@@ -1,0 +1,1345 @@
+{
+  "plan": "01-52",
+  "files": [
+    {
+      "path": ".planning/reviews/unit-test-adversarial/orchestrators-root.md",
+      "category": "first-pass",
+      "assignedPlan": "01-52",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-001",
+        ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-002",
+        ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-003",
+        ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-004",
+        ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-005",
+        ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-006",
+        ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-007",
+        ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-008",
+        ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-009",
+        ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-010",
+        ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-011",
+        ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-012",
+        ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-013",
+        ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-014",
+        ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-015",
+        ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-016",
+        ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-017",
+        ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-018"
+      ],
+      "reviewStatus": "complete",
+      "outcome": "live findings"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/persistence.md",
+      "category": "first-pass",
+      "assignedPlan": "01-52",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-001",
+        ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-002",
+        ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-003",
+        ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-004",
+        ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-005",
+        ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-006",
+        ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-007",
+        ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-008",
+        ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-009",
+        ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-010",
+        ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-011",
+        ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-012",
+        ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-013",
+        ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-014",
+        ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-015",
+        ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-016",
+        ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-017",
+        ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-018"
+      ],
+      "reviewStatus": "complete",
+      "outcome": "live findings"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/platform.md",
+      "category": "first-pass",
+      "assignedPlan": "01-52",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-001",
+        ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-002",
+        ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-003",
+        ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-004",
+        ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-005",
+        ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-006",
+        ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-007",
+        ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-008",
+        ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-009",
+        ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-010",
+        ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-011",
+        ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-012",
+        ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-013",
+        ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-014",
+        ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-015",
+        ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-016",
+        ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-017",
+        ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-018",
+        ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-019",
+        ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-020",
+        ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-021",
+        ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-022",
+        ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-023",
+        ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-024",
+        ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-025"
+      ],
+      "reviewStatus": "complete",
+      "outcome": "live findings"
+    }
+  ],
+  "sourceClaims": [
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-001",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-root.md",
+      "label": "The review covers six top-level orchestrator production modules and six mirrored owner tests.",
+      "findingId": "ORRFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-002",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-root.md",
+      "label": "The six suites use strict mocks, whole-value assertions, hermetic filesystem cleanup, and an appropriate compile-only types test.",
+      "findingId": "ORRFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-003",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-root.md",
+      "label": "authMemo is caller-owned and does not leak through module state.",
+      "findingId": "ORRFP-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-004",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-root.md",
+      "label": "The historical review found no blocker in this area.",
+      "findingId": "ORRFP-F003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-005",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-root.md",
+      "label": "A fixing pass should prioritize discover catch narrowing, plugin-path environment cleanup, and discover assertion naming.",
+      "findingId": "ORRFP-F004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-006",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-root.md",
+      "label": "discover.test.ts uses strict-mode aliases whose names can be mistaken for loose comparisons.",
+      "findingId": "ORRFP-F005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-007",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-root.md",
+      "label": "plugin-path.test.ts restores environment state with try/finally instead of the local t.after convention.",
+      "findingId": "ORRFP-F006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-008",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-root.md",
+      "label": "auth-host, edge-deps, types, and scope-fanout owner tests are otherwise clean.",
+      "findingId": "ORRFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-009",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-root.md",
+      "label": "discover.ts casts an unknown caught value to NodeJS.ErrnoException without a guard.",
+      "findingId": "ORRFP-F007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-010",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-root.md",
+      "label": "discover.ts lacks top-level documentation for its exported interface and aggregate function.",
+      "findingId": "ORRFP-F007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-011",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-root.md",
+      "label": "discover.ts collectForKind has six positional parameters including two mutated output arrays.",
+      "findingId": "ORRFP-F007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-012",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-root.md",
+      "label": "edge-deps classifyInstalledPluginRow has five required positional parameters.",
+      "findingId": "ORRFP-F008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-013",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-root.md",
+      "label": "edge-deps uses a verbose indexed-access installed-record type instead of PluginInstallRecord.",
+      "findingId": "ORRFP-F008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-014",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-root.md",
+      "label": "Two auth-host doc comments use imperative rather than third-person wording.",
+      "findingId": "ORRFP-F009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-015",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-root.md",
+      "label": "ReinstallOutcomeBase lacks a doc comment.",
+      "findingId": "ORRFP-F009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-016",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-root.md",
+      "label": "plugin-path.ts and scope-fanout.ts are otherwise clean.",
+      "findingId": "ORRFP-F010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-017",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-root.md",
+      "label": "External device-flow and credential fakes were explicitly outside the historical review scope.",
+      "findingId": "ORRFP-F011"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-018",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-root.md",
+      "label": "The historical review did not run tests or coverage.",
+      "findingId": "ORRFP-F012"
+    },
+
+    {
+      "id": ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-001",
+      "filePath": ".planning/reviews/unit-test-adversarial/persistence.md",
+      "label": "The review covers nine persistence production modules and nine mirrored owner tests.",
+      "findingId": "PERFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-002",
+      "filePath": ".planning/reviews/unit-test-adversarial/persistence.md",
+      "label": "Persistence cases use case-owned temporary roots, exact bytes, sibling row tests, and no forbidden runner or loader patterns.",
+      "findingId": "PERFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-003",
+      "filePath": ".planning/reviews/unit-test-adversarial/persistence.md",
+      "label": "Migration fixed points, prototype-shaped keys, and the sanctioned warning boundary are strongly exercised.",
+      "findingId": "PERFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-004",
+      "filePath": ".planning/reviews/unit-test-adversarial/persistence.md",
+      "label": "PathContainmentError identity and structured fields are incompletely asserted in two suites.",
+      "findingId": "PERFP-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-005",
+      "filePath": ".planning/reviews/unit-test-adversarial/persistence.md",
+      "label": "The ScopedLocations brand rejection is not pinned with a compile-time negative.",
+      "findingId": "PERFP-F003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-006",
+      "filePath": ".planning/reviews/unit-test-adversarial/persistence.md",
+      "label": "A fixing pass should prioritize error identity, the brand negative, and independent expected JSON bytes.",
+      "findingId": "PERFP-F004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-007",
+      "filePath": ".planning/reviews/unit-test-adversarial/persistence.md",
+      "label": "config-io.test.ts checks PathContainmentError by name rather than class.",
+      "findingId": "PERFP-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-008",
+      "filePath": ".planning/reviews/unit-test-adversarial/persistence.md",
+      "label": "locations.test.ts does not assert the containment-error row by class and structured fields.",
+      "findingId": "PERFP-F005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-009",
+      "filePath": ".planning/reviews/unit-test-adversarial/persistence.md",
+      "label": "locations.test.ts never proves an unbranded hand-built ScopedLocations value fails type checking.",
+      "findingId": "PERFP-F003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-010",
+      "filePath": ".planning/reviews/unit-test-adversarial/persistence.md",
+      "label": "Two state-io expected byte values repeat the production JSON serialization formula.",
+      "findingId": "PERFP-F006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-011",
+      "filePath": ".planning/reviews/unit-test-adversarial/persistence.md",
+      "label": "agents-index-io tests hand-derive the index path instead of using ScopedLocations.agentsIndexPath.",
+      "findingId": "PERFP-F007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-012",
+      "filePath": ".planning/reviews/unit-test-adversarial/persistence.md",
+      "label": "The config-write-back AST case is a justified structural proof of the documented single-write invariant.",
+      "findingId": "PERFP-F008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-013",
+      "filePath": ".planning/reviews/unit-test-adversarial/persistence.md",
+      "label": "The remaining persistence owner tests are clean.",
+      "findingId": "PERFP-F009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-014",
+      "filePath": ".planning/reviews/unit-test-adversarial/persistence.md",
+      "label": "Nine JSON fixtures under tests/persistence/fixtures are unreferenced dead support.",
+      "findingId": "PERFP-F010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-015",
+      "filePath": ".planning/reviews/unit-test-adversarial/persistence.md",
+      "label": "agentsIndexPathFor duplicates ScopedLocations.agentsIndexPath.",
+      "findingId": "PERFP-F007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-016",
+      "filePath": ".planning/reviews/unit-test-adversarial/persistence.md",
+      "label": "The remaining persistence production modules are clean within the review scope.",
+      "findingId": "PERFP-F009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-017",
+      "filePath": ".planning/reviews/unit-test-adversarial/persistence.md",
+      "label": "The historical review did not execute the persistence suites.",
+      "findingId": "PERFP-F011"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-018",
+      "filePath": ".planning/reviews/unit-test-adversarial/persistence.md",
+      "label": "Supporting domain, shared, and platform modules were read only as context and not reviewed for their own quality.",
+      "findingId": "PERFP-F012"
+    },
+
+    {
+      "id": ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-001",
+      "filePath": ".planning/reviews/unit-test-adversarial/platform.md",
+      "label": "The review covers eleven platform test/support files and three production modules.",
+      "findingId": "PLTFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-002",
+      "filePath": ".planning/reviews/unit-test-adversarial/platform.md",
+      "label": "Git and credential shared contracts run against both fake and real participants with fresh instances and negative controls.",
+      "findingId": "PLTFP-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-003",
+      "filePath": ".planning/reviews/unit-test-adversarial/platform.md",
+      "label": "Real Git and credential adapter tests are hermetic and avoid network and subprocess access.",
+      "findingId": "PLTFP-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-004",
+      "filePath": ".planning/reviews/unit-test-adversarial/platform.md",
+      "label": "The shared GitOps fake crashes when clone, fetch, or resolveRemoteRef receives the auth bundle its type accepts.",
+      "findingId": "PLTFP-F003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-005",
+      "filePath": ".planning/reviews/unit-test-adversarial/platform.md",
+      "label": "A fixing pass should prioritize the Git fake auth crash, shared-contract documentation, Pi API narrowing, and small Git type-design issues.",
+      "findingId": "PLTFP-F004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-006",
+      "filePath": ".planning/reviews/unit-test-adversarial/platform.md",
+      "label": "A marketplace add test contains a strip-and-reattach workaround for the Git fake auth crash.",
+      "findingId": "PLTFP-F003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-007",
+      "filePath": ".planning/reviews/unit-test-adversarial/platform.md",
+      "label": "git-ops-contract does not explicitly cover or mark validation inapplicable.",
+      "findingId": "PLTFP-F005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-008",
+      "filePath": ".planning/reviews/unit-test-adversarial/platform.md",
+      "label": "git-ops-fake.test combines its case inventory and negative-control checks in one case.",
+      "findingId": "PLTFP-F006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-009",
+      "filePath": ".planning/reviews/unit-test-adversarial/platform.md",
+      "label": "git.test groups six exported entrypoints under one non-entrypoint describe label.",
+      "findingId": "PLTFP-F007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-010",
+      "filePath": ".planning/reviews/unit-test-adversarial/platform.md",
+      "label": "pi-api.test uses four double assertions to satisfy an over-wide ExtensionAPI dependency.",
+      "findingId": "PLTFP-F008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-011",
+      "filePath": ".planning/reviews/unit-test-adversarial/platform.md",
+      "label": "The remaining credential and Git test-support files are clean.",
+      "findingId": "PLTFP-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-012",
+      "filePath": ".planning/reviews/unit-test-adversarial/platform.md",
+      "label": "Both shared contracts currently register fake and real participants with fresh state per case.",
+      "findingId": "PLTFP-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-013",
+      "filePath": ".planning/reviews/unit-test-adversarial/platform.md",
+      "label": "The current private negative controls have independently written expected failure lists.",
+      "findingId": "PLTFP-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-014",
+      "filePath": ".planning/reviews/unit-test-adversarial/platform.md",
+      "label": "Git contract category documentation is weaker than the credential and device-flow model contracts.",
+      "findingId": "PLTFP-F005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-015",
+      "filePath": ".planning/reviews/unit-test-adversarial/platform.md",
+      "label": "The Git fake negative control is not isolated from the contract case-name inventory assertion.",
+      "findingId": "PLTFP-F006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-016",
+      "filePath": ".planning/reviews/unit-test-adversarial/platform.md",
+      "label": "No shared contract has a typed or executable inventory requiring every real participant registration.",
+      "findingId": "PLTFP-F009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-017",
+      "filePath": ".planning/reviews/unit-test-adversarial/platform.md",
+      "label": "Git auth option shapes repeat BuildAuthCallbacksOpts instead of reusing it.",
+      "findingId": "PLTFP-F010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-018",
+      "filePath": ".planning/reviews/unit-test-adversarial/platform.md",
+      "label": "Two Git catch bindings use the local err spelling instead of the proposed explicit unknown style.",
+      "findingId": "PLTFP-F011"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-019",
+      "filePath": ".planning/reviews/unit-test-adversarial/platform.md",
+      "label": "Three Git option interfaces lack documentation.",
+      "findingId": "PLTFP-F012"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-020",
+      "filePath": ".planning/reviews/unit-test-adversarial/platform.md",
+      "label": "CredentialProcess.on does not statically pair event names with listener shapes.",
+      "findingId": "PLTFP-F013"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-021",
+      "filePath": ".planning/reviews/unit-test-adversarial/platform.md",
+      "label": "Pi soft-dependency probes accept the full ExtensionAPI although they only use getAllTools.",
+      "findingId": "PLTFP-F014"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-022",
+      "filePath": ".planning/reviews/unit-test-adversarial/platform.md",
+      "label": "hasLoadedPiMcpAdapter retains an uncommented structural cast.",
+      "findingId": "PLTFP-F015"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-023",
+      "filePath": ".planning/reviews/unit-test-adversarial/platform.md",
+      "label": "The platform production modules are otherwise explicitly injected and testable without hidden side effects.",
+      "findingId": "PLTFP-F016"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-024",
+      "filePath": ".planning/reviews/unit-test-adversarial/platform.md",
+      "label": "The historical review did not execute the platform toolchain.",
+      "findingId": "PLTFP-F017"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-025",
+      "filePath": ".planning/reviews/unit-test-adversarial/platform.md",
+      "label": "The marketplace add test was inspected only as evidence for the shared fake defect and remains outside this report's ownership.",
+      "findingId": "PLTFP-F018"
+    }
+  ],
+  "findings": [
+    {
+      "id": "ORRFP-F001",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-001",
+        ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-002",
+        ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-008"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "ORR-F026",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/auth-host.ts" },
+        { "path": "extensions/pi-claude-marketplace/orchestrators/discover.ts" },
+        { "path": "extensions/pi-claude-marketplace/orchestrators/edge-deps.ts" },
+        { "path": "extensions/pi-claude-marketplace/orchestrators/plugin-path.ts" },
+        { "path": "extensions/pi-claude-marketplace/orchestrators/scope-fanout.ts" },
+        { "path": "extensions/pi-claude-marketplace/orchestrators/types.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/orchestrators/auth-host.test.ts" },
+        { "path": "tests/orchestrators/discover.test.ts" },
+        { "path": "tests/orchestrators/edge-deps.test.ts" },
+        { "path": "tests/orchestrators/plugin-path.test.ts" },
+        { "path": "tests/orchestrators/scope-fanout.test.ts" },
+        { "path": "tests/orchestrators/types.test.ts" }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test tests/orchestrators/{auth-host,discover,edge-deps,plugin-path,scope-fanout,types}.test.ts",
+        "exitCode": 0,
+        "observed": "All six current owner suites passed; CodeGraph also confirmed the six mirrored production-test pairs and caller-owned dependencies."
+      },
+      "rationale": "These positive first-pass claims are already canonically represented by ORR-F026 and remain supported by the current focused rerun.",
+      "destination": "Retain ORR-F026 as evidence-only guidance."
+    },
+    {
+      "id": "ORRFP-F002",
+      "claimIds": [".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-003"],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "ORR-F030",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/orchestrators/auth-host.ts" }],
+      "testRefs": [{ "path": "tests/orchestrators/auth-host.test.ts" }],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test tests/orchestrators/auth-host.test.ts",
+        "exitCode": 0,
+        "observed": "The current suite passed, and CodeGraph shows authMemo only as an optional caller-supplied map read and written inside buildAuthForHost."
+      },
+      "rationale": "ORR-F030 already records positive replacement proof that the alleged module-level memo leak does not exist.",
+      "destination": "No change; keep memo ownership at the command caller."
+    },
+    {
+      "id": "ORRFP-F003",
+      "claimIds": [".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-004"],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "ORR-F027",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/orchestrators/discover.ts" }],
+      "testRefs": [{ "path": "tests/orchestrators/discover.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current shard comparison",
+        "observed": "The broad no-blocker verdict is superseded by narrower canonical test-strength and structural findings in ORR-F001 through ORR-F031."
+      },
+      "rationale": "ORR-F027 already preserves this over-broad historical verdict as stale evidence.",
+      "destination": "Do not use the broad clean verdict to override claim-level findings."
+    },
+    {
+      "id": "ORRFP-F004",
+      "claimIds": [".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-005"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "ORR-F031",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/discover.ts" },
+        { "path": "extensions/pi-claude-marketplace/orchestrators/plugin-path.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/orchestrators/discover.test.ts" },
+        { "path": "tests/orchestrators/plugin-path.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source/test inspection",
+        "observed": "The named cleanup targets remain visible, but their routes are independently owned by ORR-F021 through ORR-F025 and ORR-F031."
+      },
+      "rationale": "The first-pass priority statement repeats the canonical sibling-drift remediation rather than defining new evidence.",
+      "destination": "Use the canonical claim-level routes when Phase 2 is planned."
+    },
+    {
+      "id": "ORRFP-F005",
+      "claimIds": [".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-006"],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "ORR-F021",
+      "sourceRefs": [{ "path": "tests/orchestrators/discover.test.ts" }],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "The claim concerns assertion spelling inside the owner test itself."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current node:assert/strict import and assertion inspection",
+        "observed": "deepEqual and equal are strict aliases under node:assert/strict; spelling does not weaken comparison behavior."
+      },
+      "rationale": "ORR-F021 already contains the positive stale proof for the historical loose-comparison implication.",
+      "destination": "No correctness work; optional spelling cleanup only."
+    },
+    {
+      "id": "ORRFP-F006",
+      "claimIds": [".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-007"],
+      "evidenceStatus": "duplicate",
+      "route": "operator decision",
+      "duplicateOf": "ORR-F022",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/orchestrators/plugin-path.ts" }],
+      "testRefs": [{ "path": "tests/orchestrators/plugin-path.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current test inspection",
+        "observed": "The cases still restore process.env in finally blocks; current behavior is hermetic, while the canonical finding retains the broader hidden-environment design question."
+      },
+      "rationale": "ORR-F022 already owns the decision; changing cleanup syntax alone would not resolve the production design issue.",
+      "destination": "Resolve hidden environment ownership under ORR-F022 before mechanical cleanup."
+    },
+    {
+      "id": "ORRFP-F007",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-009",
+        ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-010",
+        ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-011"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "ORR-F023",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/orchestrators/discover.ts" }],
+      "testRefs": [{ "path": "tests/orchestrators/discover.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source inspection",
+        "observed": "The unguarded caught-value cast, missing exported-symbol documentation, and six-parameter helper remain present."
+      },
+      "rationale": "ORR-F023 already canonically owns all three structural discover findings.",
+      "destination": "Carry the focused discover cleanup under ORR-F023."
+    },
+    {
+      "id": "ORRFP-F008",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-012",
+        ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-013"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "ORR-F024",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/orchestrators/edge-deps.ts" }],
+      "testRefs": [{ "path": "tests/orchestrators/edge-deps.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current signature inspection",
+        "observed": "classifyInstalledPluginRow still takes five positional arguments and uses the indexed ExtensionState record type."
+      },
+      "rationale": "ORR-F024 already owns these edge-deps readability and type-shape findings.",
+      "destination": "Carry the cleanup under ORR-F024."
+    },
+    {
+      "id": "ORRFP-F009",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-014",
+        ".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-015"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "ORR-F025",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/auth-host.ts" },
+        { "path": "extensions/pi-claude-marketplace/orchestrators/types.ts" }
+      ],
+      "testRefs": [
+        { "path": "N/A", "reason": "These are production documentation-style observations." }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current documentation inspection",
+        "observed": "The imperative comment phrasing and missing ReinstallOutcomeBase documentation remain."
+      },
+      "rationale": "ORR-F025 already owns the top-level orchestrator documentation cleanup.",
+      "destination": "Carry the documentation cleanup under ORR-F025."
+    },
+    {
+      "id": "ORRFP-F010",
+      "claimIds": [".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-016"],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "ORR-F026",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/plugin-path.ts" },
+        { "path": "extensions/pi-claude-marketplace/orchestrators/scope-fanout.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/orchestrators/plugin-path.test.ts" },
+        { "path": "tests/orchestrators/scope-fanout.test.ts" }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test tests/orchestrators/plugin-path.test.ts tests/orchestrators/scope-fanout.test.ts",
+        "exitCode": 0,
+        "observed": "Both owner suites passed and current static inspection found no additional scoped defect."
+      },
+      "rationale": "The bounded positive claim is already represented by ORR-F026.",
+      "destination": "Retain as evidence only."
+    },
+    {
+      "id": "ORRFP-F011",
+      "claimIds": [".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-017"],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": ".planning/reviews/unit-test-adversarial/orchestrators-root.md" }],
+      "testRefs": [
+        { "path": "tests/domain/device-flow-fake.ts" },
+        { "path": "tests/platform/credential-ops-fake.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Corpus scope and assignment comparison",
+        "observed": "The named fakes are outside this file's top-level orchestrator ownership and are reviewed by separate corpus records."
+      },
+      "rationale": "The explicit scope boundary prevents duplicate ownership without judging those support modules here.",
+      "destination": "No implementation action."
+    },
+    {
+      "id": "ORRFP-F012",
+      "claimIds": [".planning/reviews/unit-test-adversarial/orchestrators-root.md#CLAIM-018"],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": ".planning/reviews/unit-test-adversarial/orchestrators-root.md" }],
+      "testRefs": [
+        { "path": "tests/orchestrators/auth-host.test.ts" },
+        { "path": "tests/orchestrators/discover.test.ts" },
+        { "path": "tests/orchestrators/edge-deps.test.ts" },
+        { "path": "tests/orchestrators/plugin-path.test.ts" },
+        { "path": "tests/orchestrators/scope-fanout.test.ts" },
+        { "path": "tests/orchestrators/types.test.ts" }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test tests/orchestrators/{auth-host,discover,edge-deps,plugin-path,scope-fanout,types}.test.ts",
+        "exitCode": 0,
+        "observed": "The current revalidation reran all six suites successfully, positively replacing the historical no-command limitation."
+      },
+      "rationale": "The historical review limitation no longer describes this revalidation; green tests remain executability evidence rather than mutation proof.",
+      "destination": "Close the historical limitation with current rerun evidence."
+    },
+
+    {
+      "id": "PERFP-F001",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-001",
+        ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-002",
+        ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-003"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "PER-F029",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/persistence/config-io.ts" },
+        { "path": "extensions/pi-claude-marketplace/persistence/locations.ts" },
+        { "path": "extensions/pi-claude-marketplace/persistence/state-io.ts" },
+        { "path": "extensions/pi-claude-marketplace/persistence/migrate.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/persistence/config-io.test.ts" },
+        { "path": "tests/persistence/locations.test.ts" },
+        { "path": "tests/persistence/state-io.test.ts" },
+        { "path": "tests/persistence/migrate.test.ts" }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test tests/persistence/*.test.ts",
+        "exitCode": 0,
+        "observed": "All nine current persistence owner suites passed, including temporary-root, exact-byte, migration fixed-point, and prototype-shaped-key cases."
+      },
+      "rationale": "The broad positive evidence overlaps PER-F029 and PER-F030; PER-F029 is retained as the canonical link while narrower defects remain independent.",
+      "destination": "Retain the positive patterns without letting them override claim-level gaps."
+    },
+    {
+      "id": "PERFP-F002",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-004",
+        ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-007"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "PER-F021",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/persistence/config-io.ts" },
+        { "path": "extensions/pi-claude-marketplace/shared/path-safety.ts" }
+      ],
+      "testRefs": [{ "path": "tests/persistence/config-io.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current test inspection",
+        "observed": "The config containment case still checks a generic Error and compares the name string instead of asserting PathContainmentError identity; no isolated mutation was run."
+      },
+      "rationale": "PER-F021 already owns this D-11-inconclusive test-strength claim.",
+      "destination": "Use PER-F021 for the isolated mutation and Phase 2 assertion strengthening."
+    },
+    {
+      "id": "PERFP-F003",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-005",
+        ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-009"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "PER-F023",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/persistence/locations.ts" }],
+      "testRefs": [{ "path": "tests/persistence/locations.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current type-test inspection",
+        "observed": "ScopedLocations retains a required symbol brand, but its owner test still has no hand-built unbranded @ts-expect-error negative; no isolated mutation was run."
+      },
+      "rationale": "PER-F023 already owns this D-11-inconclusive type-test strength gap.",
+      "destination": "Strengthen the type-only proof under PER-F023."
+    },
+    {
+      "id": "PERFP-F004",
+      "claimIds": [".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-006"],
+      "evidenceStatus": "duplicate",
+      "route": "deferred backlog",
+      "duplicateOf": "PER-F031",
+      "sourceRefs": [{ "path": ".planning/reviews/unit-test-adversarial/persistence.md" }],
+      "testRefs": [
+        { "path": "tests/persistence/config-io.test.ts" },
+        { "path": "tests/persistence/locations.test.ts" },
+        { "path": "tests/persistence/state-io.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Canonical finding comparison",
+        "observed": "The priority statement bundles three independently routed findings and is not itself implementation evidence."
+      },
+      "rationale": "PER-F031 retains the cross-cutting cleanup context while PER-F021, PER-F023, and PER-F024 own the actionable items.",
+      "destination": "Plan from the canonical claim-level routes, not this bundled ordering."
+    },
+    {
+      "id": "PERFP-F005",
+      "claimIds": [".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-008"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "PER-F022",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/persistence/locations.ts" },
+        { "path": "extensions/pi-claude-marketplace/shared/path-safety.ts" }
+      ],
+      "testRefs": [{ "path": "tests/persistence/locations.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current row assertion inspection",
+        "observed": "The containment row still shares generic Error name/message assertions and omits PathContainmentError parent/child fields; no isolated mutation was run."
+      },
+      "rationale": "PER-F022 already owns this D-11-inconclusive assertion-strength gap.",
+      "destination": "Use PER-F022 for mutation-backed strengthening."
+    },
+    {
+      "id": "PERFP-F006",
+      "claimIds": [".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-010"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "PER-F024",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/shared/atomic-json.ts" }],
+      "testRefs": [{ "path": "tests/persistence/state-io.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current serializer and expected-value comparison",
+        "observed": "Two expected byte strings still call JSON.stringify with the production indent and newline formula; no isolated mutation was run."
+      },
+      "rationale": "PER-F024 already owns the D-11-inconclusive independent-oracle gap.",
+      "destination": "Replace the derived expectations under PER-F024."
+    },
+    {
+      "id": "PERFP-F007",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-011",
+        ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-015"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 8",
+      "duplicateOf": "PER-F028",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/persistence/agents-index-io.ts" },
+        { "path": "extensions/pi-claude-marketplace/persistence/locations.ts" }
+      ],
+      "testRefs": [{ "path": "tests/persistence/agents-index-io.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/test inspection",
+        "observed": "agentsIndexPathFor still joins extensionRoot with agents-index.json and its tests repeat the same derivation rather than consuming agentsIndexPath."
+      },
+      "rationale": "PER-F028 already canonically owns the duplicated path derivation and paired test drift risk.",
+      "destination": "Consolidate the path under PER-F028 in Phase 8."
+    },
+    {
+      "id": "PERFP-F008",
+      "claimIds": [".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-012"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 8",
+      "duplicateOf": "PER-F026",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/persistence/config-write-back.ts" }
+      ],
+      "testRefs": [{ "path": "tests/persistence/config-write-back.test.ts" }],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test tests/persistence/config-write-back.test.ts",
+        "exitCode": 0,
+        "observed": "The owner suite passed, including its AST proof that one awaited save occurs after both patch loops."
+      },
+      "rationale": "PER-F026 already owns this structural-test placement concern while preserving the single-write proof.",
+      "destination": "Relocate or document the structural proof only under PER-F026."
+    },
+    {
+      "id": "PERFP-F009",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-013",
+        ".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-016"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "PER-F029",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/persistence/config-merge.ts" },
+        { "path": "extensions/pi-claude-marketplace/persistence/migrate.ts" },
+        { "path": "extensions/pi-claude-marketplace/persistence/state-io.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/persistence/config-merge.test.ts" },
+        { "path": "tests/persistence/migrate.test.ts" },
+        { "path": "tests/persistence/state-io.test.ts" }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test tests/persistence/{config-merge,migrate,state-io}.test.ts",
+        "exitCode": 0,
+        "observed": "The current owner suites passed; the bounded clean claim remains positive evidence, subject to separately linked defects."
+      },
+      "rationale": "PER-F029 and PER-F030 already preserve the current positive persistence patterns.",
+      "destination": "No additional implementation action."
+    },
+    {
+      "id": "PERFP-F010",
+      "claimIds": [".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-014"],
+      "evidenceStatus": "duplicate",
+      "route": "deferred backlog",
+      "duplicateOf": "PER-F027",
+      "sourceRefs": [
+        { "path": "tests/persistence/fixtures/agents-index/empty.json" },
+        { "path": "tests/persistence/fixtures/legacy/state-populated-mixed.json" }
+      ],
+      "testRefs": [
+        { "path": "N/A", "reason": "The claim concerns unreferenced test-support fixture files." }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph reference inspection and current corpus comparison",
+        "observed": "The nine fixture files remain without test consumers and the equivalent scenarios remain inline."
+      },
+      "rationale": "PER-F027 already owns this dead test-support inventory.",
+      "destination": "Retain in the deferred backlog under PER-F027."
+    },
+    {
+      "id": "PERFP-F011",
+      "claimIds": [".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-017"],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": ".planning/reviews/unit-test-adversarial/persistence.md" }],
+      "testRefs": [
+        { "path": "tests/persistence/state-io.test.ts" },
+        { "path": "tests/persistence/config-io.test.ts" },
+        { "path": "tests/persistence/locations.test.ts" }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test tests/persistence/*.test.ts",
+        "exitCode": 0,
+        "observed": "All nine current persistence owner suites passed, positively replacing the historical no-rerun limitation."
+      },
+      "rationale": "The historical execution limitation is stale for this revalidation; passing suites do not settle the separately unmutated test-strength claims.",
+      "destination": "Close the historical limitation with current executability evidence."
+    },
+    {
+      "id": "PERFP-F012",
+      "claimIds": [".planning/reviews/unit-test-adversarial/persistence.md#CLAIM-018"],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": ".planning/reviews/unit-test-adversarial/persistence.md" }],
+      "testRefs": [
+        { "path": "N/A", "reason": "This is an explicit historical review ownership boundary." }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Corpus scope and assignment comparison",
+        "observed": "The named supporting modules have separate corpus owners and are not re-adjudicated as persistence findings here."
+      },
+      "rationale": "The scope boundary remains correct and preserves exclusive corpus ownership.",
+      "destination": "No implementation action."
+    },
+
+    {
+      "id": "PLTFP-F001",
+      "claimIds": [".planning/reviews/unit-test-adversarial/platform.md#CLAIM-001"],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/platform/git.ts" },
+        { "path": "extensions/pi-claude-marketplace/platform/git-credential.ts" },
+        { "path": "extensions/pi-claude-marketplace/platform/pi-api.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/platform/git.test.ts" },
+        { "path": "tests/platform/git-credential.test.ts" },
+        { "path": "tests/platform/pi-api.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph and current path inventory",
+        "observed": "The current platform production surface remains three modules with eleven owned test/support TypeScript files."
+      },
+      "rationale": "The bounded scope claim remains current and does not itself require implementation.",
+      "destination": "Retain as evidence-only scope metadata."
+    },
+    {
+      "id": "PLTFP-F002",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-002",
+        ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-003",
+        ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-011",
+        ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-012",
+        ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-013"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "PLT-F032",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/platform/git.ts" },
+        { "path": "extensions/pi-claude-marketplace/platform/git-credential.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/platform/git.test.ts" },
+        { "path": "tests/platform/git-credential.test.ts" },
+        { "path": "tests/platform/git-ops-fake.test.ts" },
+        { "path": "tests/platform/credential-ops-fake.test.ts" }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test tests/platform/{credential-ops-fake,git-credential,git-ops-fake,git,pi-api}.test.ts",
+        "exitCode": 0,
+        "observed": "All five owner suites passed; current contract registrations, fresh participants, hermetic adapters, and independent negative-control expectations remain present."
+      },
+      "rationale": "PLT-F032 and PLT-F033 already canonically retain these positive contract and adapter patterns.",
+      "destination": "Retain as evidence-only guidance without masking narrower findings."
+    },
+    {
+      "id": "PLTFP-F003",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-004",
+        ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-006"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "PLT-F020",
+      "sourceRefs": [
+        { "path": "tests/platform/git-ops-fake.ts" },
+        { "path": "tests/orchestrators/marketplace/add.test.ts" }
+      ],
+      "testRefs": [{ "path": "tests/platform/git-ops-fake.test.ts" }],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "cd <repository-local-isolated-copy> && node --input-type=module -e <invoke-createGitOpsFake-clone-with-auth>",
+        "exitCode": 1,
+        "observed": "The isolated current copy threw DOMException DataCloneError at git-ops-fake.ts structuredClone(cloneOptions) when the auth bundle contained credential and callback functions; the live tree was unchanged and the copy was removed."
+      },
+      "rationale": "The failing hermetic probe supplies current behavioral proof for the fake defect already owned by PLT-F020.",
+      "destination": "Fix the shared fake once under PLT-F020 and remove downstream strip-and-reattach workarounds."
+    },
+    {
+      "id": "PLTFP-F004",
+      "claimIds": [".planning/reviews/unit-test-adversarial/platform.md#CLAIM-005"],
+      "evidenceStatus": "duplicate",
+      "route": "deferred backlog",
+      "duplicateOf": "PLT-F034",
+      "sourceRefs": [{ "path": ".planning/reviews/unit-test-adversarial/platform.md" }],
+      "testRefs": [
+        { "path": "tests/platform/git-ops-fake.test.ts" },
+        { "path": "tests/platform/pi-api.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Canonical finding comparison",
+        "observed": "The priority paragraph bundles independently routed defects, architecture gaps, and readability items rather than defining one remediation."
+      },
+      "rationale": "PLT-F034 retains the cross-cutting context while claim-level canonical findings own the work.",
+      "destination": "Use the canonical routes rather than the bundled priority order."
+    },
+    {
+      "id": "PLTFP-F005",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-007",
+        ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-014"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "PLT-F021",
+      "sourceRefs": [{ "path": "tests/platform/git-ops-contract.ts" }],
+      "testRefs": [
+        { "path": "tests/platform/git-ops-fake.test.ts" },
+        { "path": "tests/platform/git.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph and current contract-header inspection",
+        "observed": "The Git contract still neither exercises validation nor explicitly records it as inapplicable; no isolated mutation was run."
+      },
+      "rationale": "PLT-F021 already owns this D-11-inconclusive contract documentation gap.",
+      "destination": "Clarify or exercise validation under PLT-F021."
+    },
+    {
+      "id": "PLTFP-F006",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-008",
+        ".planning/reviews/unit-test-adversarial/platform.md#CLAIM-015"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 4",
+      "duplicateOf": "PLT-F022",
+      "sourceRefs": [{ "path": "tests/platform/git-ops-fake.test.ts" }],
+      "testRefs": [
+        { "path": "N/A", "reason": "The claim concerns structure within the fake owner test." }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current case inspection",
+        "observed": "The no-force-update test still contains both the case-name inventory assertion and the negative-control failures assertion; no isolated mutation was run."
+      },
+      "rationale": "PLT-F022 already owns this D-11-inconclusive architecture-test separation concern.",
+      "destination": "Resolve under PLT-F022 in Phase 4."
+    },
+    {
+      "id": "PLTFP-F007",
+      "claimIds": [".planning/reviews/unit-test-adversarial/platform.md#CLAIM-009"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 8",
+      "duplicateOf": "PLT-F023",
+      "sourceRefs": [{ "path": "tests/platform/git.test.ts" }],
+      "testRefs": [
+        { "path": "N/A", "reason": "The claim concerns owner-test describe structure." }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current test structure inspection",
+        "observed": "The local Git operations describe still groups currentBranch, resolveRef, listBranches, listRemotes, forceUpdateRef, and checkout."
+      },
+      "rationale": "PLT-F023 already owns this structure cleanup.",
+      "destination": "Split the grouping under PLT-F023 in Phase 8."
+    },
+    {
+      "id": "PLTFP-F008",
+      "claimIds": [".planning/reviews/unit-test-adversarial/platform.md#CLAIM-010"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "PLT-F024",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/platform/pi-api.ts" }],
+      "testRefs": [{ "path": "tests/platform/pi-api.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/test inspection",
+        "observed": "Four current test doubles still require as unknown as ExtensionAPI because production accepts the full peer interface."
+      },
+      "rationale": "PLT-F024 already owns the double-assertion symptom; PLT-F029 owns the production narrowing route.",
+      "destination": "Remove the casts through the narrow-port fix under PLT-F029."
+    },
+    {
+      "id": "PLTFP-F009",
+      "claimIds": [".planning/reviews/unit-test-adversarial/platform.md#CLAIM-016"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 4",
+      "duplicateOf": "PLT-F031",
+      "sourceRefs": [
+        { "path": "tests/platform/git-ops-contract.ts" },
+        { "path": "tests/platform/credential-ops-contract.ts" },
+        { "path": "tests/domain/device-flow-contract.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/platform/git.test.ts" },
+        { "path": "tests/platform/git-credential.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph registration-reference inspection",
+        "observed": "Current real-adapter registrations exist, but no typed inventory or gate requires them to remain; no isolated mutation was run."
+      },
+      "rationale": "PLT-F031 already owns this cross-contract architecture-gate gap.",
+      "destination": "Add an executable participant inventory under PLT-F031."
+    },
+    {
+      "id": "PLTFP-F010",
+      "claimIds": [".planning/reviews/unit-test-adversarial/platform.md#CLAIM-017"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 8",
+      "duplicateOf": "PLT-F025",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/platform/git.ts" }],
+      "testRefs": [{ "path": "tests/platform/git.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current type inspection",
+        "observed": "CloneOptions, FetchOptions, and ResolveRemoteRefOptions still repeat the three-field auth shape alongside BuildAuthCallbacksOpts."
+      },
+      "rationale": "PLT-F025 already owns this type consolidation.",
+      "destination": "Consolidate under PLT-F025 in Phase 8."
+    },
+    {
+      "id": "PLTFP-F011",
+      "claimIds": [".planning/reviews/unit-test-adversarial/platform.md#CLAIM-018"],
+      "evidenceStatus": "duplicate",
+      "route": "operator decision",
+      "duplicateOf": "PLT-F026",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/platform/git.ts" }],
+      "testRefs": [
+        { "path": "N/A", "reason": "This is a repository-wide catch-binding style decision." }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current catch-block inspection",
+        "observed": "The two catch bindings remain named err, while explicit unknown annotations are a broader repository style question rather than a local correctness defect."
+      },
+      "rationale": "PLT-F026 already owns the operator decision about this style prescription.",
+      "destination": "Resolve repository-wide catch style under PLT-F026."
+    },
+    {
+      "id": "PLTFP-F012",
+      "claimIds": [".planning/reviews/unit-test-adversarial/platform.md#CLAIM-019"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 8",
+      "duplicateOf": "PLT-F027",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/platform/git.ts" }],
+      "testRefs": [{ "path": "N/A", "reason": "This is a production documentation observation." }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current interface inspection",
+        "observed": "ResolveRefOptions, ForceUpdateRefOptions, and CurrentBranchOptions still lack documentation."
+      },
+      "rationale": "PLT-F027 already owns the documentation cleanup.",
+      "destination": "Document under PLT-F027 in Phase 8."
+    },
+    {
+      "id": "PLTFP-F013",
+      "claimIds": [".planning/reviews/unit-test-adversarial/platform.md#CLAIM-020"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "PLT-F028",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/platform/git-credential.ts" }],
+      "testRefs": [{ "path": "tests/platform/git-credential.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current interface inspection",
+        "observed": "CredentialProcess.on still accepts a union of event names independently from a union of listener signatures."
+      },
+      "rationale": "PLT-F028 already owns the latent type-pairing risk.",
+      "destination": "Add paired overloads under PLT-F028."
+    },
+    {
+      "id": "PLTFP-F014",
+      "claimIds": [".planning/reviews/unit-test-adversarial/platform.md#CLAIM-021"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "PLT-F029",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/platform/pi-api.ts" }],
+      "testRefs": [{ "path": "tests/platform/pi-api.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current call and signature inspection",
+        "observed": "hasLoadedPiSubagents, hasLoadedPiMcpAdapter, and softDepStatus still accept ExtensionAPI while only calling getAllTools."
+      },
+      "rationale": "PLT-F029 already owns the production narrow-port correction.",
+      "destination": "Introduce the narrow consumer-owned port under PLT-F029."
+    },
+    {
+      "id": "PLTFP-F015",
+      "claimIds": [".planning/reviews/unit-test-adversarial/platform.md#CLAIM-022"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "PLT-F030",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/platform/pi-api.ts" }],
+      "testRefs": [{ "path": "tests/platform/pi-api.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current function inspection",
+        "observed": "hasLoadedPiMcpAdapter still casts each tool to a structural sourceInfo shape without an inline justification."
+      },
+      "rationale": "PLT-F030 already owns this cast cleanup, which the narrow-port change can remove.",
+      "destination": "Resolve with PLT-F029 and PLT-F030 in Phase 2."
+    },
+    {
+      "id": "PLTFP-F016",
+      "claimIds": [".planning/reviews/unit-test-adversarial/platform.md#CLAIM-023"],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/platform/git.ts" },
+        { "path": "extensions/pi-claude-marketplace/platform/git-credential.ts" },
+        { "path": "extensions/pi-claude-marketplace/platform/pi-api.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/platform/git.test.ts" },
+        { "path": "tests/platform/git-credential.test.ts" },
+        { "path": "tests/platform/pi-api.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph dependency and constructor inspection",
+        "observed": "Platform side effects remain behind explicit operation parameters or injected spawn/credential collaborators; constructing adapters performs no network, file, or process work."
+      },
+      "rationale": "The bounded positive production-design claim remains supported independently of the listed structural findings.",
+      "destination": "Retain as evidence-only guidance."
+    },
+    {
+      "id": "PLTFP-F017",
+      "claimIds": [".planning/reviews/unit-test-adversarial/platform.md#CLAIM-024"],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": ".planning/reviews/unit-test-adversarial/platform.md" }],
+      "testRefs": [
+        { "path": "tests/platform/git.test.ts" },
+        { "path": "tests/platform/git-credential.test.ts" },
+        { "path": "tests/platform/git-ops-fake.test.ts" },
+        { "path": "tests/platform/credential-ops-fake.test.ts" },
+        { "path": "tests/platform/pi-api.test.ts" }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test tests/platform/{credential-ops-fake,git-credential,git-ops-fake,git,pi-api}.test.ts",
+        "exitCode": 0,
+        "observed": "All five current platform owner suites passed, positively replacing the historical no-toolchain limitation."
+      },
+      "rationale": "The historical execution limitation is stale for this revalidation; the separate isolated failing fake probe remains authoritative for PLTFP-F003.",
+      "destination": "Close the no-rerun limitation with current evidence."
+    },
+    {
+      "id": "PLTFP-F018",
+      "claimIds": [".planning/reviews/unit-test-adversarial/platform.md#CLAIM-025"],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": ".planning/reviews/unit-test-adversarial/platform.md" },
+        { "path": "tests/orchestrators/marketplace/add.test.ts" }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "This is an explicit ownership boundary for supporting evidence."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Corpus assignment and canonical finding comparison",
+        "observed": "The add-suite workaround is used only as corroborating evidence here; the marketplace add area is owned by separate corpus records."
+      },
+      "rationale": "The boundary preserves exclusive adjudication while retaining the load-bearing workaround as evidence.",
+      "destination": "Fix the shared fake under PLT-F020; let the marketplace owner remove its workaround."
+    }
+  ]
+}
