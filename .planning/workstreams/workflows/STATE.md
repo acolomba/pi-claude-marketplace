@@ -4,18 +4,18 @@ milestone: workflows-replay
 milestone_name: Workflow Bridge Replay onto main
 current_phase: 111
 current_phase_name: Workflows bridge
-current_plan: 111-03 (not started)
+current_plan: 111-04 (not started)
 status: In progress
-stopped_at: Completed 111-02-PLAN.md
-last_updated: "2026-09-05T11:03:00.000Z"
+stopped_at: Completed 111-03-PLAN.md
+last_updated: "2026-09-05T11:10:00.000Z"
 last_activity: 2026-09-05
-last_activity_desc: 111-02 executed - workflows bridge read side landed, criterion-4 row observed red first
-state_head: 55524e63
+last_activity_desc: 111-03 executed - workflows staging triplet and barrel landed, all five bridge pairs at complete direct coverage
+state_head: 6981b2b4
 progress:
   total_phases: 9
   completed_phases: 2
   total_plans: 12
-  completed_plans: 10
+  completed_plans: 11
   percent: 22
 ---
 
@@ -36,8 +36,20 @@ never merged. Since then #154 declared `workflows` an *unsupported* kind, and
 ## Current Position
 
 Phase: 111 (Workflows bridge) — IN PROGRESS
-Plan: 2 of 4 complete (`111-01`, `111-02`), `111-03` next
-Status: In progress. `111-01` landed the path layer, and `111-02` landed the
+Plan: 3 of 4 complete (`111-01`, `111-02`, `111-03`), `111-04` next
+Status: In progress. `111-03` completed the bridge: `bridges/workflows/stage.ts`
+and `bridges/workflows/index.ts` landed byte-identical to the port in one commit
+(`6981b2b4`) carrying exactly its four planned paths, with 24 cases in
+`stage.test.ts` and 5 in `index.test.ts`. All five bridge pairs now report their
+expected direct coverage — `types.ts` classified `type-only`, and discovery
+(56/56 branches), unstage (8/8), staging (61/61) and the barrel (25/25 lines) at
+`hit === found`. No branch proved unreachable and no `fallow-ignore` marker was
+added: the four gaps the first measurement reported were closed by adding three
+public-behaviour cases. The whole chain is green — typecheck 0, ESLint 0, all
+three fallow sub-gates, Prettier, both corresponding-test gates, `npm test` at
+5378/0 and `npm run test:integration` at 32/0.
+
+Earlier in the phase, `111-01` landed the path layer, and `111-02` landed the
 bridge's read half on top of it: `bridges/workflows/{types,discover,unstage}.ts`
 with their three owner tests, the `bridges-workflows` fallow zone triple, and
 the one behavior this phase authors — the criterion-4 admitted-but-caveated
@@ -139,8 +151,8 @@ explicitly declines that mechanism, and main has since taught
 `generatedCommandName` nested-path and empty-head rules a flat workflow caller
 can never produce.
 
-Last activity: 2026-09-05 — Phase 110 verified 20/20 and marked complete; the
-next step is `/gsd-plan-phase 111`
+Last activity: 2026-09-05 — `111-03` executed; the workflows bridge is
+complete and the next step is `111-04`
 
 **The D-109-06 window is now open, and pinned by test.** Until Phase 111 lands, a
 workflow-bearing plugin resolves `installable`, renders `● (installed)` with no
@@ -175,7 +187,7 @@ that way permanently.
 ## Progress
 
 **Phases Complete:** 2/9 verified (Phases 109-114 replay, 115-117 hardening)
-**Current Plan:** `111-03` — Phase 111 is 2/4 executed.
+**Current Plan:** `111-04` — Phase 111 is 3/4 executed.
 
 ```text
 [==--------] 22%
@@ -185,7 +197,7 @@ that way permanently.
 |-------|------|--------|
 | 109 | Kind inversion | Complete (5/5 plans, verified 12/12) |
 | 110 | Domain and platform modules | In progress (3/3 plans executed, verification pending) |
-| 111 | Workflows bridge | In progress (2/4 plans executed) |
+| 111 | Workflows bridge | In progress (3/4 plans executed) |
 | 112 | Install and removal lifecycle | Not started |
 | 113 | Update, enable/disable, reconcile | Not started |
 | 114 | Degradation and documentation | Not started |
@@ -222,11 +234,11 @@ What is on this branch right now, so a later session does not read the archived
   `features/workflows-spike`, not here.
 - **Spike evidence:** ported and renumbered 021-026 (008-013 collided with this
   branch's existing spikes). Re-verified against engine 3.10.1 in Spike 027.
-- **Production code:** two leaf modules so far, both landed by `110-01` —
-  `platform/workflow-home.ts` (seam-free) and `domain/workflow-project-key.ts`
-  (unedited). Still absent: `bridges/workflows/`, `domain/workflow-script.ts`,
-  the `domain/name.ts` and `shared/errors.ts` additions, and the `acorn`
-  dependency.
+- **Production code:** the domain and platform leaves from Phase 110, and the
+  whole of `bridges/workflows/` (`types`, `discover`, `unstage`, `stage`,
+  `index`) plus the `persistence/locations.ts` workflows members from Phase 111.
+  Still absent: any orchestrator that DRIVES the bridge, and the
+  `EXTENSION_VERSION` bump.
 - **Behavior today:** Phase 109 inverted it. A workflow-bearing plugin now
   resolves `installable`, installs with no `--partial`, and renders a clean
   `● (installed)` row — and materializes nothing, because no bridge exists yet.
@@ -295,25 +307,25 @@ implementation.
 
 **Last session:** 2026-09-05T11:03:00Z
 
-**Stopped At:** Completed 111-02-PLAN.md
+**Stopped At:** Completed 111-03-PLAN.md
 **Resume File:** None
-**Next Action:** `/gsd-execute-phase 111` — `111-03` (the staging triplet and
-the barrel, the WR-06 occupancy refusal, every rollback branch). `111-02`'s
-production commit is `fc893974`, carrying exactly its seven planned paths, with
-`55524e63` the metadata commit. The phase mechanism held again: path-scoped
-checkout naming individual files, the blast-radius assertion printing `0`
-immediately after, an owner test importing every export by name, complete direct
-coverage per pair, and the full gate chain before the commit.
+**Next Action:** `/gsd-execute-phase 111` — `111-04` (bump `EXTENSION_VERSION`
+at all six sites and invert the install-window assertion so it proves the
+envelope present). `111-03`'s single commit is `6981b2b4`, carrying exactly its
+four planned paths. The phase mechanism held a third time: path-scoped checkout
+naming individual files, the blast-radius assertion printing `0` immediately
+after, owner tests importing every export by name, complete direct coverage per
+pair, and the full gate chain before the commit.
 
-Three things `111-03` inherits. `workflowArtifactPath` is **async**, so every
-call site in `stage.ts` must await it — a forgotten await yields a leaf named
-`[object Promise]` rather than a throw. The `bridges-workflows` zone is now in
-`.fallowrc.json`, so `stage.ts` and `index.ts` land without a `Boundary
-coverage` failure. And `prepareStageWorkflows` re-exports the discovery warnings
-unchanged, so the criterion-4 row reaches `StageWorkflowsCommitResult.warnings`
-with no staging edit — `111-03`'s stage-side case should assert the same exact
-string while the envelope is still staged, so the row is not mistaken for a
-refusal.
+Two things `111-04` inherits. **The `orchestrators` fallow allow-list still
+omits `"bridges-workflows"`** — nothing imports the bridge yet, so adding it in
+`111-03` would have been unverifiable, but the first orchestrator import must add
+that one string in the same change or `fallow dead-code`'s boundary sub-gate
+fails on the new edge. And `commitPreparedWorkflows`'s `onPlaced` is the
+caller's removal payload on every path including each throw, while its RETURN
+value is a leak string rather than a throw when only the staging cleanup failed;
+a caller that derives removal work from the thrown error's type instead will
+unlink either a foreign file or a previous envelope the rollback just restored.
 
 Phase 109 remains verified 12/12 and marked complete in ROADMAP.md;
 `109-VERIFICATION.md` carries the evidence. The phase's two manual-only
@@ -405,6 +417,7 @@ re-persists `harness-worktree` as a side effect.
 | Phase 110 P03 | 47 min | 3 tasks | 4 files |
 | Phase 111 P01 | 35 min | 2 tasks | 5 files |
 | Phase 111 P02 | 62 min | 3 tasks | 7 files |
+| Phase 111 P03 | 35 min | 3 tasks | 4 files |
 
 ## Decisions
 
@@ -433,12 +446,16 @@ _Recorded per phase as the milestone proceeds._
 - [Phase 111]: The row's reason names the missing NAME and states the description as the engine's OTHER requirement, never as a second observed absence. — Both measured stem-fallback shapes carry a description, so a row claiming otherwise would be a false statement about the file, which is worse than no row.
 - [Phase 111]: The case-fold dedup case plants two REAL directories differing only in case rather than declaring one directory under two spellings. — On a case-sensitive filesystem the plan's shape leaves the second directory non-existent, `readdir` returns nothing, and the case passes whether or not the key is folded; it would have covered the darwin arm while asserting nothing about it.
 - [Phase 111]: The three permission-mutating cases share ONE `t.after()` between the restoring `chmod` and the tree removal. — `node:test` runs after-hooks in registration order, so a removal registered by a shared root helper runs before the restoring chmod and fails with `EACCES`, turning two green assertions into two red cases whose summary line looks like a broken assertion.
+- [Phase 111]: The CR-01 restore-failure branch is driven by a composer override carrying a SIDE EFFECT, not by a composer returning two different paths. — `displacePreviousTargets` resolves each previous name once and the restore loop replays the captured pair, so "resolve differently on the displacement read and on the restore read" is unbuildable; what the seam does reach is ordering, and resolving the second previous name after the first has been displaced is the one moment the freed target can be turned into something a restore cannot rename back onto.
+- [Phase 111]: The fully-successful-reversal case asserts the ABSENCE of a leak suffix rather than its presence. — A reversal that left nothing placed and a staging cleanup that succeeded produce no leak at all, so asserting one would require an implementation that reports a leak falsely; the absence is exactly what separates that case from the failed-reversal case beside it.
+- [Phase 111]: Four measured branch gaps in `stage.ts` were closed by adding three public-behaviour cases, never a suppression directive. — The noop case now plants a no-`meta` script instead of a non-script file, and two rollback cases were added (a non-ENOENT displacement failure, and a re-stage whose restore succeeds); the module went from 53/57 to 61/61 branches.
+- [Phase 111]: The staging-side first-wins dedup is reported as unreachable through the public API rather than force-covered. — Discovery dedups by absolute source path and the collision assert rejects any two records sharing a generated name, so no input makes `seen.has(...)` true; V8 records the expression as evaluated, the module still reports 61/61, and the guard stands as defence in depth.
 - [Phase 109]: A negative assertion is only trusted after a non-vacuity probe. Before accepting the green `ENOENT` assertion, `resolveStrict` was driven against the identical fixture shape and returned `installable` with `workflows` in `supported`. — Without that check the assertion passes just as happily for a plugin carrying no `workflows/` directory at all, and would pin nothing.
 - [Phase 109]: D-109-01/D-109-05 executed as a red slice: the five locking gates and the published byte contract were turned to the post-inversion reading BEFORE any production edit, and each was observed failing against unmodified code. — Success Criterion 4 asks for a red-then-green pair. With production edited first the renderer prints whatever the fixture hands it, both halves agree, and the observed red never happens.
 
 ## Operator Next Steps
 
-- Continue Phase 111 with `/gsd-execute-phase 111` — `111-03` is next
+- Continue Phase 111 with `/gsd-execute-phase 111` — `111-04` is next
 - Phase 109 is complete and verified 12/12; 110-114 run in order, each
   depending on the one before it
 - The hardening phases 115, 116 and 117 are mutually independent; the order
