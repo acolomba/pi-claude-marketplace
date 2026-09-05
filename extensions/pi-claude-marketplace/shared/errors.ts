@@ -613,3 +613,39 @@ export class AggregateResourcesDiscoverError extends Error {
     this.failures = Object.freeze([...failures]);
   }
 }
+
+/** One generated workflow command name claimed by more than one source script. */
+export interface WorkflowNameCollision {
+  readonly generatedName: string;
+  readonly fileNames: readonly string[];
+}
+
+/**
+ * WNAM-05: two workflow scripts in one plugin resolve to the same generated
+ * command name.
+ *
+ * The clash lives in the declared `meta.name`, so neither file name reveals it
+ * and keeping the first silently would be the misnaming WNAM-05 exists to
+ * prevent. `collisions` carries the offenders as data because the install
+ * surface renders each one through `notify()`; recovering them by parsing the
+ * message would be the message-substring coupling the typed-error convention
+ * exists to forbid.
+ */
+export class WorkflowNameCollisionError extends Error {
+  readonly collisions: readonly WorkflowNameCollision[];
+  constructor(collisions: readonly WorkflowNameCollision[]) {
+    const details = collisions
+      .map((collision) => {
+        const claimants = collision.fileNames.map((fileName) => `"${fileName}"`).join(", ");
+
+        return `"${collision.generatedName}" <- [${claimants}]`;
+      })
+      .join("\n  ");
+
+    super(
+      `Generated workflow name collision detected. Rename the meta.name of one of the source scripts:\n  ${details}`,
+    );
+    this.name = "WorkflowNameCollisionError";
+    this.collisions = Object.freeze([...collisions]);
+  }
+}

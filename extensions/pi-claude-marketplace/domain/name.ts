@@ -152,3 +152,83 @@ export function generatedAgentName(plugin: string, source: string): string {
   assertSafeName(generated);
   return generated;
 }
+
+/**
+ * Workflow name generator (RN-1 / WNAM-06).
+ *
+ * Format: `<plugin>:<workflow>` -- the same colon separator command names use.
+ * The `<plugin>-` prefix is elided from `source` (acme + acme-audit ->
+ * acme:audit, NOT acme:acme-audit).
+ *
+ * `source` is the workflow's `meta.name`, not its file stem: the two diverge in
+ * real plugins, and the declared name is the one the host engine answers to.
+ *
+ * Workflow discovery is flat and non-recursive (WBRG-02), so this takes the
+ * single-segment shape of `generatedSkillName` rather than
+ * `generatedCommandName`'s `/`-separated path handling. Sharing a helper with
+ * the command generator would mean pulling its nested-path and empty-head rules
+ * into a caller that can never produce either shape.
+ */
+export function generatedWorkflowName(plugin: string, source: string): string {
+  assertSafeName(plugin);
+  assertSafeName(source);
+  const prefix = `${plugin}-`;
+  const elided = source.startsWith(prefix) ? source.slice(prefix.length) : source;
+  assertSafeName(elided);
+  const generated = `${plugin}:${elided}`;
+  assertSafeName(generated);
+  assertSafeSavedWorkflowName(generated);
+  return generated;
+}
+
+/**
+ * WNAM-06 / SC-4: replicate the host engine's `isSafeSavedWorkflowName`
+ * (`@quintinshaw/pi-dynamic-workflows` 3.10.1, `dist/workflow-saved.js`) for a
+ * name this module has already generated.
+ *
+ * Four of the engine's six clauses live here: the 128-character cap, the
+ * trim-equality rule, the whitespace/separator/NUL screen, and the
+ * control-and-format screen. `assertSafeName` carries the other two -- the
+ * non-empty check and both dot forms -- and `generatedWorkflowName` runs it on
+ * the joined name before calling this.
+ *
+ * The last two screens overlap `assertSafeName` without being covered by it.
+ * That validator refuses only code points below 0x20 plus 0x7f, so a plain
+ * space at 0x20 and every `\p{Cf}` code point pass it while the engine refuses
+ * the name -- which in practice is an envelope on disk that never registers as
+ * a command. Both patterns carry `/u` so the property escapes match code points
+ * the way the engine's do.
+ *
+ * Matching the engine exactly is the goal, never exceeding it: a gate stricter
+ * than the engine refuses a name the engine would accept, and only the lax
+ * direction self-corrects when a later engine relaxes a rule.
+ *
+ * This wraps rather than widens `assertSafeName`, which skills, commands and
+ * agents all share and none of which wants a 128-character cap or a whitespace
+ * ban. Only `generatedWorkflowName` calls this.
+ */
+function assertSafeSavedWorkflowName(name: string): void {
+  if (name.length > 128) {
+    throw new Error(
+      `Generated workflow name "${name}" must be at most 128 characters (got ${name.length}).`,
+    );
+  }
+
+  if (name.trim() !== name) {
+    throw new Error(
+      `Generated workflow name "${name}" must not have leading or trailing whitespace.`,
+    );
+  }
+
+  if (/[\s/\\\0]/u.test(name)) {
+    throw new Error(
+      `Generated workflow name "${name}" must not contain whitespace, path separators, or NUL.`,
+    );
+  }
+
+  if (/[\p{Cc}\p{Cf}]/u.test(name)) {
+    throw new Error(
+      `Generated workflow name "${name}" must not contain control or format characters.`,
+    );
+  }
+}

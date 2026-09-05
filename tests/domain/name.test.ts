@@ -6,6 +6,7 @@ import {
   generatedAgentName,
   generatedCommandName,
   generatedSkillName,
+  generatedWorkflowName,
 } from "../../extensions/pi-claude-marketplace/domain/name.ts";
 
 describe("assertSafeName", () => {
@@ -419,6 +420,131 @@ describe("generatedAgentName", () => {
 
       // assert
       assert.throws(generateAgentName, (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.strictEqual(error.constructor, Error);
+        assert.strictEqual(error.message, errorMessage);
+        return true;
+      });
+    });
+  }
+});
+
+describe("generatedWorkflowName", () => {
+  for (const { plugin, source, expectedWorkflowName } of [
+    { plugin: "acme", source: "audit", expectedWorkflowName: "acme:audit" },
+    { plugin: "acme", source: "acme-audit", expectedWorkflowName: "acme:audit" },
+    { plugin: "ab", source: "abc", expectedWorkflowName: "ab:abc" },
+    { plugin: "foo", source: "foo", expectedWorkflowName: "foo:foo" },
+    { plugin: "acme", source: "a.b", expectedWorkflowName: "acme:a.b" },
+  ]) {
+    test(`generates ${JSON.stringify(expectedWorkflowName)} from ${JSON.stringify(source)}`, () => {
+      // arrange
+      const pluginName = plugin;
+      const sourceName = source;
+
+      // act
+      const workflowName = generatedWorkflowName(pluginName, sourceName);
+
+      // assert
+      assert.strictEqual(workflowName, expectedWorkflowName);
+    });
+  }
+
+  test("accepts a joined name of exactly 128 code units", () => {
+    // arrange
+    // "acme:" is 5 code units, so a 123-unit source lands the join on the ceiling.
+    const plugin = "acme";
+    const source = "x".repeat(123);
+
+    // act
+    const workflowName = generatedWorkflowName(plugin, source);
+
+    // assert
+    assert.strictEqual(workflowName, `acme:${"x".repeat(123)}`);
+    assert.strictEqual(workflowName.length, 128);
+  });
+
+  test("rejects a joined name of 129 code units", () => {
+    // arrange
+    const plugin = "acme";
+    const source = "x".repeat(124);
+    const errorMessage = `Generated workflow name "acme:${"x".repeat(124)}" must be at most 128 characters (got 129).`;
+
+    // act
+    const generateWorkflowName = () => generatedWorkflowName(plugin, source);
+
+    // assert
+    assert.throws(generateWorkflowName, (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.strictEqual(error.constructor, Error);
+      assert.strictEqual(error.message, errorMessage);
+      return true;
+    });
+  });
+
+  for (const { pluginName, sourceName, errorMessage } of [
+    {
+      pluginName: "ac/me",
+      sourceName: "audit",
+      errorMessage: 'Name "ac/me" must not contain path separators.',
+    },
+    {
+      pluginName: "acme",
+      sourceName: "",
+      errorMessage: "Name must be a non-empty string.",
+    },
+    {
+      pluginName: "acme",
+      sourceName: "acme-",
+      errorMessage: "Name must be a non-empty string.",
+    },
+    {
+      pluginName: "acme",
+      sourceName: "trail ",
+      errorMessage:
+        'Generated workflow name "acme:trail " must not have leading or trailing whitespace.',
+    },
+    {
+      pluginName: "acme",
+      sourceName: "my name",
+      errorMessage:
+        'Generated workflow name "acme:my name" must not contain whitespace, path separators, or NUL.',
+    },
+    {
+      // A leading space in the source survives the join: "acme: lead" has no
+      // leading or trailing whitespace of its own, so the trim rule cannot see it.
+      pluginName: "acme",
+      sourceName: " lead",
+      errorMessage:
+        'Generated workflow name "acme: lead" must not contain whitespace, path separators, or NUL.',
+    },
+    {
+      // U+200B ZERO WIDTH SPACE, a format character written as an escape because
+      // it is invisible in source.
+      pluginName: "acme",
+      sourceName: "zw\u200Bsp",
+      errorMessage:
+        'Generated workflow name "acme:zw\u200Bsp" must not contain control or format characters.',
+    },
+    {
+      // U+202E RIGHT-TO-LEFT OVERRIDE, a bidi control and also a format
+      // character: it reverses how the rest of the name renders.
+      pluginName: "acme",
+      sourceName: "bidi\u202Ex",
+      errorMessage:
+        'Generated workflow name "acme:bidi\u202Ex" must not contain control or format characters.',
+    },
+  ]) {
+    test(`rejects plugin ${JSON.stringify(pluginName)} and source ${JSON.stringify(sourceName)}`, () => {
+      // arrange
+      const plugin = pluginName;
+      const source = sourceName;
+
+      // act
+      const generateWorkflowName = () => generatedWorkflowName(plugin, source);
+
+      // assert
+      assert.throws(generateWorkflowName, (error: unknown) => {
         assert.ok(error instanceof Error);
         assert.strictEqual(error.constructor, Error);
         assert.strictEqual(error.message, errorMessage);

@@ -26,6 +26,7 @@ import {
   StaleSourceCloneError,
   StateLockHeldError,
   UnsupportedSourceError,
+  WorkflowNameCollisionError,
 } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 
 import type {
@@ -33,6 +34,7 @@ import type {
   PluginShapeErrorKind,
   PluginShapeErrorShape,
   ResourcesDiscoverFailure,
+  WorkflowNameCollision,
 } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 
 void ({
@@ -1519,5 +1521,87 @@ describe("AggregateResourcesDiscoverError", () => {
     ]);
     assert.strictEqual(Object.isFrozen(error.failures), true);
     assert.notStrictEqual(error.failures, failures);
+  });
+});
+
+describe("WorkflowNameCollisionError", () => {
+  test("exposes every collision and its claimants in caller order", () => {
+    // arrange
+    const collisions: WorkflowNameCollision[] = [
+      { generatedName: "acme:audit", fileNames: ["audit.ts", "security-audit.ts"] },
+      { generatedName: "acme:report", fileNames: ["a.ts", "b.ts", "c.ts"] },
+    ];
+
+    // act
+    const error = new WorkflowNameCollisionError(collisions);
+
+    // assert
+    assert.ok(error instanceof WorkflowNameCollisionError);
+    assert.ok(error instanceof Error);
+    assert.deepStrictEqual(
+      {
+        name: error.name,
+        message: error.message,
+        collisions: error.collisions,
+        cause: error.cause,
+      },
+      {
+        name: "WorkflowNameCollisionError",
+        message:
+          'Generated workflow name collision detected. Rename the meta.name of one of the source scripts:\n  "acme:audit" <- ["audit.ts", "security-audit.ts"]\n  "acme:report" <- ["a.ts", "b.ts", "c.ts"]',
+        collisions: [
+          { generatedName: "acme:audit", fileNames: ["audit.ts", "security-audit.ts"] },
+          { generatedName: "acme:report", fileNames: ["a.ts", "b.ts", "c.ts"] },
+        ],
+        cause: undefined,
+      },
+    );
+  });
+
+  test("names one collision on a single detail line", () => {
+    // arrange
+    const collisions: WorkflowNameCollision[] = [
+      { generatedName: "acme:audit", fileNames: ["audit.ts", "security-audit.ts"] },
+    ];
+
+    // act
+    const error = new WorkflowNameCollisionError(collisions);
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        name: error.name,
+        message: error.message,
+        collisions: error.collisions,
+        cause: error.cause,
+      },
+      {
+        name: "WorkflowNameCollisionError",
+        message:
+          'Generated workflow name collision detected. Rename the meta.name of one of the source scripts:\n  "acme:audit" <- ["audit.ts", "security-audit.ts"]',
+        collisions: [{ generatedName: "acme:audit", fileNames: ["audit.ts", "security-audit.ts"] }],
+        cause: undefined,
+      },
+    );
+  });
+
+  test("freezes a defensive copy a later push into the caller's array cannot reach", () => {
+    // arrange
+    const collisions: WorkflowNameCollision[] = [
+      { generatedName: "acme:audit", fileNames: ["audit.ts", "security-audit.ts"] },
+      { generatedName: "acme:report", fileNames: ["a.ts", "b.ts", "c.ts"] },
+    ];
+
+    // act
+    const error = new WorkflowNameCollisionError(collisions);
+    collisions.push({ generatedName: "acme:late", fileNames: ["late.ts"] });
+
+    // assert
+    assert.deepStrictEqual(error.collisions, [
+      { generatedName: "acme:audit", fileNames: ["audit.ts", "security-audit.ts"] },
+      { generatedName: "acme:report", fileNames: ["a.ts", "b.ts", "c.ts"] },
+    ]);
+    assert.strictEqual(Object.isFrozen(error.collisions), true);
+    assert.notStrictEqual(error.collisions, collisions);
   });
 });
