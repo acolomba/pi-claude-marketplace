@@ -90580,8 +90580,26 @@
     },
     {
       "id": "MF-DEC-04",
-      "status": "pending",
-      "premiseFindingIds": []
+      "status": "resolved",
+      "premiseFindingIds": [
+        "SNC-F001"
+      ],
+      "proof": "SNC-F001 is the single specific terminal canonical root for this decision and is stale. Current CodeGraph call paths and source inspection show install, update, and reinstall orchestration constructing populated cascade rows and routing them through notifyWithContext into the shared cascade emission path, disproving the historical 18-of-19 production-dead census. The broad MF-009 record remains provenance for all nine historical operator decisions but is not a premise substitute for this specific stale root. The narrower current issues are independent findings with existing routes: SNA-F010 covers the inaccurate reachability comment, SNC-F002 one standalone dead dispatcher arm, OPM-F04 list-composer divergence, SNC-F019 installed-like inlining, and OPM-F05 the missing cross-render parity gate.",
+      "options": [
+        "Evidence-only closure",
+        "Retire central switch",
+        "Restore call-never-duplicate composer contract"
+      ],
+      "selectedOption": "Evidence-only closure",
+      "rejectedOptions": [
+        "Retire central switch — rejected as a global decision because populated production cascades now reach the shared cascade emission path; SNC-F002 separately retains the evidence for its one standalone dead arm without authorizing broader removal.",
+        "Restore call-never-duplicate composer contract — rejected as a global decision because the obsolete 18-of-19 census no longer justifies replacing all command render maps; OPM-F04, SNC-F019, and OPM-F05 retain the narrower composition and parity work under their existing routes."
+      ],
+      "affectedIds": [
+        "SNC-F001"
+      ],
+      "recommendation": "Evidence-only closure per D-15: retire the obsolete 18-of-19 census without asking the operator or selecting a global renderer architecture, while preserving every narrower terminal finding and its current route.",
+      "downstreamConsequences": "MF-DEC-04 authorizes no production or test change, adds or removes no downstream implementation requirement, and creates no scopeChanges record; RVAL-03 records only the evidence-based closure of this stale decision premise. Preserve SNA-F010 in Phase 2 for the reachability-comment correction, SNC-F002 in Phase 2 for the standalone dead arm, OPM-F04 in Phase 2 for list-composer divergence, SNC-F019 in Phase 2 for installed-like inlining, and OPM-F05 in Phase 6 for the planted cross-render parity gate. Those findings remain independently actionable only within their existing destinations and are not expanded by this closure."
     },
     {
       "id": "MF-DEC-05",
