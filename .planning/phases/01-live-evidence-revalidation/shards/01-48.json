@@ -1,0 +1,1407 @@
+{
+  "plan": "01-48",
+  "files": [
+    {
+      "path": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md",
+      "category": "first-pass",
+      "assignedPlan": "01-48",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-001",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-002",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-003",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-004",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-005",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-006",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-007",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-008",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-009",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-010",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-011",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-012",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-013",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-014",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-015",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-016",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-017",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-018",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-019",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-020",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-021",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-022",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-023",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-024",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-025",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-026"
+      ],
+      "reviewStatus": "complete",
+      "outcome": "live findings"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md",
+      "category": "first-pass",
+      "assignedPlan": "01-48",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-001",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-002",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-003",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-004",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-005",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-006",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-007",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-008",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-009",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-010",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-011",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-012",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-013",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-014",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-015",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-016",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-017",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-018",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-019",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-020",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-021",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-022",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-023",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-024",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-025",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-026",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-027",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-028",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-029",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-030",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-031",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-032",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-033"
+      ],
+      "reviewStatus": "complete",
+      "outcome": "live findings"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md",
+      "category": "first-pass",
+      "assignedPlan": "01-48",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-001",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-002",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-003",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-004",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-005",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-006",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-007",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-008",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-009",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-010",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-011",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-012",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-013",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-014",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-015",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-016",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-017",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-018",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-019",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-020",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-021",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-022",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-023"
+      ],
+      "reviewStatus": "complete",
+      "outcome": "live findings"
+    }
+  ],
+  "sourceClaims": [
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-001",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md",
+      "label": "CLAIM-001",
+      "findingId": "OMAUR-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-002",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md",
+      "label": "CLAIM-002",
+      "findingId": "OMAUR-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-003",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md",
+      "label": "CLAIM-003",
+      "findingId": "OMAUR-F003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-004",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md",
+      "label": "CLAIM-004",
+      "findingId": "OMAUR-F004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-005",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md",
+      "label": "CLAIM-005",
+      "findingId": "OMAUR-F004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-006",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md",
+      "label": "CLAIM-006",
+      "findingId": "OMAUR-F005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-007",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md",
+      "label": "CLAIM-007",
+      "findingId": "OMAUR-F006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-008",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md",
+      "label": "CLAIM-008",
+      "findingId": "OMAUR-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-009",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md",
+      "label": "CLAIM-009",
+      "findingId": "OMAUR-F003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-010",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md",
+      "label": "CLAIM-010",
+      "findingId": "OMAUR-F007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-011",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md",
+      "label": "CLAIM-011",
+      "findingId": "OMAUR-F004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-012",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md",
+      "label": "CLAIM-012",
+      "findingId": "OMAUR-F008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-013",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md",
+      "label": "CLAIM-013",
+      "findingId": "OMAUR-F009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-014",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md",
+      "label": "CLAIM-014",
+      "findingId": "OMAUR-F010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-015",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md",
+      "label": "CLAIM-015",
+      "findingId": "OMAUR-F010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-016",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md",
+      "label": "CLAIM-016",
+      "findingId": "OMAUR-F010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-017",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md",
+      "label": "CLAIM-017",
+      "findingId": "OMAUR-F011"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-018",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md",
+      "label": "CLAIM-018",
+      "findingId": "OMAUR-F012"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-019",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md",
+      "label": "CLAIM-019",
+      "findingId": "OMAUR-F013"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-020",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md",
+      "label": "CLAIM-020",
+      "findingId": "OMAUR-F014"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-021",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md",
+      "label": "CLAIM-021",
+      "findingId": "OMAUR-F015"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-022",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md",
+      "label": "CLAIM-022",
+      "findingId": "OMAUR-F010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-023",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md",
+      "label": "CLAIM-023",
+      "findingId": "OMAUR-F016"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-024",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md",
+      "label": "CLAIM-024",
+      "findingId": "OMAUR-F017"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-025",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md",
+      "label": "CLAIM-025",
+      "findingId": "OMAUR-F017"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-026",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md",
+      "label": "CLAIM-026",
+      "findingId": "OMAUR-F017"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-001",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md",
+      "label": "CLAIM-001",
+      "findingId": "OMRR-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-002",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md",
+      "label": "CLAIM-002",
+      "findingId": "OMRR-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-003",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md",
+      "label": "CLAIM-003",
+      "findingId": "OMRR-F004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-004",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md",
+      "label": "CLAIM-004",
+      "findingId": "OMRR-F003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-005",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md",
+      "label": "CLAIM-005",
+      "findingId": "OMRR-F005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-006",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md",
+      "label": "CLAIM-006",
+      "findingId": "OMRR-F003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-007",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md",
+      "label": "CLAIM-007",
+      "findingId": "OMRR-F006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-008",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md",
+      "label": "CLAIM-008",
+      "findingId": "OMRR-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-009",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md",
+      "label": "CLAIM-009",
+      "findingId": "OMRR-F003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-010",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md",
+      "label": "CLAIM-010",
+      "findingId": "OMRR-F003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-011",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md",
+      "label": "CLAIM-011",
+      "findingId": "OMRR-F004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-012",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md",
+      "label": "CLAIM-012",
+      "findingId": "OMRR-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-013",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md",
+      "label": "CLAIM-013",
+      "findingId": "OMRR-F005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-014",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md",
+      "label": "CLAIM-014",
+      "findingId": "OMRR-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-015",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md",
+      "label": "CLAIM-015",
+      "findingId": "OMRR-F005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-016",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md",
+      "label": "CLAIM-016",
+      "findingId": "OMRR-F007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-017",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md",
+      "label": "CLAIM-017",
+      "findingId": "OMRR-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-018",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md",
+      "label": "CLAIM-018",
+      "findingId": "OMRR-F004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-019",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md",
+      "label": "CLAIM-019",
+      "findingId": "OMRR-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-020",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md",
+      "label": "CLAIM-020",
+      "findingId": "OMRR-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-021",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md",
+      "label": "CLAIM-021",
+      "findingId": "OMRR-F005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-022",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md",
+      "label": "CLAIM-022",
+      "findingId": "OMRR-F008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-023",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md",
+      "label": "CLAIM-023",
+      "findingId": "OMRR-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-024",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md",
+      "label": "CLAIM-024",
+      "findingId": "OMRR-F005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-025",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md",
+      "label": "CLAIM-025",
+      "findingId": "OMRR-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-026",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md",
+      "label": "CLAIM-026",
+      "findingId": "OMRR-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-027",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md",
+      "label": "CLAIM-027",
+      "findingId": "OMRR-F007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-028",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md",
+      "label": "CLAIM-028",
+      "findingId": "OMRR-F007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-029",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md",
+      "label": "CLAIM-029",
+      "findingId": "OMRR-F007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-030",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md",
+      "label": "CLAIM-030",
+      "findingId": "OMRR-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-031",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md",
+      "label": "CLAIM-031",
+      "findingId": "OMRR-F009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-032",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md",
+      "label": "CLAIM-032",
+      "findingId": "OMRR-F010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-033",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md",
+      "label": "CLAIM-033",
+      "findingId": "OMRR-F010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-001",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md",
+      "label": "CLAIM-001",
+      "findingId": "OPEFR-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-002",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md",
+      "label": "CLAIM-002",
+      "findingId": "OPEFR-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-003",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md",
+      "label": "CLAIM-003",
+      "findingId": "OPEFR-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-004",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md",
+      "label": "CLAIM-004",
+      "findingId": "OPEFR-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-005",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md",
+      "label": "CLAIM-005",
+      "findingId": "OPEFR-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-006",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md",
+      "label": "CLAIM-006",
+      "findingId": "OPEFR-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-007",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md",
+      "label": "CLAIM-007",
+      "findingId": "OPEFR-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-008",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md",
+      "label": "CLAIM-008",
+      "findingId": "OPEFR-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-009",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md",
+      "label": "CLAIM-009",
+      "findingId": "OPEFR-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-010",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md",
+      "label": "CLAIM-010",
+      "findingId": "OPEFR-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-011",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md",
+      "label": "CLAIM-011",
+      "findingId": "OPEFR-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-012",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md",
+      "label": "CLAIM-012",
+      "findingId": "OPEFR-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-013",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md",
+      "label": "CLAIM-013",
+      "findingId": "OPEFR-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-014",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md",
+      "label": "CLAIM-014",
+      "findingId": "OPEFR-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-015",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md",
+      "label": "CLAIM-015",
+      "findingId": "OPEFR-F003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-016",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md",
+      "label": "CLAIM-016",
+      "findingId": "OPEFR-F004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-017",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md",
+      "label": "CLAIM-017",
+      "findingId": "OPEFR-F005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-018",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md",
+      "label": "CLAIM-018",
+      "findingId": "OPEFR-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-019",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md",
+      "label": "CLAIM-019",
+      "findingId": "OPEFR-F006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-020",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md",
+      "label": "CLAIM-020",
+      "findingId": "OPEFR-F007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-021",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md",
+      "label": "CLAIM-021",
+      "findingId": "OPEFR-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-022",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md",
+      "label": "CLAIM-022",
+      "findingId": "OPEFR-F008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-023",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md",
+      "label": "CLAIM-023",
+      "findingId": "OPEFR-F008"
+    }
+  ],
+  "findings": [
+    {
+      "id": "OMAUR-F001",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-001"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "OMAUB-F29",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts" },
+        { "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/update.messaging.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/orchestrators/marketplace/add.test.ts" },
+        { "path": "tests/orchestrators/marketplace/update.messaging.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph, current source/test inspection, and focused node:test rerun",
+        "observed": "The add and messaging suites retain hermetic temporary roots, exact whole-message assertions, strict mocks, and rollback coverage; all messaging suites and the update suite passed."
+      },
+      "rationale": "The broad positive baseline is already retained by OMAUB-F29 and remains independent from narrower live findings.",
+      "destination": "Preserve these patterns during Phase 2 fixes."
+    },
+    {
+      "id": "OMAUR-F002",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-002",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-008"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "OMAUB-F15",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts" }
+      ],
+      "testRefs": [{ "path": "tests/orchestrators/marketplace/update.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current makeCtx inspection",
+        "observed": "update.test.ts still constructs ctx and pi as partial literals cast to the full host interfaces."
+      },
+      "rationale": "The hand-rolled host-double finding is the same live issue canonicalized by OMAUB-F15.",
+      "destination": "Replace prescribed notification interactions with exact verified mocks in Phase 2."
+    },
+    {
+      "id": "OMAUR-F003",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-003",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-009"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "OMAUB-F16",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts" }
+      ],
+      "testRefs": [{ "path": "tests/orchestrators/marketplace/update.test.ts" }],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "node --test focused marketplace update owner suite in a repository-local isolated copy",
+        "exitCode": 0,
+        "observed": "Canonical current mutations survived the fragment-only notification cluster; current inspection still finds the cited match/doesNotMatch assertions."
+      },
+      "rationale": "The weak notification assertions are the same mutation-backed live gap canonicalized by OMAUB-F16.",
+      "destination": "Assert complete notifications and severity in Phase 2."
+    },
+    {
+      "id": "OMAUR-F004",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-004",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-005",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-011"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "OMAUB-F18",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts" },
+        { "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/orchestrators/marketplace/add.test.ts" },
+        { "path": "tests/orchestrators/marketplace/update.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current option-call inspection",
+        "observed": "The cited path/empty-scope cases still omit gitOps while production defaults those options to DEFAULT_GIT_OPS."
+      },
+      "rationale": "The fragile live-boundary fallback is already canonicalized by OMAUB-F18.",
+      "destination": "Inject a zero-call GitOps fake in Phase 2."
+    },
+    {
+      "id": "OMAUR-F005",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-006"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "OMAA-F24",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts" }
+      ],
+      "testRefs": [{ "path": "tests/orchestrators/marketplace/add.test.ts" }],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "node --test focused marketplace add owner suite in a repository-local isolated copy",
+        "exitCode": 0,
+        "observed": "The canonical wrong-error mutation survived the orchestrated unsupported-source case's generic Error and nonempty-cause assertions."
+      },
+      "rationale": "The weak error-identity case is OMAA-F24.",
+      "destination": "Assert the exact typed outcome in Phase 2."
+    },
+    {
+      "id": "OMAUR-F006",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-007"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "OMAA-F25",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts" }
+      ],
+      "testRefs": [{ "path": "tests/orchestrators/marketplace/add.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current test comment inspection",
+        "observed": "Assert-phase narration still repeats nearby assertions throughout add.test.ts."
+      },
+      "rationale": "The narration-comment cleanup is already OMAA-F25.",
+      "destination": "Remove restatements while retaining rationale in Phase 2."
+    },
+    {
+      "id": "OMAUR-F007",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-010"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "OMAUB-F17",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts" }
+      ],
+      "testRefs": [{ "path": "tests/orchestrators/marketplace/update.test.ts" }],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "node --test focused marketplace update owner suite in a repository-local isolated copy",
+        "exitCode": 0,
+        "observed": "The canonical persisted-state mutation survived the partial-refresh failure case."
+      },
+      "rationale": "The missing failure-path state promise is OMAUB-F17.",
+      "destination": "Assert the complete unchanged record in Phase 2."
+    },
+    {
+      "id": "OMAUR-F008",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-012"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "OMAUB-F19",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts" }
+      ],
+      "testRefs": [{ "path": "tests/orchestrators/marketplace/update.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current title census",
+        "observed": "Three update tests still begin with the non-durable 260525-cjr B2 prefix."
+      },
+      "rationale": "The title cleanup is OMAUB-F19.",
+      "destination": "Drop the session-style prefix in Phase 2."
+    },
+    {
+      "id": "OMAUR-F009",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-013"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "OMAUB-F20",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/platform/pi-api.ts" }],
+      "testRefs": [{ "path": "tests/orchestrators/marketplace/update.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current import inspection",
+        "observed": "update.test.ts still imports host types directly rather than through platform/pi-api.ts."
+      },
+      "rationale": "The project-boundary bypass is OMAUB-F20.",
+      "destination": "Use the local Pi API type boundary in Phase 2."
+    },
+    {
+      "id": "OMAUR-F010",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-014",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-015",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-016",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-022"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "OMAUB-F29",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/add.messaging.ts" },
+        { "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/update.messaging.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/orchestrators/marketplace/add.messaging.test.ts" },
+        { "path": "tests/orchestrators/marketplace/update.messaging.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current export/assertion census and focused node:test rerun",
+        "observed": "Both messaging owner suites pass and still assert their complete runtime/type surfaces with hand-written expectations."
+      },
+      "rationale": "The clean/proportionate messaging observations are positive evidence already retained by OMAUB-F29.",
+      "destination": "Preserve during later remediation."
+    },
+    {
+      "id": "OMAUR-F011",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-017"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "OMAA-F26",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts" }
+      ],
+      "testRefs": [{ "path": "tests/orchestrators/marketplace/add.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source inspection",
+        "observed": "add.ts still calls randomUUID and new Date inline at its staging and persistence boundaries."
+      },
+      "rationale": "The hidden add dependencies are OMAA-F26.",
+      "destination": "Inject stable collaborators when the production signature changes in Phase 2."
+    },
+    {
+      "id": "OMAUR-F012",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-018"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "OMAA-F27",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts" }
+      ],
+      "testRefs": [{ "path": "tests/orchestrators/marketplace/add.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current source inspection",
+        "observed": "Both parsed-manifest name assertions remain in add.ts without a narrowing contract or rationale."
+      },
+      "rationale": "The manifest-name assertions are OMAA-F27.",
+      "destination": "Strengthen the return type or remove the assertions in Phase 2."
+    },
+    {
+      "id": "OMAUR-F013",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-019"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "OMAUB-F21",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts" }
+      ],
+      "testRefs": [{ "path": "tests/orchestrators/marketplace/update.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source inspection",
+        "observed": "update.ts still stamps lastUpdatedAt with inline new Date()."
+      },
+      "rationale": "The hidden update clock is OMAUB-F21.",
+      "destination": "Inject a clock in Phase 2."
+    },
+    {
+      "id": "OMAUR-F014",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-020"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "OMAUB-F22",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts" }
+      ],
+      "testRefs": [{ "path": "tests/orchestrators/marketplace/update.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current source inspection",
+        "observed": "record.source is still asserted as ParsedSource without an adjacent rationale."
+      },
+      "rationale": "The unchecked persisted-source assertion is OMAUB-F22.",
+      "destination": "Narrow the persisted type or document the boundary in Phase 2."
+    },
+    {
+      "id": "OMAUR-F015",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-021"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "OMAUB-F23",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/update.messaging.ts" }
+      ],
+      "testRefs": [{ "path": "tests/orchestrators/marketplace/update.messaging.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current switch inspection",
+        "observed": "The comment still promises a terminal assertNever, but the four-arm switch ends without one."
+      },
+      "rationale": "The factually wrong exhaustiveness comment is OMAUB-F23.",
+      "destination": "Add a real exhaustive fallback or correct the comment in Phase 2."
+    },
+    {
+      "id": "OMAUR-F016",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-023"
+      ],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts" },
+        { "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/orchestrators/marketplace/add.test.ts" },
+        { "path": "tests/orchestrators/marketplace/update.test.ts" }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test assigned owner suites",
+        "exitCode": 1,
+        "observed": "Thirteen assigned suites passed; add.test.ts ran 56 cases successfully and its Unix-socket case failed before the unit under test because this sandbox refuses local socket listen with EPERM."
+      },
+      "rationale": "The historical review's no-execution limitation no longer applies; current suites were executed, with one disclosed sandbox-only setup failure unrelated to the report claims.",
+      "destination": "Evidence-only closure."
+    },
+    {
+      "id": "OMAUR-F017",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-024",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-025",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-add-update.md#CLAIM-026"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts" }
+      ],
+      "testRefs": [{ "path": "tests/platform/git-ops-fake.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current assignment and dependency-boundary inspection",
+        "observed": "Shared marketplace logic, support fakes, and fixture contents remain separately owned; the report used them only to establish collaborator and hermeticity context."
+      },
+      "rationale": "These scope boundaries prevent duplicate ownership while preserving the evidence chain.",
+      "destination": "Evidence-only closure."
+    },
+    {
+      "id": "OMRR-F001",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-001",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-012",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-014",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-017",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-019",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-020",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-023",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-025",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-026",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-030"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "OMR-F17",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts" },
+        { "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts" },
+        { "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/list.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/orchestrators/marketplace/shared.test.ts" },
+        { "path": "tests/orchestrators/marketplace/remove.test.ts" },
+        { "path": "tests/orchestrators/marketplace/list.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph, current suite inspection, and focused node:test rerun",
+        "observed": "The marketplace shared/remove/autoupdate/info/list and messaging suites pass and retain broad hermetic, whole-value, and byte-exact coverage outside the separately routed gaps."
+      },
+      "rationale": "The clean and proportionate baseline observations are the positive evidence already canonicalized by OMR-F17.",
+      "destination": "Preserve during targeted fixes."
+    },
+    {
+      "id": "OMRR-F002",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-002",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-008"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "operator decision",
+      "duplicateOf": "OMR-F13",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts" }
+      ],
+      "testRefs": [{ "path": "tests/orchestrators/marketplace/remove.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source/test inspection",
+        "observed": "The source-kind fallback remains observationally unreachable through normalized state; the test still mutates Object.prototype and asserts exactly 12 property reads to reach it."
+      },
+      "rationale": "The invasive test and dead source-kind arm are the same operator decision canonicalized by OMR-F13.",
+      "destination": "Decide whether to remove the dead branch or widen the persisted contract."
+    },
+    {
+      "id": "OMRR-F003",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-004",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-006",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-009",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-010"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "OMR-F14",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/shared/path-safety.ts" }],
+      "testRefs": [
+        { "path": "tests/orchestrators/marketplace/shared.test.ts" },
+        { "path": "tests/orchestrators/marketplace/remove.test.ts" }
+      ],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "node --test focused marketplace shared/remove owner suites in a repository-local isolated copy",
+        "exitCode": 0,
+        "observed": "Canonical wrong-error mutations survived assertFailedOutcome's self-reference and the generic Error/message checks; the current assertions remain unchanged."
+      },
+      "rationale": "The vacuous helper and weak structured-error checks are OMR-F14.",
+      "destination": "Assert concrete classes/fields and independently constructed outcomes in Phase 2."
+    },
+    {
+      "id": "OMRR-F004",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-003",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-011",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-018"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 7",
+      "duplicateOf": "OMR-F01",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts" },
+        { "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/list.ts" }
+      ],
+      "testRefs": [{ "path": "tests/architecture/no-orchestrator-network.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current architecture-gate target census",
+        "observed": "The no-network gate still omits marketplace remove.ts and list.ts (and autoupdate.ts), despite their no-network contracts."
+      },
+      "rationale": "The missing structural target coverage is OMR-F01.",
+      "destination": "Expand the architecture gate in Phase 7."
+    },
+    {
+      "id": "OMRR-F005",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-005",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-013",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-015",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-021",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-024"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "OMR-F15",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/autoupdate.ts" },
+        { "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/info.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/orchestrators/marketplace/autoupdate.test.ts" },
+        { "path": "tests/orchestrators/marketplace/info.test.ts" },
+        { "path": "tests/orchestrators/marketplace/list.messaging.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current node:assert/strict import and focused rerun",
+        "observed": "The cited deepEqual/equal spellings remain, but node:assert/strict makes them strict aliases; all affected focused suites pass."
+      },
+      "rationale": "The original loose-comparison premise is positively refuted and already closed by OMR-F15.",
+      "destination": "Evidence-only closure; rename only as optional mechanical consistency."
+    },
+    {
+      "id": "OMRR-F006",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-007"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "OMR-F12",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts" }
+      ],
+      "testRefs": [{ "path": "tests/orchestrators/marketplace/shared.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current identifier census",
+        "observed": "The two shared tests still use the placeholder name result."
+      },
+      "rationale": "The naming cleanup is already OMR-F12.",
+      "destination": "Use role-based names in Phase 2."
+    },
+    {
+      "id": "OMRR-F007",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-016",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-027",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-028",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-029"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "OMR-F16",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/info.ts" },
+        { "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts" },
+        { "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts" }
+      ],
+      "testRefs": [{ "path": "tests/architecture/no-orchestrator-network.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current header and cast-site inspection",
+        "observed": "info.ts still names the wrong enforcing test, remove.ts keeps two unexplained assertions, and shared.ts initializes five arrays with per-field assertions."
+      },
+      "rationale": "These current source-clarity findings are already grouped by OMR-F16.",
+      "destination": "Correct comments and types in Phase 2."
+    },
+    {
+      "id": "OMRR-F008",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-022"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/autoupdate.messaging.ts"
+        }
+      ],
+      "testRefs": [{ "path": "tests/orchestrators/marketplace/autoupdate.messaging.test.ts" }],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "node --test focused autoupdate messaging owner suite in a repository-local isolated copy",
+        "exitCode": 0,
+        "observed": "Replacing one context's failed renderer independently did not affect the existing asymmetric cases, so the shared-binding promise is not discriminated."
+      },
+      "rationale": "No current assertion proves both contexts retain the same failed renderer binding.",
+      "destination": "Add a strict binding-identity assertion in Phase 2."
+    },
+    {
+      "id": "OMRR-F009",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-031"
+      ],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts" }
+      ],
+      "testRefs": [{ "path": "tests/orchestrators/marketplace/remove.test.ts" }],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test assigned marketplace rest owner suites",
+        "exitCode": 0,
+        "observed": "All assigned marketplace rest source-owner and messaging suites passed in the current checkout."
+      },
+      "rationale": "The historical report's no-execution limitation is positively stale because the equivalent focused suites now ran successfully.",
+      "destination": "Evidence-only closure."
+    },
+    {
+      "id": "OMRR-F010",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-032",
+        ".planning/reviews/unit-test-adversarial/orchestrators-marketplace-rest.md#CLAIM-033"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts" }
+      ],
+      "testRefs": [{ "path": "tests/orchestrators/marketplace/shared.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current assignment and error-class inspection",
+        "observed": "Transitive bridge internals remain separately owned, and the report correctly limits its concrete error-class proof to the named path-safety cases."
+      },
+      "rationale": "The scope limitations remain valid provenance rather than remediation findings.",
+      "destination": "Evidence-only closure."
+    },
+    {
+      "id": "OPEFR-F001",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-001",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-002",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-004",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-007",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-013",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-014",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-018",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-021"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "OPEF-F15",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts" },
+        { "path": "extensions/pi-claude-marketplace/orchestrators/plugin/fetch.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/orchestrators/plugin/enable-disable.test.ts" },
+        { "path": "tests/orchestrators/plugin/fetch.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph, current boundary inspection, and focused node:test rerun",
+        "observed": "Both owner suites pass; fetch retains exact strict mocks, offline injected git collaborators, complete schedules, and enable retains its lock-reentry/cross-ledger public proofs."
+      },
+      "rationale": "The broad positive and clean-surface observations are already retained by OPEF-F15.",
+      "destination": "Preserve these behaviors during remediation."
+    },
+    {
+      "id": "OPEFR-F002",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-003",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-005",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-006",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-008",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-009",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-010",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-011",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-012"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "OPEF-F13",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts" },
+        { "path": "extensions/pi-claude-marketplace/orchestrators/plugin/fetch.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/orchestrators/plugin/enable-disable.test.ts" },
+        { "path": "tests/orchestrators/plugin/fetch.test.ts" }
+      ],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "node --test focused plugin owner suites in a repository-local isolated copy",
+        "exitCode": 0,
+        "observed": "Canonical mutations survived the field-wise outcomes and vacuous negative assertions; current inspection also retains cast host doubles, mock-kind names, stub call counts, weak raw-byte negatives, and regex errno checks."
+      },
+      "rationale": "The first-pass assertion/double cluster is the same live test-quality gap canonicalized by OPEF-F13.",
+      "destination": "Apply the current unit-test rubric in Phase 2."
+    },
+    {
+      "id": "OPEFR-F003",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-015"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 4",
+      "duplicateOf": "OPEF-F12",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts" }
+      ],
+      "testRefs": [{ "path": "tests/orchestrators/plugin/enable-disable.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source inspection",
+        "observed": "runDisableBranch still writes both timestamps with inline new Date()."
+      },
+      "rationale": "The hidden clock dependency is already part of OPEF-F12.",
+      "destination": "Inject a clock during the Phase 4 production-design pass."
+    },
+    {
+      "id": "OPEFR-F004",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-016"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 4",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts" }
+      ],
+      "testRefs": [{ "path": "tests/orchestrators/plugin/enable-disable.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current runEnableBranch inspection",
+        "observed": "The catch still encloses runInstallLedger and its subsequent pure outcome mapping rather than only the throwing operation."
+      },
+      "rationale": "The over-broad try boundary remains a localized production-clarity issue.",
+      "destination": "Narrow the try/catch without changing behavior in Phase 4."
+    },
+    {
+      "id": "OPEFR-F005",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-017"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts" }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "Documentation-mood claim has no direct behavioral test target."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current JSDoc census",
+        "observed": "Several comments still use imperative Run/Write/Drop wording, and the same house style appears beyond this module."
+      },
+      "rationale": "The wording issue is current but cross-cutting and does not affect correctness.",
+      "destination": "Defer to a repository-wide documentation-style pass."
+    },
+    {
+      "id": "OPEFR-F006",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-019"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/orchestrators/plugin/fetch.ts" }],
+      "testRefs": [{ "path": "tests/orchestrators/plugin/fetch.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current import/call inspection",
+        "observed": "FetchCloneCacheSeam remains a narrow production injection port with real defaults; every owner-test call supplies an offline implementation."
+      },
+      "rationale": "The seam is legitimate testable production design, not a test-only hook to remove.",
+      "destination": "Preserve this injection boundary."
+    },
+    {
+      "id": "OPEFR-F007",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-020"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/orchestrators/plugin/fetch.ts" }],
+      "testRefs": [{ "path": "tests/architecture/no-orchestrator-network.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current import inspection",
+        "observed": "reasonedRow still dynamically imports domain/resolver.ts without documenting a cycle or load-cost reason; the architecture gate's separate dynamic-import blind spot remains OPEF-F01."
+      },
+      "rationale": "The unexplained import form is current but is not itself a production defect.",
+      "destination": "Document or promote the import during related Phase 7 gate work."
+    },
+    {
+      "id": "OPEFR-F008",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-022",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-enable-fetch.md#CLAIM-023"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/plugin/fetch.messaging.ts" }
+      ],
+      "testRefs": [{ "path": "tests/platform/git-ops-fake.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current assignment and support-boundary inspection",
+        "observed": "Messaging modules and shared fake internals remain explicitly outside this report's ownership; they were used only to establish offline behavior."
+      },
+      "rationale": "The scope exclusions remain valid traceability controls.",
+      "destination": "Evidence-only closure."
+    }
+  ],
+  "decisions": [],
+  "scopeChanges": []
+}
