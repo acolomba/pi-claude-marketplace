@@ -663,7 +663,11 @@ test("contains one aggregate discovery failure and recovers through the same cal
       mp: {
         name: "mp",
         scope: "project",
-        source: { kind: "path", raw: path.join(scope.cwd, "mp-src") },
+        source: {
+          kind: "path",
+          logical: path.join(scope.cwd, "mp-src"),
+          raw: path.join(scope.cwd, "mp-src"),
+        },
         addedFromCwd: scope.cwd,
         manifestPath: path.join(scope.cwd, "mp-src", ".claude-plugin", "marketplace.json"),
         marketplaceRoot: path.join(scope.cwd, "mp-src"),

@@ -126,14 +126,19 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
       hookDebugLog(`plugin PATH recompute skipped: ${errorMessage(err)}`, "env");
     }
 
-    const discovered = await aggregateDiscoveredResources(
-      locationsFor("user", homedir()),
-      locationsFor("project", event.cwd),
-    );
-    return {
-      skillPaths: [...discovered.skillPaths],
-      promptPaths: [...discovered.promptPaths],
-    };
+    try {
+      const discovered = await aggregateDiscoveredResources(
+        locationsFor("user", homedir()),
+        locationsFor("project", event.cwd),
+      );
+      return {
+        skillPaths: [...discovered.skillPaths],
+        promptPaths: [...discovered.promptPaths],
+      };
+    } catch (err) {
+      hookDebugLog(`resource discovery skipped: ${errorMessage(err)}`, "resources");
+      return { skillPaths: [], promptPaths: [] };
+    }
   });
 
   // SENV-01/02/03: reset the Claude-Code session env on every session_start
