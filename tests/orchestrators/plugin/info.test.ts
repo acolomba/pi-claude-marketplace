@@ -29,7 +29,7 @@
 
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -1257,6 +1257,62 @@ test("WR-02: not-installed plugin with malformed plugin.json surfaces `{unparsea
       /\(unavailable\) \{unreadable\}/,
       "post-fix: probe-throw must classify SyntaxError as `unparseable`, not the hardcoded `unreadable`",
     );
+  });
+});
+
+test("refuses an outside path source as unavailable without inspecting its plugin tree", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const userRoot = path.join(home, ".pi", "agent");
+    const marketplaceRoot = await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          {
+            name: "escape",
+            source: "../outside-plugin",
+            version: "1.0.0",
+            description: "Outside plugin.",
+          },
+        ],
+      },
+    });
+    const outsideRoot = path.join(path.dirname(marketplaceRoot), "outside-plugin");
+    const outsideManifest = path.join(outsideRoot, ".claude-plugin", "plugin.json");
+    const outsideSkill = path.join(outsideRoot, "skills", "secret", "SKILL.md");
+    await mkdir(path.dirname(outsideManifest), { recursive: true });
+    await mkdir(path.dirname(outsideSkill), { recursive: true });
+    await writeFile(outsideManifest, "{ malformed outside manifest", "utf8");
+    await writeFile(outsideSkill, "outside skill\n", "utf8");
+    const outsideTreeBefore = (await readdir(outsideRoot, { recursive: true })).sort();
+    const outsideManifestBefore = await readFile(outsideManifest);
+    const outsideSkillBefore = await readFile(outsideSkill);
+    const { ctx, pi, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "escape", scope: "user", cwd });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ⊘ escape v1.0.0 (unavailable) {unreadable}",
+          "    Outside plugin.",
+          "    components: not resolved",
+        ].join("\n"),
+      },
+    ]);
+    assert.deepStrictEqual(
+      (await readdir(outsideRoot, { recursive: true })).sort(),
+      outsideTreeBefore,
+    );
+    assert.deepStrictEqual(await readFile(outsideManifest), outsideManifestBefore);
+    assert.deepStrictEqual(await readFile(outsideSkill), outsideSkillBefore);
   });
 });
 

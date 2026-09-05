@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -7,6 +8,10 @@ import {
   type ScopedLocations,
   locationsFor,
 } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import {
+  PathContainmentError,
+  SymlinkRefusedError,
+} from "../../extensions/pi-claude-marketplace/shared/path-safety.ts";
 
 const LOCATION_KEYS = [
   "scope",
@@ -237,6 +242,112 @@ test("returns every safe derived path inside its exact scope root", async () => 
   assert.deepStrictEqual(paths, expectedPaths);
   assert.deepStrictEqual(relativePaths, expectedRelativePaths);
 });
+
+for (const { title, parentFor, linkSegments, childSegments, invoke, label } of [
+  {
+    title: "plugin data refuses a symlinked marketplace component",
+    parentFor: (locations: ScopedLocations) => locations.dataRoot,
+    linkSegments: ["market"],
+    childSegments: ["market", "plugin"],
+    invoke: (locations: ScopedLocations) => locations.pluginDataDir("market", "plugin"),
+    label: "pluginDataDir(market, plugin)",
+  },
+  {
+    title: "marketplace data refuses a symlinked marketplace component",
+    parentFor: (locations: ScopedLocations) => locations.dataRoot,
+    linkSegments: ["market"],
+    childSegments: ["market"],
+    invoke: (locations: ScopedLocations) => locations.marketplaceDataDir("market"),
+    label: "marketplaceDataDir(market)",
+  },
+  {
+    title: "source clones refuse a symlinked marketplace component",
+    parentFor: (locations: ScopedLocations) => locations.sourcesDir,
+    linkSegments: ["market"],
+    childSegments: ["market"],
+    invoke: (locations: ScopedLocations) => locations.sourceCloneDir("market"),
+    label: "sourceCloneDir(market)",
+  },
+  {
+    title: "plugin clones refuse a symlinked clone-key component",
+    parentFor: (locations: ScopedLocations) => locations.pluginClonesDir,
+    linkSegments: ["clone-key"],
+    childSegments: ["clone-key"],
+    invoke: (locations: ScopedLocations) => locations.pluginCloneDir("clone-key"),
+    label: "pluginCloneDir(clone-key)",
+  },
+  {
+    title: "source staging refuses a symlinked identifier component",
+    parentFor: (locations: ScopedLocations) =>
+      path.join(locations.extensionRoot, "sources-staging"),
+    linkSegments: ["stage-id"],
+    childSegments: ["stage-id"],
+    invoke: (locations: ScopedLocations) => locations.sourcesStagingDir("stage-id"),
+    label: "sourcesStagingDir(stage-id)",
+  },
+  {
+    title: "plugin cache refuses a symlinked intermediate directory",
+    parentFor: (locations: ScopedLocations) => locations.cacheDir,
+    linkSegments: ["plugins"],
+    childSegments: ["plugins", "market.json"],
+    invoke: (locations: ScopedLocations) => locations.pluginCacheFile("market"),
+    label: "pluginCacheFile(market)",
+  },
+] as const) {
+  test(title, async (t) => {
+    // arrange
+    const directory = await fs.mkdtemp(path.join(os.tmpdir(), "locations-symlink-"));
+    t.after(() => fs.rm(directory, { recursive: true, force: true }));
+    const projectRoot = path.join(directory, "project");
+    const outsideRoot = path.join(directory, "outside");
+    const locations = locationsFor("project", projectRoot);
+    const parent = parentFor(locations);
+    const linkPath = path.join(parent, ...linkSegments);
+    const child = path.join(parent, ...childSegments);
+    await fs.mkdir(path.dirname(linkPath), { recursive: true });
+    await fs.mkdir(outsideRoot);
+    await fs.writeFile(path.join(outsideRoot, "sentinel.txt"), "outside sentinel\n");
+    await fs.symlink(outsideRoot, linkPath);
+    const outsideTreeBefore = await fs.readdir(outsideRoot);
+    const outsideBytesBefore = await fs.readFile(path.join(outsideRoot, "sentinel.txt"));
+    const expectedError = {
+      name: "SymlinkRefusedError",
+      message: `${label} contains symlink ${linkPath} -> ${outsideRoot} (parent: ${parent}, target: ${child}).`,
+      parent,
+      child,
+      linkPath,
+      linkTarget: outsideRoot,
+    };
+    let symlinkError: unknown;
+
+    // act
+    try {
+      await invoke(locations);
+    } catch (error) {
+      symlinkError = error;
+    }
+
+    // assert
+    assert.ok(symlinkError instanceof SymlinkRefusedError);
+    assert.ok(symlinkError instanceof PathContainmentError);
+    assert.deepStrictEqual(
+      {
+        name: symlinkError.name,
+        message: symlinkError.message,
+        parent: symlinkError.parent,
+        child: symlinkError.child,
+        linkPath: symlinkError.linkPath,
+        linkTarget: symlinkError.linkTarget,
+      },
+      expectedError,
+    );
+    assert.deepStrictEqual(await fs.readdir(outsideRoot), outsideTreeBefore);
+    assert.deepStrictEqual(
+      await fs.readFile(path.join(outsideRoot, "sentinel.txt")),
+      outsideBytesBefore,
+    );
+  });
+}
 
 const activeSeparatorName = ["active", "separator"].join(path.sep);
 const alternateSeparator = path.sep === "/" ? "\\" : "/";

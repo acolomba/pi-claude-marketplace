@@ -1,5 +1,14 @@
 import assert from "node:assert/strict";
-import { access, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import {
+  access,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test, type TestContext } from "node:test";
@@ -14,6 +23,10 @@ import {
 } from "../../../extensions/pi-claude-marketplace/bridges/commands/stage.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { ManualRecoveryError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import {
+  PathContainmentError,
+  SymlinkRefusedError,
+} from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
 
 import type { ResolvedPluginInstallable } from "../../../extensions/pi-claude-marketplace/domain/resolver.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -177,6 +190,139 @@ test("returns a complete no-op and materializes no command directories", async (
   assert.deepStrictEqual(finalizeLeaks, []);
   assert.strictEqual(stagingExists, false);
   assert.strictEqual(promptsExist, false);
+});
+
+test("refuses an outside previous command before changing its complete target tree", async (t) => {
+  // arrange
+  const locations = await createProjectLocations(t, "commands-outside-target-");
+  const resourcesRoot = path.dirname(locations.promptsTargetDir);
+  const outsideFile = path.join(resourcesRoot, "outside", "command.md");
+  await mkdir(path.dirname(outsideFile), { recursive: true });
+  await writeFile(outsideFile, "outside command\n");
+  const targetTreeBefore = (await readdir(resourcesRoot, { recursive: true })).sort();
+  const outsideBytesBefore = await readFile(outsideFile);
+  const expectedError = {
+    name: "PathContainmentError",
+    message: `previous command file escapes ${locations.promptsTargetDir} (resolved: ${outsideFile}).`,
+    parent: locations.promptsTargetDir,
+    child: outsideFile,
+  };
+  const prepared = await prepareStageCommands({
+    locations,
+    cwd: locations.scopeRoot,
+    marketplaceName: MARKETPLACE_NAME,
+    pluginName: PLUGIN_NAME,
+    pluginRoot: path.join(locations.scopeRoot, "plugin"),
+    pluginDataDir: path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
+    resolved: resolvedFor(path.join(locations.scopeRoot, "plugin"), []),
+    previousCommandNames: ["../outside/command"],
+  });
+  let containmentError: unknown;
+
+  // act
+  try {
+    await commitPreparedCommands(prepared);
+  } catch (error) {
+    containmentError = error;
+  }
+
+  const abortLeak = await abortPreparedCommands(prepared);
+
+  // assert
+  assert.strictEqual(prepared.kind, "staged");
+  assert.deepStrictEqual(prepared.result, {
+    stagedNames: [],
+    recorded: [],
+    warnings: [],
+    degraded: [],
+  });
+  assert.ok(containmentError instanceof PathContainmentError);
+  assert.strictEqual(containmentError instanceof SymlinkRefusedError, false);
+  assert.deepStrictEqual(
+    {
+      name: containmentError.name,
+      message: containmentError.message,
+      parent: containmentError.parent,
+      child: containmentError.child,
+    },
+    expectedError,
+  );
+  assert.strictEqual(abortLeak, undefined);
+  assert.deepStrictEqual(
+    (await readdir(resourcesRoot, { recursive: true })).sort(),
+    targetTreeBefore,
+  );
+  assert.deepStrictEqual(await readFile(outsideFile), outsideBytesBefore);
+});
+
+test("refuses an intermediate symlink before changing its complete target tree", async (t) => {
+  // arrange
+  const locations = await createProjectLocations(t, "commands-symlink-target-");
+  const outsideRoot = path.join(locations.extensionRoot, "outside-prompts");
+  const outsideFile = path.join(outsideRoot, "command.md");
+  const linkPath = path.join(locations.promptsTargetDir, "link");
+  const child = path.join(linkPath, "command.md");
+  await mkdir(locations.promptsTargetDir, { recursive: true });
+  await mkdir(outsideRoot);
+  await writeFile(outsideFile, "outside command\n");
+  await symlink(outsideRoot, linkPath);
+  const targetTreeBefore = await readdir(locations.promptsTargetDir);
+  const outsideTreeBefore = await readdir(outsideRoot);
+  const outsideBytesBefore = await readFile(outsideFile);
+  const expectedError = {
+    name: "SymlinkRefusedError",
+    message: `previous command file contains symlink ${linkPath} -> ${outsideRoot} (parent: ${locations.promptsTargetDir}, target: ${child}).`,
+    parent: locations.promptsTargetDir,
+    child,
+    linkPath,
+    linkTarget: outsideRoot,
+  };
+  const prepared = await prepareStageCommands({
+    locations,
+    cwd: locations.scopeRoot,
+    marketplaceName: MARKETPLACE_NAME,
+    pluginName: PLUGIN_NAME,
+    pluginRoot: path.join(locations.scopeRoot, "plugin"),
+    pluginDataDir: path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
+    resolved: resolvedFor(path.join(locations.scopeRoot, "plugin"), []),
+    previousCommandNames: ["link/command"],
+  });
+  let symlinkError: unknown;
+
+  // act
+  try {
+    await commitPreparedCommands(prepared);
+  } catch (error) {
+    symlinkError = error;
+  }
+
+  const abortLeak = await abortPreparedCommands(prepared);
+
+  // assert
+  assert.strictEqual(prepared.kind, "staged");
+  assert.deepStrictEqual(prepared.result, {
+    stagedNames: [],
+    recorded: [],
+    warnings: [],
+    degraded: [],
+  });
+  assert.ok(symlinkError instanceof SymlinkRefusedError);
+  assert.ok(symlinkError instanceof PathContainmentError);
+  assert.deepStrictEqual(
+    {
+      name: symlinkError.name,
+      message: symlinkError.message,
+      parent: symlinkError.parent,
+      child: symlinkError.child,
+      linkPath: symlinkError.linkPath,
+      linkTarget: symlinkError.linkTarget,
+    },
+    expectedError,
+  );
+  assert.strictEqual(abortLeak, undefined);
+  assert.deepStrictEqual(await readdir(locations.promptsTargetDir), targetTreeBefore);
+  assert.deepStrictEqual(await readdir(outsideRoot), outsideTreeBefore);
+  assert.deepStrictEqual(await readFile(outsideFile), outsideBytesBefore);
 });
 
 test("aborts staged commands without creating target prompts", async (t) => {
