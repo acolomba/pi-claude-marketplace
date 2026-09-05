@@ -68,6 +68,21 @@ assertion that the envelopes ARE written. An assertion that quietly stays green
 while meaning the opposite is worse than no assertion. Recorded in
 `109-CONTEXT.md` §Deferred Ideas and `109-05-SUMMARY.md`.
 
+**Phase 111 must also BUMP `EXTENSION_VERSION`** in the same change that lands
+`bridges/workflows/`. A-03 records only the prohibition — do not bump *during*
+the window — and its inverse is an obligation that was written nowhere.
+`orchestrators/reconcile/backfill.ts:76` returns early while
+`state.lastReconciledExtensionVersion === EXTENSION_VERSION`, so the bump is the
+only thing that opens the gate and lets `supportedSetGrew` (`backfill.ts:343`)
+re-materialize the records the released v0.18.1 wrote. Any user who
+`--partial`-installed a workflow-bearing plugin on 0.18.1 has
+`compatibility: { installable: false, unsupported: ["workflows"] }` on disk, and
+`list` / `info` / `enable` / reconcile read that PERSISTED array rather than a
+fresh resolution, so the row now renders
+`◉ helper (partially-installed) {unsupported component}` — a token naming a
+dropped component for a kind Pi supports. Without the bump those records stay
+that way permanently.
+
 ## Progress
 
 **Phases Complete:** 0/9 (Phases 109-114 replay, 115-117 hardening)

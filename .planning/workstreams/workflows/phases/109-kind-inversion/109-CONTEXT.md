@@ -363,6 +363,21 @@ reverses one; each is now part of the locked set.
   Phase 111 has to invert it to assert the envelopes **are** written. Carry this
   into Phase 111's CONTEXT.md so it is not left behind — an assertion that
   quietly stays green while meaning the opposite is worse than no assertion.
+- **Phase 111 must bump `EXTENSION_VERSION` in the same change that lands
+  `bridges/workflows/`.** A-03 above records only the prohibition — do not bump
+  *during* the window. Its inverse is an obligation. The load-time backfill scan
+  returns early while `state.lastReconciledExtensionVersion === EXTENSION_VERSION`
+  (`orchestrators/reconcile/backfill.ts:76`), so the bump is the only thing that
+  opens the gate and lets `supportedSetGrew` (`backfill.ts:343`) re-materialize
+  the records the released v0.18.1 wrote. Any user who `--partial`-installed a
+  workflow-bearing plugin on 0.18.1 carries
+  `compatibility: { installable: false, unsupported: ["workflows"] }` on disk;
+  `list`, `info`, `enable-disable` and reconcile feed `narrowUnsupportedKinds`
+  from that PERSISTED array rather than from a fresh resolution, and D-109-01
+  retired the `workflows` arm of `kindToReason`, so the row falls through to
+  `{unsupported component}` — a token naming a dropped component for a kind Pi
+  now supports. Without the bump those records never converge. Carry this into
+  Phase 111's CONTEXT.md alongside the assertion inversion above.
 - **`docs/workflows-compatibility.md` does not exist yet** and is Phase 114's
   deliverable (WDOC-01..03). Nothing in this phase creates or references it.
 - **The soft-dependency marker** (`requires pi-dynamic-workflows`) and the
