@@ -350,14 +350,15 @@ export class StateLockHeldError extends Error {
  *
  * Wraps the heterogeneous-undo phase-3a failures from update.ts's
  * hand-rolled 3-phase sequence. `failures` carries one entry per bridge
- * (`skills` | `commands` | `agents` | `mcp`) whose `commit*` threw. The
+ * (`skills` | `commands` | `agents` | `hooks` | `mcp` | `workflows`) whose
+ * `commit*` threw. The
  * constructor's `message` argument typically embeds the
  * RECOVERY_PLUGIN_REINSTALL_PREFIX-composed recovery hint; the
  * `Error.cause` (passed via the options bag) carries the chained
  * originating error for the depth-5 `causeChainTrailer` walk.
  */
 export interface Phase3Failure {
-  readonly phase: "skills" | "commands" | "agents" | "hooks" | "mcp";
+  readonly phase: "skills" | "commands" | "agents" | "hooks" | "mcp" | "workflows";
   readonly msg: string;
   readonly cause: unknown;
 }

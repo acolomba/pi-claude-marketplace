@@ -1426,10 +1426,15 @@ async function abortHandles(handles: PrepHandles): Promise<(string | undefined)[
 //    staleness.
 //  - PHASE3_FAILURE_PHASES + Phase3Phase: closed-set tuple for the per-bridge
 //    finalize gating. `Phase3Failure.phase` is already declared as the closed
-//    union `"skills" | "commands" | "agents" | "mcp"` in shared/errors.ts, so
-//    the tuple here is a runtime mirror of the type for explicit Set<Phase3Phase>
-//    construction inside `finalizeUpdateRecord`. A future fifth bridge surfaces
-//    here as a TS error.
+//    union `"skills" | "commands" | "agents" | "hooks" | "mcp" | "workflows"`
+//    in shared/errors.ts, so the tuple here is a runtime mirror of the type for
+//    explicit Set<Phase3Phase> construction inside `finalizeUpdateRecord`. A
+//    future bridge surfaces here as a TS error.
+//
+//    WLIF-02: the `workflows` member is carried so an update re-stage can be
+//    REPRESENTED. `update.ts` cannot produce a workflows failure today and
+//    gains no behavior from the widening; landing it here is what lets that
+//    re-stage arrive without a second type commit.
 //
 // The intent-mark marker is internal-only: shared/notify.ts does not read
 // `compatibility.notes`; the only extension consumer is reinstall.ts
@@ -1440,7 +1445,14 @@ const UPDATE_IN_PROGRESS_NOTE = "update-in-progress";
 
 // D-63-01: hooks slot lands between agents and mcp -- mirrors install.ts
 // runPhases literal-array order.
-const PHASE3_FAILURE_PHASES = ["skills", "commands", "agents", "hooks", "mcp"] as const;
+const PHASE3_FAILURE_PHASES = [
+  "skills",
+  "commands",
+  "agents",
+  "hooks",
+  "mcp",
+  "workflows",
+] as const;
 type Phase3Phase = (typeof PHASE3_FAILURE_PHASES)[number];
 
 /**

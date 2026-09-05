@@ -142,7 +142,7 @@ export type ReinstallPluginOutcome =
  * `PluginFailedMessage.rollbackPartial[].phase` label, which also carries the
  * install path's `phase3a` / `phase3b` tokens.)
  */
-export type UpdatePhaseBridge = "skills" | "commands" | "agents" | "hooks" | "mcp";
+export type UpdatePhaseBridge = "skills" | "commands" | "agents" | "hooks" | "mcp" | "workflows";
 
 /**
  * CMC-17 / MSG-RP-1: per-phase rollback-partial child

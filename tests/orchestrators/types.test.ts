@@ -91,6 +91,7 @@ const UPDATE_PHASE_BRIDGES = {
   hooks: true,
   mcp: true,
   skills: true,
+  workflows: true,
 } satisfies Record<UpdatePhaseBridge, true>;
 
 const UPDATE_PHASE_FAILURE = {
