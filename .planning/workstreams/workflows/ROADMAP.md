@@ -361,7 +361,22 @@ owner tests, plus the one new behavior (criterion 4) and the two mechanical obli
    transaction. This phase owns the ledger and is where that view exists.
 7. `npm run check` is green.
 
-**Plans**: TBD
+**Plans**: 4 plans in 3 waves. The waves are serialized because `use_worktrees` is `false` here, so
+same-wave plans would share one working tree while every gate this phase leans on scans the whole
+tree rather than the staged diff. They also carry a real ordering constraint: the `resources.workflows`
+record member is an unnamed prerequisite of criteria 3 and 4, so it lands in the first commit of wave 1
+and everything that reads or writes it follows.
+
+Plans:
+
+- [ ] 112-01-PLAN.md — the workflow inventory on the install record, the sixth ledger phase with its
+  undo, and the three mirrored ledger-phase closed sets (wave 1)
+- [ ] 112-02-PLAN.md — the sixth cascade slot, the dropped-axis, both partial-cascade record folds, and
+  removal pinned on all four verbs (wave 2)
+- [ ] 112-03-PLAN.md — reinstall re-materializes envelopes and records the names it actually wrote
+  (wave 2)
+- [ ] 112-04-PLAN.md — the age-bounded orphan staging sweep and the stale bridge-count corrections
+  (wave 3)
 
 ### Phase 113: Update, enable/disable, reconcile
 
