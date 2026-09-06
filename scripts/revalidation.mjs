@@ -832,11 +832,7 @@ function validateResolvedDecision(decision, findings, violations) {
   validateDecisionOptions(decision, violations);
 }
 
-function validateDecision(decision, state, violations) {
-  if (!/^MF-DEC-\d{2}$/.test(decision.id ?? "")) {
-    violations.push(violation("invalid-decision-id", String(decision.id), "expected MF-DEC-NN"));
-  }
-
+function validateDecisionCollections(decision, findings, violations) {
   for (const field of ["premiseFindingIds", "options", "rejectedOptions", "affectedIds"]) {
     if (!Array.isArray(decision[field])) {
       violations.push(
@@ -855,11 +851,19 @@ function validateDecision(decision, state, violations) {
 
   if (Array.isArray(decision.premiseFindingIds)) {
     for (const premise of decision.premiseFindingIds) {
-      if (!state.findings.has(premise)) {
+      if (!findings.has(premise)) {
         violations.push(violation("dangling-decision-premise", decision.id, premise));
       }
     }
   }
+}
+
+function validateDecision(decision, state, violations) {
+  if (!/^MF-DEC-\d{2}$/.test(decision.id ?? "")) {
+    violations.push(violation("invalid-decision-id", String(decision.id), "expected MF-DEC-NN"));
+  }
+
+  validateDecisionCollections(decision, state.findings, violations);
 
   if (decision.status === "resolved") {
     validateResolvedDecision(decision, state.findings, violations);
