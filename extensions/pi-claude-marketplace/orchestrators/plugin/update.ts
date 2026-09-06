@@ -91,6 +91,7 @@ import {
   commitPreparedSkills,
   prepareStageSkills,
 } from "../../bridges/skills/index.ts";
+import { abortPreparedWorkflows, prepareStageWorkflows } from "../../bridges/workflows/index.ts";
 import { parseHooksConfig, projectHookSummaryEntries } from "../../domain/components/hooks.ts";
 import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
@@ -159,6 +160,7 @@ import type { PreparedAgentsStaging } from "../../bridges/agents/index.ts";
 import type { PreparedCommandsStaging } from "../../bridges/commands/index.ts";
 import type { PreparedMcpStaging } from "../../bridges/mcp/index.ts";
 import type { PreparedSkillsStaging } from "../../bridges/skills/index.ts";
+import type { PreparedWorkflowsStaging } from "../../bridges/workflows/index.ts";
 import type { PluginEntry } from "../../domain/components/plugin.ts";
 import type { GitPluginRootResult, MaterializablePlugin } from "../../domain/resolver.ts";
 import type { GitBackedSource, ParsedSource } from "../../domain/source.ts";
@@ -759,6 +761,11 @@ interface PrepHandles {
   commands: PreparedCommandsStaging;
   agents: PreparedAgentsStaging;
   mcp: PreparedMcpStaging;
+  /**
+   * WLIF-02: the sixth bridge. Last in prepare order, so first to unwind --
+   * see both abort helpers.
+   */
+  workflows: PreparedWorkflowsStaging;
 }
 
 interface UpdatePhase3Failure extends Omit<Phase3Failure, "cause"> {
@@ -1362,6 +1369,18 @@ async function prepareUpdateHandles(
       pluginData: pluginDataDir,
       sourcePath: `${installable.pluginRoot}#mcpServers`,
     });
+    handles.workflows = await prepareStageWorkflows({
+      locations,
+      pluginName: plugin,
+      resolved: installable,
+      // WR-01: the RECORDED inventory, never a re-discovery of the pre-update
+      // tree. Workflow envelopes are the only artifacts this extension writes
+      // outside every scope root, so the install record is the one thing that
+      // can name them -- and supplying that list is what makes the bridge's
+      // displace-and-restore path and its WR-06 ownership pre-check reachable
+      // at all.
+      previousWorkflowNames: record.resources.workflows,
+    });
   } catch (err) {
     throw appendLeaks(err, await abortPartialHandles(handles));
   }
@@ -1387,11 +1406,28 @@ function collectUpdateWarnings(handles: PrepHandles, cascade: boolean): readonly
     agents: handles.agents.result.warnings,
     mcp: handles.mcp.result.warnings,
   });
-  return Object.freeze([...discovery, ...(cascade ? bridge : [])]);
+  // WLIF-02: the workflow prepare's warnings join the DISCOVERY half, and they
+  // join it HERE rather than through `splitStagingWarnings`. They describe the
+  // plugin's declared scripts -- a fact a standalone user needs -- not a
+  // hygiene note only the cascade forwards. The shared classifier is left at
+  // four members on purpose: a fifth would drag every other consumer of it
+  // into this change.
+  return Object.freeze([
+    ...discovery,
+    ...handles.workflows.result.warnings,
+    ...(cascade ? bridge : []),
+  ]);
 }
 
 async function abortPartialHandles(handles: Partial<PrepHandles>): Promise<(string | undefined)[]> {
   const leaks: (string | undefined)[] = [];
+  // WLIF-02: workflows unwinds FIRST -- the reverse of the prepare order. Its
+  // abort returns a leak string exactly as the agents abort does, so the leak
+  // is pushed rather than swallowed.
+  if (handles.workflows !== undefined) {
+    leaks.push(await abortPreparedWorkflows(handles.workflows));
+  }
+
   if (handles.agents !== undefined) {
     leaks.push(await abortPreparedAgents(handles.agents));
   }
@@ -1408,8 +1444,11 @@ async function abortPartialHandles(handles: Partial<PrepHandles>): Promise<(stri
 }
 
 async function abortHandles(handles: PrepHandles): Promise<(string | undefined)[]> {
+  // WLIF-02: reverse of the prepare order -- workflows, then mcp, agents,
+  // commands, skills.
+  const leaks = [await abortPreparedWorkflows(handles.workflows)];
   abortPreparedMcp(handles.mcp);
-  const leaks = [await abortPreparedAgents(handles.agents)];
+  leaks.push(await abortPreparedAgents(handles.agents));
   await abortPreparedCommands(handles.commands);
   await abortPreparedSkills(handles.skills);
   return leaks;

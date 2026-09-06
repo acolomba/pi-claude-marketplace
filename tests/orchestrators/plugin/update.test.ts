@@ -8517,3 +8517,281 @@ test("NREG-01: a clean update outcome omits the notes key entirely", async () =>
     }
   });
 });
+
+// ─── WLIF-02: workflows as the update's sixth bridge ─────────────────────────
+//
+// `locationsFor` is called INSIDE the `withHermeticHome` closure in every case
+// below: the helper sets `process.env.HOME`, which is what the workflow home
+// derivation reads. Workflow envelopes are the only artifacts this extension
+// writes outside every scope root, so a call outside the closure would point
+// `workflowsSavedDir` at the developer's real home and leak a write the test
+// never cleans.
+
+/**
+ * Write `<pluginRoot>/workflows/<sourceName>.js` for each entry, REPLACING
+ * whatever set was there.
+ *
+ * The replacement is the point. Every behavior worth covering here is about the
+ * script set DIFFERING between the from-version tree and the to-version tree,
+ * so one helper seeds both: call it before the install, then again with the new
+ * set before the update.
+ *
+ * The default body carries a NAMED `meta` export on purpose. A body without one
+ * classifies as SKIPPED and writes zero envelopes, so a case relying on the
+ * default would pass for the wrong reason.
+ */
+async function writeWorkflowScripts(
+  marketplaceRoot: string,
+  pluginName: string,
+  workflows: readonly { sourceName: string; body?: string }[],
+): Promise<void> {
+  const workflowsDir = path.join(marketplaceRoot, "plugins", pluginName, "workflows");
+  await rm(workflowsDir, { force: true, recursive: true });
+  if (workflows.length === 0) {
+    return;
+  }
+
+  await mkdir(workflowsDir, { recursive: true });
+  for (const workflow of workflows) {
+    await writeFile(
+      path.join(workflowsDir, `${workflow.sourceName}.js`),
+      workflow.body ??
+        `export const meta = { name: "${workflow.sourceName}", description: "does ${workflow.sourceName}" };\n`,
+    );
+  }
+}
+
+/** Directory entries, or `[]` when the directory was never created. */
+async function entriesOf(directory: string): Promise<string[]> {
+  try {
+    return (await readdir(directory)).sort();
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Seed a workflow-bearing plugin at `version` and INSTALL it, so the pre-update
+ * record names envelopes that are actually on disk.
+ *
+ * Installed for real rather than hand-seeded: `previousWorkflowNames` exists to
+ * reach the bridge's displace-and-restore path, and a record naming envelopes
+ * nothing ever wrote would send that path down its ENOENT-tolerant arm and
+ * prove nothing.
+ */
+async function seedInstalledWorkflowPlugin(opts: {
+  readonly cwd: string;
+  readonly version: string;
+  readonly workflows: readonly { sourceName: string; body?: string }[];
+}): Promise<{ readonly marketplaceRoot: string; readonly manifestPath: string }> {
+  const marketplaceRoot = path.join(opts.cwd, "mp-src");
+  const { manifestPath } = await seedPathMarketplace({
+    cwd: opts.cwd,
+    marketplaceRoot,
+    marketplaceName: "mp",
+    // SNM-34: the plugin's own `plugin.json` carries no version, so the
+    // manifest entry is what reaches the record and a `rewriteManifest` bump
+    // actually moves it. With the version mirrored into `plugin.json` the
+    // update resolves as `unchanged` and never prepares anything.
+    manifestPlugins: {
+      hello: { version: opts.version, hasSkill: true, omitPluginJsonVersion: true },
+    },
+  });
+  await writeWorkflowScripts(marketplaceRoot, "hello", opts.workflows);
+  const seed = makeCtx();
+  await installPlugin({
+    ctx: seed.ctx,
+    pi: seed.pi,
+    scope: "project",
+    cwd: opts.cwd,
+    marketplace: "mp",
+    plugin: "hello",
+  });
+  return { marketplaceRoot, manifestPath };
+}
+
+test("WLIF-02: an abort after the workflows prepare leaves no workflows staging tree", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-workflows-abort-"));
+    const previousCwd = process.cwd();
+    let stagingWatch: ReturnType<typeof watch> | undefined;
+    let didMutate = false;
+    try {
+      // arrange -- version B adds a second workflow, so the prepare has a tree
+      // to write before the intent mark refuses.
+      const locations = locationsFor("project", cwd);
+      const { marketplaceRoot, manifestPath } = await seedInstalledWorkflowPlugin({
+        cwd,
+        version: "1.0.0",
+        workflows: [{ sourceName: "greet" }],
+      });
+      await writeWorkflowScripts(marketplaceRoot, "hello", [
+        { sourceName: "greet" },
+        { sourceName: "wave" },
+      ]);
+      await rewriteManifest(manifestPath, "mp", { hello: { version: "2.10.0" } });
+
+      // The skills staging directory is written during the FIRST prepare, so
+      // the version bump lands before the workflows prepare and the ST-9 check
+      // fires at the intent mark -- after every handle exists.
+      stagingWatch = watch(locations.skillsStagingDir, () => {
+        if (didMutate) {
+          return;
+        }
+
+        didMutate = true;
+        const state = JSON.parse(readFileSync(locations.stateJsonPath, "utf8")) as ExtensionState;
+        const record = state.marketplaces["mp"]?.plugins["hello"];
+        assert.ok(record !== undefined);
+        record.version = "9.9.9";
+        writeFileSync(locations.stateJsonPath, JSON.stringify(state));
+      });
+      process.chdir(cwd);
+
+      // act
+      const outcome = await updateSinglePlugin("hello", "mp", "project");
+
+      // assert
+      assert.equal(didMutate, true);
+      assert.equal(outcome.partition, "failed");
+      assert.deepEqual(outcome.reasons, ["concurrently updated"]);
+      assert.deepEqual(
+        await entriesOf(locations.workflowsStagingDir),
+        [],
+        "the workflows handle must unwind on the abort path, not linger as a staging tree",
+      );
+      // The from-version envelope is untouched: the prepare wrote only into
+      // staging, so an abort before the commit cannot have moved it.
+      assert.deepEqual(await entriesOf(locations.workflowsSavedDir), ["hello:greet.json"]);
+    } finally {
+      stagingWatch?.close();
+      process.chdir(previousCwd);
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WLIF-02: a plugin with no workflows and an empty inventory stages nothing", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-workflows-noop-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.0.1", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      const { ctx, pi } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      // assert -- WPTH-05: the noop short-circuit must not bring the host
+      // engine's storage root into existence for a plugin that ships no
+      // workflows, so the assertion is on the directories, not on a name list.
+      assert.equal(
+        await pathExists(locations.workflowsStagingDir),
+        false,
+        "no admitted workflow and no recorded name means no staging tree",
+      );
+      assert.equal(await pathExists(locations.workflowsSavedDir), false);
+      assert.deepEqual(
+        (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins["hello"]?.resources
+          .workflows,
+        [],
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WLIF-02: a workflow version B cannot admit reaches the standalone diagnostic channel", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-workflows-warn-direct-"));
+    try {
+      // arrange -- version B adds a script with no `meta` export at all, which
+      // the decision layer skips.
+      const { marketplaceRoot, manifestPath } = await seedInstalledWorkflowPlugin({
+        cwd,
+        version: "1.0.0",
+        workflows: [{ sourceName: "greet" }],
+      });
+      await writeWorkflowScripts(marketplaceRoot, "hello", [
+        { sourceName: "greet" },
+        { sourceName: "broken", body: "export default function run() {}\n" },
+      ]);
+      await rewriteManifest(manifestPath, "mp", { hello: { version: "2.10.0" } });
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      // assert -- the same channel the skills and commands discovery warnings
+      // reach, in the install tense, after the verb's own row.
+      const diagnostics = notifications.filter((n) => n.severity === "warning");
+      assert.equal(diagnostics.length, 1, JSON.stringify(notifications));
+      assert.match(
+        diagnostics[0]?.message ?? "",
+        /Plugin "hello" updated; 1 declared component was skipped\./,
+      );
+      assert.match(diagnostics[0]?.message ?? "", /workflow script "broken\.js"/);
+      assert.match(diagnostics[0]?.message ?? "", /was not installed/);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WLIF-02: the same workflow warning rides the cascade outcome's notes", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-workflows-warn-cascade-"));
+    const previousCwd = process.cwd();
+    try {
+      // arrange
+      const { marketplaceRoot, manifestPath } = await seedInstalledWorkflowPlugin({
+        cwd,
+        version: "1.0.0",
+        workflows: [{ sourceName: "greet" }],
+      });
+      await writeWorkflowScripts(marketplaceRoot, "hello", [
+        { sourceName: "greet" },
+        { sourceName: "broken", body: "export default function run() {}\n" },
+      ]);
+      await rewriteManifest(manifestPath, "mp", { hello: { version: "2.10.0" } });
+      process.chdir(cwd);
+
+      // act
+      const outcome = await updateSinglePlugin("hello", "mp", "project");
+
+      // assert
+      assert.equal(outcome.partition, "updated");
+      assert.equal(
+        (outcome.notes ?? []).some(
+          (note) =>
+            note.includes('workflow script "broken.js"') && note.includes("was not installed"),
+        ),
+        true,
+        JSON.stringify(outcome.notes),
+      );
+    } finally {
+      process.chdir(previousCwd);
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
