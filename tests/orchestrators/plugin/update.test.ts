@@ -9252,6 +9252,52 @@ test("CR-03: a refused workflows commit leaves the foreign file and restores the
   });
 });
 
+test("CR-01: the intent-mark union omits a name whose target holds foreign content", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-workflows-foreign-union-"));
+    const previousCwd = process.cwd();
+    let stateWatch: ReturnType<typeof watchStateTransition> | undefined;
+    let unionDuringWindow: string[] | undefined;
+    try {
+      // arrange -- the same refusal vehicle, read at the ONE moment that
+      // matters for this invariant: what a crash would leave on disk.
+      const { locations, foreignPath, foreignBytes } = await seedRefusedWorkflowUpdate(cwd);
+      stateWatch = watchStateTransition(
+        locations,
+        (state) =>
+          state.marketplaces["mp"]?.plugins["hello"]?.compatibility.notes.includes(
+            "update-in-progress",
+          ) === true,
+        (state) => {
+          unionDuringWindow = [
+            ...(state.marketplaces["mp"]?.plugins["hello"]?.resources.workflows ?? []),
+          ];
+        },
+      );
+      process.chdir(cwd);
+
+      // act
+      await updateSinglePlugin("hello", "mp", "project");
+
+      // assert -- the PERSISTED record during the intent-mark window, not the
+      // narrowed one finalize writes afterwards. `hello:wave` names the user's
+      // own file, and the record is the only ownership claim an unstage reads:
+      // a name that lands here survives a crash in this window with nothing
+      // left to re-narrow it, and the next uninstall unlinks it by fiat.
+      assert.equal(stateWatch.fired(), true);
+      assert.deepEqual(unionDuringWindow, ["hello:greet"]);
+      // `hello:greet` proves the omission is the ownership probe and not a
+      // union that stopped widening: it is the plugin's own previous name, so
+      // its occupied target is owned and stays recorded.
+      assert.equal(await readFile(foreignPath, "utf8"), foreignBytes);
+    } finally {
+      stateWatch?.close();
+      process.chdir(previousCwd);
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 // ─── WR-03: one reachability case per widened `workflows` failure slot ────────
 //
 // Three closed sets already carry a `workflows` member that this verb could not

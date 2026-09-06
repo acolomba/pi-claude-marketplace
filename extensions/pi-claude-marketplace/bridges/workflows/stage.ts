@@ -105,6 +105,41 @@ function buildEnvelope(admitted: AdmittedWorkflow & { readonly source: string })
 }
 
 /**
+ * CR-01 / WR-06: the prepared names whose target is already occupied by content
+ * this plugin does not own.
+ *
+ * The ownership test is the same one `assertTargetsUnoccupied` applies at
+ * commit, restated for a moment when nothing has been displaced yet: a target
+ * that exists is foreign UNLESS its name is one this plugin previously placed,
+ * in which case the commit displaces it before the occupancy check ever sees
+ * it. Nothing is read, opened or modified -- `pathExists` is an `lstat`.
+ *
+ * This exists for callers that must record names BEFORE the commit decides.
+ * `assertTargetsUnoccupied` protects the file; it cannot protect the RECORD,
+ * because a name already written into the owned inventory is a name a later
+ * `unstage` unlinks by fiat, whatever the commit that followed it did.
+ */
+async function foreignOccupiedTargets(
+  pairs: readonly { name: string; from: string; to: string }[],
+  previousNames: readonly string[],
+): Promise<readonly string[]> {
+  const previous = new Set(previousNames);
+  const foreign: string[] = [];
+
+  for (const pair of pairs) {
+    if (previous.has(pair.name)) {
+      continue;
+    }
+
+    if (await pathExists(pair.to)) {
+      foreign.push(pair.name);
+    }
+  }
+
+  return foreign;
+}
+
+/**
  * Stage workflow envelopes into a fresh `<workflowsStagingDir>/<uuid>/` tree.
  * Per-file rename to the saved directory is deferred to
  * `commitPreparedWorkflows`.
@@ -155,6 +190,7 @@ export async function prepareStageWorkflows(
       result: {
         stagedNames: Object.freeze<string[]>([]),
         warnings: Object.freeze([...discoverWarnings]),
+        unownedNames: Object.freeze<string[]>([]),
       },
     };
   }
@@ -173,6 +209,7 @@ export async function prepareStageWorkflows(
 
   const renamePairs: { name: string; from: string; to: string }[] = [];
   const stagedNames: string[] = [];
+  let unownedNames: readonly string[];
 
   try {
     for (const verdict of admitted) {
@@ -189,6 +226,8 @@ export async function prepareStageWorkflows(
       renamePairs.push({ name: verdict.generatedName, from: stagedFile, to: targetFile });
       stagedNames.push(verdict.generatedName);
     }
+
+    unownedNames = await foreignOccupiedTargets(renamePairs, previousNames);
   } catch (err) {
     throw appendLeakToError(err, await cleanupStaging(stagingRoot, STAGING_LABEL));
   }
@@ -200,6 +239,7 @@ export async function prepareStageWorkflows(
     result: {
       stagedNames: Object.freeze(stagedNames),
       warnings: Object.freeze([...discoverWarnings]),
+      unownedNames: Object.freeze([...unownedNames]),
     },
     _previousNames: Object.freeze([...previousNames]),
     _renamePairs: Object.freeze(renamePairs),

@@ -122,6 +122,23 @@ export interface StageWorkflowsInput {
 export interface StageWorkflowsCommitResult {
   readonly stagedNames: readonly string[];
   readonly warnings: readonly string[];
+  /**
+   * CR-01 / WR-06: the subset of `stagedNames` whose target path was ALREADY
+   * occupied at prepare time by content this plugin does not own -- occupied,
+   * and not named in `previousWorkflowNames`. It is the prepare-time answer to
+   * the question `assertTargetsUnoccupied` asks again at commit, exposed so a
+   * caller that records names BEFORE the commit can leave these out.
+   *
+   * Required rather than optional so both prepared branches are compile-forced
+   * to answer it; the noop branch stages nothing and so reports an empty list.
+   *
+   * A point-in-time answer, not a guarantee: a target that becomes occupied
+   * after the probe is still refused by the commit's own check. What the field
+   * buys is the one direction that check cannot cover -- a name recorded before
+   * the commit runs is owned inventory to every later removal, whatever the
+   * commit then decides.
+   */
+  readonly unownedNames: readonly string[];
 }
 
 /** Discriminated union -- `kind: "noop" | "staged"`. */

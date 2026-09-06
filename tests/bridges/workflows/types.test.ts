@@ -70,6 +70,7 @@ void stageWorkflowsInputWithoutPreviousNames;
 const stageWorkflowsCommitResult: StageWorkflowsCommitResult = {
   stagedNames: ["acme:greet"],
   warnings: ['workflow script "helper.js" in "/plugin/workflows" was not installed: no meta'],
+  unownedNames: [],
 } satisfies StageWorkflowsCommitResult;
 void stageWorkflowsCommitResult;
 
@@ -78,6 +79,7 @@ const preparedWorkflowsNoop: PreparedWorkflowsNoop = {
   result: {
     stagedNames: [],
     warnings: [],
+    unownedNames: [],
   },
 } satisfies PreparedWorkflowsNoop;
 void preparedWorkflowsNoop;

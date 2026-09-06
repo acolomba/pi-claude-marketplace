@@ -1576,12 +1576,40 @@ async function markUpdateInProgress(
     // envelopes live outside every scope root, so this array is the only thing
     // that can name them at all.
     //
-    // Over-naming is therefore the safe direction, and that is why the union is
-    // written BEFORE the commit rather than after it: removal and re-staging
-    // are both ENOENT-tolerant (NFR-3), so a name that never landed costs a
-    // no-op, while a name that landed unrecorded costs the file -- permanently.
+    // Over-naming is the safe direction FOR A NAME THIS PLUGIN OWNS, and that
+    // is why the union is written BEFORE the commit rather than after it:
+    // removal and re-staging are both ENOENT-tolerant (NFR-3), so an owned name
+    // that never landed costs a no-op, while a name that landed unrecorded
+    // costs the file -- permanently.
+    //
+    // CR-01: it is NOT the safe direction for a name whose target already holds
+    // content this plugin does not own, so those names are excluded here. The
+    // record is the sole ownership claim on an envelope: `unstagePluginWorkflows`
+    // unlinks by recorded name with no content check, and
+    // `displacePreviousTargets` moves every recorded name aside BEFORE
+    // `assertTargetsUnoccupied` runs, so a recorded name is never
+    // ownership-checked again. Recording a foreign name would therefore route a
+    // later uninstall, disable, update, enable or reinstall straight around the
+    // commit's occupancy refusal and delete the user's own file. The failure-exit
+    // narrow in `applyPerBridgeResources` cannot be relied on to undo it: a crash
+    // between this write and finalize -- the window the intent mark exists to
+    // survive -- leaves the union standing with nothing to re-narrow it.
+    //
+    // `unownedNames` is a prepare-time probe, so the exclusion is not exhaustive
+    // in either direction, and both residuals are bounded:
+    //  - A target occupied AFTER the probe is still refused by the commit, and
+    //    the failure exit drops the name on the ordinary (non-crash) path.
+    //  - A probed-foreign name the commit nevertheless places (the occupier
+    //    vanished in between) is recorded by the success exit from `stagedNames`.
+    //    Only a crash in that same window leaves it unrecorded, and an orphan
+    //    envelope of our own content is a smaller loss than a deleted file of
+    //    someone else's.
+    const unowned = new Set(handles.workflows.result.unownedNames);
     sRecord.resources.workflows = [
-      ...new Set([...sRecord.resources.workflows, ...handles.workflows.result.stagedNames]),
+      ...new Set([
+        ...sRecord.resources.workflows,
+        ...handles.workflows.result.stagedNames.filter((name) => !unowned.has(name)),
+      ]),
     ];
   });
 }

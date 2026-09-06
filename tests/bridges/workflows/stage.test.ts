@@ -227,7 +227,11 @@ describe("prepareStageWorkflows", () => {
 
     // assert
     assert.strictEqual(prepared.kind, "noop");
-    assert.deepStrictEqual(prepared.result, { stagedNames: [], warnings: [expectedSkip] });
+    assert.deepStrictEqual(prepared.result, {
+      stagedNames: [],
+      warnings: [expectedSkip],
+      unownedNames: [],
+    });
     assert.strictEqual(workflowHomeExists, false);
   });
 
@@ -249,7 +253,7 @@ describe("prepareStageWorkflows", () => {
 
     // assert
     assert.strictEqual(prepared.kind, "staged");
-    assert.deepStrictEqual(prepared.result, { stagedNames: [], warnings: [] });
+    assert.deepStrictEqual(prepared.result, { stagedNames: [], warnings: [], unownedNames: [] });
     assert.deepStrictEqual(prepared._renamePairs, []);
     assert.deepStrictEqual(prepared._previousNames, ["acme:gone"]);
   });
@@ -274,7 +278,11 @@ describe("prepareStageWorkflows", () => {
 
     // assert
     assert.strictEqual(prepared.kind, "staged");
-    assert.deepStrictEqual(prepared.result, { stagedNames: ["acme:greet"], warnings: [] });
+    assert.deepStrictEqual(prepared.result, {
+      stagedNames: ["acme:greet"],
+      warnings: [],
+      unownedNames: [],
+    });
     assert.deepStrictEqual(
       prepared._renamePairs.map((pair) => pair.name),
       ["acme:greet"],
@@ -338,6 +346,7 @@ describe("prepareStageWorkflows", () => {
     assert.deepStrictEqual(prepared.result, {
       stagedNames: ["acme:aaa-quiet", "acme:greet"],
       warnings: [expectedCaveat],
+      unownedNames: [],
     });
     assert.strictEqual(fallbackEnvelopeExists, true);
   });
@@ -450,6 +459,58 @@ describe("prepareStageWorkflows", () => {
     assert.ok(error instanceof Error);
     assert.strictEqual(error.message, "composer refused");
     assert.deepStrictEqual(stagingEntries, []);
+  });
+
+  test("reports a target already holding content this plugin never placed", async (t) => {
+    // arrange
+    const { locations } = await createWorkflowScope(t, "workflows-stage-unowned-");
+    const pluginRoot = await createPluginRoot(t, "workflows-unowned-source-");
+    const workflowsDir = await createWorkflowsDir(pluginRoot);
+    await writeWorkflowScript(workflowsDir, "greet.js", GREET_SOURCE);
+    await writeWorkflowScript(workflowsDir, "shout.js", SHOUT_SOURCE);
+    await mkdir(locations.workflowsSavedDir, { recursive: true });
+    await writeFile(await locations.workflowArtifactPath("acme:greet"), "FOREIGN\n", "utf8");
+
+    // act
+    const prepared = stagedPreparation(
+      await prepareStageWorkflows({
+        locations,
+        pluginName: PLUGIN_NAME,
+        resolved: resolvedPlugin(pluginRoot, ["workflows"]),
+      }),
+    );
+
+    // assert
+    // The probe answers about the RECORD, not about the file: the commit still
+    // refuses this same target, and a caller that never records names in
+    // advance can ignore the field entirely.
+    assert.deepStrictEqual(prepared.result.stagedNames, ["acme:greet", "acme:shout"]);
+    assert.deepStrictEqual(prepared.result.unownedNames, ["acme:greet"]);
+  });
+
+  test("reports nothing unowned when the occupied target is a name it placed before", async (t) => {
+    // arrange -- the discriminator against a bare existence check: the target
+    // exists in both cases, and only the previous-name list separates the
+    // envelope this plugin is about to replace from a stranger's file.
+    const { locations } = await createWorkflowScope(t, "workflows-stage-owned-");
+    const pluginRoot = await createPluginRoot(t, "workflows-owned-source-");
+    const workflowsDir = await createWorkflowsDir(pluginRoot);
+    await writeWorkflowScript(workflowsDir, "greet.js", GREET_SOURCE);
+    const stageInput = {
+      locations,
+      pluginName: PLUGIN_NAME,
+      resolved: resolvedPlugin(pluginRoot, ["workflows"]),
+    };
+    await commitPreparedWorkflows(await prepareStageWorkflows(stageInput));
+
+    // act
+    const prepared = stagedPreparation(
+      await prepareStageWorkflows({ ...stageInput, previousWorkflowNames: ["acme:greet"] }),
+    );
+
+    // assert
+    assert.deepStrictEqual(prepared.result.stagedNames, ["acme:greet"]);
+    assert.deepStrictEqual(prepared.result.unownedNames, []);
   });
 });
 
