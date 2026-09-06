@@ -922,6 +922,7 @@ test("RVAL-04 scope-impact rejects a missing requirement definition", async (t) 
     status: 1,
     stdout: "",
     stderr:
+      "missing-requirement-clause: PDEF-01: requirement clause is blank or absent\n" +
       "missing-requirement-definition: PDEF-01: active definition is absent\n" +
       "scope-after-anchor: SCOPE-REQ-PDEF-01: afterAnchor does not resolve to requirement\n",
   });
@@ -1539,7 +1540,9 @@ test("RVAL-04 scope-impact rejects an active evidence-only requirement", async (
   assert.deepStrictEqual(execution, {
     status: 1,
     stdout: "",
-    stderr: "requirement-disposition: PDEF-01: active requirement cannot be evidence only\n",
+    stderr:
+      "invalid-requirement-route: PDEF-01: active requirement must use one numbered phase and an active status\n" +
+      "requirement-disposition: PDEF-01: active requirement cannot be evidence only\n",
   });
 });
 
