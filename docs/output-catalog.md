@@ -441,7 +441,7 @@ A workflow-bearing plugin renders as an ordinary not-installed inventory row: th
 
 This state adds no workflow-specific glyph, heading, or wrapping rule.
 
-**Nothing enforces the workflow-specific half of that claim.** These bytes are identical to the generic `(available)` row by construction (D-109-04), and the paired fixture carries no workflow signal, so `catalog-uat` would stay green if a workflow reason token came back on a `list` row. No test renders an inventory row for a workflow-bearing plugin -- `tests/integration/workflow-kind-inversion.test.ts` drives `install`, never `list`. The nearest guard is one layer down: the resolver owner tests in `tests/domain/resolver.test.ts` pin that such a plugin resolves `installable` with `workflows` supported, which is what would have to break first for this row to regress.
+These bytes are identical to the generic `(available)` row by construction (D-109-04), so the paired fixture cannot enforce the workflow-specific half of the claim on its own: `catalog-uat` renders the fixture, and the fixture carries no workflow signal. Two live `list` runs in `tests/orchestrators/plugin/list.test.ts` supply that half. One drives `list` over a plugin whose source tree holds a workflow script and pins this row; the other drives `list` over an installed record that holds a non-empty workflow inventory and pins the `(installed)` row as unchanged. Thus a workflow token that came back on either row would fail a test and not only differ from a fixture.
 
 ### Partially-installed inventory row -- partial-hook plugin (FSTAT-02 / PHOOK-04 / PHOOK-05 / D-71-04)
 
@@ -1797,6 +1797,19 @@ The marketplace manifest loads correctly, but it does not declare the plugin. An
 ● mp [user] <no autoupdate>
   ● alpha v1.0.0 (installed) {not in manifest}
     skills: alpha-skill
+```
+
+### Success -- workflows listed from the installation record (WFLW-04)
+
+The marketplace manifest no longer declares the plugin, so the row reads its whole component inventory from the installation record. The `workflows:` line shows the generated names that the install wrote, exactly as the record holds them, sorted by the same rule the other name-list kinds use. This arm runs no discovery: it reads no plugin source and it opens no script file, so the names come from the record and from nowhere else. If the record holds no workflow names, the `workflows:` line does not show. Severity `info`; no reload-hint (read-only surface).
+
+<!-- catalog-state: state-only-installed-with-workflows -->
+
+```text
+● mp [user] <no autoupdate>
+  ● alpha v1.0.0 (installed) {not in manifest}
+    skills: alpha-skill
+    workflows: alpha:changelog, alpha:release
 ```
 
 ### Success -- partially installed from the installation record (INFO-10)

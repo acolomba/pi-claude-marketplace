@@ -328,6 +328,7 @@ interface SeedPathMarketplaceOpts {
         agents?: readonly string[];
         mcpServers?: readonly string[];
         hooks?: readonly string[];
+        workflows?: readonly string[];
       };
       /** Persisted hook entries; omission exercises the legacy file fallback. */
       hookEntries?: readonly { event: string; matcher?: string }[];
@@ -370,7 +371,7 @@ async function seedPathMarketplace(opts: SeedPathMarketplaceOpts): Promise<strin
       mcpServers: [...(override?.mcpServers ?? [])],
       prompts: [...(override?.prompts ?? [])],
       skills: [...(override?.skills ?? [`${name}-skill`])],
-      workflows: [],
+      workflows: [...(override?.workflows ?? [])],
     });
   }
 
@@ -7093,5 +7094,114 @@ test("NFR-10: a declared workflows path escaping the plugin root folds to the no
         "  ⊘ alpha v1.0.0 (unavailable) {unsupported source, unreadable}\n" +
         "    components: not resolved",
     );
+  });
+});
+
+test("WFLW-04: a manifest-absent record renders its persisted workflow inventory, sorted", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange -- the names are seeded out of alphabetical order, so a rendered
+    // sorted list proves the arm sorts rather than echoing the record.
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [] },
+      installed: {
+        alpha: { version: "1.0.0", resources: { workflows: ["alpha:release", "alpha:changelog"] } },
+      },
+    });
+    const { ctx, pi, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+
+    // assert
+    assert.deepEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ● alpha v1.0.0 (installed) {not in manifest}",
+          "    skills: alpha-skill",
+          "    workflows: alpha:changelog, alpha:release",
+        ].join("\n"),
+      },
+    ]);
+  });
+});
+
+test("WFLW-04: a manifest-absent record with an empty workflow inventory renders no workflows line", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [] },
+      installed: { alpha: { version: "1.0.0", resources: { workflows: [] } } },
+    });
+    const { ctx, pi, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+
+    // assert
+    assert.deepEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ● alpha v1.0.0 (installed) {not in manifest}",
+          "    skills: alpha-skill",
+        ].join("\n"),
+      },
+    ]);
+  });
+});
+
+test("WFLW-04: the lenient component map carries the conventional workflows directory beside a declared one", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange -- a malformed hooks file makes the plugin structurally
+    // unavailable, which is the arm that carries no `componentPaths` and so
+    // re-derives them from the raw manifest strings. The declared `extra-flows`
+    // and the conventional `workflows` must BOTH be walked, so the row lists a
+    // script from each.
+    const userRoot = path.join(home, ".pi", "agent");
+    const mpRoot = await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [{ name: "alpha", source: "./alpha", version: "1.0.0", workflows: "extra-flows" }],
+      },
+      installablePluginDirs: ["alpha"],
+    });
+    await seedWorkflowScripts(mpRoot, "alpha", { "zeta.js": WORKFLOW_NAMED_ZETA });
+    const extraDir = path.join(mpRoot, "alpha", "extra-flows");
+    await mkdir(extraDir, { recursive: true });
+    await writeFile(
+      path.join(extraDir, "extra.js"),
+      'export const meta = { name: "extra", description: "extras" };\n',
+      "utf8",
+    );
+    await mkdir(path.join(mpRoot, "alpha", "hooks"), { recursive: true });
+    await writeFile(path.join(mpRoot, "alpha", "hooks", "hooks.json"), "{ not valid json", "utf8");
+    const { ctx, pi, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+
+    // assert
+    assert.deepEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ⊘ alpha v1.0.0 (unavailable) {unsupported hooks}",
+          "    workflows: alpha:extra, alpha:zeta",
+        ].join("\n"),
+      },
+    ]);
   });
 });

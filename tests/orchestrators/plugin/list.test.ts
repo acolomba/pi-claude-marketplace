@@ -4442,3 +4442,85 @@ test("listPlugins normalizes a non-Error notification failure before reporting i
     verify(ui);
   });
 });
+
+// ──────────────────────────────────────────────────────────────────────────
+// WFLW-04: the inventory row is INDIFFERENT to workflows.
+//
+// No kind carries a per-kind count on a `list` row, so the workflows kind adds
+// none either -- a count for this kind alone would be an inconsistency rather
+// than a feature. These two cases pin the row's bytes for a workflow-bearing
+// plugin on both sides of the installed/not-installed split, which is the half
+// of the claim the catalog states cannot make on their own: their bytes are
+// identical to the generic rows by construction, so a fixture alone would stay
+// green if a workflow token came back.
+// ──────────────────────────────────────────────────────────────────────────
+
+test("WFLW-04: a workflow-bearing available plugin renders the generic available row", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const userRoot = path.join(home, ".pi", "agent");
+    const mpRoot = path.join(userRoot, "marketplaces", "official");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "official",
+      manifest: {
+        name: "official",
+        plugins: [{ name: "helper", source: "./helper", version: "1.0.0" }],
+      },
+      installablePluginDirs: ["helper"],
+    });
+    await mkdir(path.join(mpRoot, "helper", "workflows"), { recursive: true });
+    await writeFile(
+      path.join(mpRoot, "helper", "workflows", "greet.js"),
+      'export const meta = { name: "greet", description: "greets" };\n',
+      "utf8",
+    );
+    const { ctx, pi, notifications, ui } = makeCtx();
+
+    // act
+    await listPlugins({ ctx, pi, cwd });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      { message: ["● official [user]", "  ○ helper v1.0.0 (available)"].join("\n") },
+    ]);
+    verify(ctx);
+    verify(pi);
+    verify(ui);
+  });
+});
+
+test("WFLW-04: a non-empty persisted workflow inventory leaves the installed row unchanged", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: {
+        name: "mp1",
+        plugins: [{ name: "alpha", source: "./alpha", version: "1.0.0" }],
+      },
+      installablePluginDirs: ["alpha"],
+      installed: {
+        alpha: { version: "1.0.0", resources: { workflows: ["alpha:greet", "alpha:shout"] } },
+      },
+    });
+    const { ctx, pi, notifications, ui } = makeCtx();
+
+    // act
+    await listPlugins({ ctx, pi, cwd });
+
+    // assert -- byte-identical to the same record with an empty inventory.
+    assert.deepStrictEqual(notifications, [
+      { message: ["● mp1 [user]", "  ● alpha v1.0.0 (installed)"].join("\n") },
+    ]);
+    verify(ctx);
+    verify(pi);
+    verify(ui);
+  });
+});

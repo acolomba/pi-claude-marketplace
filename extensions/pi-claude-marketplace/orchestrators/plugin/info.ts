@@ -1224,12 +1224,19 @@ function derivePersistedInstalledStatus(
 
 /**
  * INFO-11 / D-96-01: the component inventory for the state-only arm, read from
- * the four name-list `resources` arrays. The names render VERBATIM as the
+ * the five name-list `resources` arrays. The names render VERBATIM as the
  * Pi-generated installed names (`<plugin>-<skill>`, `<plugin>:<command>`,
- * `pi-claude-marketplace-<plugin>-<agent>`); MCP servers are the sole
- * exception by data shape, holding their raw source keys. There is no
- * reverse-mapping to the manifest-backed arm's source names -- the divergence
- * is documented in the output catalog, not engineered away.
+ * `pi-claude-marketplace-<plugin>-<agent>`, `<plugin>:<workflow>`); MCP servers
+ * are the sole exception by data shape, holding their raw source keys. There is
+ * no reverse-mapping to the manifest-backed arm's source names -- the
+ * divergence is documented in the output catalog, not engineered away.
+ *
+ * WFLW-04: `workflows` comes from the record for the same reason every other
+ * name-list kind does, and it is the only inventory there is -- the saved
+ * directory the envelopes live in is shared with the user's own workflows and
+ * with every other plugin, so listing it would attribute foreign names to this
+ * plugin. This arm runs NO discovery: it reads no plugin source and opens no
+ * script, which is what keeps it network-free and manifest-free by signature.
  *
  * Sorting reuses `discoverComponentNames`' comparator so the two surfaces
  * order identically. Entries are copied, never de-duplicated: `resources.*` is
@@ -1256,6 +1263,7 @@ async function composeStateOnlyComponents(
   const commands = sortComponentNames(record.resources.prompts);
   const mcp = sortComponentNames(record.resources.mcpServers);
   const skills = sortComponentNames(record.resources.skills);
+  const workflows = sortComponentNames(record.resources.workflows);
   // D-100-03 / ENBL-12 read ladder: the record wins when it carries the key,
   // the materialized file answers when it does not, and records self-heal on
   // the next install, update, reinstall or enable (there is no backfill,
@@ -1284,6 +1292,7 @@ async function composeStateOnlyComponents(
         hooksRead.entries.length > 0 && { hooks: hooksRead.entries }),
       ...(mcp.length > 0 && { mcp }),
       ...(skills.length > 0 && { skills }),
+      ...(workflows.length > 0 && { workflows }),
     },
     ...(hooksRead.kind === "degraded" && { degraded: hooksRead.reason }),
   };

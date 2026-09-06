@@ -3415,6 +3415,30 @@ const FIXTURES: FixtureMap = {
       } satisfies NotificationMessage,
     },
 
+    // WFLW-04: the state-only arm's `workflows:` line. The names are the
+    // generated installed names the record holds, which is why they carry the
+    // `<plugin>:` prefix the manifest-backed arm's source names do not.
+    "state-only-installed-with-workflows": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "mp",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: false },
+        plugin: {
+          status: "installed",
+          name: "alpha",
+          version: "1.0.0",
+          reasons: ["not in manifest"],
+          componentsResolved: true,
+          components: {
+            skills: ["alpha-skill"],
+            workflows: ["alpha:changelog", "alpha:release"],
+          },
+        },
+      } satisfies NotificationMessage,
+    },
+
     "state-only-partially-installed-single-scope": {
       pi: piWithBothLoaded(),
       message: {
@@ -5257,14 +5281,14 @@ test("catalog UAT: every <!-- catalog-state: --> annotation pairs byte-equal wit
   const catalog = await readFile(CATALOG_PATH, "utf8");
   const examples = loadCatalogExamples(catalog);
 
-  // Exact count, not a floor: 183 is the number of annotated examples in
+  // Exact count, not a floor: 184 is the number of annotated examples in
   // docs/output-catalog.md, and it is what stops a `loadCatalogExamples`
   // refactor from silently parsing a fraction of the corpus. Update it
   // deliberately when catalog examples are added or removed.
   assert.equal(
     examples.length,
-    183,
-    `Expected exactly 183 annotated catalog examples; found ${examples.length}. Check that the discriminator comments in docs/output-catalog.md were not lost, and update this count when examples are added.`,
+    184,
+    `Expected exactly 184 annotated catalog examples; found ${examples.length}. Check that the discriminator comments in docs/output-catalog.md were not lost, and update this count when examples are added.`,
   );
 
   const failures: Failure[] = [];
