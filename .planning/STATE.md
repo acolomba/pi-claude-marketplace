@@ -11,28 +11,28 @@ last_activity: 2026-09-05
 last_activity_desc: Phase 02 complete, transitioned to Phase 3
 progress:
   total_phases: 9
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 72
   completed_plans: 72
-  percent: 11
+  percent: 22
 ---
 
 # Project State
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-09-04 after the v1.19 milestone closed)
+See: `.planning/PROJECT.md` (updated 2026-09-05 after refine-unit-tests Phase 2)
 
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 02 — Containment and Input Safety verification against
-the sealed terminal evidence ledger.
+**Current focus:** Phase 03 — Production Defect Corrections against the sealed
+terminal evidence ledger.
 
 ## Current Position
 
 Phase: 3 — Production Defect Corrections
-Next: Verify Phase 02
+Next: Discuss Phase 03
 Plan: Not started
 Status: Ready to plan
 Last activity: 2026-09-05 — Phase 02 complete, transitioned to Phase 3
@@ -47,216 +47,216 @@ Last activity: 2026-09-05 — Phase 02 complete, transitioned to Phase 3
 
 **By Phase:**
 
-| Phase                           | Plans | Total           | Avg/Plan          |
-| ------------------------------- | ----: | --------------- | ----------------- |
-| 108. Domain and Platform        |    23 | 10h 58m         | 28.6 min          |
-| 109. Shared Contracts           |    19 | 3h 19m          | 10.5 min          |
-| 110                             |    12 | -               | -                 |
-| 111. Non-Hook Component Bridges |    31 | -               | -                 |
-| 112. Hook Runtime               |    31 | 7h 58m          | 15.4 min          |
-| 113. Orchestrator Support       |    35 | 7h 46m recorded | 16.6 min recorded |
+| Phase                           | Plans | Total            | Avg/Plan          |
+| ------------------------------- | ----: | ---------------- | ----------------- |
+| 108. Domain and Platform        |    23 | 10h 58m          | 28.6 min          |
+| 109. Shared Contracts           |    19 | 3h 19m           | 10.5 min          |
+| 110                             |    12 | -                | -                 |
+| 111. Non-Hook Component Bridges |    31 | -                | -                 |
+| 112. Hook Runtime               |    31 | 7h 58m           | 15.4 min          |
+| 113. Orchestrator Support       |    35 | 7h 46m recorded  | 16.6 min recorded |
 | 01. Live Evidence Revalidation  |    69 | 15h 18m recorded | 13.3 min recorded |
-| 02 | 3 | - | - |
+| 02                              |     3 | -                | -                 |
 
-**Recent Trend:** 69 Phase 01 plans completed with 110/110 terminal files, nine resolved decisions, and the complete repository gate green.
+**Recent Trend:** Phase 02 closed three production-defect requirements in three plans; independent verification passed 3/3 with 257/257 focused tests and nine complete direct-coverage gates.
 **Per-Plan Metrics:**
 
-| Plan          | Duration | Tasks   | Files   |
-| ------------- | -------- | ------- | ------- |
-| Phase 116 P19 | 45 min   | 1 tasks | 1 files |
-| Phase 116 P15 | 40 min   | 1 tasks | 1 files |
-| Phase 116 P14 | 45 min   | 1 tasks | 1 files |
-| Phase 108 P01 | 10 min   | 2 tasks | 1 files |
-| Phase 108 P06 | 18 min   | 3 tasks | 7 files |
-| Phase 108 P08 | 13 min   | 2 tasks | 1 files |
-| Phase 108 P09 | 15 min   | 2 tasks | 1 files |
-| Phase 108 P10 | 12 min   | 2 tasks | 1 files |
-| Phase 108 P11 | 14 min   | 2 tasks | 1 files |
-| Phase 108 P13 | 14 min   | 2 tasks | 1 files |
-| Phase 108 P14 | 10 min   | 2 tasks | 1 files |
-| Phase 108 P15 | 10 min   | 2 tasks | 1 files |
-| Phase 108 P16 | 16 min   | 2 tasks | 1 files |
-| Phase 108 P17 | 26 min   | 2 tasks | 1 files |
-| Phase 108 P19 | 28 min   | 3 tasks | 5 files |
-| Phase 108 P20 | 12 min   | 2 tasks | 1 files |
-| Phase 108 P18 | 43 min   | 3 tasks | 8 files |
-| Phase 108 P21 | 3h 40m   | 3 tasks | 9 files |
-| Phase 108 P12 | 27 min   | 3 tasks | 5 files |
-| Phase 108 P22 | 42 min   | 3 tasks | 8 files |
-| Phase 108 P02 | 20 min   | 3 tasks | 7 files |
-| Phase 108 P03 | 19 min   | 3 tasks | 8 files |
-| Phase 108 P04 | 22 min   | 3 tasks | 5 files |
-| Phase 108 P05 | 20 min   | 3 tasks | 8 files |
-| Phase 108 P07 | 27 min   | 3 tasks | 9 files |
-| Phase 108 P23 | 20 min   | 3 tasks | 5 files |
-| Phase 109 P01 | 7 min    | 2 tasks | 1 files |
-| Phase 109 P02 | 10 min   | 2 tasks | 1 files |
-| Phase 109 P03 | 12 min   | 2 tasks | 1 files |
-| Phase 109 P04 | 7 min    | 2 tasks | 1 files |
-| Phase 109 P05 | 5 min    | 2 tasks | 1 files |
-| Phase 109 P06 | 7 min    | 2 tasks | 1 files |
-| Phase 109 P07 | 16min    | 2 tasks | 1 files |
-| Phase 109 P08 | 6min     | 2 tasks | 1 files |
-| Phase 109 P09 | 19 min   | 2 tasks | 2 files |
-| Phase 109 P10 | 9 min    | 2 tasks | 1 files |
-| Phase 109 P11 | 6 min    | 2 tasks | 1 files |
-| Phase 109 P12 | 12 min   | 2 tasks | 1 files |
-| Phase 109 P13 | 6 min    | 2 tasks | 1 files |
-| Phase 109 P14 | 40 min   | 3 tasks | 9 files |
-| Phase 109 P15 | 6 min    | 2 tasks | 1 files |
-| Phase 109 P16 | 9 min    | 2 tasks | 1 files |
-| Phase 109 P17 | 11 min   | 2 tasks | 1 files |
-| Phase 109 P18 | 4 min    | 2 tasks | 1 files |
-| Phase 109 P19 | 7 min    | 2 tasks | 1 files |
-| Phase 110 P02 | 11 min   | 2 tasks | 1 files |
-| Phase 110 P06 | 7 min    | 2 tasks | 1 files |
-| Phase 110 P11 | 7 min    | 2 tasks | 1 files |
-| Phase 110 P01 | 8min     | 2 tasks | 1 files |
-| Phase 110 P03 | 11 min   | 2 tasks | 1 files |
-| Phase 110 P05 | 10 min   | 2 tasks | 1 files |
-| Phase 110 P08 | 10min    | 2 tasks | 2 files |
-| Phase 110 P10 | 9 min    | 2 tasks | 1 files |
-| Phase 110 P04 | 11 min   | 2 tasks | 1 files |
-| Phase 110 P07 | 16 min   | 2 tasks | 2 files |
-| Phase 110 P09 | 19 min   | 2 tasks | 3 files |
-| Phase 110 P12 | 17 min   | 2 tasks | 1 files |
-| Phase 111 P01 | 14 min   | 2 tasks | 2 files |
-| Phase 111 P02 | 10 min   | 2 tasks | 1 files |
-| Phase 112 P01 | 14 min   | 2 tasks | 1 files |
-| Phase 112 P03 | 9 min    | 2 tasks | 1 files |
-| Phase 112 P08 | 8 min    | 2 tasks | 1 files |
-| Phase 112 P09 | 9 min    | 2 tasks | 1 files |
-| Phase 112 P10 | 14 min   | 2 tasks | 1 files |
-| Phase 112 P12 | 12 min   | 2 tasks | 1 files |
-| Phase 112 P15 | 6 min    | 2 tasks | 1 files |
-| Phase 112 P16 | 7 min    | 2 tasks | 1 files |
-| Phase 112 P17 | 7 min    | 2 tasks | 1 files |
-| Phase 112 P18 | 3 min    | 2 tasks | 1 files |
-| Phase 112 P19 | 5 min    | 2 tasks | 1 files |
-| Phase 112 P20 | 5 min    | 2 tasks | 1 files |
-| Phase 112 P21 | 8 min    | 2 tasks | 1 files |
-| Phase 112 P22 | 20 min   | 2 tasks | 1 files |
-| Phase 112 P23 | 10 min   | 2 tasks | 1 files |
-| Phase 112 P24 | 10 min   | 2 tasks | 1 files |
-| Phase 112 P27 | 19 min   | 2 tasks | 1 files |
-| Phase 112 P28 | 28 min   | 2 tasks | 3 files |
-| Phase 112 P29 | 13 min   | 2 tasks | 1 files |
-| Phase 112 P30 | 17 min   | 2 tasks | 1 files |
-| Phase 112 P31 | 17 min   | 2 tasks | 1 files |
-| Phase 112 P11 | 14 min   | 2 tasks | 2 files |
-| Phase 112 P13 | 20 min   | 2 tasks | 2 files |
-| Phase 112 P25 | 12 min   | 2 tasks | 1 files |
-| Phase 112 P02 | 45 min   | 2 tasks | 3 files |
-| Phase 112 P06 | 26 min   | 2 tasks | 3 files |
-| Phase 112 P04 | 33 min   | 2 tasks | 3 files |
-| Phase 112 P05 | 18 min   | 2 tasks | 2 files |
-| Phase 112 P26 | 19 min   | 2 tasks | 2 files |
-| Phase 112 P07 | 34 min   | 2 tasks | 3 files |
-| Phase 112 P14 | 16 min   | 2 tasks | 1 file  |
-| Phase 115 P02 | 96 min | 3 tasks | 2 files |
-| Phase 115 P05 | 90min | 3 tasks | 5 files |
-| Phase 116 P00 | 35 min | 2 tasks | 5 files |
-| Phase 116 P01 | 25 min | 1 tasks | 1 files |
-| Phase 116 P02 | 20 min | 1 tasks | 1 files |
-| Phase 116 P04 | 25 min | 1 tasks | 1 files |
-| Phase 116 P06 | 65 min | 1 tasks | 3 files |
-| Phase 116 P30 | 40 min | 1 tasks | 1 files |
-| Phase 116 P12 | 45 min | 1 tasks | 1 files |
-| Phase 116 P23 | 50 min | 1 tasks | 1 files |
-| Phase 116 P26 | 45 min | 1 tasks | 1 files |
-| Phase 116 P27 | 70 min | 2 tasks | 2 files |
-| Phase 116 P29 | 20 min | 1 tasks | 1 files |
-| Phase 116 P03 | 45 min | 1 tasks | 1 files |
-| Phase 116 P10 | 45 min | 1 tasks | 1 files |
-| Phase 116 P13 | 50 min | 1 tasks | 1 files |
-| Phase 116 P07 | 35 min | 1 tasks | 1 files |
-| Phase 116 P11 | 35 min | 1 tasks | 1 files |
-| Phase 116 P05 | 30 min | 1 tasks | 1 files |
-| Phase 116 P17 | 40 min | 2 tasks | 1 files |
-| Phase 116 P28 | 30 min | 1 tasks | 1 files |
-| Phase 117 P01 | 11 min | 1 tasks | 1 files |
-| Phase 117 P02 | 15 min | 2 tasks | 10 files |
-| Phase 117 P03 | 16 min | 1 tasks | 27 files |
-| Phase 117 P04 | 22 min | 2 tasks | 2 files |
-| Phase 117 P05 | 9 min | 1 tasks | 2 files |
-| Phase 117 P06 | 13 min | 1 tasks | 2 files |
-| Phase 117 P07 | 28 min | 2 tasks | 17 files |
-| Phase 117 P08 | 22 min | 2 tasks | 4 files |
-| Phase 117 P09 | 13 min | 1 tasks | 2 files |
-| Phase 117 P10 | 12 min | 1 tasks | 1 files |
-| Phase 117 P11 | 50 min | 1 tasks | 4 files |
-| Phase 117 P11 | 2h 20m | 2 tasks | 16 files |
-| Phase 01 P01 | 28 min | 3 tasks | 7 files |
-| Phase 01 P02 | 10 min | 2 tasks | 2 files |
-| Phase 01 P03 | 18min | 3 tasks | 2 files |
-| Phase 01 P04 | 4min | 2 tasks | 2 files |
-| Phase 01 P05 | 5min | 1 tasks | 2 files |
-| Phase 01 P06 | 10min | 2 tasks | 2 files |
-| Phase 01 P07 | 6min | 1 tasks | 2 files |
-| Phase 01 P08 | 12min | 2 tasks | 1 files |
-| Phase 01 P09 | 15min | 2 tasks | 2 files |
-| Phase 01 P10 | 6min | 2 tasks | 1 files |
-| Phase 01 P11 | 8min | 1 tasks | 1 files |
-| Phase 01 P12 | 12min | 2 tasks | 1 files |
-| Phase 01 P13 | 12min | 1 tasks | 1 files |
-| Phase 01 P14 | 17min | 2 tasks | 1 files |
-| Phase 01 P15 | 8min | 1 tasks | 1 files |
-| Phase 01 P16 | 15min | 2 tasks | 2 files |
-| Phase 01 P17 | 10min | 2 tasks | 1 files |
-| Phase 01 P18 | 5min | 2 tasks | 1 files |
-| Phase 01 P19 | 12min | 1 tasks | 1 files |
-| Phase 01 P20 | 6min | 2 tasks | 1 files |
-| Phase 01 P21 | 8min | 2 tasks | 1 files |
-| Phase 01 P22 | 7min | 1 tasks | 1 files |
-| Phase 01 P23 | 5min | 2 tasks | 1 files |
-| Phase 01 P24 | 6min | 2 tasks | 2 files |
-| Phase 01 P25 | 5min | 1 tasks | 2 files |
-| Phase 01 P26 | 27min | 2 tasks | 2 files |
-| Phase 01 P27 | 18min | 2 tasks | 1 files |
-| Phase 01 P28 | 25min | 2 tasks | 1 files |
-| Phase 01 P29 | 8min | 2 tasks | 2 files |
-| Phase 01 P30 | 8min | 2 tasks | 1 files |
-| Phase 01 P31 | 12min | 2 tasks | 1 files |
-| Phase 01 P32 | 14min | 1 tasks | 1 files |
-| Phase 01 P33 | 10min | 2 tasks | 1 files |
-| Phase 01 P34 | 10min | 2 tasks | 2 files |
-| Phase 01 P35 | 14min | 2 tasks | 2 files |
-| Phase 01 P36 | 5min | 1 tasks | 2 files |
-| Phase 01-live-evidence-revalidation P37 | 10min | 2 tasks | 1 files |
-| Phase 01-live-evidence-revalidation P38 | 12min | 2 tasks | 1 files |
-| Phase 01-live-evidence-revalidation P39 | 15min | 1 tasks | 1 files |
-| Phase 01-live-evidence-revalidation P40 | 18min | 3 tasks | 2 files |
-| Phase 01 P41 | 12min | 3 tasks | 5 files |
-| Phase 01 P42 | 8min | 3 tasks | 5 files |
-| Phase 01 P43 | 8min | 3 tasks | 5 files |
-| Phase 01 P44 | 7min | 3 tasks | 5 files |
-| Phase 01 P45 | 10min | 3 tasks | 5 files |
-| Phase 01 P46 | 11min | 3 tasks | 5 files |
-| Phase 01 P47 | 16min | 3 tasks | 5 files |
-| Phase 01 P48 | 11min | 3 tasks | 5 files |
-| Phase 01 P49 | 16min | 3 tasks | 5 files |
-| Phase 01 P51 | 11min | 3 tasks | 5 files |
-| Phase 01 P52 | 7min | 3 tasks | 5 files |
-| Phase 01 P53 | 8min | 3 tasks | 5 files |
-| Phase 01 P54 | 10min | 2 tasks | 5 files |
-| Phase 01 P55 | 18min | 3 tasks | 21 files |
-| Phase 01 P56 | 12min | 1 tasks | 3 files |
-| Phase 01 P57 | 1h 43m | 1 tasks | 3 files |
-| Phase 01 P58 | 58min | 1 tasks | 5 files |
-| Phase 01 P59 | 3min | 1 tasks | 3 files |
-| Phase 01 P60 | 18min | 1 tasks | 3 files |
-| Phase 01 P61 | 17min | 1 tasks | 3 files |
-| Phase 01 P62 | 24min | 1 tasks | 3 files |
-| Phase 01 P63 | 16min | 1 tasks | 3 files |
-| Phase 01 P64 | 1h 17m | 1 tasks | 3 files |
-| Phase 01 P65 | 19min | 1 tasks | 3 files |
-| Phase 01 P66 | 23min | 1 tasks | 3 files |
-| Phase 01 P67 | 14min | 1 tasks | 3 files |
-| Phase 01 P68 | 9min | 1 tasks | 4 files |
-| Phase 01 P69 | 31min | 1 tasks | 27 files |
-| Phase 02 P01 | 18min | 2 tasks | 6 files |
-| Phase 02 P02 | 17min | 2 tasks | 5 files |
-| Phase 02 P03 | 13min | 2 tasks | 2 files |
+| Plan                                    | Duration | Tasks   | Files    |
+| --------------------------------------- | -------- | ------- | -------- |
+| Phase 116 P19                           | 45 min   | 1 tasks | 1 files  |
+| Phase 116 P15                           | 40 min   | 1 tasks | 1 files  |
+| Phase 116 P14                           | 45 min   | 1 tasks | 1 files  |
+| Phase 108 P01                           | 10 min   | 2 tasks | 1 files  |
+| Phase 108 P06                           | 18 min   | 3 tasks | 7 files  |
+| Phase 108 P08                           | 13 min   | 2 tasks | 1 files  |
+| Phase 108 P09                           | 15 min   | 2 tasks | 1 files  |
+| Phase 108 P10                           | 12 min   | 2 tasks | 1 files  |
+| Phase 108 P11                           | 14 min   | 2 tasks | 1 files  |
+| Phase 108 P13                           | 14 min   | 2 tasks | 1 files  |
+| Phase 108 P14                           | 10 min   | 2 tasks | 1 files  |
+| Phase 108 P15                           | 10 min   | 2 tasks | 1 files  |
+| Phase 108 P16                           | 16 min   | 2 tasks | 1 files  |
+| Phase 108 P17                           | 26 min   | 2 tasks | 1 files  |
+| Phase 108 P19                           | 28 min   | 3 tasks | 5 files  |
+| Phase 108 P20                           | 12 min   | 2 tasks | 1 files  |
+| Phase 108 P18                           | 43 min   | 3 tasks | 8 files  |
+| Phase 108 P21                           | 3h 40m   | 3 tasks | 9 files  |
+| Phase 108 P12                           | 27 min   | 3 tasks | 5 files  |
+| Phase 108 P22                           | 42 min   | 3 tasks | 8 files  |
+| Phase 108 P02                           | 20 min   | 3 tasks | 7 files  |
+| Phase 108 P03                           | 19 min   | 3 tasks | 8 files  |
+| Phase 108 P04                           | 22 min   | 3 tasks | 5 files  |
+| Phase 108 P05                           | 20 min   | 3 tasks | 8 files  |
+| Phase 108 P07                           | 27 min   | 3 tasks | 9 files  |
+| Phase 108 P23                           | 20 min   | 3 tasks | 5 files  |
+| Phase 109 P01                           | 7 min    | 2 tasks | 1 files  |
+| Phase 109 P02                           | 10 min   | 2 tasks | 1 files  |
+| Phase 109 P03                           | 12 min   | 2 tasks | 1 files  |
+| Phase 109 P04                           | 7 min    | 2 tasks | 1 files  |
+| Phase 109 P05                           | 5 min    | 2 tasks | 1 files  |
+| Phase 109 P06                           | 7 min    | 2 tasks | 1 files  |
+| Phase 109 P07                           | 16min    | 2 tasks | 1 files  |
+| Phase 109 P08                           | 6min     | 2 tasks | 1 files  |
+| Phase 109 P09                           | 19 min   | 2 tasks | 2 files  |
+| Phase 109 P10                           | 9 min    | 2 tasks | 1 files  |
+| Phase 109 P11                           | 6 min    | 2 tasks | 1 files  |
+| Phase 109 P12                           | 12 min   | 2 tasks | 1 files  |
+| Phase 109 P13                           | 6 min    | 2 tasks | 1 files  |
+| Phase 109 P14                           | 40 min   | 3 tasks | 9 files  |
+| Phase 109 P15                           | 6 min    | 2 tasks | 1 files  |
+| Phase 109 P16                           | 9 min    | 2 tasks | 1 files  |
+| Phase 109 P17                           | 11 min   | 2 tasks | 1 files  |
+| Phase 109 P18                           | 4 min    | 2 tasks | 1 files  |
+| Phase 109 P19                           | 7 min    | 2 tasks | 1 files  |
+| Phase 110 P02                           | 11 min   | 2 tasks | 1 files  |
+| Phase 110 P06                           | 7 min    | 2 tasks | 1 files  |
+| Phase 110 P11                           | 7 min    | 2 tasks | 1 files  |
+| Phase 110 P01                           | 8min     | 2 tasks | 1 files  |
+| Phase 110 P03                           | 11 min   | 2 tasks | 1 files  |
+| Phase 110 P05                           | 10 min   | 2 tasks | 1 files  |
+| Phase 110 P08                           | 10min    | 2 tasks | 2 files  |
+| Phase 110 P10                           | 9 min    | 2 tasks | 1 files  |
+| Phase 110 P04                           | 11 min   | 2 tasks | 1 files  |
+| Phase 110 P07                           | 16 min   | 2 tasks | 2 files  |
+| Phase 110 P09                           | 19 min   | 2 tasks | 3 files  |
+| Phase 110 P12                           | 17 min   | 2 tasks | 1 files  |
+| Phase 111 P01                           | 14 min   | 2 tasks | 2 files  |
+| Phase 111 P02                           | 10 min   | 2 tasks | 1 files  |
+| Phase 112 P01                           | 14 min   | 2 tasks | 1 files  |
+| Phase 112 P03                           | 9 min    | 2 tasks | 1 files  |
+| Phase 112 P08                           | 8 min    | 2 tasks | 1 files  |
+| Phase 112 P09                           | 9 min    | 2 tasks | 1 files  |
+| Phase 112 P10                           | 14 min   | 2 tasks | 1 files  |
+| Phase 112 P12                           | 12 min   | 2 tasks | 1 files  |
+| Phase 112 P15                           | 6 min    | 2 tasks | 1 files  |
+| Phase 112 P16                           | 7 min    | 2 tasks | 1 files  |
+| Phase 112 P17                           | 7 min    | 2 tasks | 1 files  |
+| Phase 112 P18                           | 3 min    | 2 tasks | 1 files  |
+| Phase 112 P19                           | 5 min    | 2 tasks | 1 files  |
+| Phase 112 P20                           | 5 min    | 2 tasks | 1 files  |
+| Phase 112 P21                           | 8 min    | 2 tasks | 1 files  |
+| Phase 112 P22                           | 20 min   | 2 tasks | 1 files  |
+| Phase 112 P23                           | 10 min   | 2 tasks | 1 files  |
+| Phase 112 P24                           | 10 min   | 2 tasks | 1 files  |
+| Phase 112 P27                           | 19 min   | 2 tasks | 1 files  |
+| Phase 112 P28                           | 28 min   | 2 tasks | 3 files  |
+| Phase 112 P29                           | 13 min   | 2 tasks | 1 files  |
+| Phase 112 P30                           | 17 min   | 2 tasks | 1 files  |
+| Phase 112 P31                           | 17 min   | 2 tasks | 1 files  |
+| Phase 112 P11                           | 14 min   | 2 tasks | 2 files  |
+| Phase 112 P13                           | 20 min   | 2 tasks | 2 files  |
+| Phase 112 P25                           | 12 min   | 2 tasks | 1 files  |
+| Phase 112 P02                           | 45 min   | 2 tasks | 3 files  |
+| Phase 112 P06                           | 26 min   | 2 tasks | 3 files  |
+| Phase 112 P04                           | 33 min   | 2 tasks | 3 files  |
+| Phase 112 P05                           | 18 min   | 2 tasks | 2 files  |
+| Phase 112 P26                           | 19 min   | 2 tasks | 2 files  |
+| Phase 112 P07                           | 34 min   | 2 tasks | 3 files  |
+| Phase 112 P14                           | 16 min   | 2 tasks | 1 file   |
+| Phase 115 P02                           | 96 min   | 3 tasks | 2 files  |
+| Phase 115 P05                           | 90min    | 3 tasks | 5 files  |
+| Phase 116 P00                           | 35 min   | 2 tasks | 5 files  |
+| Phase 116 P01                           | 25 min   | 1 tasks | 1 files  |
+| Phase 116 P02                           | 20 min   | 1 tasks | 1 files  |
+| Phase 116 P04                           | 25 min   | 1 tasks | 1 files  |
+| Phase 116 P06                           | 65 min   | 1 tasks | 3 files  |
+| Phase 116 P30                           | 40 min   | 1 tasks | 1 files  |
+| Phase 116 P12                           | 45 min   | 1 tasks | 1 files  |
+| Phase 116 P23                           | 50 min   | 1 tasks | 1 files  |
+| Phase 116 P26                           | 45 min   | 1 tasks | 1 files  |
+| Phase 116 P27                           | 70 min   | 2 tasks | 2 files  |
+| Phase 116 P29                           | 20 min   | 1 tasks | 1 files  |
+| Phase 116 P03                           | 45 min   | 1 tasks | 1 files  |
+| Phase 116 P10                           | 45 min   | 1 tasks | 1 files  |
+| Phase 116 P13                           | 50 min   | 1 tasks | 1 files  |
+| Phase 116 P07                           | 35 min   | 1 tasks | 1 files  |
+| Phase 116 P11                           | 35 min   | 1 tasks | 1 files  |
+| Phase 116 P05                           | 30 min   | 1 tasks | 1 files  |
+| Phase 116 P17                           | 40 min   | 2 tasks | 1 files  |
+| Phase 116 P28                           | 30 min   | 1 tasks | 1 files  |
+| Phase 117 P01                           | 11 min   | 1 tasks | 1 files  |
+| Phase 117 P02                           | 15 min   | 2 tasks | 10 files |
+| Phase 117 P03                           | 16 min   | 1 tasks | 27 files |
+| Phase 117 P04                           | 22 min   | 2 tasks | 2 files  |
+| Phase 117 P05                           | 9 min    | 1 tasks | 2 files  |
+| Phase 117 P06                           | 13 min   | 1 tasks | 2 files  |
+| Phase 117 P07                           | 28 min   | 2 tasks | 17 files |
+| Phase 117 P08                           | 22 min   | 2 tasks | 4 files  |
+| Phase 117 P09                           | 13 min   | 1 tasks | 2 files  |
+| Phase 117 P10                           | 12 min   | 1 tasks | 1 files  |
+| Phase 117 P11                           | 50 min   | 1 tasks | 4 files  |
+| Phase 117 P11                           | 2h 20m   | 2 tasks | 16 files |
+| Phase 01 P01                            | 28 min   | 3 tasks | 7 files  |
+| Phase 01 P02                            | 10 min   | 2 tasks | 2 files  |
+| Phase 01 P03                            | 18min    | 3 tasks | 2 files  |
+| Phase 01 P04                            | 4min     | 2 tasks | 2 files  |
+| Phase 01 P05                            | 5min     | 1 tasks | 2 files  |
+| Phase 01 P06                            | 10min    | 2 tasks | 2 files  |
+| Phase 01 P07                            | 6min     | 1 tasks | 2 files  |
+| Phase 01 P08                            | 12min    | 2 tasks | 1 files  |
+| Phase 01 P09                            | 15min    | 2 tasks | 2 files  |
+| Phase 01 P10                            | 6min     | 2 tasks | 1 files  |
+| Phase 01 P11                            | 8min     | 1 tasks | 1 files  |
+| Phase 01 P12                            | 12min    | 2 tasks | 1 files  |
+| Phase 01 P13                            | 12min    | 1 tasks | 1 files  |
+| Phase 01 P14                            | 17min    | 2 tasks | 1 files  |
+| Phase 01 P15                            | 8min     | 1 tasks | 1 files  |
+| Phase 01 P16                            | 15min    | 2 tasks | 2 files  |
+| Phase 01 P17                            | 10min    | 2 tasks | 1 files  |
+| Phase 01 P18                            | 5min     | 2 tasks | 1 files  |
+| Phase 01 P19                            | 12min    | 1 tasks | 1 files  |
+| Phase 01 P20                            | 6min     | 2 tasks | 1 files  |
+| Phase 01 P21                            | 8min     | 2 tasks | 1 files  |
+| Phase 01 P22                            | 7min     | 1 tasks | 1 files  |
+| Phase 01 P23                            | 5min     | 2 tasks | 1 files  |
+| Phase 01 P24                            | 6min     | 2 tasks | 2 files  |
+| Phase 01 P25                            | 5min     | 1 tasks | 2 files  |
+| Phase 01 P26                            | 27min    | 2 tasks | 2 files  |
+| Phase 01 P27                            | 18min    | 2 tasks | 1 files  |
+| Phase 01 P28                            | 25min    | 2 tasks | 1 files  |
+| Phase 01 P29                            | 8min     | 2 tasks | 2 files  |
+| Phase 01 P30                            | 8min     | 2 tasks | 1 files  |
+| Phase 01 P31                            | 12min    | 2 tasks | 1 files  |
+| Phase 01 P32                            | 14min    | 1 tasks | 1 files  |
+| Phase 01 P33                            | 10min    | 2 tasks | 1 files  |
+| Phase 01 P34                            | 10min    | 2 tasks | 2 files  |
+| Phase 01 P35                            | 14min    | 2 tasks | 2 files  |
+| Phase 01 P36                            | 5min     | 1 tasks | 2 files  |
+| Phase 01-live-evidence-revalidation P37 | 10min    | 2 tasks | 1 files  |
+| Phase 01-live-evidence-revalidation P38 | 12min    | 2 tasks | 1 files  |
+| Phase 01-live-evidence-revalidation P39 | 15min    | 1 tasks | 1 files  |
+| Phase 01-live-evidence-revalidation P40 | 18min    | 3 tasks | 2 files  |
+| Phase 01 P41                            | 12min    | 3 tasks | 5 files  |
+| Phase 01 P42                            | 8min     | 3 tasks | 5 files  |
+| Phase 01 P43                            | 8min     | 3 tasks | 5 files  |
+| Phase 01 P44                            | 7min     | 3 tasks | 5 files  |
+| Phase 01 P45                            | 10min    | 3 tasks | 5 files  |
+| Phase 01 P46                            | 11min    | 3 tasks | 5 files  |
+| Phase 01 P47                            | 16min    | 3 tasks | 5 files  |
+| Phase 01 P48                            | 11min    | 3 tasks | 5 files  |
+| Phase 01 P49                            | 16min    | 3 tasks | 5 files  |
+| Phase 01 P51                            | 11min    | 3 tasks | 5 files  |
+| Phase 01 P52                            | 7min     | 3 tasks | 5 files  |
+| Phase 01 P53                            | 8min     | 3 tasks | 5 files  |
+| Phase 01 P54                            | 10min    | 2 tasks | 5 files  |
+| Phase 01 P55                            | 18min    | 3 tasks | 21 files |
+| Phase 01 P56                            | 12min    | 1 tasks | 3 files  |
+| Phase 01 P57                            | 1h 43m   | 1 tasks | 3 files  |
+| Phase 01 P58                            | 58min    | 1 tasks | 5 files  |
+| Phase 01 P59                            | 3min     | 1 tasks | 3 files  |
+| Phase 01 P60                            | 18min    | 1 tasks | 3 files  |
+| Phase 01 P61                            | 17min    | 1 tasks | 3 files  |
+| Phase 01 P62                            | 24min    | 1 tasks | 3 files  |
+| Phase 01 P63                            | 16min    | 1 tasks | 3 files  |
+| Phase 01 P64                            | 1h 17m   | 1 tasks | 3 files  |
+| Phase 01 P65                            | 19min    | 1 tasks | 3 files  |
+| Phase 01 P66                            | 23min    | 1 tasks | 3 files  |
+| Phase 01 P67                            | 14min    | 1 tasks | 3 files  |
+| Phase 01 P68                            | 9min     | 1 tasks | 4 files  |
+| Phase 01 P69                            | 31min    | 1 tasks | 27 files |
+| Phase 02 P01                            | 18min    | 2 tasks | 6 files  |
+| Phase 02 P02                            | 17min    | 2 tasks | 5 files  |
+| Phase 02 P03                            | 13min    | 2 tasks | 2 files  |
 
 ## Accumulated Context
 
@@ -617,7 +617,7 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 02]: Use one normalized parent-child pair for every accepted-path containment decision, error, relative segment, and lstat walk.
 - [Phase 02]: Keep production consumers byte-identical because all live callers inherit the repaired shared pre-I/O assertion.
 - [Phase 02]: Catch only aggregateDiscoveredResources and its result projection at the registered host callback; keep reconciliation, PATH recompute, and the aggregator unchanged.
-- [Phase 02]: Use a real mode-000 skill directory to prove transient failure, then restore it before invoking the same registered callback again.
+- [Phase 02]: Prove transient aggregate failure with one exact-path, explicitly non-concurrent built-in mock; restore and re-synchronize it before invoking the same registered callback again and in teardown.
 - [Phase 02]: Retain the per-warning try/catch and prove both user and project warning attempts under a notifier that throws on every call.
 
 ### Pending Todos
@@ -626,42 +626,41 @@ None for roadmap creation.
 
 ### Blockers/Concerns
 
-- `gsd-tools query phase.complete` cannot write the root planning files while
-  workstream mode is active, and neither existing workstream holds v1.19 —
-  `defaults-enabled` is a finished milestone at phase 105 and `milestone` is v1.18
-  at phase 100. Phase 114's ROADMAP and STATE transition was therefore applied by
-  hand. Phases 115 through 117 and milestone close will hit the same wall until the
-  stale workstream directories are retired or v1.19 is given its own workstream.
+- `gsd-tools query phase.complete` cannot write root planning files while the
+  three archived workstream directories remain. The active `refine-unit-tests`
+  milestone is root-scoped, so Phase 2's canonical transition was simulated in
+  an isolated flat copy, inspected, and applied by hand. Later phase transitions
+  will require the same guarded procedure unless workstream routing is repaired.
 - RESOLVED by 117-12: D-117-20 in `117-CONTEXT.md` now reads 190 complete numeric records + 7 accepted D-116-01a shortfalls + 7 type-only, matching the operator decision taken in plan 117-11 and the retained all-pair artifact. The superseded 197 + 7 wording is gone.
 
 ## Deferred Items
 
-| Category | Item | Status | Deferred At | Milestone |
-| -------- | ---- | ------ | ----------- | --------- |
-| Tooling | Detect unused code and unused type members — no gate reports a type member nothing reads (measured: typecheck, lint, and fallow all pass with one planted) | Pending | Phase 116 discussion | v1.19 |
-| quick_tasks | 260720-d8i-move-agent-provenance-from-body-comment- | unknown | 2026-09-04 | v1.19 |
-| todos | 2026-09-02-detect-unused-code-and-type-members.md | (presence-only) | 2026-09-04 | v1.19 |
-| uat_gaps | 89/89-UAT.md (archived v1.16) | passed | 2026-09-04 | v1.19 |
-| uat_gaps | 63/63-UAT.md (archived v1.13) | passed | 2026-09-04 | v1.19 |
-| uat_gaps | 56/56-UAT-FIX-2.md (archived v1.12) | all_fixed | 2026-09-04 | v1.19 |
-| uat_gaps | 56/56-UAT-FIX.md (archived v1.12) | all_fixed | 2026-09-04 | v1.19 |
-| deferred_items | 112/deferred-items.md: Phase 112 deferred items - `npm run check` reaches `format:check` but reports pre-existing format differences in user-owned, untracked `.mcp.json` and | acknowledged | 2026-09-04 | v1.19 |
-| deferred_items | 117/deferred-items.md: 1. Stale test path in an `install.messaging.ts` doc comment - **Found during:** 117-04 Task 1 - **File:** `extensions/pi-claude-marketplace/orchestrat | acknowledged | 2026-09-04 | v1.19 |
-| deferred_items | 117/deferred-items.md: 2. Stale byte-form-lock path in the output catalog - **Found during:** 117-05 Task 1 - **File:** `docs/output-catalog.md` (the `### Device Flow user-c | acknowledged | 2026-09-04 | v1.19 |
-| deferred_items | 117/deferred-items.md: 3. Stale `tests/helpers/` references throughout the codebase map - **Found during:** 117-07 Task 1 - **File:** `.planning/codebase/TESTING.md` (lines  | acknowledged | 2026-09-04 | v1.19 |
-| deferred_items | 117/deferred-items.md: 4. RESOLVED - `--all` cannot complete: the seven D-116-01a shortfalls are accepted - **Found during:** 117-11 Task 2 - **File:** `scripts/test-coverag | acknowledged | 2026-09-04 | v1.19 |
-| deferred_items | 117/deferred-items.md: 5. RESOLVED - The PATH interpreter was upgraded mid-phase and reddened 11 tests - **Found during:** 117-11 Task 2 - **File:** ten test suites, led by  | acknowledged | 2026-09-04 | v1.19 |
-| deferred_items | 117/deferred-items.md: 6. RESOLVED - The direct-coverage sweeps still have no automated control **Resolved 2026-09-04 by operator decision.** Two parts, closed differently:  | acknowledged | 2026-09-04 | v1.19 |
-| deferred_items | 90/deferred-items.md (archived v1.17): 90-03 execution - **Pre-existing environment failure (pi-subagents global peer):** two integration tests in `tests/integration/skill-path-resolution.t | acknowledged | 2026-09-04 | v1.19 |
-| deferred_items | 86/deferred-items.md (archived v1.15): Pre-existing integration test failures (NOT introduced by Plan 03) Two `tests/integration/*` cases fail on the current branch. They fail IDENTICALLY w | acknowledged | 2026-09-04 | v1.19 |
-| deferred_items | 85/deferred-items.md (archived v1.14): Pre-existing integration-test failures (unrelated to this phase) `npm run test:integration` reports 2 failures that also fail on the base commit `2aa2 | acknowledged | 2026-09-04 | v1.19 |
-| deferred_items | 50/deferred-items.md (archived v1.11): Pre-existing test failure: reinstall README documentation gap - **Test:** `tests/architecture/reinstall-docs.test.ts` -- "PRL-01/03/04/05/13/14/15/16: | acknowledged | 2026-09-04 | v1.19 |
-| deferred_items | 25/deferred-items.md (archived v1.4.1): `tests/e2e/import-command.test.ts` 3 failures (`import imports enabled Claude settings across both scopes`, `import --scope project narrows writes to  | acknowledged | 2026-09-04 | v1.19 |
+| Category       | Item                                                                                                                                                                                          | Status          | Deferred At          | Milestone |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- | -------------------- | --------- |
+| Tooling        | Detect unused code and unused type members — no gate reports a type member nothing reads (measured: typecheck, lint, and fallow all pass with one planted)                                    | Pending         | Phase 116 discussion | v1.19     |
+| quick_tasks    | 260720-d8i-move-agent-provenance-from-body-comment-                                                                                                                                           | unknown         | 2026-09-04           | v1.19     |
+| todos          | 2026-09-02-detect-unused-code-and-type-members.md                                                                                                                                             | (presence-only) | 2026-09-04           | v1.19     |
+| uat_gaps       | 89/89-UAT.md (archived v1.16)                                                                                                                                                                 | passed          | 2026-09-04           | v1.19     |
+| uat_gaps       | 63/63-UAT.md (archived v1.13)                                                                                                                                                                 | passed          | 2026-09-04           | v1.19     |
+| uat_gaps       | 56/56-UAT-FIX-2.md (archived v1.12)                                                                                                                                                           | all_fixed       | 2026-09-04           | v1.19     |
+| uat_gaps       | 56/56-UAT-FIX.md (archived v1.12)                                                                                                                                                             | all_fixed       | 2026-09-04           | v1.19     |
+| deferred_items | 112/deferred-items.md: Phase 112 deferred items - `npm run check` reaches `format:check` but reports pre-existing format differences in user-owned, untracked `.mcp.json` and                 | acknowledged    | 2026-09-04           | v1.19     |
+| deferred_items | 117/deferred-items.md: 1. Stale test path in an `install.messaging.ts` doc comment - **Found during:** 117-04 Task 1 - **File:** `extensions/pi-claude-marketplace/orchestrat                 | acknowledged    | 2026-09-04           | v1.19     |
+| deferred_items | 117/deferred-items.md: 2. Stale byte-form-lock path in the output catalog - **Found during:** 117-05 Task 1 - **File:** `docs/output-catalog.md` (the `### Device Flow user-c                 | acknowledged    | 2026-09-04           | v1.19     |
+| deferred_items | 117/deferred-items.md: 3. Stale `tests/helpers/` references throughout the codebase map - **Found during:** 117-07 Task 1 - **File:** `.planning/codebase/TESTING.md` (lines                  | acknowledged    | 2026-09-04           | v1.19     |
+| deferred_items | 117/deferred-items.md: 4. RESOLVED - `--all` cannot complete: the seven D-116-01a shortfalls are accepted - **Found during:** 117-11 Task 2 - **File:** `scripts/test-coverag                 | acknowledged    | 2026-09-04           | v1.19     |
+| deferred_items | 117/deferred-items.md: 5. RESOLVED - The PATH interpreter was upgraded mid-phase and reddened 11 tests - **Found during:** 117-11 Task 2 - **File:** ten test suites, led by                  | acknowledged    | 2026-09-04           | v1.19     |
+| deferred_items | 117/deferred-items.md: 6. RESOLVED - The direct-coverage sweeps still have no automated control **Resolved 2026-09-04 by operator decision.** Two parts, closed differently:                  | acknowledged    | 2026-09-04           | v1.19     |
+| deferred_items | 90/deferred-items.md (archived v1.17): 90-03 execution - **Pre-existing environment failure (pi-subagents global peer):** two integration tests in `tests/integration/skill-path-resolution.t | acknowledged    | 2026-09-04           | v1.19     |
+| deferred_items | 86/deferred-items.md (archived v1.15): Pre-existing integration test failures (NOT introduced by Plan 03) Two `tests/integration/*` cases fail on the current branch. They fail IDENTICALLY w | acknowledged    | 2026-09-04           | v1.19     |
+| deferred_items | 85/deferred-items.md (archived v1.14): Pre-existing integration-test failures (unrelated to this phase) `npm run test:integration` reports 2 failures that also fail on the base commit `2aa2 | acknowledged    | 2026-09-04           | v1.19     |
+| deferred_items | 50/deferred-items.md (archived v1.11): Pre-existing test failure: reinstall README documentation gap - **Test:** `tests/architecture/reinstall-docs.test.ts` -- "PRL-01/03/04/05/13/14/15/16: | acknowledged    | 2026-09-04           | v1.19     |
+| deferred_items | 25/deferred-items.md (archived v1.4.1): `tests/e2e/import-command.test.ts` 3 failures (`import imports enabled Claude settings across both scopes`, `import --scope project narrows writes to | acknowledged    | 2026-09-04           | v1.19     |
 
 **One item could NOT be suppressed by the tool** - `deferred_items` phase 25 (archived
 v1.4.1). Its deferred items live in a markdown TABLE, not a bullet list: the scanner
-synthesizes that row's `text` by joining cells with ` - ` while the file stores them as
-` | `, so the acknowledge writer's literal-text search can never match and it refuses with
+synthesizes that row's `text` by joining cells with a spaced hyphen while the file stores
+them with a spaced vertical bar, so the acknowledge writer's literal-text search can never match and it refuses with
 `no deferred item matched --text`. The other 17 were suppressed normally. This one is
 disclosed here instead and WILL resurface at the next milestone close - it was not silently
 discarded, and the archived file was deliberately left byte-identical rather than
@@ -675,14 +674,15 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 Phase 01 is sealed at 69/69 plans. Phase 02 Plans 01 through 03 completed
 PDEF-03, PDEF-02, and PDEF-04 with typed fail-closed input, path, and lifecycle
-boundaries. Phase 02 is ready for goal verification.
+boundaries. Independent verification passed 3/3 with no behavior, UAT, or
+security gaps. Phase 03 is ready for discussion and planning.
 
 **Resume file:** None
 
-**Read beside it:** `.planning/phases/02-containment-and-input-safety/02-03-SUMMARY.md`,
-`.planning/phases/02-containment-and-input-safety/02-VALIDATION.md`,
-`.planning/REQUIREMENTS.md`, and `.planning/ROADMAP.md`.
+**Read beside it:** `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`, and the
+Phase 01 terminal evidence ledger and scope-impact crosswalk routed to Phase 03.
 
-Last session: 2026-09-05T22:50:59.029Z
+Last session: 2026-09-06T00:17:22.144Z
 
-**Next:** Verify Phase 02 against its goal, requirements, and validation contract.
+**Next:** Discuss Phase 03 Production Defect Corrections, then research and plan
+only the terminal findings that still reproduce.
