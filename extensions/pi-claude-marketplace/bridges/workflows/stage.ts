@@ -118,6 +118,14 @@ function buildEnvelope(admitted: AdmittedWorkflow & { readonly source: string })
  * `assertTargetsUnoccupied` protects the file; it cannot protect the RECORD,
  * because a name already written into the owned inventory is a name a later
  * `unstage` unlinks by fiat, whatever the commit that followed it did.
+ *
+ * IN-02: probing here adds no prepare-stage failure mode, on the install path
+ * or the update one. `pathExists` re-raises anything that is not ENOENT /
+ * ENOTDIR, but the caller resolved this same leaf through
+ * `workflowArtifactPath` one step earlier, and the `assertPathInside` walk
+ * inside it lstats the leaf and re-raises everything but ENOENT -- so an
+ * EACCES / ELOOP on the saved directory already aborted prepare before this
+ * probe existed.
  */
 async function foreignOccupiedTargets(
   pairs: readonly { name: string; from: string; to: string }[],
