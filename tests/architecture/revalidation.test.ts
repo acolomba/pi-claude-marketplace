@@ -880,7 +880,13 @@ test("RVAL-04 scope-impact rejects a duplicate stable requirement definition", a
   const projectRoot = await createScopeImpactFixture(t);
   const contractPath = path.join(projectRoot, ".planning/REQUIREMENTS.md");
   const contract = await readFile(contractPath, "utf8");
-  await writeFile(contractPath, contract.replace("### Production Correctness\n", "### Production Correctness\n- [ ] **PDEF-01**: duplicate\n"));
+  await writeFile(
+    contractPath,
+    contract.replace(
+      "### Production Correctness\n",
+      "### Production Correctness\n- [ ] **PDEF-01**: duplicate\n",
+    ),
+  );
 
   // act
   const execution = runCli(projectRoot, ["scope-impact", "--check"]);
@@ -898,7 +904,13 @@ test("RVAL-04 scope-impact rejects changed requirement disposition", async (t) =
   const projectRoot = await createScopeImpactFixture(t);
   const contractPath = path.join(projectRoot, ".planning/REQUIREMENTS.md");
   const contract = await readFile(contractPath, "utf8");
-  await writeFile(contractPath, contract.replace("| GGAT-02 | Evidence/history (formerly Phase 7) | Evidence only |", "| GGAT-02 | Phase 7 | Pending |"));
+  await writeFile(
+    contractPath,
+    contract.replace(
+      "| GGAT-02 | Evidence/history (formerly Phase 7) | Evidence only |",
+      "| GGAT-02 | Phase 7 | Pending |",
+    ),
+  );
 
   // act
   const execution = runCli(projectRoot, ["scope-impact", "--check"]);
@@ -917,7 +929,9 @@ test("RVAL-04 scope-impact rejects a missing Phase 2-9 route", async (t) => {
   // arrange
   const projectRoot = await createScopeImpactFixture(t);
   const ledger = JSON.parse(await readFile(path.join(projectRoot, ledgerPath), "utf8")) as Ledger;
-  ledger.scopeChanges = ledger.scopeChanges.filter((change) => change.id !== "SCOPE-ROUTE-PHASE-09");
+  ledger.scopeChanges = ledger.scopeChanges.filter(
+    (change) => change.id !== "SCOPE-ROUTE-PHASE-09",
+  );
   await writeFile(path.join(projectRoot, ledgerPath), `${JSON.stringify(ledger, null, 2)}\n`);
 
   // act
@@ -958,7 +972,13 @@ test("RVAL-04 scope-impact rejects changed roadmap membership", async (t) => {
   const projectRoot = await createScopeImpactFixture(t);
   const contractPath = path.join(projectRoot, ".planning/ROADMAP.md");
   const contract = await readFile(contractPath, "utf8");
-  await writeFile(contractPath, contract.replace("**Requirements:** GGAT-01, GGAT-03, GGAT-04", "**Requirements:** GGAT-01, GGAT-03"));
+  await writeFile(
+    contractPath,
+    contract.replace(
+      "**Requirements:** GGAT-01, GGAT-03, GGAT-04",
+      "**Requirements:** GGAT-01, GGAT-03",
+    ),
+  );
 
   // act
   const execution = runCli(projectRoot, ["scope-impact", "--check"]);
@@ -976,7 +996,10 @@ test("RVAL-04 scope-impact rejects phase title drift", async (t) => {
   const projectRoot = await createScopeImpactFixture(t);
   const contractPath = path.join(projectRoot, ".planning/ROADMAP.md");
   const contract = await readFile(contractPath, "utf8");
-  await writeFile(contractPath, contract.replace("### Phase 8: Direct Coverage", "### Phase 8: Coverage Drift"));
+  await writeFile(
+    contractPath,
+    contract.replace("### Phase 8: Direct Coverage", "### Phase 8: Coverage Drift"),
+  );
 
   // act
   const execution = runCli(projectRoot, ["scope-impact", "--check"]);
@@ -1016,7 +1039,10 @@ test("RVAL-04 scope-impact rejects duplicate traceability and phase declarations
   const requirements = await readFile(requirementsFile, "utf8");
   const roadmap = await readFile(roadmapFile, "utf8");
   await writeFile(requirementsFile, `${requirements}\n| RVAL-01 | Phase 1 | Complete |\n`);
-  await writeFile(roadmapFile, `${roadmap}\n### Phase 9: Final Quality and Backlog Closure\n**Requirements:** CLOSE-01, CLOSE-02\n`);
+  await writeFile(
+    roadmapFile,
+    `${roadmap}\n### Phase 9: Final Quality and Backlog Closure\n**Requirements:** CLOSE-01, CLOSE-02\n`,
+  );
 
   // act
   const execution = runCli(projectRoot, ["scope-impact", "--check"]);
@@ -1056,7 +1082,10 @@ test("RVAL-04 scope-impact rejects an active evidence-only requirement", async (
   const projectRoot = await createScopeImpactFixture(t);
   const contractPath = path.join(projectRoot, ".planning/REQUIREMENTS.md");
   const contract = await readFile(contractPath, "utf8");
-  await writeFile(contractPath, contract.replace("| PDEF-01 | Phase 3 | Pending |", "| PDEF-01 | Phase 3 | Evidence only |"));
+  await writeFile(
+    contractPath,
+    contract.replace("| PDEF-01 | Phase 3 | Pending |", "| PDEF-01 | Phase 3 | Evidence only |"),
+  );
 
   // act
   const execution = runCli(projectRoot, ["scope-impact", "--check"]);
@@ -1074,7 +1103,13 @@ test("RVAL-04 scope-impact rejects phase renumbering", async (t) => {
   const projectRoot = await createScopeImpactFixture(t);
   const contractPath = path.join(projectRoot, ".planning/ROADMAP.md");
   const contract = await readFile(contractPath, "utf8");
-  await writeFile(contractPath, contract.replace("### Phase 6: Assertion and Module Refinement", "### Phase 10: Assertion and Module Refinement"));
+  await writeFile(
+    contractPath,
+    contract.replace(
+      "### Phase 6: Assertion and Module Refinement",
+      "### Phase 10: Assertion and Module Refinement",
+    ),
+  );
 
   // act
   const execution = runCli(projectRoot, ["scope-impact", "--check"]);
@@ -1118,9 +1153,24 @@ test("strict scope validation rejects identical, malformed, and mismatched ancho
   };
   ledger.scopeChanges = [
     { ...base, id: "SCOPE-0", beforeAnchor: "path :: section :: REQ-1 — row", afterAnchor: "" },
-    { ...base, id: "SCOPE-1", beforeAnchor: "same :: REQ-1 :: row", afterAnchor: "same :: REQ-1 :: row" },
-    { ...base, id: "SCOPE-2", beforeAnchor: "path ::  :: REQ-1 — row", afterAnchor: "path :: section :: REQ-1 — row" },
-    { ...base, id: "SCOPE-3", beforeAnchor: "path :: section :: OTHER-1 — row", afterAnchor: "path :: section :: REQ-1 — row" },
+    {
+      ...base,
+      id: "SCOPE-1",
+      beforeAnchor: "same :: REQ-1 :: row",
+      afterAnchor: "same :: REQ-1 :: row",
+    },
+    {
+      ...base,
+      id: "SCOPE-2",
+      beforeAnchor: "path ::  :: REQ-1 — row",
+      afterAnchor: "path :: section :: REQ-1 — row",
+    },
+    {
+      ...base,
+      id: "SCOPE-3",
+      beforeAnchor: "path :: section :: OTHER-1 — row",
+      afterAnchor: "path :: section :: REQ-1 — row",
+    },
   ];
 
   // act
@@ -1130,10 +1180,26 @@ test("strict scope validation rejects identical, malformed, and mismatched ancho
 
   // assert
   assert.deepStrictEqual(violations, [
-    { code: "invalid-scope-anchor", target: "SCOPE-0", message: "beforeAnchor and afterAnchor are mandatory" },
-    { code: "invalid-scope-anchor", target: "SCOPE-1", message: "beforeAnchor and afterAnchor must differ" },
-    { code: "invalid-scope-anchor", target: "SCOPE-2", message: "beforeAnchor must be a three-part locator" },
-    { code: "scope-anchor-identity", target: "SCOPE-3", message: "beforeAnchor must identify REQ-1" },
+    {
+      code: "invalid-scope-anchor",
+      target: "SCOPE-0",
+      message: "beforeAnchor and afterAnchor are mandatory",
+    },
+    {
+      code: "invalid-scope-anchor",
+      target: "SCOPE-1",
+      message: "beforeAnchor and afterAnchor must differ",
+    },
+    {
+      code: "invalid-scope-anchor",
+      target: "SCOPE-2",
+      message: "beforeAnchor must be a three-part locator",
+    },
+    {
+      code: "scope-anchor-identity",
+      target: "SCOPE-3",
+      message: "beforeAnchor must identify REQ-1",
+    },
   ]);
 });
 
@@ -1142,7 +1208,10 @@ test("RVAL-04 scope-impact rejects a phase without requirements", async (t) => {
   const projectRoot = await createScopeImpactFixture(t);
   const contractPath = path.join(projectRoot, ".planning/ROADMAP.md");
   const contract = await readFile(contractPath, "utf8");
-  await writeFile(contractPath, contract.replace("**Requirements:** CLOSE-01, CLOSE-02", "**Requirements omitted**"));
+  await writeFile(
+    contractPath,
+    contract.replace("**Requirements:** CLOSE-01, CLOSE-02", "**Requirements omitted**"),
+  );
 
   // act
   const execution = runCli(projectRoot, ["scope-impact", "--check"]);
