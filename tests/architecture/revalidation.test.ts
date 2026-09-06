@@ -998,6 +998,27 @@ test("RVAL-04 scope-impact rejects changed requirement clause text", async (t) =
   });
 });
 
+test("RVAL-04 scope-impact rejects duplicate evidence history records", async (t) => {
+  // arrange
+  const projectRoot = await createScopeImpactFixture(t);
+  const contractPath = path.join(projectRoot, ".planning/REQUIREMENTS.md");
+  const contract = await readFile(contractPath, "utf8");
+  const recordStart = contract.indexOf("- **GGAT-02**");
+  const recordEnd = contract.indexOf("\n- **RCOV-04**", recordStart);
+  const record = contract.slice(recordStart, recordEnd);
+  await writeFile(contractPath, contract.replace(record, `${record}\n${record}`));
+
+  // act
+  const execution = runCli(projectRoot, ["scope-impact", "--check"]);
+
+  // assert
+  assert.deepStrictEqual(execution, {
+    status: 1,
+    stdout: "",
+    stderr: "duplicate-requirement: GGAT-02: requirement is recorded more than once\n",
+  });
+});
+
 test("RVAL-04 scope-impact rejects changed requirement disposition", async (t) => {
   // arrange
   const projectRoot = await createScopeImpactFixture(t);
@@ -2183,6 +2204,59 @@ test("ledger rejects invalid collection fields and empty required evidence", asy
   assert.ok(codes.includes("invalid-decision-collection"));
   assert.ok(codes.includes("incomplete-validation"));
   assert.ok(codes.includes("incomplete-scope-change"));
+});
+
+test("ledger rejects non-string scope identities before parsing anchors", async (t) => {
+  // arrange
+  const { projectRoot, corpusPath } = await corpusFixture(t);
+  const ledger = benignLedger(corpusPath);
+  const base = {
+    action: "keep",
+    findingIds: ["FINDING-1"],
+    decisionIds: [],
+    rationale: "Evidence remains current.",
+  };
+  ledger.scopeChanges = [
+    {
+      ...base,
+      id: undefined as unknown as string,
+      requirementId: "REQ-1",
+    },
+    {
+      ...base,
+      id: "SCOPE-REQ-REQ-2",
+      requirementId: undefined as unknown as string,
+    },
+  ];
+
+  // act
+  const violations = validateLedger(ledger, {
+    projectRoot,
+    expectedPaths: [corpusPath],
+  }).filter((item) =>
+    ["incomplete-scope-change", "invalid-requirement-id", "invalid-scope-change-id"].includes(
+      item.code,
+    ),
+  );
+
+  // assert
+  assert.deepStrictEqual(violations, [
+    {
+      code: "incomplete-scope-change",
+      target: "SCOPE-REQ-REQ-2",
+      message: "requirementId, action, and rationale are mandatory",
+    },
+    {
+      code: "invalid-requirement-id",
+      target: "SCOPE-REQ-REQ-2",
+      message: "undefined",
+    },
+    {
+      code: "invalid-scope-change-id",
+      target: "undefined",
+      message: "scope change id is unsafe",
+    },
+  ]);
 });
 
 test("resolved decisions reject blank and undisposed options", async (t) => {
