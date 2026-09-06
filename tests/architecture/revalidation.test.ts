@@ -1441,6 +1441,38 @@ test("ledger rejects invalid collection fields and empty required evidence", asy
   assert.ok(codes.includes("incomplete-scope-change"));
 });
 
+test("resolved decisions reject blank and undisposed options", async (t) => {
+  // arrange
+  const { projectRoot, corpusPath } = await corpusFixture(t);
+  const blankLedger = benignLedger(corpusPath);
+  const blankDecision = pendingDecisions()[0]!;
+  resolveDecision(blankDecision);
+  blankDecision.options = ["remove", ""];
+  blankDecision.rejectedOptions = [""];
+  blankLedger.decisions = [blankDecision];
+  const undisposedLedger = benignLedger(corpusPath);
+  const undisposedDecision = pendingDecisions()[0]!;
+  resolveDecision(undisposedDecision);
+  undisposedDecision.options = ["remove", "retain", "defer"];
+  undisposedDecision.rejectedOptions = ["retain"];
+  undisposedLedger.decisions = [undisposedDecision];
+
+  // act
+  const blankCodes = validateLedger(blankLedger, {
+    projectRoot,
+    expectedPaths: [corpusPath],
+  }).map((item) => item.code);
+  const undisposedCodes = validateLedger(undisposedLedger, {
+    projectRoot,
+    expectedPaths: [corpusPath],
+  }).map((item) => item.code);
+
+  // assert
+  assert.ok(blankCodes.includes("invalid-decision-option"));
+  assert.ok(blankCodes.includes("invalid-rejected-option"));
+  assert.ok(undisposedCodes.includes("invalid-rejected-option"));
+});
+
 for (const sensitiveValue of [
   "--secret hidden-value",
   "Authorization: Bearer hidden-value",

@@ -735,6 +735,15 @@ function validateDecisionOptions(decision, violations) {
     return;
   }
 
+  const optionsAreValid = decision.options.every(
+    (option) => typeof option === "string" && option.trim() !== "",
+  );
+  if (!optionsAreValid) {
+    violations.push(
+      violation("invalid-decision-option", decision.id, "options must be non-empty strings"),
+    );
+  }
+
   const duplicateOptions = duplicateValues(decision.options);
   if (duplicateOptions.length > 0) {
     violations.push(
@@ -752,6 +761,19 @@ function validateDecisionOptions(decision, violations) {
     return;
   }
 
+  const rejectedOptionsAreValid = decision.rejectedOptions.every(
+    (option) => typeof option === "string" && option.trim() !== "",
+  );
+  if (!rejectedOptionsAreValid) {
+    violations.push(
+      violation(
+        "invalid-rejected-option",
+        decision.id,
+        "rejectedOptions must be non-empty strings",
+      ),
+    );
+  }
+
   const duplicateRejectedOptions = duplicateValues(decision.rejectedOptions);
   if (duplicateRejectedOptions.length > 0) {
     violations.push(
@@ -759,16 +781,16 @@ function validateDecisionOptions(decision, violations) {
     );
   }
 
-  if (
-    decision.rejectedOptions.some(
-      (option) => option === decision.selectedOption || !decision.options.includes(option),
-    )
-  ) {
+  const expectedRejectedOptions = decision.options
+    .filter((option) => option !== decision.selectedOption)
+    .sort();
+  const actualRejectedOptions = [...decision.rejectedOptions].sort();
+  if (JSON.stringify(actualRejectedOptions) !== JSON.stringify(expectedRejectedOptions)) {
     violations.push(
       violation(
         "invalid-rejected-option",
         decision.id,
-        "rejectedOptions must contain only unselected options",
+        "rejectedOptions must contain exactly every unselected option",
       ),
     );
   }
