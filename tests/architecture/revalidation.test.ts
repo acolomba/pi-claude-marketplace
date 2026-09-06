@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, rmSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -81,6 +81,8 @@ interface Ledger {
     findingIds: string[];
     decisionIds: string[];
     rationale: string;
+    beforeAnchor?: string;
+    afterAnchor?: string;
   }>;
 }
 
@@ -779,6 +781,63 @@ test("derives scope impact only from traced scope records", async (t) => {
       rationale: "The premise survives.",
     },
   ]);
+});
+
+test("RVAL-04 scope-impact checks all live planning-contract records", () => {
+  // arrange
+  const projectRoot = fileURLToPath(new URL("../..", import.meta.url));
+
+  // act
+  const execution = runCli(projectRoot, ["scope-impact", "--check"]);
+
+  // assert
+  assert.deepStrictEqual(execution, {
+    status: 0,
+    stdout: "Scope impact valid: 40 records.\n",
+    stderr: "",
+  });
+});
+
+test("RVAL-04 scope-impact rejects a missing requirements contract", async (t) => {
+  // arrange
+  const projectRoot = await mkdtemp(path.join(tmpdir(), "revalidation-scope-impact-"));
+  t.after(() => rm(projectRoot, { recursive: true, force: true }));
+  await mkdir(path.dirname(path.join(projectRoot, ledgerPath)), { recursive: true });
+  const canonicalRoot = fileURLToPath(new URL("../..", import.meta.url));
+  await writeFile(
+    path.join(projectRoot, ledgerPath),
+    await readFile(path.join(canonicalRoot, ledgerPath), "utf8"),
+  );
+  await writeFile(
+    path.join(projectRoot, ".planning/ROADMAP.md"),
+    await readFile(path.join(canonicalRoot, ".planning/ROADMAP.md"), "utf8"),
+  );
+
+  // act
+  const execution = runCli(projectRoot, ["scope-impact", "--check"]);
+
+  // assert
+  assert.deepStrictEqual(execution, {
+    status: 1,
+    stdout: "",
+    stderr: "path does not exist: .planning/REQUIREMENTS.md\n",
+  });
+});
+
+test("RVAL-04 scope-impact preserves ordinary JSON output", () => {
+  // arrange
+  const projectRoot = fileURLToPath(new URL("../..", import.meta.url));
+  const ledger = JSON.parse(readFileSync(path.join(projectRoot, ledgerPath), "utf8")) as Ledger;
+
+  // act
+  const execution = runCli(projectRoot, ["scope-impact"]);
+
+  // assert
+  assert.deepStrictEqual(execution, {
+    status: 0,
+    stdout: `${JSON.stringify(deriveScopeImpact(ledger), null, 2)}\n`,
+    stderr: "",
+  });
 });
 
 test("public merge check and publish preserve and then replace complete destination bytes", async (t) => {
