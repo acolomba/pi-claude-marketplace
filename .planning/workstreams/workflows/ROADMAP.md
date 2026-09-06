@@ -470,6 +470,13 @@ Plans:
    outcome union, so the load-time reconcile projection cannot stamp it. This is
    also what gives criterion 2's staged workflow names a consumer; without it
    they would be a field every reader discards.
+   **Extended during execution, operator-authorized:** `uninstall`'s `(failed)`
+   arm stamps as well, not only its clean arm. A partial uninstall cascade can
+   leave a command registered over a removed envelope exactly as a partial
+   disable can, and disable stamps both of its arms. Withholding it there would
+   reproduce, inside one verb, the same-fact-reported-inconsistently outcome
+   this criterion exists to prevent -- on the failure path, where the user most
+   needs to know the command is still live.
 9. `npm run check` is green.
 
 **Plans**: 5 plans in 4 waves. Same-wave plans have no `files_modified` overlap, but the waves are
@@ -486,7 +493,7 @@ Plans:
   and one reachability case per widened failure slot (wave 2)
 - [x] 113-03-PLAN.md — The staged workflow names on the ledger projection both enable verbs read, and the
   load-time no-re-materialization guard with a negative control (wave 2)
-- [ ] 113-04-PLAN.md — The lingering-command reload remedy as a closed-set token stamped by all four
+- [x] 113-04-PLAN.md — The lingering-command reload remedy as a closed-set token stamped by all four
   retiring verbs, plus the verified reinstall traceability correction (wave 3)
 - [ ] 113-05-PLAN.md — The read-only retained-staging scan, its advisory on both `pending` arms, and the
   phase green gate (wave 4)

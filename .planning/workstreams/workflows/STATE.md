@@ -4,18 +4,18 @@ milestone: workflows-replay
 milestone_name: Workflow Bridge Replay onto main
 current_phase: 113
 current_phase_name: Update, enable/disable, reconcile
-current_plan: 113-04 (wave 3)
+current_plan: 113-05 (wave 4)
 status: executing
-stopped_at: Phase 113 waves 1-2 complete (113-01..03); wave 3 next
+stopped_at: Phase 113 waves 1-3 complete (113-01..04); wave 4 next
 last_updated: "2026-09-05T22:49:08.588Z"
 last_activity: 2026-09-05
-last_activity_desc: Phase 113 waves 1-2 executed - info surface, update sixth bridge, enable projection
+last_activity_desc: Phase 113 wave 3 executed - the lingering-command reload remedy
 state_head: 7e1fa90921ea4c7700c37de2eebe05784155560d
 progress:
   total_phases: 9
   completed_phases: 4
   total_plans: 21
-  completed_plans: 19
+  completed_plans: 20
   percent: 44
 ---
 
@@ -36,7 +36,7 @@ never merged. Since then #154 declared `workflows` an *unsupported* kind, and
 ## Current Position
 
 Phase: 113 (Update, enable/disable, reconcile) — READY TO EXECUTE
-Plan: 3/5 executed — waves 1-2 done; 113-04 is wave 3, 113-05 is wave 4
+Plan: 4/5 executed — waves 1-3 done; 113-05 is wave 4 and closes the phase
 Status: Executing Phase 113. Plan 113-01 landed the `info` `workflows:` line,
 the required discovery `tense` parameter, and the preview-tense warning
 channel, in commits 282c23f6, 0fe0f018 and e4e8c71d.
@@ -66,6 +66,30 @@ Two carried facts wave 3 must act on:
   so a workflows-prepare failure never released the mcp handle. Plan 02's
   `>= 3` grep threshold was written against the two-helper shape and has been
   corrected to `>= 2` (ce35983c).
+
+Wave 3 landed WLIF-06 as the `stale workflow command` token (e9d79e31,
+2923eadc) and corrected the WLIF-04 booking against evidence (e6647ebf).
+
+Three facts from it:
+
+- The closed-set amendment turned out to be SEVEN sites, not the six the
+  pattern map predicted. The two extra were a second `REASONS.length` assertion
+  in `tests/shared/notify.test.ts` and a `_ReasonsCoverageProof` type pin in
+  `tests/shared/notify-reasons.test.ts`. They were found by removing the token
+  and observing what went red, not by enumeration -- which is the only method
+  that finds this class, since a widened closed set compiles clean at every
+  derivation site.
+- `stagedWorkflowNames` was DELETED from the module-private sentinel rather
+  than read there; the retirement gate is computed in `runEnableBranch` and the
+  sentinel carries `staleWorkflowCommand?: boolean` instead. Computing it at
+  the row composer would have meant computing inside a renderer.
+- WLIF-04 was found already satisfied by Phase 112. Its traceability row now
+  reads `Phase 113 -> Phase 112 | Complete`, corrected only after the evidence
+  case passed.
+
+Operator decision taken at the wave 3 boundary: uninstall's `(failed)` arm
+stamps too. Recorded as an extension to ROADMAP criterion 8 and folded into
+plan 113-05, which already owns the catalog files it touches.
 
 Research overturned a load-bearing claim: `shared/notify.ts`'s exact-length
 `COMPONENT_KINDS` tuple does NOT fail to typecheck when the component set gains
