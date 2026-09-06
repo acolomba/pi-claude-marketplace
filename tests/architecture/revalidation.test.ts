@@ -1501,6 +1501,31 @@ test("RVAL-04 scope-impact rejects conflicting requirements declarations in one 
   });
 });
 
+test("RVAL-04 scope-impact rejects a duplicate requirement within one declaration", async (t) => {
+  // arrange
+  const projectRoot = await createScopeImpactFixture(t);
+  const contractPath = path.join(projectRoot, ".planning/ROADMAP.md");
+  const contract = await readFile(contractPath, "utf8");
+  await writeFile(
+    contractPath,
+    contract.replace(
+      "**Requirements:** GGAT-01, GGAT-03, GGAT-04",
+      "**Requirements:** GGAT-01, GGAT-03, GGAT-04, GGAT-04",
+    ),
+  );
+
+  // act
+  const execution = runCli(projectRoot, ["scope-impact", "--check"]);
+
+  // assert
+  assert.deepStrictEqual(execution, {
+    status: 1,
+    stdout: "",
+    stderr:
+      "duplicate-phase-requirement: PHASE-07: requirements declaration contains a duplicate member\n",
+  });
+});
+
 test("RVAL-04 scope-impact rejects a missing requirement row", async (t) => {
   // arrange
   const projectRoot = await createScopeImpactFixture(t);
