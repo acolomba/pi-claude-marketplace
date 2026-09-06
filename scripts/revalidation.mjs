@@ -1057,50 +1057,35 @@ export function validateLedger(ledger, context = {}) {
   );
 }
 
-export function validateShard(shard, assignment) {
-  if (!isObject(shard) || typeof shard.plan !== "string" || !Array.isArray(shard.files)) {
-    throw new TypeError("shard requires plan and files");
-  }
-
-  const violations = [];
-  const files = collectObjectRecords(
-    shard.files,
-    "invalid-shard-file",
-    shard.plan,
-    "shard file requires a path",
-    violations,
-    (file) => isObject(file) && typeof file.path === "string",
-  );
-  const assignedPaths = assignment.filter((row) => row.plan === shard.plan).map((row) => row.path);
+function validateShardAssignment(plan, files, assignment, violations) {
+  const assignedPaths = assignment.filter((row) => row.plan === plan).map((row) => row.path);
   const shardPaths = files.map((file) => file.path);
   if (JSON.stringify(shardPaths) !== JSON.stringify(assignedPaths)) {
     violations.push(
-      violation("shard-assignment", shard.plan, "shard paths must exactly match assignment order"),
+      violation("shard-assignment", plan, "shard paths must exactly match assignment order"),
     );
   }
 
-  if (files.some((file) => file.assignedPlan !== shard.plan)) {
-    violations.push(
-      violation("shard-owner", shard.plan, "every shard file must name its owning plan"),
-    );
+  if (files.some((file) => file.assignedPlan !== plan)) {
+    violations.push(violation("shard-owner", plan, "every shard file must name its owning plan"));
   }
 
-  const claims = Array.isArray(shard.sourceClaims) ? shard.sourceClaims : [];
-  const findings = Array.isArray(shard.findings) ? shard.findings : [];
+  return assignedPaths;
+}
+
+function validateShardClaimOwners(plan, claimsArePresent, claims, assignedPaths, violations) {
   const assignedPathSet = new Set(assignedPaths);
   if (
-    !Array.isArray(shard.sourceClaims) ||
+    !claimsArePresent ||
     claims.some((claim) => !isObject(claim) || !assignedPathSet.has(claim.filePath))
   ) {
     violations.push(
-      violation(
-        "shard-claim-owner",
-        shard.plan,
-        "every shard claim must belong to an assigned file",
-      ),
+      violation("shard-claim-owner", plan, "every shard claim must belong to an assigned file"),
     );
   }
+}
 
+function validateShardFileClaimLinks(files, claims, violations) {
   for (const file of files) {
     const actualClaimIds = claims
       .filter((claim) => isObject(claim) && claim.filePath === file.path)
@@ -1120,7 +1105,9 @@ export function validateShard(shard, assignment) {
       );
     }
   }
+}
 
+function validateShardFindingLinks(plan, findingsArePresent, claims, findings, violations) {
   const referencedFindingIds = [
     ...new Set(claims.filter(isObject).map((claim) => claim.findingId)),
   ].sort();
@@ -1128,7 +1115,7 @@ export function validateShard(shard, assignment) {
   const duplicateFindingIds = duplicateValues(findingIds);
   const declaredFindingIds = [...new Set(findingIds)].sort();
   if (
-    !Array.isArray(shard.findings) ||
+    !findingsArePresent ||
     findings.some((finding) => !isObject(finding) || typeof finding.id !== "string") ||
     duplicateFindingIds.length > 0 ||
     JSON.stringify(referencedFindingIds) !== JSON.stringify(declaredFindingIds)
@@ -1136,11 +1123,35 @@ export function validateShard(shard, assignment) {
     violations.push(
       violation(
         "shard-finding-links",
-        shard.plan,
+        plan,
         "findings must exactly match those referenced by shard-local claims",
       ),
     );
   }
+}
+
+export function validateShard(shard, assignment) {
+  if (!isObject(shard) || typeof shard.plan !== "string" || !Array.isArray(shard.files)) {
+    throw new TypeError("shard requires plan and files");
+  }
+
+  const violations = [];
+  const files = collectObjectRecords(
+    shard.files,
+    "invalid-shard-file",
+    shard.plan,
+    "shard file requires a path",
+    violations,
+    (file) => isObject(file) && typeof file.path === "string",
+  );
+  const assignedPaths = validateShardAssignment(shard.plan, files, assignment, violations);
+  const claimsArePresent = Array.isArray(shard.sourceClaims);
+  const findingsArePresent = Array.isArray(shard.findings);
+  const claims = claimsArePresent ? shard.sourceClaims : [];
+  const findings = findingsArePresent ? shard.findings : [];
+  validateShardClaimOwners(shard.plan, claimsArePresent, claims, assignedPaths, violations);
+  validateShardFileClaimLinks(files, claims, violations);
+  validateShardFindingLinks(shard.plan, findingsArePresent, claims, findings, violations);
 
   // A duplicateOf target may live in another shard; it remains a reference, not shard-owned data.
 
