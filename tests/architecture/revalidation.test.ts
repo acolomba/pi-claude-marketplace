@@ -656,6 +656,39 @@ test("validates plan-owned shards and merges them in assignment order", async (t
   assert.throws(() => mergeShards({}, [first], assignment), /missing shards: 01-03/);
 });
 
+test("shard validation rejects cross-plan claims and unreachable findings", async (t) => {
+  // arrange
+  const { corpusPath } = await corpusFixture(t);
+  const secondPath = ".planning/reviews/unit-test-adversarial/second.md";
+  const assignment = [
+    { ordinal: 1, plan: "01-02", bytes: 1, path: corpusPath },
+    { ordinal: 2, plan: "01-03", bytes: 1, path: secondPath },
+  ];
+  const shard = { ...benignLedger(corpusPath), plan: "01-02" };
+  const foreign = benignLedger(secondPath);
+  foreign.sourceClaims[0]!.id = `${secondPath}#CLAIM-2`;
+  foreign.sourceClaims[0]!.findingId = "FINDING-2";
+  foreign.findings[0]!.id = "FINDING-2";
+  foreign.findings[0]!.claimIds = [`${secondPath}#CLAIM-2`];
+  const misplacedClaim = structuredClone(shard);
+  misplacedClaim.sourceClaims.push(foreign.sourceClaims[0]!);
+  misplacedClaim.findings.push(foreign.findings[0]!);
+  const misplacedFinding = structuredClone(shard);
+  misplacedFinding.findings.push(foreign.findings[0]!);
+  const mismatchedFile = structuredClone(shard);
+  mismatchedFile.files[0]!.claimIds = [];
+
+  // act
+  const claimCodes = validateShard(misplacedClaim, assignment).map((item) => item.code);
+  const findingCodes = validateShard(misplacedFinding, assignment).map((item) => item.code);
+  const fileCodes = validateShard(mismatchedFile, assignment).map((item) => item.code);
+
+  // assert
+  assert.ok(claimCodes.includes("shard-claim-owner"));
+  assert.ok(findingCodes.includes("shard-finding-links"));
+  assert.ok(fileCodes.includes("shard-file-claim-links"));
+});
+
 test("derives scope impact only from traced scope records", async (t) => {
   // arrange
   const { corpusPath } = await corpusFixture(t);

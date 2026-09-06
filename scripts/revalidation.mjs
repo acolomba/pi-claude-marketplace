@@ -981,6 +981,61 @@ export function validateShard(shard, assignment) {
     );
   }
 
+  const claims = Array.isArray(shard.sourceClaims) ? shard.sourceClaims : [];
+  const findings = Array.isArray(shard.findings) ? shard.findings : [];
+  const assignedPathSet = new Set(assignedPaths);
+  if (
+    !Array.isArray(shard.sourceClaims) ||
+    claims.some((claim) => !isObject(claim) || !assignedPathSet.has(claim.filePath))
+  ) {
+    violations.push(
+      violation("shard-claim-owner", shard.plan, "every shard claim must belong to an assigned file"),
+    );
+  }
+
+  for (const file of shard.files) {
+    const actualClaimIds = claims
+      .filter((claim) => isObject(claim) && claim.filePath === file.path)
+      .map((claim) => claim.id)
+      .sort();
+    const declaredClaimIds = Array.isArray(file.claimIds) ? [...file.claimIds].sort() : [];
+    if (
+      !Array.isArray(file.claimIds) ||
+      JSON.stringify(actualClaimIds) !== JSON.stringify(declaredClaimIds)
+    ) {
+      violations.push(
+        violation(
+          "shard-file-claim-links",
+          file.path,
+          "file claimIds must exactly match shard-local sourceClaims",
+        ),
+      );
+    }
+  }
+
+  const referencedFindingIds = [
+    ...new Set(claims.filter(isObject).map((claim) => claim.findingId)),
+  ].sort();
+  const findingIds = findings.filter(isObject).map((finding) => finding.id);
+  const duplicateFindingIds = duplicateValues(findingIds);
+  const declaredFindingIds = [...new Set(findingIds)].sort();
+  if (
+    !Array.isArray(shard.findings) ||
+    findings.some((finding) => !isObject(finding) || typeof finding.id !== "string") ||
+    duplicateFindingIds.length > 0 ||
+    JSON.stringify(referencedFindingIds) !== JSON.stringify(declaredFindingIds)
+  ) {
+    violations.push(
+      violation(
+        "shard-finding-links",
+        shard.plan,
+        "findings must exactly match those referenced by shard-local claims",
+      ),
+    );
+  }
+
+  // A duplicateOf target may live in another shard; it remains a reference, not shard-owned data.
+
   return violations;
 }
 
