@@ -9189,6 +9189,118 @@ test("WR-01: a workflows staging-cleanup leak is a recorded failure over a commi
   });
 });
 
+test("IN-01: a phase-3 failure names the staging directory, never its absolute path", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-workflows-leak-redact-"));
+    const previousCwd = process.cwd();
+    let stateWatch: ReturnType<typeof watchStateTransition> | undefined;
+    let stagingDirLocked: string | undefined;
+    try {
+      // arrange -- every sibling bridge has something to write, so a workflows
+      // failure that rolled one of them back would be visible.
+      const locations = locationsFor("project", cwd);
+      const marketplaceRoot = path.join(cwd, "mp-src");
+      const { manifestPath } = await seedPathMarketplace({
+        cwd,
+        marketplaceRoot,
+        marketplaceName: "mp",
+        manifestPlugins: {
+          hello: {
+            version: "1.0.0",
+            hasSkill: true,
+            hasCommand: true,
+            hasAgent: true,
+            hasMcp: true,
+            omitPluginJsonVersion: true,
+          },
+        },
+      });
+      await writeWorkflowScripts(marketplaceRoot, "hello", [
+        { sourceName: "greet" },
+        { sourceName: "wave" },
+      ]);
+      const seed = makeCtx();
+      await installPlugin({
+        ctx: seed.ctx,
+        pi: seed.pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+      await writeWorkflowScripts(marketplaceRoot, "hello", [
+        { sourceName: "greet" },
+        { sourceName: "zap" },
+      ]);
+      await rewriteManifest(manifestPath, "mp", { hello: { version: "2.10.0" } });
+      const before = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
+        "hello"
+      ];
+      assert.ok(before !== undefined);
+
+      // The intent mark runs after every prepare and before the first commit,
+      // so sealing the staging PARENT there leaves the renames working and
+      // fails only the post-commit `rm` of the staging root.
+      stateWatch = watchStateTransition(
+        locations,
+        (state) =>
+          state.marketplaces["mp"]?.plugins["hello"]?.compatibility.notes.includes(
+            "update-in-progress",
+          ) === true,
+        () => {
+          chmodSync(locations.workflowsStagingDir, 0o500);
+          stagingDirLocked = locations.workflowsStagingDir;
+        },
+      );
+      process.chdir(cwd);
+
+      // act -- the DIRECT entrypoint, which is the arm that notifies.
+      const { ctx, pi, notifications } = makeCtx();
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      // assert
+      assert.equal(stateWatch.fired(), true);
+      const row = notifications.at(-1);
+      assert.ok(row !== undefined);
+      // The leak text embeds `prepared.stagingRoot`, and the renderer walks the
+      // whole `.cause` chain -- so redacting only the head would still print the
+      // home directory in the `[workflows] (rollback failed)` child.
+      assert.match(row.message, /failed to clean up workflows staging directory/u);
+      assert.equal(
+        row.message.includes(locations.workflowsStagingDir),
+        false,
+        "the absolute staging root must not reach the user (T-53-02-02)",
+      );
+      assert.equal(
+        row.message.includes(locations.workflowsHomeDir),
+        false,
+        "nor the resolved workflow home it sits under",
+      );
+      // What survives is the directory NAME, which is what the phase's own
+      // criteria ask for and what a byte-equality fixture can pin.
+      assert.match(
+        row.message,
+        /staging directory at [0-9a-f-]+: EACCES/u,
+        "the leak still names WHICH tree leaked",
+      );
+    } finally {
+      if (stagingDirLocked !== undefined) {
+        await chmod(stagingDirLocked, 0o700);
+      }
+
+      stateWatch?.close();
+      process.chdir(previousCwd);
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 /** The envelope body version A of `hello:greet` carries. */
 const GREET_VERSION_A_SOURCE =
   'export const meta = { name: "greet", description: "does greet" };\n';

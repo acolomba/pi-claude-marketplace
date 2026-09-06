@@ -51,7 +51,7 @@ function hasOnwardCause(err: unknown): boolean {
  * Stops after `CAUSE_CHAIN_MAX_DEPTH` links, or earlier when a link has no
  * onward cause or its `.cause` references itself.
  */
-function* causeChain(err: unknown): Generator {
+export function* causeChain(err: unknown): Generator {
   let current: unknown = err;
   for (let depth = 0; depth < CAUSE_CHAIN_MAX_DEPTH; depth++) {
     yield current;
@@ -110,7 +110,13 @@ export function causeChainTrailer(err: unknown): string {
   return `${PREFIX}${rendered.join(JOINER)}`;
 }
 
-function linkMessage(c: unknown): string {
+/**
+ * One chain link rendered as text. Exported alongside {@link causeChain} so a
+ * consumer that REBUILDS a chain (rather than rendering one) states each link
+ * exactly as `causeChainTrailer` would, instead of re-deriving the
+ * Error / string / unknown ladder and drifting from it.
+ */
+export function linkMessage(c: unknown): string {
   if (c instanceof Error) {
     return c.message;
   }
