@@ -1,6 +1,10 @@
 import {
+  closeSync,
+  constants as fsConstants,
   existsSync,
+  fsyncSync,
   lstatSync,
+  openSync,
   readFileSync,
   readdirSync,
   realpathSync,
@@ -105,20 +109,26 @@ function assertSafeRelativePath(projectRoot, candidate, { mustExist = true } = {
     throw new Error(`path escapes repository root: ${candidate}`);
   }
 
-  if (!mustExist) {
-    return target;
-  }
-
-  if (!existsSync(target)) {
+  const targetStats = lstatSync(target, { throwIfNoEntry: false });
+  if (mustExist && targetStats === undefined) {
     throw new Error(`path does not exist: ${candidate}`);
   }
 
-  const resolved = realpathSync(target);
+  if (!mustExist && targetStats?.isSymbolicLink()) {
+    throw new Error(`write target must not be a symlink: ${candidate}`);
+  }
+
+  let existingParent = mustExist ? target : path.dirname(target);
+  while (lstatSync(existingParent, { throwIfNoEntry: false }) === undefined) {
+    existingParent = path.dirname(existingParent);
+  }
+
+  const resolved = realpathSync(existingParent);
   if (resolved !== root && !resolved.startsWith(`${root}${path.sep}`)) {
     throw new Error(`path resolves through a symlink outside repository root: ${candidate}`);
   }
 
-  return resolved;
+  return mustExist ? realpathSync(target) : target;
 }
 
 export function enumerateCorpus(projectRoot = DEFAULT_ROOT) {
@@ -1007,10 +1017,24 @@ function writeAtomically(destination, contents) {
   const temporary = `${destination}.tmp-${process.pid}-${Date.now()}-${Math.random()
     .toString(16)
     .slice(2)}`;
+  let fileDescriptor;
   try {
-    writeFileSync(temporary, contents, { flag: "wx" });
+    const noFollow = fsConstants.O_NOFOLLOW ?? 0;
+    fileDescriptor = openSync(
+      temporary,
+      fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_EXCL | noFollow,
+      0o600,
+    );
+    writeFileSync(fileDescriptor, contents);
+    fsyncSync(fileDescriptor);
+    closeSync(fileDescriptor);
+    fileDescriptor = undefined;
     renameSync(temporary, destination);
   } finally {
+    if (fileDescriptor !== undefined) {
+      closeSync(fileDescriptor);
+    }
+
     if (existsSync(temporary)) {
       unlinkSync(temporary);
     }
@@ -1051,7 +1075,7 @@ function main(args = process.argv.slice(2)) {
   }
 
   if (command === "render") {
-    writeFileSync(
+    writeAtomically(
       assertSafeRelativePath(projectRoot, MARKDOWN_PATH, { mustExist: false }),
       renderRevalidation(ledger),
     );
