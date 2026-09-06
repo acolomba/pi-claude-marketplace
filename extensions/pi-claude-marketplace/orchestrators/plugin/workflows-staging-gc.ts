@@ -187,12 +187,125 @@ export async function garbageCollectWorkflowsStaging(
 }
 
 /**
- * WR-02: does this staging root still hold displaced previous envelopes?
+ * WR-06: the trees the sweep keeps forever, named without removing anything.
  *
- * `<stagingRoot>/.previous/` is where the commit moves a previously-recorded
- * target aside instead of unlinking it. A successful commit removes the whole
- * root; a commit whose restore loop failed KEEPS it, because the directory then
- * holds the only surviving copy of the user's previous workflow envelope.
+ * The sweep above spares a tree whose `.previous/` still holds envelopes and
+ * says nothing about it: both of its call sites discard its return inside a
+ * bare `catch {}` (D-19-01), and on the crash path there is no failure to hang
+ * a leak line on at all. This is the read-only sibling that names the same set,
+ * and it shares the two things that DEFINE that set -- the displaced-envelope
+ * reader below and `WORKFLOWS_STAGING_MAX_AGE_MS` -- so a live transaction
+ * mid-commit is never reported.
+ *
+ * `garbageCollectWorkflowsStaging` is deliberately NOT widened to return this
+ * alongside its leaks. It is destructive and both of its callers discard its
+ * value, so a second member would be discarded at both.
+ *
+ * Read-only in the strong sense, because the surface that renders this never
+ * writes a file and has no failure arm to route a throw into: an absent -- or
+ * unreadable -- staging directory yields the empty result and creates nothing,
+ * a per-entry failure is skipped rather than recorded (there is no leak channel
+ * here), and a containment refusal skips its entry without ending the pass.
+ */
+export interface RetainedWorkflowsStagingTree {
+  /**
+   * The staging root's directory NAME. T-53-02-02: never the absolute path --
+   * the surface that renders this carries basenames, and a machine-specific
+   * absolute path could not be pinned by a byte-equality fixture at all.
+   */
+  readonly name: string;
+  /**
+   * How many displaced envelopes `.previous/` holds. ABSENT, never zero, when
+   * the directory could not be read: the reader answers that case in the retain
+   * direction WITHOUT learning a count, and a rendered `0` would state a fact
+   * nobody established.
+   */
+  readonly envelopeCount?: number;
+}
+
+export async function scanRetainedWorkflowsStaging(
+  locations: Pick<ScopedLocations, "workflowsStagingDir" | "workflowsHomeDir">,
+): Promise<RetainedWorkflowsStagingTree[]> {
+  let entries: string[];
+  try {
+    entries = await readdir(locations.workflowsStagingDir);
+  } catch {
+    // Every read failure is the empty result, not a throw. The sweep can
+    // rethrow because its callers already swallow; this cannot, because its
+    // caller is a read-only command whose entire output would go with it.
+    // NFR-3 / NFR-5: the directory is never created on the way to that answer.
+    return [];
+  }
+
+  const abandonedBefore = Date.now() - WORKFLOWS_STAGING_MAX_AGE_MS;
+  const retained: RetainedWorkflowsStagingTree[] = [];
+  for (const name of entries) {
+    const candidate = path.join(locations.workflowsStagingDir, name);
+
+    // The entry's OWN link status, unfollowed, as the sweep reads it: a
+    // symbolic link is described rather than traversed, and the race where an
+    // entry vanishes between enumeration and inspection is skipped.
+    let stats: Stats;
+    try {
+      stats = await lstat(candidate);
+    } catch {
+      continue;
+    }
+
+    if (!stats.isDirectory() || stats.mtimeMs >= abandonedBefore) {
+      continue;
+    }
+
+    // WPTH-04 / NFR-10 / WR-07: anchored at the workflows home, one level ABOVE
+    // the staging directory, and resolved BEFORE any read through the candidate
+    // -- the same anchor and the same ordering the sweep uses. Anchoring at the
+    // staging root would skip the one segment an attacker could have replaced,
+    // leaving a check that cannot fail. A refusal skips the entry rather than
+    // ending the pass: one poisoned entry must not hide every other retained
+    // tree from the only surface that names them.
+    try {
+      await assertPathInside(
+        locations.workflowsHomeDir,
+        candidate,
+        `workflows staging root ${name}`,
+      );
+    } catch {
+      continue;
+    }
+
+    const displaced = await readDisplacedEnvelopes(candidate);
+    if (!displaced.holds) {
+      continue;
+    }
+
+    retained.push({
+      name,
+      ...(displaced.count !== undefined && { envelopeCount: displaced.count }),
+    });
+  }
+
+  // Sorted by directory name: the surface that renders this owes byte-identical
+  // output on two consecutive invocations against unchanged state, and
+  // `readdir` order is neither sorted nor stable across filesystems.
+  return retained.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** What a staging root's `.previous/` holds, as far as it can be established. */
+interface DisplacedEnvelopes {
+  readonly holds: boolean;
+  /**
+   * Absent, not zero, when the directory could not be read -- the error arm
+   * below answers WHETHER without ever learning HOW MANY.
+   */
+  readonly count?: number;
+}
+
+/**
+ * WR-02: read `<stagingRoot>/.previous/`, the directory the commit moves a
+ * previously-recorded target into instead of unlinking it. A successful commit
+ * removes the whole root; a commit whose restore loop failed KEEPS it, because
+ * the directory then holds the only surviving copy of the user's previous
+ * workflow envelope.
  *
  * WR-05: only ENOENT (no `.previous/` at all -- the ordinary case, since most
  * roots never displaced anything) and ENOTDIR (a plain file at that name, which
@@ -203,12 +316,23 @@ export async function garbageCollectWorkflowsStaging(
  * names: one orphan surviving another pass, never a recursive rm over what may
  * be the only surviving copy of the user's workflow scripts. The next pass
  * retries (NFR-3), so a transient failure costs a day, not the bytes.
+ *
+ * This is the SINGLE reader of that directory. The sweep needs only the verdict
+ * and the read-only scan needs the count as well, so the errno ladder above --
+ * which is the entire retention rule -- is stated once and projected, rather
+ * than written twice and left to drift.
  */
-async function holdsDisplacedEnvelopes(stagingRoot: string): Promise<boolean> {
+async function readDisplacedEnvelopes(stagingRoot: string): Promise<DisplacedEnvelopes> {
   try {
-    return (await readdir(path.join(stagingRoot, DISPLACED_DIR))).length > 0;
+    const displaced = await readdir(path.join(stagingRoot, DISPLACED_DIR));
+    return { holds: displaced.length > 0, count: displaced.length };
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code;
-    return code !== "ENOENT" && code !== "ENOTDIR";
+    return { holds: code !== "ENOENT" && code !== "ENOTDIR" };
   }
+}
+
+/** WR-02: the sweep's retention verdict -- the projection of the reader above. */
+async function holdsDisplacedEnvelopes(stagingRoot: string): Promise<boolean> {
+  return (await readDisplacedEnvelopes(stagingRoot)).holds;
 }

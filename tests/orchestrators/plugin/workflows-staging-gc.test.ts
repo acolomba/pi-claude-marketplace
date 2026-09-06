@@ -7,6 +7,7 @@ import { test, type TestContext } from "node:test";
 import {
   WORKFLOWS_STAGING_MAX_AGE_MS,
   garbageCollectWorkflowsStaging,
+  scanRetainedWorkflowsStaging,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/workflows-staging-gc.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 
@@ -384,4 +385,230 @@ test("WR-02: sweeps an aged staging tree whose .previous is empty", async (t) =>
   // assert
   assert.deepStrictEqual(leaks, []);
   assert.deepStrictEqual(await stagingEntries(locations), []);
+});
+
+// ---------------------------------------------------------------------------
+// WR-06: the read-only retained-tree scan.
+//
+// The sweep above declines to remove an aged tree whose `.previous/` still
+// holds envelopes, because those bytes are the only surviving copy of the
+// user's previous workflow scripts. Nothing then removes that tree and nothing
+// names it. These cases pin the read-only sibling that names it, and pin that
+// it reports EXACTLY the set the sweep keeps for that reason -- same predicate,
+// same age bound -- so a live transaction mid-commit is never reported.
+// ---------------------------------------------------------------------------
+
+/** Give a staging tree a `.previous/` holding `count` displaced envelopes. */
+async function displace(root: string, count: number): Promise<string> {
+  const displaced = path.join(root, ".previous");
+  await mkdir(displaced, { recursive: true });
+  for (let i = 0; i < count; i += 1) {
+    await writeFile(path.join(displaced, `acme_prev${i}.json`), `{"name":"acme:prev${i}"}\n`);
+  }
+
+  return displaced;
+}
+
+test("WR-06: reports an aged staging tree whose .previous holds displaced envelopes", async (t) => {
+  // arrange
+  // `bbb-orphan` is an aged tree of the same age with no displacement at all --
+  // the sweep removes it, so the scan must not name it. Reporting it would tell
+  // the operator to recover bytes that were never at risk.
+  const { locations } = await createStagingScope(t, "workflows-staging-scan-retained-");
+  const retained = await seedStagingTree(locations, "aaa-retained", { aged: false });
+  await displace(retained, 2);
+  await backdate(retained);
+  await seedStagingTree(locations, "bbb-orphan", { aged: true });
+
+  // act
+  const found = await scanRetainedWorkflowsStaging(locations);
+
+  // assert
+  assert.deepStrictEqual(found, [{ name: "aaa-retained", envelopeCount: 2 }]);
+});
+
+test("WR-06: does not report a staging tree still inside the maximum age", async (t) => {
+  // arrange
+  // The displaced envelopes are present, so only the age bound separates this
+  // tree from a reported one. A transaction mid-commit holds exactly this
+  // shape, and naming it would send the operator to recover a live staging root.
+  const { locations } = await createStagingScope(t, "workflows-staging-scan-fresh-");
+  const live = await seedStagingTree(locations, "in-flight", { aged: false });
+  await displace(live, 1);
+
+  // act
+  const found = await scanRetainedWorkflowsStaging(locations);
+
+  // assert
+  assert.deepStrictEqual(found, []);
+});
+
+test("WR-06: returns the empty result and creates nothing when the staging directory is absent", async (t) => {
+  // arrange
+  const { locations } = await createStagingScope(t, "workflows-staging-scan-absent-");
+
+  // act
+  const found = await scanRetainedWorkflowsStaging(locations);
+
+  // assert
+  assert.deepStrictEqual(found, []);
+  // NFR-5 read-surface discipline: the scan must not bring the directory into
+  // existence on its way to answering "nothing is retained".
+  await assert.rejects(readdir(locations.workflowsStagingDir), { code: "ENOENT" });
+});
+
+test("WR-06: returns the empty result rather than throwing when the staging directory cannot be read", async (t) => {
+  // arrange
+  // The sweep rethrows a non-ENOENT read failure; the scan cannot, because its
+  // caller is a read-only command with no failure arm of its own to route it to.
+  const { locations } = await createStagingScope(t, "workflows-staging-scan-enotdir-");
+  await mkdir(locations.workflowsHomeDir, { recursive: true });
+  await writeFile(locations.workflowsStagingDir, "not a directory");
+
+  // act
+  const found = await scanRetainedWorkflowsStaging(locations);
+
+  // assert
+  assert.deepStrictEqual(found, []);
+});
+
+test("WR-06: skips a staging entry it cannot inspect and still resolves", async (t) => {
+  // arrange
+  // Read-but-not-search on the staging directory: `readdir` names both entries
+  // and the per-entry `lstat` is what fails. Both entries fail together because
+  // the permission sits on their shared parent -- a single-entry inspection
+  // failure is a race with no deterministic vehicle. What is pinned here is
+  // that the failure is skipped rather than thrown out of a read-only command.
+  requireNonRoot();
+  const { locations } = await createStagingScope(t, "workflows-staging-scan-unreadable-");
+  const retained = await seedStagingTree(locations, "aaa-retained", { aged: false });
+  await displace(retained, 1);
+  await backdate(retained);
+  await seedStagingTree(locations, "bbb-retained", { aged: true });
+  t.after(() => chmod(locations.workflowsStagingDir, 0o755).catch(() => undefined));
+  await chmod(locations.workflowsStagingDir, 0o444);
+
+  // act
+  const found = await scanRetainedWorkflowsStaging(locations);
+
+  // assert
+  await chmod(locations.workflowsStagingDir, 0o755);
+  assert.deepStrictEqual(found, []);
+});
+
+test("WR-07: skips a refused staging segment and resolves rather than rejecting", async (t) => {
+  // arrange
+  // Two aged trees, both carrying displaced envelopes, behind a symlinked
+  // staging segment. Every entry is refused by construction: a symlinked ENTRY
+  // is skipped earlier as a non-directory, so the segment is the only place a
+  // containment refusal can originate. The claim is that a refusal neither
+  // reports the entry nor ends the pass -- the call resolves.
+  const { home, locations } = await createStagingScope(t, "workflows-staging-scan-symlink-");
+  const external = path.join(home, "external-staging");
+  for (const name of ["aaa-retained", "bbb-retained"]) {
+    const orphan = path.join(external, name);
+    await mkdir(orphan, { recursive: true });
+    await displace(orphan, 1);
+    await backdate(orphan);
+  }
+
+  await mkdir(locations.workflowsHomeDir, { recursive: true });
+  await symlink(external, locations.workflowsStagingDir, "dir");
+
+  // act
+  const found = await scanRetainedWorkflowsStaging(locations);
+
+  // assert
+  assert.deepStrictEqual(found, []);
+});
+
+test("WR-06: skips an aged staging entry that is not a directory", async (t) => {
+  // arrange
+  const { locations } = await createStagingScope(t, "workflows-staging-scan-nondir-");
+  await mkdir(locations.workflowsStagingDir, { recursive: true });
+  const stray = path.join(locations.workflowsStagingDir, "stray.json");
+  await writeFile(stray, "{}\n");
+  await backdate(stray);
+
+  // act
+  const found = await scanRetainedWorkflowsStaging(locations);
+
+  // assert
+  assert.deepStrictEqual(found, []);
+});
+
+test("WR-06: sorts the reported trees by directory name", async (t) => {
+  // arrange
+  // Seeded in reverse so a pass that simply forwarded the enumeration order
+  // could not accidentally agree. Order is the byte-identical-on-repeat
+  // contract of the surface that renders this: `readdir` order is not sorted
+  // and is not stable across filesystems.
+  const { locations } = await createStagingScope(t, "workflows-staging-scan-sorted-");
+  for (const name of ["ccc-retained", "aaa-retained", "bbb-retained"]) {
+    const root = await seedStagingTree(locations, name, { aged: false });
+    await displace(root, 1);
+    await backdate(root);
+  }
+
+  // act
+  const found = await scanRetainedWorkflowsStaging(locations);
+
+  // assert
+  assert.deepStrictEqual(
+    found.map((entry) => entry.name),
+    ["aaa-retained", "bbb-retained", "ccc-retained"],
+  );
+});
+
+test("WR-05: reports a retained tree whose .previous cannot be read, with no count", async (t) => {
+  // arrange
+  // The same open question the sweep answers by retaining: an unreadable
+  // `.previous/` does not prove the directory is empty. The scan inherits that
+  // answer -- it reports the tree -- but it cannot state a count it never read,
+  // so the count is ABSENT rather than zero. `chmod 0o000` stands in for the
+  // transient EMFILE/EIO window that cannot be provoked deterministically.
+  requireNonRoot();
+  const { locations } = await createStagingScope(t, "workflows-staging-scan-unreadable-prev-");
+  const retained = await seedStagingTree(locations, "aaa-retained", { aged: false });
+  const displaced = await displace(retained, 1);
+  t.after(() => chmod(displaced, 0o755).catch(() => undefined));
+  await chmod(displaced, 0o000);
+  await backdate(retained);
+
+  // act
+  const found = await scanRetainedWorkflowsStaging(locations);
+
+  // assert
+  await chmod(displaced, 0o755);
+  assert.deepStrictEqual(found, [{ name: "aaa-retained" }]);
+});
+
+test("WR-02: the sweep's leak list and retention decisions survive the shared reader", async (t) => {
+  // arrange
+  // The refactor's regression guard. One tree of each kind the sweep
+  // distinguishes -- retained for displaced envelopes, unremovable, ordinary
+  // orphan -- swept in one pass, so a reader that answered any of the three
+  // differently would move either the leak list or the surviving set.
+  requireNonRoot();
+  const { locations } = await createStagingScope(t, "workflows-staging-gc-refactor-");
+  const retained = await seedStagingTree(locations, "aaa-retained", { aged: false });
+  await displace(retained, 1);
+  await backdate(retained);
+  const blocked = await seedStagingTree(locations, "bbb-blocked", { aged: true });
+  const locked = path.join(blocked, "locked");
+  await mkdir(locked);
+  await writeFile(path.join(locked, "acme_shout.json"), "{}\n");
+  t.after(() => chmod(locked, 0o755).catch(() => undefined));
+  await chmod(locked, 0o555);
+  await backdate(blocked);
+  await seedStagingTree(locations, "ccc-orphan", { aged: true });
+
+  // act
+  const leaks = await garbageCollectWorkflowsStaging(locations);
+
+  // assert
+  await chmod(locked, 0o755);
+  assert.strictEqual(leaks.length, 1);
+  assert.match(leaks[0] ?? "", /^bbb-blocked: /);
+  assert.deepStrictEqual(await stagingEntries(locations), ["aaa-retained", "bbb-blocked"]);
 });
