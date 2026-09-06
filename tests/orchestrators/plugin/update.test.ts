@@ -9074,7 +9074,7 @@ test("CR-02: the intent-mark window widens the recorded inventory to the union",
   });
 });
 
-test("CR-03: a workflows staging-cleanup leak is a recorded failure and the record keeps the union", async () => {
+test("WR-01: a workflows staging-cleanup leak is a recorded failure over a committed record", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "update-workflows-leak-"));
     const previousCwd = process.cwd();
@@ -9152,10 +9152,18 @@ test("CR-03: a workflows staging-cleanup leak is a recorded failure and the reco
       const record = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
         "hello"
       ];
-      // CR-03: the pre-update inventory PLUS what the commit reported placing.
-      // Strictly larger than either the recorded set or the staged set, so
-      // neither one alone could produce it.
-      assert.deepEqual(record?.resources.workflows, ["hello:greet", "hello:wave", "hello:zap"]);
+      // WR-01: the leak is a failure of the CLEANUP, not of the commit -- every
+      // envelope reached its target and `hello:wave` was retired -- so the
+      // record is what the commit staged. Keying this off the failure set
+      // instead would re-add `hello:wave`, whose envelope now sits in the
+      // leaked `.previous/` tree rather than at its target, and the record
+      // would name a file that is not there.
+      assert.deepEqual(record?.resources.workflows, ["hello:greet", "hello:zap"]);
+      assert.equal(
+        await pathExists(path.join(locations.workflowsSavedDir, "hello:wave.json")),
+        false,
+        "the retired envelope is gone from the saved directory, so naming it would be false",
+      );
       // SC#2: a workflows failure never rolls back a sibling's inventory. Each
       // sibling declares the same components in both versions, so every one of
       // these arrays is non-empty and unchanged from the install.

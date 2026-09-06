@@ -1931,8 +1931,8 @@ function applyPerBridgeResources(
      * record this function mutates was already widened to the intent-mark
      * union, so it cannot supply this. */
     readonly previousWorkflowNames: readonly string[];
-    /** CR-03: what the workflows commit reported placing. */
-    readonly placedWorkflowNames: readonly string[];
+    /** CR-03 / WR-01: what the workflows commit reported. */
+    readonly workflows: WorkflowsCommitReport;
   },
 ): void {
   const { plugin, handles, failedPhases, installable, hookEntries } = args;
@@ -1965,15 +1965,24 @@ function applyPerBridgeResources(
   // CR-03: the ONE arm whose failure branch is not a no-op, and the narrow half
   // of the two-window policy CR-02 opened.
   //
-  // On success the truth is exactly what the commit staged. On failure it is
-  // the PRE-update inventory plus whatever the commit reported placing --
-  // never the prepared names, which name targets a refusal never reached.
-  // Leaving the intent-mark union standing instead is not acceptable either: it
-  // would keep naming envelopes the commit never wrote, and one of those names
-  // can be the foreign file the ownership pre-check declined to replace.
-  sRecord.resources.workflows = failedPhases.has("workflows")
-    ? [...new Set([...args.previousWorkflowNames, ...args.placedWorkflowNames])]
-    : [...handles.workflows.result.stagedNames];
+  // On a commit that ran, the truth is exactly what it staged. On a commit that
+  // threw it is the PRE-update inventory plus whatever the commit reported
+  // placing -- never the prepared names, which name targets a refusal never
+  // reached. Leaving the intent-mark union standing instead is not acceptable
+  // either: it would keep naming envelopes the commit never wrote.
+  //
+  // WR-01: the discriminant is the commit's OWN verdict, not
+  // `failedPhases.has("workflows")`. The two disagree on exactly one path -- a
+  // staging-cleanup leak, which is a recorded failure over a commit that fully
+  // succeeded. Reading the failure set there would re-record every previous
+  // name the commit just retired, and those envelopes are in the leaked
+  // `.previous/` tree rather than at their targets, so the record would name
+  // files that are not there: `retiresWorkflowCommand` stamps a false
+  // `{stale workflow command}` on the next update, and `info` lists the phantom
+  // entries verbatim.
+  sRecord.resources.workflows = args.workflows.committed
+    ? [...handles.workflows.result.stagedNames]
+    : [...new Set([...args.previousWorkflowNames, ...args.workflows.placedNames])];
 }
 
 /**
@@ -2068,7 +2077,7 @@ async function finalizeUpdateRecord(
   handles: PrepHandles,
   phase3aFailures: readonly Phase3Failure[],
   hookEntries: readonly HookSummaryEntry[] | undefined,
-  placedWorkflowNames: readonly string[],
+  workflows: WorkflowsCommitReport,
 ): Promise<{ readonly invalidConfigWriteBack: boolean }> {
   const { plugin, marketplace, locations } = args;
   const { installable } = preflight;
@@ -2102,7 +2111,7 @@ async function finalizeUpdateRecord(
       installable,
       hookEntries,
       previousWorkflowNames: preflight.record.resources.workflows,
-      placedWorkflowNames,
+      workflows,
     });
 
     if (allSucceeded) {
@@ -2204,6 +2213,25 @@ async function commitUpdateHooks(
  */
 
 /**
+ * CR-03 / WR-01: what the workflows commit reported, in the two terms the
+ * record write is built from.
+ *
+ * `committed` and "no failure was recorded" are deliberately separate: a
+ * staging-cleanup leak is recorded as a `phase: "workflows"` failure -- it is
+ * a real leak and the row must say so -- yet the commit itself succeeded and
+ * every envelope is at its target. Keying the record off the failure set would
+ * conflate the two and re-record the previous names the commit just retired.
+ */
+interface WorkflowsCommitReport {
+  readonly committed: boolean;
+  /**
+   * The names sitting at their target path as a result of THIS commit, as the
+   * bridge reported them -- never the prepared names.
+   */
+  readonly placedNames: readonly string[];
+}
+
+/**
  * WLIF-02 / CR-03: the workflows slot of phase 3a.
  *
  * Its own function because it answers TWO questions no other arm has to: did
@@ -2221,6 +2249,13 @@ async function commitUpdateHooks(
  */
 async function commitUpdateWorkflows(prepared: PreparedWorkflowsStaging): Promise<{
   readonly failure: UpdatePhase3Failure | undefined;
+  /**
+   * WR-01: whether the COMMIT itself completed -- false only when it threw.
+   * A staging-cleanup leak is a recorded failure and still leaves every
+   * envelope at its target, so `failure !== undefined` and `!committed` are
+   * different questions and the record write reads this one.
+   */
+  readonly committed: boolean;
   readonly placedNames: readonly string[];
 }> {
   let placedNames: readonly string[] = [];
@@ -2233,7 +2268,7 @@ async function commitUpdateWorkflows(prepared: PreparedWorkflowsStaging): Promis
       },
     });
     if (leak === undefined) {
-      return { failure: undefined, placedNames };
+      return { failure: undefined, committed: true, placedNames };
     }
 
     return {
@@ -2242,11 +2277,13 @@ async function commitUpdateWorkflows(prepared: PreparedWorkflowsStaging): Promis
         msg: `workflows staging cleanup leak: ${leak}`,
         cause: new Error(leak),
       },
+      committed: true,
       placedNames,
     };
   } catch (err) {
     return {
       failure: { phase: "workflows", msg: errorMessage(err), cause: err as Error },
+      committed: false,
       placedNames,
     };
   }
@@ -2259,12 +2296,9 @@ async function commitUpdatePhase3a(
 ): Promise<{
   readonly failures: UpdatePhase3Failure[];
   readonly hookEntries: readonly HookSummaryEntry[] | undefined;
-  /**
-   * CR-03: the names sitting at their target path as a result of THIS commit,
-   * as the bridge reported them -- never the prepared names. The record write
-   * is the only consumer.
-   */
-  readonly placedWorkflowNames: readonly string[];
+  /** CR-03 / WR-01: what the workflows commit reported. The record write is
+   * the only consumer. */
+  readonly workflows: WorkflowsCommitReport;
 }> {
   const failures: UpdatePhase3Failure[] = [];
 
@@ -2318,7 +2352,11 @@ async function commitUpdatePhase3a(
     failures.push(workflows.failure);
   }
 
-  return { failures, hookEntries, placedWorkflowNames: workflows.placedNames };
+  return {
+    failures,
+    hookEntries,
+    workflows: { committed: workflows.committed, placedNames: workflows.placedNames },
+  };
 }
 
 function hasUpdatePhase3Failures(
@@ -2492,7 +2530,7 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<UpdateRunOutco
   const {
     failures: phase3aFailures,
     hookEntries,
-    placedWorkflowNames,
+    workflows: workflowsCommit,
   } = await commitUpdatePhase3a(args, preflight, handles);
 
   // ─── Phase 2b: finalize state (TR-04) ─────────────────────────────────────
@@ -2523,7 +2561,7 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<UpdateRunOutco
       handles,
       phase3aFailures,
       hookEntries,
-      placedWorkflowNames,
+      workflowsCommit,
     );
     invalidConfigWriteBack = finalizeResult.invalidConfigWriteBack;
   } catch (finalizeErr) {
