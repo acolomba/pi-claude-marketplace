@@ -1121,6 +1121,7 @@ function validateScopeRowIdentity(change, violations) {
   return valid;
 }
 
+// fallow-ignore-next-line complexity -- temporary; remove after Phase 01-71 refactor
 function validateScopeChangeStructure(change, violations, { requireContractKind = false } = {}) {
   let valid = true;
   if (!identityIsSafe(change.id)) {
