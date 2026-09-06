@@ -932,6 +932,35 @@ function validateDecisions(ledger, state, violations) {
   }
 }
 
+function validateScopeAnchors(change, violations) {
+  const anchors = [change.beforeAnchor, change.afterAnchor];
+  if (anchors.some((anchor) => typeof anchor !== "string" || anchor.trim() === "")) {
+    violations.push(
+      violation("invalid-scope-anchor", change.id, "beforeAnchor and afterAnchor are mandatory"),
+    );
+  } else if (change.beforeAnchor === change.afterAnchor) {
+    violations.push(
+      violation("invalid-scope-anchor", change.id, "beforeAnchor and afterAnchor must differ"),
+    );
+  } else {
+    for (const [name, anchor] of [
+      ["beforeAnchor", change.beforeAnchor],
+      ["afterAnchor", change.afterAnchor],
+    ]) {
+      const parts = anchor.split(" :: ");
+      if (parts.length !== 3 || parts.some((part) => part.trim() === "")) {
+        violations.push(
+          violation("invalid-scope-anchor", change.id, `${name} must be a three-part locator`),
+        );
+      } else if (!anchor.includes(change.requirementId)) {
+        violations.push(
+          violation("scope-anchor-identity", change.id, `${name} must identify ${change.requirementId}`),
+        );
+      }
+    }
+  }
+}
+
 function validateScopeChange(change, ledger, findings, violations) {
   if (!identityIsSafe(change.id)) {
     violations.push(
@@ -983,32 +1012,7 @@ function validateScopeChange(change, ledger, findings, violations) {
     violations.push(violation("invalid-scope-action", change.id, String(change.action)));
   }
 
-  const anchors = [change.beforeAnchor, change.afterAnchor];
-  if (anchors.some((anchor) => typeof anchor !== "string" || anchor.trim() === "")) {
-    violations.push(
-      violation("invalid-scope-anchor", change.id, "beforeAnchor and afterAnchor are mandatory"),
-    );
-  } else if (change.beforeAnchor === change.afterAnchor) {
-    violations.push(
-      violation("invalid-scope-anchor", change.id, "beforeAnchor and afterAnchor must differ"),
-    );
-  } else {
-    for (const [name, anchor] of [
-      ["beforeAnchor", change.beforeAnchor],
-      ["afterAnchor", change.afterAnchor],
-    ]) {
-      const parts = anchor.split(" :: ");
-      if (parts.length !== 3 || parts.some((part) => part.trim() === "")) {
-        violations.push(
-          violation("invalid-scope-anchor", change.id, `${name} must be a three-part locator`),
-        );
-      } else if (!anchor.includes(change.requirementId)) {
-        violations.push(
-          violation("scope-anchor-identity", change.id, `${name} must identify ${change.requirementId}`),
-        );
-      }
-    }
-  }
+  validateScopeAnchors(change, violations);
 }
 
 function validateScopeChanges(ledger, findings, violations) {
