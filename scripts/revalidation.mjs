@@ -118,6 +118,10 @@ function assertSafeRelativePath(projectRoot, candidate, { mustExist = true } = {
     throw new Error(`write target must not be a symlink: ${candidate}`);
   }
 
+  if (!mustExist && targetStats !== undefined && !targetStats.isFile()) {
+    throw new Error(`write target must be a regular file: ${candidate}`);
+  }
+
   let existingParent = mustExist ? target : path.dirname(target);
   while (lstatSync(existingParent, { throwIfNoEntry: false }) === undefined) {
     existingParent = path.dirname(existingParent);
@@ -1013,31 +1017,225 @@ function validationContext(projectRoot, options, assignment = []) {
   };
 }
 
+function writeDurableFile(destination, contents) {
+  const noFollow = fsConstants.O_NOFOLLOW ?? 0;
+  const fileDescriptor = openSync(
+    destination,
+    fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_EXCL | noFollow,
+    0o600,
+  );
+  try {
+    writeFileSync(fileDescriptor, contents);
+    fsyncSync(fileDescriptor);
+  } finally {
+    closeSync(fileDescriptor);
+  }
+}
+
 function writeAtomically(destination, contents) {
   const temporary = `${destination}.tmp-${process.pid}-${Date.now()}-${Math.random()
     .toString(16)
     .slice(2)}`;
-  let fileDescriptor;
   try {
-    const noFollow = fsConstants.O_NOFOLLOW ?? 0;
-    fileDescriptor = openSync(
-      temporary,
-      fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_EXCL | noFollow,
-      0o600,
-    );
-    writeFileSync(fileDescriptor, contents);
-    fsyncSync(fileDescriptor);
-    closeSync(fileDescriptor);
-    fileDescriptor = undefined;
+    writeDurableFile(temporary, contents);
     renameSync(temporary, destination);
   } finally {
-    if (fileDescriptor !== undefined) {
-      closeSync(fileDescriptor);
-    }
-
-    if (existsSync(temporary)) {
+    if (lstatSync(temporary, { throwIfNoEntry: false }) !== undefined) {
       unlinkSync(temporary);
     }
+  }
+}
+
+function processIsRunning(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) {
+    return false;
+  }
+
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error?.code !== "ESRCH";
+  }
+}
+
+function acquirePublishLock(lockPath) {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      writeDurableFile(lockPath, `${JSON.stringify({ pid: process.pid })}\n`);
+      return;
+    } catch (error) {
+      if (error?.code !== "EEXIST") {
+        throw error;
+      }
+
+      let owner;
+      try {
+        owner = JSON.parse(readFileSync(lockPath, "utf8"));
+      } catch (parseError) {
+        throw new Error(`publish lock is malformed: ${lockPath}`, { cause: parseError });
+      }
+
+      if (processIsRunning(owner.pid)) {
+        throw new Error(`publish is already running under process ${owner.pid}`, {
+          cause: error,
+        });
+      }
+
+      unlinkSync(lockPath);
+    }
+  }
+
+  throw new Error("failed to acquire publish lock");
+}
+
+function removePublishedFile(candidate) {
+  const stats = lstatSync(candidate, { throwIfNoEntry: false });
+  if (stats === undefined) {
+    return;
+  }
+
+  if (!stats.isFile()) {
+    throw new Error(`transaction path is not a regular file: ${candidate}`);
+  }
+
+  unlinkSync(candidate);
+}
+
+function rollbackPublish(projectRoot, records) {
+  for (const record of [...records].reverse()) {
+    const destination = assertSafeRelativePath(projectRoot, record.destination, {
+      mustExist: false,
+    });
+    const staged = assertSafeRelativePath(projectRoot, record.staged, { mustExist: false });
+    const backup = assertSafeRelativePath(projectRoot, record.backup, { mustExist: false });
+    if (lstatSync(backup, { throwIfNoEntry: false }) !== undefined) {
+      removePublishedFile(destination);
+      renameSync(backup, destination);
+    } else if (!record.hadDestination) {
+      removePublishedFile(destination);
+    }
+
+    if (lstatSync(staged, { throwIfNoEntry: false }) !== undefined) {
+      removePublishedFile(staged);
+    }
+  }
+}
+
+function finishPublish(projectRoot, records) {
+  for (const record of records) {
+    for (const candidate of [record.staged, record.backup]) {
+      const absolute = assertSafeRelativePath(projectRoot, candidate, { mustExist: false });
+      if (lstatSync(absolute, { throwIfNoEntry: false }) !== undefined) {
+        removePublishedFile(absolute);
+      }
+    }
+  }
+}
+
+function recoverPublish(projectRoot, journalPath) {
+  if (lstatSync(journalPath, { throwIfNoEntry: false }) === undefined) {
+    return;
+  }
+
+  const journal = JSON.parse(readFileSync(journalPath, "utf8"));
+  if (!isObject(journal) || !Array.isArray(journal.records)) {
+    throw new Error(`publish journal is malformed: ${journalPath}`);
+  }
+
+  if (journal.status === "published") {
+    finishPublish(projectRoot, journal.records);
+  } else {
+    rollbackPublish(projectRoot, journal.records);
+  }
+
+  unlinkSync(journalPath);
+}
+
+function publishRevalidation(projectRoot, json, markdown) {
+  const lockPath = assertSafeRelativePath(projectRoot, `${PHASE_ROOT}/.publish.lock`, {
+    mustExist: false,
+  });
+  const journalPath = assertSafeRelativePath(projectRoot, `${PHASE_ROOT}/.publish-journal.json`, {
+    mustExist: false,
+  });
+  acquirePublishLock(lockPath);
+  try {
+    recoverPublish(projectRoot, journalPath);
+    const transactionId = `${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const entries = [
+      { destination: LEDGER_PATH, contents: json },
+      { destination: MARKDOWN_PATH, contents: markdown },
+    ];
+    const records = entries.map((entry) => ({
+      destination: entry.destination,
+      staged: `${entry.destination}.stage-${transactionId}`,
+      backup: `${entry.destination}.backup-${transactionId}`,
+      hadDestination:
+        lstatSync(assertSafeRelativePath(projectRoot, entry.destination, { mustExist: false }), {
+          throwIfNoEntry: false,
+        }) !== undefined,
+    }));
+
+    try {
+      for (const [index, entry] of entries.entries()) {
+        writeDurableFile(
+          assertSafeRelativePath(projectRoot, records[index].staged, { mustExist: false }),
+          entry.contents,
+        );
+      }
+
+      writeAtomically(journalPath, `${JSON.stringify({ status: "staged", records }, null, 2)}\n`);
+    } catch (stagingError) {
+      finishPublish(projectRoot, records);
+      throw stagingError;
+    }
+
+    let published = false;
+    try {
+      for (const record of records) {
+        if (record.hadDestination) {
+          renameSync(
+            assertSafeRelativePath(projectRoot, record.destination, { mustExist: false }),
+            assertSafeRelativePath(projectRoot, record.backup, { mustExist: false }),
+          );
+        }
+      }
+
+      for (const record of records) {
+        renameSync(
+          assertSafeRelativePath(projectRoot, record.staged, { mustExist: false }),
+          assertSafeRelativePath(projectRoot, record.destination, { mustExist: false }),
+        );
+      }
+
+      writeAtomically(
+        journalPath,
+        `${JSON.stringify({ status: "published", records }, null, 2)}\n`,
+      );
+      published = true;
+      finishPublish(projectRoot, records);
+      unlinkSync(journalPath);
+    } catch (publishError) {
+      if (published) {
+        throw publishError;
+      }
+
+      try {
+        rollbackPublish(projectRoot, records);
+        unlinkSync(journalPath);
+      } catch (rollbackError) {
+        throw new AggregateError(
+          [publishError, rollbackError],
+          "publish failed and rollback did not complete; recovery journal retained",
+          { cause: rollbackError },
+        );
+      }
+
+      throw publishError;
+    }
+  } finally {
+    unlinkSync(lockPath);
   }
 }
 
@@ -1163,11 +1361,7 @@ function main(args = process.argv.slice(2)) {
       return;
     }
 
-    writeAtomically(assertSafeRelativePath(projectRoot, LEDGER_PATH, { mustExist: false }), json);
-    writeAtomically(
-      assertSafeRelativePath(projectRoot, MARKDOWN_PATH, { mustExist: false }),
-      markdown,
-    );
+    publishRevalidation(projectRoot, json, markdown);
     process.stdout.write("Shard merge published.\n");
     return;
   }
