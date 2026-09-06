@@ -144,8 +144,9 @@ function outcomePhrase(tense: WorkflowOutcomeTense, site: WorkflowOutcomeSite): 
  * WBRG-03 / WR-09: an IO failure on one candidate, attributed to the call site
  * that raised it.
  *
- * `inspect` and `read` land on the same file one step apart, so a shared phrase
- * claimed a read at the site where the `lstat` had not opened anything.
+ * `inspect` and `read` land on the same file one step apart, so each site
+ * states its own phrase: nothing has been opened when the `lstat` fails, so
+ * only the `read` site may claim a read.
  */
 function readFailureWarning(
   fileName: string,
