@@ -1,6 +1,6 @@
 ---
 phase: 01-live-evidence-revalidation
-reviewed: 2026-09-06T02:50:52Z
+reviewed: 2026-09-06T13:38:35Z
 depth: standard
 files_reviewed: 3
 files_reviewed_list:
@@ -8,64 +8,62 @@ files_reviewed_list:
   - scripts/revalidation.negative.mjs
   - tests/architecture/revalidation.test.ts
 findings:
-  critical: 3
-  warning: 1
+  critical: 5
+  warning: 0
   info: 0
-  total: 4
+  total: 5
 status: issues_found
 ---
 
-# Phase 01: Code Review Report
+# Phase 1: Code Review Report
 
-**Reviewed:** 2026-09-06T02:50:52Z
+**Reviewed:** 2026-09-06T13:38:35Z
 **Depth:** standard
 **Files Reviewed:** 3
 **Status:** issues_found
 
 ## Summary
 
-The second fix pass closes its seven reported findings, but the current implementation still has three blocking correctness or test-reliability defects. A validly shaped but false recovery journal can delete both canonical artifacts before a replacement publish begins. Non-object records in several JSON collections also crash the validator instead of producing structural violations. Three filesystem cleanup tests do not observe the cleanup named in their titles, so regressions can retain 100% direct coverage.
+The current happy-path gates are green: the architecture suite passes 108/108 when its child CLI processes are allowed, the standalone negative runner passes, the live check reports 40 records, and direct coverage reports 100% branches, functions, and lines. Those gates do not expose five fail-open defects in the planning-contract implementation and its compatibility test.
 
-The focused suite passed all 68 cases, and direct coverage reached 100% lines, branches, and functions. TypeScript compilation, exact-file ESLint, exact-file Prettier, and the standalone negative controls passed. The full `npm run check` failed on an in-scope fallow health violation: `validateShard` has cognitive complexity 16. The pre-existing untracked `.mcp.json` formatting issue was not reached and is not counted.
+`npm run check` passed typecheck, repository-scoped ESLint, and all Fallow gates before stopping on the pre-existing untracked `.mcp.json` formatting warning. All three reviewed files pass targeted Prettier. A direct `npx eslint . --max-warnings=0` invocation also reaches the tool-owned `.codex/` tree and fails while loading a typed rule there; the repository's scoped lint command passes.
 
 ## Narrative Findings (AI reviewer)
 
 ## Critical Issues
 
-### CR-01: A false destination-state flag can delete both canonical artifacts
+### CR-01: Removing a live traceability row is accepted
 
-**Classification:** BLOCKER
-**File:** `/home/acolomba/pi-claude-marketplace-refine-unit-tests/scripts/revalidation.mjs:1401-1468`
-**Issue:** `validatePublishJournal` requires `hadDestination` to be a boolean but never proves that it agrees with the filesystem state. `rollbackPublish` treats `false` as authority to unlink the canonical destination whenever no backup exists. An executable probe supplied an otherwise valid `staged` journal for the exact JSON and Markdown destinations, set both flags to `false`, and injected a failure at the first stage of the replacement publish. Recovery deleted both existing canonical files before that injected failure, leaving both paths missing. The closed path grammar prevents deletion of arbitrary files, but it does not protect the two authoritative Phase 1 artifacts from an untrusted or corrupted journal.
-**Fix:** Derive recovery actions from the observed destination, stage, and backup states before mutating any path. Reject every ambiguous or impossible state without changing files; do not unlink an existing destination merely because `hadDestination` is `false`. Add a regression that writes existing canonical bytes, plants this exact journal, fails the next publish immediately after recovery, and compares both complete destination byte sequences.
+**File:** `scripts/revalidation.mjs:1902-1912`
+**Issue:** `validateRequirementContracts` iterates only the requirement IDs that remain in `requirements.dispositions`. It never compares that parsed set with the 32 `SCOPE-REQ-*` rows in the ledger. As a result, deleting the `GGAT-02` evidence/history row from REQUIREMENTS.md still exits zero and prints `Scope impact valid: 40 records.` The fixed total at lines 1972-1975 counts ledger rows, so it cannot detect a contract row removed from Markdown. This violates the required exact 32-row round trip and lets requirements disappear silently.
+**Fix:** Build the expected requirement-ID set from the ledger's canonical `SCOPE-REQ-*` rows, require exactly 32 unique IDs, and compare it bidirectionally with both parsed definitions/history records and traceability rows. Emit deterministic missing/extra violations before validating each row.
 
-### CR-02: Non-object collection records crash both validators
+### CR-02: Requirement clause rewrites with the same ID and section are invisible
 
-**Classification:** BLOCKER
-**File:** `/home/acolomba/pi-claude-marketplace-refine-unit-tests/scripts/revalidation.mjs:357-438`
-**Also affected:** `/home/acolomba/pi-claude-marketplace-refine-unit-tests/scripts/revalidation.mjs:534-537,883-985,1021-1080`
-**Issue:** The top-level array guard does not validate each record before later passes dereference it. Executable probes with `files: [null]`, `decisions: [null]`, or `scopeChanges: [null]` each threw `TypeError: Cannot read properties of null`; a shard with `files: [null]` failed the same way. Claims and findings already handle non-object records as structural violations, so the remaining collections expose inconsistent behavior at the untrusted-JSON boundary and prevent callers from receiving the promised violation list.
-**Fix:** Validate and collect file, decision, scope-change, and shard-file records before reading any property. Emit a dedicated structural violation and skip the malformed record, as `collectClaims` and `collectFindings` already do. Add cases for `null`, arrays, strings, and numbers in every record collection, and assert the exact violation records without an unexpected throw.
+**File:** `scripts/revalidation.mjs:1790-1826`
+**Issue:** `parseRequirementsContract` stores only `requirementId -> section` for a definition. It discards the requirement's clause text. Replacing the PDEF-01 clause with unrelated prose while retaining its ID and section still passes `scope-impact --check`. The checker therefore cannot detect the “structurally drifted requirement clauses” it claims to enforce and does not actually resolve the third component of an `afterAnchor` to live contract content.
+**Fix:** Parse a deterministic normalized representation of each complete requirement clause and compare it with an exact, machine-verifiable locator/signature carried by the corresponding scope row. Reject duplicate, truncated, extra, or changed clause bodies instead of treating matching ID and section as sufficient.
 
-### CR-03: Filesystem cleanup tests do not observe the promised cleanup
+### CR-03: Scope-row IDs and `requirementId` fields can contradict each other
 
-**Classification:** BLOCKER
-**File:** `/home/acolomba/pi-claude-marketplace-refine-unit-tests/tests/architecture/revalidation.test.ts:1743-1772`
-**Also affected:** `/home/acolomba/pi-claude-marketplace-refine-unit-tests/tests/architecture/revalidation.test.ts:1862-1917`
-**Issue:** The staging-failure case asserts only that the injected error is thrown; it never checks that the first staged file was removed. The atomic-journal case never checks that its `.tmp-*` file disappeared. The recovery and rollback cases likewise assert final destination bytes or `AggregateError` without asserting removal or retention of the journal, stage, and backup artifacts named in their titles. Implementations that delete `finishPublish`, leave the atomic temporary file, or remove the recovery journal after rollback failure still satisfy these cases. The direct coverage gate remains at 100% because it measures execution, not these missing postconditions.
-**Fix:** After each failure or recovery, enumerate the phase directory and compare the complete artifact set. Assert that stage, backup, lock, and journal files are absent after successful cleanup, and assert that the journal remains after rollback failure. Keep each failure point in its own test so one earlier assertion cannot hide a later cleanup contract.
+**File:** `scripts/revalidation.mjs:1858-1912`
+**Issue:** Rows are selected by `change.id`, but neither `validateRequirementChange` nor `validateRequirementContracts` requires `change.requirementId` to equal the ID encoded in that key. Changing `SCOPE-REQ-AUTH-01.requirementId` from `AUTH-01` to `PDEF-01` leaves the command green because validation continues with the map key and the old `afterAnchor`. The same missing invariant applies to route rows. This breaks stable identity enforcement on untrusted ledger data.
+**Fix:** Before contract comparison, require every requirement row to satisfy `change.id === 'SCOPE-REQ-' + change.requirementId` and every route row to satisfy both `change.id === 'SCOPE-ROUTE-' + change.requirementId` and `change.requirementId === PHASE-NN`. Reject rows whose key, field, or anchor identity differs.
 
-## Warnings
+### CR-04: `beforeAnchor` path confinement is not enforced
 
-### WR-01: The repository gate rejects `validateShard` complexity
+**File:** `scripts/revalidation.mjs:935-965`
+**Issue:** Generic anchor validation checks only three nonblank parts and a substring match; it does not validate the locator path. More importantly, the `scope-impact --check` path at lines 1992-1997 never calls this validation and only inspects `afterAnchor`. Replacing an AUTH-01 `beforeAnchor` path with `../outside.md` still reports success. The gate therefore accepts traversal-shaped and path-mismatched provenance despite the plan's fail-closed path/anchor contract.
+**Fix:** Validate both anchors inside the planning-contract checker. Require fixed normalized repository-relative paths by row kind (`.planning/REQUIREMENTS.md` for requirement rows and `.planning/ROADMAP.md` for route rows), exact stable identity, three nonblank parts, and distinct before/after values. Reuse one strict locator parser so `validateLedger` and `scope-impact --check` cannot drift.
 
-**Classification:** WARNING
-**File:** `/home/acolomba/pi-claude-marketplace-refine-unit-tests/scripts/revalidation.mjs:1021-1101`
-**Issue:** `npm run check` fails in `fallow health --fail-on-issues`: `validateShard` spans 81 lines and has cognitive complexity 16, above the configured threshold. The second fix pass added several independent ownership and link checks to this one function, so the repository cannot pass its required quality gate even though compilation, linting, formatting, and focused tests pass.
-**Fix:** Extract focused helpers for assignment and owner checks, file-to-claim links, and claim-to-finding links. Keep `validateShard` as a short coordinator that appends each helper's violations, then rerun the full repository gate.
+### CR-05: The ordinary-output regression test uses production code as its oracle
+
+**File:** `tests/architecture/revalidation.test.ts:842-855`
+**Issue:** The test named “preserves ordinary JSON output” computes its expected bytes by calling `deriveScopeImpact`, the same production function used by `handleScopeImpact`. A regression in sorting, projection fields, or serialization can change both actual and expected values and leave the test green. This is a self-fulfilling assertion and does not protect the promised byte-compatible branch.
+**Fix:** Exercise ordinary mode with a short explicit ledger and compare stdout with an independently written complete JSON string (including order, indentation, omitted anchors, and trailing newline), or compare with a reviewed golden file that is not generated by production code.
 
 ---
 
-_Reviewed: 2026-09-06T02:50:52Z_
+_Reviewed: 2026-09-06T13:38:35Z_
 _Reviewer: the agent (gsd-code-reviewer)_
 _Depth: standard_
