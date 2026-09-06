@@ -1130,6 +1130,27 @@ test("RVAL-04 scope-impact rejects changed requirement clause text", async (t) =
   });
 });
 
+test("RVAL-04 scope-impact rejects a changed ledger requirement signature", async (t) => {
+  // arrange
+  const projectRoot = await createScopeImpactFixture(t);
+  const ledgerFile = path.join(projectRoot, ledgerPath);
+  const ledger = JSON.parse(await readFile(ledgerFile, "utf8")) as Ledger;
+  ledger.scopeChanges.find((change) => change.id === "SCOPE-REQ-PDEF-01")!.requirementSignature =
+    `sha256:${"0".repeat(64)}`;
+  await writeFile(ledgerFile, `${JSON.stringify(ledger, null, 2)}\n`);
+
+  // act
+  const execution = runCli(projectRoot, ["scope-impact", "--check"]);
+
+  // assert
+  assert.deepStrictEqual(execution, {
+    status: 1,
+    stdout: "",
+    stderr:
+      "requirement-signature: PDEF-01: scope signature differs from sealed requirement contract\n",
+  });
+});
+
 for (const row of [
   {
     title: "RVAL-04 scope-impact rejects a blank active requirement clause",

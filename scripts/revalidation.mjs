@@ -2281,7 +2281,6 @@ function validateRequirementDisposition(requirementId, action, disposition, viol
   if (
     routeIsValid &&
     statusIsValid &&
-    sealedDisposition !== undefined &&
     (disposition.route !== sealedDisposition.route ||
       disposition.status !== sealedDisposition.status)
   ) {
@@ -2297,10 +2296,6 @@ function validateRequirementDisposition(requirementId, action, disposition, viol
 
 function validateRequirementClause(requirements, requirementId, change, violations) {
   const sealedSignature = SEALED_REQUIREMENT_SIGNATURES[requirementId];
-  if (sealedSignature === undefined) {
-    return;
-  }
-
   const clause =
     change.action === "move-to-evidence"
       ? requirements.clauses.history.get(requirementId)
