@@ -906,7 +906,9 @@ test("RVAL-04 scope-impact rejects changed requirement disposition", async (t) =
   assert.deepStrictEqual(execution, {
     status: 1,
     stdout: "",
-    stderr: "requirement-disposition: GGAT-02: moved requirement must be evidence only\n",
+    stderr:
+      "phase-requirements: PHASE-07: roadmap membership differs from traceability\n" +
+      "requirement-disposition: GGAT-02: moved requirement must be evidence only\n",
   });
 });
 
@@ -925,8 +927,8 @@ test("RVAL-04 scope-impact rejects a missing Phase 2-9 route", async (t) => {
     status: 1,
     stdout: "",
     stderr:
-      "scope-contract-count: scopeChanges: expected exactly 40 unique rows\n" +
-      "missing-scope-route: PHASE-09: scope route is absent\n",
+      "missing-scope-route: PHASE-09: scope route is absent\n" +
+      "scope-contract-count: scopeChanges: expected exactly 40 unique rows\n",
   });
 });
 
@@ -945,8 +947,8 @@ test("RVAL-04 scope-impact rejects a duplicate route", async (t) => {
     status: 1,
     stdout: "",
     stderr:
-      "scope-contract-count: scopeChanges: expected exactly 40 unique rows\n" +
-      "duplicate-scope-contract: SCOPE-ROUTE-PHASE-09: scope row appears more than once\n",
+      "duplicate-scope-contract: SCOPE-ROUTE-PHASE-09: scope row appears more than once\n" +
+      "scope-contract-count: scopeChanges: expected exactly 40 unique rows\n",
   });
 });
 
@@ -1001,6 +1003,174 @@ test("RVAL-04 scope-impact rejects a misdirected afterAnchor", async (t) => {
     status: 1,
     stdout: "",
     stderr: "scope-after-anchor: SCOPE-REQ-AUTH-01: afterAnchor does not resolve to requirement\n",
+  });
+});
+
+test("RVAL-04 scope-impact rejects duplicate traceability and phase declarations", async (t) => {
+  // arrange
+  const projectRoot = await createScopeImpactFixture(t);
+  const requirementsFile = path.join(projectRoot, ".planning/REQUIREMENTS.md");
+  const roadmapFile = path.join(projectRoot, ".planning/ROADMAP.md");
+  const requirements = await readFile(requirementsFile, "utf8");
+  const roadmap = await readFile(roadmapFile, "utf8");
+  await writeFile(requirementsFile, `${requirements}\n| RVAL-01 | Phase 1 | Complete |\n`);
+  await writeFile(roadmapFile, `${roadmap}\n### Phase 9: Final Quality and Backlog Closure\n**Requirements:** CLOSE-01, CLOSE-02\n`);
+
+  // act
+  const execution = runCli(projectRoot, ["scope-impact", "--check"]);
+
+  // assert
+  assert.deepStrictEqual(execution, {
+    status: 1,
+    stdout: "",
+    stderr:
+      "duplicate-phase-route: PHASE-09: roadmap phase appears more than once\n" +
+      "duplicate-requirement-route: RVAL-01: traceability row appears more than once\n",
+  });
+});
+
+test("RVAL-04 scope-impact rejects a missing requirement row", async (t) => {
+  // arrange
+  const projectRoot = await createScopeImpactFixture(t);
+  const ledger = JSON.parse(await readFile(path.join(projectRoot, ledgerPath), "utf8")) as Ledger;
+  ledger.scopeChanges = ledger.scopeChanges.filter((change) => change.id !== "SCOPE-REQ-AUTH-01");
+  await writeFile(path.join(projectRoot, ledgerPath), `${JSON.stringify(ledger, null, 2)}\n`);
+
+  // act
+  const execution = runCli(projectRoot, ["scope-impact", "--check"]);
+
+  // assert
+  assert.deepStrictEqual(execution, {
+    status: 1,
+    stdout: "",
+    stderr:
+      "missing-scope-requirement: SCOPE-REQ-AUTH-01: scope row is absent\n" +
+      "scope-contract-count: scopeChanges: expected exactly 40 unique rows\n",
+  });
+});
+
+test("RVAL-04 scope-impact rejects an active evidence-only requirement", async (t) => {
+  // arrange
+  const projectRoot = await createScopeImpactFixture(t);
+  const contractPath = path.join(projectRoot, ".planning/REQUIREMENTS.md");
+  const contract = await readFile(contractPath, "utf8");
+  await writeFile(contractPath, contract.replace("| PDEF-01 | Phase 3 | Pending |", "| PDEF-01 | Phase 3 | Evidence only |"));
+
+  // act
+  const execution = runCli(projectRoot, ["scope-impact", "--check"]);
+
+  // assert
+  assert.deepStrictEqual(execution, {
+    status: 1,
+    stdout: "",
+    stderr: "requirement-disposition: PDEF-01: active requirement cannot be evidence only\n",
+  });
+});
+
+test("RVAL-04 scope-impact rejects phase renumbering", async (t) => {
+  // arrange
+  const projectRoot = await createScopeImpactFixture(t);
+  const contractPath = path.join(projectRoot, ".planning/ROADMAP.md");
+  const contract = await readFile(contractPath, "utf8");
+  await writeFile(contractPath, contract.replace("### Phase 6: Assertion and Module Refinement", "### Phase 10: Assertion and Module Refinement"));
+
+  // act
+  const execution = runCli(projectRoot, ["scope-impact", "--check"]);
+
+  // assert
+  assert.deepStrictEqual(execution, {
+    status: 1,
+    stdout: "",
+    stderr: "missing-phase-route: PHASE-06: roadmap phase is absent\n",
+  });
+});
+
+test("RVAL-04 scope-impact rejects non-file planning contracts", async (t) => {
+  // arrange
+  const projectRoot = await createScopeImpactFixture(t);
+  const contractPath = path.join(projectRoot, ".planning/REQUIREMENTS.md");
+  await rm(contractPath);
+  await mkdir(contractPath);
+
+  // act
+  const execution = runCli(projectRoot, ["scope-impact", "--check"]);
+
+  // assert
+  assert.deepStrictEqual(execution, {
+    status: 1,
+    stdout: "",
+    stderr: "path must be a regular file: .planning/REQUIREMENTS.md\n",
+  });
+});
+
+test("strict scope validation rejects identical, malformed, and mismatched anchors", async (t) => {
+  // arrange
+  const { corpusPath, projectRoot } = await corpusFixture(t);
+  const ledger = benignLedger(corpusPath);
+  const base = {
+    requirementId: "REQ-1",
+    action: "keep",
+    findingIds: ["FINDING-1"],
+    decisionIds: [],
+    rationale: "Evidence remains current.",
+  };
+  ledger.scopeChanges = [
+    { ...base, id: "SCOPE-0", beforeAnchor: "path :: section :: REQ-1 — row", afterAnchor: "" },
+    { ...base, id: "SCOPE-1", beforeAnchor: "same :: REQ-1 :: row", afterAnchor: "same :: REQ-1 :: row" },
+    { ...base, id: "SCOPE-2", beforeAnchor: "path ::  :: REQ-1 — row", afterAnchor: "path :: section :: REQ-1 — row" },
+    { ...base, id: "SCOPE-3", beforeAnchor: "path :: section :: OTHER-1 — row", afterAnchor: "path :: section :: REQ-1 — row" },
+  ];
+
+  // act
+  const violations = validateLedger(ledger, { projectRoot, expectedPaths: [corpusPath] }).filter(
+    (item) => item.code === "invalid-scope-anchor" || item.code === "scope-anchor-identity",
+  );
+
+  // assert
+  assert.deepStrictEqual(violations, [
+    { code: "invalid-scope-anchor", target: "SCOPE-0", message: "beforeAnchor and afterAnchor are mandatory" },
+    { code: "invalid-scope-anchor", target: "SCOPE-1", message: "beforeAnchor and afterAnchor must differ" },
+    { code: "invalid-scope-anchor", target: "SCOPE-2", message: "beforeAnchor must be a three-part locator" },
+    { code: "scope-anchor-identity", target: "SCOPE-3", message: "beforeAnchor must identify REQ-1" },
+  ]);
+});
+
+test("RVAL-04 scope-impact rejects a phase without requirements", async (t) => {
+  // arrange
+  const projectRoot = await createScopeImpactFixture(t);
+  const contractPath = path.join(projectRoot, ".planning/ROADMAP.md");
+  const contract = await readFile(contractPath, "utf8");
+  await writeFile(contractPath, contract.replace("**Requirements:** CLOSE-01, CLOSE-02", "**Requirements omitted**"));
+
+  // act
+  const execution = runCli(projectRoot, ["scope-impact", "--check"]);
+
+  // assert
+  assert.deepStrictEqual(execution, {
+    status: 1,
+    stdout: "",
+    stderr: "phase-requirements: PHASE-09: roadmap membership differs from traceability\n",
+  });
+});
+
+test("RVAL-04 scope-impact rejects absent requirement and route after anchors", async (t) => {
+  // arrange
+  const projectRoot = await createScopeImpactFixture(t);
+  const ledger = JSON.parse(await readFile(path.join(projectRoot, ledgerPath), "utf8")) as Ledger;
+  delete ledger.scopeChanges.find((change) => change.id === "SCOPE-REQ-AUTH-01")!.afterAnchor;
+  delete ledger.scopeChanges.find((change) => change.id === "SCOPE-ROUTE-PHASE-02")!.afterAnchor;
+  await writeFile(path.join(projectRoot, ledgerPath), `${JSON.stringify(ledger, null, 2)}\n`);
+
+  // act
+  const execution = runCli(projectRoot, ["scope-impact", "--check"]);
+
+  // assert
+  assert.deepStrictEqual(execution, {
+    status: 1,
+    stdout: "",
+    stderr:
+      "scope-after-anchor: SCOPE-REQ-AUTH-01: afterAnchor does not resolve to requirement\n" +
+      "scope-after-anchor: SCOPE-ROUTE-PHASE-02: afterAnchor does not resolve to phase\n",
   });
 });
 

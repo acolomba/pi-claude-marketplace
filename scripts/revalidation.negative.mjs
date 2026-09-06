@@ -16,6 +16,8 @@ const ledgerPath = `${phaseRoot}/01-REVALIDATION.json`;
 const markdownPath = `${phaseRoot}/01-REVALIDATION.md`;
 const assignmentPath = `${phaseRoot}/01-CORPUS-ASSIGNMENT.md`;
 const shardRoot = `${phaseRoot}/shards`;
+const requirementsPath = ".planning/REQUIREMENTS.md";
+const roadmapPath = ".planning/ROADMAP.md";
 
 function invokeCli(projectRoot, args) {
   const stdout = [];
@@ -222,6 +224,31 @@ try {
       (item) => item.code === "file-order",
     ),
   );
+
+  const canonicalRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
+  const scopeLedger = await readFile(path.join(canonicalRoot, ledgerPath), "utf8");
+  const requirements = await readFile(path.join(canonicalRoot, requirementsPath), "utf8");
+  const roadmap = await readFile(path.join(canonicalRoot, roadmapPath), "utf8");
+  await writeFile(path.join(projectRoot, ledgerPath), scopeLedger);
+  await writeFile(path.join(projectRoot, roadmapPath), roadmap);
+  assert.throws(
+    () => invokeCli(projectRoot, ["scope-impact", "--check"]),
+    new RegExp(`path does not exist: ${requirementsPath.replace(".", "\\.")}`),
+  );
+
+  await writeFile(path.join(projectRoot, requirementsPath), requirements);
+  await writeFile(
+    path.join(projectRoot, roadmapPath),
+    roadmap.replace(
+      "**Requirements:** GGAT-01, GGAT-03, GGAT-04",
+      "**Requirements:** GGAT-01, GGAT-03",
+    ),
+  );
+  assert.deepStrictEqual(invokeCli(projectRoot, ["scope-impact", "--check"]), {
+    status: 1,
+    stdout: "",
+    stderr: "phase-requirements: PHASE-07: roadmap membership differs from traceability\n",
+  });
 
   process.stdout.write("Revalidation negative controls passed.\n");
 } finally {
