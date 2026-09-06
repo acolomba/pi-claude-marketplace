@@ -300,11 +300,21 @@ export type ContentReason = Exclude<
  * (e.g. JSON pointers like `/schemaVersion`) are short -- single-segment
  * after the leading `/` -- and intentionally excluded so JSON-validator
  * diagnostics survive intact for the operator.
+ *
+ * WR-04: a match may not START immediately after a word character, a colon or
+ * a separator, because a URL scheme satisfies both the drive-letter form
+ * (`s:/` of `https://`) and the POSIX form (the slashes after it) -- so an
+ * unanchored match turned `https://github.com/org/repo.git` into
+ * `httprepo.git`, mangling a token that is not a local path at all. The same
+ * anchor means a path embedded in a `file://` URL is left alone; nothing in
+ * this extension composes one, and a mangled URL is worse for diagnosis than
+ * an unredacted one.
  */
 export function redactAbsolutePaths(text: string): string {
   // Match absolute paths with at least one internal separator so single-
-  // segment leading-slash JSON pointers (`/schemaVersion`) are not eaten.
-  const re = /(?:[A-Za-z]:[\\/]|\\\\\?\\|\/)[\w./\\~-]+[\\/][\w./\\~-]+/g;
+  // segment leading-slash JSON pointers (`/schemaVersion`) are not eaten, and
+  // only where a path can START, so a URL scheme cannot open a match.
+  const re = /(?<![\w:/\\])(?:[A-Za-z]:[\\/]|\\\\\?\\|\/)[\w./\\~-]+[\\/][\w./\\~-]+/g;
   return text.replace(re, (match) => {
     // path.basename handles both POSIX and Windows separators when invoked
     // through the platform-agnostic node:path module, but the renderer ships

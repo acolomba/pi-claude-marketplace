@@ -5029,6 +5029,19 @@ for (const { name, input, expected } of [
     input: "invalid /schemaVersion detail",
     expected: "invalid /schemaVersion detail",
   },
+  {
+    // WR-04: a scheme satisfies the drive-letter form (`s:/`) and its slashes
+    // satisfy the POSIX form, so an unanchored match collapsed the whole URL
+    // to `httprepo.git` -- string mangling on a token that is not a path.
+    name: "preserves an https URL, which no anchor of a local path can open",
+    input: "clone failed for https://github.com/org/repo.git",
+    expected: "clone failed for https://github.com/org/repo.git",
+  },
+  {
+    name: "still redacts a path that follows a key and an equals sign",
+    input: "EACCES at path=/srv/private/state/config.json",
+    expected: "EACCES at path=config.json",
+  },
 ] as const) {
   test(name, () => {
     // arrange
