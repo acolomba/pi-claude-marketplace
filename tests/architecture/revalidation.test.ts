@@ -1951,7 +1951,7 @@ test("collection fallbacks and render ordering cover empty and plural views", as
   );
 
   // assert
-  assert.ok(violations.some((item) => item.code === "file-claim-links"));
+  assert.ok(violations.some((item) => item.code === "invalid-file-claim-ids"));
   assert.match(violations.map((item) => item.message).join("\n"), /expected adversarial/);
   assert.strictEqual((emptyMarkdown.match(/_None\._/g) ?? []).length, 4);
   assert.match(orderedMarkdown, /2 claims/);
