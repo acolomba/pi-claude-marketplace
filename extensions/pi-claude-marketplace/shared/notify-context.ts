@@ -147,6 +147,7 @@ export function notifyWithContext<
   rows: readonly MarketplaceRows<Msg>[],
   kind?: "cascade",
   cardinality?: "single" | "plural",
+  advisories?: readonly string[],
 ): void {
   // WR-01 seam: the rows are `Msg`-narrowed at the call site (a status the
   // render map omits is a compile error there); the cascade envelope consumes
@@ -164,11 +165,17 @@ export function notifyWithContext<
   // `<Operation>` prefix. A call site that omits `cardinality` (single-target
   // ops) gets no tally. These fields are read only by the tally composer in
   // `emitWithSummary` -- they never affect the per-row body or severity.
+  // WR-06: free-text advisory body lines the command composed itself. Threaded
+  // as a trailing optional in the same style as the two above, so every existing
+  // call site is untouched and its bytes are unchanged. The renderer folds them
+  // in after the body and before the tally; a command that omits them renders
+  // exactly what it rendered before.
   const message: CascadeNotificationMessage = {
     ...(kind === undefined ? {} : { kind }),
     marketplaces,
     label: context.Messaging.label,
     ...(cardinality !== undefined && { cardinality }),
+    ...(advisories !== undefined && { advisories }),
   };
 
   emitContextCascade(ctx, pi, message, (p, probe, mpScope) =>

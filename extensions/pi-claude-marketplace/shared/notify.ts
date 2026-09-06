@@ -1417,6 +1417,14 @@ export interface CascadeNotificationMessage {
   // success category (the never-silent no-op headline is the orchestrator's job,
   // not `composeTally`'s).
   readonly tally?: { readonly verb: string; readonly count: number };
+  // WR-06: free-text advisory body lines, rendered after the cascade body and
+  // before the tally. Supplied ALREADY ORDERED by the caller and rendered
+  // verbatim -- these are not rows and carry no closed-set token, so nothing
+  // here is sorted, severity-mapped or reason-narrowed on the way out. The
+  // pending-empty variant declares the same member and the same render site
+  // composes both, which is what keeps the two arms of a command that can emit
+  // either one byte-identical.
+  readonly advisories?: readonly string[];
 }
 
 /**
@@ -1644,6 +1652,12 @@ export interface PluginInfoCascadeMessage {
  */
 export interface ReconcilePendingEmptyMessage {
   readonly kind: "reconcile-pending-empty";
+  // WR-06: the same free-text advisory body lines the cascade arm declares, on
+  // the same terms -- caller-ordered, rendered verbatim, no token, no row. The
+  // steady-state user is the one most likely to be carrying a retained staging
+  // tree, so an advisory the cascade arm alone could carry would miss exactly
+  // the reader it exists for.
+  readonly advisories?: readonly string[];
 }
 
 /**
@@ -3267,6 +3281,48 @@ function foldTallyAndHint(body: string, tally: string, hint: string): string {
 }
 
 /**
+ * WR-06: append the message's advisory body lines as their own block, after the
+ * composed body and BEFORE the tally and the reload-hint fold.
+ *
+ * The single render site for both carriers. A message shape that declares the
+ * member gets the identical byte form whichever arm of a command produced it,
+ * because the arms differ only in what they hand this function as `body`.
+ */
+function foldAdvisories(body: string, advisories: readonly string[] | undefined): string {
+  const lines = advisories ?? [];
+  return lines.length === 0 ? body : `${body}\n\n${lines.join("\n")}`;
+}
+
+/**
+ * WR-06: one advisory body line per workflow staging tree the sweeper keeps
+ * forever, in the caller's order.
+ *
+ * The tree holds displaced envelopes: the only surviving copy of the user's
+ * previous workflow scripts. It sits outside every scope root, so uninstall and
+ * a reload cannot reach it, and no other surface names it.
+ *
+ * T-53-02-02: the line carries the directory NAME and states the containing
+ * location as fixed text. It interpolates no absolute path -- the surface that
+ * renders this already carries basenames rather than paths for the same
+ * information-disclosure reason, and a machine-specific absolute path could not
+ * be pinned by a byte-equality fixture at all.
+ *
+ * WR-05: the count is omitted, never rendered as zero, when the reader could not
+ * establish it. A tree is reported on the same open question that keeps it, and
+ * a count nobody read is not a fact the line may state.
+ */
+export function composeRetainedWorkflowsAdvisories(
+  retained: readonly { readonly name: string; readonly envelopeCount?: number }[],
+): readonly string[] {
+  return retained.map((tree) => {
+    const count = tree.envelopeCount;
+    const envelopes =
+      count === undefined ? "" : ` (${tallyCategory(count, "envelope", "envelopes")})`;
+    return `    retained workflow staging: ${tree.name}${envelopes} under the workflows staging directory`;
+  });
+}
+
+/**
  * Reload-hint trigger per SNM-33. The trailer is reserved for
  * operations that actually change a Pi-visible resource. The ONLY Pi-visible
  * resources are plugin rows (skill / agent / command / MCP entry); marketplace
@@ -3857,7 +3913,7 @@ function dispatchInfoMessage(
       // DIFF-01 SC #2: catalog-locked free-form advisory body line. Hard-coded
       // here so the byte form cannot drift from `docs/output-catalog.md`'s
       // `empty-steady-state` state.
-      body = "Pending: next reload will apply 0 actions.";
+      body = foldAdvisories("Pending: next reload will apply 0 actions.", message.advisories);
       break;
     case "reconcile-applied-cascade":
       // RECON-04: compose the same cascade body the cascade arm renders
@@ -3936,7 +3992,9 @@ export function notify(
   // "(no marketplaces)" sentinel rather than the empty string; one blank
   // line between marketplace blocks.
   const blocks = message.marketplaces.map((mp) => composeMarketplaceBlock(mp, probe));
-  const body = blocks.length === 0 ? "(no marketplaces)" : blocks.join("\n\n");
+  const composed = blocks.length === 0 ? "(no marketplaces)" : blocks.join("\n\n");
+  // WR-06: advisory body lines sit between the body and the tally.
+  const body = foldAdvisories(composed, message.advisories);
 
   // OUT-03 / OUT-04 / D-04: the per-operation tally renders on PLURAL ops
   // (cardinality === "plural"), sits AFTER the body and BEFORE the reload-hint
@@ -3989,6 +4047,10 @@ function emitCascadeWith(
     mpScope: Scope,
   ) => string,
   hint: string,
+  // WR-06: caller-composed advisory body lines. Only the plain cascade carrier
+  // declares them; the reconcile-applied carrier passes `undefined`, so the
+  // member stays on the two shapes that can actually produce one.
+  advisories: readonly string[] | undefined,
 ): void {
   const probe = softDepStatus(pi);
 
@@ -4000,7 +4062,11 @@ function emitCascadeWith(
 
     return lines.join("\n");
   });
-  const body = blocks.length === 0 ? "(no marketplaces)" : blocks.join("\n\n");
+  const composed = blocks.length === 0 ? "(no marketplaces)" : blocks.join("\n\n");
+  // WR-06: advisory body lines sit between the body and the tally, exactly as
+  // they do on the central dispatch, so a command that can emit either arm
+  // renders the identical trailer from either one.
+  const body = foldAdvisories(composed, advisories);
 
   // OUT-03 / OUT-04 / D-04: trailing per-operation tally for plural cascades,
   // placed between the body and the reload-hint trailer.
@@ -4026,7 +4092,7 @@ export function emitContextCascade(
   ) => string,
 ): void {
   const hint = shouldEmitReloadHint(message) ? RELOAD_HINT_TRAILER : "";
-  emitCascadeWith(ctx, pi, message, renderPluginRowBody, hint);
+  emitCascadeWith(ctx, pi, message, renderPluginRowBody, hint, message.advisories);
 }
 
 /**
@@ -4094,7 +4160,7 @@ export function emitReconcileAppliedContextCascade(
     mpScope: Scope,
   ) => string,
 ): void {
-  emitCascadeWith(ctx, pi, message, renderPluginRowBody, "");
+  emitCascadeWith(ctx, pi, message, renderPluginRowBody, "", undefined);
 }
 
 /**

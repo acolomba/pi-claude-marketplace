@@ -42,8 +42,13 @@ import {
   type MarketplaceRows,
   type Plural,
 } from "../../shared/notify-context.ts";
-import { compareByNameThenScope, notify } from "../../shared/notify.ts";
+import {
+  compareByNameThenScope,
+  composeRetainedWorkflowsAdvisories,
+  notify,
+} from "../../shared/notify.ts";
 import { narrowProbeError } from "../../shared/probe-classifiers.ts";
+import { scanRetainedWorkflowsStaging } from "../plugin/workflows-staging-gc.ts";
 
 import {
   buildReconcilePendingNotification,
@@ -58,7 +63,7 @@ import type { PlannedPluginInstall, ReconcilePlan } from "./types.ts";
 import type { MergedConfig, ScopeLoadOutcome } from "../../persistence/config-merge.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
-import type { ContentReason } from "../../shared/notify.ts";
+import type { ContentReason, ReconcilePendingEmptyMessage } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 
 export interface PendingReconcileOptions {
@@ -126,6 +131,40 @@ function mergedViewForPlanning(outcome: ScopeLoadOutcome, state: ExtensionState)
 
   const local = outcome.local.status === "valid" ? outcome.local.config : {};
   return mergeScopeConfigs(buildConfigFromState(state), local);
+}
+
+/**
+ * WR-06: the advisory body lines naming the workflow staging trees the sweeper
+ * keeps forever, or `undefined` when there are none.
+ *
+ * `workflowsStagingDir` and `workflowsHomeDir` are scope-INDEPENDENT, so the
+ * scope handed to `locationsFor` is immaterial and one call answers for the
+ * whole invocation. That is also why the caller must not put this inside its
+ * per-scope loop: a two-scope invocation would render the identical advisory
+ * twice.
+ *
+ * D-19-01 shape, owned by the scan rather than repeated here: a scan that
+ * cannot answer costs the advisory, never the command. The scan is TOTAL -- an
+ * absent or unreadable staging directory, an entry it cannot inspect and a
+ * containment refusal all resolve to the empty result rather than rejecting --
+ * so a try/catch around it would be a branch nothing can reach.
+ */
+async function retainedWorkflowsAdvisories(cwd: string): Promise<readonly string[] | undefined> {
+  const lines = composeRetainedWorkflowsAdvisories(
+    await scanRetainedWorkflowsStaging(locationsFor("user", cwd)),
+  );
+  return lines.length === 0 ? undefined : lines;
+}
+
+/**
+ * DIFF-01 SC #2: the empty-steady-state message. WR-06: the advisory key is
+ * ABSENT rather than present-and-empty when nothing is retained, so a steady
+ * state with no retained tree emits the bytes it has always emitted.
+ */
+function pendingEmptyMessage(
+  advisories: readonly string[] | undefined,
+): ReconcilePendingEmptyMessage {
+  return { kind: "reconcile-pending-empty", ...(advisories !== undefined && { advisories }) };
 }
 
 export async function pendingReconcile(opts: PendingReconcileOptions): Promise<void> {
@@ -206,13 +245,25 @@ export async function pendingReconcile(opts: PendingReconcileOptions): Promise<v
     plans.push(planReconcile(mergedViewForPlanning(outcome, state), state, scope));
   }
 
+  // WR-06: name the workflow staging trees the sweeper keeps forever, because
+  // their `.previous/` holds the only surviving copy of the user's previous
+  // workflow scripts and no other surface reaches them.
+  //
+  // Called ONCE per invocation, deliberately OUTSIDE the per-scope loop above:
+  // `workflowsStagingDir` and `workflowsHomeDir` are scope-INDEPENDENT, so the
+  // scope handed to `locationsFor` is immaterial and a call inside the loop
+  // would render the identical advisory twice whenever no scope was given.
+  //
+  const advisories = await retainedWorkflowsAdvisories(opts.cwd);
+
   // DIFF-01 SC #2 empty-steady-state: no invalid-config rows AND every plan
   // is empty -> dispatch the dedicated ReconcilePendingEmptyMessage variant
   // (the renderer hard-codes the catalog-locked advisory body line, so the
   // byte form cannot drift from docs/output-catalog.md). IL-2 preserved by
-  // routing through notify() exactly once.
+  // routing through notify() exactly once. WR-06: the retained-tree lines ride
+  // the same variant, so the steady-state reader meets the identical trailer.
   if (invalidBlocks.length === 0 && isReconcilePlanListEmpty(plans)) {
-    notify(opts.ctx, opts.pi, { kind: "reconcile-pending-empty" });
+    notify(opts.ctx, opts.pi, pendingEmptyMessage(advisories));
     return;
   }
 
@@ -264,5 +315,15 @@ export async function pendingReconcile(opts: PendingReconcileOptions): Promise<v
     ...invalidBlocks,
   ].sort((a, b) => compareByNameThenScope(a, b));
 
-  notifyWithContext(opts.ctx, opts.pi, PENDING_CONTEXT, marketplaces);
+  // WR-06: the cascade arm carries the identical advisory lines the empty arm
+  // carries, from the one render site that composes both.
+  notifyWithContext(
+    opts.ctx,
+    opts.pi,
+    PENDING_CONTEXT,
+    marketplaces,
+    undefined,
+    undefined,
+    advisories,
+  );
 }

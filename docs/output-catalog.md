@@ -2164,6 +2164,18 @@ The merged config matches the recorded state byte-for-byte in every scope -- the
 Pending: next reload will apply 0 actions.
 ```
 
+### Empty steady-state carrying a retained workflow staging tree (WR-06)
+
+The next reload would apply zero actions, AND a workflow staging tree survives that the sweeper keeps forever: its `.previous/` still holds displaced envelopes, which are the only surviving copy of the user's previous workflow scripts. The tree sits under the workflow home rather than under any scope root, so uninstall and `/reload` never reach it and no other surface names it. One free-form advisory body line per retained tree is appended after the body, sorted by directory name, each carrying the tree's directory NAME and its envelope count. The line interpolates NO absolute path (T-53-02-02 -- the same information-disclosure rule that puts a basename on the invalid-config row), and states the containing location as fixed text. An empty set renders nothing at all: no header, no zero-count line. Severity `info`; no reload-hint; no summary line.
+
+<!-- catalog-state: empty-steady-state-retained-workflow-staging -->
+
+```text
+Pending: next reload will apply 0 actions.
+
+    retained workflow staging: 9f1c4d2a-3b7e (2 envelopes) under the workflows staging directory
+```
+
 ### Marketplace add with child plugin install
 
 A new marketplace declared in `claude-plugins.json` carries one child plugin row declared with the same key (`will install`). WILL-01 / D-65.1-02: the marketplace add is immediate, so its header carries no `will add` token and renders status-less (list-arm bare header); only the reload-deferred child install carries a pending token. Subject-first row grammar per DIFF-02: `● new-mp [user]` / `● new-plugin (will install)`. Orphan-fold (D-13-18 / MSG-PL-6): the plugin row omits its `[scope]` bracket because its scope matches the parent marketplace's scope. Severity `info`; no reload-hint.
@@ -2195,6 +2207,19 @@ A plugin recorded in `state.json` but no longer declared in `claude-plugins.json
 ```text
 ● mp [user]
   ○ old-plugin (will uninstall)
+```
+
+### Plugin pending uninstall carrying a retained workflow staging tree (WR-06)
+
+The same retained-tree advisory on the command's OTHER arm. The cascade message and the empty-steady-state message declare the SAME optional advisory member and one render site composes both, so the appended line is byte-identical to the [empty steady-state](#empty-steady-state-carrying-a-retained-workflow-staging-tree-wr-06) form above whichever arm the user's configuration lands on. The advisory sits after the cascade body and before the trailing tally slot; it is a body line, not a row, because its subject is a directory and the row grammar's name slot expects a plugin or a marketplace. Severity `info`; no reload-hint.
+
+<!-- catalog-state: plugin-pending-uninstall-retained-workflow-staging -->
+
+```text
+● mp [user]
+  ○ old-plugin (will uninstall)
+
+    retained workflow staging: 9f1c4d2a-3b7e (2 envelopes) under the workflows staging directory
 ```
 
 ### Marketplace remove with installed plugins
