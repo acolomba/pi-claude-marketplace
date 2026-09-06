@@ -297,6 +297,15 @@ function publishJournalRecords(transactionId: string) {
   }));
 }
 
+function malformedRecordRows() {
+  return [
+    { title: "null", record: null },
+    { title: "an array", record: [] },
+    { title: "a string", record: "malformed" },
+    { title: "a number", record: 7 },
+  ] as const;
+}
+
 function runInProcess(projectRoot: string, args: readonly string[]): CliExecution {
   const stdout: string[] = [];
   const stderr: string[] = [];
@@ -704,6 +713,30 @@ test("shard validation rejects cross-plan claims and unreachable findings", asyn
   assert.ok(malformedCodes.includes("shard-finding-links"));
   assert.ok(malformedCodes.includes("shard-file-claim-links"));
 });
+
+for (const row of malformedRecordRows()) {
+  test(`shard validation rejects ${row.title} file record`, async (t) => {
+    // arrange
+    const { corpusPath } = await corpusFixture(t);
+    const shard = { ...benignLedger(corpusPath), plan: "01-02" };
+    shard.files = [row.record as unknown as Ledger["files"][number]];
+    const assignment = [{ ordinal: 1, plan: "01-02", bytes: 1, path: corpusPath }];
+
+    // act
+    const violations = validateShard(shard, assignment).filter(
+      (item) => item.code === "invalid-shard-file",
+    );
+
+    // assert
+    assert.deepStrictEqual(violations, [
+      {
+        code: "invalid-shard-file",
+        target: "01-02",
+        message: "shard file requires a path",
+      },
+    ]);
+  });
+}
 
 test("derives scope impact only from traced scope records", async (t) => {
   // arrange
@@ -1419,6 +1452,63 @@ test("ledger reports malformed claims, findings, references, and validation evid
     assert.ok(codes.has(code), code);
   }
 });
+
+for (const row of malformedRecordRows()) {
+  test(`ledger rejects ${row.title} file record`, async (t) => {
+    // arrange
+    const { projectRoot, corpusPath } = await corpusFixture(t);
+    const ledger = benignLedger(corpusPath);
+    ledger.files = [row.record as unknown as Ledger["files"][number]];
+
+    // act
+    const violations = validateLedger(ledger, { projectRoot, expectedPaths: [corpusPath] }).filter(
+      (item) => item.code === "invalid-file",
+    );
+
+    // assert
+    assert.deepStrictEqual(violations, [
+      { code: "invalid-file", target: "files", message: "file requires a path" },
+    ]);
+  });
+
+  test(`ledger rejects ${row.title} decision record`, async (t) => {
+    // arrange
+    const { projectRoot, corpusPath } = await corpusFixture(t);
+    const ledger = benignLedger(corpusPath);
+    ledger.decisions = [row.record as unknown as Ledger["decisions"][number]];
+
+    // act
+    const violations = validateLedger(ledger, { projectRoot, expectedPaths: [corpusPath] }).filter(
+      (item) => item.code === "invalid-decision",
+    );
+
+    // assert
+    assert.deepStrictEqual(violations, [
+      { code: "invalid-decision", target: "decisions", message: "decision must be an object" },
+    ]);
+  });
+
+  test(`ledger rejects ${row.title} scope-change record`, async (t) => {
+    // arrange
+    const { projectRoot, corpusPath } = await corpusFixture(t);
+    const ledger = benignLedger(corpusPath);
+    ledger.scopeChanges = [row.record as unknown as Ledger["scopeChanges"][number]];
+
+    // act
+    const violations = validateLedger(ledger, { projectRoot, expectedPaths: [corpusPath] }).filter(
+      (item) => item.code === "invalid-scope-change",
+    );
+
+    // assert
+    assert.deepStrictEqual(violations, [
+      {
+        code: "invalid-scope-change",
+        target: "scopeChanges",
+        message: "scope change must be an object",
+      },
+    ]);
+  });
+}
 
 test("ledger rejects invalid collection fields and empty required evidence", async (t) => {
   // arrange

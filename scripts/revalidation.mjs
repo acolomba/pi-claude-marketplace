@@ -310,6 +310,20 @@ function validateSchema(ledger, requireLive, violations) {
   }
 }
 
+function collectObjectRecords(records, code, target, message, violations, predicate = isObject) {
+  const validRecords = [];
+  for (const record of records) {
+    if (!predicate(record)) {
+      violations.push(violation(code, target, message));
+      continue;
+    }
+
+    validRecords.push(record);
+  }
+
+  return validRecords;
+}
+
 function validateLiveInventoryCounts(ledger, expectedPaths, violations) {
   if (expectedPaths.length !== 110 || ledger.files.length !== 110) {
     violations.push(
@@ -991,25 +1005,50 @@ export function validateLedger(ledger, context = {}) {
   const projectRoot = context.projectRoot ?? DEFAULT_ROOT;
   const expectedPaths = context.expectedPaths ?? enumerateCorpus(projectRoot);
   const violations = [];
-  validateSchema(ledger, context.requireLive ?? false, violations);
-  const filePaths = validateInventory(ledger, projectRoot, expectedPaths, violations);
-  const claims = collectClaims(ledger, filePaths, violations);
-  const findings = collectFindings(ledger, violations);
+  const validatedLedger = {
+    ...ledger,
+    files: collectObjectRecords(
+      ledger.files,
+      "invalid-file",
+      "files",
+      "file requires a path",
+      violations,
+      (file) => isObject(file) && typeof file.path === "string",
+    ),
+    decisions: collectObjectRecords(
+      ledger.decisions,
+      "invalid-decision",
+      "decisions",
+      "decision must be an object",
+      violations,
+    ),
+    scopeChanges: collectObjectRecords(
+      ledger.scopeChanges,
+      "invalid-scope-change",
+      "scopeChanges",
+      "scope change must be an object",
+      violations,
+    ),
+  };
+  validateSchema(validatedLedger, context.requireLive ?? false, violations);
+  const filePaths = validateInventory(validatedLedger, projectRoot, expectedPaths, violations);
+  const claims = collectClaims(validatedLedger, filePaths, violations);
+  const findings = collectFindings(validatedLedger, violations);
   const state = {
     projectRoot,
     claims,
     findings,
-    inventoryMode: ledger.inventoryMode,
+    inventoryMode: validatedLedger.inventoryMode,
     assignment: context.assignment ?? [],
     allowIncomplete: context.allowIncomplete ?? false,
     allowInconclusive: context.allowInconclusive ?? false,
     allowPendingDecisions: context.allowPendingDecisions ?? false,
     decisionId: context.decisionId,
   };
-  validateFiles(ledger, state, violations);
+  validateFiles(validatedLedger, state, violations);
   validateFindings(findings, state, violations);
-  validateDecisions(ledger, state, violations);
-  validateScopeChanges(ledger, findings, violations);
+  validateDecisions(validatedLedger, state, violations);
+  validateScopeChanges(validatedLedger, findings, violations);
   validateCrossLinks(claims, findings, violations);
   return violations.sort((left, right) =>
     `${left.code}\0${left.target}\0${left.message}`.localeCompare(
@@ -1023,16 +1062,24 @@ export function validateShard(shard, assignment) {
     throw new TypeError("shard requires plan and files");
   }
 
-  const assignedPaths = assignment.filter((row) => row.plan === shard.plan).map((row) => row.path);
-  const shardPaths = shard.files.map((file) => file.path);
   const violations = [];
+  const files = collectObjectRecords(
+    shard.files,
+    "invalid-shard-file",
+    shard.plan,
+    "shard file requires a path",
+    violations,
+    (file) => isObject(file) && typeof file.path === "string",
+  );
+  const assignedPaths = assignment.filter((row) => row.plan === shard.plan).map((row) => row.path);
+  const shardPaths = files.map((file) => file.path);
   if (JSON.stringify(shardPaths) !== JSON.stringify(assignedPaths)) {
     violations.push(
       violation("shard-assignment", shard.plan, "shard paths must exactly match assignment order"),
     );
   }
 
-  if (shard.files.some((file) => file.assignedPlan !== shard.plan)) {
+  if (files.some((file) => file.assignedPlan !== shard.plan)) {
     violations.push(
       violation("shard-owner", shard.plan, "every shard file must name its owning plan"),
     );
@@ -1054,7 +1101,7 @@ export function validateShard(shard, assignment) {
     );
   }
 
-  for (const file of shard.files) {
+  for (const file of files) {
     const actualClaimIds = claims
       .filter((claim) => isObject(claim) && claim.filePath === file.path)
       .map((claim) => claim.id)
@@ -1397,9 +1444,7 @@ function validatePublishRecoveryState(journal, projectRoot, journalPath) {
       !backupExists && stagedExists && (destinationExists || !record.hadDestination);
     if (
       (journal.status === "published" && !publishedStateIsValid) ||
-      (journal.status === "staged" &&
-        !stagedWithBackupIsValid &&
-        !stagedWithoutBackupIsValid)
+      (journal.status === "staged" && !stagedWithBackupIsValid && !stagedWithoutBackupIsValid)
     ) {
       throw new Error(`publish journal is malformed: ${journalPath}`);
     }
