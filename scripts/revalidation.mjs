@@ -1875,6 +1875,76 @@ function addRequirementLocation(locations, id, section, message, violations) {
   }
 }
 
+function stripMarkdownComments(line, state) {
+  const visibleParts = [];
+  let offset = 0;
+  while (offset < line.length) {
+    if (state.insideComment) {
+      const commentEnd = line.indexOf("-->", offset);
+      if (commentEnd === -1) {
+        return visibleParts.join("");
+      }
+
+      state.insideComment = false;
+      offset = commentEnd + "-->".length;
+      continue;
+    }
+
+    const commentStart = line.indexOf("<!--", offset);
+    if (commentStart === -1) {
+      visibleParts.push(line.slice(offset));
+      break;
+    }
+
+    visibleParts.push(line.slice(offset, commentStart));
+    state.insideComment = true;
+    offset = commentStart + "<!--".length;
+  }
+
+  return visibleParts.join("");
+}
+
+function fenceOpening(line) {
+  const match = /^ {0,3}(`{3,}|~{3,})/.exec(line);
+  return match === null ? undefined : { marker: match[1][0], width: match[1].length };
+}
+
+function closesFence(line, fence) {
+  const candidate = line.trim();
+  return (
+    candidate.length >= fence.width &&
+    [...candidate].every((character) => character === fence.marker)
+  );
+}
+
+function visibleMarkdown(markdown) {
+  const visibleLines = [];
+  const commentState = { insideComment: false };
+  let fence;
+  for (const rawLine of markdown.split("\n")) {
+    if (fence !== undefined) {
+      if (closesFence(rawLine, fence)) {
+        fence = undefined;
+      }
+
+      visibleLines.push("");
+      continue;
+    }
+
+    const line = stripMarkdownComments(rawLine, commentState);
+    const opening = fenceOpening(line);
+    if (opening !== undefined) {
+      fence = opening;
+      visibleLines.push("");
+      continue;
+    }
+
+    visibleLines.push(line);
+  }
+
+  return visibleLines.join("\n");
+}
+
 function parseRequirementLocations(markdown, violations) {
   const definitions = new Map();
   const history = new Map();
@@ -2171,8 +2241,8 @@ function validatePhaseContracts(requirements, phases, rows, locators, violations
 
 function validatePlanningContracts(ledger, requirementsMarkdown, roadmapMarkdown) {
   const violations = [];
-  const requirements = parseRequirementsContract(requirementsMarkdown, violations);
-  const phases = parseRoadmapContract(roadmapMarkdown, violations);
+  const requirements = parseRequirementsContract(visibleMarkdown(requirementsMarkdown), violations);
+  const phases = parseRoadmapContract(visibleMarkdown(roadmapMarkdown), violations);
   const rows = new Map();
   const locators = new Map();
   for (const change of ledger.scopeChanges) {

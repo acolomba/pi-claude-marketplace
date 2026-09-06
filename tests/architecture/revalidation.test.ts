@@ -948,6 +948,63 @@ test("RVAL-04 scope-impact rejects a missing traceability row", async (t) => {
   });
 });
 
+for (const row of [
+  {
+    title: "RVAL-04 scope-impact ignores a commented requirement definition",
+    contract: ".planning/REQUIREMENTS.md",
+    original:
+      "- [ ] **PDEF-01**: Each terminally confirmed production defect routed to Phase 3\n" +
+      "  has a direct owner regression that fails without the correction and passes\n" +
+      "  with it; stale, struck, and evidence-only claims authorize no implementation.",
+    replacement: (original: string) => `<!--\n${original}\n-->`,
+    expectedStderr:
+      "missing-requirement-definition: PDEF-01: active definition is absent\n" +
+      "scope-after-anchor: SCOPE-REQ-PDEF-01: afterAnchor does not resolve to requirement\n",
+  },
+  {
+    title: "RVAL-04 scope-impact ignores a fenced traceability row",
+    contract: ".planning/REQUIREMENTS.md",
+    original: "| AUTH-01 | Phase 4 | Pending |",
+    replacement: (original: string) => `\`\`\`md\n${original}\n\`\`\``,
+    expectedStderr:
+      "missing-requirement-route: AUTH-01: traceability row is absent\n" +
+      "phase-requirements: PHASE-04: roadmap membership differs from traceability\n",
+  },
+  {
+    title: "RVAL-04 scope-impact ignores a commented phase heading",
+    contract: ".planning/ROADMAP.md",
+    original: "### Phase 8: Direct Coverage",
+    replacement: (original: string) => `<!-- ${original} -->`,
+    expectedStderr: "missing-phase-route: PHASE-08: roadmap phase is absent\n",
+  },
+  {
+    title: "RVAL-04 scope-impact ignores a fenced phase requirements declaration",
+    contract: ".planning/ROADMAP.md",
+    original: "**Requirements:** RCOV-01, RCOV-02, RCOV-03",
+    replacement: (original: string) => `~~~markdown\n${original}\n~~~`,
+    expectedStderr:
+      "phase-requirements: PHASE-08: roadmap membership differs from traceability\n",
+  },
+] as const) {
+  test(row.title, async (t) => {
+    // arrange
+    const projectRoot = await createScopeImpactFixture(t);
+    const contractPath = path.join(projectRoot, row.contract);
+    const contract = await readFile(contractPath, "utf8");
+    await writeFile(contractPath, contract.replace(row.original, row.replacement(row.original)));
+
+    // act
+    const execution = runCli(projectRoot, ["scope-impact", "--check"]);
+
+    // assert
+    assert.deepStrictEqual(execution, {
+      status: 1,
+      stdout: "",
+      stderr: row.expectedStderr,
+    });
+  });
+}
+
 test("RVAL-04 scope-impact rejects a duplicate stable requirement definition", async (t) => {
   // arrange
   const projectRoot = await createScopeImpactFixture(t);
