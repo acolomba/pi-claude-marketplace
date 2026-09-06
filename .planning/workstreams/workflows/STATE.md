@@ -4,18 +4,18 @@ milestone: workflows-replay
 milestone_name: Workflow Bridge Replay onto main
 current_phase: 113
 current_phase_name: Update, enable/disable, reconcile
-current_plan: 113-02 (wave 2)
+current_plan: 113-04 (wave 3)
 status: executing
-stopped_at: Phase 113 wave 1 complete (113-01); wave 2 next
+stopped_at: Phase 113 waves 1-2 complete (113-01..03); wave 3 next
 last_updated: "2026-09-05T22:49:08.588Z"
 last_activity: 2026-09-05
-last_activity_desc: Phase 113 plan 01 executed - the info workflows line and the discovery tense
+last_activity_desc: Phase 113 waves 1-2 executed - info surface, update sixth bridge, enable projection
 state_head: 7e1fa90921ea4c7700c37de2eebe05784155560d
 progress:
   total_phases: 9
   completed_phases: 4
   total_plans: 21
-  completed_plans: 17
+  completed_plans: 19
   percent: 44
 ---
 
@@ -36,7 +36,7 @@ never merged. Since then #154 declared `workflows` an *unsupported* kind, and
 ## Current Position
 
 Phase: 113 (Update, enable/disable, reconcile) — READY TO EXECUTE
-Plan: 1/5 executed — 113-01 done; 113-02 and 113-03 are wave 2
+Plan: 3/5 executed — waves 1-2 done; 113-04 is wave 3, 113-05 is wave 4
 Status: Executing Phase 113. Plan 113-01 landed the `info` `workflows:` line,
 the required discovery `tense` parameter, and the preview-tense warning
 channel, in commits 282c23f6, 0fe0f018 and e4e8c71d.
@@ -50,6 +50,22 @@ what caught it, and it recorded the verbatim error it produces:
 `error TS2344: Type '"workflows"' does not satisfy the constraint 'never'.`
 
 The advisory label token the later plans' fixtures must match is `note:`.
+
+Wave 2 landed `update` as a sixth bridge (183a6d99, e67a5949, b2db09f0) and the
+enable projection plus the reconcile idempotence guard (dde0e281, d1aae1c2).
+
+Two carried facts wave 3 must act on:
+
+- `stagedWorkflowNames` on the module-private `SetEnabledOutcome` fresh arm has
+  a producer and no consumer. Plan 04's enable gate is its intended reader; if
+  plan 04 computes from `summary` directly instead, the member must be deleted
+  in that same commit rather than left behind.
+- Plan 02 merged `abortPartialHandles` into `abortHandles`, because workflows
+  prepares last so the partial helper's workflows guard was unreachable and
+  uncoverable. That also fixed a real leak: the partial helper had no mcp arm,
+  so a workflows-prepare failure never released the mcp handle. Plan 02's
+  `>= 3` grep threshold was written against the two-helper shape and has been
+  corrected to `>= 2` (ce35983c).
 
 Research overturned a load-bearing claim: `shared/notify.ts`'s exact-length
 `COMPONENT_KINDS` tuple does NOT fail to typecheck when the component set gains

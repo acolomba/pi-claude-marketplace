@@ -482,9 +482,9 @@ Plans:
 
 - [x] 113-01-PLAN.md — Tracer: the `info` `workflows:` line end to end, with the required discovery tense
   discriminant and a component-kind guard that was seen to fire (wave 1)
-- [ ] 113-02-PLAN.md — The `update` sixth bridge: prepare, abort, commit, the two-window record policy,
+- [x] 113-02-PLAN.md — The `update` sixth bridge: prepare, abort, commit, the two-window record policy,
   and one reachability case per widened failure slot (wave 2)
-- [ ] 113-03-PLAN.md — The staged workflow names on the ledger projection both enable verbs read, and the
+- [x] 113-03-PLAN.md — The staged workflow names on the ledger projection both enable verbs read, and the
   load-time no-re-materialization guard with a negative control (wave 2)
 - [ ] 113-04-PLAN.md — The lingering-command reload remedy as a closed-set token stamped by all four
   retiring verbs, plus the verified reinstall traceability correction (wave 3)
