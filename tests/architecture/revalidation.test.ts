@@ -83,6 +83,7 @@ interface Ledger {
     rationale: string;
     beforeAnchor?: string;
     afterAnchor?: string;
+    requirementSignature?: string;
   }>;
 }
 
@@ -917,6 +918,32 @@ test("RVAL-04 scope-impact rejects a duplicate stable requirement definition", a
     status: 1,
     stdout: "",
     stderr: "duplicate-requirement: PDEF-01: requirement is defined more than once\n",
+  });
+});
+
+test("RVAL-04 scope-impact rejects changed requirement clause text", async (t) => {
+  // arrange
+  const projectRoot = await createScopeImpactFixture(t);
+  const contractPath = path.join(projectRoot, ".planning/REQUIREMENTS.md");
+  const contract = await readFile(contractPath, "utf8");
+  await writeFile(
+    contractPath,
+    contract.replace(
+      "- [ ] **PDEF-01**: Each terminally confirmed production defect routed to Phase 3\n" +
+        "  has a direct owner regression that fails without the correction and passes\n" +
+        "  with it; stale, struck, and evidence-only claims authorize no implementation.",
+      "- [ ] **PDEF-01**: Unrelated prose retains the stable ID and section.",
+    ),
+  );
+
+  // act
+  const execution = runCli(projectRoot, ["scope-impact", "--check"]);
+
+  // assert
+  assert.deepStrictEqual(execution, {
+    status: 1,
+    stdout: "",
+    stderr: "requirement-clause: PDEF-01: requirement clause differs from scope signature\n",
   });
 });
 

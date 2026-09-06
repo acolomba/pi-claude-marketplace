@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   closeSync,
   constants as fsConstants,
@@ -1836,7 +1837,46 @@ function parseRequirementsContract(markdown, violations) {
     }
   }
 
-  return { definitions, history, dispositions };
+  return {
+    definitions,
+    history,
+    dispositions,
+    signatures: parseRequirementSignatures(markdown),
+  };
+}
+
+function normalizeRequirementClause(clause) {
+  return clause
+    .replace(/\n {2}/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function signRequirementClause(clause) {
+  const normalized = normalizeRequirementClause(clause);
+  return `sha256:${createHash("sha256").update(normalized).digest("hex")}`;
+}
+
+function collectRequirementSignatures(markdown, pattern) {
+  return new Map(
+    [...markdown.matchAll(pattern)].map((match) => [match[1], signRequirementClause(match[2])]),
+  );
+}
+
+function parseRequirementSignatures(markdown) {
+  const definitionPattern = /^- \[[ x]\] \*\*([A-Z]+-\d+)\*\*: ([^\n]*(?:\n {2}[^\n]*)*)/gm;
+  const definitions = collectRequirementSignatures(markdown, definitionPattern);
+  const historyStart = markdown.indexOf("## Evidence and History\n");
+  const historyEnd = markdown.indexOf("\n## ", historyStart + 1);
+  const historyMarkdown = markdown.slice(
+    historyStart,
+    historyEnd === -1 ? markdown.length : historyEnd,
+  );
+  const historyPattern = /^- \*\*([A-Z]+-\d+)\*\*(?: \([^)]*\))?: ([^\n]*(?:\n {2}[^\n]*)*)/gm;
+  return new Map([
+    ...definitions,
+    ...collectRequirementSignatures(historyMarkdown, historyPattern),
+  ]);
 }
 
 function parseRoadmapContract(markdown, violations) {
@@ -1897,6 +1937,17 @@ function validateRequirementChange(requirements, requirementId, change, violatio
         "requirement-disposition",
         requirementId,
         "active requirement cannot be evidence only",
+      ),
+    );
+  }
+
+  const clauseSignature = requirements.signatures.get(requirementId);
+  if (clauseSignature !== undefined && change.requirementSignature !== clauseSignature) {
+    violations.push(
+      violation(
+        "requirement-clause",
+        requirementId,
+        "requirement clause differs from scope signature",
       ),
     );
   }
