@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 01
 current_phase_name: live-evidence-revalidation
 status: executing
-stopped_at: Phase 02 complete, ready to plan Phase 3
-last_updated: "2026-09-06T13:05:03.604Z"
+stopped_at: Completed 01-70-PLAN.md
+last_updated: "2026-09-06T13:27:46.381Z"
 last_activity: 2026-09-05
 last_activity_desc: Phase 01 execution resumed (wave continue)
-state_head: 425f44df3e067ae12179a76cf9ca1283ecb7b310
+state_head: 0ad373ee87bd4fd877b203215cc8d6a72e68e21f
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 73
-  completed_plans: 72
+  completed_plans: 73
   percent: 11
 ---
 
@@ -34,7 +34,7 @@ terminal evidence ledger.
 
 Phase: 01 (live-evidence-revalidation) — READY TO EXECUTE
 Next: Discuss Phase 03
-Plan: 1 of 69
+Plan: 2 of 69
 Status: Ready to execute
 Last activity: 2026-09-05 — Phase 01 execution resumed (wave continue)
 
@@ -258,6 +258,7 @@ Last activity: 2026-09-05 — Phase 01 execution resumed (wave continue)
 | Phase 02 P01                            | 18min    | 2 tasks | 6 files  |
 | Phase 02 P02                            | 17min    | 2 tasks | 5 files  |
 | Phase 02 P03                            | 13min    | 2 tasks | 2 files  |
+| Phase 01 P70 | 19min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -620,6 +621,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 02]: Catch only aggregateDiscoveredResources and its result projection at the registered host callback; keep reconciliation, PATH recompute, and the aggregator unchanged.
 - [Phase 02]: Prove transient aggregate failure with one exact-path, explicitly non-concurrent built-in mock; restore and re-synchronize it before invoking the same registered callback again and in teardown.
 - [Phase 02]: Retain the per-warning try/catch and prove both user and project warning attempts under a notifier that throws on every call.
+- [Phase 01]: Parse requirement definitions separately from traceability dispositions so moved evidence-only IDs remain stable without authorizing active work. — Preserves D-19 and D-21.
+- [Phase 01]: Validate Phase 2-9 membership against traceability and require qualified after anchors. — Enforces D-20 and D-23.
 
 ### Pending Todos
 
@@ -671,7 +674,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Phase 02 complete, ready to plan Phase 3
+**Stopped at:** Completed 01-70-PLAN.md
 
 Phase 01 is sealed at 69/69 plans. Phase 02 Plans 01 through 03 completed
 PDEF-03, PDEF-02, and PDEF-04 with typed fail-closed input, path, and lifecycle
@@ -683,7 +686,7 @@ security gaps. Phase 03 is ready for discussion and planning.
 **Read beside it:** `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`, and the
 Phase 01 terminal evidence ledger and scope-impact crosswalk routed to Phase 03.
 
-Last session: 2026-09-06T00:17:22.144Z
+Last session: 2026-09-06T13:27:37.020Z
 
 **Next:** Discuss Phase 03 Production Defect Corrections, then research and plan
 only the terminal findings that still reproduce.

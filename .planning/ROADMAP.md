@@ -66,7 +66,7 @@ be narrowed or moved out of scope with evidence.
 **Goal:** Establish the complete reproducible scope before changing code.
 **Depends on:** Nothing
 **Requirements:** RVAL-01, RVAL-02, RVAL-03, RVAL-04
-**Plans:** 69/69 plans complete
+**Plans:** 70/70 plans executed
 
 **Success Criteria**:
 
@@ -80,6 +80,9 @@ be narrowed or moved out of scope with evidence.
    requirements and remaining roadmap are revised before Phase 2 planning.
 
 Plans:
+
+- [x] 01-70-PLAN.md
+
 **Wave 1**
 
 - [x] 01-01-PLAN.md — Build the production-quality evidence-gate tracer and its complete validator foundation
@@ -391,7 +394,7 @@ baseline, which still includes both pairs; neither is a terminal shortfall.
 
 | Phase | Plans Complete | Status | Completed |
 | ----- | -------------- | ------ | --------- |
-| 1. Live Evidence Revalidation | 69/69 | Complete | 2026-09-05 |
+| 1. Live Evidence Revalidation | 70/70 | In Progress|  |
 | 2. Containment and Input Safety | 3/3 | Complete    | 2026-09-05 |
 | 3. Production Defect Corrections | 0/0 | Not started | — |
 | 4. Hermetic Test Infrastructure | 0/0 | Not started | — |
