@@ -988,7 +988,7 @@ for (const row of [
     replacement: (original: string) => `~~~markdown\n${original}\n~~~`,
     expectedStderr:
       "missing-phase-requirements: PHASE-08: roadmap phase has no requirements declaration\n" +
-      "phase-requirements: PHASE-08: roadmap membership differs from traceability\n",
+      "phase-requirements: PHASE-08: roadmap membership differs from sealed requirement routes\n",
   },
 ] as const) {
   test(row.title, async (t) => {
@@ -1009,6 +1009,33 @@ for (const row of [
     });
   });
 }
+
+test("RVAL-04 scope-impact ignores content after a four-space fence pseudo-closer", async (t) => {
+  // arrange
+  const projectRoot = await createScopeImpactFixture(t);
+  const contractPath = path.join(projectRoot, ".planning/REQUIREMENTS.md");
+  const contract = await readFile(contractPath, "utf8");
+  const traceabilityRow = "| CLOSE-02 | Phase 9 | Pending |";
+  await writeFile(
+    contractPath,
+    contract.replace(
+      traceabilityRow,
+      ["```md", "hidden contract", "    ```", traceabilityRow, "```"].join("\n"),
+    ),
+  );
+
+  // act
+  const execution = runCli(projectRoot, ["scope-impact", "--check"]);
+
+  // assert
+  assert.deepStrictEqual(execution, {
+    status: 1,
+    stdout: "",
+    stderr:
+      "missing-requirement-route: CLOSE-02: traceability row is absent\n" +
+      "phase-requirements: PHASE-09: roadmap membership differs from traceability\n",
+  });
+});
 
 test("RVAL-04 scope-impact rejects a duplicate stable requirement definition", async (t) => {
   // arrange

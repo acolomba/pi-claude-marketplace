@@ -2025,11 +2025,8 @@ function fenceOpening(line) {
 }
 
 function closesFence(line, fence) {
-  const candidate = line.trim();
-  return (
-    candidate.length >= fence.width &&
-    [...candidate].every((character) => character === fence.marker)
-  );
+  const match = /^ {0,3}(`{3,}|~{3,})[ \t]*$/.exec(line);
+  return match !== null && match[1][0] === fence.marker && match[1].length >= fence.width;
 }
 
 function visibleMarkdown(markdown) {
