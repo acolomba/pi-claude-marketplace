@@ -685,16 +685,24 @@ test("shard validation rejects cross-plan claims and unreachable findings", asyn
   misplacedFinding.findings.push(foreign.findings[0]!);
   const mismatchedFile = structuredClone(shard);
   mismatchedFile.files[0]!.claimIds = [];
+  const malformedCollections = structuredClone(shard);
+  malformedCollections.sourceClaims = null as unknown as Ledger["sourceClaims"];
+  malformedCollections.findings = null as unknown as Ledger["findings"];
+  malformedCollections.files[0]!.claimIds = null as unknown as string[];
 
   // act
   const claimCodes = validateShard(misplacedClaim, assignment).map((item) => item.code);
   const findingCodes = validateShard(misplacedFinding, assignment).map((item) => item.code);
   const fileCodes = validateShard(mismatchedFile, assignment).map((item) => item.code);
+  const malformedCodes = validateShard(malformedCollections, assignment).map((item) => item.code);
 
   // assert
   assert.ok(claimCodes.includes("shard-claim-owner"));
   assert.ok(findingCodes.includes("shard-finding-links"));
   assert.ok(fileCodes.includes("shard-file-claim-links"));
+  assert.ok(malformedCodes.includes("shard-claim-owner"));
+  assert.ok(malformedCodes.includes("shard-finding-links"));
+  assert.ok(malformedCodes.includes("shard-file-claim-links"));
 });
 
 test("derives scope impact only from traced scope records", async (t) => {
