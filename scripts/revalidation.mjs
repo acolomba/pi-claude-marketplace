@@ -47,6 +47,10 @@ const SECRET_FLAG_PATTERN = /--(?:token|password|secret|authorization|api[-_]?ke
 const AUTHORIZATION_HEADER_PATTERN = /\bauthorization\s*:\s*(?:basic|bearer)\s+\S+/i;
 const ABSOLUTE_HOME_PATTERN =
   /(?:\/home\/[^/\s"'`]+|\/Users\/[^/\s"'`]+|\/root(?:\/|\b)|[A-Za-z]:[\\/]Users[\\/][^\\/\s"'`]+)/;
+const FILE_PATH_PATTERN = /^[A-Za-z0-9._/-]+$/;
+const IDENTITY_PATTERN = /^[A-Za-z0-9._/][A-Za-z0-9._/#:-]*$/;
+const PLAN_PATTERN = /^\d{2}-\d{2}$/;
+const SCOPE_ACTIONS = new Set(["keep", "move-to-evidence", "narrow/split"]);
 
 function toPosix(candidate) {
   return candidate.split(path.sep).join("/");
@@ -58,6 +62,26 @@ function violation(code, target, message) {
 
 function isObject(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function identityIsSafe(value) {
+  return typeof value === "string" && IDENTITY_PATTERN.test(value);
+}
+
+function escapeMarkdownText(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replace(/([\\`*_[\]])/g, "\\$1");
+}
+
+function markdownCode(value) {
+  return `\`${String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll("`", "&#96;")}\``;
 }
 
 function containsSensitiveEvidence(value, visited = new Set()) {
@@ -306,6 +330,11 @@ export function validateLedger(ledger, context = {}) {
   const filePaths = ledger.files.map((file) => file.path);
   for (const file of ledger.files) {
     assertSafeRelativePath(projectRoot, file.path);
+    if (!FILE_PATH_PATTERN.test(file.path)) {
+      violations.push(
+        violation("invalid-file-path-grammar", String(file.path), "file path has unsafe characters"),
+      );
+    }
   }
 
   for (const duplicate of duplicateValues(filePaths)) {
@@ -385,6 +414,12 @@ export function validateLedger(ledger, context = {}) {
     }
 
     claims.set(claim.id, claim);
+    if (!identityIsSafe(claim.id) || !identityIsSafe(claim.label)) {
+      violations.push(
+        violation("invalid-claim-identity", claim.id, "claim id and label have unsafe characters"),
+      );
+    }
+
     if (claim.id !== `${claim.filePath}#${claim.label}`) {
       violations.push(
         violation(
@@ -414,6 +449,11 @@ export function validateLedger(ledger, context = {}) {
     }
 
     findings.set(finding.id, finding);
+    if (!identityIsSafe(finding.id)) {
+      violations.push(
+        violation("invalid-finding-id", finding.id, "finding id has unsafe characters"),
+      );
+    }
   }
 
   for (const claim of claims.values()) {
@@ -433,6 +473,12 @@ export function validateLedger(ledger, context = {}) {
 
     if (!OUTCOMES.has(file.outcome)) {
       violations.push(violation("invalid-outcome", file.path, String(file.outcome)));
+    }
+
+    if (typeof file.assignedPlan !== "string" || !PLAN_PATTERN.test(file.assignedPlan)) {
+      violations.push(
+        violation("invalid-assigned-plan", file.path, String(file.assignedPlan)),
+      );
     }
 
     if (ledger.inventoryMode === "live") {
@@ -661,6 +707,14 @@ export function validateLedger(ledger, context = {}) {
       violations.push(violation("invalid-decision-id", String(decision.id), "expected MF-DEC-NN"));
     }
 
+    for (const affectedId of decision.affectedIds ?? []) {
+      if (!identityIsSafe(affectedId)) {
+        violations.push(
+          violation("invalid-affected-id", decision.id, String(affectedId)),
+        );
+      }
+    }
+
     for (const premise of decision.premiseFindingIds ?? []) {
       if (!findings.has(premise)) {
         violations.push(violation("dangling-decision-premise", decision.id, premise));
@@ -777,6 +831,12 @@ export function validateLedger(ledger, context = {}) {
     }
 
     scopeIds.add(change.id);
+    if (!identityIsSafe(change.id)) {
+      violations.push(
+        violation("invalid-scope-change-id", String(change.id), "scope change id is unsafe"),
+      );
+    }
+
     if (
       !Array.isArray(change.findingIds) ||
       change.findingIds.length === 0 ||
@@ -807,6 +867,18 @@ export function validateLedger(ledger, context = {}) {
           change.id,
           "requirementId, action, and rationale are mandatory",
         ),
+      );
+    }
+
+    if (!identityIsSafe(change.requirementId)) {
+      violations.push(
+        violation("invalid-requirement-id", change.id, String(change.requirementId)),
+      );
+    }
+
+    if (!SCOPE_ACTIONS.has(change.action)) {
+      violations.push(
+        violation("invalid-scope-action", change.id, String(change.action)),
       );
     }
   }
@@ -931,7 +1003,7 @@ export function renderRevalidation(ledger) {
       ? ["_None._"]
       : files.map(
           (file) =>
-            `- \`${file.path}\` — ${file.outcome} (${file.reviewStatus}; ${file.claimIds.length} ${file.claimIds.length === 1 ? "claim" : "claims"})`,
+            `- ${markdownCode(file.path)} — ${escapeMarkdownText(file.outcome)} (${escapeMarkdownText(file.reviewStatus)}; ${file.claimIds.length} ${file.claimIds.length === 1 ? "claim" : "claims"})`,
         )),
     "",
     "## Findings",
@@ -939,21 +1011,26 @@ export function renderRevalidation(ledger) {
     ...(findings.length === 0
       ? ["_None._"]
       : findings.map(
-          (finding) => `- \`${finding.id}\` — ${finding.evidenceStatus} → ${finding.route}`,
+          (finding) =>
+            `- ${markdownCode(finding.id)} — ${escapeMarkdownText(finding.evidenceStatus)} → ${escapeMarkdownText(finding.route)}`,
         )),
     "",
     "## Decisions",
     "",
     ...(decisions.length === 0
       ? ["_None._"]
-      : decisions.map((decision) => `- \`${decision.id}\` — ${decision.status}`)),
+      : decisions.map(
+          (decision) =>
+            `- ${markdownCode(decision.id)} — ${escapeMarkdownText(decision.status)}`,
+        )),
     "",
     "## Scope Changes",
     "",
     ...(scopeChanges.length === 0
       ? ["_None._"]
       : scopeChanges.map(
-          (change) => `- \`${change.id}\` — ${change.requirementId}: ${change.action}`,
+          (change) =>
+            `- ${markdownCode(change.id)} — ${escapeMarkdownText(change.requirementId)}: ${escapeMarkdownText(change.action)}`,
         )),
     "",
   ];
