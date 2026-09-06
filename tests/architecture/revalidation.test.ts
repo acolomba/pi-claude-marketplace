@@ -278,6 +278,20 @@ async function createCliFixture(t: TestContext): Promise<CliFixture> {
   return { projectRoot, corpusPath, ledger, shard };
 }
 
+async function createScopeImpactFixture(t: TestContext): Promise<string> {
+  const projectRoot = await mkdtemp(path.join(tmpdir(), "revalidation-scope-impact-"));
+  t.after(() => rm(projectRoot, { recursive: true, force: true }));
+  const canonicalRoot = fileURLToPath(new URL("../..", import.meta.url));
+  for (const candidate of [ledgerPath, ".planning/REQUIREMENTS.md", ".planning/ROADMAP.md"]) {
+    await mkdir(path.dirname(path.join(projectRoot, candidate)), { recursive: true });
+    await writeFile(
+      path.join(projectRoot, candidate),
+      await readFile(path.join(canonicalRoot, candidate), "utf8"),
+    );
+  }
+  return projectRoot;
+}
+
 async function writeCanonical(projectRoot: string, ledger: Ledger): Promise<void> {
   await writeFile(path.join(projectRoot, ledgerPath), `${JSON.stringify(ledger, null, 2)}\n`);
   await writeFile(path.join(projectRoot, markdownPath), renderRevalidation(ledger));
@@ -837,6 +851,156 @@ test("RVAL-04 scope-impact preserves ordinary JSON output", () => {
     status: 0,
     stdout: `${JSON.stringify(deriveScopeImpact(ledger), null, 2)}\n`,
     stderr: "",
+  });
+});
+
+test("RVAL-04 scope-impact rejects a missing requirement definition", async (t) => {
+  // arrange
+  const projectRoot = await createScopeImpactFixture(t);
+  const contractPath = path.join(projectRoot, ".planning/REQUIREMENTS.md");
+  const contract = await readFile(contractPath, "utf8");
+  await writeFile(contractPath, contract.replace(/- \[ \] \*\*PDEF-01\*\*:[\s\S]*?(?=\n- \[)/, ""));
+
+  // act
+  const execution = runCli(projectRoot, ["scope-impact", "--check"]);
+
+  // assert
+  assert.deepStrictEqual(execution, {
+    status: 1,
+    stdout: "",
+    stderr:
+      "missing-requirement-definition: PDEF-01: active definition is absent\n" +
+      "scope-after-anchor: SCOPE-REQ-PDEF-01: afterAnchor does not resolve to requirement\n",
+  });
+});
+
+test("RVAL-04 scope-impact rejects a duplicate stable requirement definition", async (t) => {
+  // arrange
+  const projectRoot = await createScopeImpactFixture(t);
+  const contractPath = path.join(projectRoot, ".planning/REQUIREMENTS.md");
+  const contract = await readFile(contractPath, "utf8");
+  await writeFile(contractPath, contract.replace("### Production Correctness\n", "### Production Correctness\n- [ ] **PDEF-01**: duplicate\n"));
+
+  // act
+  const execution = runCli(projectRoot, ["scope-impact", "--check"]);
+
+  // assert
+  assert.deepStrictEqual(execution, {
+    status: 1,
+    stdout: "",
+    stderr: "duplicate-requirement: PDEF-01: requirement is defined more than once\n",
+  });
+});
+
+test("RVAL-04 scope-impact rejects changed requirement disposition", async (t) => {
+  // arrange
+  const projectRoot = await createScopeImpactFixture(t);
+  const contractPath = path.join(projectRoot, ".planning/REQUIREMENTS.md");
+  const contract = await readFile(contractPath, "utf8");
+  await writeFile(contractPath, contract.replace("| GGAT-02 | Evidence/history (formerly Phase 7) | Evidence only |", "| GGAT-02 | Phase 7 | Pending |"));
+
+  // act
+  const execution = runCli(projectRoot, ["scope-impact", "--check"]);
+
+  // assert
+  assert.deepStrictEqual(execution, {
+    status: 1,
+    stdout: "",
+    stderr: "requirement-disposition: GGAT-02: moved requirement must be evidence only\n",
+  });
+});
+
+test("RVAL-04 scope-impact rejects a missing Phase 2-9 route", async (t) => {
+  // arrange
+  const projectRoot = await createScopeImpactFixture(t);
+  const ledger = JSON.parse(await readFile(path.join(projectRoot, ledgerPath), "utf8")) as Ledger;
+  ledger.scopeChanges = ledger.scopeChanges.filter((change) => change.id !== "SCOPE-ROUTE-PHASE-09");
+  await writeFile(path.join(projectRoot, ledgerPath), `${JSON.stringify(ledger, null, 2)}\n`);
+
+  // act
+  const execution = runCli(projectRoot, ["scope-impact", "--check"]);
+
+  // assert
+  assert.deepStrictEqual(execution, {
+    status: 1,
+    stdout: "",
+    stderr:
+      "scope-contract-count: scopeChanges: expected exactly 40 unique rows\n" +
+      "missing-scope-route: PHASE-09: scope route is absent\n",
+  });
+});
+
+test("RVAL-04 scope-impact rejects a duplicate route", async (t) => {
+  // arrange
+  const projectRoot = await createScopeImpactFixture(t);
+  const ledger = JSON.parse(await readFile(path.join(projectRoot, ledgerPath), "utf8")) as Ledger;
+  ledger.scopeChanges.push(structuredClone(ledger.scopeChanges.at(-1)!));
+  await writeFile(path.join(projectRoot, ledgerPath), `${JSON.stringify(ledger, null, 2)}\n`);
+
+  // act
+  const execution = runCli(projectRoot, ["scope-impact", "--check"]);
+
+  // assert
+  assert.deepStrictEqual(execution, {
+    status: 1,
+    stdout: "",
+    stderr:
+      "scope-contract-count: scopeChanges: expected exactly 40 unique rows\n" +
+      "duplicate-scope-contract: SCOPE-ROUTE-PHASE-09: scope row appears more than once\n",
+  });
+});
+
+test("RVAL-04 scope-impact rejects changed roadmap membership", async (t) => {
+  // arrange
+  const projectRoot = await createScopeImpactFixture(t);
+  const contractPath = path.join(projectRoot, ".planning/ROADMAP.md");
+  const contract = await readFile(contractPath, "utf8");
+  await writeFile(contractPath, contract.replace("**Requirements:** GGAT-01, GGAT-03, GGAT-04", "**Requirements:** GGAT-01, GGAT-03"));
+
+  // act
+  const execution = runCli(projectRoot, ["scope-impact", "--check"]);
+
+  // assert
+  assert.deepStrictEqual(execution, {
+    status: 1,
+    stdout: "",
+    stderr: "phase-requirements: PHASE-07: roadmap membership differs from traceability\n",
+  });
+});
+
+test("RVAL-04 scope-impact rejects phase title drift", async (t) => {
+  // arrange
+  const projectRoot = await createScopeImpactFixture(t);
+  const contractPath = path.join(projectRoot, ".planning/ROADMAP.md");
+  const contract = await readFile(contractPath, "utf8");
+  await writeFile(contractPath, contract.replace("### Phase 8: Direct Coverage", "### Phase 8: Coverage Drift"));
+
+  // act
+  const execution = runCli(projectRoot, ["scope-impact", "--check"]);
+
+  // assert
+  assert.deepStrictEqual(execution, {
+    status: 1,
+    stdout: "",
+    stderr: "scope-after-anchor: SCOPE-ROUTE-PHASE-08: afterAnchor does not resolve to phase\n",
+  });
+});
+
+test("RVAL-04 scope-impact rejects a misdirected afterAnchor", async (t) => {
+  // arrange
+  const projectRoot = await createScopeImpactFixture(t);
+  const ledger = JSON.parse(await readFile(path.join(projectRoot, ledgerPath), "utf8")) as Ledger;
+  ledger.scopeChanges[0].afterAnchor = ".planning/ROADMAP.md :: Production Correctness :: AUTH-01 — drift";
+  await writeFile(path.join(projectRoot, ledgerPath), `${JSON.stringify(ledger, null, 2)}\n`);
+
+  // act
+  const execution = runCli(projectRoot, ["scope-impact", "--check"]);
+
+  // assert
+  assert.deepStrictEqual(execution, {
+    status: 1,
+    stdout: "",
+    stderr: "scope-after-anchor: SCOPE-REQ-AUTH-01: afterAnchor does not resolve to requirement\n",
   });
 });
 
