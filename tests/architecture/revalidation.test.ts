@@ -1110,6 +1110,41 @@ test("RVAL-04 scope-impact rejects duplicate evidence history records", async (t
   });
 });
 
+for (const row of [
+  {
+    title: "RVAL-04 scope-impact rejects an evidence ID with an active definition",
+    marker: "- [ ] **GGAT-03**:",
+    insertion: "- [ ] **GGAT-02**: This ID cannot return to active scope.\n",
+    requirementId: "GGAT-02",
+    message: "evidence requirement cannot have an active definition",
+  },
+  {
+    title: "RVAL-04 scope-impact rejects an active ID with an evidence record",
+    marker: "- **GGAT-02**",
+    insertion: "- **PDEF-01**: This active ID cannot also be evidence history.\n",
+    requirementId: "PDEF-01",
+    message: "active requirement cannot have an evidence/history record",
+  },
+] as const) {
+  test(row.title, async (t) => {
+    // arrange
+    const projectRoot = await createScopeImpactFixture(t);
+    const contractPath = path.join(projectRoot, ".planning/REQUIREMENTS.md");
+    const contract = await readFile(contractPath, "utf8");
+    await writeFile(contractPath, contract.replace(row.marker, `${row.insertion}${row.marker}`));
+
+    // act
+    const execution = runCli(projectRoot, ["scope-impact", "--check"]);
+
+    // assert
+    assert.deepStrictEqual(execution, {
+      status: 1,
+      stdout: "",
+      stderr: `requirement-location: ${row.requirementId}: ${row.message}\n`,
+    });
+  });
+}
+
 test("RVAL-04 scope-impact accepts evidence history as the final contract section", async (t) => {
   // arrange
   const projectRoot = await createScopeImpactFixture(t);

@@ -2156,6 +2156,18 @@ function validateRequiredRequirementRows(requirements, rows, expectedIds, violat
       );
     }
 
+    if ((expectsHistory && hasDefinition) || (!expectsHistory && hasHistory)) {
+      violations.push(
+        violation(
+          "requirement-location",
+          requirementId,
+          expectsHistory
+            ? "evidence requirement cannot have an active definition"
+            : "active requirement cannot have an evidence/history record",
+        ),
+      );
+    }
+
     if (!requirements.dispositions.has(requirementId)) {
       violations.push(
         violation("missing-requirement-route", requirementId, "traceability row is absent"),
