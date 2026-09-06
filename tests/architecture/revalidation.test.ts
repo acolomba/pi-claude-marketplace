@@ -976,7 +976,9 @@ for (const row of [
     contract: ".planning/ROADMAP.md",
     original: "### Phase 8: Direct Coverage",
     replacement: (original: string) => `<!-- ${original} -->`,
-    expectedStderr: "missing-phase-route: PHASE-08: roadmap phase is absent\n",
+    expectedStderr:
+      "duplicate-phase-requirements: PHASE-07: roadmap phase has more than one requirements declaration\n" +
+      "missing-phase-route: PHASE-08: roadmap phase is absent\n",
   },
   {
     title: "RVAL-04 scope-impact ignores a fenced phase requirements declaration",
@@ -984,6 +986,7 @@ for (const row of [
     original: "**Requirements:** RCOV-01, RCOV-02, RCOV-03",
     replacement: (original: string) => `~~~markdown\n${original}\n~~~`,
     expectedStderr:
+      "missing-phase-requirements: PHASE-08: roadmap phase has no requirements declaration\n" +
       "phase-requirements: PHASE-08: roadmap membership differs from traceability\n",
   },
 ] as const) {
@@ -1472,6 +1475,31 @@ test("RVAL-04 scope-impact rejects duplicate traceability and phase declarations
   });
 });
 
+test("RVAL-04 scope-impact rejects conflicting requirements declarations in one phase", async (t) => {
+  // arrange
+  const projectRoot = await createScopeImpactFixture(t);
+  const contractPath = path.join(projectRoot, ".planning/ROADMAP.md");
+  const contract = await readFile(contractPath, "utf8");
+  await writeFile(
+    contractPath,
+    contract.replace(
+      "**Requirements:** GGAT-01, GGAT-03, GGAT-04",
+      "**Requirements:** GGAT-01, GGAT-03, GGAT-04\n**Requirements:** GGAT-01",
+    ),
+  );
+
+  // act
+  const execution = runCli(projectRoot, ["scope-impact", "--check"]);
+
+  // assert
+  assert.deepStrictEqual(execution, {
+    status: 1,
+    stdout: "",
+    stderr:
+      "duplicate-phase-requirements: PHASE-07: roadmap phase has more than one requirements declaration\n",
+  });
+});
+
 test("RVAL-04 scope-impact rejects a missing requirement row", async (t) => {
   // arrange
   const projectRoot = await createScopeImpactFixture(t);
@@ -1637,7 +1665,9 @@ test("RVAL-04 scope-impact rejects a phase without requirements", async (t) => {
   assert.deepStrictEqual(execution, {
     status: 1,
     stdout: "",
-    stderr: "phase-requirements: PHASE-09: roadmap membership differs from traceability\n",
+    stderr:
+      "missing-phase-requirements: PHASE-09: roadmap phase has no requirements declaration\n" +
+      "phase-requirements: PHASE-09: roadmap membership differs from traceability\n",
   });
 });
 

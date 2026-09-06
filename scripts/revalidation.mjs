@@ -2085,6 +2085,43 @@ function parseRequirementClauses(markdown) {
   };
 }
 
+function parsePhaseRequirements(id, body, violations) {
+  const declarations = [...body.matchAll(/^\*\*Requirements:\*\*[ \t]*(.*)$/gm)];
+  if (declarations.length === 0) {
+    violations.push(
+      violation("missing-phase-requirements", id, "roadmap phase has no requirements declaration"),
+    );
+    return [];
+  }
+
+  if (declarations.length > 1) {
+    violations.push(
+      violation(
+        "duplicate-phase-requirements",
+        id,
+        "roadmap phase has more than one requirements declaration",
+      ),
+    );
+  }
+
+  const requirements = declarations[0][1]
+    .split(",")
+    .map((requirement) => requirement.trim())
+    .filter((requirement) => requirement !== "");
+  const uniqueRequirements = new Set(requirements);
+  if (uniqueRequirements.size !== requirements.length) {
+    violations.push(
+      violation(
+        "duplicate-phase-requirement",
+        id,
+        "requirements declaration contains a duplicate member",
+      ),
+    );
+  }
+
+  return [...uniqueRequirements];
+}
+
 function parseRoadmapContract(markdown, violations) {
   const phases = new Map();
   const headings = [...markdown.matchAll(/^### Phase (\d+): (.+)$/gm)];
@@ -2104,11 +2141,10 @@ function parseRoadmapContract(markdown, violations) {
 
     const end = headings[index + 1]?.index ?? markdown.length;
     const body = markdown.slice(match.index + match[0].length, end);
-    const declaration = body.match(/^\*\*Requirements:\*\* (.+)$/m);
     phases.set(id, {
       number,
       title: match[2],
-      requirements: declaration === null ? [] : declaration[1].split(", "),
+      requirements: parsePhaseRequirements(id, body, violations),
     });
   }
 
