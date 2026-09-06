@@ -1132,8 +1132,8 @@ export function mergeShards(baseLedger, shards, assignment = []) {
   return {
     ...baseLedger,
     files: ordered.flatMap((shard) => shard.files),
-    sourceClaims: ordered.flatMap((shard) => shard.sourceClaims ?? []),
-    findings: ordered.flatMap((shard) => shard.findings ?? []),
+    sourceClaims: ordered.flatMap((shard) => shard.sourceClaims),
+    findings: ordered.flatMap((shard) => shard.findings),
   };
 }
 

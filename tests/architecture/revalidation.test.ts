@@ -1936,7 +1936,15 @@ test("collection fallbacks and render ordering cover empty and plural views", as
     [
       {
         plan: "01-02",
-        files: [{ ...benignLedger(firstPath).files[0]! }],
+        files: [
+          {
+            ...benignLedger(firstPath).files[0]!,
+            claimIds: [],
+            outcome: "control document",
+          },
+        ],
+        sourceClaims: [],
+        findings: [],
       } as unknown as Ledger & { plan: string },
     ],
     assignment,
