@@ -3395,6 +3395,36 @@ const FIXTURES: FixtureMap = {
       } satisfies NotificationMessage,
     },
 
+    // WR-09: the preview-tense advisory channel. `notes` is free text and
+    // carries no closed-set reason, so the row's brace stays empty and its
+    // severity stays `info` -- the sentence is about one file, not about the
+    // read. The composer reduces the walked directory to its name before the
+    // string reaches the row, which is what makes these bytes pinnable.
+    "installed-with-workflow-preview-note": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "claude-plugins-official",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: true },
+        plugin: {
+          status: "installed",
+          name: "commit-commands",
+          version: "1.2.0",
+          description: "Helpful git commit commands for everyday use.",
+          notes: [
+            'workflow script "roll.js" in "workflows" will be refused: roll.js calls ' +
+              "`Math.random`, which the workflow engine refuses as nondeterministic",
+          ],
+          componentsResolved: true,
+          components: {
+            skills: ["commit-summary"],
+            workflows: ["commit-commands:changelog"],
+          },
+        },
+      } satisfies NotificationMessage,
+    },
+
     "state-only-installed-single-scope": {
       pi: piWithBothLoaded(),
       message: {
@@ -5281,14 +5311,14 @@ test("catalog UAT: every <!-- catalog-state: --> annotation pairs byte-equal wit
   const catalog = await readFile(CATALOG_PATH, "utf8");
   const examples = loadCatalogExamples(catalog);
 
-  // Exact count, not a floor: 184 is the number of annotated examples in
+  // Exact count, not a floor: 185 is the number of annotated examples in
   // docs/output-catalog.md, and it is what stops a `loadCatalogExamples`
   // refactor from silently parsing a fraction of the corpus. Update it
   // deliberately when catalog examples are added or removed.
   assert.equal(
     examples.length,
-    184,
-    `Expected exactly 184 annotated catalog examples; found ${examples.length}. Check that the discriminator comments in docs/output-catalog.md were not lost, and update this count when examples are added.`,
+    185,
+    `Expected exactly 185 annotated catalog examples; found ${examples.length}. Check that the discriminator comments in docs/output-catalog.md were not lost, and update this count when examples are added.`,
   );
 
   const failures: Failure[] = [];

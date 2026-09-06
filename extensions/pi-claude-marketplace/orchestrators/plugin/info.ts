@@ -63,7 +63,7 @@ import {
   type MarketplaceRows,
   type Plural,
 } from "../../shared/notify-context.ts";
-import { notify } from "../../shared/notify.ts";
+import { notify, redactAbsolutePaths } from "../../shared/notify.ts";
 import { PathContainmentError, assertPathInside } from "../../shared/path-safety.ts";
 import {
   narrowProbeError,
@@ -647,6 +647,11 @@ function parseLenientHooksJson(raw: string): unknown {
  * so the discovery pass that reads the bodies is the only producer. It runs in
  * the `preview` tense here: nothing on this surface writes to disk.
  *
+ * WR-09: that one pass yields the names AND the per-file advisories, returned
+ * side by side as `notes` so no second discovery runs to produce them. `notes`
+ * is free text, already reduced and already ordered, and the caller spreads it
+ * onto the row only when non-empty.
+ *
  * SURF-01: object-literal field placement is documentation
  * only -- the renderer iterates `COMPONENT_KINDS` to enforce the
  * `["agents", "commands", "hooks", "mcp", "skills", "workflows"]` ordering.
@@ -671,12 +676,15 @@ async function composeResolvedComponents(
   },
   pluginName: string,
 ): Promise<{
-  readonly agents?: readonly string[];
-  readonly commands?: readonly string[];
-  readonly hooks?: readonly HookSummaryEntry[];
-  readonly mcp?: readonly string[];
-  readonly skills?: readonly string[];
-  readonly workflows?: readonly string[];
+  readonly components: {
+    readonly agents?: readonly string[];
+    readonly commands?: readonly string[];
+    readonly hooks?: readonly HookSummaryEntry[];
+    readonly mcp?: readonly string[];
+    readonly skills?: readonly string[];
+    readonly workflows?: readonly string[];
+  };
+  readonly notes: readonly string[];
 }> {
   const agents = await discoverComponentNames(pluginRoot, resolved.componentPaths.agents, "agents");
   const commands = await discoverComponentNames(
@@ -706,23 +714,38 @@ async function composeResolvedComponents(
       ? await readLenientHookSummary(pluginRoot)
       : await readHookSummaryEntries(pluginRoot, resolved.hooksConfigPath);
 
-  const workflows = await previewWorkflowNames(pluginRoot, resolved.componentPaths.workflows, {
+  const workflows = await previewWorkflows(pluginRoot, resolved.componentPaths.workflows, {
     pluginName,
   });
 
   return {
-    ...(agents.length > 0 && { agents }),
-    ...(commands.length > 0 && { commands }),
-    ...(hooks !== undefined && hooks.length > 0 && { hooks }),
-    ...(mcp.length > 0 && { mcp }),
-    ...(skills.length > 0 && { skills }),
-    ...(workflows.length > 0 && { workflows }),
+    components: {
+      ...(agents.length > 0 && { agents }),
+      ...(commands.length > 0 && { commands }),
+      ...(hooks !== undefined && hooks.length > 0 && { hooks }),
+      ...(mcp.length > 0 && { mcp }),
+      ...(skills.length > 0 && { skills }),
+      ...(workflows.names.length > 0 && { workflows: workflows.names }),
+    },
+    notes: workflows.warnings,
   };
 }
 
 /**
- * WFLW-04: the generated `<plugin>:<name>` of every ADMITTED script under the
- * declared workflows directories, sorted.
+ * WR-09: the advisory field, carried only when there is something to say.
+ *
+ * Every row builder spreads this rather than testing emptiness itself, so the
+ * "omit when empty" decision -- the one that keeps an unaffected row's bytes
+ * unchanged -- has a single site rather than one per builder.
+ */
+function advisoryFields(notes: readonly string[]): { notes?: readonly string[] } {
+  return notes.length > 0 ? { notes } : {};
+}
+
+/**
+ * WFLW-04 / WR-09: ONE discovery pass over the declared workflows directories,
+ * yielding the generated `<plugin>:<name>` of every ADMITTED script, sorted,
+ * beside the preview-tense advisory for every script that earned one.
  *
  * BOTH admitted arms are listed. `stem-fallback` is admitted -- an envelope is
  * written for it -- so omitting it would make this surface disagree with what
@@ -735,28 +758,37 @@ async function composeResolvedComponents(
  * enumerated from the saved directory either -- that directory is shared with
  * the user's own workflows and with every other plugin.
  *
+ * NFR-9: each advisory embeds the ABSOLUTE directory the pass walked, so every
+ * one is reduced HERE, at the composition site, the same way
+ * `surfaceDiscoveryWarnings` reduces this exact string family before it reaches
+ * a user. Two consequences follow and both are wanted: the row stops disclosing
+ * the resolved home path, and its bytes stop varying by machine.
+ *
  * NFR-10: a declared path that escapes the plugin root raises out of the
  * discovery pass, which is what the row builders' existing catch turns into
  * the not-resolved marker rather than a listing of somewhere else's contents.
  */
-async function previewWorkflowNames(
+async function previewWorkflows(
   pluginRoot: string,
   declared: readonly string[],
   opts: { readonly pluginName: string },
-): Promise<readonly string[]> {
-  const { discovered } = await discoverPluginWorkflows({
+): Promise<{ readonly names: readonly string[]; readonly warnings: readonly string[] }> {
+  const { discovered, warnings } = await discoverPluginWorkflows({
     pluginName: opts.pluginName,
     resolved: { pluginRoot, componentPaths: { workflows: declared } },
     // WR-09: a read-only surface states what WOULD happen, never what did.
     tense: "preview",
   });
 
-  return sortComponentNames(
-    discovered
-      .map((record) => record.verdict)
-      .filter((verdict) => verdict.outcome === "named" || verdict.outcome === "stem-fallback")
-      .map((verdict) => verdict.generatedName),
-  );
+  return {
+    names: sortComponentNames(
+      discovered
+        .map((record) => record.verdict)
+        .filter((verdict) => verdict.outcome === "named" || verdict.outcome === "stem-fallback")
+        .map((verdict) => verdict.generatedName),
+    ),
+    warnings: warnings.map((warning) => redactAbsolutePaths(warning)),
+  };
 }
 
 /**
@@ -1331,8 +1363,9 @@ async function buildNotInstallablePathRowFields(
 ): Promise<
   | {
       readonly reasons?: readonly ContentReason[];
+      readonly notes?: readonly string[];
       readonly componentsResolved: true;
-      readonly components: Awaited<ReturnType<typeof composeResolvedComponents>>;
+      readonly components: Awaited<ReturnType<typeof composeResolvedComponents>>["components"];
     }
   | {
       readonly reasons: readonly ContentReason[];
@@ -1348,11 +1381,12 @@ async function buildNotInstallablePathRowFields(
   // unmasked to the caller; classifying them as IO probe failures
   // would mis-route a path-escape as a transient disk error.
   try {
-    const components = await composeResolvedComponents(pluginRoot, resolved, pluginName);
+    const resolvedComponents = await composeResolvedComponents(pluginRoot, resolved, pluginName);
     return {
       ...(resolverReasons.length > 0 && { reasons: resolverReasons }),
+      ...advisoryFields(resolvedComponents.notes),
       componentsResolved: true,
-      components,
+      components: resolvedComponents.components,
     };
   } catch (err) {
     return {
@@ -1616,13 +1650,15 @@ async function buildInstalledGitRow(opts: {
         resolveGitPluginRoot: probe,
       });
       if (resolved.state === "installable") {
+        const composed = await composeResolvedComponents(presence.pluginRoot, resolved, pluginName);
         return {
           status: "installed",
           name: pluginName,
           ...(version !== undefined && { version }),
           ...(description !== undefined && { description }),
+          ...advisoryFields(composed.notes),
           componentsResolved: true,
-          components: await composeResolvedComponents(presence.pluginRoot, resolved, pluginName),
+          components: composed.components,
           ...(dependencies !== undefined && { dependencies }),
         };
       }
@@ -1708,13 +1744,15 @@ async function buildInstalledRow(opts: {
   try {
     const resolved = await resolveStrict(entry, { marketplaceRoot: mpRecord.marketplaceRoot });
     if (resolved.state === "installable") {
+      const composed = await composeResolvedComponents(resolved.pluginRoot, resolved, pluginName);
       return {
         status: "installed",
         name: pluginName,
         ...(version !== undefined && { version }),
         ...(description !== undefined && { description }),
+        ...advisoryFields(composed.notes),
         componentsResolved: true,
-        components: await composeResolvedComponents(resolved.pluginRoot, resolved, pluginName),
+        components: composed.components,
         ...(dependencies !== undefined && { dependencies }),
       };
     }
@@ -1983,15 +2021,16 @@ async function buildWarmGitNonInstallableRow(
           mcpServers: {},
         };
   try {
-    const components = await composeResolvedComponents(pluginRoot, forComponents, pluginName);
+    const composed = await composeResolvedComponents(pluginRoot, forComponents, pluginName);
     return {
       status,
       name: pluginName,
       ...(version !== undefined && { version }),
       ...(description !== undefined && { description }),
       ...(resolverReasons.length > 0 && { reasons: resolverReasons }),
+      ...advisoryFields(composed.notes),
       componentsResolved: true,
-      components,
+      components: composed.components,
     };
   } catch (err) {
     return {
@@ -2160,7 +2199,7 @@ async function buildAvailableRow(opts: {
   const { pluginName, version, description, dependencies } = opts;
 
   try {
-    const components = await composeResolvedComponents(
+    const composed = await composeResolvedComponents(
       opts.pluginRoot,
       opts.resolvedForComponents,
       pluginName,
@@ -2170,8 +2209,9 @@ async function buildAvailableRow(opts: {
       name: pluginName,
       ...(version !== undefined && { version }),
       ...(description !== undefined && { description }),
+      ...advisoryFields(composed.notes),
       componentsResolved: true,
-      components,
+      components: composed.components,
       ...(dependencies !== undefined && { dependencies }),
     };
   } catch (err) {

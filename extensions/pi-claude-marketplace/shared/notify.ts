@@ -1495,6 +1495,23 @@ export interface PluginInfoRowBase {
   readonly scope?: Scope;
   readonly description?: string;
   readonly reasons?: readonly ContentReason[];
+  /**
+   * WR-09: free-text advisory lines about individual component FILES, rendered
+   * one per entry after the component block.
+   *
+   * NOT a closed-set reason, and never carries one. A `ContentReason` is a
+   * token about the plugin as a whole and rides the row's brace; each of these
+   * sentences is about one file inside it and states what WOULD happen to that
+   * file. A row carrying them is still an ordinary successful read, so the
+   * severity is unchanged.
+   *
+   * PRECONDITION: the composer supplies these already ordered and already
+   * reduced. An absolute path inside one of them would disclose the resolved
+   * home directory (NFR-9) AND make the row's bytes vary by machine, so the
+   * composition site maps every entry through `redactAbsolutePaths`; the
+   * renderer does neither on its behalf.
+   */
+  readonly notes?: readonly string[];
 }
 
 /**
@@ -3644,6 +3661,10 @@ function notAddedReasonFor(message: MarketplaceNotAddedMessage): Reason {
  * Reasons brace via `composeReasons` with both declares-flags FALSE
  * -- info messages NEVER emit soft-dep markers.
  *
+ * WR-09: `notes` renders LAST -- after the component block and after any
+ * `dependencies:` line -- as one `    note: <text>` line per entry. A row that
+ * carries none is byte-unchanged.
+ *
  * SORT PRECONDITION: per-kind arrays and `dependencies` MUST be
  * pre-sorted at message construction. The renderer does not sort.
  *
@@ -3689,6 +3710,13 @@ function renderPluginInfo(message: PluginInfoMessage, probe: SoftDepStatus): str
 
     default:
       assertNever(plugin);
+  }
+
+  // WR-09: per-file advisories LAST, after every component line and after the
+  // `dependencies:` line, one per entry in the order the composer supplied.
+  // The label is a fixed token: the byte form is pinned by the output catalog.
+  for (const note of plugin.notes ?? []) {
+    lines.push(`    note: ${note}`);
   }
 
   return lines.join("\n");
