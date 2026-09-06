@@ -95,8 +95,8 @@ interface RevalidationApi {
   enumerateCorpus: (projectRoot: string) => string[];
   validateLedger: (
     ledger: unknown,
-    context: {
-      projectRoot: string;
+    context?: {
+      projectRoot?: string;
       expectedPaths: string[];
       allowIncomplete?: boolean;
       allowInconclusive?: boolean;
@@ -129,8 +129,8 @@ interface RevalidationApi {
     },
   ) => void;
   main: (
-    args: string[],
-    runtime: {
+    args?: string[],
+    runtime?: {
       stdout: { write: (value: string) => boolean };
       stderr: { write: (value: string) => boolean };
       exitCode?: number;
@@ -1086,14 +1086,15 @@ for (const destination of [ledgerPath, markdownPath]) {
 
     // act & assert
     assert.throws(
-      () =>
-        { publishRevalidation(fixture.projectRoot, "new json\n", "new markdown\n", {
+      () => {
+        publishRevalidation(fixture.projectRoot, "new json\n", "new markdown\n", {
           afterPublish(publishedPath) {
             if (publishedPath === destination) {
               throw new Error(`injected failure after ${destination}`);
             }
           },
-        }); },
+        });
+      },
       new RegExp(`injected failure after ${destination.replaceAll(".", "\\.")}`),
     );
     assert.deepStrictEqual(await destinationBytes(fixture.projectRoot), before);
@@ -1512,7 +1513,9 @@ test("filesystem guards reject missing, non-directory, and directory targets", a
 
   const emptyRoot = await mkdtemp(path.join(tmpdir(), "revalidation-missing-parent-"));
   t.after(() => rm(emptyRoot, { recursive: true, force: true }));
-  assert.throws(() => { publishRevalidation(emptyRoot, "{}\n", "markdown\n"); }, /ENOENT/);
+  assert.throws(() => {
+    publishRevalidation(emptyRoot, "{}\n", "markdown\n");
+  }, /ENOENT/);
 });
 
 test("control routes, superseded files, and duplicate findings remain explicit", async (t) => {
@@ -1561,10 +1564,9 @@ for (const lockContents of ["{", `${JSON.stringify({ pid: process.pid })}\n`]) {
     await writeFile(lockPath, lockContents);
 
     // act & assert
-    assert.throws(
-      () => { publishRevalidation(fixture.projectRoot, "{}\n", "markdown\n"); },
-      /publish lock is malformed|publish is already running/,
-    );
+    assert.throws(() => {
+      publishRevalidation(fixture.projectRoot, "{}\n", "markdown\n");
+    }, /publish lock is malformed|publish is already running/);
   });
 }
 
@@ -1591,17 +1593,15 @@ test("publish cleans staged files when staging fails", async (t) => {
   const fixture = await createCliFixture(t);
 
   // act & assert
-  assert.throws(
-    () =>
-      { publishRevalidation(fixture.projectRoot, "{}\n", "markdown\n", {
-        beforeStage(destination) {
-          if (destination === markdownPath) {
-            throw new Error("injected staging failure");
-          }
-        },
-      }); },
-    /injected staging failure/,
-  );
+  assert.throws(() => {
+    publishRevalidation(fixture.projectRoot, "{}\n", "markdown\n", {
+      beforeStage(destination) {
+        if (destination === markdownPath) {
+          throw new Error("injected staging failure");
+        }
+      },
+    });
+  }, /injected staging failure/);
 });
 
 test("atomic journal writes remove their temporary file after rename failure", async (t) => {
@@ -1610,15 +1610,13 @@ test("atomic journal writes remove their temporary file after rename failure", a
   const journalPath = path.join(fixture.projectRoot, phaseRoot, ".publish-journal.json");
 
   // act & assert
-  assert.throws(
-    () =>
-      { publishRevalidation(fixture.projectRoot, "{}\n", "markdown\n", {
-        afterStage() {
-          mkdirSync(journalPath);
-        },
-      }); },
-    /EISDIR|ENOTEMPTY|directory/,
-  );
+  assert.throws(() => {
+    publishRevalidation(fixture.projectRoot, "{}\n", "markdown\n", {
+      afterStage() {
+        mkdirSync(journalPath);
+      },
+    });
+  }, /EISDIR|ENOTEMPTY|directory/);
 });
 
 test("publish recovery rejects malformed journals and non-file transaction paths", async (t) => {
@@ -1628,10 +1626,9 @@ test("publish recovery rejects malformed journals and non-file transaction paths
   await writeFile(journalPath, "{}\n");
 
   // act & assert
-  assert.throws(
-    () => { publishRevalidation(fixture.projectRoot, "{}\n", "markdown\n"); },
-    /publish journal is malformed/,
-  );
+  assert.throws(() => {
+    publishRevalidation(fixture.projectRoot, "{}\n", "markdown\n");
+  }, /publish journal is malformed/);
   await rm(journalPath);
   const stagedPath = `${ledgerPath}.stage-old`;
   await mkdir(path.join(fixture.projectRoot, stagedPath));
@@ -1649,10 +1646,9 @@ test("publish recovery rejects malformed journals and non-file transaction paths
       ],
     })}\n`,
   );
-  assert.throws(
-    () => { publishRevalidation(fixture.projectRoot, "{}\n", "markdown\n"); },
-    /write target must be a regular file/,
-  );
+  assert.throws(() => {
+    publishRevalidation(fixture.projectRoot, "{}\n", "markdown\n");
+  }, /write target must be a regular file/);
 });
 
 test("publish recovery completes both staged rollback and published cleanup", async (t) => {
@@ -1710,19 +1706,17 @@ test("publish retains its journal when rollback also fails", async (t) => {
   const ledgerDestination = path.join(fixture.projectRoot, ledgerPath);
 
   // act & assert
-  assert.throws(
-    () =>
-      { publishRevalidation(fixture.projectRoot, "new\n", "new markdown\n", {
-        afterPublish(destination) {
-          if (destination === ledgerPath) {
-            rmSync(ledgerDestination);
-            mkdirSync(ledgerDestination);
-            throw new Error("publish failed");
-          }
-        },
-      }); },
-    AggregateError,
-  );
+  assert.throws(() => {
+    publishRevalidation(fixture.projectRoot, "new\n", "new markdown\n", {
+      afterPublish(destination) {
+        if (destination === ledgerPath) {
+          rmSync(ledgerDestination);
+          mkdirSync(ledgerDestination);
+          throw new Error("publish failed");
+        }
+      },
+    });
+  }, AggregateError);
 });
 
 test("collection fallbacks and render ordering cover empty and plural views", async (t) => {
@@ -1844,7 +1838,9 @@ test("array evidence, missing dossier premises, default roots, and CLI error val
     ),
   );
   assert.throws(() => buildDecisionDossier(dossierLedger, "MF-DEC-01"), /unresolved premises/);
-  assert.throws(() => { main(["unknown"], process); }, /command must be/);
+  assert.throws(() => {
+    main(["unknown"]);
+  }, /command must be/);
   reportCliError("plain failure", runtime);
   reportCliError(new Error("error failure"), runtime);
   assert.deepStrictEqual(stderr, ["plain failure\n", "error failure\n"]);
@@ -1861,4 +1857,117 @@ test("array evidence, missing dossier premises, default roots, and CLI error val
     "--allow-pending-decisions",
   ]);
   assert.strictEqual(merged.status, 1);
+});
+
+test("refactored validation passes retain negative cross-link and live assignment cases", async (t) => {
+  // arrange
+  const { projectRoot, corpusPath } = await corpusFixture(t);
+  const missingAssignment = benignLedger(corpusPath);
+  missingAssignment.inventoryMode = "live";
+  const wrongAssignment = benignLedger(corpusPath);
+  wrongAssignment.inventoryMode = "live";
+  const brokenFinding = benignLedger(corpusPath);
+  brokenFinding.findings[0]!.claimIds = ["MISSING"];
+  brokenFinding.findings[0]!.sourceRefs = [];
+  const brokenDecision = benignLedger(corpusPath);
+  brokenDecision.decisions = [
+    {
+      ...pendingDecisions()[0]!,
+      status: "resolved",
+      premiseFindingIds: ["FINDING-1"],
+      proof: "proof",
+      options: null as unknown as string[],
+      selectedOption: "missing",
+      rejectedOptions: [],
+      affectedIds: ["FINDING-1"],
+      recommendation: "recommendation",
+      downstreamConsequences: "consequence",
+    },
+  ];
+  const brokenScope = benignLedger(corpusPath);
+  brokenScope.scopeChanges = [
+    {
+      id: "bad id",
+      requirementId: "REQ-1",
+      action: "keep",
+      findingIds: ["FINDING-1"],
+      decisionIds: [],
+      rationale: "trace",
+    },
+  ];
+  const nullishCollections = benignLedger(corpusPath);
+  nullishCollections.findings[0]!.claimIds = null as unknown as string[];
+  nullishCollections.findings[0]!.sourceRefs =
+    null as unknown as Ledger["findings"][number]["sourceRefs"];
+  nullishCollections.findings[0]!.testRefs =
+    null as unknown as Ledger["findings"][number]["testRefs"];
+  nullishCollections.decisions = [
+    {
+      ...pendingDecisions()[0]!,
+      id: undefined as unknown as string,
+      status: "resolved",
+      premiseFindingIds: undefined as unknown as string[],
+      proof: "proof",
+      options: null as unknown as string[],
+      selectedOption: "missing",
+      rejectedOptions: [],
+      affectedIds: undefined as unknown as string[],
+      recommendation: "recommendation",
+      downstreamConsequences: "consequence",
+    },
+  ];
+
+  // act
+  const missingCodes = new Set(
+    validateLedger(missingAssignment, { projectRoot, expectedPaths: [corpusPath] }).map(
+      (item) => item.code,
+    ),
+  );
+  const wrongCodes = new Set(
+    validateLedger(wrongAssignment, {
+      projectRoot,
+      expectedPaths: [corpusPath],
+      assignment: [{ ordinal: 1, plan: "01-99", bytes: 1, path: corpusPath }],
+    }).map((item) => item.code),
+  );
+  const findingCodes = new Set(
+    validateLedger(brokenFinding, { projectRoot, expectedPaths: [corpusPath] }).map(
+      (item) => item.code,
+    ),
+  );
+  const decisionCodes = new Set(
+    validateLedger(brokenDecision, { projectRoot, expectedPaths: [corpusPath] }).map(
+      (item) => item.code,
+    ),
+  );
+  const scopeCodes = new Set(
+    validateLedger(brokenScope, { projectRoot, expectedPaths: [corpusPath] }).map(
+      (item) => item.code,
+    ),
+  );
+  const nullishCodes = new Set(
+    validateLedger(nullishCollections, { projectRoot, expectedPaths: [corpusPath] }).map(
+      (item) => item.code,
+    ),
+  );
+  const emptyLedger: Ledger = {
+    version: 1,
+    inventoryMode: "fixture",
+    files: [],
+    sourceClaims: [],
+    findings: [],
+    decisions: [],
+    scopeChanges: [],
+  };
+
+  // assert
+  assert.ok(missingCodes.has("missing-assignment-row"));
+  assert.ok(wrongCodes.has("assigned-plan"));
+  assert.ok(findingCodes.has("dangling-finding-claim"));
+  assert.ok(findingCodes.has("missing-references"));
+  assert.ok(decisionCodes.has("incomplete-decision"));
+  assert.ok(scopeCodes.has("invalid-scope-change-id"));
+  assert.ok(nullishCodes.has("invalid-decision-id"));
+  assert.ok(nullishCodes.has("missing-references"));
+  assert.deepStrictEqual(validateLedger(emptyLedger, { expectedPaths: [] }), []);
 });

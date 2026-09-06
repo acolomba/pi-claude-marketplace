@@ -15,8 +15,6 @@ import {
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-/* eslint-disable sonarjs/cognitive-complexity */
-
 const DEFAULT_ROOT = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const CORPUS_ROOT = ".planning/reviews/unit-test-adversarial";
 const PHASE_ROOT = ".planning/phases/01-live-evidence-revalidation";
@@ -278,29 +276,21 @@ function terminalFinding(finding, findings) {
   return target !== undefined && target.evidenceStatus !== "inconclusive";
 }
 
-// Ledger validation intentionally centralizes cross-collection invariants so one
-// deterministic pass can report all actionable violations together.
-// fallow-ignore-next-line complexity -- one pass must accumulate every linked-ledger violation deterministically.
-export function validateLedger(ledger, context = {}) {
+const LEDGER_COLLECTIONS = ["files", "sourceClaims", "findings", "decisions", "scopeChanges"];
+
+function assertLedgerShape(ledger) {
   if (!isObject(ledger)) {
     throw new TypeError("ledger must be an object");
   }
 
-  const projectRoot = context.projectRoot ?? DEFAULT_ROOT;
-  const expectedPaths = context.expectedPaths ?? enumerateCorpus(projectRoot);
-  const allowIncomplete = context.allowIncomplete ?? false;
-  const allowInconclusive = context.allowInconclusive ?? false;
-  const allowPendingDecisions = context.allowPendingDecisions ?? false;
-  const requireLive = context.requireLive ?? false;
-  const assignment = context.assignment ?? [];
-  const decisionId = context.decisionId;
-  const violations = [];
-  for (const collection of ["files", "sourceClaims", "findings", "decisions", "scopeChanges"]) {
+  for (const collection of LEDGER_COLLECTIONS) {
     if (!Array.isArray(ledger[collection])) {
       throw new TypeError(`ledger.${collection} must be an array`);
     }
   }
+}
 
+function validateSchema(ledger, requireLive, violations) {
   if (!SUPPORTED_VERSIONS.has(ledger.version)) {
     violations.push(violation("invalid-version", "version", String(ledger.version)));
   }
@@ -314,7 +304,53 @@ export function validateLedger(ledger, context = {}) {
       violation("canonical-inventory-mode", "inventoryMode", "canonical ledger must use live mode"),
     );
   }
+}
 
+function validateLiveInventoryCounts(ledger, expectedPaths, violations) {
+  if (expectedPaths.length !== 110 || ledger.files.length !== 110) {
+    violations.push(
+      violation(
+        "inventory-count",
+        "files",
+        `live inventory must contain exactly 110 paths; found ${ledger.files.length}`,
+      ),
+    );
+  }
+
+  const categoryCounts = Object.fromEntries(
+    [...CATEGORIES].map((category) => [
+      category,
+      ledger.files.filter((file) => file.category === category).length,
+    ]),
+  );
+  const actualCategoryCounts = [
+    categoryCounts["first-pass"],
+    categoryCounts.adversarial,
+    categoryCounts.control,
+  ];
+  if (JSON.stringify(actualCategoryCounts) !== JSON.stringify([45, 58, 7])) {
+    violations.push(
+      violation(
+        "category-count",
+        "files",
+        `live inventory must contain 45 first-pass, 58 adversarial, and 7 control files; found ${categoryCounts["first-pass"]}/${categoryCounts.adversarial}/${categoryCounts.control}`,
+      ),
+    );
+  }
+
+  const actualEvidenceCounts = [ledger.sourceClaims.length, ledger.findings.length];
+  if (JSON.stringify(actualEvidenceCounts) !== JSON.stringify([2_897, 2_437])) {
+    violations.push(
+      violation(
+        "evidence-count",
+        "ledger",
+        `live evidence must contain 2897 claims and 2437 findings; found ${ledger.sourceClaims.length}/${ledger.findings.length}`,
+      ),
+    );
+  }
+}
+
+function validateInventory(ledger, projectRoot, expectedPaths, violations) {
   const filePaths = ledger.files.map((file) => file.path);
   for (const file of ledger.files) {
     assertSafeRelativePath(projectRoot, file.path);
@@ -347,51 +383,14 @@ export function validateLedger(ledger, context = {}) {
     violations.push(violation("extra-files", "files", extra.join(", ")));
   }
 
-  if (
-    ledger.inventoryMode === "live" &&
-    (expectedPaths.length !== 110 || ledger.files.length !== 110)
-  ) {
-    violations.push(
-      violation(
-        "inventory-count",
-        "files",
-        `live inventory must contain exactly 110 paths; found ${ledger.files.length}`,
-      ),
-    );
-  }
-
   if (ledger.inventoryMode === "live") {
-    const categoryCounts = Object.fromEntries(
-      [...CATEGORIES].map((category) => [
-        category,
-        ledger.files.filter((file) => file.category === category).length,
-      ]),
-    );
-    if (
-      categoryCounts["first-pass"] !== 45 ||
-      categoryCounts.adversarial !== 58 ||
-      categoryCounts.control !== 7
-    ) {
-      violations.push(
-        violation(
-          "category-count",
-          "files",
-          `live inventory must contain 45 first-pass, 58 adversarial, and 7 control files; found ${categoryCounts["first-pass"]}/${categoryCounts.adversarial}/${categoryCounts.control}`,
-        ),
-      );
-    }
-
-    if (ledger.sourceClaims.length !== 2_897 || ledger.findings.length !== 2_437) {
-      violations.push(
-        violation(
-          "evidence-count",
-          "ledger",
-          `live evidence must contain 2897 claims and 2437 findings; found ${ledger.sourceClaims.length}/${ledger.findings.length}`,
-        ),
-      );
-    }
+    validateLiveInventoryCounts(ledger, expectedPaths, violations);
   }
 
+  return filePaths;
+}
+
+function collectClaims(ledger, filePaths, violations) {
   const claims = new Map();
   for (const claim of ledger.sourceClaims) {
     if (!isObject(claim) || typeof claim.id !== "string") {
@@ -427,6 +426,10 @@ export function validateLedger(ledger, context = {}) {
     }
   }
 
+  return claims;
+}
+
+function collectFindings(ledger, violations) {
   const findings = new Map();
   for (const finding of ledger.findings) {
     if (!isObject(finding) || typeof finding.id !== "string") {
@@ -448,202 +451,231 @@ export function validateLedger(ledger, context = {}) {
     }
   }
 
-  for (const claim of claims.values()) {
-    if (!findings.has(claim.findingId)) {
-      violations.push(violation("dangling-claim-finding", claim.id, String(claim.findingId)));
-    }
+  return findings;
+}
+
+function validateLiveFile(file, assignment, violations) {
+  const assignmentRow = assignment.find((row) => row.path === file.path);
+  if (!assignmentRow) {
+    violations.push(
+      violation("missing-assignment-row", file.path, "live file is absent from assignment"),
+    );
+  } else if (file.assignedPlan !== assignmentRow.plan) {
+    violations.push(
+      violation(
+        "assigned-plan",
+        file.path,
+        `expected ${assignmentRow.plan}; found ${String(file.assignedPlan)}`,
+      ),
+    );
   }
 
+  const expectedCategory = categoryForPath(file.path);
+  if (file.category !== expectedCategory) {
+    violations.push(
+      violation(
+        "file-category",
+        file.path,
+        `expected ${expectedCategory}; found ${String(file.category)}`,
+      ),
+    );
+  }
+}
+
+function validateFile(file, state, violations) {
+  if (!CATEGORIES.has(file.category)) {
+    violations.push(violation("invalid-category", file.path, String(file.category)));
+  }
+
+  if (!REVIEW_STATUSES.has(file.reviewStatus)) {
+    violations.push(violation("invalid-review-status", file.path, String(file.reviewStatus)));
+  }
+
+  if (!OUTCOMES.has(file.outcome)) {
+    violations.push(violation("invalid-outcome", file.path, String(file.outcome)));
+  }
+
+  if (typeof file.assignedPlan !== "string" || !PLAN_PATTERN.test(file.assignedPlan)) {
+    violations.push(violation("invalid-assigned-plan", file.path, String(file.assignedPlan)));
+  }
+
+  if (state.inventoryMode === "live") {
+    validateLiveFile(file, state.assignment, violations);
+  }
+
+  const linkedClaims = [...state.claims.values()].filter((claim) => claim.filePath === file.path);
+  const actualIds = linkedClaims.map((claim) => claim.id).sort();
+  const declaredIds = Array.isArray(file.claimIds) ? [...file.claimIds].sort() : [];
+  if (JSON.stringify(actualIds) !== JSON.stringify(declaredIds)) {
+    violations.push(
+      violation("file-claim-links", file.path, "declared claimIds do not match sourceClaims"),
+    );
+  }
+
+  const derived = expectedOutcome(file, linkedClaims, state.findings);
+  if (file.outcome !== derived) {
+    violations.push(violation("derived-outcome", file.path, `expected ${derived}`));
+  }
+
+  if (
+    !state.allowIncomplete &&
+    file.reviewStatus !== "complete" &&
+    file.reviewStatus !== "superseded"
+  ) {
+    violations.push(violation("incomplete-file", file.path, "file review is not complete"));
+  }
+}
+
+function validateFiles(ledger, state, violations) {
   for (const file of ledger.files) {
-    if (!CATEGORIES.has(file.category)) {
-      violations.push(violation("invalid-category", file.path, String(file.category)));
-    }
+    validateFile(file, state, violations);
+  }
+}
 
-    if (!REVIEW_STATUSES.has(file.reviewStatus)) {
-      violations.push(violation("invalid-review-status", file.path, String(file.reviewStatus)));
-    }
-
-    if (!OUTCOMES.has(file.outcome)) {
-      violations.push(violation("invalid-outcome", file.path, String(file.outcome)));
-    }
-
-    if (typeof file.assignedPlan !== "string" || !PLAN_PATTERN.test(file.assignedPlan)) {
-      violations.push(violation("invalid-assigned-plan", file.path, String(file.assignedPlan)));
-    }
-
-    if (ledger.inventoryMode === "live") {
-      const assignmentRow = assignment.find((row) => row.path === file.path);
-      if (!assignmentRow) {
-        violations.push(
-          violation("missing-assignment-row", file.path, "live file is absent from assignment"),
-        );
-      } else if (file.assignedPlan !== assignmentRow.plan) {
-        violations.push(
-          violation(
-            "assigned-plan",
-            file.path,
-            `expected ${assignmentRow.plan}; found ${String(file.assignedPlan)}`,
-          ),
-        );
-      }
-
-      const expectedCategory = categoryForPath(file.path);
-      if (file.category !== expectedCategory) {
-        violations.push(
-          violation(
-            "file-category",
-            file.path,
-            `expected ${expectedCategory}; found ${String(file.category)}`,
-          ),
-        );
-      }
-    }
-
-    const linkedClaims = [...claims.values()].filter((claim) => claim.filePath === file.path);
-    const actualIds = linkedClaims.map((claim) => claim.id).sort();
-    const declaredIds = Array.isArray(file.claimIds) ? [...file.claimIds].sort() : [];
-    if (JSON.stringify(actualIds) !== JSON.stringify(declaredIds)) {
-      violations.push(
-        violation("file-claim-links", file.path, "declared claimIds do not match sourceClaims"),
-      );
-    }
-
-    const derived = expectedOutcome(file, linkedClaims, findings);
-    if (file.outcome !== derived) {
-      violations.push(violation("derived-outcome", file.path, `expected ${derived}`));
-    }
-
-    if (
-      !allowIncomplete &&
-      file.reviewStatus !== "complete" &&
-      file.reviewStatus !== "superseded"
-    ) {
-      violations.push(violation("incomplete-file", file.path, "file review is not complete"));
-    }
+function validateFindingStatus(finding, findings, violations) {
+  if (!STATUSES.has(finding.evidenceStatus)) {
+    violations.push(
+      violation("invalid-evidence-status", finding.id, String(finding.evidenceStatus)),
+    );
   }
 
-  for (const finding of findings.values()) {
-    if (!STATUSES.has(finding.evidenceStatus)) {
-      violations.push(
-        violation("invalid-evidence-status", finding.id, String(finding.evidenceStatus)),
-      );
-    }
+  if (!routeIsValid(finding.route)) {
+    violations.push(violation("invalid-route", finding.id, String(finding.route)));
+  }
 
-    if (!routeIsValid(finding.route)) {
-      violations.push(violation("invalid-route", finding.id, String(finding.route)));
+  if (finding.evidenceStatus === "duplicate") {
+    if (typeof finding.duplicateOf !== "string" || !findings.has(finding.duplicateOf)) {
+      violations.push(violation("dangling-duplicate", finding.id, String(finding.duplicateOf)));
     }
+  } else if (finding.duplicateOf !== null) {
+    violations.push(
+      violation("invalid-duplicate-link", finding.id, "non-duplicate finding must use null"),
+    );
+  }
+}
 
-    if (finding.evidenceStatus === "duplicate") {
-      if (typeof finding.duplicateOf !== "string" || !findings.has(finding.duplicateOf)) {
-        violations.push(violation("dangling-duplicate", finding.id, String(finding.duplicateOf)));
-      }
-    } else if (finding.duplicateOf !== null) {
-      violations.push(
-        violation("invalid-duplicate-link", finding.id, "non-duplicate finding must use null"),
-      );
+function validateFindingClaims(finding, claims, violations) {
+  const expectedClaimIds = [...claims.values()]
+    .filter((claim) => claim.findingId === finding.id)
+    .map((claim) => claim.id)
+    .sort();
+  const declaredClaimIds = Array.isArray(finding.claimIds) ? [...finding.claimIds].sort() : [];
+  if (JSON.stringify(expectedClaimIds) !== JSON.stringify(declaredClaimIds)) {
+    violations.push(
+      violation("finding-claim-links", finding.id, "declared claimIds do not match sourceClaims"),
+    );
+  }
+
+  for (const claimId of finding.claimIds ?? []) {
+    if (!claims.has(claimId)) {
+      violations.push(violation("dangling-finding-claim", finding.id, claimId));
     }
+  }
+}
 
-    const expectedClaimIds = [...claims.values()]
-      .filter((claim) => claim.findingId === finding.id)
-      .map((claim) => claim.id)
-      .sort();
-    const declaredClaimIds = Array.isArray(finding.claimIds) ? [...finding.claimIds].sort() : [];
-    if (JSON.stringify(expectedClaimIds) !== JSON.stringify(declaredClaimIds)) {
-      violations.push(
-        violation("finding-claim-links", finding.id, "declared claimIds do not match sourceClaims"),
-      );
-    }
+function validateFindingReferences(finding, projectRoot, violations) {
+  for (const reference of finding.sourceRefs ?? []) {
+    validateReference(reference, projectRoot, finding.id, violations);
+  }
 
-    for (const claimId of finding.claimIds ?? []) {
-      if (!claims.has(claimId)) {
-        violations.push(violation("dangling-finding-claim", finding.id, claimId));
-      }
-    }
+  for (const reference of finding.testRefs ?? []) {
+    validateReference(reference, projectRoot, finding.id, violations);
+  }
 
-    for (const reference of finding.sourceRefs ?? []) {
-      validateReference(reference, projectRoot, finding.id, violations);
-    }
+  if (
+    !Array.isArray(finding.sourceRefs) ||
+    finding.sourceRefs.length === 0 ||
+    !Array.isArray(finding.testRefs) ||
+    finding.testRefs.length === 0
+  ) {
+    violations.push(
+      violation("missing-references", finding.id, "sourceRefs and testRefs are mandatory"),
+    );
+  }
+}
 
-    for (const reference of finding.testRefs ?? []) {
-      validateReference(reference, projectRoot, finding.id, violations);
-    }
+function validateEvidenceShape(finding, violations) {
+  const validation = finding.validation;
+  if (!isObject(validation) || !METHODS.has(validation.method)) {
+    violations.push(
+      violation("invalid-validation", finding.id, "validation method is missing or invalid"),
+    );
+    return;
+  }
 
-    if (
-      !Array.isArray(finding.sourceRefs) ||
-      finding.sourceRefs.length === 0 ||
-      !Array.isArray(finding.testRefs) ||
-      finding.testRefs.length === 0
-    ) {
-      violations.push(
-        violation("missing-references", finding.id, "sourceRefs and testRefs are mandatory"),
-      );
-    }
+  if (
+    validation.method === "static-proof" &&
+    (typeof validation.tool !== "string" || typeof validation.observed !== "string")
+  ) {
+    violations.push(
+      violation("incomplete-validation", finding.id, "static proof requires tool and observed"),
+    );
+  }
 
-    const validation = finding.validation;
-    if (!isObject(validation) || !METHODS.has(validation.method)) {
-      violations.push(
-        violation("invalid-validation", finding.id, "validation method is missing or invalid"),
-      );
-    } else if (validation.method === "static-proof") {
-      if (typeof validation.tool !== "string" || typeof validation.observed !== "string") {
-        violations.push(
-          violation("incomplete-validation", finding.id, "static proof requires tool and observed"),
-        );
-      }
-    } else if (
-      typeof validation.command !== "string" ||
+  if (
+    validation.method !== "static-proof" &&
+    (typeof validation.command !== "string" ||
       !Number.isInteger(validation.exitCode) ||
-      typeof validation.observed !== "string"
-    ) {
-      violations.push(
-        violation(
-          "incomplete-validation",
-          finding.id,
-          "probe requires command, exitCode, and observed",
-        ),
-      );
-    }
-
-    if (isObject(validation) && METHODS.has(validation.method)) {
-      const permittedFields = permittedValidationFields();
-      const unexpectedFields = Object.keys(validation).filter(
-        (field) => !permittedFields.has(field),
-      );
-      if (unexpectedFields.length > 0) {
-        violations.push(
-          violation("unexpected-validation-field", finding.id, unexpectedFields.sort().join(", ")),
-        );
-      }
-    }
-
-    if (containsSensitiveEvidence(validation)) {
-      violations.push(
-        violation(
-          "sensitive-evidence",
-          finding.id,
-          "validation evidence contains sensitive material",
-        ),
-      );
-    }
-
-    if (
-      typeof finding.rationale !== "string" ||
-      finding.rationale.trim() === "" ||
-      typeof finding.destination !== "string" ||
-      finding.destination.trim() === ""
-    ) {
-      violations.push(
-        violation("incomplete-finding", finding.id, "rationale and destination are mandatory"),
-      );
-    }
-
-    if (!allowInconclusive && finding.evidenceStatus === "inconclusive") {
-      violations.push(
-        violation("inconclusive-finding", finding.id, "inconclusive evidence blocks completion"),
-      );
-    }
+      typeof validation.observed !== "string")
+  ) {
+    violations.push(
+      violation(
+        "incomplete-validation",
+        finding.id,
+        "probe requires command, exitCode, and observed",
+      ),
+    );
   }
 
+  const permittedFields = permittedValidationFields();
+  const unexpectedFields = Object.keys(validation).filter((field) => !permittedFields.has(field));
+  if (unexpectedFields.length > 0) {
+    violations.push(
+      violation("unexpected-validation-field", finding.id, unexpectedFields.sort().join(", ")),
+    );
+  }
+}
+
+function validateFindingEvidence(finding, allowInconclusive, violations) {
+  validateEvidenceShape(finding, violations);
+  if (containsSensitiveEvidence(finding.validation)) {
+    violations.push(
+      violation(
+        "sensitive-evidence",
+        finding.id,
+        "validation evidence contains sensitive material",
+      ),
+    );
+  }
+
+  if (
+    typeof finding.rationale !== "string" ||
+    finding.rationale.trim() === "" ||
+    typeof finding.destination !== "string" ||
+    finding.destination.trim() === ""
+  ) {
+    violations.push(
+      violation("incomplete-finding", finding.id, "rationale and destination are mandatory"),
+    );
+  }
+
+  if (!allowInconclusive && finding.evidenceStatus === "inconclusive") {
+    violations.push(
+      violation("inconclusive-finding", finding.id, "inconclusive evidence blocks completion"),
+    );
+  }
+}
+
+function validateFindings(findings, state, violations) {
+  for (const finding of findings.values()) {
+    validateFindingStatus(finding, findings, violations);
+    validateFindingClaims(finding, state.claims, violations);
+    validateFindingReferences(finding, state.projectRoot, violations);
+    validateFindingEvidence(finding, state.allowInconclusive, violations);
+  }
+}
+
+function validateDuplicateCycles(findings, violations) {
   for (const finding of findings.values()) {
     const visited = new Set([finding.id]);
     let cursor = finding;
@@ -657,9 +689,136 @@ export function validateLedger(ledger, context = {}) {
       cursor = findings.get(cursor.duplicateOf);
     }
   }
+}
 
-  const decisionIds = duplicateValues(ledger.decisions.map((decision) => decision.id));
-  for (const id of decisionIds) {
+function validateCrossLinks(claims, findings, violations) {
+  for (const claim of claims.values()) {
+    if (!findings.has(claim.findingId)) {
+      violations.push(violation("dangling-claim-finding", claim.id, String(claim.findingId)));
+    }
+  }
+
+  validateDuplicateCycles(findings, violations);
+}
+
+function validateDecisionOptions(decision, violations) {
+  if (!Array.isArray(decision.options)) {
+    return;
+  }
+
+  const duplicateOptions = duplicateValues(decision.options);
+  if (duplicateOptions.length > 0) {
+    violations.push(
+      violation("duplicate-decision-option", decision.id, duplicateOptions.join(", ")),
+    );
+  }
+
+  if (!decision.options.includes(decision.selectedOption)) {
+    violations.push(
+      violation("invalid-selected-option", decision.id, "selectedOption must be one of options"),
+    );
+  }
+
+  if (!Array.isArray(decision.rejectedOptions)) {
+    return;
+  }
+
+  const duplicateRejectedOptions = duplicateValues(decision.rejectedOptions);
+  if (duplicateRejectedOptions.length > 0) {
+    violations.push(
+      violation("duplicate-rejected-option", decision.id, duplicateRejectedOptions.join(", ")),
+    );
+  }
+
+  if (
+    decision.rejectedOptions.some(
+      (option) => option === decision.selectedOption || !decision.options.includes(option),
+    )
+  ) {
+    violations.push(
+      violation(
+        "invalid-rejected-option",
+        decision.id,
+        "rejectedOptions must contain only unselected options",
+      ),
+    );
+  }
+}
+
+function validateResolvedDecision(decision, findings, violations) {
+  const prerequisites = (decision.premiseFindingIds ?? []).map((id) => findings.get(id));
+  if (
+    prerequisites.length === 0 ||
+    prerequisites.some((finding) => !terminalFinding(finding, findings))
+  ) {
+    violations.push(
+      violation(
+        "unresolved-decision-premise",
+        decision.id,
+        "every premise must have terminal evidence",
+      ),
+    );
+  }
+
+  for (const field of ["proof", "selectedOption", "recommendation", "downstreamConsequences"]) {
+    if (typeof decision[field] !== "string" || decision[field].trim() === "") {
+      violations.push(violation("incomplete-decision", decision.id, `${field} is mandatory`));
+    }
+  }
+
+  if (
+    !Array.isArray(decision.options) ||
+    decision.options.length < 2 ||
+    !Array.isArray(decision.rejectedOptions) ||
+    !Array.isArray(decision.affectedIds) ||
+    decision.affectedIds.length === 0
+  ) {
+    violations.push(
+      violation(
+        "incomplete-decision",
+        decision.id,
+        "options, rejectedOptions, and affectedIds are mandatory",
+      ),
+    );
+  }
+
+  validateDecisionOptions(decision, violations);
+}
+
+function validateDecision(decision, state, violations) {
+  if (!/^MF-DEC-\d{2}$/.test(decision.id ?? "")) {
+    violations.push(violation("invalid-decision-id", String(decision.id), "expected MF-DEC-NN"));
+  }
+
+  for (const affectedId of decision.affectedIds ?? []) {
+    if (!identityIsSafe(affectedId)) {
+      violations.push(violation("invalid-affected-id", decision.id, String(affectedId)));
+    }
+  }
+
+  for (const premise of decision.premiseFindingIds ?? []) {
+    if (!state.findings.has(premise)) {
+      violations.push(violation("dangling-decision-premise", decision.id, premise));
+    }
+  }
+
+  if (decision.status === "resolved") {
+    validateResolvedDecision(decision, state.findings, violations);
+  } else if (decision.status !== "pending") {
+    violations.push(violation("invalid-decision-status", decision.id, String(decision.status)));
+  }
+
+  if (
+    !state.allowPendingDecisions &&
+    decision.status !== "resolved" &&
+    (state.decisionId === undefined || decision.id === state.decisionId)
+  ) {
+    violations.push(violation("pending-decision", decision.id, "operator decision is unresolved"));
+  }
+}
+
+function validateDecisionSet(ledger, decisionId, violations) {
+  for (const id of duplicateValues(ledger.decisions.map((decision) => decision.id))) {
     violations.push(
       violation("duplicate-decision", id, "decision identity appears more than once"),
     );
@@ -685,121 +844,65 @@ export function validateLedger(ledger, context = {}) {
       ),
     );
   }
+}
 
+function validateDecisions(ledger, state, violations) {
+  validateDecisionSet(ledger, state.decisionId, violations);
   for (const decision of ledger.decisions) {
-    if (!/^MF-DEC-\d{2}$/.test(decision.id ?? "")) {
-      violations.push(violation("invalid-decision-id", String(decision.id), "expected MF-DEC-NN"));
-    }
+    validateDecision(decision, state, violations);
+  }
+}
 
-    for (const affectedId of decision.affectedIds ?? []) {
-      if (!identityIsSafe(affectedId)) {
-        violations.push(violation("invalid-affected-id", decision.id, String(affectedId)));
-      }
-    }
-
-    for (const premise of decision.premiseFindingIds ?? []) {
-      if (!findings.has(premise)) {
-        violations.push(violation("dangling-decision-premise", decision.id, premise));
-      }
-    }
-
-    if (decision.status === "resolved") {
-      const prerequisites = (decision.premiseFindingIds ?? []).map((id) => findings.get(id));
-      if (
-        prerequisites.length === 0 ||
-        prerequisites.some((finding) => !terminalFinding(finding, findings))
-      ) {
-        violations.push(
-          violation(
-            "unresolved-decision-premise",
-            decision.id,
-            "every premise must have terminal evidence",
-          ),
-        );
-      }
-
-      for (const field of ["proof", "selectedOption", "recommendation", "downstreamConsequences"]) {
-        if (typeof decision[field] !== "string" || decision[field].trim() === "") {
-          violations.push(violation("incomplete-decision", decision.id, `${field} is mandatory`));
-        }
-      }
-
-      if (
-        !Array.isArray(decision.options) ||
-        decision.options.length < 2 ||
-        !Array.isArray(decision.rejectedOptions) ||
-        !Array.isArray(decision.affectedIds) ||
-        decision.affectedIds.length === 0
-      ) {
-        violations.push(
-          violation(
-            "incomplete-decision",
-            decision.id,
-            "options, rejectedOptions, and affectedIds are mandatory",
-          ),
-        );
-      }
-
-      if (Array.isArray(decision.options)) {
-        const duplicateOptions = duplicateValues(decision.options);
-        if (duplicateOptions.length > 0) {
-          violations.push(
-            violation("duplicate-decision-option", decision.id, duplicateOptions.join(", ")),
-          );
-        }
-
-        if (!decision.options.includes(decision.selectedOption)) {
-          violations.push(
-            violation(
-              "invalid-selected-option",
-              decision.id,
-              "selectedOption must be one of options",
-            ),
-          );
-        }
-
-        if (Array.isArray(decision.rejectedOptions)) {
-          const duplicateRejectedOptions = duplicateValues(decision.rejectedOptions);
-          if (duplicateRejectedOptions.length > 0) {
-            violations.push(
-              violation(
-                "duplicate-rejected-option",
-                decision.id,
-                duplicateRejectedOptions.join(", "),
-              ),
-            );
-          }
-
-          if (
-            decision.rejectedOptions.some(
-              (option) => option === decision.selectedOption || !decision.options.includes(option),
-            )
-          ) {
-            violations.push(
-              violation(
-                "invalid-rejected-option",
-                decision.id,
-                "rejectedOptions must contain only unselected options",
-              ),
-            );
-          }
-        }
-      }
-    } else if (decision.status !== "pending") {
-      violations.push(violation("invalid-decision-status", decision.id, String(decision.status)));
-    }
-
-    if (
-      !allowPendingDecisions &&
-      decision.status !== "resolved" &&
-      (decisionId === undefined || decision.id === decisionId)
-    ) {
-      violations.push(
-        violation("pending-decision", decision.id, "operator decision is unresolved"),
-      );
-    }
+function validateScopeChange(change, ledger, findings, violations) {
+  if (!identityIsSafe(change.id)) {
+    violations.push(
+      violation("invalid-scope-change-id", String(change.id), "scope change id is unsafe"),
+    );
   }
 
+  if (
+    !Array.isArray(change.findingIds) ||
+    change.findingIds.length === 0 ||
+    change.findingIds.some((id) => !findings.has(id))
+  ) {
+    violations.push(
+      violation("invalid-scope-trace", change.id, "scope change must link existing findings"),
+    );
+  }
+
+  if (
+    !Array.isArray(change.decisionIds) ||
+    change.decisionIds.some((id) => !ledger.decisions.some((decision) => decision.id === id))
+  ) {
+    violations.push(
+      violation("invalid-scope-trace", change.id, "scope change has a dangling decision"),
+    );
+  }
+
+  if (
+    typeof change.requirementId !== "string" ||
+    typeof change.action !== "string" ||
+    typeof change.rationale !== "string"
+  ) {
+    violations.push(
+      violation(
+        "incomplete-scope-change",
+        change.id,
+        "requirementId, action, and rationale are mandatory",
+      ),
+    );
+  }
+
+  if (!identityIsSafe(change.requirementId)) {
+    violations.push(violation("invalid-requirement-id", change.id, String(change.requirementId)));
+  }
+
+  if (!SCOPE_ACTIONS.has(change.action)) {
+    violations.push(violation("invalid-scope-action", change.id, String(change.action)));
+  }
+}
+
+function validateScopeChanges(ledger, findings, violations) {
   const scopeIds = new Set();
   for (const change of ledger.scopeChanges) {
     if (scopeIds.has(change.id)) {
@@ -813,54 +916,35 @@ export function validateLedger(ledger, context = {}) {
     }
 
     scopeIds.add(change.id);
-    if (!identityIsSafe(change.id)) {
-      violations.push(
-        violation("invalid-scope-change-id", String(change.id), "scope change id is unsafe"),
-      );
-    }
-
-    if (
-      !Array.isArray(change.findingIds) ||
-      change.findingIds.length === 0 ||
-      change.findingIds.some((id) => !findings.has(id))
-    ) {
-      violations.push(
-        violation("invalid-scope-trace", change.id, "scope change must link existing findings"),
-      );
-    }
-
-    if (
-      !Array.isArray(change.decisionIds) ||
-      change.decisionIds.some((id) => !ledger.decisions.some((decision) => decision.id === id))
-    ) {
-      violations.push(
-        violation("invalid-scope-trace", change.id, "scope change has a dangling decision"),
-      );
-    }
-
-    if (
-      typeof change.requirementId !== "string" ||
-      typeof change.action !== "string" ||
-      typeof change.rationale !== "string"
-    ) {
-      violations.push(
-        violation(
-          "incomplete-scope-change",
-          change.id,
-          "requirementId, action, and rationale are mandatory",
-        ),
-      );
-    }
-
-    if (!identityIsSafe(change.requirementId)) {
-      violations.push(violation("invalid-requirement-id", change.id, String(change.requirementId)));
-    }
-
-    if (!SCOPE_ACTIONS.has(change.action)) {
-      violations.push(violation("invalid-scope-action", change.id, String(change.action)));
-    }
+    validateScopeChange(change, ledger, findings, violations);
   }
+}
 
+export function validateLedger(ledger, context = {}) {
+  assertLedgerShape(ledger);
+  const projectRoot = context.projectRoot ?? DEFAULT_ROOT;
+  const expectedPaths = context.expectedPaths ?? enumerateCorpus(projectRoot);
+  const violations = [];
+  validateSchema(ledger, context.requireLive ?? false, violations);
+  const filePaths = validateInventory(ledger, projectRoot, expectedPaths, violations);
+  const claims = collectClaims(ledger, filePaths, violations);
+  const findings = collectFindings(ledger, violations);
+  const state = {
+    projectRoot,
+    claims,
+    findings,
+    inventoryMode: ledger.inventoryMode,
+    assignment: context.assignment ?? [],
+    allowIncomplete: context.allowIncomplete ?? false,
+    allowInconclusive: context.allowInconclusive ?? false,
+    allowPendingDecisions: context.allowPendingDecisions ?? false,
+    decisionId: context.decisionId,
+  };
+  validateFiles(ledger, state, violations);
+  validateFindings(findings, state, violations);
+  validateDecisions(ledger, state, violations);
+  validateScopeChanges(ledger, findings, violations);
+  validateCrossLinks(claims, findings, violations);
   return violations.sort((left, right) =>
     `${left.code}\0${left.target}\0${left.message}`.localeCompare(
       `${right.code}\0${right.target}\0${right.message}`,
@@ -1290,8 +1374,118 @@ export function publishRevalidation(projectRoot, json, markdown, hooks = {}) {
   }
 }
 
-// CLI dispatch is kept in one boundary; all domain work remains in pure exports.
-// fallow-ignore-next-line complexity -- command routing stays at the sole process boundary.
+function writeViolations(violations, runtime) {
+  for (const item of violations) {
+    runtime.stderr.write(`${item.code}: ${item.target}: ${item.message}\n`);
+  }
+
+  if (violations.length > 0) {
+    runtime.exitCode = 1;
+  }
+}
+
+function handleInventory({ projectRoot, options, runtime }) {
+  const inventory = enumerateCorpus(projectRoot);
+  const assigned = readAssignments(projectRoot, options).map((row) => row.path);
+  if (JSON.stringify(inventory) !== JSON.stringify(assigned)) {
+    throw new Error("live inventory differs from corpus assignment");
+  }
+
+  const categories = Object.fromEntries(
+    [...CATEGORIES].map((category) => [
+      category,
+      assigned.filter((candidate) => categoryForPath(candidate) === category).length,
+    ]),
+  );
+  runtime.stdout.write(
+    `Inventory valid: ${assigned.length} total (${categories["first-pass"]} first-pass, ${categories.adversarial} adversarial, ${categories.control} control)\n`,
+  );
+}
+
+function handleRender({ projectRoot, ledger }) {
+  writeAtomically(
+    assertSafeRelativePath(projectRoot, MARKDOWN_PATH, { mustExist: false }),
+    renderRevalidation(ledger),
+  );
+}
+
+function handleValidate({ projectRoot, ledger, options, runtime }) {
+  const assignment = readAssignments(projectRoot, options);
+  const violations = validateLedger(ledger, validationContext(projectRoot, options, assignment));
+  const rendered = renderRevalidation(ledger);
+  const markdown = readFileSync(assertSafeRelativePath(projectRoot, MARKDOWN_PATH), "utf8");
+  if (markdown !== rendered) {
+    violations.push(
+      violation("markdown-drift", MARKDOWN_PATH, "generated Markdown differs from canonical JSON"),
+    );
+  }
+
+  writeViolations(violations, runtime);
+  if (violations.length === 0) {
+    runtime.stdout.write("Revalidation ledger valid.\n");
+  }
+}
+
+function handleValidateShard({ projectRoot, options, runtime }) {
+  const assignment = readAssignments(projectRoot, options);
+  const shard = readJson(projectRoot, options.shard);
+  if (options.plan && shard.plan !== options.plan) {
+    throw new Error(`shard plan ${shard.plan} does not match ${options.plan}`);
+  }
+
+  writeViolations(validateShard(shard, assignment), runtime);
+}
+
+function readShards(projectRoot, relativeRoot) {
+  const absoluteRoot = assertSafeRelativePath(projectRoot, relativeRoot);
+  return readdirSync(absoluteRoot)
+    .filter((name) => name.endsWith(".json"))
+    .sort()
+    .map((name) => JSON.parse(readFileSync(path.join(absoluteRoot, name), "utf8")));
+}
+
+function handleMergeShards({ projectRoot, ledger, options, runtime }) {
+  const assignment = readAssignments(projectRoot, options);
+  const merged = mergeShards(
+    ledger ?? { version: 1, inventoryMode: "live", decisions: [], scopeChanges: [] },
+    readShards(projectRoot, options["shard-dir"]),
+    assignment,
+  );
+  const violations = validateLedger(merged, validationContext(projectRoot, options, assignment));
+  writeViolations(violations, runtime);
+  if (violations.length > 0) {
+    return;
+  }
+
+  const json = `${JSON.stringify(merged, null, 2)}\n`;
+  const markdown = renderRevalidation(merged);
+  if (options.check === true) {
+    runtime.stdout.write("Shard merge valid.\n");
+    return;
+  }
+
+  publishRevalidation(projectRoot, json, markdown);
+  runtime.stdout.write("Shard merge published.\n");
+}
+
+function handleDecisionDossier({ ledger, options, runtime }) {
+  runtime.stdout.write(`${JSON.stringify(buildDecisionDossier(ledger, options.id), null, 2)}\n`);
+}
+
+function handleScopeImpact({ ledger, runtime }) {
+  runtime.stdout.write(`${JSON.stringify(deriveScopeImpact(ledger), null, 2)}\n`);
+}
+
+const COMMAND_HANDLERS = new Map([
+  ["inventory", handleInventory],
+  ["render", handleRender],
+  ["validate", handleValidate],
+  ["validate-shard", handleValidateShard],
+  ["merge-shards", handleMergeShards],
+  ["decision-dossier", handleDecisionDossier],
+  ["scope-impact", handleScopeImpact],
+]);
+
 export function main(args = process.argv.slice(2), runtime = process) {
   const { positional, options } = parseArgs(args);
   const command = positional[0];
@@ -1299,131 +1493,18 @@ export function main(args = process.argv.slice(2), runtime = process) {
   const ledger = existsSync(path.join(projectRoot, LEDGER_PATH))
     ? readJson(projectRoot, LEDGER_PATH)
     : null;
-  if (command === "inventory") {
-    const inventory = enumerateCorpus(projectRoot);
-    const assignment = readAssignments(projectRoot, options);
-    const assigned = assignment.map((row) => row.path);
-    if (JSON.stringify(inventory) !== JSON.stringify(assigned)) {
-      throw new Error("live inventory differs from corpus assignment");
-    }
-
-    const categories = Object.fromEntries(
-      [...CATEGORIES].map((category) => [
-        category,
-        assigned.filter((candidate) => categoryForPath(candidate) === category).length,
-      ]),
-    );
-    runtime.stdout.write(
-      `Inventory valid: ${assigned.length} total (${categories["first-pass"]} first-pass, ${categories.adversarial} adversarial, ${categories.control} control)\n`,
-    );
-    return;
-  }
-
-  if (!ledger && !["validate-shard", "merge-shards"].includes(command)) {
+  if (!ledger && !["inventory", "validate-shard", "merge-shards"].includes(command)) {
     throw new Error(`missing ${LEDGER_PATH}`);
   }
 
-  if (command === "render") {
-    writeAtomically(
-      assertSafeRelativePath(projectRoot, MARKDOWN_PATH, { mustExist: false }),
-      renderRevalidation(ledger),
+  const handler = COMMAND_HANDLERS.get(command);
+  if (!handler) {
+    throw new Error(
+      "command must be validate, render, inventory, validate-shard, merge-shards, decision-dossier, or scope-impact",
     );
-    return;
   }
 
-  if (command === "validate") {
-    const assignment = readAssignments(projectRoot, options);
-    const violations = validateLedger(ledger, validationContext(projectRoot, options, assignment));
-    const rendered = renderRevalidation(ledger);
-    const markdown = readFileSync(assertSafeRelativePath(projectRoot, MARKDOWN_PATH), "utf8");
-    if (markdown !== rendered) {
-      violations.push(
-        violation(
-          "markdown-drift",
-          MARKDOWN_PATH,
-          "generated Markdown differs from canonical JSON",
-        ),
-      );
-    }
-
-    if (violations.length > 0) {
-      for (const item of violations) {
-        runtime.stderr.write(`${item.code}: ${item.target}: ${item.message}\n`);
-      }
-
-      runtime.exitCode = 1;
-    } else {
-      runtime.stdout.write("Revalidation ledger valid.\n");
-    }
-
-    return;
-  }
-
-  const assignment = readAssignments(projectRoot, options);
-  if (command === "validate-shard") {
-    const shard = readJson(projectRoot, options.shard);
-    if (options.plan && shard.plan !== options.plan) {
-      throw new Error(`shard plan ${shard.plan} does not match ${options.plan}`);
-    }
-
-    const violations = validateShard(shard, assignment);
-    if (violations.length > 0) {
-      for (const item of violations) {
-        runtime.stderr.write(`${item.code}: ${item.target}: ${item.message}\n`);
-      }
-
-      runtime.exitCode = 1;
-    }
-
-    return;
-  }
-
-  if (command === "merge-shards") {
-    const shardRoot = assertSafeRelativePath(projectRoot, options["shard-dir"]);
-    const shards = readdirSync(shardRoot)
-      .filter((name) => name.endsWith(".json"))
-      .sort()
-      .map((name) => JSON.parse(readFileSync(path.join(shardRoot, name), "utf8")));
-    const merged = mergeShards(
-      ledger ?? { version: 1, inventoryMode: "live", decisions: [], scopeChanges: [] },
-      shards,
-      assignment,
-    );
-    const violations = validateLedger(merged, validationContext(projectRoot, options, assignment));
-    if (violations.length > 0) {
-      for (const item of violations) {
-        runtime.stderr.write(`${item.code}: ${item.target}: ${item.message}\n`);
-      }
-
-      runtime.exitCode = 1;
-      return;
-    }
-
-    const json = `${JSON.stringify(merged, null, 2)}\n`;
-    const markdown = renderRevalidation(merged);
-    if (options.check === true) {
-      runtime.stdout.write("Shard merge valid.\n");
-      return;
-    }
-
-    publishRevalidation(projectRoot, json, markdown);
-    runtime.stdout.write("Shard merge published.\n");
-    return;
-  }
-
-  if (command === "decision-dossier") {
-    runtime.stdout.write(`${JSON.stringify(buildDecisionDossier(ledger, options.id), null, 2)}\n`);
-    return;
-  }
-
-  if (command === "scope-impact") {
-    runtime.stdout.write(`${JSON.stringify(deriveScopeImpact(ledger), null, 2)}\n`);
-    return;
-  }
-
-  throw new Error(
-    "command must be validate, render, inventory, validate-shard, merge-shards, decision-dossier, or scope-impact",
-  );
+  handler({ projectRoot, ledger, options, runtime });
 }
 
 export function reportCliError(error, runtime = process) {
