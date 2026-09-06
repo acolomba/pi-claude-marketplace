@@ -16,7 +16,7 @@ affects: [phase-03, resource-discovery, lifecycle, plugin-path]
 actuals:
   tokens: 3144
   tasks: 2
-  commits: 3
+  commits: 5
 
 tech-stack:
   added: []
@@ -33,7 +33,7 @@ key-files:
 
 key-decisions:
   - "Catch only `aggregateDiscoveredResources` and its result projection at the registered host callback; keep reconciliation, PATH recompute, and the aggregator unchanged."
-  - "Use a real mode-000 skill directory to prove transient failure, then restore it before invoking the same registered callback again."
+  - "Use one exact-path `fs.promises.readdir` fault inside the real aggregation call, restore and re-synchronize the built-in before invoking the same registered callback again, and keep the case explicitly non-concurrent."
   - "Retain the per-warning try/catch and prove both user and project warning attempts under a notifier that throws on every call."
 
 patterns-established:
@@ -97,7 +97,7 @@ status: complete
 ## Accomplishments
 
 - Added a narrow root callback catch around aggregate resource discovery and its projection, returning exactly `{ skillPaths: [], promptPaths: [] }` without weakening the fail-loud aggregator.
-- Proved that a real case-owned mode-000 discovery fault preserves completed configuration migration and PATH reconciliation, then yields exact resources through the same callback after the fault is removed.
+- Proved that an exact-path `EACCES` fault from the real aggregation `readdir` preserves completed configuration migration and PATH reconciliation, then yields exact resources through the same callback after the fault is restored.
 - Proved user and project skipped-scope warnings are each attempted when every host notification throws, with no notification failure escaping and no poisoned state on a second invocation.
 
 ## Task Commits
@@ -108,6 +108,11 @@ Each task was committed atomically:
 2. **Task 1 GREEN: Contain aggregate discovery failures** - `514e24e6` (fix)
 3. **Task 2: Prove warning attempts stay independent** - `73f2fa74` (test)
 
+Post-execution review corrected the recovery probe in two atomic commits:
+
+4. **CR-02 first repair: Replace permission-bit dependence** - `a00c48e3` (test)
+5. **CR-02 final repair: Exercise the real aggregate operation** - `2103c21b` (test)
+
 ## Files Created/Modified
 
 - `extensions/pi-claude-marketplace/index.ts` - Catches aggregate discovery failure only at the registered resource callback after reconciliation and PATH work complete.
@@ -117,11 +122,16 @@ Each task was committed atomically:
 
 - Kept `aggregateDiscoveredResources` byte-identical and fail-loud; only its registered host boundary chooses the exact empty fallback.
 - Kept configuration reconciliation and plugin PATH recomputation outside the catch so successful effects persist and failures in those earlier stages retain their existing behavior.
-- Used invocation-local behavior and real filesystem state for recovery evidence, with no retry state, reset hook, dependency seam, test-only export, global patch, network access, or real-home access.
+- Used a case-owned exact-path built-in mock because permission bits are not portable and the first replacement faulted before aggregation. The final case proves the real aggregate operation was reached, restores and re-synchronizes it before recovery and in `t.after()`, and adds no retry state, reset hook, dependency seam, test-only export, network access, or real-home access.
 
 ## Deviations from Plan
 
-None - plan executed exactly as written.
+### Safety override after independent review
+
+- The planned mode-`000` filesystem fault was nondeterministic under privileged runners and Windows ACLs.
+- The first replacement's fourth `event.cwd` read failed during argument evaluation, before `aggregateDiscoveredResources` was invoked, so it was a dishonest regression case.
+- The final repair deliberately overrides the plan's no-built-in-patch preference with one narrowly targeted, explicitly non-concurrent `node:test` mock. This follows the operator's locked rule that safety defects and honest evidence override preservation.
+- Production behavior and public surfaces did not change during the review-fix loop.
 
 ## Issues Encountered
 
@@ -135,7 +145,7 @@ None - plan executed exactly as written.
 - The focused Phase 2 test matrix passed, including root containment, fail-loud aggregate ownership, recovery, and hostile-notifier behavior.
 - All eight plan direct-coverage commands passed with 100% lines, branches, and functions, including `index.ts` and `orchestrators/discover.ts`.
 - TypeScript compilation, repository lint, focused zero-warning ESLint, `fallow`, corresponding-test positive and negative gates, direct-coverage negative gate, the full unit suite, and integration suite passed.
-- TypeScript Google Style and unit-testing reviews found no style violation, dead branch, skip marker, global or builtin patch, network access, real-home access, or test-only production seam in the plan diff.
+- TypeScript Google Style and unit-testing reviews found no style violation, dead branch, skip marker, uncontained global mutation, network access, real-home access, or test-only production seam in the final phase diff.
 
 ## User Setup Required
 
