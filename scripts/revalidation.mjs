@@ -21,6 +21,8 @@ const PHASE_ROOT = ".planning/phases/01-live-evidence-revalidation";
 const LEDGER_PATH = `${PHASE_ROOT}/01-REVALIDATION.json`;
 const MARKDOWN_PATH = `${PHASE_ROOT}/01-REVALIDATION.md`;
 const ASSIGNMENT_PATH = `${PHASE_ROOT}/01-CORPUS-ASSIGNMENT.md`;
+const REQUIREMENTS_PATH = ".planning/REQUIREMENTS.md";
+const ROADMAP_PATH = ".planning/ROADMAP.md";
 const SUPPORTED_VERSIONS = new Set([1]);
 const INVENTORY_MODES = new Set(["live", "fixture"]);
 const STATUSES = new Set(["confirmed", "stale", "superseded", "duplicate", "inconclusive"]);
@@ -980,6 +982,33 @@ function validateScopeChange(change, ledger, findings, violations) {
   if (!SCOPE_ACTIONS.has(change.action)) {
     violations.push(violation("invalid-scope-action", change.id, String(change.action)));
   }
+
+  const anchors = [change.beforeAnchor, change.afterAnchor];
+  if (anchors.some((anchor) => typeof anchor !== "string" || anchor.trim() === "")) {
+    violations.push(
+      violation("invalid-scope-anchor", change.id, "beforeAnchor and afterAnchor are mandatory"),
+    );
+  } else if (change.beforeAnchor === change.afterAnchor) {
+    violations.push(
+      violation("invalid-scope-anchor", change.id, "beforeAnchor and afterAnchor must differ"),
+    );
+  } else {
+    for (const [name, anchor] of [
+      ["beforeAnchor", change.beforeAnchor],
+      ["afterAnchor", change.afterAnchor],
+    ]) {
+      const parts = anchor.split(" :: ");
+      if (parts.length !== 3 || parts.some((part) => part.trim() === "")) {
+        violations.push(
+          violation("invalid-scope-anchor", change.id, `${name} must be a three-part locator`),
+        );
+      } else if (!anchor.includes(change.requirementId)) {
+        violations.push(
+          violation("scope-anchor-identity", change.id, `${name} must identify ${change.requirementId}`),
+        );
+      }
+    }
+  }
 }
 
 function validateScopeChanges(ledger, findings, violations) {
@@ -1750,7 +1779,171 @@ function handleDecisionDossier({ ledger, options, runtime }) {
   runtime.stdout.write(`${JSON.stringify(buildDecisionDossier(ledger, options.id), null, 2)}\n`);
 }
 
-function handleScopeImpact({ ledger, runtime }) {
+function parseRequirementsContract(markdown, violations) {
+  const definitions = new Map();
+  let section = "";
+  for (const line of markdown.split("\n")) {
+    const heading = line.match(/^### (.+)$/);
+    if (heading !== null) {
+      section = heading[1];
+      continue;
+    }
+
+    const definition = line.match(/^- \[[ x]\] \*\*([A-Z]+-\d+)\*\*:/);
+    if (definition !== null) {
+      const id = definition[1];
+      if (definitions.has(id)) {
+        violations.push(violation("duplicate-requirement", id, "requirement is defined more than once"));
+      } else {
+        definitions.set(id, section);
+      }
+    }
+  }
+
+  const dispositions = new Map();
+  for (const match of markdown.matchAll(/^\| ([A-Z]+-\d+) \| ([^|]+) \| ([^|]+) \|$/gm)) {
+    const [, id, route, status] = match;
+    if (dispositions.has(id)) {
+      violations.push(violation("duplicate-requirement-route", id, "traceability row appears more than once"));
+    } else {
+      dispositions.set(id, { route: route.trim(), status: status.trim() });
+    }
+  }
+
+  return { definitions, dispositions };
+}
+
+function parseRoadmapContract(markdown, violations) {
+  const phases = new Map();
+  const headings = [...markdown.matchAll(/^### Phase (\d+): (.+)$/gm)];
+  for (const [index, match] of headings.entries()) {
+    const number = Number(match[1]);
+    if (number < 2 || number > 9) {
+      continue;
+    }
+
+    const id = `PHASE-${String(number).padStart(2, "0")}`;
+    if (phases.has(id)) {
+      violations.push(violation("duplicate-phase-route", id, "roadmap phase appears more than once"));
+      continue;
+    }
+
+    const end = headings[index + 1]?.index ?? markdown.length;
+    const body = markdown.slice(match.index + match[0].length, end);
+    const declaration = body.match(/^\*\*Requirements:\*\* (.+)$/m);
+    phases.set(id, {
+      number,
+      title: match[2],
+      requirements: declaration === null ? [] : declaration[1].split(", "),
+    });
+  }
+
+  return phases;
+}
+
+function validatePlanningContracts(ledger, requirementsMarkdown, roadmapMarkdown) {
+  const violations = [];
+  const requirements = parseRequirementsContract(requirementsMarkdown, violations);
+  const phases = parseRoadmapContract(roadmapMarkdown, violations);
+  const rows = new Map();
+  for (const change of ledger.scopeChanges) {
+    if (rows.has(change.id)) {
+      violations.push(violation("duplicate-scope-contract", change.id, "scope row appears more than once"));
+    } else {
+      rows.set(change.id, change);
+    }
+  }
+
+  const expectedRequirementIds = new Set(requirements.dispositions.keys());
+  for (const requirementId of expectedRequirementIds) {
+    const id = `SCOPE-REQ-${requirementId}`;
+    const change = rows.get(id);
+    if (change === undefined) {
+      violations.push(violation("missing-scope-requirement", id, "scope row is absent"));
+      continue;
+    }
+
+    const disposition = requirements.dispositions.get(requirementId);
+    const section = requirements.definitions.get(requirementId);
+    const expectedSection = change.action === "move-to-evidence" ? "Evidence and History" : section;
+    if (section === undefined && change.action !== "move-to-evidence") {
+      violations.push(violation("missing-requirement-definition", requirementId, "active definition is absent"));
+    }
+    if (change.action === "move-to-evidence" && disposition.status !== "Evidence only") {
+      violations.push(violation("requirement-disposition", requirementId, "moved requirement must be evidence only"));
+    }
+    if (change.action !== "move-to-evidence" && disposition.status === "Evidence only") {
+      violations.push(violation("requirement-disposition", requirementId, "active requirement cannot be evidence only"));
+    }
+    const afterParts = typeof change.afterAnchor === "string" ? change.afterAnchor.split(" :: ") : [];
+    if (
+      afterParts.length !== 3 ||
+      afterParts[0] !== REQUIREMENTS_PATH ||
+      afterParts[1] !== expectedSection ||
+      !afterParts[2].startsWith(`${requirementId} —`)
+    ) {
+      violations.push(violation("scope-after-anchor", id, "afterAnchor does not resolve to requirement"));
+    }
+  }
+
+  for (let number = 2; number <= 9; number += 1) {
+    const phaseId = `PHASE-${String(number).padStart(2, "0")}`;
+    const change = rows.get(`SCOPE-ROUTE-${phaseId}`);
+    const phase = phases.get(phaseId);
+    if (change === undefined) {
+      violations.push(violation("missing-scope-route", phaseId, "scope route is absent"));
+      continue;
+    }
+    if (phase === undefined) {
+      violations.push(violation("missing-phase-route", phaseId, "roadmap phase is absent"));
+      continue;
+    }
+
+    const expectedRequirements = [...requirements.dispositions.entries()]
+      .filter(([, disposition]) => disposition.route === `Phase ${number}`)
+      .map(([id]) => id)
+      .sort();
+    if (JSON.stringify([...phase.requirements].sort()) !== JSON.stringify(expectedRequirements)) {
+      violations.push(violation("phase-requirements", phaseId, "roadmap membership differs from traceability"));
+    }
+    const afterParts = typeof change.afterAnchor === "string" ? change.afterAnchor.split(" :: ") : [];
+    if (
+      afterParts.length !== 3 ||
+      afterParts[0] !== ROADMAP_PATH ||
+      afterParts[1] !== `${phaseId} / Phase ${number} ${phase.title}`
+    ) {
+      violations.push(violation("scope-after-anchor", change.id, "afterAnchor does not resolve to phase"));
+    }
+  }
+
+  if (ledger.scopeChanges.length !== 40 || rows.size !== 40) {
+    violations.push(violation("scope-contract-count", "scopeChanges", "expected exactly 40 unique rows"));
+  }
+  return violations.sort((left, right) =>
+    `${left.code}\0${left.target}`.localeCompare(`${right.code}\0${right.target}`),
+  );
+}
+
+function readPlanningContract(projectRoot, candidate) {
+  const absolutePath = assertSafeRelativePath(projectRoot, candidate);
+  if (!lstatSync(absolutePath).isFile()) {
+    throw new Error(`path must be a regular file: ${candidate}`);
+  }
+  return readFileSync(absolutePath, "utf8");
+}
+
+function handleScopeImpact({ projectRoot, ledger, options, runtime }) {
+  if (options.check === true) {
+    const requirementsMarkdown = readPlanningContract(projectRoot, REQUIREMENTS_PATH);
+    const roadmapMarkdown = readPlanningContract(projectRoot, ROADMAP_PATH);
+    const violations = validatePlanningContracts(ledger, requirementsMarkdown, roadmapMarkdown);
+    writeViolations(violations, runtime);
+    if (violations.length === 0) {
+      runtime.stdout.write(`Scope impact valid: ${ledger.scopeChanges.length} records.\n`);
+    }
+    return;
+  }
+
   runtime.stdout.write(`${JSON.stringify(deriveScopeImpact(ledger), null, 2)}\n`);
 }
 
