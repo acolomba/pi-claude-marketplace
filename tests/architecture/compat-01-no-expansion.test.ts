@@ -170,6 +170,7 @@ test("COMPAT-01: REASONS holds exactly its inherited members, in order", () => {
     "installs disabled",
     "marketplace in user scope",
     "marketplace in project scope",
+    "stale workflow command",
   ];
 
   // act

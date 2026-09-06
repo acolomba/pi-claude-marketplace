@@ -80,7 +80,7 @@ import type { Dependency } from "./concerns/soft-dep.ts";
  * at column 0 with severity `"error"`.
  *
  * D-09 / OUT-08: this tuple is the byte-source of the closed set -- its
- * 43-entry membership AND order are catalog-stable and MUST NOT change (new
+ * 44-entry membership AND order are catalog-stable and MUST NOT change (new
  * tokens append at the tail; existing entries never reorder). The
  * topic-grouped organization of these literals (idempotent / unsupported-
  * components / failure-class shared groups, plus the command-private reasons)
@@ -231,6 +231,26 @@ export const REASONS = [
   // structural siblings bake theirs: the closed set is a catalog of literals.
   "marketplace in user scope",
   "marketplace in project scope",
+  // WLIF-06: a workflow command the just-finished verb RETIRED -- its envelope
+  // is off disk, but the host exposes no unregister call, so the command that
+  // envelope registered stays live and runnable for the rest of the session.
+  // Until a reload, the plugin's command surface and its artifacts disagree,
+  // and this token is what says so. A CONTENT reason: its subject is the PLUGIN
+  // the row is about, so it JOINS that row's other reasons rather than
+  // replacing any of them, and stays inside `ContentReason`.
+  //
+  // It is NOT the `/reload to pick up changes` trailer, and the two deliberately
+  // coexist on one row stating different facts. That trailer is about NEW things
+  // a reload will pick up; this token is about a REMOVED thing a reload will
+  // drop. Reusing the trailer would report the second as if it were the first.
+  //
+  // It stays OFF the exported enable/disable outcome union, which is what
+  // structurally prevents the load-time reconcile projection from stamping it: a
+  // reload is what CLEARS this condition, so a row rendered from the reload path
+  // claiming the remedy would contradict itself. The four user-typed retiring
+  // verbs (uninstall / disable / reinstall / update) own it on their own rows;
+  // `enable` reaches it through a module-private outcome sentinel instead.
+  "stale workflow command",
 ] as const;
 
 export type Reason = (typeof REASONS)[number];
