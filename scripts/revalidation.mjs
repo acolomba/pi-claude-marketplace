@@ -2153,19 +2153,12 @@ function parseRoadmapContract(markdown, violations) {
   return phases;
 }
 
-function validateRequirementChange(requirements, requirementId, change, locators, violations) {
-  const id = `SCOPE-REQ-${requirementId}`;
-  const disposition = requirements.dispositions.get(requirementId);
-  const expectedSection =
-    change.action === "move-to-evidence"
-      ? requirements.history.get(requirementId)
-      : requirements.definitions.get(requirementId);
+function validateRequirementDisposition(requirementId, action, disposition, violations) {
+  if (disposition === undefined) {
+    return;
+  }
 
-  if (
-    change.action === "move-to-evidence" &&
-    disposition?.status !== undefined &&
-    disposition.status !== "Evidence only"
-  ) {
+  if (action === "move-to-evidence" && disposition.status !== "Evidence only") {
     violations.push(
       violation(
         "requirement-disposition",
@@ -2176,8 +2169,7 @@ function validateRequirementChange(requirements, requirementId, change, locators
   }
 
   if (
-    change.action === "move-to-evidence" &&
-    disposition?.route !== undefined &&
+    action === "move-to-evidence" &&
     !EVIDENCE_REQUIREMENT_ROUTE_PATTERN.test(disposition.route)
   ) {
     violations.push(
@@ -2189,7 +2181,7 @@ function validateRequirementChange(requirements, requirementId, change, locators
     );
   }
 
-  if (change.action !== "move-to-evidence" && disposition?.status === "Evidence only") {
+  if (action !== "move-to-evidence" && disposition.status === "Evidence only") {
     violations.push(
       violation(
         "requirement-disposition",
@@ -2200,8 +2192,7 @@ function validateRequirementChange(requirements, requirementId, change, locators
   }
 
   if (
-    change.action !== "move-to-evidence" &&
-    disposition !== undefined &&
+    action !== "move-to-evidence" &&
     (!ACTIVE_REQUIREMENT_ROUTE_PATTERN.test(disposition.route) ||
       !ACTIVE_REQUIREMENT_STATUSES.has(disposition.status))
   ) {
@@ -2213,7 +2204,9 @@ function validateRequirementChange(requirements, requirementId, change, locators
       ),
     );
   }
+}
 
+function validateRequirementClause(requirements, requirementId, change, violations) {
   const clause =
     change.action === "move-to-evidence"
       ? requirements.clauses.history.get(requirementId)
@@ -2235,6 +2228,21 @@ function validateRequirementChange(requirements, requirementId, change, locators
       ),
     );
   }
+}
+
+function validateRequirementChange(requirements, requirementId, change, locators, violations) {
+  const id = `SCOPE-REQ-${requirementId}`;
+  const expectedSection =
+    change.action === "move-to-evidence"
+      ? requirements.history.get(requirementId)
+      : requirements.definitions.get(requirementId);
+  validateRequirementDisposition(
+    requirementId,
+    change.action,
+    requirements.dispositions.get(requirementId),
+    violations,
+  );
+  validateRequirementClause(requirements, requirementId, change, violations);
 
   const afterParts = locators.get(id)?.after;
   if (
@@ -2251,39 +2259,47 @@ function requirementRows(rows) {
   return new Map([...rows].filter(([id]) => id.startsWith("SCOPE-REQ-")));
 }
 
+function validateRequiredRequirementRow(requirements, requirementId, change, violations) {
+  const hasDefinition = requirements.definitions.has(requirementId);
+  const hasHistory = requirements.history.has(requirementId);
+  const expectsHistory = change.action === "move-to-evidence";
+  if ((expectsHistory && !hasHistory) || (!expectsHistory && !hasDefinition)) {
+    violations.push(
+      violation(
+        "missing-requirement-definition",
+        requirementId,
+        expectsHistory ? "evidence/history record is absent" : "active definition is absent",
+      ),
+    );
+  }
+
+  if ((expectsHistory && hasDefinition) || (!expectsHistory && hasHistory)) {
+    violations.push(
+      violation(
+        "requirement-location",
+        requirementId,
+        expectsHistory
+          ? "evidence requirement cannot have an active definition"
+          : "active requirement cannot have an evidence/history record",
+      ),
+    );
+  }
+
+  if (!requirements.dispositions.has(requirementId)) {
+    violations.push(
+      violation("missing-requirement-route", requirementId, "traceability row is absent"),
+    );
+  }
+}
+
 function validateRequiredRequirementRows(requirements, rows, expectedIds, violations) {
   for (const requirementId of [...expectedIds].sort()) {
-    const change = rows.get(`SCOPE-REQ-${requirementId}`);
-    const hasDefinition = requirements.definitions.has(requirementId);
-    const hasHistory = requirements.history.has(requirementId);
-    const expectsHistory = change.action === "move-to-evidence";
-    if ((expectsHistory && !hasHistory) || (!expectsHistory && !hasDefinition)) {
-      violations.push(
-        violation(
-          "missing-requirement-definition",
-          requirementId,
-          expectsHistory ? "evidence/history record is absent" : "active definition is absent",
-        ),
-      );
-    }
-
-    if ((expectsHistory && hasDefinition) || (!expectsHistory && hasHistory)) {
-      violations.push(
-        violation(
-          "requirement-location",
-          requirementId,
-          expectsHistory
-            ? "evidence requirement cannot have an active definition"
-            : "active requirement cannot have an evidence/history record",
-        ),
-      );
-    }
-
-    if (!requirements.dispositions.has(requirementId)) {
-      violations.push(
-        violation("missing-requirement-route", requirementId, "traceability row is absent"),
-      );
-    }
+    validateRequiredRequirementRow(
+      requirements,
+      requirementId,
+      rows.get(`SCOPE-REQ-${requirementId}`),
+      violations,
+    );
   }
 }
 
