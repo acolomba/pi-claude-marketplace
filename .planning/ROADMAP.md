@@ -218,7 +218,7 @@ Plans:
 **Goal:** Correct confirmed defects in path containment, MCP input, and lifecycle recovery.
 **Depends on:** Phase 1
 **Requirements:** PDEF-02, PDEF-03, PDEF-04
-**Plans:** 3/3 plans executed
+**Plans:** 3/3 plans complete
 
 Plans:
 **Wave 1**
@@ -392,7 +392,7 @@ baseline, which still includes both pairs; neither is a terminal shortfall.
 | Phase | Plans Complete | Status | Completed |
 | ----- | -------------- | ------ | --------- |
 | 1. Live Evidence Revalidation | 69/69 | Complete | 2026-09-05 |
-| 2. Containment and Input Safety | 3/3 | In Progress | — |
+| 2. Containment and Input Safety | 3/3 | Complete    | 2026-09-05 |
 | 3. Production Defect Corrections | 0/0 | Not started | — |
 | 4. Hermetic Test Infrastructure | 0/0 | Not started | — |
 | 5. Injection and Ownership Design | 0/0 | Not started | — |
