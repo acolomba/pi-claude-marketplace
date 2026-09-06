@@ -2,21 +2,21 @@
 gsd_state_version: 1.0
 milestone: workflows-replay
 milestone_name: Workflow Bridge Replay onto main
-current_phase: 113
-current_phase_name: Update, enable/disable, reconcile
+current_phase: 114
+current_phase_name: Degradation and documentation
 current_plan: 113-05 (wave 4)
-status: executing
-stopped_at: Phase 113 waves 1-3 complete (113-01..04); wave 4 next
-last_updated: "2026-09-05T22:49:08.588Z"
-last_activity: 2026-09-05
-last_activity_desc: Phase 113 wave 3 executed - the lingering-command reload remedy
-state_head: 7e1fa90921ea4c7700c37de2eebe05784155560d
+status: planning
+stopped_at: Phase 113 complete, ready to plan Phase 114
+last_updated: "2026-09-06T18:09:13.262Z"
+last_activity: 2026-09-06
+last_activity_desc: Phase 113 complete, transitioned to Phase 114
+state_head: b2459e2c6d92cccc2cde7fda71ffc5227f618919
 progress:
   total_phases: 9
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 21
-  completed_plans: 20
-  percent: 44
+  completed_plans: 21
+  percent: 56
 ---
 
 # Project State
@@ -35,354 +35,47 @@ never merged. Since then #154 declared `workflows` an *unsupported* kind, and
 
 ## Current Position
 
-Phase: 113 (Update, enable/disable, reconcile) — READY TO EXECUTE
-Plan: 4/5 executed — waves 1-3 done; 113-05 is wave 4 and closes the phase
-Status: Executing Phase 113. Plan 113-01 landed the `info` `workflows:` line,
-the required discovery `tense` parameter, and the preview-tense warning
-channel, in commits 282c23f6, 0fe0f018 and e4e8c71d.
+Phase: 114 — Degradation and documentation
+Plan: none yet — Phase 114 is not planned
+Status: Ready to plan Phase 114. Phase 113 is complete and verified 9/9 against
+the ROADMAP's nine success criteria.
 
-Plan 113-01 also corrected the forcing construct it was sent to add. The plan
-as written kept the tuple's slot annotation, which makes
-`Exclude<ComponentKind, ComponentKind>` evaluate to `never` unconditionally --
-the proof would have passed for every possible interface. It is now
-`as const satisfies readonly ComponentKind[]`. The mandated negative control is
-what caught it, and it recorded the verbatim error it produces:
-`error TS2344: Type '"workflows"' does not satisfy the constraint 'never'.`
+Phase 113 made the remaining lifecycle verbs treat workflows as a first-class
+kind. `update` now prepares, aborts, commits and records workflows as a sixth
+bridge, with a deliberately asymmetric two-window record write -- workflow
+envelopes are the only artifacts living outside every scope root, so the record
+is the only thing that can name them. `enable` and `disable` carry the staged
+names, load-time reconcile re-materializes nothing, and `info` renders a
+`workflows:` line plus preview-tense discovery warnings on a new `note:`
+channel. WLIF-06 landed as the 44th closed-set reason, `stale workflow command`,
+stamped by six verbs.
 
-The advisory label token the later plans' fixtures must match is `note:`.
+Three findings from this phase are worth carrying forward, because each is a
+recurrence of a class this milestone keeps hitting:
 
-Wave 2 landed `update` as a sixth bridge (183a6d99, e67a5949, b2db09f0) and the
-enable projection plus the reconcile idempotence guard (dde0e281, d1aae1c2).
+- **A guard can be green because it checks nothing.** Research measured that
+  `notify.ts`'s exact-length `COMPONENT_KINDS` tuple did NOT fail to typecheck
+  when the component set gained a sixth key -- the comment claiming it did was
+  false. The replacement forcing construct was then itself found vacuous when
+  its mandated negative control ran: keeping the slot annotation makes
+  `Exclude<ComponentKind, ComponentKind>` unconditionally `never`. Only the
+  negative control caught either one.
+- **A closed-set amendment is bigger than its enumeration.** The WLIF-06 token
+  needed SEVEN sites, not the six the pattern map predicted. The extra two were
+  found by removing the token and observing what went red, never by listing.
+- **A comment asserting something is safe is where the data-loss bugs live.**
+  The code review's blocker was an intent-mark union recording PREPARED rather
+  than PLACED workflow names, justified by a comment reading "a name that never
+  landed costs a no-op" -- true except for the collision case the ownership
+  refusal exists for, where the name belongs to the user's own file. The first
+  fix pass then introduced a worse defect of the same shape, redacting the
+  manual-recovery instructions into identical basenames so "move it back by
+  hand" named nothing; the second pass reverted it.
 
-Two carried facts wave 3 must act on:
-
-- `stagedWorkflowNames` on the module-private `SetEnabledOutcome` fresh arm has
-  a producer and no consumer. Plan 04's enable gate is its intended reader; if
-  plan 04 computes from `summary` directly instead, the member must be deleted
-  in that same commit rather than left behind.
-- Plan 02 merged `abortPartialHandles` into `abortHandles`, because workflows
-  prepares last so the partial helper's workflows guard was unreachable and
-  uncoverable. That also fixed a real leak: the partial helper had no mcp arm,
-  so a workflows-prepare failure never released the mcp handle. Plan 02's
-  `>= 3` grep threshold was written against the two-helper shape and has been
-  corrected to `>= 2` (ce35983c).
-
-Wave 3 landed WLIF-06 as the `stale workflow command` token (e9d79e31,
-2923eadc) and corrected the WLIF-04 booking against evidence (e6647ebf).
-
-Three facts from it:
-
-- The closed-set amendment turned out to be SEVEN sites, not the six the
-  pattern map predicted. The two extra were a second `REASONS.length` assertion
-  in `tests/shared/notify.test.ts` and a `_ReasonsCoverageProof` type pin in
-  `tests/shared/notify-reasons.test.ts`. They were found by removing the token
-  and observing what went red, not by enumeration -- which is the only method
-  that finds this class, since a widened closed set compiles clean at every
-  derivation site.
-- `stagedWorkflowNames` was DELETED from the module-private sentinel rather
-  than read there; the retirement gate is computed in `runEnableBranch` and the
-  sentinel carries `staleWorkflowCommand?: boolean` instead. Computing it at
-  the row composer would have meant computing inside a renderer.
-- WLIF-04 was found already satisfied by Phase 112. Its traceability row now
-  reads `Phase 113 -> Phase 112 | Complete`, corrected only after the evidence
-  case passed.
-
-Operator decision taken at the wave 3 boundary: uninstall's `(failed)` arm
-stamps too. Recorded as an extension to ROADMAP criterion 8 and folded into
-plan 113-05, which already owns the catalog files it touches.
-
-Research overturned a load-bearing claim: `shared/notify.ts`'s exact-length
-`COMPONENT_KINDS` tuple does NOT fail to typecheck when the component set gains
-a sixth key — that was compiled and measured, and the comment asserting it is
-false. Plan 01 lands a replacement forcing construct with a negative control.
-This is the same optional-field silent-omission class the milestone has hit
-before.
-
-Two scope decisions were taken after research and recorded as ROADMAP criteria
-so they cannot evaporate. Criterion 5 was amended: `info` must RENDER the
-preview-tense discovery warnings, not merely produce them, because `info` has no
-channel they can reach today and building the mechanism without a reader would
-ship the same defect criterion 6 exists to clean up. Criterion 8 is new: WLIF-06
-(the lingering-command reload remedy) was booked to this phase, implemented
-nowhere, and named by no criterion; it lands here as a closed-set token stamped
-by every retiring verb. Planning added a fifth stamp site, `enable`, because the
-staged workflow names have no other consumer — the token rides the
-module-private sentinel and stays off the exported union, so the load-time
-reconcile projection still cannot stamp it.
-
-Phase 112 is complete and verified 7/7 against
-the ROADMAP's seven success criteria. The install ledger now carries a sixth
-workflows phase that unwinds with the rest, all four removal verbs take the
-envelopes away again, and an age-bounded sweeper reclaims orphaned staging trees.
-
-The review loop ran two iterations and found two data-loss blockers, both in
-reinstall's `replaceAll` catch and both descended from one false comment — that
-nothing after the commit can fail, when a commit can fail *partially*. One
-discarded the stranded-envelope report, orphaning executables in the shared
-saved directory; the other deleted the staging root the commit deliberately
-preserved as the only copy of the user's displaced envelopes. Iteration 2 then
-found the new retention predicate swallowed every errno (a transient EIO would
-hand the tree to `rm -rf`) and probed through an unvalidated path before the
-containment check. All fixed, each proven non-vacuous by reverting the fix and
-observing red.
-
-Four items were carried out of Phase 112 rather than closed. Two are now planned
-here: ROADMAP Phase 113 criteria 6 and 7 (update never re-stages workflows;
-retained trees are never enumerated), owned by plans 02 and 05. `WARN-01` and
-`CASCADEAX-01` remain open in `.planning/BACKLOG.md`.
-staging sweeper with its mirrored owner test, `b2c2b4af` the install-side and
-removal-side call sites, `85b0692b` the stale ledger and kind-count corrections.
-`npm run check` is green end to end (unit 5504/0, integration 32/0) and
-`pre-commit run --all-files` rewrote nothing. `112-01` landed the tracer in four commits — `a025d5b4` the
-`resources.workflows` record inventory, `d02db74b` the sixth ledger phase,
-`6d01ed99` the rollback evidence, `6f8e1c6a` the closed-set widening. `112-02`
-landed the removal side in three — `edb7007c` the sixth cascade slot and the
-`dropped.workflows` axis on both returns, `246f855c` both partial-cascade record
-folds, `ce4b98f9` removal pinned on all four verbs against real envelopes on
-disk. `112-03` landed reinstall's bespoke re-materialization in three —
-`b6ed30e8` the fifth prepare handle and its abort arm, `c97ca097` the commit
-step, the placed-names thread-through and the never-throwing recovery composer,
-`e785a865` the record and replace semantics pinned. `npm run check` is green end
-to end (unit 5423/0, integration 32/0) and every file any of the three plans
-touched holds at 100% direct coverage.
-
-**What `112-04` settled.** `garbageCollectWorkflowsStaging` sweeps
-`<workflowsStagingDir>/<uuid>/` trees older than `WORKFLOWS_STAGING_MAX_AGE_MS`
-(24 hours, one exported constant). Nothing persists a staging identifier and the
-staging directory is scope-independent, so the age bound is the whole liveness
-mechanism rather than a refinement of the clone collector's persisted-record
-one. Containment is anchored on `workflowsHomeDir`, one level above the staging
-directory, so the staging segment itself is walked; the assertion is resolved
-outside the swallowing try so a refusal propagates instead of becoming a removal
-leak. Both `collectPostCommitWarnings` and `runPostUninstallCleanup` call it,
-silently, discarding the leak strings the way all four clone-collector call
-sites do.
-
-**What `112-03` settled for `112-04`.** Everything reachable in-process is now
-cleaned: the workflows commit removes its own staging root on success,
-`abortPreparedWorkflows` removes it when a replace step fails, and a cleanup
-refusal is reported as a bridge warning rather than swallowed. What is left for
-the sweep is genuinely crash-orphaned trees only. Two divergences ride forward.
-`splitStagingWarnings` is UNCHANGED — the workflow prepare's warnings are
-appended at reinstall's `bridgeWarnings` composition site instead, because that
-classifier is shared with the update verb; Phase 113 should fold the append back
-in when it widens it. And `unplaceWorkflows` CONVERTS a `PathContainmentError`
-into a leak string rather than letting it propagate, because it runs inside a
-catch already unwinding a different error; the bridge still raises by class and
-the install ledger still lets it escape, so PI-14 is intact at the ledger
-boundary.
-
-**What `112-02` settled for `112-03`.** Every removal path clears workflow
-envelopes from one edit to `cascadeUnstagePlugin`, so reinstall re-materializes
-against a directory known to be clean of its own prior envelopes. A DISABLED
-record deliberately RETAINS `resources.workflows` — the enable path reads that
-inventory to displace its own envelopes aside rather than hitting the occupancy
-refusal, and a case pins the asymmetry. `CASCADEAX-01` stays open: both folds
-still read their `dropped` argument structurally and the hand-rolled one still
-omits the hooks axis, so a SEVENTH axis would be dropped in silence again.
-
-**Three facts `112-01` settled that the next plans depend on.** The record
-carries a REQUIRED `resources.workflows` with a migrate default-fill and no
-`schemaVersion` bump, so every removal path now has an inventory to read. The
-sixth phase's undo removes only the names `onPlaced` REPORTED, and
-`PathContainmentError` is not re-folded — it escapes `runPhases` by class and
-bypasses the `capture` assignment, so the failure row carries no version and no
-rollback-partial marker; a test pins that so a later reader does not repair it.
-And the fallow allow-list edge is in place, so `112-02` and `112-03` may import
-the bridge freely.
-
-**Two things the next plans should know.** The typecheck worklist after the
-schema edit was 67 errors across 30 files (the research predicted ~68), and the
-one production site the research expected in `state-io.ts` did not materialise.
-The complexity extraction the plan budgeted was needed — but on two TEST
-helpers (`seedMarketplace` in `list.test.ts`, `writePluginComponents` in
-`install.test.ts`), not on the install ledger body, which absorbed the sixth
-phase without breaching either ceiling. Expect the same pressure on any fixture
-that enumerates the record's resource axes by hand.
-
-**One interaction to budget for.** The sixth phase reads
-`stateSnapshot.marketplaces[mp].plugins[plugin]` once per install. Two existing
-tests pin proxy read counts and both needed their reveal threshold moved one
-read later so the sabotage still lands on `statePhase`.
-
-**Unlike Phases 110 and 111, nothing is ported here.** Those two checked
-production code out of `features/workflow-port-wip` verbatim and spent their
-effort on owner tests. This phase writes new wiring against orchestrators main
-rewrote after the spike branch was cut, and criterion 5 makes that a success
-criterion rather than a style note.
-
-Three measured findings shape it. **An unnamed prerequisite has to be commit
-1**: `state.json`'s record schema has no `workflows` resources array, every
-removal path removes by recorded name, and adding the field produces ~68 `tsc`
-errors across 30 files. **Two fold sites the compiler will not catch** —
-`applyPartialCascadeFold` and a hand-rolled duplicate in `remove.ts` read
-`dropped` structurally and keep compiling while silently omitting a new axis;
-this is a defect class the project has shipped repeatedly, now filed as
-`CASCADEAX-01`. And **the disk-state undo test does not exist**: the assertion
-appears in three places, all driven by a sibling-bridge failure, but the
-workflows phase is the last bridge slot so its vehicle must be `statePhase` —
-and the `statePhase`-vehicle tests assert only on the rejection. That gap is how
-Phase 111's two data-loss bugs survived 100% coverage.
-
-Phase 111 is complete and verified 9/9.
-`b524524c` moved the version literal to `0.19.0` at all six sites — the
-manifest, both lockfile records, the `EXTENSION_VERSION` constant, the
-hard-coded literal in `tests/shared/extension-version.test.ts` (the site the
-repository's own checklist does not name), the Sonar project version, and a new
-`## [0.19.0]` changelog heading — plus the `.planning/PROJECT.md` prose site.
-The bump opens the load-time backfill gate; the re-materialization behind it
-runs through `reinstallPlugin`, which gains no workflows phase until Phase 112,
-so **artifacts for records written by the last released version do not appear
-yet**. `a3939034` turned the install-window assertion: it now drives the bridge
-through its barrel and compares the `hello:greet` envelope as one whole object,
-read back from `workflowsSavedDir`. The fixture body changed from a default
-export (which the admission rule classifies `skipped`/`no-meta`, so no envelope
-was ever written) to a named `meta` export. A negative control confirmed the
-case goes red when the old body is restored. The positive precondition's three
-assertions are byte-identical; only its comment, which named a deleted ENOENT
-assertion, was rewritten.
-
-Phase gate: `npm run check` green end to end (unit 5378/0, integration 32/0),
-`npm run test:corresponding` passing, `pre-commit run --all-files` leaving no
-file modified, and all six touched pairs at complete direct coverage —
-discover 56/56, stage 61/61, unstage 8/8, barrel 25/25 lines, locations 20/20,
-errors-bridges 13/13.
-
-Two items ride forward. **The end-to-end stale-record repair is not observable
-in this phase** and goes to the milestone's live acceptance testing. **The
-duplication remedy at pull-request time is a `sonar.cpd.exclusions` entry citing
-`port/README.md`, explicitly not a shared-helper refactor** — `fallow dupes`
-measures zero new duplicated lines for this bridge.
-
-Phase 112 inherited two carriers and `112-01` closed both. The two explicit
-bridge calls in `tests/integration/workflow-kind-inversion.test.ts` are gone,
-replaced by the install-driven path; the ENOENT assertion beside them, which
-claimed the install materialized nothing, became the assertion its own comment
-described. And `"bridges-workflows"` is in the `orchestrators` zone's `allow`
-array, landed in `d02db74b`, the commit that first imports the bridge —
-verified load-bearing by removing the string and watching `fallow dead-code`
-exit 1 naming both new edges by file and line.
-
-Earlier in the phase, `111-01` landed the path layer, `111-02` landed the
-bridge's read half — `bridges/workflows/{types,discover,unstage}.ts` with their
-three owner tests, the `bridges-workflows` fallow zone triple, and the one
-behavior this phase authors, the criterion-4 admitted-but-caveated warning row
-for a stem-fallback script — and `111-03` completed the bridge with
-`bridges/workflows/stage.ts` and `bridges/workflows/index.ts` (`6981b2b4`), 24
-cases in `stage.test.ts` and 5 in `index.test.ts`. No branch proved unreachable
-and no `fallow-ignore` marker was added anywhere in the phase.
-
-Two findings the research measured in a probe worktree shape this phase.
-**Criterion 9 could not be satisfied as written**: `tests/integration/workflow-kind-inversion.test.ts`
-still passes with the complete bridge present, because nothing drives the bridge
-from `installPlugin` until Phase 112 — and the fixture ships
-`export default { name: "greet" }`, which admits as `skipped`/`no-meta`, so no
-envelope would be written in any phase. Resolved to Option A: invert against an
-explicit bridge drive now and fix the fixture body, rather than defer. **The
-version bump has six sites, not the five CLAUDE.md names** — `tests/shared/extension-version.test.ts`
-is the one the checklist misses.
-
-Phase 110 is complete and verified 20/20.
-`110-01` landed the tracer: `platform/workflow-home.ts` with
-its relocation seam deleted, `domain/workflow-project-key.ts` unedited, and both
-owner tests, in two commits (`df7b9be8`, `ed756b8f`). `110-02` landed
-`generatedWorkflowName` and `WorkflowNameCollisionError` in one commit
-(`2152a2aa`), with the ported engine-parity wrapper completed from two clauses
-to six. `110-03` landed `acorn` at `^8.16.0`, `domain/workflow-script.ts` and
-its 51-case owner test as one atomic commit of exactly four paths (`d3c5be6f`).
-The whole gate chain is green, all five pairs the phase touched are at complete
-direct coverage, and Phase 109's five inverted files plus all Phase 111
-territory are provably untouched. Then thirteen code-review fix commits followed across two review iterations
-(`101478f3`..`af1634ea`), and the verifier re-ran the whole chain live: typecheck
-0, ESLint 0, all three fallow sub-gates, Prettier, both corresponding-test
-gates, `npm test` at 5303/0, `npm run test:integration` at 32/0. Next: Phase 111 (the
-workflows bridge).
-
-**The phase mechanism is proved and reusable.** `110-01` ran it end to end:
-path-scoped `git checkout features/workflow-port-wip -- <one file>` (never a
-directory, never `extensions/`), the five-file blast-radius assertion
-immediately after, an owner test that imports every export by name so
-`fallow dead-code` stays clean without a suppression marker, 100% direct
-coverage per pair, and the full chain before each commit.
-
-**WPTH-02 does not close in this phase.** `110-01` proved only its provable
-half — the storage root is home-derived, reads no `cwd` and reads no
-environment override. The "legacy project path is never written" guarantee is a
-Phase 111 property of `persistence/locations.ts` and
-`bridges/workflows/stage.ts`. `110-01-SUMMARY.md` §WPTH-02 carry-forward has
-the detail; the requirement should be re-scoped or split rather than marked
-satisfied on Phase 110's evidence.
-
-**WNAM-03 does not close in this phase either.** `110-03` delivered its
-classification half — a script with no `meta` is `skipped` with cause
-`no-meta`, pinned by three cases and by the case that keeps it apart from
-`refused`/`unparseable`. The *warning* half (surfacing that skip to the user)
-and the "and not installed" half are both Phase 111's: nothing in Phase 110
-emits anything to a user and nothing in it installs. `110-03-SUMMARY.md`
-§WNAM-03 carry-forward has the detail; `requirements-completed` there lists
-WNAM-01, WNAM-02, WNAM-04 and WNAM-05 and deliberately omits WNAM-03.
-
-**T-110-17 is accepted, not mitigated.** `admitWorkflowScript` places no size
-or depth cap on the source it hands to acorn. The host engine has none either,
-and matching its posture is the current decision — a cap stricter than the
-engine's would refuse a script the engine accepts, and only the lax direction
-self-corrects across engine upgrades. Recorded as a candidate for Phase 115
-(admission-gate hardening), not as a Phase 110 gap.
-
-Phase 109 remains complete and verified 12/12; the inversion is live, the whole
-test tree agrees with it, and `npm run check` was green end to end at its close.
-
-**The measured WNAM-06 defect is CLOSED.** The port's
-`assertSafeSavedWorkflowName` claimed `assertSafeName` covered the engine's
-remaining `isSafeSavedWorkflowName` clauses. It did not: `assertSafeName` screens
-only `charCode < 0x20 || charCode === 0x7f` plus `/` and `\`, so a plain space
-and every `\p{Cf}` code point passed it and the engine then rejected the
-generated name. `110-02` closed it red-first — four parity rows written before
-any production edit, observed failing 4-of-78 against the ported wrapper — then
-added the `/[\s/\\\0]/u` and `/[\p{Cc}\p{Cf}]/u` screens so the wrapper carries
-all six engine clauses. The wrapper now matches engine 3.10.1 exactly rather
-than exceeding it, and its docblock cites that version.
-
-**One item rides to pull-request time, not to `110-03`.** `fallow dupes` now
-reports a new clone family in `domain/name.ts` ("2 groups, 70 lines", tree total
-928 lines / 1.4%) because `generatedWorkflowName` deliberately mirrors
-`generatedSkillName`. `fallow` exits 0, so no local gate fails, but
-`sonar-project.properties` does not list `domain/name.ts` in
-`sonar.cpd.exclusions` — expect a SonarCloud Duplicated Lines condition on the
-PR. The remedy is that exclusion entry with the `port/README.md` rationale, NOT
-a refactor into a shared colon-name helper: WNAM-06's 2026-09-04 amendment
-explicitly declines that mechanism, and main has since taught
-`generatedCommandName` nested-path and empty-head rules a flat workflow caller
-can never produce.
-
-Last activity: 2026-09-05 — Phase 112 verified 7/7 and marked complete; the
-next step is `/gsd-plan-phase 113`
-
-**The D-109-06 window is CLOSED.** Phase 111 landed `bridges/workflows/` and
-bumped `EXTENSION_VERSION` to `0.19.0`, discharging both obligations Phase 109
-deferred forward. A workflow-bearing plugin still resolves `installable` and
-renders `● (installed)` with no brace, but the bridge now materializes its
-envelopes — `tests/integration/workflow-kind-inversion.test.ts` asserts the
-envelope IS written, with the old ENOENT assertion repositioned between the two
-acts so it proves the transition rather than the end state alone. The verifier
-reproduced the negative control: restoring the old fixture body turns the case
-red, so the inverted assertion is not vacuous.
-
-**The A-03 prohibition is spent.** It forbade bumping `EXTENSION_VERSION` *during*
-the window, because the bump fires the `supportedSetGrew` convergence and no
-bridge existed to materialize anything. The bridge exists now, so the bump was
-this phase's obligation rather than its hazard, and it landed at all six sites —
-including `tests/shared/extension-version.test.ts`, which the repository's own
-bump checklist does not name.
-
-**What the bump does NOT yet do.** `orchestrators/reconcile/backfill.ts:76`
-returns early while `state.lastReconciledExtensionVersion === EXTENSION_VERSION`,
-so the bump opens that gate — but `backfill.ts:343` re-materializes through
-`reinstallPlugin`, which gains no workflows phase until Phase 112. A user who
-`--partial`-installed a workflow-bearing plugin on the released 0.18.1 still
-carries `compatibility: { installable: false, unsupported: ["workflows"] }` on
-disk and still renders `◉ helper (partially-installed) {unsupported component}`.
-Phase 112 is what makes the repair actually run; the effect lands at release.
+Deferred: the `info` surface reads every candidate script body twice, uncapped
+(code-review IN-02). Not fixed here because `install` shares that discovery
+pass, so a size ceiling would start refusing large but well-formed third-party
+scripts. Logged in `.planning/BACKLOG.md` as a scoped item.
 
 ## Progress
 
@@ -507,7 +200,7 @@ implementation.
 
 **Last session:** 2026-09-05T19:20:00Z
 
-**Stopped At:** Phase 112 complete, ready to plan Phase 113
+**Stopped At:** Phase 113 complete, ready to plan Phase 114
 **Resume File:** None
 **Next Action:** `/gsd-verify-work 112` — all four plans are executed and the
 phase gate is green. Three stale "five kinds" statements survive OUTSIDE the six

@@ -48,7 +48,7 @@ test — against the owner-test convention rather than the deleted helpers.
 - [x] **Phase 110: Domain and platform modules** — `workflow-script.ts`, `workflow-project-key.ts`, `workflow-home.ts`, the `name.ts` addition, and the `acorn` dependency land with owner tests and no test-only seams (WNAM-01..06, WPTH-02) (completed 2026-09-05)
 - [x] **Phase 111: Workflows bridge** — `bridges/workflows/` discover / stage / unstage / types and the `locations.ts` additions land with owner tests (WBRG-01..04, WPTH-01, WPTH-03..05) (completed 2026-09-05)
 - [x] **Phase 112: Install and removal lifecycle** — the sixth ledger phase, cascade unstage, and reinstall re-materialization, wired against the rewritten `install.ts` / `uninstall.ts` / `reinstall.ts` (WLIF-01..03)
-- [ ] **Phase 113: Update, enable/disable, reconcile** — the remaining lifecycle verbs plus the `info` and `list` read surfaces, wired against the rewritten orchestrators (WLIF-04..06, WFLW-04)
+- [x] **Phase 113: Update, enable/disable, reconcile** — the remaining lifecycle verbs plus the `info` and `list` read surfaces, wired against the rewritten orchestrators (WLIF-04..06, WFLW-04) (completed 2026-09-06)
 - [ ] **Phase 114: Degradation and documentation** — the third soft-dependency marker, the notify closed-set amendments, and `docs/workflows-compatibility.md` (WDEP-01..04, WDOC-01..03)
 
 ### Planned workflow-hardening
@@ -495,7 +495,7 @@ Plans:
   load-time no-re-materialization guard with a negative control (wave 2)
 - [x] 113-04-PLAN.md — The lingering-command reload remedy as a closed-set token stamped by all four
   retiring verbs, plus the verified reinstall traceability correction (wave 3)
-- [ ] 113-05-PLAN.md — The read-only retained-staging scan, its advisory on both `pending` arms, and the
+- [x] 113-05-PLAN.md — The read-only retained-staging scan, its advisory on both `pending` arms, and the
   phase green gate (wave 4)
 
 ### Phase 114: Degradation and documentation
@@ -624,7 +624,7 @@ Plans:
 | 110. Domain and platform modules | 3/3 | Complete    | 2026-09-05 |
 | 111. Workflows bridge | 4/4 | Complete    | 2026-09-05 |
 | 112. Install and removal lifecycle | 4/4 | Complete    | 2026-09-05 |
-| 113. Update, enable/disable, reconcile | 0/? | Not started | - |
+| 113. Update, enable/disable, reconcile | 5/5 | Complete    | 2026-09-06 |
 | 114. Degradation and documentation | 0/? | Not started | - |
 | 115. Install-time admission-gate warnings | 0/? | Not started | - |
 | 116. Load-time workflow convergence | 0/? | Not started | - |

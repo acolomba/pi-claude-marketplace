@@ -2613,3 +2613,36 @@ that bridge inconsistent with the other five for a defect all six share.
 member the failure arm can read, or have `runPhases` surface the context's
 accumulated warnings alongside its `RollbackPartial[]`. Either converts a
 discarded array into a rendered one for every bridge at once.
+
+## WFLOW-01: the `info` surface reads every candidate workflow script body, uncapped
+
+Raised by the Phase 113 code review as IN-02 and deliberately not fixed there.
+
+`discoverPluginWorkflows` must read each candidate script's body, because a
+workflow's command name lives in its `meta.name` rather than its filename. The
+read-only `info` surface consumes that same discovery pass, so `info` on a
+workflow-bearing plugin reads every `.js` under every declared workflows
+directory, with no size ceiling and no cap on the number of files. A plugin
+shipping a large generated script makes a read-only command do proportional IO.
+
+**Why it was not fixed in place.** `info` and the install-time stage share ONE
+discovery pass -- that sharing is deliberate and documented in
+`bridges/workflows/types.ts` and the discovery module header. So a size ceiling
+added for `info` also applies to `install`, which would begin refusing large but
+perfectly well-formed third-party scripts. That is a product decision, not a
+cleanup: it needs a ceiling number nobody has chosen, and "too large to inspect"
+is a new user-visible string requiring both tense tables, a paired catalog
+fixture, and a UAT case. The review itself hedged ("if a bound is wanted").
+
+**What a scoped item must decide.**
+
+1. The ceiling: bytes per script, and whether a file count per directory is also
+   needed.
+2. Whether `install` shares the ceiling or only `info` does. If they diverge,
+   the shared-discovery-pass claim in `types.ts` stops being true and the header
+   must change with it.
+3. The refusal wording in both tenses, plus its catalog states.
+
+**Not urgent.** The read is bounded by what the plugin author shipped, and a
+plugin that large is already pathological. It is filed so the uncapped read is
+a recorded decision rather than an oversight.
