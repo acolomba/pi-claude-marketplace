@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, readFileSync, rmSync } from "node:fs";
+import { mkdirSync, rmSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -840,10 +840,35 @@ test("RVAL-04 scope-impact rejects a missing requirements contract", async (t) =
   });
 });
 
-test("RVAL-04 scope-impact preserves ordinary JSON output", () => {
+test("RVAL-04 scope-impact preserves ordinary JSON output", async (t) => {
   // arrange
-  const projectRoot = fileURLToPath(new URL("../..", import.meta.url));
-  const ledger = JSON.parse(readFileSync(path.join(projectRoot, ledgerPath), "utf8")) as Ledger;
+  const projectRoot = await mkdtemp(path.join(tmpdir(), "revalidation-scope-output-"));
+  t.after(() => rm(projectRoot, { recursive: true, force: true }));
+  await mkdir(path.dirname(path.join(projectRoot, ledgerPath)), { recursive: true });
+  const ledger = benignLedger("fixture.md");
+  ledger.scopeChanges = [
+    {
+      id: "SCOPE-REQ-BETA-02",
+      requirementId: "BETA-02",
+      action: "narrow/split",
+      beforeAnchor: "before.md :: Before :: BETA-02 — old",
+      afterAnchor: "after.md :: After :: BETA-02 — new",
+      findingIds: ["FINDING-2"],
+      decisionIds: ["DECISION-2"],
+      rationale: "Second row.",
+    },
+    {
+      id: "SCOPE-REQ-ALPHA-01",
+      requirementId: "ALPHA-01",
+      action: "keep",
+      beforeAnchor: "before.md :: Before :: ALPHA-01 — old",
+      afterAnchor: "after.md :: After :: ALPHA-01 — new",
+      findingIds: ["FINDING-1"],
+      decisionIds: [],
+      rationale: "First row.",
+    },
+  ];
+  await writeFile(path.join(projectRoot, ledgerPath), `${JSON.stringify(ledger, null, 2)}\n`);
 
   // act
   const execution = runCli(projectRoot, ["scope-impact"]);
@@ -851,7 +876,33 @@ test("RVAL-04 scope-impact preserves ordinary JSON output", () => {
   // assert
   assert.deepStrictEqual(execution, {
     status: 0,
-    stdout: `${JSON.stringify(deriveScopeImpact(ledger), null, 2)}\n`,
+    stdout: [
+      "[",
+      "  {",
+      '    "id": "SCOPE-REQ-ALPHA-01",',
+      '    "requirementId": "ALPHA-01",',
+      '    "action": "keep",',
+      '    "findingIds": [',
+      '      "FINDING-1"',
+      "    ],",
+      '    "decisionIds": [],',
+      '    "rationale": "First row."',
+      "  },",
+      "  {",
+      '    "id": "SCOPE-REQ-BETA-02",',
+      '    "requirementId": "BETA-02",',
+      '    "action": "narrow/split",',
+      '    "findingIds": [',
+      '      "FINDING-2"',
+      "    ],",
+      '    "decisionIds": [',
+      '      "DECISION-2"',
+      "    ],",
+      '    "rationale": "Second row."',
+      "  }",
+      "]",
+      "",
+    ].join("\n"),
     stderr: "",
   });
 });
