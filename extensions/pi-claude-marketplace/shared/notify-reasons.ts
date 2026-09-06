@@ -256,11 +256,15 @@ type CommandPrivateReason =
   | "marketplace not added to project scope"
   | "orphan rewake"
   // WLIF-06: the retired-workflow-command marker. Five verbs stamp it. The
-  // three that RE-MATERIALIZE (enable / reinstall / update) take the
-  // previous-minus-placed difference through `retiresWorkflowCommand`; the two
+  // three that RE-MATERIALIZE (enable / reinstall / update) take a
+  // previous-minus-current difference through `retiresWorkflowCommand`; the two
   // that only REMOVE (uninstall / disable) read what their cascade reported
-  // dropping. Named here for the proof rather than promoted to a shared topic
-  // group. Like the cross-scope pair above, it IS a `ContentReason`.
+  // dropping. Enable and reinstall pass PLACED names; update passes its
+  // PREPARED names, which equal the placed ones there because that call site
+  // sits past the phase-3 failure guard -- a commit that placed any less took
+  // the failure exit instead. Named here for the proof rather than promoted to
+  // a shared topic group. Like the cross-scope pair above, it IS a
+  // `ContentReason`.
   | "stale workflow command";
 
 /**

@@ -2623,7 +2623,9 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<UpdateRunOutco
   // signals rather than at the shared row composer -- the composer is called by
   // both update cascades and neither of them holds `preflight.record`, which is
   // the pre-update inventory the difference is taken against. `stagedNames` is
-  // what this re-stage placed, so a version that withdrew or renamed a workflow
+  // what this re-stage PREPARED, which is what it placed at this point: the
+  // phase-3 failure guard above has already returned, so a commit that placed
+  // any less never reaches here. A version that withdrew or renamed a workflow
   // leaves its old generated name in the difference.
   const staleWorkflowCommand = retiresWorkflowCommand(
     preflight.record.resources.workflows,
