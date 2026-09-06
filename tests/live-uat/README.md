@@ -28,7 +28,7 @@ The harness builds a disposable path-source marketplace with three plugins -- a 
 
 - **A1** (INV-01..04) -- `list` keeps the record and stamps `{not in manifest}`.
 - **A2** (BOUND-03) -- the still-declared control plugin is **not** stamped, proving the reason tracks the entry rather than the read.
-- **A3** (INFO-09..11) -- `info` renders from the installation record instead of `(failed)`, and reconstructs the component inventory across all five kinds.
+- **A3** (INFO-09..11) -- `info` renders from the installation record instead of `(failed)`, and reconstructs the component inventory across all six kinds.
 - **A4** (INFO-12) -- `info --fetch` emits the skip note instead of reaching the network.
 - **A5** (LIFE-05) -- `update` renders `(skipped) {not in manifest}`.
 - **A6** (LIFE-04) -- `uninstall` succeeds, removes the staged artifacts from disk, and drops the record.

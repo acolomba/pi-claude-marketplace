@@ -246,7 +246,7 @@ Their history is persistent, atomic, capped at 100 entries, and replayable from 
 
 We have everything below the discovery layer.
 
-We resolve a Claude plugin, read its manifest, and translate five component kinds into Pi-native artifacts. We install under a five-phase transactional ledger with symmetric undo, so a failure in the MCP phase unwinds the skills, commands, agents, and hooks already committed. We hold a cross-process advisory lock over the `state.json` file of each scope while we do it. We support two scopes, `user` and `project`, with independent records. We contain every write inside a branded `ScopedLocations` bundle and refuse any path outside it.
+We resolve a Claude plugin, read its manifest, and translate six component kinds into Pi-native artifacts. We install under a seven-phase transactional ledger with symmetric undo, so a failure in the MCP phase unwinds the skills, commands, agents, and hooks already committed. We hold a cross-process advisory lock over the `state.json` file of each scope while we do it. We support two scopes, `user` and `project`, with independent records. We contain every write inside a branded `ScopedLocations` bundle and refuse any path outside it.
 
 We degrade rather than refuse. An unsupported component kind marks the plugin `partially-available`, and `--partial` installs the rest. An absent companion extension degrades in presentation instead of a failure.
 
@@ -342,7 +342,7 @@ There is no compatibility contract with any host: no peer dependency on Pi, only
 
 ### Our strengths
 
-We do the part that is hard to do correctly, and we do it under guarantees. We translate five component kinds. We run a transactional ledger with symmetric undo, a cross-process lock, two scopes, path containment on every write, and recovery through `/reload` alone. Our offline promise fails the build when it breaks. Our output vocabulary is a closed set, gated byte-for-byte against `docs/output-catalog.md`.
+We do the part that is hard to do correctly, and we do it under guarantees. We translate six component kinds. We run a transactional ledger with symmetric undo, a cross-process lock, two scopes, path containment on every write, and recovery through `/reload` alone. Our offline promise fails the build when it breaks. Our output vocabulary is a closed set, gated byte-for-byte against `docs/output-catalog.md`.
 
 We are also the only product in this comparison that a user can adopt without a break from Claude Code, because we import the plugin set they already have.
 

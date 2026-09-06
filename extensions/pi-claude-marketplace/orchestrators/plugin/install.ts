@@ -955,7 +955,7 @@ async function runInstallLedgerBody(
   };
 
   // D-01 literal-array discipline: each phase is a single Phase<InstallCtx>
-  // value; the ledger sees a 5-element constant array.
+  // value; the ledger sees a 7-element constant array.
   const skillsPhase: Phase<InstallCtx> = {
     name: "skills",
     do: async (c) => {

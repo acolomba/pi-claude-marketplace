@@ -866,7 +866,7 @@ test("ENBL-02 / ENBL-18: disable preserves the version pin and the record's reso
 });
 
 // ENBL-13 / ENBL-18 / D-100-04: artifact removal stays symmetric across all
-// five kinds -- cascadeUnstagePlugin still unstages hooks via removeHookConfig,
+// six kinds -- cascadeUnstagePlugin still unstages hooks via removeHookConfig,
 // so hooks.json is gone from disk. What the record keeps is the DESCRIPTION of
 // what was installed, not the artifact: `resources.hooks` survives the disable
 // so `info` can still report the plugin's contents while it is disabled, and
