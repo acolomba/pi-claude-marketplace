@@ -146,6 +146,18 @@ function expectedOutcome(file, claims, findings) {
     : "no live findings";
 }
 
+function categoryForPath(candidate) {
+  if (
+    (!candidate.includes("/adversarial/") && candidate.split("/").at(-1).startsWith("_")) ||
+    candidate.endsWith("/README.md") ||
+    candidate.endsWith("/META-FINDINGS.md")
+  ) {
+    return "control";
+  }
+
+  return candidate.includes("/adversarial/") ? "adversarial" : "first-pass";
+}
+
 function validateReference(reference, projectRoot, target, violations) {
   if (!isObject(reference) || typeof reference.path !== "string") {
     violations.push(violation("invalid-reference", target, "reference must contain a path"));
@@ -209,6 +221,7 @@ export function validateLedger(ledger, context = {}) {
   const allowInconclusive = context.allowInconclusive ?? false;
   const allowPendingDecisions = context.allowPendingDecisions ?? false;
   const requireLive = context.requireLive ?? false;
+  const assignment = context.assignment ?? [];
   const decisionId = context.decisionId;
   const violations = [];
   for (const collection of ["files", "sourceClaims", "findings", "decisions", "scopeChanges"]) {
@@ -361,6 +374,34 @@ export function validateLedger(ledger, context = {}) {
 
     if (!OUTCOMES.has(file.outcome)) {
       violations.push(violation("invalid-outcome", file.path, String(file.outcome)));
+    }
+
+    if (ledger.inventoryMode === "live") {
+      const assignmentRow = assignment.find((row) => row.path === file.path);
+      if (!assignmentRow) {
+        violations.push(
+          violation("missing-assignment-row", file.path, "live file is absent from assignment"),
+        );
+      } else if (file.assignedPlan !== assignmentRow.plan) {
+        violations.push(
+          violation(
+            "assigned-plan",
+            file.path,
+            `expected ${assignmentRow.plan}; found ${String(file.assignedPlan)}`,
+          ),
+        );
+      }
+
+      const expectedCategory = categoryForPath(file.path);
+      if (file.category !== expectedCategory) {
+        violations.push(
+          violation(
+            "file-category",
+            file.path,
+            `expected ${expectedCategory}; found ${String(file.category)}`,
+          ),
+        );
+      }
     }
 
     const linkedClaims = [...claims.values()].filter((claim) => claim.filePath === file.path);
@@ -886,10 +927,20 @@ function readJson(projectRoot, relativePath) {
   return JSON.parse(readFileSync(assertSafeRelativePath(projectRoot, relativePath), "utf8"));
 }
 
-function validationContext(projectRoot, options) {
+function readAssignments(projectRoot, options) {
+  return parseAssignments(
+    readFileSync(
+      assertSafeRelativePath(projectRoot, options.assignment ?? ASSIGNMENT_PATH),
+      "utf8",
+    ),
+  );
+}
+
+function validationContext(projectRoot, options, assignment = []) {
   return {
     projectRoot,
     requireLive: true,
+    assignment,
     allowIncomplete: options["allow-incomplete"] === true,
     allowInconclusive: options["allow-inconclusive"] === true,
     allowPendingDecisions: options["allow-pending-decisions"] === true,
@@ -922,27 +973,18 @@ function main(args = process.argv.slice(2)) {
     : null;
   if (command === "inventory") {
     const inventory = enumerateCorpus(projectRoot);
-    const assignment = parseAssignments(
-      readFileSync(
-        assertSafeRelativePath(projectRoot, options.assignment ?? ASSIGNMENT_PATH),
-        "utf8",
-      ),
-    );
+    const assignment = readAssignments(projectRoot, options);
     const assigned = assignment.map((row) => row.path);
     if (JSON.stringify(inventory) !== JSON.stringify(assigned)) {
       throw new Error("live inventory differs from corpus assignment");
     }
 
-    const categories = {
-      control: assigned.filter(
-        (candidate) =>
-          (!candidate.includes("/adversarial/") && candidate.split("/").at(-1).startsWith("_")) ||
-          candidate.endsWith("/README.md") ||
-          candidate.endsWith("/META-FINDINGS.md"),
-      ).length,
-      adversarial: assigned.filter((candidate) => candidate.includes("/adversarial/")).length,
-    };
-    categories["first-pass"] = assigned.length - categories.control - categories.adversarial;
+    const categories = Object.fromEntries(
+      [...CATEGORIES].map((category) => [
+        category,
+        assigned.filter((candidate) => categoryForPath(candidate) === category).length,
+      ]),
+    );
     process.stdout.write(
       `Inventory valid: ${assigned.length} total (${categories["first-pass"]} first-pass, ${categories.adversarial} adversarial, ${categories.control} control)\n`,
     );
@@ -962,7 +1004,11 @@ function main(args = process.argv.slice(2)) {
   }
 
   if (command === "validate") {
-    const violations = validateLedger(ledger, validationContext(projectRoot, options));
+    const assignment = readAssignments(projectRoot, options);
+    const violations = validateLedger(
+      ledger,
+      validationContext(projectRoot, options, assignment),
+    );
     const rendered = renderRevalidation(ledger);
     const markdown = readFileSync(assertSafeRelativePath(projectRoot, MARKDOWN_PATH), "utf8");
     if (markdown !== rendered) {
@@ -988,10 +1034,7 @@ function main(args = process.argv.slice(2)) {
     return;
   }
 
-  const assignmentPath = options.assignment ?? ASSIGNMENT_PATH;
-  const assignment = parseAssignments(
-    readFileSync(assertSafeRelativePath(projectRoot, assignmentPath), "utf8"),
-  );
+  const assignment = readAssignments(projectRoot, options);
   if (command === "validate-shard") {
     const shard = readJson(projectRoot, options.shard);
     if (options.plan && shard.plan !== options.plan) {
@@ -1021,7 +1064,10 @@ function main(args = process.argv.slice(2)) {
       shards,
       assignment,
     );
-    const violations = validateLedger(merged, validationContext(projectRoot, options));
+    const violations = validateLedger(
+      merged,
+      validationContext(projectRoot, options, assignment),
+    );
     if (violations.length > 0) {
       for (const item of violations) {
         process.stderr.write(`${item.code}: ${item.target}: ${item.message}\n`);
