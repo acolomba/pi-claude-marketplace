@@ -299,3 +299,11 @@ No blockers. Nothing in this plan touches `update.ts`, `enable-disable.ts`, `ins
 ---
 *Phase: 113-update-enable-disable-reconcile*
 *Completed: 2026-09-05*
+
+## Self-Check: PASSED
+
+Every file this summary claims exists on disk, and every commit hash it names resolves in `git log`.
+
+- Files verified: `113-01-SUMMARY.md`, `bridges/workflows/types.ts`, `bridges/workflows/discover.ts`, `shared/notify.ts`, `orchestrators/plugin/info.ts`, `docs/output-catalog.md`
+- Commits verified: `282c23f6`, `0fe0f018`, `e4e8c71d`, `3f1f0ca3`
+- `.planning/workstreams/workflows/STATE.md` and `ROADMAP.md`: untouched, per the orchestrator's ownership of those files.
