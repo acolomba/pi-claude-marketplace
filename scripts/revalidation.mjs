@@ -387,6 +387,21 @@ export function validateLedger(ledger, context = {}) {
       );
     }
 
+    const expectedClaimIds = [...claims.values()]
+      .filter((claim) => claim.findingId === finding.id)
+      .map((claim) => claim.id)
+      .sort();
+    const declaredClaimIds = Array.isArray(finding.claimIds) ? [...finding.claimIds].sort() : [];
+    if (JSON.stringify(expectedClaimIds) !== JSON.stringify(declaredClaimIds)) {
+      violations.push(
+        violation(
+          "finding-claim-links",
+          finding.id,
+          "declared claimIds do not match sourceClaims",
+        ),
+      );
+    }
+
     for (const claimId of finding.claimIds ?? []) {
       if (!claims.has(claimId)) {
         violations.push(violation("dangling-finding-claim", finding.id, claimId));
