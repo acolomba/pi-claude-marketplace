@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdirSync, rmSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -286,6 +286,18 @@ async function destinationBytes(projectRoot: string): Promise<readonly [Buffer, 
     readFile(path.join(projectRoot, ledgerPath)),
     readFile(path.join(projectRoot, markdownPath)),
   ]);
+}
+
+async function phaseArtifactNames(projectRoot: string): Promise<string[]> {
+  return (await readdir(path.join(projectRoot, phaseRoot))).sort();
+}
+
+function canonicalPhaseArtifactNames(): string[] {
+  return ["01-CORPUS-ASSIGNMENT.md", "01-REVALIDATION.json", "01-REVALIDATION.md", "shards"];
+}
+
+function normalizeTransactionArtifact(name: string): string {
+  return name.replace(/\.backup-\d+-\d+-[0-9a-f]+$/, ".backup-<transaction>");
 }
 
 function publishJournalRecords(transactionId: string) {
@@ -1834,8 +1846,8 @@ test("publish cleans staged files when staging fails", async (t) => {
   // arrange
   const fixture = await createCliFixture(t);
 
-  // act & assert
-  assert.throws(() => {
+  // act
+  const publish = () => {
     publishRevalidation(fixture.projectRoot, "{}\n", "markdown\n", {
       beforeStage(destination) {
         if (destination === markdownPath) {
@@ -1843,7 +1855,14 @@ test("publish cleans staged files when staging fails", async (t) => {
         }
       },
     });
-  }, /injected staging failure/);
+  };
+
+  // assert
+  assert.throws(publish, /injected staging failure/);
+  assert.deepStrictEqual(
+    await phaseArtifactNames(fixture.projectRoot),
+    canonicalPhaseArtifactNames(),
+  );
 });
 
 test("atomic journal writes remove their temporary file after rename failure", async (t) => {
@@ -1851,14 +1870,21 @@ test("atomic journal writes remove their temporary file after rename failure", a
   const fixture = await createCliFixture(t);
   const journalPath = path.join(fixture.projectRoot, phaseRoot, ".publish-journal.json");
 
-  // act & assert
-  assert.throws(() => {
+  // act
+  const publish = () => {
     publishRevalidation(fixture.projectRoot, "{}\n", "markdown\n", {
       afterStage() {
         mkdirSync(journalPath);
       },
     });
-  }, /EISDIR|ENOTEMPTY|directory/);
+  };
+
+  // assert
+  assert.throws(publish, /EISDIR|ENOTEMPTY|directory/);
+  assert.deepStrictEqual(await phaseArtifactNames(fixture.projectRoot), [
+    ".publish-journal.json",
+    ...canonicalPhaseArtifactNames(),
+  ]);
 });
 
 test("publish recovery rejects malformed journals and non-file transaction paths", async (t) => {
@@ -1972,51 +1998,73 @@ for (const row of [
   });
 }
 
-test("publish recovery completes both staged rollback and published cleanup", async (t) => {
+test("publish recovery removes every staged rollback artifact", async (t) => {
   // arrange
   const fixture = await createCliFixture(t);
   const journalPath = path.join(fixture.projectRoot, phaseRoot, ".publish-journal.json");
-  const stagedRecords = publishJournalRecords("1-1-a");
-  stagedRecords[0]!.hadDestination = false;
-  const staged = stagedRecords[0]!.staged;
-  await writeFile(path.join(fixture.projectRoot, staged), "staged\n");
+  const records = publishJournalRecords("1-1-a");
+  for (const record of records) {
+    await writeFile(path.join(fixture.projectRoot, record.staged), "staged\n");
+  }
   await writeFile(
     journalPath,
     `${JSON.stringify({
       status: "staged",
-      records: stagedRecords,
-    })}\n`,
-  );
-  publishRevalidation(fixture.projectRoot, "first\n", "first markdown\n");
-
-  const publishedRecords = publishJournalRecords("2-2-b");
-  const backup = publishedRecords[0]!.backup;
-  await writeFile(path.join(fixture.projectRoot, backup), "old backup\n");
-  await writeFile(
-    journalPath,
-    `${JSON.stringify({
-      status: "published",
-      records: publishedRecords,
+      records,
     })}\n`,
   );
 
   // act
-  publishRevalidation(fixture.projectRoot, "second\n", "second markdown\n");
+  publishRevalidation(fixture.projectRoot, "replacement\n", "replacement markdown\n");
 
   // assert
   assert.deepStrictEqual(await destinationBytes(fixture.projectRoot), [
-    Buffer.from("second\n"),
-    Buffer.from("second markdown\n"),
+    Buffer.from("replacement\n"),
+    Buffer.from("replacement markdown\n"),
   ]);
+  assert.deepStrictEqual(
+    await phaseArtifactNames(fixture.projectRoot),
+    canonicalPhaseArtifactNames(),
+  );
 });
 
-test("publish retains its journal when rollback also fails", async (t) => {
+test("publish recovery removes every published cleanup artifact", async (t) => {
+  // arrange
+  const fixture = await createCliFixture(t);
+  const journalPath = path.join(fixture.projectRoot, phaseRoot, ".publish-journal.json");
+  const records = publishJournalRecords("2-2-b");
+  for (const record of records) {
+    await writeFile(path.join(fixture.projectRoot, record.backup), "old backup\n");
+  }
+  await writeFile(
+    journalPath,
+    `${JSON.stringify({
+      status: "published",
+      records,
+    })}\n`,
+  );
+
+  // act
+  publishRevalidation(fixture.projectRoot, "replacement\n", "replacement markdown\n");
+
+  // assert
+  assert.deepStrictEqual(await destinationBytes(fixture.projectRoot), [
+    Buffer.from("replacement\n"),
+    Buffer.from("replacement markdown\n"),
+  ]);
+  assert.deepStrictEqual(
+    await phaseArtifactNames(fixture.projectRoot),
+    canonicalPhaseArtifactNames(),
+  );
+});
+
+test("publish retains only recoverable artifacts when rollback also fails", async (t) => {
   // arrange
   const fixture = await createCliFixture(t);
   const ledgerDestination = path.join(fixture.projectRoot, ledgerPath);
 
-  // act & assert
-  assert.throws(() => {
+  // act
+  const publish = () => {
     publishRevalidation(fixture.projectRoot, "new\n", "new markdown\n", {
       afterPublish(destination) {
         if (destination === ledgerPath) {
@@ -2026,7 +2074,21 @@ test("publish retains its journal when rollback also fails", async (t) => {
         }
       },
     });
-  }, AggregateError);
+  };
+
+  // assert
+  assert.throws(publish, AggregateError);
+  assert.deepStrictEqual(
+    (await phaseArtifactNames(fixture.projectRoot)).map(normalizeTransactionArtifact),
+    [
+      ".publish-journal.json",
+      "01-CORPUS-ASSIGNMENT.md",
+      "01-REVALIDATION.json",
+      "01-REVALIDATION.json.backup-<transaction>",
+      "01-REVALIDATION.md",
+      "shards",
+    ],
+  );
 });
 
 test("collection fallbacks and render ordering cover empty and plural views", async (t) => {
