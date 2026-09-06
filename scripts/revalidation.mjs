@@ -497,20 +497,18 @@ export function validateLedger(ledger, context = {}) {
     violations.push(violation("unknown-decision", decisionId, "decision is not in the ledger"));
   }
 
-  if (allowPendingDecisions) {
-    const pendingDecisionIds = ledger.decisions
-      .filter((decision) => decision.status === "pending")
-      .map((decision) => decision.id)
-      .sort();
-    if (JSON.stringify(pendingDecisionIds) !== JSON.stringify(PENDING_DECISION_IDS)) {
-      violations.push(
-        violation(
-          "pending-decision-set",
-          "decisions",
-          `pending decisions must be exactly ${PENDING_DECISION_IDS.join(", ")}`,
-        ),
-      );
-    }
+  const ledgerDecisionIds = ledger.decisions.map((decision) => decision.id).sort();
+  if (
+    ledger.inventoryMode === "live" &&
+    JSON.stringify(ledgerDecisionIds) !== JSON.stringify(PENDING_DECISION_IDS)
+  ) {
+    violations.push(
+      violation(
+        "decision-set",
+        "decisions",
+        `decisions must be exactly ${PENDING_DECISION_IDS.join(", ")}`,
+      ),
+    );
   }
 
   for (const decision of ledger.decisions) {
@@ -559,6 +557,52 @@ export function validateLedger(ledger, context = {}) {
             "options, rejectedOptions, and affectedIds are mandatory",
           ),
         );
+      }
+
+      if (Array.isArray(decision.options)) {
+        const duplicateOptions = duplicateValues(decision.options);
+        if (duplicateOptions.length > 0) {
+          violations.push(
+            violation("duplicate-decision-option", decision.id, duplicateOptions.join(", ")),
+          );
+        }
+
+        if (!decision.options.includes(decision.selectedOption)) {
+          violations.push(
+            violation(
+              "invalid-selected-option",
+              decision.id,
+              "selectedOption must be one of options",
+            ),
+          );
+        }
+
+        if (Array.isArray(decision.rejectedOptions)) {
+          const duplicateRejectedOptions = duplicateValues(decision.rejectedOptions);
+          if (duplicateRejectedOptions.length > 0) {
+            violations.push(
+              violation(
+                "duplicate-rejected-option",
+                decision.id,
+                duplicateRejectedOptions.join(", "),
+              ),
+            );
+          }
+
+          if (
+            decision.rejectedOptions.some(
+              (option) => option === decision.selectedOption || !decision.options.includes(option),
+            )
+          ) {
+            violations.push(
+              violation(
+                "invalid-rejected-option",
+                decision.id,
+                "rejectedOptions must contain only unselected options",
+              ),
+            );
+          }
+        }
       }
     } else if (decision.status !== "pending") {
       violations.push(violation("invalid-decision-status", decision.id, String(decision.status)));
