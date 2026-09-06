@@ -1509,10 +1509,18 @@ function handleValidateShard({ projectRoot, options, runtime }) {
 
 function readShards(projectRoot, relativeRoot) {
   const absoluteRoot = assertSafeRelativePath(projectRoot, relativeRoot);
-  return readdirSync(absoluteRoot)
-    .filter((name) => name.endsWith(".json"))
-    .sort()
-    .map((name) => JSON.parse(readFileSync(path.join(absoluteRoot, name), "utf8")));
+  return readdirSync(absoluteRoot, { withFileTypes: true })
+    .filter((entry) => entry.name.endsWith(".json"))
+    .sort((left, right) => left.name.localeCompare(right.name))
+    .map((entry) => {
+      const relativePath = toPosix(path.join(relativeRoot, entry.name));
+      if (!entry.isFile()) {
+        throw new Error(`shard member must be a regular file: ${relativePath}`);
+      }
+
+      const absolutePath = assertSafeRelativePath(projectRoot, relativePath);
+      return JSON.parse(readFileSync(absolutePath, "utf8"));
+    });
 }
 
 function handleMergeShards({ projectRoot, ledger, options, runtime }) {

@@ -1069,6 +1069,31 @@ test("validator rejects a corpus path that resolves outside through a real symli
   );
 });
 
+test("public merge rejects a shard symlink that resolves outside the repository", async (t) => {
+  // arrange
+  const fixture = await createCliFixture(t);
+  const outsideRoot = await mkdtemp(path.join(tmpdir(), "revalidation-shard-outside-"));
+  t.after(() => rm(outsideRoot, { recursive: true, force: true }));
+  const shardPath = path.join(fixture.projectRoot, shardRoot, "01-02.json");
+  const outsideShard = path.join(outsideRoot, "outside.json");
+  await writeFile(outsideShard, JSON.stringify(fixture.shard));
+  await rm(shardPath);
+  await symlink(outsideShard, shardPath);
+
+  // act & assert
+  assert.throws(() => {
+    runInProcess(fixture.projectRoot, [
+      "merge-shards",
+      "--assignment",
+      assignmentPath,
+      "--shard-dir",
+      shardRoot,
+      "--check",
+      "--allow-pending-decisions",
+    ]);
+  }, /shard member must be a regular file/);
+});
+
 test("renderer rejects a write target that is a real symlink", async (t) => {
   // arrange
   const fixture = await createCliFixture(t);
