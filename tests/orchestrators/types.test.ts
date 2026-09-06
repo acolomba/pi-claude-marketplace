@@ -99,6 +99,22 @@ const UPDATE_PHASE_FAILURE = {
   phase: "skills",
 } satisfies UpdatePhaseFailure;
 
+/**
+ * WR-03: the workflows member exercised as its five siblings are -- a concrete
+ * failure carried on the `(failed)` partition, not just a key in the Record
+ * above.
+ *
+ * The message is the refusal the update verb actually raises: the saved
+ * directory is shared with the user's own workflows and with every other
+ * plugin, so a target still occupied after displacement is foreign and the
+ * commit declines it rather than renaming over it. The behavior behind this
+ * shape is driven end to end in `tests/orchestrators/plugin/update.test.ts`.
+ */
+const UPDATE_PHASE_FAILURE_WORKFLOWS = {
+  msg: "cannot replace workflow target with non-previous content",
+  phase: "workflows",
+} satisfies UpdatePhaseFailure;
+
 const PLUGIN_UPDATE_BASE = {
   declaresAgents: false,
   declaresMcp: false,
@@ -179,7 +195,7 @@ const PLUGIN_UPDATE_FAILED_FULL = {
   name: "alpha",
   notes: ["permission denied while updating alpha"],
   partition: "failed",
-  phaseFailures: [UPDATE_PHASE_FAILURE],
+  phaseFailures: [UPDATE_PHASE_FAILURE, UPDATE_PHASE_FAILURE_WORKFLOWS],
   reasons: ["permission denied", "rollback partial"],
   toVersion: "2.0.0",
 } satisfies PluginUpdateFailedOutcome;

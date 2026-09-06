@@ -9107,30 +9107,52 @@ test("CR-03: a workflows staging-cleanup leak is a recorded failure and the reco
   });
 });
 
-test("CR-03: a refused workflows commit places nothing and the record keeps only the pre-update names", async () => {
+/** The envelope body version A of `hello:greet` carries. */
+const GREET_VERSION_A_SOURCE =
+  'export const meta = { name: "greet", description: "does greet" };\n';
+
+/**
+ * WR-03: the deterministic workflows-failure vehicle every case below drives.
+ *
+ * Version A installs `greet`. Version B adds `wave`, and a FOREIGN envelope is
+ * planted at version B's `hello:wave` target -- a name the pre-update record
+ * does not hold. The bridge's ownership pre-check runs over the whole target
+ * set BEFORE the first rename, so the commit refuses by class and provably
+ * places nothing, which is what lets the same vehicle pin the record narrowing
+ * as well as the failure's identity.
+ *
+ * Planted on the filesystem rather than simulated by patching a module: this
+ * repository exposes no test-only seams and a gate counts them.
+ */
+async function seedRefusedWorkflowUpdate(cwd: string): Promise<{
+  readonly locations: ReturnType<typeof locationsFor>;
+  readonly foreignPath: string;
+  readonly foreignBytes: string;
+}> {
+  const locations = locationsFor("project", cwd);
+  const { marketplaceRoot, manifestPath } = await seedInstalledWorkflowPlugin({
+    cwd,
+    version: "1.0.0",
+    workflows: [{ sourceName: "greet", body: GREET_VERSION_A_SOURCE }],
+  });
+  await writeWorkflowScripts(marketplaceRoot, "hello", [
+    { sourceName: "greet", body: GREET_VERSION_A_SOURCE },
+    { sourceName: "wave" },
+  ]);
+  await rewriteManifest(manifestPath, "mp", { hello: { version: "2.10.0" } });
+  const foreignPath = path.join(locations.workflowsSavedDir, "hello:wave.json");
+  const foreignBytes = '{"name":"hello:wave","script":"// hand-saved by the user\\n"}';
+  await writeFile(foreignPath, foreignBytes, "utf8");
+  return { locations, foreignPath, foreignBytes };
+}
+
+test("CR-03: a refused workflows commit leaves the foreign file and restores the previous envelope", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "update-workflows-refused-"));
     const previousCwd = process.cwd();
     try {
-      // arrange -- a foreign envelope sits at one of version B's target paths
-      // under a name the record does not hold. WR-06: the whole-set ownership
-      // pre-check runs before the first rename, so the refusal provably places
-      // nothing.
-      const locations = locationsFor("project", cwd);
-      const versionASource = 'export const meta = { name: "greet", description: "does greet" };\n';
-      const { marketplaceRoot, manifestPath } = await seedInstalledWorkflowPlugin({
-        cwd,
-        version: "1.0.0",
-        workflows: [{ sourceName: "greet" }],
-      });
-      await writeWorkflowScripts(marketplaceRoot, "hello", [
-        { sourceName: "greet" },
-        { sourceName: "wave" },
-      ]);
-      await rewriteManifest(manifestPath, "mp", { hello: { version: "2.10.0" } });
-      const foreignPath = path.join(locations.workflowsSavedDir, "hello:wave.json");
-      const foreignBytes = '{"name":"hello:wave","script":"// hand-saved by the user\\n"}';
-      await writeFile(foreignPath, foreignBytes, "utf8");
+      // arrange
+      const { locations, foreignPath, foreignBytes } = await seedRefusedWorkflowUpdate(cwd);
       process.chdir(cwd);
 
       // act
@@ -9138,25 +9160,125 @@ test("CR-03: a refused workflows commit places nothing and the record keeps only
 
       // assert
       assert.equal(outcome.partition, "failed");
-      const workflowFailure = (outcome.phaseFailures ?? []).find((f) => f.phase === "workflows");
-      assert.ok(workflowFailure !== undefined, JSON.stringify(outcome.phaseFailures));
-
-      const record = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
-        "hello"
-      ];
-      // The prepared set was ["hello:greet", "hello:wave"]. Recording it would
-      // have named an envelope the commit never wrote -- and `hello:wave` is
-      // the FOREIGN file, so a later removal would delete the user's own work.
-      assert.deepEqual(record?.resources.workflows, ["hello:greet"]);
-      assert.equal(await readFile(foreignPath, "utf8"), foreignBytes);
+      assert.equal(
+        await readFile(foreignPath, "utf8"),
+        foreignBytes,
+        "the refusal must leave the user's own saved workflow byte-for-byte",
+      );
       // The plugin's own previous envelope was displaced and put back.
       assert.deepEqual(await readEnvelope(locations.workflowsSavedDir, "hello:greet"), {
         name: "hello:greet",
         description: "does greet",
-        script: versionASource,
+        script: GREET_VERSION_A_SOURCE,
       });
     } finally {
       process.chdir(previousCwd);
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// ─── WR-03: one reachability case per widened `workflows` failure slot ────────
+//
+// Three closed sets already carry a `workflows` member that this verb could not
+// produce. Each case below drives a REAL workflows failure through the update
+// verb and observes ONE of them, on a value the production code produced. A
+// single end-to-end case would prove only the slot it happens to touch and
+// leave the other two inferred, which is the state these cases exist to end.
+
+test("WR-03: a workflows failure reaches the update ledger's failed-phase set", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-workflows-slot-ledger-"));
+    const previousCwd = process.cwd();
+    try {
+      // arrange
+      const { locations } = await seedRefusedWorkflowUpdate(cwd);
+      process.chdir(cwd);
+
+      // act
+      await updateSinglePlugin("hello", "mp", "project");
+
+      // assert -- the PERSISTED record is the observation. The finalize window
+      // builds its failed-phase set by filtering the reported phases through
+      // the ledger's own phase tuple, so a tuple without the `workflows` member
+      // would drop this failure, take the success arm, and record the PREPARED
+      // pair ["hello:greet", "hello:wave"] -- naming the foreign file. The
+      // pre-update inventory alone is what the failure arm produces, and only
+      // the failure arm can produce it.
+      const record = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
+        "hello"
+      ];
+      assert.deepEqual(record?.resources.workflows, ["hello:greet"]);
+      // The other bridges still committed and still wrote their own inventories,
+      // so the narrowing above is the per-phase gate firing rather than a whole
+      // finalize that never ran.
+      assert.equal((record?.resources.skills ?? []).length > 0, true);
+    } finally {
+      process.chdir(previousCwd);
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WR-03: a workflows failure reaches the update outcome's per-phase failure list", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-workflows-slot-outcome-"));
+    const previousCwd = process.cwd();
+    try {
+      // arrange
+      await seedRefusedWorkflowUpdate(cwd);
+      process.chdir(cwd);
+
+      // act
+      const outcome = await updateSinglePlugin("hello", "mp", "project");
+
+      // assert -- the RETURNED outcome is the observation. `phaseFailures` is
+      // typed by the shared orchestrator vocabulary, so a `workflows` entry
+      // arriving here is that union's member being produced rather than
+      // declared.
+      assert.equal(outcome.partition, "failed");
+      const phases = (outcome.phaseFailures ?? []).map((failure) => failure.phase);
+      assert.deepEqual(phases, ["workflows"], JSON.stringify(outcome.phaseFailures));
+    } finally {
+      process.chdir(previousCwd);
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WR-03: a workflows failure reaches the rendered rollback-partial row", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-workflows-slot-row-"));
+    try {
+      // arrange
+      await seedRefusedWorkflowUpdate(cwd);
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      // assert -- the RENDERED bytes are the observation. The direct path hands
+      // the renderer the typed per-phase failures verbatim, so the phase member
+      // on the shared failure interface is what puts this line on screen.
+      const body = notifications.map((n) => n.message).join("\n");
+      assert.match(body, /\{rollback partial\}/, `no aggregate row in:\n${body}`);
+      assert.match(
+        body,
+        /\[workflows\] \(rollback failed\)/,
+        `the failing bridge must be named on its own child row in:\n${body}`,
+      );
+      assert.match(
+        body,
+        /plugin-uninstall \+ plugin-install for "hello"\./,
+        `a phase-3 aggregate must carry the recovery hint in:\n${body}`,
+      );
+    } finally {
       await rm(cwd, { recursive: true, force: true });
     }
   });
