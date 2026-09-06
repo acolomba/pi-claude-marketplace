@@ -958,6 +958,7 @@ for (const row of [
       "  with it; stale, struck, and evidence-only claims authorize no implementation.",
     replacement: (original: string) => `<!--\n${original}\n-->`,
     expectedStderr:
+      "missing-requirement-clause: PDEF-01: requirement clause is blank or absent\n" +
       "missing-requirement-definition: PDEF-01: active definition is absent\n" +
       "scope-after-anchor: SCOPE-REQ-PDEF-01: afterAnchor does not resolve to requirement\n",
   },
@@ -1054,6 +1055,39 @@ test("RVAL-04 scope-impact rejects changed requirement clause text", async (t) =
     stderr: "requirement-clause: PDEF-01: requirement clause differs from scope signature\n",
   });
 });
+
+for (const row of [
+  {
+    title: "RVAL-04 scope-impact rejects a blank active requirement clause",
+    requirementId: "PDEF-01",
+    pattern: /- \[ \] \*\*PDEF-01\*\*:[\s\S]*?(?=\n- \[)/,
+    replacement: "- [ ] **PDEF-01**:",
+  },
+  {
+    title: "RVAL-04 scope-impact rejects a blank evidence requirement clause",
+    requirementId: "GGAT-02",
+    pattern: /- \*\*GGAT-02\*\*[\s\S]*?(?=\n- \*\*RCOV-04\*\*)/,
+    replacement: "- **GGAT-02** (`SCOPE-REQ-GGAT-02`, formerly Phase 7):",
+  },
+] as const) {
+  test(row.title, async (t) => {
+    // arrange
+    const projectRoot = await createScopeImpactFixture(t);
+    const contractPath = path.join(projectRoot, ".planning/REQUIREMENTS.md");
+    const contract = await readFile(contractPath, "utf8");
+    await writeFile(contractPath, contract.replace(row.pattern, row.replacement));
+
+    // act
+    const execution = runCli(projectRoot, ["scope-impact", "--check"]);
+
+    // assert
+    assert.deepStrictEqual(execution, {
+      status: 1,
+      stdout: "",
+      stderr: `missing-requirement-clause: ${row.requirementId}: requirement clause is blank or absent\n`,
+    });
+  });
+}
 
 test("RVAL-04 scope-impact rejects duplicate evidence history records", async (t) => {
   // arrange

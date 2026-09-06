@@ -2001,12 +2001,13 @@ function parseRequirementDispositions(markdown, violations) {
 
 function parseRequirementsContract(markdown, violations) {
   const { definitions, history } = parseRequirementLocations(markdown, violations);
+  const clauses = parseRequirementClauses(markdown);
 
   return {
     definitions,
     history,
     dispositions: parseRequirementDispositions(markdown, violations),
-    signatures: parseRequirementSignatures(markdown),
+    clauses,
   };
 }
 
@@ -2017,31 +2018,31 @@ function normalizeRequirementClause(clause) {
     .trim();
 }
 
-function signRequirementClause(clause) {
-  const normalized = normalizeRequirementClause(clause);
-  return `sha256:${createHash("sha256").update(normalized).digest("hex")}`;
+function signRequirementClause(normalizedClause) {
+  return `sha256:${createHash("sha256").update(normalizedClause).digest("hex")}`;
 }
 
-function collectRequirementSignatures(markdown, pattern) {
+function collectRequirementClauses(markdown, pattern) {
   return new Map(
-    [...markdown.matchAll(pattern)].map((match) => [match[1], signRequirementClause(match[2])]),
+    [...markdown.matchAll(pattern)].map((match) => [match[1], normalizeRequirementClause(match[2])]),
   );
 }
 
-function parseRequirementSignatures(markdown) {
-  const definitionPattern = /^- \[[ x]\] \*\*([A-Z]+-\d+)\*\*: ([^\n]*(?:\n {2}[^\n]*)*)/gm;
-  const definitions = collectRequirementSignatures(markdown, definitionPattern);
+function parseRequirementClauses(markdown) {
+  const definitionPattern = /^- \[[ x]\] \*\*([A-Z]+-\d+)\*\*:[ \t]*([^\n]*(?:\n {2}[^\n]*)*)/gm;
+  const definitions = collectRequirementClauses(markdown, definitionPattern);
   const historyStart = markdown.indexOf("## Evidence and History\n");
   const historyEnd = markdown.indexOf("\n## ", historyStart + 1);
   const historyMarkdown = markdown.slice(
     historyStart,
     historyEnd === -1 ? markdown.length : historyEnd,
   );
-  const historyPattern = /^- \*\*([A-Z]+-\d+)\*\*(?: \([^)]*\))?: ([^\n]*(?:\n {2}[^\n]*)*)/gm;
-  return new Map([
-    ...definitions,
-    ...collectRequirementSignatures(historyMarkdown, historyPattern),
-  ]);
+  const historyPattern =
+    /^- \*\*([A-Z]+-\d+)\*\*(?: \([^)]*\))?:[ \t]*([^\n]*(?:\n {2}[^\n]*)*)/gm;
+  return {
+    definitions,
+    history: collectRequirementClauses(historyMarkdown, historyPattern),
+  };
 }
 
 function parseRoadmapContract(markdown, violations) {
@@ -2106,8 +2107,15 @@ function validateRequirementChange(requirements, requirementId, change, locators
     );
   }
 
-  const clauseSignature = requirements.signatures.get(requirementId);
-  if (clauseSignature !== undefined && change.requirementSignature !== clauseSignature) {
+  const clause =
+    change.action === "move-to-evidence"
+      ? requirements.clauses.history.get(requirementId)
+      : requirements.clauses.definitions.get(requirementId);
+  if (clause === undefined || clause === "") {
+    violations.push(
+      violation("missing-requirement-clause", requirementId, "requirement clause is blank or absent"),
+    );
+  } else if (change.requirementSignature !== signRequirementClause(clause)) {
     violations.push(
       violation(
         "requirement-clause",
