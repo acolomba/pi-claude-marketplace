@@ -10,6 +10,12 @@ import ts from "typescript";
 const projectRoot = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const productionRoot = "extensions/pi-claude-marketplace";
 const testRoot = "tests";
+const specialPairs = new Map([
+  ["scripts/revalidation.mjs", "tests/architecture/revalidation.test.ts"],
+]);
+const specialTests = new Map(
+  [...specialPairs].map(([sourcePath, testPath]) => [testPath, sourcePath]),
+);
 
 function toProjectPath(inputPath) {
   const absolutePath = path.resolve(projectRoot, inputPath);
@@ -23,6 +29,10 @@ function toProjectPath(inputPath) {
 }
 
 function sourceToTest(sourcePath) {
+  if (specialPairs.has(sourcePath)) {
+    return specialPairs.get(sourcePath);
+  }
+
   const prefix = `${productionRoot}/`;
 
   if (!sourcePath.startsWith(prefix) || !sourcePath.endsWith(".ts")) {
@@ -34,6 +44,10 @@ function sourceToTest(sourcePath) {
 }
 
 function testToSource(testPath) {
+  if (specialTests.has(testPath)) {
+    return specialTests.get(testPath);
+  }
+
   const prefix = `${testRoot}/`;
   const suffix = ".test.ts";
 
@@ -50,7 +64,13 @@ export function pairForPath(inputPath) {
   let sourcePath;
   let testPath;
 
-  if (projectPath.startsWith(`${productionRoot}/`)) {
+  if (specialPairs.has(projectPath)) {
+    sourcePath = projectPath;
+    testPath = sourceToTest(projectPath);
+  } else if (specialTests.has(projectPath)) {
+    testPath = projectPath;
+    sourcePath = testToSource(projectPath);
+  } else if (projectPath.startsWith(`${productionRoot}/`)) {
     sourcePath = projectPath;
     testPath = sourceToTest(projectPath);
   } else if (projectPath.startsWith(`${testRoot}/`)) {
@@ -72,13 +92,15 @@ export function pairForPath(inputPath) {
 export function productionPaths() {
   const absoluteRoot = path.join(projectRoot, productionRoot);
 
-  return readdirSync(absoluteRoot, { recursive: true, withFileTypes: true })
+  const productionModules = readdirSync(absoluteRoot, { recursive: true, withFileTypes: true })
     .filter((entry) => entry.isFile() && entry.name.endsWith(".ts"))
     .map((entry) => {
       const absolutePath = path.join(entry.parentPath, entry.name);
       return toProjectPath(absolutePath);
     })
     .sort();
+
+  return [...productionModules, ...specialPairs.keys()].sort();
 }
 
 function gitLines(args) {
@@ -159,6 +181,10 @@ function isStructuralSupplement(projectPath) {
  * the suites that have no pair by design do not compose a module path that does not exist.
  */
 function isPairablePath(projectPath) {
+  if (specialPairs.has(projectPath) || specialTests.has(projectPath)) {
+    return true;
+  }
+
   if (projectPath.startsWith(`${productionRoot}/`)) {
     return projectPath.endsWith(".ts");
   }

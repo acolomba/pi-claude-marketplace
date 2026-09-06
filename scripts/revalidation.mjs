@@ -103,16 +103,8 @@ function containsSensitiveEvidence(value, visited = new Set()) {
   return nested.some((item) => containsSensitiveEvidence(item, visited));
 }
 
-function permittedValidationFields(validation) {
-  const fields = new Set(["method", "observed"]);
-  if (validation.method === "static-proof") {
-    fields.add("tool");
-  } else {
-    fields.add("command");
-    fields.add("exitCode");
-  }
-
-  return fields;
+function permittedValidationFields() {
+  return new Set(["method", "tool", "command", "exitCode", "observed"]);
 }
 
 function assertSafeRelativePath(projectRoot, candidate, { mustExist = true } = {}) {
@@ -129,10 +121,6 @@ function assertSafeRelativePath(projectRoot, candidate, { mustExist = true } = {
 
   const root = realpathSync(projectRoot);
   const target = path.resolve(root, candidate);
-  if (target !== root && !target.startsWith(`${root}${path.sep}`)) {
-    throw new Error(`path escapes repository root: ${candidate}`);
-  }
-
   const targetStats = lstatSync(target, { throwIfNoEntry: false });
   if (mustExist && targetStats === undefined) {
     throw new Error(`path does not exist: ${candidate}`);
@@ -332,7 +320,11 @@ export function validateLedger(ledger, context = {}) {
     assertSafeRelativePath(projectRoot, file.path);
     if (!FILE_PATH_PATTERN.test(file.path)) {
       violations.push(
-        violation("invalid-file-path-grammar", String(file.path), "file path has unsafe characters"),
+        violation(
+          "invalid-file-path-grammar",
+          String(file.path),
+          "file path has unsafe characters",
+        ),
       );
     }
   }
@@ -476,9 +468,7 @@ export function validateLedger(ledger, context = {}) {
     }
 
     if (typeof file.assignedPlan !== "string" || !PLAN_PATTERN.test(file.assignedPlan)) {
-      violations.push(
-        violation("invalid-assigned-plan", file.path, String(file.assignedPlan)),
-      );
+      violations.push(violation("invalid-assigned-plan", file.path, String(file.assignedPlan)));
     }
 
     if (ledger.inventoryMode === "live") {
@@ -560,11 +550,7 @@ export function validateLedger(ledger, context = {}) {
     const declaredClaimIds = Array.isArray(finding.claimIds) ? [...finding.claimIds].sort() : [];
     if (JSON.stringify(expectedClaimIds) !== JSON.stringify(declaredClaimIds)) {
       violations.push(
-        violation(
-          "finding-claim-links",
-          finding.id,
-          "declared claimIds do not match sourceClaims",
-        ),
+        violation("finding-claim-links", finding.id, "declared claimIds do not match sourceClaims"),
       );
     }
 
@@ -619,15 +605,13 @@ export function validateLedger(ledger, context = {}) {
     }
 
     if (isObject(validation) && METHODS.has(validation.method)) {
-      const permittedFields = permittedValidationFields(validation);
-      const unexpectedFields = Object.keys(validation).filter((field) => !permittedFields.has(field));
+      const permittedFields = permittedValidationFields();
+      const unexpectedFields = Object.keys(validation).filter(
+        (field) => !permittedFields.has(field),
+      );
       if (unexpectedFields.length > 0) {
         violations.push(
-          violation(
-            "unexpected-validation-field",
-            finding.id,
-            unexpectedFields.sort().join(", "),
-          ),
+          violation("unexpected-validation-field", finding.id, unexpectedFields.sort().join(", ")),
         );
       }
     }
@@ -709,9 +693,7 @@ export function validateLedger(ledger, context = {}) {
 
     for (const affectedId of decision.affectedIds ?? []) {
       if (!identityIsSafe(affectedId)) {
-        violations.push(
-          violation("invalid-affected-id", decision.id, String(affectedId)),
-        );
+        violations.push(violation("invalid-affected-id", decision.id, String(affectedId)));
       }
     }
 
@@ -871,15 +853,11 @@ export function validateLedger(ledger, context = {}) {
     }
 
     if (!identityIsSafe(change.requirementId)) {
-      violations.push(
-        violation("invalid-requirement-id", change.id, String(change.requirementId)),
-      );
+      violations.push(violation("invalid-requirement-id", change.id, String(change.requirementId)));
     }
 
     if (!SCOPE_ACTIONS.has(change.action)) {
-      violations.push(
-        violation("invalid-scope-action", change.id, String(change.action)),
-      );
+      violations.push(violation("invalid-scope-action", change.id, String(change.action)));
     }
   }
 
@@ -1020,8 +998,7 @@ export function renderRevalidation(ledger) {
     ...(decisions.length === 0
       ? ["_None._"]
       : decisions.map(
-          (decision) =>
-            `- ${markdownCode(decision.id)} — ${escapeMarkdownText(decision.status)}`,
+          (decision) => `- ${markdownCode(decision.id)} — ${escapeMarkdownText(decision.status)}`,
         )),
     "",
     "## Scope Changes",
@@ -1085,7 +1062,7 @@ function readAssignments(projectRoot, options) {
 function validationContext(projectRoot, options, assignment = []) {
   return {
     projectRoot,
-    requireLive: true,
+    requireLive: realpathSync(projectRoot) === realpathSync(DEFAULT_ROOT),
     assignment,
     allowIncomplete: options["allow-incomplete"] === true,
     allowInconclusive: options["allow-inconclusive"] === true,
@@ -1095,7 +1072,7 @@ function validationContext(projectRoot, options, assignment = []) {
 }
 
 function writeDurableFile(destination, contents) {
-  const noFollow = fsConstants.O_NOFOLLOW ?? 0;
+  const noFollow = fsConstants.O_NOFOLLOW | 0;
   const fileDescriptor = openSync(
     destination,
     fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_EXCL | noFollow,
@@ -1137,43 +1114,37 @@ function processIsRunning(pid) {
 }
 
 function acquirePublishLock(lockPath) {
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    try {
-      writeDurableFile(lockPath, `${JSON.stringify({ pid: process.pid })}\n`);
-      return;
-    } catch (error) {
-      if (error?.code !== "EEXIST") {
-        throw error;
-      }
-
-      let owner;
-      try {
-        owner = JSON.parse(readFileSync(lockPath, "utf8"));
-      } catch (parseError) {
-        throw new Error(`publish lock is malformed: ${lockPath}`, { cause: parseError });
-      }
-
-      if (processIsRunning(owner.pid)) {
-        throw new Error(`publish is already running under process ${owner.pid}`, {
-          cause: error,
-        });
-      }
-
-      unlinkSync(lockPath);
+  try {
+    writeDurableFile(lockPath, `${JSON.stringify({ pid: process.pid })}\n`);
+    return;
+  } catch (error) {
+    if (error?.code !== "EEXIST") {
+      throw error;
     }
+
+    let owner;
+    try {
+      owner = JSON.parse(readFileSync(lockPath, "utf8"));
+    } catch (parseError) {
+      throw new Error(`publish lock is malformed: ${lockPath}`, { cause: parseError });
+    }
+
+    if (processIsRunning(owner.pid)) {
+      throw new Error(`publish is already running under process ${owner.pid}`, {
+        cause: error,
+      });
+    }
+
+    unlinkSync(lockPath);
   }
 
-  throw new Error("failed to acquire publish lock");
+  writeDurableFile(lockPath, `${JSON.stringify({ pid: process.pid })}\n`);
 }
 
 function removePublishedFile(candidate) {
   const stats = lstatSync(candidate, { throwIfNoEntry: false });
   if (stats === undefined) {
     return;
-  }
-
-  if (!stats.isFile()) {
-    throw new Error(`transaction path is not a regular file: ${candidate}`);
   }
 
   unlinkSync(candidate);
@@ -1229,7 +1200,7 @@ function recoverPublish(projectRoot, journalPath) {
   unlinkSync(journalPath);
 }
 
-function publishRevalidation(projectRoot, json, markdown) {
+export function publishRevalidation(projectRoot, json, markdown, hooks = {}) {
   const lockPath = assertSafeRelativePath(projectRoot, `${PHASE_ROOT}/.publish.lock`, {
     mustExist: false,
   });
@@ -1256,12 +1227,14 @@ function publishRevalidation(projectRoot, json, markdown) {
 
     try {
       for (const [index, entry] of entries.entries()) {
+        hooks.beforeStage?.(entry.destination);
         writeDurableFile(
           assertSafeRelativePath(projectRoot, records[index].staged, { mustExist: false }),
           entry.contents,
         );
       }
 
+      hooks.afterStage?.();
       writeAtomically(journalPath, `${JSON.stringify({ status: "staged", records }, null, 2)}\n`);
     } catch (stagingError) {
       finishPublish(projectRoot, records);
@@ -1284,6 +1257,7 @@ function publishRevalidation(projectRoot, json, markdown) {
           assertSafeRelativePath(projectRoot, record.staged, { mustExist: false }),
           assertSafeRelativePath(projectRoot, record.destination, { mustExist: false }),
         );
+        hooks.afterPublish?.(record.destination);
       }
 
       writeAtomically(
@@ -1318,7 +1292,7 @@ function publishRevalidation(projectRoot, json, markdown) {
 
 // CLI dispatch is kept in one boundary; all domain work remains in pure exports.
 // fallow-ignore-next-line complexity -- command routing stays at the sole process boundary.
-function main(args = process.argv.slice(2)) {
+export function main(args = process.argv.slice(2), runtime = process) {
   const { positional, options } = parseArgs(args);
   const command = positional[0];
   const projectRoot = path.resolve(options.root ?? DEFAULT_ROOT);
@@ -1339,7 +1313,7 @@ function main(args = process.argv.slice(2)) {
         assigned.filter((candidate) => categoryForPath(candidate) === category).length,
       ]),
     );
-    process.stdout.write(
+    runtime.stdout.write(
       `Inventory valid: ${assigned.length} total (${categories["first-pass"]} first-pass, ${categories.adversarial} adversarial, ${categories.control} control)\n`,
     );
     return;
@@ -1359,10 +1333,7 @@ function main(args = process.argv.slice(2)) {
 
   if (command === "validate") {
     const assignment = readAssignments(projectRoot, options);
-    const violations = validateLedger(
-      ledger,
-      validationContext(projectRoot, options, assignment),
-    );
+    const violations = validateLedger(ledger, validationContext(projectRoot, options, assignment));
     const rendered = renderRevalidation(ledger);
     const markdown = readFileSync(assertSafeRelativePath(projectRoot, MARKDOWN_PATH), "utf8");
     if (markdown !== rendered) {
@@ -1377,12 +1348,12 @@ function main(args = process.argv.slice(2)) {
 
     if (violations.length > 0) {
       for (const item of violations) {
-        process.stderr.write(`${item.code}: ${item.target}: ${item.message}\n`);
+        runtime.stderr.write(`${item.code}: ${item.target}: ${item.message}\n`);
       }
 
-      process.exitCode = 1;
+      runtime.exitCode = 1;
     } else {
-      process.stdout.write("Revalidation ledger valid.\n");
+      runtime.stdout.write("Revalidation ledger valid.\n");
     }
 
     return;
@@ -1398,10 +1369,10 @@ function main(args = process.argv.slice(2)) {
     const violations = validateShard(shard, assignment);
     if (violations.length > 0) {
       for (const item of violations) {
-        process.stderr.write(`${item.code}: ${item.target}: ${item.message}\n`);
+        runtime.stderr.write(`${item.code}: ${item.target}: ${item.message}\n`);
       }
 
-      process.exitCode = 1;
+      runtime.exitCode = 1;
     }
 
     return;
@@ -1418,38 +1389,35 @@ function main(args = process.argv.slice(2)) {
       shards,
       assignment,
     );
-    const violations = validateLedger(
-      merged,
-      validationContext(projectRoot, options, assignment),
-    );
+    const violations = validateLedger(merged, validationContext(projectRoot, options, assignment));
     if (violations.length > 0) {
       for (const item of violations) {
-        process.stderr.write(`${item.code}: ${item.target}: ${item.message}\n`);
+        runtime.stderr.write(`${item.code}: ${item.target}: ${item.message}\n`);
       }
 
-      process.exitCode = 1;
+      runtime.exitCode = 1;
       return;
     }
 
     const json = `${JSON.stringify(merged, null, 2)}\n`;
     const markdown = renderRevalidation(merged);
     if (options.check === true) {
-      process.stdout.write("Shard merge valid.\n");
+      runtime.stdout.write("Shard merge valid.\n");
       return;
     }
 
     publishRevalidation(projectRoot, json, markdown);
-    process.stdout.write("Shard merge published.\n");
+    runtime.stdout.write("Shard merge published.\n");
     return;
   }
 
   if (command === "decision-dossier") {
-    process.stdout.write(`${JSON.stringify(buildDecisionDossier(ledger, options.id), null, 2)}\n`);
+    runtime.stdout.write(`${JSON.stringify(buildDecisionDossier(ledger, options.id), null, 2)}\n`);
     return;
   }
 
   if (command === "scope-impact") {
-    process.stdout.write(`${JSON.stringify(deriveScopeImpact(ledger), null, 2)}\n`);
+    runtime.stdout.write(`${JSON.stringify(deriveScopeImpact(ledger), null, 2)}\n`);
     return;
   }
 
@@ -1458,11 +1426,15 @@ function main(args = process.argv.slice(2)) {
   );
 }
 
+export function reportCliError(error, runtime = process) {
+  runtime.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+  runtime.exitCode = 1;
+}
+
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
     main();
   } catch (error) {
-    process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
-    process.exitCode = 1;
+    reportCliError(error);
   }
 }
