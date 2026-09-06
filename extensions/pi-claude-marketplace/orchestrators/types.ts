@@ -23,6 +23,18 @@ export interface ReinstallReinstalledOutcome extends ReinstallOutcomeBase {
   readonly version: string;
   readonly resourcesChanged: boolean;
   /**
+   * WLIF-06: the reinstall's new source did not re-place at least one workflow
+   * envelope the record named, so the command that envelope registered is still
+   * live for the session. The row composer turns this into the
+   * `{stale workflow command}` token and takes the info -> warning raise.
+   *
+   * Omitted when nothing was retired, so a clean reinstall's outcome shape --
+   * and its rendered bytes -- are unchanged (NREG-01). A boolean rather than
+   * the retired names: the remedy is the same reload whichever command it was,
+   * and the generated names never reach a rendered row.
+   */
+  readonly staleWorkflowCommand?: boolean;
+  /**
    * D-99-02c: the GENERATED NAMES the reinstall ledger staged. The `Names`
    * suffix keeps them spelled apart from the same-subject presence FLAGS on
    * `LedgerDegradationSignals` (`plugin/shared.ts`), which carry a count
@@ -200,6 +212,23 @@ export interface PluginUpdateUpdatedOutcome extends PluginUpdateBase, LedgerDegr
    */
   readonly stagedAgentNames: readonly string[];
   readonly stagedMcpServerNames: readonly string[];
+  /**
+   * WLIF-06: the update's new version withdrew or renamed at least one workflow
+   * the record named, so the command that envelope registered is still live for
+   * the session -- the host exposes no unregister call. A FOURTH independent
+   * degradation axis on this partition, read by the shared leaf row composer,
+   * which turns it into the `{stale workflow command}` token and raises the row
+   * to `warning`: the update was carried out, but the desired state is not
+   * reached until the reload.
+   *
+   * The axis travels on the outcome rather than being computed at the row,
+   * because both update cascades share one row composer and neither of them
+   * holds the pre-update record the difference is taken against.
+   *
+   * Omitted when nothing was retired, so a clean update's outcome shape is
+   * unchanged (NREG-01).
+   */
+  readonly staleWorkflowCommand?: boolean;
   /**
    * WR-01: the three inherited signals this verb spells elsewhere, pinned to
    * `never` so a producer cannot populate a second spelling of a fact the

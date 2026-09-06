@@ -90,6 +90,7 @@ import {
   missIsNotInstalled,
   enableRowDependencies,
   resolveCrossScopePluginTarget,
+  retiresWorkflowCommand,
   selectDeclaringConfigWriteTarget,
   type CrossScopePluginResolution,
   type DeclaringConfigWriteTarget,
@@ -211,21 +212,24 @@ type SetEnabledOutcome =
       kind: "fresh";
       version?: string;
       /**
-       * WLIF-05 / WLIF-06: the workflow envelope names the enable branch's
-       * materialization placed, off the ledger projection.
+       * WLIF-06: at least one workflow the record named is not on disk any more
+       * while the command it registered is still live for the session. Both
+       * branches reach this arm and both set it from their own operand -- enable
+       * from the pre-enable inventory minus what the ledger re-placed, disable
+       * from what the cascade reported dropping.
        *
-       * Present only on the arm where a ledger actually ran. Absent means no
-       * materialization happened on this arm at all -- the disable branch and
-       * the config-write-back arm both reach `fresh` without staging anything,
-       * and an empty array there would be indistinguishable from "materialized
-       * and placed nothing", which is the opposite claim.
+       * Absent means nothing was retired on this arm, which is also the state of
+       * the config-write-back arm: it stages nothing and removes nothing, so a
+       * plain write-back has no retirement to report and its row keeps the bytes
+       * it always rendered.
        *
        * Deliberately module-private and deliberately NOT a member of the
        * exported `EnableDisablePluginOutcome`: the load-time reconcile caller
-       * consumes that union, and workflow-retirement is a fact about a command
-       * the running host still has registered, which a reload is what clears.
+       * consumes that union, and a lingering command is a fact about the running
+       * host that a reload is what clears -- so the path that runs ON a reload
+       * must have no way to claim it.
        */
-      stagedWorkflowNames?: readonly string[];
+      staleWorkflowCommand?: boolean;
     } & EnableDegradationSignals)
   | { kind: "invalid-config" }
   /**
@@ -241,7 +245,17 @@ type SetEnabledOutcome =
       recordedVersion?: string;
       rollbackPartials?: readonly RollbackPartial[];
     }
-  | { kind: "disable-failed"; cause: Error; recordedVersion?: string };
+  | {
+      kind: "disable-failed";
+      cause: Error;
+      recordedVersion?: string;
+      /**
+       * WLIF-06: envelopes the partial cascade removed BEFORE it threw. The
+       * failure row names both facts -- why the disable did not finish, and that
+       * the commands behind the envelopes it did remove are still registered.
+       */
+      staleWorkflowCommand?: boolean;
+    };
 
 /**
  * Run the enable branch: invoke the guard-FREE `runInstallLedger` against the
@@ -340,13 +354,18 @@ async function runEnableBranch(
       // declaration verdict, nothing more.
       ...(summary.stagedAgentNames.length > 0 && { stagedAgents: true }),
       ...(summary.stagedMcpServerNames.length > 0 && { stagedMcpServers: true }),
-      // WLIF-05 / WLIF-06: the NAMES, unreduced, and the one read on this
-      // projection that is not a length. `installed` above is the PRE-enable
-      // record -- captured before the ledger rewrote it, which is why it is a
-      // parameter -- so the two together are the only place the difference
-      // between the recorded inventory and what this run re-placed can be
-      // computed. Carried on the module-private sentinel, never on a row.
-      stagedWorkflowNames: summary.stagedWorkflowNames,
+      // WLIF-05 / WLIF-06: the retirement gate, computed here because this is
+      // the only place both operands exist. `installed` is the PRE-enable record
+      // -- captured before the ledger rewrote it, which is why it is a parameter
+      // -- and `summary.stagedWorkflowNames` is what this run re-placed. A
+      // source that dropped or renamed a workflow while the plugin was disabled
+      // leaves the old generated name in the difference.
+      //
+      // Spread only when something was retired, so a clean re-enable's sentinel
+      // shape, and the row derived from it, are unchanged (NREG-01).
+      ...(retiresWorkflowCommand(installed.resources.workflows, summary.stagedWorkflowNames) && {
+        staleWorkflowCommand: true,
+      }),
     };
   } catch (err) {
     return {
@@ -400,6 +419,12 @@ async function runDisableBranch(
         kind: "disable-failed",
         cause: cascade.cause,
         recordedVersion,
+        // WLIF-06: a cascade that removed two envelopes and then failed on a
+        // third leaves three commands registered. Reporting none of them would
+        // tell the operator nothing changed, which is the opposite of what
+        // happened, so the partial arm reads the SAME reported-removal operand
+        // the clean arm reads.
+        ...(cascade.dropped.workflows.length > 0 && { staleWorkflowCommand: true }),
       },
       saveShrunken: true,
     };
@@ -429,7 +454,19 @@ async function runDisableBranch(
   // without requiring /reload (NFR-2). Mirrors the uninstall.ts invariant.
   dropCachedHooks(scope, opts.marketplace, opts.plugin, "", true);
 
-  return { outcome: { kind: "fresh", version: recordedVersion }, saveShrunken: false, disabled };
+  return {
+    outcome: {
+      kind: "fresh",
+      version: recordedVersion,
+      // WLIF-06: what the cascade REPORTED removing, never the length of
+      // `installed.resources.workflows` -- ENBL-18 deliberately keeps that array
+      // populated across a disable, so its length says what the plugin contains
+      // and not what just came off disk.
+      ...(cascade.dropped.workflows.length > 0 && { staleWorkflowCommand: true }),
+    },
+    saveShrunken: false,
+    disabled,
+  };
 }
 
 type FailedUnstageOutcome = UnstageOutcome & {
@@ -1015,6 +1052,13 @@ function freshOutcomeToTypedResult(
   enable: boolean,
   outcome: Extract<SetEnabledOutcome, { kind: "fresh" }>,
 ): EnableDisablePluginOutcome {
+  // WLIF-06: `outcome.staleWorkflowCommand` is deliberately NOT forwarded, on
+  // either arm. The exported union is what the load-time reconcile caller
+  // consumes, and a reload is exactly what CLEARS a lingering command -- a row
+  // rendered from the reload path claiming the reload remedy would contradict
+  // itself. Keeping the fact off this union is what makes that structural rather
+  // than a convention a later edit could forget; read this omission as the
+  // decision it is, not as an oversight.
   const version = outcome.version !== undefined && { version: outcome.version };
   if (!enable) {
     return { status: "disabled", name: plugin, ...version };
@@ -1187,7 +1231,7 @@ function dispatchOutcome(args: {
  */
 function freshEnableRow(
   plugin: string,
-  outcome: EnableDegradationSignals & { version?: string },
+  outcome: EnableDegradationSignals & { version?: string; staleWorkflowCommand?: boolean },
   probe: SoftDepStatus,
 ): EnableMsg {
   const unsupported = outcome.unsupported ?? [];
@@ -1196,12 +1240,20 @@ function freshEnableRow(
     ...(outcome.orphanRewake === true ? (["orphan rewake"] as const) : []),
     ...malformed,
   ];
+  // WLIF-06: the tail token, in the same position the update composer gives it,
+  // so a reader scanning a column of rows meets it in the same place whichever
+  // verb produced them. One token per plugin however many names were retired.
+  const stale: readonly ContentReason[] =
+    outcome.staleWorkflowCommand === true ? (["stale workflow command"] as const) : [];
   // SEV-01: the enable row derives the SAME dependency list `install.ts` derives
   // for the same ledger run, so the `{requires pi-...}` markers fire on a
   // re-enable exactly as on an install.
   const dependencies = enableRowDependencies(outcome);
+  // SEV-01 / WLIF-06: a retired command is the THIRD raise, and it composes with
+  // the other two the same way they compose with each other -- the stronger
+  // wins, so none can silently replace another.
   const severity =
-    malformed.length > 0
+    malformed.length > 0 || stale.length > 0
       ? "warning"
       : companionSeverity(
           {
@@ -1216,18 +1268,19 @@ function freshEnableRow(
       name: plugin,
       dependencies,
       ...(outcome.version !== undefined && { version: outcome.version }),
-      reasons: [...reasons, ...narrowUnsupportedKinds(unsupported)],
+      reasons: [...reasons, ...narrowUnsupportedKinds(unsupported), ...stale],
       severity,
       needsReload: true,
     };
   }
 
+  const cleanFormReasons: readonly ContentReason[] = [...reasons, ...stale];
   return {
     status: "installed",
     name: plugin,
     dependencies,
     ...(outcome.version !== undefined && { version: outcome.version }),
-    ...(reasons.length > 0 && { reasons }),
+    ...(cleanFormReasons.length > 0 && { reasons: cleanFormReasons }),
     // D-03/D-06: a realized re-enable re-materializes artifacts -> reloads Pi
     // resources.
     severity,
@@ -1338,7 +1391,15 @@ function composeOutcomeRow(args: {
       return {
         status: "failed",
         name: plugin,
-        reasons: narrowDisableFailure(outcome.cause),
+        // WLIF-06: the stale-command token joins the failure reason at the tail
+        // rather than replacing it. The two state different facts -- why the
+        // disable stopped, and what its partial progress left registered -- and
+        // a reader needs both. Severity stays `error`: the disable was NOT
+        // carried out, which outranks the warning band the token carries alone.
+        reasons: [
+          ...narrowDisableFailure(outcome.cause),
+          ...(outcome.staleWorkflowCommand === true ? (["stale workflow command"] as const) : []),
+        ],
         ...(outcome.recordedVersion !== undefined && { version: outcome.recordedVersion }),
         cause: outcome.cause,
         // D-03/D-06: a failed disable -> error, no reload.
@@ -1366,7 +1427,17 @@ function composeOutcomeRow(args: {
             status: "disabled",
             name: plugin,
             ...(outcome.version !== undefined && { version: outcome.version }),
-            severity: "info",
+            // WLIF-06: the disable took the envelopes off disk, so the commands
+            // they registered stay live until a reload. `PluginDisabledMessage`
+            // already admits `reasons`; an unaffected disable keeps the key
+            // absent and renders the brace-less row it always rendered.
+            ...(outcome.staleWorkflowCommand === true && {
+              reasons: ["stale workflow command"] satisfies readonly ContentReason[],
+            }),
+            // The transition happened, so `info` -- unless a retired command
+            // lingers, which is the middle band of the severity model: carried
+            // out, but short of the desired state until the reload.
+            severity: outcome.staleWorkflowCommand === true ? "warning" : "info",
             needsReload: true,
           };
   }

@@ -8939,6 +8939,80 @@ test("WLIF-02: a workflow the new version renamed lands under the new name with 
   });
 });
 
+test("WLIF-06: an update that withdrew a workflow names the reload remedy", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-workflows-stale-"));
+    try {
+      // arrange -- the same withdrawal shape as the WLIF-02 case above, read
+      // here through the RENDERED row rather than through the record.
+      const { marketplaceRoot, manifestPath } = await seedInstalledWorkflowPlugin({
+        cwd,
+        version: "1.0.0",
+        workflows: [{ sourceName: "greet" }, { sourceName: "wave" }],
+      });
+      await writeWorkflowScripts(marketplaceRoot, "hello", [{ sourceName: "greet" }]);
+      await rewriteManifest(manifestPath, "mp", { hello: { version: "2.10.0" } });
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      // assert -- `hello:wave` is in the pre-update record and not in what this
+      // re-stage placed, so its command is registered over nothing until the
+      // reload the trailer names. Severity `warning`: the update WAS applied.
+      const row = notifications.at(-1);
+      assert.ok(row !== undefined);
+      assert.equal(row.severity, "warning");
+      assert.match(row.message, /\(updated\) \{stale workflow command\}/u);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WLIF-06: an update that re-placed every recorded workflow stamps nothing", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-workflows-stale-none-"));
+    try {
+      // arrange -- the SAME verb over a tree whose workflow set did not change.
+      // Every recorded name is in the staged set, so the difference is empty
+      // and this is the ordinary re-place.
+      const { manifestPath } = await seedInstalledWorkflowPlugin({
+        cwd,
+        version: "1.0.0",
+        workflows: [{ sourceName: "greet" }],
+      });
+      await rewriteManifest(manifestPath, "mp", { hello: { version: "2.10.0" } });
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      // assert -- no brace, no severity raise: the bytes this row rendered
+      // before the token existed.
+      const row = notifications.at(-1);
+      assert.ok(row !== undefined);
+      assert.equal(row.severity, undefined);
+      assert.doesNotMatch(row.message, /stale workflow command/u);
+      assert.match(row.message, /\(updated\)\n/u);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("CR-02: the intent-mark window widens the recorded inventory to the union", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "update-workflows-union-"));

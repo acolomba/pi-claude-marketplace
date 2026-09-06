@@ -635,3 +635,98 @@ test("renderReinstallPartitionAndNotify omits tally and reload for a single miss
   verify(harness.pi);
   verify(harness.ui);
 });
+
+test("WLIF-06: a retired workflow command takes the tail token and raises the row", () => {
+  // arrange
+  const outcome: ReinstallReinstalledOutcome = {
+    partition: "reinstalled",
+    name: "alpha",
+    marketplace: "official",
+    scope: "project",
+    version: "2.0.0",
+    resourcesChanged: true,
+    stagedAgentNames: [],
+    stagedMcpServerNames: [],
+    declaresAgents: false,
+    declaresMcp: false,
+    degradedKinds: ["skill"],
+    staleWorkflowCommand: true,
+  };
+
+  // act
+  const row = reinstalledRowFromOutcome(outcome, undefined);
+
+  // assert -- the malformed kinds first, the stale-command token at the tail,
+  // the same order the enable and update rows use.
+  assert.deepStrictEqual(row, {
+    status: "reinstalled",
+    name: "alpha",
+    dependencies: [],
+    version: "2.0.0",
+    reasons: ["malformed skill", "stale workflow command"],
+    severity: "warning",
+    needsReload: true,
+  });
+});
+
+test("WLIF-06: the token raises a row that has no other reason of its own", () => {
+  // arrange -- nothing degraded, so the raise can only come from this axis.
+  const outcome: ReinstallReinstalledOutcome = {
+    partition: "reinstalled",
+    name: "alpha",
+    marketplace: "official",
+    scope: "project",
+    version: "2.0.0",
+    resourcesChanged: true,
+    stagedAgentNames: [],
+    stagedMcpServerNames: [],
+    declaresAgents: false,
+    declaresMcp: false,
+    staleWorkflowCommand: true,
+  };
+
+  // act
+  const row = reinstalledRowFromOutcome(outcome, undefined);
+
+  // assert
+  assert.deepStrictEqual(row, {
+    status: "reinstalled",
+    name: "alpha",
+    dependencies: [],
+    version: "2.0.0",
+    reasons: ["stale workflow command"],
+    severity: "warning",
+    needsReload: true,
+  });
+});
+
+test("WLIF-06: a reinstall that retired nothing renders the row it always rendered", () => {
+  // arrange -- the same outcome with the axis absent. The key must be ABSENT
+  // rather than present-and-empty, which is what preserves the legacy bytes.
+  const outcome: ReinstallReinstalledOutcome = {
+    partition: "reinstalled",
+    name: "alpha",
+    marketplace: "official",
+    scope: "project",
+    version: "2.0.0",
+    resourcesChanged: true,
+    stagedAgentNames: [],
+    stagedMcpServerNames: [],
+    declaresAgents: false,
+    declaresMcp: false,
+  };
+
+  // act
+  const row = reinstalledRowFromOutcome(outcome, undefined);
+
+  // assert
+  assert.deepStrictEqual(row, {
+    status: "reinstalled",
+    name: "alpha",
+    dependencies: [],
+    version: "2.0.0",
+    severity: "info",
+    needsReload: true,
+  });
+  assert.equal(Object.hasOwn(row, "reasons"), false, "no present-and-empty reasons key");
+});

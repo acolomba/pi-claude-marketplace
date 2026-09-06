@@ -599,6 +599,13 @@ export async function uninstallPlugin(
   // shrunken-row save has committed. AG-5 still throws (preserves row);
   // non-AG-5 mutates resources.* in place and surfaces via this sentinel.
   let cascadeFailure: Error | undefined;
+  // WLIF-06: did this removal take a workflow envelope off disk? Read from what
+  // the cascade REPORTED dropping, never from the length of the record's
+  // workflow inventory -- the inventory can name envelopes the cascade failed to
+  // remove, so its length answers a different question than "does a command
+  // linger". Captured outside the guard because the success row is composed
+  // after it.
+  let retiredWorkflowCommand = false;
 
   try {
     // WR-04: explicit-save transaction so the abort arms
@@ -646,6 +653,7 @@ export async function uninstallPlugin(
       // PU-1 ordering enforced INSIDE cascadeUnstagePlugin (D-03:
       // skills -> commands -> agents -> mcp).
       const localOutcome = await cascade(plugin, marketplace, locations, installed);
+      retiredWorkflowCommand = localOutcome.dropped.workflows.length > 0;
 
       // TR-03: split the failure handling by cause type.
       //   - AG-5 (AgentsUnstageFailureError): foreign content owned by
@@ -768,14 +776,7 @@ export async function uninstallPlugin(
     };
   }
 
-  const uninstalledRow: PluginUninstalledMessage = {
-    status: "uninstalled",
-    name: plugin,
-    ...(removedVersion !== undefined && { version: removedVersion }),
-    // D-03/D-06: realized uninstall transition -> info, reloads Pi resources.
-    severity: "info",
-    needsReload: true,
-  };
+  const uninstalledRow = composeUninstalledRow(plugin, removedVersion, retiredWorkflowCommand);
   notifyWithContext(ctx, pi, UNINSTALL_CONTEXT, [
     {
       name: marketplace,
@@ -784,4 +785,39 @@ export async function uninstallPlugin(
     },
   ]);
   return undefined;
+}
+
+/**
+ * The realized-removal success row.
+ *
+ * Extracted from `uninstallPlugin` so that function stays under the project's
+ * cognitive-complexity ceiling, and so the one place a removal decides between
+ * `info` and `warning` is a named unit rather than an expression buried in a
+ * 270-line orchestrator body.
+ *
+ * WLIF-06: `staleWorkflowCommand` says the cascade took at least one workflow
+ * envelope off disk. The host exposes no unregister call, so the command that
+ * envelope registered stays runnable until a reload, and the row names that
+ * rather than reporting a clean removal. Severity follows the project's
+ * three-way model: `info` when the removal reached the desired state, `warning`
+ * when it was carried out but a retired command lingers.
+ *
+ * A removal that took no workflow keeps `reasons` ABSENT -- not
+ * present-and-empty -- so its bytes are the brace-less legacy row (NREG-01).
+ */
+function composeUninstalledRow(
+  plugin: string,
+  removedVersion: string | undefined,
+  staleWorkflowCommand: boolean,
+): PluginUninstalledMessage {
+  const reasons: readonly ContentReason[] = staleWorkflowCommand ? ["stale workflow command"] : [];
+  return {
+    status: "uninstalled",
+    name: plugin,
+    ...(removedVersion !== undefined && { version: removedVersion }),
+    ...(reasons.length > 0 && { reasons }),
+    // D-03/D-06: a realized uninstall transition reloads Pi resources.
+    severity: reasons.length > 0 ? "warning" : "info",
+    needsReload: true,
+  };
 }

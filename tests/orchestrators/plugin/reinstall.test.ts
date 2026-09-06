@@ -8377,6 +8377,70 @@ test("WLIF-01: a workflow the new version drops leaves neither an envelope nor a
   });
 });
 
+test("WLIF-06: a reinstall whose source dropped a workflow carries the stale-command axis", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-workflows-stale-"));
+    try {
+      // arrange -- the record names `hello:greet`; the new tree declares only
+      // `hello:farewell`, so the replace step places a name the record did not
+      // hold and does not re-place one it did.
+      const seeded = await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { skill: "old skill", workflows: [{ sourceName: "greet" }] },
+        install: true,
+      });
+      await rm(path.join(seeded.pluginRoot, "workflows"), { force: true, recursive: true });
+      await writePluginTree(seeded.pluginRoot, "hello", {
+        skill: "new skill",
+        workflows: [{ sourceName: "farewell" }],
+      });
+      const { ctx, pi } = makeCtx();
+
+      // act
+      const outcome = await reinstallDefault(cwd, ctx, pi);
+
+      // assert -- the axis rides the outcome so the shared row composer can
+      // name the remedy; `reinstall.messaging.test.ts` pins what it renders.
+      assert.equal(outcome.partition, "reinstalled");
+      assert.equal(outcome.staleWorkflowCommand, true);
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("WLIF-06: a reinstall that re-placed every recorded workflow omits the axis", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-workflows-stale-none-"));
+    try {
+      // arrange -- the SAME name before and after. A name in both the recorded
+      // and the placed set retires nothing; that is the ordinary re-place.
+      const seeded = await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { skill: "old skill", workflows: [{ sourceName: "greet" }] },
+        install: true,
+      });
+      await writePluginTree(seeded.pluginRoot, "hello", {
+        skill: "new skill",
+        workflows: [{ sourceName: "greet" }],
+      });
+      const { ctx, pi } = makeCtx();
+
+      // act
+      const outcome = await reinstallDefault(cwd, ctx, pi);
+
+      // assert -- ABSENT, not `false`: the outcome shape of a clean reinstall
+      // is unchanged, which is what keeps its row byte-identical.
+      assert.equal(outcome.partition, "reinstalled");
+      assert.equal(Object.hasOwn(outcome, "staleWorkflowCommand"), false);
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
 test("WLIF-01: a reinstall with no workflows records an empty array, not an absent key", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-workflows-empty-record-"));

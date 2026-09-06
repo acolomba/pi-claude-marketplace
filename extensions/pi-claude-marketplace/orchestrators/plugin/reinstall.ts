@@ -140,6 +140,7 @@ import {
   removePluginRecord,
   resolveCrossScopePluginTarget,
   resolveInstalledMarketplaceTarget,
+  retiresWorkflowCommand,
   splitStagingWarnings,
   surfaceDiscoveryWarnings,
 } from "./shared.ts";
@@ -1063,7 +1064,7 @@ async function runLockedReinstall(
     ...(await finalizeReplacements(replacements)),
   ];
   return {
-    outcome: successOutcome(scope, marketplace, plugin, oldSnapshot, handles),
+    outcome: successOutcome(scope, marketplace, plugin, oldSnapshot, handles, placedWorkflowNames),
     discoveryWarnings: staging.discovery,
     bridgeWarnings,
     ...(invalidConfigWriteBack && { invalidConfigWriteBack: true }),
@@ -1602,6 +1603,7 @@ function successOutcome(
   plugin: string,
   oldRecord: PluginInstallRecord,
   handles: PreparedHandles,
+  placedWorkflowNames: readonly string[],
 ): ReinstallReinstalledOutcome {
   // WR-06: `[]` stated HERE rather than defaulted, because the reasoning that
   // makes it safe is local to this site: this projection feeds the rendered row
@@ -1637,6 +1639,20 @@ function successOutcome(
     declaresMcp: resources.mcpServers.length > 0,
     resourcesChanged: resourcesChanged(oldRecord.resources, resources),
     ...(degradedKinds.length > 0 && { degradedKinds }),
+    // WLIF-06: the record's PRE-reinstall inventory minus what the replace step
+    // reported placing. A source that dropped or renamed a workflow leaves the
+    // old generated name in that difference, and the command it registered stays
+    // live until a reload. `reinstalledRowFromOutcome` turns this into the
+    // `{stale workflow command}` token and raises the row to `warning`.
+    //
+    // The operand is `placedWorkflowNames`, threaded out of the commit, and not
+    // the `resources.workflows` computed just above -- this projection is
+    // deliberately built with an empty workflow inventory because no state write
+    // happens on its path, so reading it here would report every recorded name
+    // as retired on every reinstall.
+    ...(retiresWorkflowCommand(oldRecord.resources.workflows, placedWorkflowNames) && {
+      staleWorkflowCommand: true,
+    }),
   };
 }
 

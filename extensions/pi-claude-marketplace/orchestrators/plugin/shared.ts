@@ -1433,3 +1433,37 @@ export function surfaceDiscoveryWarnings(
       : `Plugin "${args.plugin}" ${args.verb}; ${lines.length.toString()} declared components were skipped.`;
   notifyDiagnostic(ctx, header, lines);
 }
+
+/**
+ * WLIF-06: does a just-finished materialization leave at least one workflow
+ * command registered with no envelope behind it?
+ *
+ * The host exposes no unregister call, so a workflow whose envelope this run
+ * did NOT re-place keeps its command live and runnable for the rest of the
+ * session. The gate is therefore set difference -- the names the record held
+ * before, minus the names this run placed -- which makes a RENAME retire a
+ * command exactly as a deletion does: the old generated name is in the first
+ * set and not in the second.
+ *
+ * A name present in BOTH sets retires nothing; that is the ordinary re-place.
+ * An empty difference stamps nothing, which is what keeps an unaffected row's
+ * bytes identical to what it rendered before this token existed.
+ *
+ * One boolean, not the names: the row states that a command lingers and names
+ * the remedy; which command it was is not something the operator can act on
+ * differently, and the standing rule on the staged-name arrays is that the
+ * names never reach a rendered row.
+ *
+ * The three verbs that RE-MATERIALIZE (enable / reinstall / update) call this.
+ * The two that only REMOVE (uninstall / disable) read what their cascade
+ * reported dropping instead -- for them the placed set is empty by
+ * construction, and the cascade's report is the truthful operand because it
+ * names what actually came off disk rather than what the record claimed.
+ */
+export function retiresWorkflowCommand(
+  previousNames: readonly string[],
+  placedNames: readonly string[],
+): boolean {
+  const placed = new Set(placedNames);
+  return previousNames.some((name) => !placed.has(name));
+}

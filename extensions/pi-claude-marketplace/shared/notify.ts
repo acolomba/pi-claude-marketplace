@@ -795,6 +795,23 @@ export interface PluginUninstalledMessage extends TransitionMessageBase {
   readonly name: string;
   readonly version?: string;
   readonly scope?: Scope;
+  /**
+   * WLIF-06: `reasons` is OPTIONAL here on the same terms it is optional on
+   * `PluginInstalledMessage` / `PluginUpdatedMessage` / `PluginReinstalledMessage`
+   * / `PluginDisabledMessage`. It admits the `stale workflow command` token --
+   * the removal took a workflow envelope off disk, and the command that envelope
+   * registered stays live until a reload.
+   *
+   * That is the only fact a realized removal has left to state. Absent `reasons`
+   * renders the legacy brace-less row byte-for-byte: `composeReasons` returns
+   * `""` for an undefined list and `joinTokens` collapses the empty slot.
+   *
+   * MSG-SD-3 is untouched -- the render arm still passes both soft-dependency
+   * arguments hard-coded `false`, so an `(uninstalled)` row cannot emit
+   * `{requires pi-subagents}` / `{requires pi-mcp}` whatever the removed record
+   * declared.
+   */
+  readonly reasons?: readonly ContentReason[];
 }
 
 /**
@@ -2399,7 +2416,11 @@ export function renderUninstalledRow(
     renderScopeBracket(p.scope, mpScope),
     renderVersion(p.version),
     "(uninstalled)",
-    composeReasons(undefined, false, false, probe),
+    // WLIF-06: the row's own `reasons`, threaded exactly as the `installed` /
+    // `updated` / `reinstalled` arms thread theirs. The two `false` arguments
+    // keep MSG-SD-3 structural: a removal row still cannot carry a soft-dep
+    // marker, whatever the removed record declared.
+    composeReasons(p.reasons, false, false, probe),
   ]);
 }
 

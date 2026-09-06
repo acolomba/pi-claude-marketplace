@@ -155,6 +155,7 @@ import {
   resolveInstalledMarketplaceTarget,
   resolveInstalledPluginTarget,
   resolvePluginVersion,
+  retiresWorkflowCommand,
   splitStagingWarnings,
   surfaceDiscoveryWarnings,
 } from "./shared.ts";
@@ -2543,6 +2544,16 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<UpdateRunOutco
   // renders the record's degraded state one command later over a row that
   // claimed a clean update.
   const degradedKinds = collectDegradedKinds(handles);
+  // WLIF-06: the retirement gate, computed here beside the other outcome
+  // signals rather than at the shared row composer -- the composer is called by
+  // both update cascades and neither of them holds `preflight.record`, which is
+  // the pre-update inventory the difference is taken against. `stagedNames` is
+  // what this re-stage placed, so a version that withdrew or renamed a workflow
+  // leaves its old generated name in the difference.
+  const staleWorkflowCommand = retiresWorkflowCommand(
+    preflight.record.resources.workflows,
+    handles.workflows.result.stagedNames,
+  );
   const updateWarnings = collectUpdateWarnings(handles, args.cascade);
   await dropPluginCompletionCache(args);
   if (isDirectUpdate(args) && invalidConfigWriteBack) {
@@ -2561,6 +2572,9 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<UpdateRunOutco
     // Spread only when non-empty: a clean update's outcome keeps the key ABSENT
     // rather than present-and-empty, so its shape is unchanged (NREG-01).
     ...(degradedKinds.length > 0 && { degradedKinds }),
+    // WLIF-06: same NREG-01 spread rule -- an update that retired nothing keeps
+    // the key absent, so its row renders the bytes it rendered before.
+    ...(staleWorkflowCommand && { staleWorkflowCommand: true }),
     // SURF-05 / D-63-08 / WR-01: the update re-materializes `hooks/hooks.json`,
     // so it can introduce a handler declaring `rewakeMessage` / `rewakeSummary`
     // without `asyncRewake: true` exactly as install, enable and backfill can.

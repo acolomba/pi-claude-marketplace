@@ -1488,6 +1488,34 @@ const FIXTURES: FixtureMap = {
       },
     },
 
+    // WLIF-06: the removal took a workflow envelope off disk, so the command it
+    // registered stays live until a reload. The `{stale workflow command}` token
+    // and the `/reload to pick up changes` trailer coexist on one screen and
+    // state different facts -- new things a reload picks up versus a removed
+    // thing it drops.
+    "uninstall-stale-workflow-command": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "warning",
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "uninstalled",
+                name: "helper",
+                version: "1.0.0",
+                reasons: ["stale workflow command"],
+                severity: "warning",
+                needsReload: true,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     "success-soft-dep-omitted": {
       pi: piWithNothingLoaded(),
       message: {
@@ -1681,6 +1709,36 @@ const FIXTURES: FixtureMap = {
                 version: "1.0.0",
                 dependencies: [],
                 reasons: ["malformed skill"],
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // WLIF-06: the reinstall's source dropped or renamed a workflow the record
+    // named, so its envelope is gone and the command it registered is still
+    // live. Same token, same tail position and same info -> warning raise the
+    // uninstall, disable and update rows take.
+    "reinstall-stale-workflow-command": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "warning",
+      message: {
+        label: "Plugin reinstall",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "reinstalled",
+                severity: "warning",
+                needsReload: true,
+                name: "alpha",
+                version: "1.0.0",
+                dependencies: [],
+                reasons: ["stale workflow command"],
               },
             ],
           },
@@ -2309,6 +2367,38 @@ const FIXTURES: FixtureMap = {
                 to: "1.0.1",
                 dependencies: [],
                 reasons: ["malformed skill"],
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // WLIF-06: the new version withdrew or renamed a workflow the old one
+    // declared. The FOURTH independent axis on this partition, last in the
+    // brace, and the second one that moves the severity channel -- for a
+    // different reason than the malformed axis: this is a shortfall in what the
+    // update achieved, not a component it wrote in degraded form.
+    "update-stale-workflow-command": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "warning",
+      message: {
+        label: "Plugin update",
+        cardinality: "single",
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "updated",
+                severity: "warning",
+                needsReload: true,
+                name: "alpha",
+                from: "1.0.0",
+                to: "1.0.1",
+                dependencies: [],
+                reasons: ["stale workflow command"],
               },
             ],
           },
@@ -4667,6 +4757,33 @@ const FIXTURES: FixtureMap = {
       },
     },
 
+    // WLIF-06: the cascade reported dropping a workflow envelope, so the command
+    // it registered stays registered until a reload. Read from
+    // `cascade.dropped.workflows` and never from the record's retained
+    // inventory, which ENBL-18 deliberately keeps populated across a disable.
+    "disable-stale-workflow-command": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "warning",
+      message: {
+        marketplaces: [
+          {
+            name: "claude-plugins-official",
+            scope: "user",
+            plugins: [
+              {
+                status: "disabled",
+                severity: "warning",
+                needsReload: true,
+                name: "foo-plugin",
+                version: "1.2.3",
+                reasons: ["stale workflow command"],
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     "disable-idempotent": {
       pi: piWithBothLoaded(),
       // Benign reason -> info severity.
@@ -5311,14 +5428,14 @@ test("catalog UAT: every <!-- catalog-state: --> annotation pairs byte-equal wit
   const catalog = await readFile(CATALOG_PATH, "utf8");
   const examples = loadCatalogExamples(catalog);
 
-  // Exact count, not a floor: 185 is the number of annotated examples in
+  // Exact count, not a floor: 189 is the number of annotated examples in
   // docs/output-catalog.md, and it is what stops a `loadCatalogExamples`
   // refactor from silently parsing a fraction of the corpus. Update it
   // deliberately when catalog examples are added or removed.
   assert.equal(
     examples.length,
-    185,
-    `Expected exactly 185 annotated catalog examples; found ${examples.length}. Check that the discriminator comments in docs/output-catalog.md were not lost, and update this count when examples are added.`,
+    189,
+    `Expected exactly 189 annotated catalog examples; found ${examples.length}. Check that the discriminator comments in docs/output-catalog.md were not lost, and update this count when examples are added.`,
   );
 
   const failures: Failure[] = [];

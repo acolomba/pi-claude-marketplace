@@ -1296,6 +1296,250 @@ test("WLIF-05: a disable takes every recorded envelope off disk", async () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// WLIF-06: the reload remedy for a command whose envelope is gone
+// ---------------------------------------------------------------------------
+
+/** The single row a standalone enable/disable emits, minus its trailer. */
+function soleRow(notifications: readonly NotifyRecord[]): NotifyRecord {
+  assert.equal(notifications.length, 1, "IL-2: exactly one notify() per invocation");
+  const only = notifications[0];
+  assert.ok(only !== undefined);
+  return only;
+}
+
+test("WLIF-06: a disable that took an envelope off disk names the reload remedy", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange -- a real enable so the record holds a real inventory and the
+    // envelopes are really on disk. A hand-seeded disabled record cannot reach
+    // this state: its `resources` arrays are empty.
+    const { args } = await seedWorkflowRoundTrip(home, cwd, [{ sourceName: "greet" }]);
+    await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: true });
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({ ...args, ctx, enable: false });
+
+    // assert -- the host cannot unregister `foo-plugin:greet`, so the command
+    // is still runnable and the row says so. Severity is the middle band: the
+    // disable WAS carried out.
+    assert.deepStrictEqual(soleRow(notifications), {
+      message:
+        "A plugin operation needs attention.\n\n" +
+        "● claude-plugins-official [user]\n" +
+        "  ◍ foo-plugin v1.2.3 (disabled) {stale workflow command}\n\n" +
+        "/reload to pick up changes",
+      severity: "warning",
+    });
+  });
+});
+
+test("WLIF-06: a disable that retired nothing renders the row it always rendered", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange -- the same verb over a plugin declaring no workflow at all.
+    const { args } = await seedWorkflowRoundTrip(home, cwd, []);
+    await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: true });
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({ ...args, ctx, enable: false });
+
+    // assert -- brace-less and info, byte-for-byte what this row rendered
+    // before the token existed. The absent key is what preserves the bytes; a
+    // present-and-empty `reasons` would render the same but is a different
+    // shape, so the severity assertion is the one that would catch it.
+    assert.deepStrictEqual(soleRow(notifications), {
+      message:
+        "● claude-plugins-official [user]\n" +
+        "  ◍ foo-plugin v1.2.3 (disabled)\n\n" +
+        "/reload to pick up changes",
+    });
+  });
+});
+
+test("WLIF-06: an enable whose source dropped a workflow names the retired command", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange -- round trip, then the author withdraws one of the two.
+    const { args, mpRoot } = await seedWorkflowRoundTrip(home, cwd, [
+      { sourceName: "greet" },
+      { sourceName: "wave" },
+    ]);
+    await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: true });
+    await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: false });
+    await rewriteWorkflowScripts(mpRoot, "foo-plugin", [{ sourceName: "greet" }]);
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({ ...args, ctx, enable: true });
+
+    // assert -- `foo-plugin:wave` was in the pre-enable record and is not in
+    // what the ledger re-placed, so its command is registered over nothing.
+    assert.deepStrictEqual(soleRow(notifications), {
+      message:
+        "A plugin operation needs attention.\n\n" +
+        "● claude-plugins-official [user]\n" +
+        "  ● foo-plugin v1.2.3 (installed) {stale workflow command}\n\n" +
+        "/reload to pick up changes",
+      severity: "warning",
+    });
+  });
+});
+
+test("WLIF-06: a renamed workflow retires a command exactly as a deletion does", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange -- the generated name follows the `meta` export, so moving BOTH
+    // the file and the export is what makes this a rename rather than a no-op.
+    const { args, mpRoot } = await seedWorkflowRoundTrip(home, cwd, [{ sourceName: "greet" }]);
+    await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: true });
+    await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: false });
+    await rewriteWorkflowScripts(mpRoot, "foo-plugin", [{ sourceName: "hail" }]);
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({ ...args, ctx, enable: true });
+
+    // assert -- one name left, one name arrived, and the LEFT one is what the
+    // token is about. Set difference is what makes the two cases identical.
+    assert.equal(soleRow(notifications).severity, "warning");
+    assert.match(soleRow(notifications).message, /\{stale workflow command\}/u);
+  });
+});
+
+test("WLIF-06: a name in both the recorded and the staged set retires nothing", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange -- an unchanged tree across the round trip. Every recorded name
+    // is re-placed, so the difference is empty and this is the ordinary
+    // re-place rather than a retirement.
+    const { args } = await seedWorkflowRoundTrip(home, cwd, [
+      { sourceName: "greet" },
+      { sourceName: "wave" },
+    ]);
+    await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: true });
+    await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: false });
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({ ...args, ctx, enable: true });
+
+    // assert
+    assert.deepStrictEqual(soleRow(notifications), {
+      message:
+        "● claude-plugins-official [user]\n" +
+        "  ● foo-plugin v1.2.3 (installed)\n\n" +
+        "/reload to pick up changes",
+    });
+  });
+});
+
+test("WLIF-06: three retired names stamp exactly one token", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange -- four recorded, one survives.
+    const { args, mpRoot } = await seedWorkflowRoundTrip(home, cwd, [
+      { sourceName: "greet" },
+      { sourceName: "wave" },
+      { sourceName: "nod" },
+      { sourceName: "bow" },
+    ]);
+    await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: true });
+    await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: false });
+    await rewriteWorkflowScripts(mpRoot, "foo-plugin", [{ sourceName: "greet" }]);
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({ ...args, ctx, enable: true });
+
+    // assert -- one row, one brace, one token. The row states that a command
+    // lingers and names the remedy; the remedy is the same reload whether one
+    // or three commands linger, so repeating the token would add no fact.
+    const message = soleRow(notifications).message;
+    assert.equal(message.split("stale workflow command").length - 1, 1);
+    assert.match(message, /\(installed\) \{stale workflow command\}/u);
+  });
+});
+
+test("WLIF-06: a partial disable cascade names the envelopes it DID remove", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange -- two envelopes on disk, then the second one's target path is
+    // replaced by a directory so its unlink fails with a non-ENOENT error while
+    // the first is removed cleanly. The cascade therefore drops one and then
+    // throws, which is the arm this case exists for.
+    const { args, savedDir } = await seedWorkflowRoundTrip(home, cwd, [
+      { sourceName: "greet" },
+      { sourceName: "wave" },
+    ]);
+    await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: true });
+    const blocked = path.join(savedDir, "foo-plugin:wave.json");
+    await rm(blocked, { force: true });
+    await mkdir(blocked, { recursive: true });
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({ ...args, ctx, enable: false });
+
+    // assert -- the row names BOTH facts. Reporting only the failure would tell
+    // the operator nothing changed, while `foo-plugin:greet` is off disk and
+    // its command is still registered. The failure reason comes first and the
+    // stale-command token joins it at the tail; severity stays `error` because
+    // the disable itself was not carried out.
+    const row = soleRow(notifications);
+    assert.equal(row.severity, "error");
+    assert.match(row.message, /\(failed\) \{unreadable, stale workflow command\}/u);
+  });
+});
+
+test("WLIF-06: the reconcile projection carries no token after a retiring disable", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { args } = await seedWorkflowRoundTrip(home, cwd, [{ sourceName: "greet" }]);
+    await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: true });
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    const outcome = await setPluginEnabled({
+      ...args,
+      ctx,
+      enable: false,
+      notifications: { mode: "orchestrated" },
+    });
+
+    // assert -- the whole projection, by equality rather than by absence of one
+    // key, so a token added under any other spelling turns this red too. A
+    // reload is what CLEARS a lingering command, so the path that runs ON a
+    // reload must have no way to claim the remedy.
+    assert.equal(notifications.length, 0);
+    assert.deepStrictEqual(outcome, { status: "disabled", name: "foo-plugin", version: "1.2.3" });
+  });
+});
+
+test("WLIF-06: the reconcile projection carries no token after a retiring enable", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange -- the SYMMETRIC case. `enable` is the fifth stamp site and the
+    // one that rides the module-private sentinel, so type-level exclusion from
+    // the exported union is the whole argument that it cannot leak; an argument
+    // with no case behind it is what this pins shut.
+    const { args, mpRoot } = await seedWorkflowRoundTrip(home, cwd, [
+      { sourceName: "greet" },
+      { sourceName: "wave" },
+    ]);
+    await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: true });
+    await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: false });
+    await rewriteWorkflowScripts(mpRoot, "foo-plugin", [{ sourceName: "greet" }]);
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    const outcome = await setPluginEnabled({
+      ...args,
+      ctx,
+      enable: true,
+      notifications: { mode: "orchestrated" },
+    });
+
+    // assert
+    assert.equal(notifications.length, 0);
+    assert.deepStrictEqual(outcome, { status: "enabled", name: "foo-plugin", version: "1.2.3" });
+  });
+});
+
 test("WLIF-05: two enables over an unchanged tree report the same names in file order", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange -- the SCRIPT FILE names and the GENERATED names sort in opposite

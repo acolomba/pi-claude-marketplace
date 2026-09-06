@@ -235,6 +235,14 @@ export function reinstalledRowFromOutcome(
   rowScope: Scope | undefined,
 ): PluginReinstalledMessage {
   const malformed = malformedReasonsForKinds(outcome.degradedKinds);
+  // WLIF-06: the tail token. The reinstall's new source did not re-place a
+  // workflow the record named, so the command that envelope registered is still
+  // live -- the host cannot unregister it, and only a reload drops it. Raises
+  // the row to `warning`: the reinstall was carried out, but the desired state
+  // is not reached until that reload.
+  const stale: readonly ContentReason[] =
+    outcome.staleWorkflowCommand === true ? (["stale workflow command"] as const) : [];
+  const reasons: readonly ContentReason[] = [...malformed, ...stale];
   return {
     status: "reinstalled",
     name: outcome.name,
@@ -245,9 +253,9 @@ export function reinstalledRowFromOutcome(
     // the `v<version>` token either way.
     ...(outcome.version !== "" && { version: outcome.version }),
     ...(rowScope !== undefined && { scope: rowScope }),
-    ...(malformed.length > 0 && { reasons: malformed }),
+    ...(reasons.length > 0 && { reasons }),
     // D-03/D-06: realized reinstall transition -> reloads Pi resources.
-    severity: malformed.length > 0 ? "warning" : "info",
+    severity: reasons.length > 0 ? "warning" : "info",
     needsReload: true,
   };
 }

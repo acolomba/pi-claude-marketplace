@@ -764,6 +764,25 @@ Single-plugin command in v2 still renders the always-marketplace-header form; th
 
 The `uninstalled` variant has no `dependencies` field by construction (D-15-02 / MSG-SD-3); soft-dep markers cannot appear on uninstall rows. The byte form is identical to the plain success case above -- there is no way to expose a soft-dep here structurally.
 
+### Success when the removal retired a workflow command (WLIF-06)
+
+<!-- catalog-state: uninstall-stale-workflow-command -->
+
+```text
+A plugin operation needs attention.
+
+● official [user]
+  ○ helper v1.0.0 (uninstalled) {stale workflow command}
+
+/reload to pick up changes
+```
+
+The removal took at least one workflow envelope off disk. The host exposes no way to unregister a command, so the command that envelope registered is still live and still runnable for the rest of the session, and the row says so instead of reporting a clean removal. The gate is what the cascade REPORTED dropping, never the length of the record's workflow inventory: a disable deliberately keeps that array populated, and it can name envelopes a cascade failed to remove, so its length answers a different question.
+
+The `{stale workflow command}` token and the `/reload to pick up changes` trailer are two different facts on one screen, and both are here on purpose. The trailer is about NEW things a reload will pick up. The token is about a REMOVED thing a reload will drop. Reusing the trailer for the second would report it as if it were the first.
+
+Severity `warning` with the summary line, the middle band of the three-way model: the uninstall WAS carried out, but the desired state is not reached until the reload. A removal that took no workflow renders the brace-less `success` row above, byte for byte.
+
 ### Failure -- permission denied
 
 <!-- catalog-state: failure-permission-denied -->
@@ -869,6 +888,25 @@ Plugin reinstall: 1 warning
 ```
 
 A reinstall drives the same bridges as an install, so a skill or command whose source frontmatter cannot be parsed degrades identically (skill -> synthesized `disable-model-invocation` block; command -> neutralized frontmatter). The row keeps `(reinstalled)` -- a degraded component is reinstalled-but-short, not dropped -- and carries one `{malformed skill}` / `{malformed command}` token per kind, composed through the same `malformedReasonsForKinds` seam the install, enable and backfill rows use. Severity `warning` with the summary line, the same raise those surfaces take for the same class of degrade: this one the reinstall's own ledger just produced. OUT-03/D-04: the tally counts by STAMPED severity, so the raised row lands in `1 warning` rather than `1 success` -- the operation completed, short of ideal, and the tally says so without a second vocabulary. Both reinstall row composers (the standalone verb and the bulk cascade mapper) read the one signal, so the two surfaces cannot disagree. A clean reinstall renders the brace-less rows above unchanged.
+
+### Reinstall that retired a workflow command (WLIF-06)
+
+<!-- catalog-state: reinstall-stale-workflow-command -->
+
+```text
+A plugin operation needs attention.
+
+● official [user]
+  ● alpha v1.0.0 (reinstalled) {stale workflow command}
+
+Plugin reinstall: 1 warning
+
+/reload to pick up changes
+```
+
+The reinstall's source no longer declares a workflow the record named, or declares it under a different generated name. Either way the old envelope is gone and the command it registered is still live, because the host cannot unregister one. The gate is the record's pre-reinstall inventory minus the names the replace step reported placing, so a RENAME retires a command exactly as a deletion does, and a name present in both sets retires nothing -- that is the ordinary re-place.
+
+One token per plugin however many names were retired, at the tail of the brace. Severity `warning`: the reinstall was carried out, but the desired state is not reached until the reload the trailer names. A reinstall that re-placed everything renders the brace-less row above.
 
 ### Reinstall over an already-disabled record inside a cascade (ENBL-05 / ENBL-18 / DFEN-07)
 
@@ -1182,6 +1220,23 @@ Severity `warning` with the summary line, the same raise the install, enable and
 ```
 
 The re-materialized `hooks/hooks.json` declares `rewakeMessage` or `rewakeSummary` on a handler WITHOUT `asyncRewake: true`. `update` re-materializes that file exactly as install, enable and backfill do, so it can introduce the same config bug and now names it the same way: one token per plugin regardless of N orphan handlers, read off the re-resolved candidate. Severity `info` -- the config bug names itself in the brace; the update itself was carried out in full, so this axis moves no severity channel (unlike the malformed-component axis below it). When more than one signal is present they share ONE brace in the install row's emit order: `{orphan rewake, malformed skill}`. A dropped kind cannot join that brace on THIS row form: a non-empty dropped-kind set selects `(partially-installed)` instead, so the three-signal case renders there -- see `update-degraded-and-dropped` below.
+
+### Update that retired a workflow command (WLIF-06)
+
+<!-- catalog-state: update-stale-workflow-command -->
+
+```text
+A plugin operation needs attention.
+
+● official [user]
+  ● alpha v1.0.0 → v1.0.1 (updated) {stale workflow command}
+
+/reload to pick up changes
+```
+
+The new version withdrew a workflow the old one declared, or renamed it. The envelope is off disk and the command it registered stays live until a reload. This is a FOURTH independent axis on the `(updated)` partition, alongside the dropped-kind, malformed-component and orphan-rewake axes, and it sits LAST in the brace on both row forms -- so an update that drops a kind AND retires a command renders `{unsupported component, stale workflow command}` on the `(partially-installed)` row.
+
+Severity `warning`, the second axis that moves the severity channel and for a different reason than the malformed one: this is a shortfall in what the update ACHIEVED, not a component it wrote in degraded form. The raise applies on both surfaces that render this row -- the manual update cascade and the marketplace autoupdate cascade -- because a command left registered over a missing envelope is short of the desired state whichever surface reports it.
 
 ### Update that both drops a kind and degrades a component (CR-01 / WARN-01 / FSTAT-07)
 
@@ -2734,6 +2789,25 @@ D-54-01 / ENBL-02. Removes a plugin's materialized artifacts (skills/commands/ag
 ```
 
 Fresh disable -- a previously-enabled plugin's artifacts are unstaged via `cascadeUnstagePlugin`. Plugin row = `PluginDisabledMessage` (status: `"disabled"`, byte-identical to the `disabled-inventory` row); the cascade is dispatched with the `disable-cascade` kind, so the reload-hint fires (artifacts were removed -- SNM-33 / UAT-03). Severity `info`.
+
+### Fresh disable that retired a workflow command (WLIF-06)
+
+<!-- catalog-state: disable-stale-workflow-command -->
+
+```text
+A plugin operation needs attention.
+
+● claude-plugins-official [user]
+  ◍ foo-plugin v1.2.3 (disabled) {stale workflow command}
+
+/reload to pick up changes
+```
+
+The disable cascade took at least one workflow envelope off disk, so the command it registered stays live for the rest of the session. The gate is `cascade.dropped.workflows` -- what the cascade REPORTED removing -- and never `record.resources.workflows.length`: ENBL-18 deliberately keeps that array populated across a disable, so its length says what the plugin contains, not what just came off disk.
+
+A partial cascade that removed two envelopes and then failed on a third stamps the same token on its `(failed)` row, joined to the failure reason rather than replacing it. Two commands are registered over nothing in that case, and a row reporting only the failure would say nothing changed, which is the opposite of what happened. That row stays `error` severity: the disable was not carried out, which outranks the warning band this token carries alone.
+
+Severity `warning` here, with the summary line: the disable WAS carried out and the desired state is reached everywhere except the still-registered command. A disable over a plugin declaring no workflows renders the brace-less `disable-fresh` row above.
 
 ### Idempotent disable
 
