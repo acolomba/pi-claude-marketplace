@@ -251,7 +251,7 @@ Plans:
 **Goal:** Fix each remaining confirmed production defect with regression evidence.
 **Depends on:** Phase 2
 **Requirements:** PDEF-01, PDEF-05, PDEF-06, PDEF-07, PDEF-08
-**Plans:** TBD
+**Plans:** 11 plans
 
 **Success Criteria**:
 
@@ -267,6 +267,19 @@ Plans:
 5. The reconcile-alias source-claim map is one-to-one and fail-closed while
    preserving manifest-derived state identity; independently terminal agent,
    compact, and rollback behavior keeps its own contract.
+
+Plans:
+- [ ] 03-01-PLAN.md — Make reconcile alias claims one-to-one, fail-closed, and convergent.
+- [ ] 03-02-PLAN.md — Promote ordered multi-directory agent paths through staging and install.
+- [ ] 03-03-PLAN.md — Migrate update/reinstall agent paths and remove the singular representation.
+- [ ] 03-04-PLAN.md — Correct manual/auto compact triggers at both hook payload owners.
+- [ ] 03-05-PLAN.md — Harden hook lookups and remove trace-proven no-producer dispatch branches.
+- [ ] 03-06-PLAN.md — Route install rollback failures through the transaction-owned formatter.
+- [ ] 03-07-PLAN.md — Use typed failure reasons and retain structured update-cleanup diagnostics.
+- [ ] 03-08-PLAN.md — Declare marketplace notification cardinality from invocation structure.
+- [ ] 03-09-PLAN.md — Declare lifecycle notification cardinality after owner corrections land.
+- [ ] 03-10-PLAN.md — Declare cardinality for remaining plugin, import, and reconcile producers.
+- [ ] 03-11-PLAN.md — Require cardinality at the shared boundary, update output docs, and seal the phase.
 
 ### Phase 4: Hermetic Test Infrastructure
 
