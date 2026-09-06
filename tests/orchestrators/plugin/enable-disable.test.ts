@@ -1099,6 +1099,265 @@ test("WLIF-03: disable removes the workflow envelope while the record keeps nami
 });
 
 // ──────────────────────────────────────────────────────────────────────────
+// WLIF-05: what a re-enable's materialization actually places
+//
+// Every case here drives a full disable/enable round trip, because the set
+// difference that matters -- recorded names the next enable does NOT re-place
+// -- only exists once a real disable has left a populated inventory behind. A
+// hand-seeded record cannot produce it.
+//
+// `locationsFor` is called INSIDE the `withHermeticHome` closure: the helper
+// sets `process.env.HOME`, which is what the workflow home derivation reads, so
+// a call outside would point `workflowsSavedDir` at the developer's real home.
+// ──────────────────────────────────────────────────────────────────────────
+
+/** Directory entries, or `[]` when the directory was never created. */
+async function workflowEntriesOf(directory: string): Promise<string[]> {
+  try {
+    return (await readdir(directory)).sort();
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Replace the plugin's WHOLE workflow script set in the marketplace clone.
+ *
+ * Replacing rather than adding is the point: a source that WITHDREW a script
+ * is the shape that makes the difference between the recorded inventory and
+ * the newly staged set non-empty, and an additive helper cannot express it.
+ *
+ * The default body carries a NAMED `meta` export -- a default-export body
+ * classifies as skipped and stages zero envelopes, so a case built on the
+ * default would pass having placed nothing.
+ */
+async function rewriteWorkflowScripts(
+  mpRoot: string,
+  pluginName: string,
+  scripts: readonly { sourceName: string; metaName?: string }[],
+): Promise<void> {
+  const workflowsDir = path.join(mpRoot, "plugins", pluginName, "workflows");
+  await rm(workflowsDir, { force: true, recursive: true });
+  await mkdir(workflowsDir, { recursive: true });
+  for (const script of scripts) {
+    const name = script.metaName ?? script.sourceName;
+    await writeFile(
+      path.join(workflowsDir, `${script.sourceName}.js`),
+      `export const meta = { name: "${name}", description: "does ${name}" };\n`,
+    );
+  }
+}
+
+/** The persisted workflow inventory for the fixture's one plugin. */
+async function recordedWorkflowNames(statePath: string): Promise<readonly string[] | undefined> {
+  const parsed = JSON.parse(await readFile(statePath, "utf8")) as {
+    marketplaces: Record<
+      string,
+      { plugins: Record<string, { resources: { workflows: string[] } }> }
+    >;
+  };
+  return parsed.marketplaces["claude-plugins-official"]?.plugins["foo-plugin"]?.resources.workflows;
+}
+
+/**
+ * Seed the disabled record, write the plugin's initial script set, and hand
+ * back everything the cases below act on. `scripts: []` leaves the plugin
+ * without a workflows directory at all, which is the empty-inventory shape.
+ */
+async function seedWorkflowRoundTrip(
+  home: string,
+  cwd: string,
+  scripts: readonly { sourceName: string; metaName?: string }[],
+): Promise<{
+  args: { pi: ExtensionAPI; cwd: string; marketplace: string; plugin: string; scope: "user" };
+  statePath: string;
+  mpRoot: string;
+  savedDir: string;
+}> {
+  const { statePath, mpRoot } = await seedRealDisabledMarketplace(home, {
+    marketplaceName: "claude-plugins-official",
+    pluginName: "foo-plugin",
+    version: "1.2.3",
+  });
+  if (scripts.length > 0) {
+    await rewriteWorkflowScripts(mpRoot, "foo-plugin", scripts);
+  }
+
+  return {
+    args: {
+      pi: makePi(),
+      cwd,
+      marketplace: "claude-plugins-official",
+      plugin: "foo-plugin",
+      scope: "user" as const,
+    },
+    statePath,
+    mpRoot,
+    savedDir: locationsFor("user", cwd).workflowsSavedDir,
+  };
+}
+
+test("WLIF-05: an enable over a shrunken source re-places only the surviving workflow", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange -- two workflows recorded by a real enable, then taken off disk
+    // by a real disable, then the author withdraws one of them.
+    const { args, statePath, mpRoot, savedDir } = await seedWorkflowRoundTrip(home, cwd, [
+      { sourceName: "greet" },
+      { sourceName: "wave" },
+    ]);
+    await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: true });
+    assert.deepStrictEqual(
+      await recordedWorkflowNames(statePath),
+      ["foo-plugin:greet", "foo-plugin:wave"],
+      "precondition: the first enable must record both envelopes",
+    );
+    await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: false });
+    await rewriteWorkflowScripts(mpRoot, "foo-plugin", [{ sourceName: "greet" }]);
+
+    // act
+    await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: true });
+
+    // assert -- the withdrawn name is gone from BOTH the record and the disk.
+    // The record alone would not distinguish a name that was dropped from one
+    // whose envelope was left behind.
+    assert.deepStrictEqual(await recordedWorkflowNames(statePath), ["foo-plugin:greet"]);
+    assert.deepStrictEqual(await workflowEntriesOf(savedDir), ["foo-plugin:greet.json"]);
+  });
+});
+
+test("WLIF-05: an enable over a renamed workflow re-places only the new name", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { args, statePath, mpRoot, savedDir } = await seedWorkflowRoundTrip(home, cwd, [
+      { sourceName: "greet" },
+    ]);
+    await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: true });
+    await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: false });
+    // A rename moves BOTH the script file and the exported name, which is what
+    // an author renaming a command does. The generated name follows the `meta`
+    // export, so moving only the file would leave the name unchanged.
+    await rewriteWorkflowScripts(mpRoot, "foo-plugin", [{ sourceName: "hail" }]);
+
+    // act
+    await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: true });
+
+    // assert -- a rename retires the old command exactly as a deletion does.
+    assert.deepStrictEqual(await recordedWorkflowNames(statePath), ["foo-plugin:hail"]);
+    assert.deepStrictEqual(await workflowEntriesOf(savedDir), ["foo-plugin:hail.json"]);
+  });
+});
+
+test("WLIF-05: a plugin declaring no workflows enables and disables placing none", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange -- no workflows directory at all, so the record's inventory and
+    // the source's declaration are BOTH empty. Neither verb may error and
+    // neither may write an envelope.
+    const { args, statePath, savedDir } = await seedWorkflowRoundTrip(home, cwd, []);
+
+    // act
+    await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: true });
+    const afterEnable = await recordedWorkflowNames(statePath);
+    await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: false });
+
+    // assert -- an EMPTY array, not an absent key: the record composition
+    // cannot omit the axis, so a missing key would mean the ledger never
+    // reported on it rather than reporting nothing on it.
+    assert.deepStrictEqual(afterEnable, []);
+    assert.deepStrictEqual(await recordedWorkflowNames(statePath), []);
+    assert.deepStrictEqual(await workflowEntriesOf(savedDir), []);
+  });
+});
+
+test("WLIF-05: a disable takes every recorded envelope off disk", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { args, statePath, savedDir } = await seedWorkflowRoundTrip(home, cwd, [
+      { sourceName: "greet" },
+      { sourceName: "wave" },
+    ]);
+    await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: true });
+    assert.deepStrictEqual(await workflowEntriesOf(savedDir), [
+      "foo-plugin:greet.json",
+      "foo-plugin:wave.json",
+    ]);
+
+    // act
+    await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: false });
+
+    // assert -- EVERY name the record holds, not just the first. The removal
+    // itself runs through the shared cascade primitive, whose per-kind dropped
+    // axis is pinned in `tests/orchestrators/marketplace/shared.test.ts`; what
+    // this case adds is that the disable VERB reaches it for the whole set.
+    assert.deepStrictEqual(await workflowEntriesOf(savedDir), []);
+    assert.deepStrictEqual(await recordedWorkflowNames(statePath), [
+      "foo-plugin:greet",
+      "foo-plugin:wave",
+    ]);
+  });
+});
+
+test("WLIF-05: two enables over an unchanged tree report the same names in file order", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange -- the SCRIPT FILE names and the GENERATED names sort in opposite
+    // directions, so a producer that re-sorted by generated name would report
+    // `[alpha, zulu]` and one preserving the discovery pass's sorted file-name
+    // order reports the reverse. A fixture whose two orders agree cannot tell
+    // them apart.
+    const { args, statePath, savedDir } = await seedWorkflowRoundTrip(home, cwd, [
+      { sourceName: "a-second", metaName: "zulu" },
+      { sourceName: "z-first", metaName: "alpha" },
+    ]);
+
+    // act -- a full round trip, then a second enable over the SAME tree.
+    await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: true });
+    const first = await recordedWorkflowNames(statePath);
+    await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: false });
+    await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: true });
+
+    // assert
+    assert.deepStrictEqual(first, ["foo-plugin:zulu", "foo-plugin:alpha"]);
+    assert.deepStrictEqual(await recordedWorkflowNames(statePath), first);
+    assert.deepStrictEqual(await workflowEntriesOf(savedDir), [
+      "foo-plugin:alpha.json",
+      "foo-plugin:zulu.json",
+    ]);
+  });
+});
+
+test("WLIF-05: an enable refuses a target held by a file the record does not name", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange -- the saved directory is shared with the user's own hand-saved
+    // workflows, so a target the record never named is FOREIGN by construction.
+    const { args, statePath, mpRoot, savedDir } = await seedWorkflowRoundTrip(home, cwd, [
+      { sourceName: "greet" },
+    ]);
+    await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: true });
+    await setPluginEnabled({ ...args, ctx: makeCtx(cwd).ctx, enable: false });
+    await rewriteWorkflowScripts(mpRoot, "foo-plugin", [
+      { sourceName: "greet" },
+      { sourceName: "wave" },
+    ]);
+    const foreignPath = path.join(savedDir, "foo-plugin:wave.json");
+    const foreignBytes = '{"name":"foo-plugin:wave","description":"hand written","script":"//\\n"}';
+    await mkdir(savedDir, { recursive: true });
+    await writeFile(foreignPath, foreignBytes);
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({ ...args, ctx, enable: true });
+
+    // assert -- the enable failed as a whole, and the planted file is still
+    // exactly the user's bytes. The ownership pre-check runs over the whole
+    // target set before the first rename, so nothing was placed beside it.
+    assert.strictEqual(await readFile(foreignPath, "utf8"), foreignBytes);
+    assert.deepStrictEqual(await workflowEntriesOf(savedDir), ["foo-plugin:wave.json"]);
+    assert.equal(notifications.length, 1);
+    assert.match(notifications[0]?.message ?? "", /\(failed\)/);
+    assert.deepStrictEqual(await recordedWorkflowNames(statePath), ["foo-plugin:greet"]);
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
 // ENBL-19: enable does not self-conflict against the retained inventory
 // ──────────────────────────────────────────────────────────────────────────
 

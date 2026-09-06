@@ -7433,6 +7433,12 @@ test("runInstallLedger projects a complete empty-plugin summary and preserves a 
           },
           stagedAgentNames: [],
           stagedMcpServerNames: [],
+          // WLIF-05: a plugin declaring no workflows projects an EMPTY array,
+          // not an absent key. `deepStrictEqual` over the whole summary is what
+          // makes that distinction assertable -- a per-key assertion passes for
+          // an omitted member too, and an omitted member is a materialization
+          // reporting nothing about an axis rather than reporting nothing on it.
+          stagedWorkflowNames: [],
         },
       });
       assert.strictEqual(state.marketplaces.mp?.plugins.empty?.version, "pinned-by-caller");
@@ -9715,14 +9721,145 @@ test("WLIF-01: a re-stage over a kept record displaces the plugin's own envelope
 
       // assert
       assert.strictEqual(result.kind, "installed");
-      // `InstallLedgerSummary` deliberately carries no workflows member, so the
-      // proof the re-stage recorded the name is the state snapshot the ledger
-      // mutated in place.
+      // WLIF-05: the projection reports the name the re-stage placed, and the
+      // state snapshot the ledger mutated in place agrees with it. Both are
+      // asserted because they answer different questions -- the projection is
+      // what a caller OUTSIDE the ledger can see, and the enable verb has no
+      // other channel to it.
+      assert.deepStrictEqual(result.summary.stagedWorkflowNames, ["hello:greet"]);
       assert.deepStrictEqual(kept.marketplaces.mp?.plugins.hello?.resources.workflows, [
         "hello:greet",
       ]);
       assert.strictEqual(await pathExists(envelopePath), true);
       assert.deepStrictEqual(await entriesOf(locations.workflowsSavedDir), ["hello:greet.json"]);
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("WLIF-05: the projection reports the placed names in discovery order, stably", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-workflows-order-"));
+    try {
+      // arrange -- the SCRIPT FILE names and the GENERATED names sort in
+      // opposite directions, so a producer that re-sorted by generated name
+      // would report `["hello:alpha", "hello:zulu"]` and a producer that
+      // preserved the discovery pass's sorted file-name order reports the
+      // reverse. A fixture whose two orders agree cannot tell them apart.
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "hello",
+        workflows: [
+          {
+            sourceName: "a-second",
+            body: 'export const meta = { name: "zulu", description: "last by name" };\n',
+          },
+          {
+            sourceName: "z-first",
+            body: 'export const meta = { name: "alpha", description: "first by name" };\n',
+          },
+        ],
+      });
+      const first = makeCtx();
+      await installPlugin({
+        ctx: first.ctx,
+        pi: first.pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+      const kept = await loadState(locations.extensionRoot);
+      const { ctx } = makeCtx();
+
+      // act -- re-run the ledger over the UNCHANGED tree through the enable
+      // seam, so the second run displaces the plugin's own envelopes aside
+      // rather than refusing on occupancy.
+      const result = await runInstallLedger(kept, locations, {
+        ctx,
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        scope: "project",
+        allowExistingRecord: true,
+      });
+
+      // assert
+      assert.strictEqual(result.kind, "installed");
+      assert.deepStrictEqual(result.summary.stagedWorkflowNames, ["hello:zulu", "hello:alpha"]);
+      assert.deepStrictEqual(kept.marketplaces.mp?.plugins.hello?.resources.workflows, [
+        "hello:zulu",
+        "hello:alpha",
+      ]);
+      assert.deepStrictEqual(await entriesOf(locations.workflowsSavedDir), [
+        "hello:alpha.json",
+        "hello:zulu.json",
+      ]);
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("WLIF-05: a refused re-stage places nothing and leaves the foreign envelope intact", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-workflows-foreign-"));
+    try {
+      // arrange -- install `greet`, then let the source grow a SECOND workflow
+      // whose target path is already held by a file the record does not name.
+      // The ownership pre-check runs over the whole target set before the first
+      // rename, so the refusal has to leave `greet` untouched too.
+      const locations = locationsFor("project", cwd);
+      const marketplaceRoot = path.join(cwd, "mp-src");
+      const { pluginRoot } = await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceName: "mp",
+        marketplaceRoot,
+        pluginName: "hello",
+        workflows: [{ sourceName: "greet" }],
+      });
+      const first = makeCtx();
+      await installPlugin({
+        ctx: first.ctx,
+        pi: first.pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+      const kept = await loadState(locations.extensionRoot);
+      await writeWorkflowScripts(pluginRoot, [{ sourceName: "greet" }, { sourceName: "wave" }]);
+      const foreignPath = path.join(locations.workflowsSavedDir, "hello:wave.json");
+      const foreignBytes = '{"name":"hello:wave","description":"hand written","script":"//\\n"}';
+      await writeFile(foreignPath, foreignBytes);
+      const { ctx } = makeCtx();
+
+      // act
+      await assert.rejects(
+        runInstallLedger(kept, locations, {
+          ctx,
+          cwd,
+          marketplace: "mp",
+          plugin: "hello",
+          scope: "project",
+          allowExistingRecord: true,
+        }),
+        { name: "WorkflowTargetOccupiedError" },
+      );
+
+      // assert -- the planted file survives byte-unchanged, and the plugin's
+      // OWN previous envelope, displaced aside before the pre-check ran, is
+      // back at its target. A refusal that left `hello:greet` in the staging
+      // tree would have unregistered a command the user never asked to lose.
+      assert.strictEqual(await readFile(foreignPath, "utf8"), foreignBytes);
+      assert.deepStrictEqual(await entriesOf(locations.workflowsSavedDir), [
+        "hello:greet.json",
+        "hello:wave.json",
+      ]);
     } finally {
       await rm(cwd, { force: true, recursive: true });
     }

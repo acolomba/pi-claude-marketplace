@@ -210,6 +210,22 @@ type SetEnabledOutcome =
   | ({
       kind: "fresh";
       version?: string;
+      /**
+       * WLIF-05 / WLIF-06: the workflow envelope names the enable branch's
+       * materialization placed, off the ledger projection.
+       *
+       * Present only on the arm where a ledger actually ran. Absent means no
+       * materialization happened on this arm at all -- the disable branch and
+       * the config-write-back arm both reach `fresh` without staging anything,
+       * and an empty array there would be indistinguishable from "materialized
+       * and placed nothing", which is the opposite claim.
+       *
+       * Deliberately module-private and deliberately NOT a member of the
+       * exported `EnableDisablePluginOutcome`: the load-time reconcile caller
+       * consumes that union, and workflow-retirement is a fact about a command
+       * the running host still has registered, which a reload is what clears.
+       */
+      stagedWorkflowNames?: readonly string[];
     } & EnableDegradationSignals)
   | { kind: "invalid-config" }
   /**
@@ -324,6 +340,13 @@ async function runEnableBranch(
       // declaration verdict, nothing more.
       ...(summary.stagedAgentNames.length > 0 && { stagedAgents: true }),
       ...(summary.stagedMcpServerNames.length > 0 && { stagedMcpServers: true }),
+      // WLIF-05 / WLIF-06: the NAMES, unreduced, and the one read on this
+      // projection that is not a length. `installed` above is the PRE-enable
+      // record -- captured before the ledger rewrote it, which is why it is a
+      // parameter -- so the two together are the only place the difference
+      // between the recorded inventory and what this run re-placed can be
+      // computed. Carried on the module-private sentinel, never on a row.
+      stagedWorkflowNames: summary.stagedWorkflowNames,
     };
   } catch (err) {
     return {

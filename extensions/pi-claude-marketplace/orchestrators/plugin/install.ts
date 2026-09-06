@@ -527,6 +527,26 @@ export interface InstallLedgerSummary {
   // Staged-name lists, read only for their emptiness (ENBL-07 soft-dep flags).
   readonly stagedAgentNames: readonly string[];
   readonly stagedMcpServerNames: readonly string[];
+  /**
+   * WLIF-05 / WLIF-06: the workflow envelope names this materialization
+   * actually placed, exactly as the commit reported them through `onPlaced`.
+   *
+   * Read for its MEMBERSHIP, not for its length -- which is what separates it
+   * from the two lists above. Those two answer a declaration question (did the
+   * run stage any agent / any MCP server), so a count suffices and the names
+   * must never reach a rendered row. This one is differenced against the
+   * caller's PRE-materialization record inventory: the recorded names this run
+   * did not re-place are the workflow commands the operation retired while the
+   * host still has them registered. Reducing it to a boolean here would
+   * destroy that fact, and no other surface carries it -- by the time the
+   * ledger returns, the record it wrote already holds the NEW inventory and so
+   * cannot answer what the old one held.
+   *
+   * Required rather than optional, for the reason the context member it
+   * projects is required: a producer that could omit the axis could report a
+   * materialization as having placed nothing.
+   */
+  readonly stagedWorkflowNames: readonly string[];
 }
 
 /** Discriminated result of the guard-free install ledger body. */
@@ -836,6 +856,7 @@ function toInstallLedgerSummary(c: InstallCtx): InstallLedgerSummary {
     frontmatterDegradations: c.frontmatterDegradations,
     stagedAgentNames: c.stagedAgentNames,
     stagedMcpServerNames: c.stagedMcpServerNames,
+    stagedWorkflowNames: c.stagedWorkflowNames,
   };
 }
 
