@@ -1980,6 +1980,33 @@ test("publish recovery rejects an impossible staged state without changing files
   ]);
 });
 
+test("publish recovery removes staged files when no destination existed", async (t) => {
+  // arrange
+  const fixture = await createCliFixture(t);
+  const journalPath = path.join(fixture.projectRoot, phaseRoot, ".publish-journal.json");
+  await rm(path.join(fixture.projectRoot, ledgerPath));
+  await rm(path.join(fixture.projectRoot, markdownPath));
+  const records = publishJournalRecords("1-1-a");
+  for (const record of records) {
+    record.hadDestination = false;
+    await writeFile(path.join(fixture.projectRoot, record.staged), "staged\n");
+  }
+  await writeFile(journalPath, `${JSON.stringify({ status: "staged", records })}\n`);
+
+  // act
+  publishRevalidation(fixture.projectRoot, "replacement\n", "replacement markdown\n");
+
+  // assert
+  assert.deepStrictEqual(await destinationBytes(fixture.projectRoot), [
+    Buffer.from("replacement\n"),
+    Buffer.from("replacement markdown\n"),
+  ]);
+  assert.deepStrictEqual(
+    await phaseArtifactNames(fixture.projectRoot),
+    canonicalPhaseArtifactNames(),
+  );
+});
+
 for (const row of [
   {
     title: "a stage path derived from another destination",
