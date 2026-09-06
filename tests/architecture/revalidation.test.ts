@@ -1948,6 +1948,7 @@ test("publish recovery preserves canonical bytes when destination flags are fals
     record.hadDestination = false;
     await writeFile(path.join(fixture.projectRoot, record.staged), "unpublished\n");
   }
+
   await writeFile(journalPath, `${JSON.stringify({ status: "staged", records })}\n`);
 
   // act & assert
@@ -1991,6 +1992,7 @@ test("publish recovery removes staged files when no destination existed", async 
     record.hadDestination = false;
     await writeFile(path.join(fixture.projectRoot, record.staged), "staged\n");
   }
+
   await writeFile(journalPath, `${JSON.stringify({ status: "staged", records })}\n`);
 
   // act
@@ -2052,6 +2054,7 @@ test("publish recovery removes every staged rollback artifact", async (t) => {
   for (const record of records) {
     await writeFile(path.join(fixture.projectRoot, record.staged), "staged\n");
   }
+
   await writeFile(
     journalPath,
     `${JSON.stringify({
@@ -2082,6 +2085,7 @@ test("publish recovery removes every published cleanup artifact", async (t) => {
   for (const record of records) {
     await writeFile(path.join(fixture.projectRoot, record.backup), "old backup\n");
   }
+
   await writeFile(
     journalPath,
     `${JSON.stringify({
