@@ -933,44 +933,87 @@ function validateDecisions(ledger, state, violations) {
   }
 }
 
+function expectedScopeAnchorPath(change) {
+  if (change.id.startsWith("SCOPE-REQ-")) {
+    return REQUIREMENTS_PATH;
+  }
+
+  return change.id.startsWith("SCOPE-ROUTE-") ? ROADMAP_PATH : undefined;
+}
+
+function scopeAnchorHasIdentity(change, parts) {
+  if (change.id.startsWith("SCOPE-REQ-")) {
+    return parts[2].startsWith(`${change.requirementId} —`);
+  }
+
+  if (change.id.startsWith("SCOPE-ROUTE-")) {
+    const number = Number(change.requirementId.slice("PHASE-".length));
+    return parts[1].startsWith(`${change.requirementId} / Phase ${number} `);
+  }
+
+  return parts.some((part) => part.includes(change.requirementId));
+}
+
+function parseScopeAnchor(change, name, anchor, violations) {
+  const parts = anchor.split(" :: ");
+  if (parts.length !== 3 || parts.some((part) => part.trim() === "")) {
+    violations.push(
+      violation("invalid-scope-anchor", change.id, `${name} must be a three-part locator`),
+    );
+    return undefined;
+  }
+
+  const expectedPath = expectedScopeAnchorPath(change);
+  if (expectedPath !== undefined && parts[0] !== expectedPath) {
+    violations.push(violation("scope-anchor-path", change.id, `${name} must use ${expectedPath}`));
+    return undefined;
+  }
+
+  if (!scopeAnchorHasIdentity(change, parts)) {
+    violations.push(
+      violation(
+        "scope-anchor-identity",
+        change.id,
+        `${name} must identify ${change.requirementId}`,
+      ),
+    );
+    return undefined;
+  }
+
+  return parts;
+}
+
 function validateScopeAnchors(change, violations) {
-  const anchors = [change.beforeAnchor, change.afterAnchor];
-  if (anchors.some((anchor) => typeof anchor !== "string" || anchor.trim() === "")) {
+  if (
+    typeof change.beforeAnchor !== "string" ||
+    change.beforeAnchor.trim() === "" ||
+    typeof change.afterAnchor !== "string" ||
+    change.afterAnchor.trim() === ""
+  ) {
     violations.push(
       violation("invalid-scope-anchor", change.id, "beforeAnchor and afterAnchor are mandatory"),
     );
-  } else if (change.beforeAnchor === change.afterAnchor) {
+    return undefined;
+  }
+
+  if (change.beforeAnchor === change.afterAnchor) {
     violations.push(
       violation("invalid-scope-anchor", change.id, "beforeAnchor and afterAnchor must differ"),
     );
-  } else {
-    for (const [name, anchor] of [
-      ["beforeAnchor", change.beforeAnchor],
-      ["afterAnchor", change.afterAnchor],
-    ]) {
-      const parts = anchor.split(" :: ");
-      if (parts.length !== 3 || parts.some((part) => part.trim() === "")) {
-        violations.push(
-          violation("invalid-scope-anchor", change.id, `${name} must be a three-part locator`),
-        );
-      } else if (!anchor.includes(change.requirementId)) {
-        violations.push(
-          violation(
-            "scope-anchor-identity",
-            change.id,
-            `${name} must identify ${change.requirementId}`,
-          ),
-        );
-      }
-    }
+    return undefined;
   }
+
+  const before = parseScopeAnchor(change, "beforeAnchor", change.beforeAnchor, violations);
+  const after = parseScopeAnchor(change, "afterAnchor", change.afterAnchor, violations);
+  return before === undefined || after === undefined ? undefined : { before, after };
 }
 
 function validateScopeRowIdentity(change, violations) {
   if (typeof change.id !== "string" || typeof change.requirementId !== "string") {
-    return;
+    return false;
   }
 
+  let valid = true;
   if (change.id.startsWith("SCOPE-REQ-") && change.id !== `SCOPE-REQ-${change.requirementId}`) {
     violations.push(
       violation(
@@ -979,6 +1022,7 @@ function validateScopeRowIdentity(change, violations) {
         "requirement row key and requirementId must agree",
       ),
     );
+    valid = false;
   }
 
   if (
@@ -993,7 +1037,10 @@ function validateScopeRowIdentity(change, violations) {
         "route row key and Phase 2-9 requirementId must agree",
       ),
     );
+    valid = false;
   }
+
+  return valid;
 }
 
 function validateScopeChange(change, ledger, findings, violations) {
@@ -1047,8 +1094,9 @@ function validateScopeChange(change, ledger, findings, violations) {
     violations.push(violation("invalid-scope-action", change.id, String(change.action)));
   }
 
-  validateScopeAnchors(change, violations);
-  validateScopeRowIdentity(change, violations);
+  if (validateScopeRowIdentity(change, violations)) {
+    validateScopeAnchors(change, violations);
+  }
 }
 
 function validateScopeChanges(ledger, findings, violations) {
@@ -1940,7 +1988,7 @@ function parseRoadmapContract(markdown, violations) {
   return phases;
 }
 
-function validateRequirementChange(requirements, requirementId, change, violations) {
+function validateRequirementChange(requirements, requirementId, change, locators, violations) {
   const id = `SCOPE-REQ-${requirementId}`;
   const disposition = requirements.dispositions.get(requirementId);
   const expectedSection =
@@ -1983,12 +2031,10 @@ function validateRequirementChange(requirements, requirementId, change, violatio
     );
   }
 
-  const afterParts = typeof change.afterAnchor === "string" ? change.afterAnchor.split(" :: ") : [];
+  const afterParts = locators.get(id)?.after;
   if (
-    afterParts.length !== 3 ||
-    afterParts[0] !== REQUIREMENTS_PATH ||
-    afterParts[1] !== expectedSection ||
-    !afterParts[2].startsWith(`${requirementId} —`)
+    afterParts !== undefined &&
+    (afterParts[1] !== expectedSection || !afterParts[2].startsWith(`${requirementId} —`))
   ) {
     violations.push(
       violation("scope-after-anchor", id, "afterAnchor does not resolve to requirement"),
@@ -2052,16 +2098,16 @@ function validateRequirementSets(requirements, rows, violations) {
   }
 }
 
-function validateRequirementContracts(requirements, allRows, violations) {
+function validateRequirementContracts(requirements, allRows, locators, violations) {
   const rows = requirementRows(allRows);
   validateRequirementSets(requirements, rows, violations);
   for (const [id, change] of rows) {
     const requirementId = id.slice("SCOPE-REQ-".length);
-    validateRequirementChange(requirements, requirementId, change, violations);
+    validateRequirementChange(requirements, requirementId, change, locators, violations);
   }
 }
 
-function validatePhaseContracts(requirements, phases, rows, violations) {
+function validatePhaseContracts(requirements, phases, rows, locators, violations) {
   for (let number = 2; number <= 9; number += 1) {
     const phaseId = `PHASE-${String(number).padStart(2, "0")}`;
     const change = rows.get(`SCOPE-ROUTE-${phaseId}`);
@@ -2086,11 +2132,9 @@ function validatePhaseContracts(requirements, phases, rows, violations) {
       );
     }
 
-    const afterParts =
-      typeof change.afterAnchor === "string" ? change.afterAnchor.split(" :: ") : [];
+    const afterParts = locators.get(change.id)?.after;
     if (
-      afterParts.length !== 3 ||
-      afterParts[0] !== ROADMAP_PATH ||
+      afterParts !== undefined &&
       afterParts[1] !== `${phaseId} / Phase ${number} ${phase.title}`
     ) {
       violations.push(
@@ -2105,8 +2149,15 @@ function validatePlanningContracts(ledger, requirementsMarkdown, roadmapMarkdown
   const requirements = parseRequirementsContract(requirementsMarkdown, violations);
   const phases = parseRoadmapContract(roadmapMarkdown, violations);
   const rows = new Map();
+  const locators = new Map();
   for (const change of ledger.scopeChanges) {
-    validateScopeRowIdentity(change, violations);
+    if (validateScopeRowIdentity(change, violations)) {
+      const parsed = validateScopeAnchors(change, violations);
+      if (parsed !== undefined) {
+        locators.set(change.id, parsed);
+      }
+    }
+
     if (rows.has(change.id)) {
       violations.push(
         violation("duplicate-scope-contract", change.id, "scope row appears more than once"),
@@ -2116,8 +2167,8 @@ function validatePlanningContracts(ledger, requirementsMarkdown, roadmapMarkdown
     }
   }
 
-  validateRequirementContracts(requirements, rows, violations);
-  validatePhaseContracts(requirements, phases, rows, violations);
+  validateRequirementContracts(requirements, rows, locators, violations);
+  validatePhaseContracts(requirements, phases, rows, locators, violations);
 
   if (ledger.scopeChanges.length !== 40 || rows.size !== 40) {
     violations.push(

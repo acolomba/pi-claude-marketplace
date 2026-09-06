@@ -1075,7 +1075,28 @@ test("RVAL-04 scope-impact rejects a misdirected afterAnchor", async (t) => {
   assert.deepStrictEqual(execution, {
     status: 1,
     stdout: "",
-    stderr: "scope-after-anchor: SCOPE-REQ-AUTH-01: afterAnchor does not resolve to requirement\n",
+    stderr:
+      "scope-anchor-path: SCOPE-REQ-AUTH-01: afterAnchor must use .planning/REQUIREMENTS.md\n",
+  });
+});
+
+test("RVAL-04 scope-impact rejects a traversal-shaped beforeAnchor", async (t) => {
+  // arrange
+  const projectRoot = await createScopeImpactFixture(t);
+  const ledger = JSON.parse(await readFile(path.join(projectRoot, ledgerPath), "utf8")) as Ledger;
+  ledger.scopeChanges.find((change) => change.id === "SCOPE-REQ-AUTH-01")!.beforeAnchor =
+    "../outside.md :: Production Correctness :: AUTH-01 — prior contract";
+  await writeFile(path.join(projectRoot, ledgerPath), `${JSON.stringify(ledger, null, 2)}\n`);
+
+  // act
+  const execution = runCli(projectRoot, ["scope-impact", "--check"]);
+
+  // assert
+  assert.deepStrictEqual(execution, {
+    status: 1,
+    stdout: "",
+    stderr:
+      "scope-anchor-path: SCOPE-REQ-AUTH-01: beforeAnchor must use .planning/REQUIREMENTS.md\n",
   });
 });
 
@@ -1328,8 +1349,8 @@ test("RVAL-04 scope-impact rejects absent requirement and route after anchors", 
     status: 1,
     stdout: "",
     stderr:
-      "scope-after-anchor: SCOPE-REQ-AUTH-01: afterAnchor does not resolve to requirement\n" +
-      "scope-after-anchor: SCOPE-ROUTE-PHASE-02: afterAnchor does not resolve to phase\n",
+      "invalid-scope-anchor: SCOPE-REQ-AUTH-01: beforeAnchor and afterAnchor are mandatory\n" +
+      "invalid-scope-anchor: SCOPE-ROUTE-PHASE-02: beforeAnchor and afterAnchor are mandatory\n",
   });
 });
 
