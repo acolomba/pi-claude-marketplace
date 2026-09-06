@@ -1811,6 +1811,43 @@ test("publish recovery rejects crafted journals without deleting unrelated files
   assert.strictEqual(await readFile(path.join(fixture.projectRoot, victimPath), "utf8"), "keep me\n");
 });
 
+for (const row of [
+  {
+    title: "a stage path derived from another destination",
+    mutate(records: ReturnType<typeof publishJournalRecords>) {
+      records[0]!.staged = `${markdownPath}.stage-1-1-a`;
+    },
+  },
+  {
+    title: "a transaction ID outside the closed grammar",
+    mutate(records: ReturnType<typeof publishJournalRecords>) {
+      records[0]!.staged = `${ledgerPath}.stage-old`;
+      records[0]!.backup = `${ledgerPath}.backup-old`;
+    },
+  },
+  {
+    title: "different transaction IDs across destinations",
+    mutate(records: ReturnType<typeof publishJournalRecords>) {
+      records[1]!.staged = `${markdownPath}.stage-2-2-b`;
+      records[1]!.backup = `${markdownPath}.backup-2-2-b`;
+    },
+  },
+] as const) {
+  test(`publish recovery rejects ${row.title}`, async (t) => {
+    // arrange
+    const fixture = await createCliFixture(t);
+    const journalPath = path.join(fixture.projectRoot, phaseRoot, ".publish-journal.json");
+    const records = publishJournalRecords("1-1-a");
+    row.mutate(records);
+    await writeFile(journalPath, `${JSON.stringify({ status: "staged", records })}\n`);
+
+    // act & assert
+    assert.throws(() => {
+      publishRevalidation(fixture.projectRoot, "{}\n", "markdown\n");
+    }, /publish journal is malformed/);
+  });
+}
+
 test("publish recovery completes both staged rollback and published cleanup", async (t) => {
   // arrange
   const fixture = await createCliFixture(t);

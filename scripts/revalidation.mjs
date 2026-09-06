@@ -1439,10 +1439,7 @@ function validatePublishJournal(journal, projectRoot, journalPath) {
     transactionIds.add(transactionId);
   }
 
-  if (
-    destinations.some((destination) => !seenDestinations.has(destination)) ||
-    transactionIds.size !== 1
-  ) {
+  if (transactionIds.size !== 1) {
     throw new Error(`publish journal is malformed: ${journalPath}`);
   }
 
