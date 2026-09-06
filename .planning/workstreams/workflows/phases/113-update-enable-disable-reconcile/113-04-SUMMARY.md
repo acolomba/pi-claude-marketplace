@@ -23,7 +23,10 @@ affects: [113-05]
 actuals:
   tokens: 15486
   tasks: 3
-  commits: 3
+  # Three task commits plus three documentation commits (the summary, its
+  # self-check, and this count correction). Not rounded down to the task
+  # count: a calibrator comparing against the estimate needs the real total.
+  commits: 6
 
 tech-stack:
   added: []
