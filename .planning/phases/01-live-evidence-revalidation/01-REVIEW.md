@@ -1,6 +1,6 @@
 ---
 phase: 01-live-evidence-revalidation
-reviewed: 2026-09-06T13:38:35Z
+reviewed: 2026-09-06T15:32:04Z
 depth: standard
 files_reviewed: 3
 files_reviewed_list:
@@ -8,62 +8,48 @@ files_reviewed_list:
   - scripts/revalidation.negative.mjs
   - tests/architecture/revalidation.test.ts
 findings:
-  critical: 5
+  critical: 3
   warning: 0
   info: 0
-  total: 5
+  total: 3
 status: issues_found
 ---
 
 # Phase 1: Code Review Report
 
-**Reviewed:** 2026-09-06T13:38:35Z
+**Reviewed:** 2026-09-06T15:32:04Z
 **Depth:** standard
 **Files Reviewed:** 3
 **Status:** issues_found
 
 ## Summary
 
-The current happy-path gates are green: the architecture suite passes 108/108 when its child CLI processes are allowed, the standalone negative runner passes, the live check reports 40 records, and direct coverage reports 100% branches, functions, and lines. Those gates do not expose five fail-open defects in the planning-contract implementation and its compatibility test.
-
-`npm run check` passed typecheck, repository-scoped ESLint, and all Fallow gates before stopping on the pre-existing untracked `.mcp.json` formatting warning. All three reviewed files pass targeted Prettier. A direct `npx eslint . --max-warnings=0` invocation also reaches the tool-owned `.codex/` tree and fails while loading a typed rule there; the repository's scoped lint command passes.
+All three fresh adversarial candidates reproduced as public-check false passes. The current suite is green—131/131 architecture cases, standalone negative controls, live ledger, live 40-record scope check, typecheck, scoped ESLint/Prettier, and 100% direct branch/function/line coverage—but it does not discriminate these failures. The aggregate format check still stops only on the unrelated pre-existing `.mcp.json` warning.
 
 ## Narrative Findings (AI reviewer)
 
 ## Critical Issues
 
-### CR-01: Removing a live traceability row is accepted
+### CR-01: The exact 32 stable requirement identities are derived from the untrusted ledger
 
-**File:** `scripts/revalidation.mjs:1902-1912`
-**Issue:** `validateRequirementContracts` iterates only the requirement IDs that remain in `requirements.dispositions`. It never compares that parsed set with the 32 `SCOPE-REQ-*` rows in the ledger. As a result, deleting the `GGAT-02` evidence/history row from REQUIREMENTS.md still exits zero and prints `Scope impact valid: 40 records.` The fixed total at lines 1972-1975 counts ledger rows, so it cannot detect a contract row removed from Markdown. This violates the required exact 32-row round trip and lets requirements disappear silently.
-**Fix:** Build the expected requirement-ID set from the ledger's canonical `SCOPE-REQ-*` rows, require exactly 32 unique IDs, and compare it bidirectionally with both parsed definitions/history records and traceability rows. Emit deterministic missing/extra violations before validating each row.
+**File:** `scripts/revalidation.mjs:2314-2340`
+**Issue:** `validateRequirementSets` enforces a count of 32, then constructs `expectedIds` from the submitted `SCOPE-REQ-*` row keys themselves. It never compares those keys with the milestone's closed stable-ID set. In a case-owned fixture, renaming `AUTH-01` to `EVIL-99` consistently in the ledger row/key/anchors, requirement definition and traceability row, and Phase 4 declaration returned status 0 with `Scope impact valid: 40 records.` The clause signature did not help because it signs only the clause body, not its stable identity. This violates the plan's exact-32-ID and anti-spoofing contracts.
+**Fix:** Define or derive an independent closed set of the 32 stable IDs from sealed evidence, compare the ledger requirement-row keys and `requirementId` values against that set before parsing the documents, and bind each signature to the stable ID as well as its clause. Add a public-CLI control that performs a coordinated rename across all three inputs and requires a deterministic stable-ID violation.
 
-### CR-02: Requirement clause rewrites with the same ID and section are invisible
+### CR-02: Requirement-to-phase routing is compared only between two mutable documents
 
-**File:** `scripts/revalidation.mjs:1790-1826`
-**Issue:** `parseRequirementsContract` stores only `requirementId -> section` for a definition. It discards the requirement's clause text. Replacing the PDEF-01 clause with unrelated prose while retaining its ID and section still passes `scope-impact --check`. The checker therefore cannot detect the “structurally drifted requirement clauses” it claims to enforce and does not actually resolve the third component of an `afterAnchor` to live contract content.
-**Fix:** Parse a deterministic normalized representation of each complete requirement clause and compare it with an exact, machine-verifiable locator/signature carried by the corresponding scope row. Reject duplicate, truncated, extra, or changed clause bodies instead of treating matching ID and section as sufficient.
+**File:** `scripts/revalidation.mjs:2156-2207,2356-2389`
+**Issue:** The requirement validator checks only broad route grammar/status, while the phase validator derives each expected membership from the same REQUIREMENTS.md dispositions it is meant to verify. Neither is bound to the evidence-backed ledger row. Two independent case-owned mutations returned status 0 and the 40-record success message: moving `PDEF-01` from Phase 3 to Phase 4 in both REQUIREMENTS.md and ROADMAP.md, and changing `GGAT-02` from `formerly Phase 7` to `formerly Phase 8`. The two planning contracts can therefore drift together while the canonical evidence crosswalk remains unchanged.
+**Fix:** Persist the exact route/status for every requirement row and the exact member set for every phase route in the canonical crosswalk (or in signatures over those values). Validate each document independently against that ledger-backed expectation, then perform the cross-document consistency check. Add public-CLI controls for coordinated active reassignment and evidence-history former-phase drift.
 
-### CR-03: Scope-row IDs and `requirementId` fields can contradict each other
+### CR-03: A four-space-indented fence marker is incorrectly treated as a closing fence
 
-**File:** `scripts/revalidation.mjs:1858-1912`
-**Issue:** Rows are selected by `change.id`, but neither `validateRequirementChange` nor `validateRequirementContracts` requires `change.requirementId` to equal the ID encoded in that key. Changing `SCOPE-REQ-AUTH-01.requirementId` from `AUTH-01` to `PDEF-01` leaves the command green because validation continues with the map key and the old `afterAnchor`. The same missing invariant applies to route rows. This breaks stable identity enforcement on untrusted ledger data.
-**Fix:** Before contract comparison, require every requirement row to satisfy `change.id === 'SCOPE-REQ-' + change.requirementId` and every route row to satisfy both `change.id === 'SCOPE-ROUTE-' + change.requirementId` and `change.requirementId === PHASE-NN`. Reject rows whose key, field, or anchor identity differs.
-
-### CR-04: `beforeAnchor` path confinement is not enforced
-
-**File:** `scripts/revalidation.mjs:935-965`
-**Issue:** Generic anchor validation checks only three nonblank parts and a substring match; it does not validate the locator path. More importantly, the `scope-impact --check` path at lines 1992-1997 never calls this validation and only inspects `afterAnchor`. Replacing an AUTH-01 `beforeAnchor` path with `../outside.md` still reports success. The gate therefore accepts traversal-shaped and path-mismatched provenance despite the plan's fail-closed path/anchor contract.
-**Fix:** Validate both anchors inside the planning-contract checker. Require fixed normalized repository-relative paths by row kind (`.planning/REQUIREMENTS.md` for requirement rows and `.planning/ROADMAP.md` for route rows), exact stable identity, three nonblank parts, and distinct before/after values. Reuse one strict locator parser so `validateLedger` and `scope-impact --check` cannot drift.
-
-### CR-05: The ordinary-output regression test uses production code as its oracle
-
-**File:** `tests/architecture/revalidation.test.ts:842-855`
-**Issue:** The test named “preserves ordinary JSON output” computes its expected bytes by calling `deriveScopeImpact`, the same production function used by `handleScopeImpact`. A regression in sorting, projection fields, or serialization can change both actual and expected values and leave the test green. This is a self-fulfilling assertion and does not protect the promised byte-compatible branch.
-**Fix:** Exercise ordinary mode with a short explicit ledger and compare stdout with an independently written complete JSON string (including order, indentation, omitted anchors, and trailing newline), or compare with a reviewed golden file that is not generated by production code.
+**File:** `scripts/revalidation.mjs:1947-1968`
+**Issue:** `closesFence` calls `trim()`, so it accepts closing markers with any indentation. CommonMark permits at most three leading spaces on a closing fence; a four-space marker remains code content. A case-owned fixture removed the live `AUTH-01` traceability row and placed the same row after a four-space-indented pseudo-closer inside a fenced block. The parser exposed the hidden row and `scope-impact --check` returned status 0 with 40 valid records even though rendered Markdown still treats the row as code.
+**Fix:** Parse closing fences with the same 0-3-leading-space bound as opening fences, require only the matching marker at least as wide as the opener plus optional trailing spaces, and do not `trim()` arbitrary indentation. Add a public-CLI control with an indented pseudo-closer and a hidden requirement row.
 
 ---
 
-_Reviewed: 2026-09-06T13:38:35Z_
+_Reviewed: 2026-09-06T15:32:04Z_
 _Reviewer: the agent (gsd-code-reviewer)_
 _Depth: standard_

@@ -1,75 +1,73 @@
 ---
 phase: 01-live-evidence-revalidation
-fixed_at: 2026-09-06T03:10:26Z
+fixed_at: 2026-09-06T15:53:45Z
 review_path: .planning/phases/01-live-evidence-revalidation/01-REVIEW.md
 iteration: 3
-findings_in_scope: 4
-fixed: 4
+findings_in_scope: 3
+fixed: 3
 skipped: 0
 status: all_fixed
 ---
 
-# Phase 01: Code Review Fix Report
+# Phase 1: Code Review Fix Report
 
-**Fixed at:** 2026-09-06T03:10:26Z
+**Fixed at:** 2026-09-06T15:53:45Z
 **Source review:** `.planning/phases/01-live-evidence-revalidation/01-REVIEW.md`
 **Iteration:** 3
 
 **Summary:**
 
-- Findings in scope: 4
-- Fixed: 4
+- Findings in scope: 3
+- Fixed: 3
 - Skipped: 0
 
 ## Fixed Issues
 
-### CR-01: A false destination-state flag can delete both canonical artifacts
+### CR-01: The exact 32 stable requirement identities are derived from the untrusted ledger
 
 **Status:** fixed: requires human verification
-**Files modified:** `scripts/revalidation.mjs`, `tests/architecture/revalidation.test.ts`
-**Commits:** df4f2b60, bfb56a12, 88bc9867
-**Applied fix:** Recovery now validates the complete observed destination, stage, and backup state for every record before changing any path. It rejects ambiguous or impossible states without mutation, preserves an existing destination when a false journal flag conflicts with an intact staged file, and only removes a newly published destination when the active transaction recorded that exact publish. Regression cases compare both complete canonical byte sequences and cover existing-destination, first-publish, impossible-state, and failed-live-publish recovery paths.
+**Files modified:** `scripts/revalidation.mjs`, `scripts/revalidation.negative.mjs`, `tests/architecture/revalidation.test.ts`
+**Commits:** 8fc68003, 725b3c8f, 1a184578, 6fbe1375
+**Applied fix:** Added a closed 32-ID set and immutable per-ID clause signatures outside the mutable ledger. Check mode now rejects missing and unknown stable IDs, validates each ledger signature against its sealed ID-specific value, and validates planning prose against the same sealed value. Public CLI regressions cover a coordinated rename and a changed ledger signature.
 
-### CR-02: Non-object collection records crash both validators
+### CR-02: Requirement-to-phase routing is compared only between two mutable documents
 
 **Status:** fixed: requires human verification
-**Files modified:** `scripts/revalidation.mjs`, `tests/architecture/revalidation.test.ts`
-**Commit:** 3ca6b184
-**Applied fix:** Ledger files, decisions, and scope changes are collected through structural guards before later validation reads their fields. Shard files use the same boundary and require a string path. Null, array, string, and number records now produce exact `invalid-file`, `invalid-decision`, `invalid-scope-change`, or `invalid-shard-file` violations without throwing.
+**Files modified:** `scripts/revalidation.mjs`, `scripts/revalidation.negative.mjs`, `tests/architecture/revalidation.test.ts`
+**Commit:** 6738b932
+**Applied fix:** Added immutable exact route/status contracts for all 32 requirements. Roadmap member sets now derive from those sealed routes, each traceability disposition is checked independently, and the existing cross-document consistency check remains active. Public CLI regressions cover a coordinated active-phase reassignment and evidence former-phase drift.
 
-### CR-03: Filesystem cleanup tests do not observe the promised cleanup
+### CR-03: A four-space-indented fence marker is incorrectly treated as a closing fence
 
-**Status:** fixed
-**Files modified:** `tests/architecture/revalidation.test.ts`
-**Commit:** 9e4f552d
-**Applied fix:** Staging failure, atomic-journal rename failure, staged recovery, published recovery, and rollback failure now compare the complete phase-directory artifact set. Successful cleanup proves stage, backup, journal, lock, and atomic temporary files are absent; rollback failure proves the recovery journal and surviving backup remain. Staged rollback and published cleanup are separate cases.
+**Status:** fixed: requires human verification
+**Files modified:** `scripts/revalidation.mjs`, `scripts/revalidation.negative.mjs`, `tests/architecture/revalidation.test.ts`
+**Commit:** 42424ae9
+**Applied fix:** Closing fences now require zero to three leading spaces, the opener's marker, at least the opener's width, and only optional trailing whitespace. A public CLI regression proves that a four-space pseudo-closer cannot expose a hidden traceability row.
 
-### WR-01: The repository gate rejects `validateShard` complexity
+## Supporting Commits
 
-**Status:** fixed
-**Files modified:** `scripts/revalidation.mjs`
-**Commit:** 57a18d1b
-**Applied fix:** Assignment and owner checks, claim ownership, file-to-claim links, and claim-to-finding links now live in focused helpers. `validateShard` is a short coordinator, and the fallow health gate reports zero functions above the configured threshold.
+- `3d97145c` mirrors all three adversarial witnesses in the standalone negative-control script.
+- The expectation-only updates are included with the scoped regression commits above.
 
 ## Verification
 
-All verification ran against the main checkout because `workflow.use_worktrees` is `false`. Child-process checks ran outside the restricted filesystem sandbox so the public CLI and repository suites could launch normally. Formatting follow-up commit: 3aab1f93.
+All verification ran in the main checkout because `workflow.use_worktrees` is `false`.
 
-- `npm run test:coverage:direct -- scripts/revalidation.mjs`: passed with 89 tests and 100% branch, function, and line coverage (565/565 branches, 156/156 functions, 1799/1799 lines).
-- Focused `tests/architecture/revalidation.test.ts`: passed all cases; the final direct-coverage run exercised the complete 89-case file.
-- `npx tsc --noEmit`: passed.
-- Repository ESLint: passed with no warnings.
-- Fallow dead-code, health, and duplication gates: passed; health reported 0 functions above threshold.
-- Exact-file Prettier checks for all three reviewed files: passed.
-- Corresponding-test, corresponding-test negative, and direct-coverage negative gates: passed.
-- Unit suite: passed 5303 tests.
-- Integration suite: passed 31 tests.
-- `node scripts/revalidation.negative.mjs`: passed.
-- `git diff --check`: passed.
-- The aggregate `npm run check` reached `format:check` and stopped only on the pre-existing untracked `.mcp.json` formatting warning. That user-owned file was preserved; all later test stages were run separately and passed as recorded above.
+- Architecture suite: 136/136 tests passed.
+- Standalone negative controls: passed.
+- Live ledger validation: passed.
+- Live scope validation: 40 records passed.
+- TypeScript typecheck: passed.
+- Scoped ESLint: passed with zero warnings.
+- Scoped Prettier: passed.
+- Direct coverage for `scripts/revalidation.mjs`: 100% branches (789/789), functions (202/202), and lines (2657/2657).
+
+## Remaining Risk
+
+No known review finding remains. These are semantic contract changes, so the workflow's independent re-review remains the final confirmation rather than relying on fixer self-assessment.
 
 ---
 
-_Fixed: 2026-09-06T03:10:26Z_
+_Fixed: 2026-09-06T15:53:45Z_
 _Fixer: the agent (gsd-code-fixer)_
 _Iteration: 3_
