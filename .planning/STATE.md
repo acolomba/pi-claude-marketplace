@@ -690,3 +690,9 @@ Last session: 2026-09-06T13:27:37.020Z
 
 **Next:** Discuss Phase 03 Production Defect Corrections, then research and plan
 only the terminal findings that still reproduce.
+
+## Deferred Verification
+
+| Phase | State | Resume |
+|-------|-------|--------|
+| 01 | verification_deferred_gaps | `$gsd-plan-phase 01 --gaps` |
