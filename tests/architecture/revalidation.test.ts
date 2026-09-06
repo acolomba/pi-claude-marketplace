@@ -1232,8 +1232,10 @@ test("RVAL-04 scope-impact rejects a missing requirement row", async (t) => {
     status: 1,
     stdout: "",
     stderr:
-      "missing-scope-requirement: SCOPE-REQ-AUTH-01: scope row is absent\n" +
-      "scope-contract-count: scopeChanges: expected exactly 40 unique rows\n",
+      "scope-contract-count: scopeChanges: expected exactly 40 unique rows\n" +
+      "scope-requirement-count: scopeChanges: expected exactly 32 unique requirement rows\n" +
+      "unexpected-requirement-definition: AUTH-01: scope row is absent\n" +
+      "unexpected-requirement-route: AUTH-01: scope row is absent\n",
   });
 });
 
