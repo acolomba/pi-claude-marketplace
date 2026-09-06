@@ -1360,6 +1360,55 @@ test("RVAL-04 scope-impact rejects a contradictory route row identity", async (t
   });
 });
 
+for (const row of [
+  {
+    title: "RVAL-04 scope-impact rejects an invalid canonical scope action",
+    mutate: (ledger: Ledger) => {
+      ledger.scopeChanges.find((change) => change.id === "SCOPE-REQ-PDEF-01")!.action = "invent";
+    },
+    expectedStderr: "invalid-scope-action: SCOPE-REQ-PDEF-01: invent\n",
+  },
+  {
+    title: "RVAL-04 scope-impact rejects an unknown canonical scope row kind",
+    mutate: (ledger: Ledger) => {
+      ledger.scopeChanges.find((change) => change.id === "SCOPE-REQ-PDEF-01")!.id =
+        "SCOPE-OTHER-PDEF-01";
+    },
+    expectedStderr:
+      "invalid-scope-kind: SCOPE-OTHER-PDEF-01: scope contract row must be a requirement or phase route\n" +
+      "scope-requirement-count: scopeChanges: expected exactly 32 unique requirement rows\n" +
+      "unexpected-requirement-definition: PDEF-01: scope row is absent\n" +
+      "unexpected-requirement-route: PDEF-01: scope row is absent\n",
+  },
+  {
+    title: "RVAL-04 scope-impact rejects a requirement row without a clause signature",
+    mutate: (ledger: Ledger) => {
+      delete ledger.scopeChanges.find((change) => change.id === "SCOPE-REQ-PDEF-01")!
+        .requirementSignature;
+    },
+    expectedStderr:
+      "invalid-scope-signature: SCOPE-REQ-PDEF-01: requirement row must include a clause signature\n",
+  },
+] as const) {
+  test(row.title, async (t) => {
+    // arrange
+    const projectRoot = await createScopeImpactFixture(t);
+    const ledger = JSON.parse(await readFile(path.join(projectRoot, ledgerPath), "utf8")) as Ledger;
+    row.mutate(ledger);
+    await writeFile(path.join(projectRoot, ledgerPath), `${JSON.stringify(ledger, null, 2)}\n`);
+
+    // act
+    const execution = runCli(projectRoot, ["scope-impact", "--check"]);
+
+    // assert
+    assert.deepStrictEqual(execution, {
+      status: 1,
+      stdout: "",
+      stderr: row.expectedStderr,
+    });
+  });
+}
+
 test("RVAL-04 scope-impact rejects duplicate traceability and phase declarations", async (t) => {
   // arrange
   const projectRoot = await createScopeImpactFixture(t);

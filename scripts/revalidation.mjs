@@ -1043,12 +1043,78 @@ function validateScopeRowIdentity(change, violations) {
   return valid;
 }
 
-function validateScopeChange(change, ledger, findings, violations) {
+function validateScopeChangeStructure(change, violations, { requireContractKind = false } = {}) {
+  let valid = true;
   if (!identityIsSafe(change.id)) {
     violations.push(
       violation("invalid-scope-change-id", String(change.id), "scope change id is unsafe"),
     );
+    valid = false;
   }
+
+  if (
+    typeof change.requirementId !== "string" ||
+    change.requirementId.trim() === "" ||
+    typeof change.action !== "string" ||
+    change.action.trim() === "" ||
+    typeof change.rationale !== "string" ||
+    change.rationale.trim() === ""
+  ) {
+    violations.push(
+      violation(
+        "incomplete-scope-change",
+        change.id,
+        "requirementId, action, and rationale are mandatory",
+      ),
+    );
+    valid = false;
+  }
+
+  if (!identityIsSafe(change.requirementId)) {
+    violations.push(violation("invalid-requirement-id", change.id, String(change.requirementId)));
+    valid = false;
+  }
+
+  if (!SCOPE_ACTIONS.has(change.action)) {
+    violations.push(violation("invalid-scope-action", change.id, String(change.action)));
+    valid = false;
+  }
+
+  const isRequirement = typeof change.id === "string" && change.id.startsWith("SCOPE-REQ-");
+  const isRoute = typeof change.id === "string" && change.id.startsWith("SCOPE-ROUTE-");
+  if (requireContractKind && !isRequirement && !isRoute) {
+    violations.push(
+      violation(
+        "invalid-scope-kind",
+        String(change.id),
+        "scope contract row must be a requirement or phase route",
+      ),
+    );
+    valid = false;
+  }
+
+  if (
+    requireContractKind &&
+    isRequirement &&
+    (typeof change.requirementSignature !== "string" || change.requirementSignature.trim() === "")
+  ) {
+    violations.push(
+      violation(
+        "invalid-scope-signature",
+        change.id,
+        "requirement row must include a clause signature",
+      ),
+    );
+    valid = false;
+  }
+
+  const identityValid = validateScopeRowIdentity(change, violations);
+  const locator = identityValid ? validateScopeAnchors(change, violations) : undefined;
+  return { valid: valid && identityValid && locator !== undefined, locator };
+}
+
+function validateScopeChange(change, ledger, findings, violations) {
+  validateScopeChangeStructure(change, violations);
 
   if (
     !Array.isArray(change.findingIds) ||
@@ -1067,35 +1133,6 @@ function validateScopeChange(change, ledger, findings, violations) {
     violations.push(
       violation("invalid-scope-trace", change.id, "scope change has a dangling decision"),
     );
-  }
-
-  if (
-    typeof change.requirementId !== "string" ||
-    change.requirementId.trim() === "" ||
-    typeof change.action !== "string" ||
-    change.action.trim() === "" ||
-    typeof change.rationale !== "string" ||
-    change.rationale.trim() === ""
-  ) {
-    violations.push(
-      violation(
-        "incomplete-scope-change",
-        change.id,
-        "requirementId, action, and rationale are mandatory",
-      ),
-    );
-  }
-
-  if (!identityIsSafe(change.requirementId)) {
-    violations.push(violation("invalid-requirement-id", change.id, String(change.requirementId)));
-  }
-
-  if (!SCOPE_ACTIONS.has(change.action)) {
-    violations.push(violation("invalid-scope-action", change.id, String(change.action)));
-  }
-
-  if (validateScopeRowIdentity(change, violations)) {
-    validateScopeAnchors(change, violations);
   }
 }
 
@@ -2213,10 +2250,14 @@ function validateRequirementSets(requirements, rows, violations) {
   );
 }
 
-function validateRequirementContracts(requirements, allRows, locators, violations) {
+function validateRequirementContracts(requirements, allRows, validRowIds, locators, violations) {
   const rows = requirementRows(allRows);
   validateRequirementSets(requirements, rows, violations);
   for (const [id, change] of rows) {
+    if (!validRowIds.has(id)) {
+      continue;
+    }
+
     const requirementId = id.slice("SCOPE-REQ-".length);
     validateRequirementChange(requirements, requirementId, change, locators, violations);
   }
@@ -2264,13 +2305,18 @@ function validatePlanningContracts(ledger, requirementsMarkdown, roadmapMarkdown
   const requirements = parseRequirementsContract(visibleMarkdown(requirementsMarkdown), violations);
   const phases = parseRoadmapContract(visibleMarkdown(roadmapMarkdown), violations);
   const rows = new Map();
+  const validRowIds = new Set();
   const locators = new Map();
   for (const change of ledger.scopeChanges) {
-    if (validateScopeRowIdentity(change, violations)) {
-      const parsed = validateScopeAnchors(change, violations);
-      if (parsed !== undefined) {
-        locators.set(change.id, parsed);
-      }
+    const structure = validateScopeChangeStructure(change, violations, {
+      requireContractKind: true,
+    });
+    if (structure.locator !== undefined) {
+      locators.set(change.id, structure.locator);
+    }
+
+    if (structure.valid) {
+      validRowIds.add(change.id);
     }
 
     if (rows.has(change.id)) {
@@ -2282,7 +2328,7 @@ function validatePlanningContracts(ledger, requirementsMarkdown, roadmapMarkdown
     }
   }
 
-  validateRequirementContracts(requirements, rows, locators, violations);
+  validateRequirementContracts(requirements, rows, validRowIds, locators, violations);
   validatePhaseContracts(requirements, phases, rows, locators, violations);
 
   if (ledger.scopeChanges.length !== 40 || rows.size !== 40) {
