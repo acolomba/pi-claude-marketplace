@@ -1275,6 +1275,69 @@ for (const row of [
   });
 }
 
+test("RVAL-04 scope-impact rejects a coordinated active phase reassignment", async (t) => {
+  // arrange
+  const projectRoot = await createScopeImpactFixture(t);
+  const requirementsFile = path.join(projectRoot, ".planning/REQUIREMENTS.md");
+  const roadmapFile = path.join(projectRoot, ".planning/ROADMAP.md");
+  await writeFile(
+    requirementsFile,
+    (await readFile(requirementsFile, "utf8")).replace(
+      "| PDEF-01 | Phase 3 | Pending |",
+      "| PDEF-01 | Phase 4 | Pending |",
+    ),
+  );
+  await writeFile(
+    roadmapFile,
+    (await readFile(roadmapFile, "utf8"))
+      .replace(
+        "**Requirements:** PDEF-01, PDEF-05, PDEF-06, PDEF-07, PDEF-08",
+        "**Requirements:** PDEF-05, PDEF-06, PDEF-07, PDEF-08",
+      )
+      .replace(
+        "**Requirements:** AUTH-01, TREF-01, TREF-02, TREF-03",
+        "**Requirements:** AUTH-01, PDEF-01, TREF-01, TREF-02, TREF-03",
+      ),
+  );
+
+  // act
+  const execution = runCli(projectRoot, ["scope-impact", "--check"]);
+
+  // assert
+  assert.deepStrictEqual(execution, {
+    status: 1,
+    stdout: "",
+    stderr:
+      "phase-requirements: PHASE-03: roadmap membership differs from sealed requirement routes\n" +
+      "phase-requirements: PHASE-04: roadmap membership differs from sealed requirement routes\n" +
+      "requirement-route-contract: PDEF-01: traceability route/status differs from sealed requirement contract\n",
+  });
+});
+
+test("RVAL-04 scope-impact rejects evidence former-phase drift", async (t) => {
+  // arrange
+  const projectRoot = await createScopeImpactFixture(t);
+  const requirementsFile = path.join(projectRoot, ".planning/REQUIREMENTS.md");
+  await writeFile(
+    requirementsFile,
+    (await readFile(requirementsFile, "utf8")).replace(
+      "| GGAT-02 | Evidence/history (formerly Phase 7) | Evidence only |",
+      "| GGAT-02 | Evidence/history (formerly Phase 8) | Evidence only |",
+    ),
+  );
+
+  // act
+  const execution = runCli(projectRoot, ["scope-impact", "--check"]);
+
+  // assert
+  assert.deepStrictEqual(execution, {
+    status: 1,
+    stdout: "",
+    stderr:
+      "requirement-route-contract: GGAT-02: traceability route/status differs from sealed requirement contract\n",
+  });
+});
+
 test("RVAL-04 scope-impact rejects a missing Phase 2-9 route", async (t) => {
   // arrange
   const projectRoot = await createScopeImpactFixture(t);
@@ -1337,7 +1400,8 @@ test("RVAL-04 scope-impact rejects changed roadmap membership", async (t) => {
   assert.deepStrictEqual(execution, {
     status: 1,
     stdout: "",
-    stderr: "phase-requirements: PHASE-07: roadmap membership differs from traceability\n",
+    stderr:
+      "phase-requirements: PHASE-07: roadmap membership differs from sealed requirement routes\n",
   });
 });
 

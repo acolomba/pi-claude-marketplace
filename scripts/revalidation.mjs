@@ -90,6 +90,46 @@ const SEALED_REQUIREMENT_SIGNATURES = Object.freeze({
   "TREF-09": "sha256:5d9c55f187854aade7e83229619b3f788b2a3809b3695bb249890389ecb52f94",
 });
 const SEALED_REQUIREMENT_IDS = new Set(Object.keys(SEALED_REQUIREMENT_SIGNATURES));
+const SEALED_REQUIREMENT_ROUTES = Object.freeze({
+  "AUTH-01": Object.freeze({ route: "Phase 4", status: "Pending" }),
+  "CLOSE-01": Object.freeze({ route: "Phase 9", status: "Pending" }),
+  "CLOSE-02": Object.freeze({ route: "Phase 9", status: "Pending" }),
+  "GGAT-01": Object.freeze({ route: "Phase 7", status: "Pending" }),
+  "GGAT-02": Object.freeze({
+    route: "Evidence/history (formerly Phase 7)",
+    status: "Evidence only",
+  }),
+  "GGAT-03": Object.freeze({ route: "Phase 7", status: "Pending" }),
+  "GGAT-04": Object.freeze({ route: "Phase 7", status: "Pending" }),
+  "PDEF-01": Object.freeze({ route: "Phase 3", status: "Pending" }),
+  "PDEF-02": Object.freeze({ route: "Phase 2", status: "Complete" }),
+  "PDEF-03": Object.freeze({ route: "Phase 2", status: "Complete" }),
+  "PDEF-04": Object.freeze({ route: "Phase 2", status: "Complete" }),
+  "PDEF-05": Object.freeze({ route: "Phase 3", status: "Pending" }),
+  "PDEF-06": Object.freeze({ route: "Phase 3", status: "Pending" }),
+  "PDEF-07": Object.freeze({ route: "Phase 3", status: "Pending" }),
+  "PDEF-08": Object.freeze({ route: "Phase 3", status: "Pending" }),
+  "RCOV-01": Object.freeze({ route: "Phase 8", status: "Pending" }),
+  "RCOV-02": Object.freeze({ route: "Phase 8", status: "Pending" }),
+  "RCOV-03": Object.freeze({ route: "Phase 8", status: "Pending" }),
+  "RCOV-04": Object.freeze({
+    route: "Evidence/history (formerly Phase 8)",
+    status: "Evidence only",
+  }),
+  "RVAL-01": Object.freeze({ route: "Phase 1", status: "Complete" }),
+  "RVAL-02": Object.freeze({ route: "Phase 1", status: "Complete" }),
+  "RVAL-03": Object.freeze({ route: "Phase 1", status: "Complete" }),
+  "RVAL-04": Object.freeze({ route: "Phase 1", status: "Complete" }),
+  "TREF-01": Object.freeze({ route: "Phase 4", status: "Pending" }),
+  "TREF-02": Object.freeze({ route: "Phase 4", status: "Pending" }),
+  "TREF-03": Object.freeze({ route: "Phase 4", status: "Pending" }),
+  "TREF-04": Object.freeze({ route: "Phase 5", status: "Pending" }),
+  "TREF-05": Object.freeze({ route: "Phase 5", status: "Pending" }),
+  "TREF-06": Object.freeze({ route: "Phase 5", status: "Pending" }),
+  "TREF-07": Object.freeze({ route: "Phase 6", status: "Pending" }),
+  "TREF-08": Object.freeze({ route: "Phase 6", status: "Pending" }),
+  "TREF-09": Object.freeze({ route: "Phase 6", status: "Pending" }),
+});
 const PUBLISH_JOURNAL_FIELDS = new Set(["status", "records"]);
 const PUBLISH_RECORD_FIELDS = new Set(["destination", "staged", "backup", "hadDestination"]);
 const PUBLISH_STATUSES = new Set(["staged", "published"]);
@@ -2193,7 +2233,14 @@ function validateRequirementDisposition(requirementId, action, disposition, viol
     return;
   }
 
-  if (action === "move-to-evidence" && disposition.status !== "Evidence only") {
+  const expectsEvidence = action === "move-to-evidence";
+  const statusIsValid = expectsEvidence
+    ? disposition.status === "Evidence only"
+    : ACTIVE_REQUIREMENT_STATUSES.has(disposition.status);
+  const routeIsValid = expectsEvidence
+    ? EVIDENCE_REQUIREMENT_ROUTE_PATTERN.test(disposition.route)
+    : ACTIVE_REQUIREMENT_ROUTE_PATTERN.test(disposition.route);
+  if (expectsEvidence && !statusIsValid) {
     violations.push(
       violation(
         "requirement-disposition",
@@ -2203,10 +2250,7 @@ function validateRequirementDisposition(requirementId, action, disposition, viol
     );
   }
 
-  if (
-    action === "move-to-evidence" &&
-    !EVIDENCE_REQUIREMENT_ROUTE_PATTERN.test(disposition.route)
-  ) {
+  if (expectsEvidence && !routeIsValid) {
     violations.push(
       violation(
         "invalid-requirement-route",
@@ -2216,7 +2260,7 @@ function validateRequirementDisposition(requirementId, action, disposition, viol
     );
   }
 
-  if (action !== "move-to-evidence" && disposition.status === "Evidence only") {
+  if (!expectsEvidence && disposition.status === "Evidence only") {
     violations.push(
       violation(
         "requirement-disposition",
@@ -2226,16 +2270,29 @@ function validateRequirementDisposition(requirementId, action, disposition, viol
     );
   }
 
-  if (
-    action !== "move-to-evidence" &&
-    (!ACTIVE_REQUIREMENT_ROUTE_PATTERN.test(disposition.route) ||
-      !ACTIVE_REQUIREMENT_STATUSES.has(disposition.status))
-  ) {
+  if (!expectsEvidence && (!routeIsValid || !statusIsValid)) {
     violations.push(
       violation(
         "invalid-requirement-route",
         requirementId,
         "active requirement must use one numbered phase and an active status",
+      ),
+    );
+  }
+
+  const sealedDisposition = SEALED_REQUIREMENT_ROUTES[requirementId];
+  if (
+    routeIsValid &&
+    statusIsValid &&
+    sealedDisposition !== undefined &&
+    (disposition.route !== sealedDisposition.route ||
+      disposition.status !== sealedDisposition.status)
+  ) {
+    violations.push(
+      violation(
+        "requirement-route-contract",
+        requirementId,
+        "traceability route/status differs from sealed requirement contract",
       ),
     );
   }
@@ -2427,6 +2484,51 @@ function validateRequirementContracts(requirements, allRows, validRowIds, locato
   }
 }
 
+function requirementIdsForRoute(dispositions, route) {
+  return [...dispositions]
+    .filter(([, disposition]) => disposition.route === route)
+    .map(([id]) => id)
+    .sort();
+}
+
+function requirementListsMatch(left, right) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function validatePhaseRequirements(requirements, phaseId, number, actualRequirements, violations) {
+  const route = `Phase ${number}`;
+  const expectedRequirements = requirementIdsForRoute(
+    Object.entries(SEALED_REQUIREMENT_ROUTES),
+    route,
+  );
+  if (!requirementListsMatch(actualRequirements, expectedRequirements)) {
+    violations.push(
+      violation(
+        "phase-requirements",
+        phaseId,
+        "roadmap membership differs from sealed requirement routes",
+      ),
+    );
+    return;
+  }
+
+  const traceabilityRequirements = requirementIdsForRoute(requirements.dispositions, route);
+  if (!requirementListsMatch(actualRequirements, traceabilityRequirements)) {
+    violations.push(
+      violation("phase-requirements", phaseId, "roadmap membership differs from traceability"),
+    );
+  }
+}
+
+function validatePhaseAfterAnchor(phaseId, number, phase, change, locators, violations) {
+  const afterParts = change === undefined ? undefined : locators.get(change.id)?.after;
+  if (afterParts !== undefined && afterParts[1] !== `${phaseId} / Phase ${number} ${phase.title}`) {
+    violations.push(
+      violation("scope-after-anchor", change.id, "afterAnchor does not resolve to phase"),
+    );
+  }
+}
+
 function validatePhaseContracts(requirements, phases, rows, locators, violations) {
   for (let number = 1; number <= 9; number += 1) {
     const phaseId = `PHASE-${String(number).padStart(2, "0")}`;
@@ -2442,25 +2544,9 @@ function validatePhaseContracts(requirements, phases, rows, locators, violations
       continue;
     }
 
-    const expectedRequirements = [...requirements.dispositions.entries()]
-      .filter(([, disposition]) => disposition.route === `Phase ${number}`)
-      .map(([id]) => id)
-      .sort();
-    if (JSON.stringify([...phase.requirements].sort()) !== JSON.stringify(expectedRequirements)) {
-      violations.push(
-        violation("phase-requirements", phaseId, "roadmap membership differs from traceability"),
-      );
-    }
-
-    const afterParts = change === undefined ? undefined : locators.get(change.id)?.after;
-    if (
-      afterParts !== undefined &&
-      afterParts[1] !== `${phaseId} / Phase ${number} ${phase.title}`
-    ) {
-      violations.push(
-        violation("scope-after-anchor", change.id, "afterAnchor does not resolve to phase"),
-      );
-    }
+    const actualRequirements = [...phase.requirements].sort();
+    validatePhaseRequirements(requirements, phaseId, number, actualRequirements, violations);
+    validatePhaseAfterAnchor(phaseId, number, phase, change, locators, violations);
   }
 }
 
