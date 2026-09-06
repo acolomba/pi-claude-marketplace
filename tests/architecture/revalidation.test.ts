@@ -1961,6 +1961,25 @@ test("publish recovery preserves canonical bytes when destination flags are fals
   assert.deepStrictEqual(await destinationBytes(fixture.projectRoot), originalBytes);
 });
 
+test("publish recovery rejects an impossible staged state without changing files", async (t) => {
+  // arrange
+  const fixture = await createCliFixture(t);
+  const journalPath = path.join(fixture.projectRoot, phaseRoot, ".publish-journal.json");
+  const originalBytes = await destinationBytes(fixture.projectRoot);
+  const records = publishJournalRecords("1-1-a");
+  await writeFile(journalPath, `${JSON.stringify({ status: "staged", records })}\n`);
+
+  // act & assert
+  assert.throws(() => {
+    publishRevalidation(fixture.projectRoot, "replacement\n", "replacement markdown\n");
+  }, /publish journal is malformed/);
+  assert.deepStrictEqual(await destinationBytes(fixture.projectRoot), originalBytes);
+  assert.deepStrictEqual(await phaseArtifactNames(fixture.projectRoot), [
+    ".publish-journal.json",
+    ...canonicalPhaseArtifactNames(),
+  ]);
+});
+
 for (const row of [
   {
     title: "a stage path derived from another destination",
@@ -2089,6 +2108,31 @@ test("publish retains only recoverable artifacts when rollback also fails", asyn
       "shards",
     ],
   );
+});
+
+test("publish rollback removes outputs created by the failed transaction", async (t) => {
+  // arrange
+  const fixture = await createCliFixture(t);
+  await rm(path.join(fixture.projectRoot, ledgerPath));
+  await rm(path.join(fixture.projectRoot, markdownPath));
+
+  // act
+  const publish = () => {
+    publishRevalidation(fixture.projectRoot, "new\n", "new markdown\n", {
+      afterPublish(destination) {
+        if (destination === ledgerPath) {
+          throw new Error("injected publish failure");
+        }
+      },
+    });
+  };
+
+  // assert
+  assert.throws(publish, /injected publish failure/);
+  assert.deepStrictEqual(await phaseArtifactNames(fixture.projectRoot), [
+    "01-CORPUS-ASSIGNMENT.md",
+    "shards",
+  ]);
 });
 
 test("collection fallbacks and render ordering cover empty and plural views", async (t) => {
