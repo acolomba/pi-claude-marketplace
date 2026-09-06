@@ -1019,6 +1019,28 @@ test("RVAL-04 scope-impact rejects duplicate evidence history records", async (t
   });
 });
 
+test("RVAL-04 scope-impact accepts evidence history as the final contract section", async (t) => {
+  // arrange
+  const projectRoot = await createScopeImpactFixture(t);
+  const contractPath = path.join(projectRoot, ".planning/REQUIREMENTS.md");
+  const contract = await readFile(contractPath, "utf8");
+  const historyStart = contract.indexOf("## Evidence and History\n");
+  const historyEnd = contract.indexOf("\n## Future Requirements", historyStart);
+  const history = contract.slice(historyStart, historyEnd).trimEnd();
+  const reordered = `${contract.slice(0, historyStart)}${contract.slice(historyEnd).trimEnd()}\n\n${history}\n`;
+  await writeFile(contractPath, reordered);
+
+  // act
+  const execution = runCli(projectRoot, ["scope-impact", "--check"]);
+
+  // assert
+  assert.deepStrictEqual(execution, {
+    status: 0,
+    stdout: "Scope impact valid: 40 records.\n",
+    stderr: "",
+  });
+});
+
 test("RVAL-04 scope-impact rejects changed requirement disposition", async (t) => {
   // arrange
   const projectRoot = await createScopeImpactFixture(t);
