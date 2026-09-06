@@ -237,6 +237,104 @@ try {
   );
 
   await writeFile(path.join(projectRoot, requirementsPath), requirements);
+
+  const renamedLedger = JSON.parse(scopeLedger);
+  const renamedRequirement = renamedLedger.scopeChanges.find(
+    (change) => change.id === "SCOPE-REQ-AUTH-01",
+  );
+  assert.ok(renamedRequirement);
+  renamedRequirement.id = "SCOPE-REQ-EVIL-99";
+  renamedRequirement.requirementId = "EVIL-99";
+  renamedRequirement.beforeAnchor = renamedRequirement.beforeAnchor.replaceAll(
+    "AUTH-01",
+    "EVIL-99",
+  );
+  renamedRequirement.afterAnchor = renamedRequirement.afterAnchor.replaceAll("AUTH-01", "EVIL-99");
+  await writeFile(
+    path.join(projectRoot, ledgerPath),
+    `${JSON.stringify(renamedLedger, null, 2)}\n`,
+  );
+  await writeFile(
+    path.join(projectRoot, requirementsPath),
+    requirements
+      .replace("- [ ] **AUTH-01**", "- [ ] **EVIL-99**")
+      .replace("| AUTH-01 |", "| EVIL-99 |"),
+  );
+  await writeFile(
+    path.join(projectRoot, roadmapPath),
+    roadmap.replace(
+      "**Requirements:** AUTH-01, TREF-01, TREF-02, TREF-03",
+      "**Requirements:** EVIL-99, TREF-01, TREF-02, TREF-03",
+    ),
+  );
+  assert.deepStrictEqual(invokeCli(projectRoot, ["scope-impact", "--check"]), {
+    status: 1,
+    stdout: "",
+    stderr:
+      "phase-requirements: PHASE-04: roadmap membership differs from sealed requirement routes\n" +
+      "unexpected-requirement-definition: EVIL-99: scope row is absent\n" +
+      "unexpected-requirement-route: EVIL-99: scope row is absent\n" +
+      "unexpected-scope-requirement: EVIL-99: requirement is absent from sealed stable-ID set\n",
+  });
+
+  await writeFile(path.join(projectRoot, ledgerPath), scopeLedger);
+  await writeFile(
+    path.join(projectRoot, requirementsPath),
+    requirements.replace("| PDEF-01 | Phase 3 | Pending |", "| PDEF-01 | Phase 4 | Pending |"),
+  );
+  await writeFile(
+    path.join(projectRoot, roadmapPath),
+    roadmap
+      .replace(
+        "**Requirements:** PDEF-01, PDEF-05, PDEF-06, PDEF-07, PDEF-08",
+        "**Requirements:** PDEF-05, PDEF-06, PDEF-07, PDEF-08",
+      )
+      .replace(
+        "**Requirements:** AUTH-01, TREF-01, TREF-02, TREF-03",
+        "**Requirements:** AUTH-01, PDEF-01, TREF-01, TREF-02, TREF-03",
+      ),
+  );
+  assert.deepStrictEqual(invokeCli(projectRoot, ["scope-impact", "--check"]), {
+    status: 1,
+    stdout: "",
+    stderr:
+      "phase-requirements: PHASE-03: roadmap membership differs from sealed requirement routes\n" +
+      "phase-requirements: PHASE-04: roadmap membership differs from sealed requirement routes\n" +
+      "requirement-route-contract: PDEF-01: traceability route/status differs from sealed requirement contract\n",
+  });
+
+  await writeFile(path.join(projectRoot, roadmapPath), roadmap);
+  await writeFile(
+    path.join(projectRoot, requirementsPath),
+    requirements.replace(
+      "| GGAT-02 | Evidence/history (formerly Phase 7) | Evidence only |",
+      "| GGAT-02 | Evidence/history (formerly Phase 8) | Evidence only |",
+    ),
+  );
+  assert.deepStrictEqual(invokeCli(projectRoot, ["scope-impact", "--check"]), {
+    status: 1,
+    stdout: "",
+    stderr:
+      "requirement-route-contract: GGAT-02: traceability route/status differs from sealed requirement contract\n",
+  });
+
+  const traceabilityRow = "| CLOSE-02 | Phase 9 | Pending |";
+  await writeFile(
+    path.join(projectRoot, requirementsPath),
+    requirements.replace(
+      traceabilityRow,
+      ["```md", "hidden contract", "    ```", traceabilityRow, "```"].join("\n"),
+    ),
+  );
+  assert.deepStrictEqual(invokeCli(projectRoot, ["scope-impact", "--check"]), {
+    status: 1,
+    stdout: "",
+    stderr:
+      "missing-requirement-route: CLOSE-02: traceability row is absent\n" +
+      "phase-requirements: PHASE-09: roadmap membership differs from traceability\n",
+  });
+
+  await writeFile(path.join(projectRoot, requirementsPath), requirements);
   await writeFile(
     path.join(projectRoot, roadmapPath),
     roadmap.replace(
@@ -247,7 +345,8 @@ try {
   assert.deepStrictEqual(invokeCli(projectRoot, ["scope-impact", "--check"]), {
     status: 1,
     stdout: "",
-    stderr: "phase-requirements: PHASE-07: roadmap membership differs from traceability\n",
+    stderr:
+      "phase-requirements: PHASE-07: roadmap membership differs from sealed requirement routes\n",
   });
 
   process.stdout.write("Revalidation negative controls passed.\n");
