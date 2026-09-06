@@ -2064,7 +2064,10 @@ function signRequirementClause(normalizedClause) {
 
 function collectRequirementClauses(markdown, pattern) {
   return new Map(
-    [...markdown.matchAll(pattern)].map((match) => [match[1], normalizeRequirementClause(match[2])]),
+    [...markdown.matchAll(pattern)].map((match) => [
+      match[1],
+      normalizeRequirementClause(match[2]),
+    ]),
   );
 }
 
@@ -2077,8 +2080,7 @@ function parseRequirementClauses(markdown) {
     historyStart,
     historyEnd === -1 ? markdown.length : historyEnd,
   );
-  const historyPattern =
-    /^- \*\*([A-Z]+-\d+)\*\*(?: \([^)]*\))?:[ \t]*([^\n]*(?:\n {2}[^\n]*)*)/gm;
+  const historyPattern = /^- \*\*([A-Z]+-\d+)\*\*(?: \([^)]*\))?:[ \t]*([^\n]*(?:\n {2}[^\n]*)*)/gm;
   return {
     definitions,
     history: collectRequirementClauses(historyMarkdown, historyPattern),
@@ -2218,7 +2220,11 @@ function validateRequirementChange(requirements, requirementId, change, locators
       : requirements.clauses.definitions.get(requirementId);
   if (clause === undefined || clause === "") {
     violations.push(
-      violation("missing-requirement-clause", requirementId, "requirement clause is blank or absent"),
+      violation(
+        "missing-requirement-clause",
+        requirementId,
+        "requirement clause is blank or absent",
+      ),
     );
   } else if (change.requirementSignature !== signRequirementClause(clause)) {
     violations.push(
