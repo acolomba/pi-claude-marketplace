@@ -4,18 +4,18 @@ milestone: workflows-replay
 milestone_name: Workflow Bridge Replay onto main
 current_phase: 113
 current_phase_name: Update, enable/disable, reconcile
-current_plan: Not started
-status: ready_to_execute
-stopped_at: Phase 113 planned - 5 plans across 4 waves, checker passed with 0 blockers
+current_plan: 113-02 (wave 2)
+status: executing
+stopped_at: Phase 113 wave 1 complete (113-01); wave 2 next
 last_updated: "2026-09-05T22:49:08.588Z"
 last_activity: 2026-09-05
-last_activity_desc: Phase 113 planned and verified, ready to execute
+last_activity_desc: Phase 113 plan 01 executed - the info workflows line and the discovery tense
 state_head: 7e1fa90921ea4c7700c37de2eebe05784155560d
 progress:
   total_phases: 9
   completed_phases: 4
   total_plans: 21
-  completed_plans: 16
+  completed_plans: 17
   percent: 44
 ---
 
@@ -36,9 +36,20 @@ never merged. Since then #154 declared `workflows` an *unsupported* kind, and
 ## Current Position
 
 Phase: 113 (Update, enable/disable, reconcile) — READY TO EXECUTE
-Plan: 0/5 executed — 113-01 through 113-05, across 4 waves
-Status: Ready to execute Phase 113. Planning is complete and the plan checker
-returned 0 blockers.
+Plan: 1/5 executed — 113-01 done; 113-02 and 113-03 are wave 2
+Status: Executing Phase 113. Plan 113-01 landed the `info` `workflows:` line,
+the required discovery `tense` parameter, and the preview-tense warning
+channel, in commits 282c23f6, 0fe0f018 and e4e8c71d.
+
+Plan 113-01 also corrected the forcing construct it was sent to add. The plan
+as written kept the tuple's slot annotation, which makes
+`Exclude<ComponentKind, ComponentKind>` evaluate to `never` unconditionally --
+the proof would have passed for every possible interface. It is now
+`as const satisfies readonly ComponentKind[]`. The mandated negative control is
+what caught it, and it recorded the verbatim error it produces:
+`error TS2344: Type '"workflows"' does not satisfy the constraint 'never'.`
+
+The advisory label token the later plans' fixtures must match is `note:`.
 
 Research overturned a load-bearing claim: `shared/notify.ts`'s exact-length
 `COMPONENT_KINDS` tuple does NOT fail to typecheck when the component set gains

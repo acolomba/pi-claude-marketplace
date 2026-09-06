@@ -480,7 +480,7 @@ dead end shows up after one commit instead of after four.
 
 Plans:
 
-- [ ] 113-01-PLAN.md — Tracer: the `info` `workflows:` line end to end, with the required discovery tense
+- [x] 113-01-PLAN.md — Tracer: the `info` `workflows:` line end to end, with the required discovery tense
   discriminant and a component-kind guard that was seen to fire (wave 1)
 - [ ] 113-02-PLAN.md — The `update` sixth bridge: prepare, abort, commit, the two-window record policy,
   and one reachability case per widened failure slot (wave 2)
