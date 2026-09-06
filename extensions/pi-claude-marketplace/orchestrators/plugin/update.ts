@@ -1480,10 +1480,10 @@ async function abortHandles(handles: Partial<PrepHandles>): Promise<(string | un
 //    explicit Set<Phase3Phase> construction inside `finalizeUpdateRecord`. A
 //    future bridge surfaces here as a TS error.
 //
-//    WLIF-02: the `workflows` member is carried so an update re-stage can be
-//    REPRESENTED. `update.ts` cannot produce a workflows failure today and
-//    gains no behavior from the widening; landing it here is what lets that
-//    re-stage arrive without a second type commit.
+//    WLIF-02: the `workflows` member is produced by `commitUpdateWorkflows`
+//    and read by `applyPerBridgeResources`, which narrows
+//    `resources.workflows` on the commit's own verdict rather than on this
+//    set (WR-01) -- the set gates the FIVE other bridges' inventories.
 //
 // The intent-mark marker is internal-only: shared/notify.ts does not read
 // `compatibility.notes`; the only extension consumer is reinstall.ts
@@ -2200,19 +2200,6 @@ async function commitUpdateHooks(
 }
 
 /**
- * Phase 3a: physical replace, aggregating failures across bridges.
- *
- * D-03 discipline: CONTINUE across bridge-commit failures (not fail-fast) so
- * the partial-replace state is fully observed. `Phase3Failure` entries carry
- * per-bridge cause references; the caller wraps them in the aggregate error.
- *
- * The six commits run in skills -> commands -> agents -> hooks -> mcp ->
- * workflows order, matching install's PI-9 ledger order. Each commit is
- * independently atomic at the OS level (rename for skills/commands/agents/
- * workflows, atomicWriteJson for mcp, write-or-remove for hooks).
- */
-
-/**
  * CR-03 / WR-01: what the workflows commit reported, in the two terms the
  * record write is built from.
  *
@@ -2289,6 +2276,18 @@ async function commitUpdateWorkflows(prepared: PreparedWorkflowsStaging): Promis
   }
 }
 
+/**
+ * Phase 3a: physical replace, aggregating failures across bridges.
+ *
+ * D-03 discipline: CONTINUE across bridge-commit failures (not fail-fast) so
+ * the partial-replace state is fully observed. `Phase3Failure` entries carry
+ * per-bridge cause references; the caller wraps them in the aggregate error.
+ *
+ * The six commits run in skills -> commands -> agents -> hooks -> mcp ->
+ * workflows order, matching install's PI-9 ledger order. Each commit is
+ * independently atomic at the OS level (rename for skills/commands/agents/
+ * workflows, atomicWriteJson for mcp, write-or-remove for hooks).
+ */
 async function commitUpdatePhase3a(
   args: ThreePhaseArgs,
   preflight: PluginPreflight,
