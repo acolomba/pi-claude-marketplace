@@ -992,7 +992,8 @@ test("RVAL-04 scope-impact rejects a misdirected afterAnchor", async (t) => {
   // arrange
   const projectRoot = await createScopeImpactFixture(t);
   const ledger = JSON.parse(await readFile(path.join(projectRoot, ledgerPath), "utf8")) as Ledger;
-  ledger.scopeChanges[0].afterAnchor = ".planning/ROADMAP.md :: Production Correctness :: AUTH-01 — drift";
+  ledger.scopeChanges.find((change) => change.id === "SCOPE-REQ-AUTH-01")!.afterAnchor =
+    ".planning/ROADMAP.md :: Production Correctness :: AUTH-01 — drift";
   await writeFile(path.join(projectRoot, ledgerPath), `${JSON.stringify(ledger, null, 2)}\n`);
 
   // act
