@@ -1550,9 +1550,8 @@ for (const row of [
     },
     expectedStderr:
       "invalid-scope-kind: SCOPE-OTHER-PDEF-01: scope contract row must be a requirement or phase route\n" +
-      "scope-requirement-count: scopeChanges: expected exactly 32 unique requirement rows\n" +
-      "unexpected-requirement-definition: PDEF-01: scope row is absent\n" +
-      "unexpected-requirement-route: PDEF-01: scope row is absent\n",
+      "missing-scope-requirement: PDEF-01: stable requirement row is absent\n" +
+      "scope-requirement-count: scopeChanges: expected exactly 32 unique requirement rows\n",
   },
   {
     title: "RVAL-04 scope-impact rejects a requirement row without a clause signature",
@@ -1674,10 +1673,9 @@ test("RVAL-04 scope-impact rejects a missing requirement row", async (t) => {
     status: 1,
     stdout: "",
     stderr:
+      "missing-scope-requirement: AUTH-01: stable requirement row is absent\n" +
       "scope-contract-count: scopeChanges: expected exactly 40 unique rows\n" +
-      "scope-requirement-count: scopeChanges: expected exactly 32 unique requirement rows\n" +
-      "unexpected-requirement-definition: AUTH-01: scope row is absent\n" +
-      "unexpected-requirement-route: AUTH-01: scope row is absent\n",
+      "scope-requirement-count: scopeChanges: expected exactly 32 unique requirement rows\n",
   });
 });
 
@@ -1828,7 +1826,7 @@ test("RVAL-04 scope-impact rejects a phase without requirements", async (t) => {
     stdout: "",
     stderr:
       "missing-phase-requirements: PHASE-09: roadmap phase has no requirements declaration\n" +
-      "phase-requirements: PHASE-09: roadmap membership differs from traceability\n",
+      "phase-requirements: PHASE-09: roadmap membership differs from sealed requirement routes\n",
   });
 });
 

@@ -2368,6 +2368,9 @@ function requirementRows(rows) {
 
 function validateRequiredRequirementRow(requirements, requirementId, change, violations) {
   if (change === undefined) {
+    violations.push(
+      violation("missing-scope-requirement", requirementId, "stable requirement row is absent"),
+    );
     return;
   }
 
