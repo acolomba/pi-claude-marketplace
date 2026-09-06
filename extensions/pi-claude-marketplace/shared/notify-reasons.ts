@@ -255,11 +255,12 @@ type CommandPrivateReason =
   | "marketplace not added to user scope"
   | "marketplace not added to project scope"
   | "orphan rewake"
-  // WLIF-06: the retired-workflow-command marker. The four user-typed retiring
-  // verbs (uninstall / disable / reinstall / update) each compute their own
-  // previous-minus-staged difference and stamp it on their own row, so it is
-  // named here for the proof rather than promoted to a shared topic group.
-  // Like the cross-scope pair above, it IS a `ContentReason`.
+  // WLIF-06: the retired-workflow-command marker. Five verbs stamp it. The
+  // three that RE-MATERIALIZE (enable / reinstall / update) take the
+  // previous-minus-placed difference through `retiresWorkflowCommand`; the two
+  // that only REMOVE (uninstall / disable) read what their cascade reported
+  // dropping. Named here for the proof rather than promoted to a shared topic
+  // group. Like the cross-scope pair above, it IS a `ContentReason`.
   | "stale workflow command";
 
 /**
