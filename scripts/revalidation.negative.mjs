@@ -271,6 +271,7 @@ try {
     status: 1,
     stdout: "",
     stderr:
+      "missing-scope-requirement: AUTH-01: stable requirement row is absent\n" +
       "phase-requirements: PHASE-04: roadmap membership differs from sealed requirement routes\n" +
       "unexpected-requirement-definition: EVIL-99: scope row is absent\n" +
       "unexpected-requirement-route: EVIL-99: scope row is absent\n" +
