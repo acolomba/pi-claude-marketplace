@@ -514,8 +514,11 @@ function validateFile(file, state, violations) {
 
   const linkedClaims = [...state.claims.values()].filter((claim) => claim.filePath === file.path);
   const actualIds = linkedClaims.map((claim) => claim.id).sort();
-  const declaredIds = Array.isArray(file.claimIds) ? [...file.claimIds].sort() : [];
-  if (JSON.stringify(actualIds) !== JSON.stringify(declaredIds)) {
+  if (!Array.isArray(file.claimIds)) {
+    violations.push(
+      violation("invalid-file-claim-ids", file.path, "claimIds must be an array"),
+    );
+  } else if (JSON.stringify(actualIds) !== JSON.stringify([...file.claimIds].sort())) {
     violations.push(
       violation("file-claim-links", file.path, "declared claimIds do not match sourceClaims"),
     );
@@ -568,14 +571,20 @@ function validateFindingClaims(finding, claims, violations) {
     .filter((claim) => claim.findingId === finding.id)
     .map((claim) => claim.id)
     .sort();
-  const declaredClaimIds = Array.isArray(finding.claimIds) ? [...finding.claimIds].sort() : [];
-  if (JSON.stringify(expectedClaimIds) !== JSON.stringify(declaredClaimIds)) {
+  if (!Array.isArray(finding.claimIds)) {
+    violations.push(
+      violation("invalid-finding-claim-ids", finding.id, "claimIds must be an array"),
+    );
+    return;
+  }
+
+  if (JSON.stringify(expectedClaimIds) !== JSON.stringify([...finding.claimIds].sort())) {
     violations.push(
       violation("finding-claim-links", finding.id, "declared claimIds do not match sourceClaims"),
     );
   }
 
-  for (const claimId of finding.claimIds ?? []) {
+  for (const claimId of finding.claimIds) {
     if (!claims.has(claimId)) {
       violations.push(violation("dangling-finding-claim", finding.id, claimId));
     }
@@ -583,12 +592,16 @@ function validateFindingClaims(finding, claims, violations) {
 }
 
 function validateFindingReferences(finding, projectRoot, violations) {
-  for (const reference of finding.sourceRefs ?? []) {
-    validateReference(reference, projectRoot, finding.id, violations);
+  if (Array.isArray(finding.sourceRefs)) {
+    for (const reference of finding.sourceRefs) {
+      validateReference(reference, projectRoot, finding.id, violations);
+    }
   }
 
-  for (const reference of finding.testRefs ?? []) {
-    validateReference(reference, projectRoot, finding.id, violations);
+  if (Array.isArray(finding.testRefs)) {
+    for (const reference of finding.testRefs) {
+      validateReference(reference, projectRoot, finding.id, violations);
+    }
   }
 
   if (
@@ -614,7 +627,10 @@ function validateEvidenceShape(finding, violations) {
 
   if (
     validation.method === "static-proof" &&
-    (typeof validation.tool !== "string" || typeof validation.observed !== "string")
+    (typeof validation.tool !== "string" ||
+      validation.tool.trim() === "" ||
+      typeof validation.observed !== "string" ||
+      validation.observed.trim() === "")
   ) {
     violations.push(
       violation("incomplete-validation", finding.id, "static proof requires tool and observed"),
@@ -624,8 +640,12 @@ function validateEvidenceShape(finding, violations) {
   if (
     validation.method !== "static-proof" &&
     (typeof validation.command !== "string" ||
+      validation.command.trim() === "" ||
       !Number.isInteger(validation.exitCode) ||
-      typeof validation.observed !== "string")
+      validation.exitCode < 0 ||
+      validation.exitCode > 255 ||
+      typeof validation.observed !== "string" ||
+      validation.observed.trim() === "")
   ) {
     violations.push(
       violation(
@@ -755,7 +775,10 @@ function validateDecisionOptions(decision, violations) {
 }
 
 function validateResolvedDecision(decision, findings, violations) {
-  const prerequisites = (decision.premiseFindingIds ?? []).map((id) => findings.get(id));
+  const premiseFindingIds = Array.isArray(decision.premiseFindingIds)
+    ? decision.premiseFindingIds
+    : [];
+  const prerequisites = premiseFindingIds.map((id) => findings.get(id));
   if (
     prerequisites.length === 0 ||
     prerequisites.some((finding) => !terminalFinding(finding, findings))
@@ -799,15 +822,27 @@ function validateDecision(decision, state, violations) {
     violations.push(violation("invalid-decision-id", String(decision.id), "expected MF-DEC-NN"));
   }
 
-  for (const affectedId of decision.affectedIds ?? []) {
-    if (!identityIsSafe(affectedId)) {
-      violations.push(violation("invalid-affected-id", decision.id, String(affectedId)));
+  for (const field of ["premiseFindingIds", "options", "rejectedOptions", "affectedIds"]) {
+    if (!Array.isArray(decision[field])) {
+      violations.push(
+        violation("invalid-decision-collection", decision.id, `${field} must be an array`),
+      );
     }
   }
 
-  for (const premise of decision.premiseFindingIds ?? []) {
-    if (!state.findings.has(premise)) {
-      violations.push(violation("dangling-decision-premise", decision.id, premise));
+  if (Array.isArray(decision.affectedIds)) {
+    for (const affectedId of decision.affectedIds) {
+      if (!identityIsSafe(affectedId)) {
+        violations.push(violation("invalid-affected-id", decision.id, String(affectedId)));
+      }
+    }
+  }
+
+  if (Array.isArray(decision.premiseFindingIds)) {
+    for (const premise of decision.premiseFindingIds) {
+      if (!state.findings.has(premise)) {
+        violations.push(violation("dangling-decision-premise", decision.id, premise));
+      }
     }
   }
 
@@ -890,8 +925,11 @@ function validateScopeChange(change, ledger, findings, violations) {
 
   if (
     typeof change.requirementId !== "string" ||
+    change.requirementId.trim() === "" ||
     typeof change.action !== "string" ||
-    typeof change.rationale !== "string"
+    change.action.trim() === "" ||
+    typeof change.rationale !== "string" ||
+    change.rationale.trim() === ""
   ) {
     violations.push(
       violation(

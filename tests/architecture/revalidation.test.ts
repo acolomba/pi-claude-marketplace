@@ -1404,6 +1404,43 @@ test("ledger reports malformed claims, findings, references, and validation evid
   }
 });
 
+test("ledger rejects invalid collection fields and empty required evidence", async (t) => {
+  // arrange
+  const { projectRoot, corpusPath } = await corpusFixture(t);
+  const ledger = benignLedger(corpusPath);
+  ledger.files[0]!.claimIds = "" as unknown as string[];
+  ledger.findings[0]!.claimIds = "" as unknown as string[];
+  ledger.findings[0]!.validation.command = "";
+  ledger.findings[0]!.validation.observed = "";
+  ledger.findings[0]!.validation.exitCode = 256;
+  const decision = pendingDecisions()[0]!;
+  resolveDecision(decision);
+  decision.premiseFindingIds = "" as unknown as string[];
+  ledger.decisions = [decision];
+  ledger.scopeChanges = [
+    {
+      id: "SCOPE-1",
+      requirementId: "REQ-1",
+      action: "keep",
+      findingIds: ["FINDING-1"],
+      decisionIds: [],
+      rationale: "",
+    },
+  ];
+
+  // act
+  const codes = validateLedger(ledger, { projectRoot, expectedPaths: [corpusPath] }).map(
+    (item) => item.code,
+  );
+
+  // assert
+  assert.ok(codes.includes("invalid-file-claim-ids"));
+  assert.ok(codes.includes("invalid-finding-claim-ids"));
+  assert.ok(codes.includes("invalid-decision-collection"));
+  assert.ok(codes.includes("incomplete-validation"));
+  assert.ok(codes.includes("incomplete-scope-change"));
+});
+
 for (const sensitiveValue of [
   "--secret hidden-value",
   "Authorization: Bearer hidden-value",
