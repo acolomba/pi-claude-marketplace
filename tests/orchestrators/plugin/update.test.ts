@@ -9189,7 +9189,7 @@ test("WR-01: a workflows staging-cleanup leak is a recorded failure over a commi
   });
 });
 
-test("IN-01: a phase-3 failure names the staging directory, never its absolute path", async () => {
+test("CR-01: a phase-3 leak reaches the user with its path intact", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "update-workflows-leak-redact-"));
     const previousCwd = process.cwd();
@@ -9268,26 +9268,16 @@ test("IN-01: a phase-3 failure names the staging directory, never its absolute p
       assert.equal(stateWatch.fired(), true);
       const row = notifications.at(-1);
       assert.ok(row !== undefined);
-      // The leak text embeds `prepared.stagingRoot`, and the renderer walks the
-      // whole `.cause` chain -- so redacting only the head would still print the
-      // home directory in the `[workflows] (rollback failed)` child.
+      // CR-01: the phase-3 composer restates nothing. The leak text is a
+      // manual-recovery instruction -- the tree it names is the one an operator
+      // has to go and remove -- so the composer hands it to the renderer
+      // verbatim, absolute path included, and the renderer walks the whole
+      // `.cause` chain the same way.
       assert.match(row.message, /failed to clean up workflows staging directory/u);
       assert.equal(
         row.message.includes(locations.workflowsStagingDir),
-        false,
-        "the absolute staging root must not reach the user (T-53-02-02)",
-      );
-      assert.equal(
-        row.message.includes(locations.workflowsHomeDir),
-        false,
-        "nor the resolved workflow home it sits under",
-      );
-      // What survives is the directory NAME, which is what the phase's own
-      // criteria ask for and what a byte-equality fixture can pin.
-      assert.match(
-        row.message,
-        /staging directory at [0-9a-f-]+: EACCES/u,
-        "the leak still names WHICH tree leaked",
+        true,
+        "the leak names the tree an operator has to remove, in full",
       );
     } finally {
       if (stagingDirLocked !== undefined) {

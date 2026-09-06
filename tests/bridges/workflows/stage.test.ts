@@ -1119,6 +1119,25 @@ describe("commitPreparedWorkflows", () => {
     assert.strictEqual(error.message.includes(prepared.stagingRoot), true);
     assert.strictEqual(survivingBytes, "previous bytes\n");
     assert.deepStrictEqual(placed, [[]]);
+    // CR-01: the sentence is an instruction to move ONE file back to ANOTHER
+    // place, so its two endpoints have to stay tellable apart all the way to
+    // the user. They differ only in their directory -- the basenames are equal
+    // by construction -- which is why no consumer of this text may collapse a
+    // path to its basename on the way out.
+    const endpoints =
+      /failed to restore previous workflow envelope (\S+); the only copy is at (\S+) --/u.exec(
+        error.message,
+      );
+    assert.ok(endpoints !== null);
+    const [, lostCopy, survivingCopy] = endpoints;
+    assert.ok(lostCopy !== undefined && survivingCopy !== undefined);
+    assert.strictEqual(lostCopy, displacedTarget);
+    assert.strictEqual(
+      survivingCopy,
+      path.join(prepared.stagingRoot, ".previous", "acme:one.json"),
+    );
+    assert.notStrictEqual(lostCopy, survivingCopy);
+    assert.strictEqual(path.basename(lostCopy), path.basename(survivingCopy));
   });
 
   test("refuses a displaced directory that has been replaced by a symbolic link", async (t) => {

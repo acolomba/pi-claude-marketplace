@@ -130,12 +130,7 @@ import {
   type Plural,
 } from "../../shared/notify-context.ts";
 import { companionSeverity, skipSeverity } from "../../shared/notify-reasons.ts";
-import {
-  compareByNameThenScope,
-  notify,
-  redactAbsolutePaths,
-  redactCauseChain,
-} from "../../shared/notify.ts";
+import { compareByNameThenScope, notify } from "../../shared/notify.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 import { withLockedStateTransaction, withStateGuard } from "../../transaction/with-state-guard.ts";
 import { DEFAULT_CREDENTIAL_OPS, buildAuthForHost, hostFromCloneUrl } from "../auth-host.ts";
@@ -2379,28 +2374,6 @@ function hasUpdatePhase3Failures(
  * NOT re-rendered here -- aborting before the cascade walk means there is
  * exactly one row to surface.
  */
-/**
- * IN-01 / T-53-02-02: every phase-3 failure restated with its absolute paths
- * collapsed to basenames, in `msg` and along the whole `cause` chain.
- *
- * Applied to the WHOLE set rather than to the arms known to embed a path: the
- * six arms compose their text from six different producers, and a rule that
- * held for three of them is a rule the next producer has no reason to know
- * about. Non-empty in, non-empty out, so the aggregate's `failures[0]` stays
- * total.
- */
-function redactUpdatePhase3Failures(
-  failures: NonEmptyUpdatePhase3Failures,
-): NonEmptyUpdatePhase3Failures {
-  const redactOne = (f: UpdatePhase3Failure): UpdatePhase3Failure => ({
-    phase: f.phase,
-    msg: redactAbsolutePaths(f.msg),
-    cause: redactCauseChain(f.cause),
-  });
-  const [head, ...tail] = failures;
-  return [redactOne(head), ...tail.map(redactOne)];
-}
-
 function composePhase3FailureOutcome(
   args: ThreePhaseArgs,
   failures: NonEmptyUpdatePhase3Failures,
@@ -2409,15 +2382,18 @@ function composePhase3FailureOutcome(
   const { plugin } = args;
   const recoveryHint = `${RECOVERY_PLUGIN_REINSTALL_PREFIX} "${plugin}".`;
   const aggregateMsg = `Plugin "${plugin}" update failed during physical replace. ${recoveryHint}`;
-  // IN-01 / T-53-02-02: redact ONCE here, for all six arms, before any of this
-  // reaches a user-visible surface. Three arms report a staging-cleanup leak
-  // whose text embeds the absolute staging root, and the rendered trailer walks
-  // `.cause` -- so the disclosure is in the chain, not only in `msg`. An
-  // absolute path here would also make the row's bytes vary by machine, which a
-  // byte-equality catalog fixture cannot pin.
-  const redacted = redactUpdatePhase3Failures(failures);
-  const aggregate = new PluginUpdatePhase3Error(aggregateMsg, redacted, {
-    cause: redacted[0].cause,
+  // CR-01: phase-3 failure text is NOT path-redacted, in `msg` or along the
+  // `cause` chain. These strings ARE the manual-recovery instructions: the
+  // workflows commit deliberately leaves the only copy of a displaced envelope
+  // on disk under a random staging UUID and names both endpoints so an operator
+  // can move it back by hand (`bridges/workflows/stage.ts`). A target and its
+  // displaced copy share a basename by construction, so collapsing paths to
+  // basenames renders the two endpoints as the same file name and the
+  // instruction unactionable -- and the staging-leak line degrades to a bare
+  // UUID with no parent. `manualRecoveryLeaks` output is rendered verbatim at
+  // the same boundary for the same reason.
+  const aggregate = new PluginUpdatePhase3Error(aggregateMsg, failures, {
+    cause: failures[0].cause,
   });
 
   if (isDirectUpdate(args)) {
@@ -2433,7 +2409,7 @@ function composePhase3FailureOutcome(
       // the renderer emits the indented 4-space child rows plus 6-space
       // per-phase cause-chains.
       reasonOverride: "rollback partial" as const,
-      rollbackPartial: redacted,
+      rollbackPartial: failures,
     });
   }
 
@@ -2445,13 +2421,13 @@ function composePhase3FailureOutcome(
     name: plugin,
     fromVersion: versions.fromVersion,
     toVersion: versions.toVersion,
-    notes: [aggregateMsg, ...redacted.map((f) => `${f.phase}: ${f.msg}`)],
+    notes: [aggregateMsg, ...failures.map((f) => `${f.phase}: ${f.msg}`)],
     // Pre-narrowed: phase-3 aggregate failures always render as `(failed)
     // {rollback partial}` per docs/output-catalog.md. The direct entrypoint
     // emits these inline and filters them before its local mapper; the
     // marketplace cascade consumer reads `reasons[0]` directly.
     reasons: ["rollback partial"] as const,
-    phaseFailures: redacted.map((f) => ({ phase: f.phase, msg: f.msg })),
+    phaseFailures: failures.map((f) => ({ phase: f.phase, msg: f.msg })),
     // declaresAgents / declaresMcp are required `boolean`. `(failed)` rows
     // do not render the soft-dep marker.
     declaresAgents: false,

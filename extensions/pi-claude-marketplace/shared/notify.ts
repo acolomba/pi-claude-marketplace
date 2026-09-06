@@ -2,13 +2,7 @@ import { softDepStatus } from "../platform/pi-api.ts";
 
 import { appendHooksBlock } from "./concerns/hooks.ts";
 import { softDepMarkers } from "./concerns/soft-dep.ts";
-import {
-  assertNever,
-  causeChain,
-  causeChainTrailer,
-  linkMessage,
-  manualRecoveryLeaks,
-} from "./errors.ts";
+import { assertNever, causeChainTrailer, manualRecoveryLeaks } from "./errors.ts";
 
 import type { Scope } from "./types.ts";
 import type { ExtensionAPI, ExtensionContext, SoftDepStatus } from "../platform/pi-api.ts";
@@ -318,36 +312,6 @@ export function redactAbsolutePaths(text: string): string {
     const lastSep = Math.max(match.lastIndexOf("/"), match.lastIndexOf("\\"));
     return lastSep < 0 ? match : match.slice(lastSep + 1);
   });
-}
-
-/**
- * IN-01 / T-53-02-02: the same chain a cause-chain trailer would render, with
- * every absolute path in every link collapsed to its basename.
- *
- * A producer whose error text embeds a path this extension composed -- a
- * staging root, a target file -- cannot hand that error to `notify()` directly:
- * the trailer walks `.cause` and renders each link verbatim, so redacting only
- * the head leaves every deeper link leaking. This rebuilds the chain instead of
- * flattening it, so the rendered bytes differ from the unredacted form only in
- * the paths themselves.
- *
- * Built off `causeChain` / `linkMessage` rather than a second walk of its own,
- * so the depth bound and the self-reference cycle guard stay in one place.
- *
- * Idempotent: a basename carries no separator, so redacting an
- * already-redacted chain is a no-op and a producer may redact upstream too.
- */
-export function redactCauseChain(err: unknown): Error {
-  let rebuilt: Error | undefined;
-  for (const link of [...causeChain(err)].reverse()) {
-    const message = redactAbsolutePaths(linkMessage(link));
-    rebuilt = rebuilt === undefined ? new Error(message) : new Error(message, { cause: rebuilt });
-  }
-
-  // `causeChain` yields its head unconditionally, so the loop runs at least
-  // once and this arm is unreachable -- it exists because the typechecker
-  // cannot see that, and `extensions/` composes no non-null assertion (D-116-01a).
-  return rebuilt ?? new Error(redactAbsolutePaths(linkMessage(err)));
 }
 
 /**
