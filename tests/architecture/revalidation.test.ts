@@ -1822,6 +1822,29 @@ test("publish recovery rejects crafted journals without deleting unrelated files
   );
 });
 
+test("publish recovery preserves canonical bytes when destination flags are false", async (t) => {
+  // arrange
+  const fixture = await createCliFixture(t);
+  const journalPath = path.join(fixture.projectRoot, phaseRoot, ".publish-journal.json");
+  const originalBytes = await destinationBytes(fixture.projectRoot);
+  const records = publishJournalRecords("1-1-a");
+  for (const record of records) {
+    record.hadDestination = false;
+    await writeFile(path.join(fixture.projectRoot, record.staged), "unpublished\n");
+  }
+  await writeFile(journalPath, `${JSON.stringify({ status: "staged", records })}\n`);
+
+  // act & assert
+  assert.throws(() => {
+    publishRevalidation(fixture.projectRoot, "replacement\n", "replacement markdown\n", {
+      beforeStage() {
+        throw new Error("injected replacement failure");
+      },
+    });
+  }, /injected replacement failure/);
+  assert.deepStrictEqual(await destinationBytes(fixture.projectRoot), originalBytes);
+});
+
 for (const row of [
   {
     title: "a stage path derived from another destination",

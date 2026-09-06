@@ -1359,7 +1359,7 @@ function removePublishedFile(candidate) {
   unlinkSync(candidate);
 }
 
-function rollbackPublish(projectRoot, records) {
+function rollbackPublish(projectRoot, records, publishedDestinations = new Set()) {
   for (const record of [...records].reverse()) {
     const destination = assertSafeRelativePath(projectRoot, record.destination, {
       mustExist: false,
@@ -1369,12 +1369,39 @@ function rollbackPublish(projectRoot, records) {
     if (lstatSync(backup, { throwIfNoEntry: false }) !== undefined) {
       removePublishedFile(destination);
       renameSync(backup, destination);
-    } else if (!record.hadDestination) {
+    } else if (publishedDestinations.has(record.destination)) {
       removePublishedFile(destination);
     }
 
     if (lstatSync(staged, { throwIfNoEntry: false }) !== undefined) {
       removePublishedFile(staged);
+    }
+  }
+}
+
+function validatePublishRecoveryState(journal, projectRoot, journalPath) {
+  for (const record of journal.records) {
+    const destination = assertSafeRelativePath(projectRoot, record.destination, {
+      mustExist: false,
+    });
+    const staged = assertSafeRelativePath(projectRoot, record.staged, { mustExist: false });
+    const backup = assertSafeRelativePath(projectRoot, record.backup, { mustExist: false });
+    const destinationExists = lstatSync(destination, { throwIfNoEntry: false }) !== undefined;
+    const stagedExists = lstatSync(staged, { throwIfNoEntry: false }) !== undefined;
+    const backupExists = lstatSync(backup, { throwIfNoEntry: false }) !== undefined;
+    const publishedStateIsValid =
+      destinationExists && !stagedExists && (!backupExists || record.hadDestination);
+    const stagedWithBackupIsValid =
+      backupExists && record.hadDestination && destinationExists !== stagedExists;
+    const stagedWithoutBackupIsValid =
+      !backupExists && stagedExists && (destinationExists || !record.hadDestination);
+    if (
+      (journal.status === "published" && !publishedStateIsValid) ||
+      (journal.status === "staged" &&
+        !stagedWithBackupIsValid &&
+        !stagedWithoutBackupIsValid)
+    ) {
+      throw new Error(`publish journal is malformed: ${journalPath}`);
     }
   }
 }
@@ -1458,6 +1485,7 @@ function recoverPublish(projectRoot, journalPath) {
 
   const journal = JSON.parse(readFileSync(journalPath, "utf8"));
   validatePublishJournal(journal, projectRoot, journalPath);
+  validatePublishRecoveryState(journal, projectRoot, journalPath);
 
   if (journal.status === "published") {
     finishPublish(projectRoot, journal.records);
@@ -1510,6 +1538,7 @@ export function publishRevalidation(projectRoot, json, markdown, hooks = {}) {
     }
 
     let published = false;
+    const publishedDestinations = new Set();
     try {
       for (const record of records) {
         if (record.hadDestination) {
@@ -1525,6 +1554,7 @@ export function publishRevalidation(projectRoot, json, markdown, hooks = {}) {
           assertSafeRelativePath(projectRoot, record.staged, { mustExist: false }),
           assertSafeRelativePath(projectRoot, record.destination, { mustExist: false }),
         );
+        publishedDestinations.add(record.destination);
         hooks.afterPublish?.(record.destination);
       }
 
@@ -1541,7 +1571,7 @@ export function publishRevalidation(projectRoot, json, markdown, hooks = {}) {
       }
 
       try {
-        rollbackPublish(projectRoot, records);
+        rollbackPublish(projectRoot, records, publishedDestinations);
         unlinkSync(journalPath);
       } catch (rollbackError) {
         throw new AggregateError(
