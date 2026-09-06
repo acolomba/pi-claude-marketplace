@@ -3113,15 +3113,16 @@ test("manifest-load-fail: manifest with invalid entry name type -> notifyError o
   });
 });
 
-// ─── prepareUpdateHandles catch + abortPartialHandles (lines 461-486) ─────────
+// ─── prepareUpdateHandles catch + abortHandles ───────────────────────────────
 
-test("prepare-handles-fail: MCP collision in prepareStageMcpServers -> abortPartialHandles fires, outcome=failed", async () => {
-  // prepareStageMcpServers is the LAST bridge called inside prepareUpdateHandles.
-  // When it throws (McpServerCollisionError from assertNoMcpCollisions), the
-  // catch at lines 461-462 fires: abortPartialHandles is called with all
-  // three already-populated handles (skills, commands, agents), exercising
-  // the abortPartialHandles body (lines 467-486). The throw propagates to
-  // runThreePhaseUpdate -> updateSinglePlugin cascade catch -> partition='failed'.
+test("prepare-handles-fail: MCP collision in prepareStageMcpServers -> abortHandles fires, outcome=failed", async () => {
+  // prepareStageMcpServers throws McpServerCollisionError (from
+  // assertNoMcpCollisions) with three handles already populated -- skills,
+  // commands and agents -- and none for the workflows prepare that would have
+  // run next. The catch calls `abortHandles`, whose per-arm guards therefore
+  // take their present branch three times and their absent branch twice. The
+  // throw propagates to runThreePhaseUpdate -> updateSinglePlugin cascade
+  // catch -> partition='failed'.
   //
   // Setup: seed <cwd>/.pi/mcp.json with "rollback-server" owned by a DIFFERENT
   // plugin. Then seed hello@mp with version 1.0.1 declaring the same server.
@@ -8789,6 +8790,371 @@ test("WLIF-02: the same workflow warning rides the cascade outcome's notes", asy
         true,
         JSON.stringify(outcome.notes),
       );
+    } finally {
+      process.chdir(previousCwd);
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+/** The envelope the saved directory holds for `generatedName`. */
+async function readEnvelope(savedDir: string, generatedName: string): Promise<unknown> {
+  return JSON.parse(await readFile(path.join(savedDir, `${generatedName}.json`), "utf8"));
+}
+
+test("WLIF-02: an update that adds a workflow writes its envelope and records the placed name", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-workflows-added-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const { marketplaceRoot, manifestPath } = await seedInstalledWorkflowPlugin({
+        cwd,
+        version: "1.0.0",
+        workflows: [{ sourceName: "greet" }],
+      });
+      await writeWorkflowScripts(marketplaceRoot, "hello", [
+        { sourceName: "greet" },
+        { sourceName: "wave" },
+      ]);
+      await rewriteManifest(manifestPath, "mp", { hello: { version: "2.10.0" } });
+      const { ctx, pi } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      // assert
+      assert.deepEqual(await entriesOf(locations.workflowsSavedDir), [
+        "hello:greet.json",
+        "hello:wave.json",
+      ]);
+      const record = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
+        "hello"
+      ];
+      assert.deepEqual(record?.resources.workflows, ["hello:greet", "hello:wave"]);
+      assert.equal(record?.version, "2.10.0");
+      assert.deepEqual(
+        await entriesOf(locations.workflowsStagingDir),
+        [],
+        "a committed staging tree is cleaned up, not retained",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WLIF-02: a workflow the new version withdrew loses its envelope and its recorded name", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-workflows-withdrawn-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const { marketplaceRoot, manifestPath } = await seedInstalledWorkflowPlugin({
+        cwd,
+        version: "1.0.0",
+        workflows: [{ sourceName: "greet" }, { sourceName: "wave" }],
+      });
+      assert.deepEqual(await entriesOf(locations.workflowsSavedDir), [
+        "hello:greet.json",
+        "hello:wave.json",
+      ]);
+      await writeWorkflowScripts(marketplaceRoot, "hello", [{ sourceName: "greet" }]);
+      await rewriteManifest(manifestPath, "mp", { hello: { version: "2.10.0" } });
+      const { ctx, pi } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      // assert
+      assert.deepEqual(await entriesOf(locations.workflowsSavedDir), ["hello:greet.json"]);
+      assert.deepEqual(
+        (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins["hello"]?.resources
+          .workflows,
+        ["hello:greet"],
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WLIF-02: a workflow the new version renamed lands under the new name with the new bytes", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-workflows-renamed-"));
+    try {
+      // arrange -- ONE source file whose declared `meta.name` moves, which is
+      // what a rename looks like from the record's side.
+      const locations = locationsFor("project", cwd);
+      const versionBSource =
+        'export const meta = { name: "salute", description: "greets formally" };\n';
+      const { marketplaceRoot, manifestPath } = await seedInstalledWorkflowPlugin({
+        cwd,
+        version: "1.0.0",
+        workflows: [{ sourceName: "greet" }],
+      });
+      await writeWorkflowScripts(marketplaceRoot, "hello", [
+        { sourceName: "greet", body: versionBSource },
+      ]);
+      await rewriteManifest(manifestPath, "mp", { hello: { version: "2.10.0" } });
+      const { ctx, pi } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      // assert -- the byte-content check is the one that catches a commit that
+      // recorded the new name over the old version's script.
+      assert.deepEqual(await entriesOf(locations.workflowsSavedDir), ["hello:salute.json"]);
+      assert.deepEqual(await readEnvelope(locations.workflowsSavedDir, "hello:salute"), {
+        name: "hello:salute",
+        description: "greets formally",
+        script: versionBSource,
+      });
+      assert.deepEqual(
+        (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins["hello"]?.resources
+          .workflows,
+        ["hello:salute"],
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("CR-02: the intent-mark window widens the recorded inventory to the union", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-workflows-union-"));
+    let stateWatch: ReturnType<typeof watchStateTransition> | undefined;
+    let unionDuringWindow: string[] | undefined;
+    try {
+      // arrange -- version B keeps `greet`, withdraws `wave`, adds `zap`, so the
+      // union is a strict superset of BOTH the recorded set and the staged set.
+      const locations = locationsFor("project", cwd);
+      const { marketplaceRoot, manifestPath } = await seedInstalledWorkflowPlugin({
+        cwd,
+        version: "1.0.0",
+        workflows: [{ sourceName: "greet" }, { sourceName: "wave" }],
+      });
+      await writeWorkflowScripts(marketplaceRoot, "hello", [
+        { sourceName: "greet" },
+        { sourceName: "zap" },
+      ]);
+      await rewriteManifest(manifestPath, "mp", { hello: { version: "2.10.0" } });
+      // Read off the PERSISTED file at the moment the intent mark lands: the
+      // union has to be observable to a second process mid-commit, which a
+      // return value could never demonstrate.
+      stateWatch = watchStateTransition(
+        locations,
+        (state) =>
+          state.marketplaces["mp"]?.plugins["hello"]?.compatibility.notes.includes(
+            "update-in-progress",
+          ) === true,
+        (state) => {
+          unionDuringWindow = [
+            ...(state.marketplaces["mp"]?.plugins["hello"]?.resources.workflows ?? []),
+          ];
+        },
+      );
+      const { ctx, pi } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      // assert
+      assert.equal(stateWatch.fired(), true);
+      assert.deepEqual(unionDuringWindow, ["hello:greet", "hello:wave", "hello:zap"]);
+      // ...and the finalize window narrows it back to what the commit staged.
+      assert.deepEqual(
+        (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins["hello"]?.resources
+          .workflows,
+        ["hello:greet", "hello:zap"],
+      );
+    } finally {
+      stateWatch?.close();
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("CR-03: a workflows staging-cleanup leak is a recorded failure and the record keeps the union", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-workflows-leak-"));
+    const previousCwd = process.cwd();
+    let stateWatch: ReturnType<typeof watchStateTransition> | undefined;
+    let stagingDirLocked: string | undefined;
+    try {
+      // arrange -- every sibling bridge has something to write, so a workflows
+      // failure that rolled one of them back would be visible.
+      const locations = locationsFor("project", cwd);
+      const marketplaceRoot = path.join(cwd, "mp-src");
+      const { manifestPath } = await seedPathMarketplace({
+        cwd,
+        marketplaceRoot,
+        marketplaceName: "mp",
+        manifestPlugins: {
+          hello: {
+            version: "1.0.0",
+            hasSkill: true,
+            hasCommand: true,
+            hasAgent: true,
+            hasMcp: true,
+            omitPluginJsonVersion: true,
+          },
+        },
+      });
+      await writeWorkflowScripts(marketplaceRoot, "hello", [
+        { sourceName: "greet" },
+        { sourceName: "wave" },
+      ]);
+      const seed = makeCtx();
+      await installPlugin({
+        ctx: seed.ctx,
+        pi: seed.pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+      await writeWorkflowScripts(marketplaceRoot, "hello", [
+        { sourceName: "greet" },
+        { sourceName: "zap" },
+      ]);
+      await rewriteManifest(manifestPath, "mp", { hello: { version: "2.10.0" } });
+      const before = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
+        "hello"
+      ];
+      assert.ok(before !== undefined);
+
+      // The intent mark runs after every prepare and before the first commit,
+      // so sealing the staging PARENT there leaves the renames working and
+      // fails only the post-commit `rm` of the staging root.
+      stateWatch = watchStateTransition(
+        locations,
+        (state) =>
+          state.marketplaces["mp"]?.plugins["hello"]?.compatibility.notes.includes(
+            "update-in-progress",
+          ) === true,
+        () => {
+          chmodSync(locations.workflowsStagingDir, 0o500);
+          stagingDirLocked = locations.workflowsStagingDir;
+        },
+      );
+      process.chdir(cwd);
+
+      // act
+      const outcome = await updateSinglePlugin("hello", "mp", "project");
+
+      // assert
+      assert.equal(stateWatch.fired(), true);
+      assert.equal(outcome.partition, "failed");
+      const workflowFailure = (outcome.phaseFailures ?? []).find((f) => f.phase === "workflows");
+      assert.ok(workflowFailure !== undefined, JSON.stringify(outcome.phaseFailures));
+      assert.match(workflowFailure.msg, /workflows staging cleanup leak/);
+
+      const record = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
+        "hello"
+      ];
+      // CR-03: the pre-update inventory PLUS what the commit reported placing.
+      // Strictly larger than either the recorded set or the staged set, so
+      // neither one alone could produce it.
+      assert.deepEqual(record?.resources.workflows, ["hello:greet", "hello:wave", "hello:zap"]);
+      // SC#2: a workflows failure never rolls back a sibling's inventory. Each
+      // sibling declares the same components in both versions, so every one of
+      // these arrays is non-empty and unchanged from the install.
+      assert.deepEqual(record?.resources.skills, before.resources.skills);
+      assert.deepEqual(record?.resources.prompts, before.resources.prompts);
+      assert.deepEqual(record?.resources.agents, before.resources.agents);
+      assert.deepEqual(record?.resources.mcpServers, before.resources.mcpServers);
+      assert.equal(before.resources.skills.length > 0, true);
+      assert.equal(before.resources.prompts.length > 0, true);
+      assert.equal(before.resources.agents.length > 0, true);
+      assert.equal(before.resources.mcpServers.length > 0, true);
+      // All-or-nothing: the aggregate is non-empty, so no version bump.
+      assert.equal(record?.version, "1.0.0");
+    } finally {
+      if (stagingDirLocked !== undefined) {
+        await chmod(stagingDirLocked, 0o700);
+      }
+
+      stateWatch?.close();
+      process.chdir(previousCwd);
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("CR-03: a refused workflows commit places nothing and the record keeps only the pre-update names", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-workflows-refused-"));
+    const previousCwd = process.cwd();
+    try {
+      // arrange -- a foreign envelope sits at one of version B's target paths
+      // under a name the record does not hold. WR-06: the whole-set ownership
+      // pre-check runs before the first rename, so the refusal provably places
+      // nothing.
+      const locations = locationsFor("project", cwd);
+      const versionASource = 'export const meta = { name: "greet", description: "does greet" };\n';
+      const { marketplaceRoot, manifestPath } = await seedInstalledWorkflowPlugin({
+        cwd,
+        version: "1.0.0",
+        workflows: [{ sourceName: "greet" }],
+      });
+      await writeWorkflowScripts(marketplaceRoot, "hello", [
+        { sourceName: "greet" },
+        { sourceName: "wave" },
+      ]);
+      await rewriteManifest(manifestPath, "mp", { hello: { version: "2.10.0" } });
+      const foreignPath = path.join(locations.workflowsSavedDir, "hello:wave.json");
+      const foreignBytes = '{"name":"hello:wave","script":"// hand-saved by the user\\n"}';
+      await writeFile(foreignPath, foreignBytes, "utf8");
+      process.chdir(cwd);
+
+      // act
+      const outcome = await updateSinglePlugin("hello", "mp", "project");
+
+      // assert
+      assert.equal(outcome.partition, "failed");
+      const workflowFailure = (outcome.phaseFailures ?? []).find((f) => f.phase === "workflows");
+      assert.ok(workflowFailure !== undefined, JSON.stringify(outcome.phaseFailures));
+
+      const record = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
+        "hello"
+      ];
+      // The prepared set was ["hello:greet", "hello:wave"]. Recording it would
+      // have named an envelope the commit never wrote -- and `hello:wave` is
+      // the FOREIGN file, so a later removal would delete the user's own work.
+      assert.deepEqual(record?.resources.workflows, ["hello:greet"]);
+      assert.equal(await readFile(foreignPath, "utf8"), foreignBytes);
+      // The plugin's own previous envelope was displaced and put back.
+      assert.deepEqual(await readEnvelope(locations.workflowsSavedDir, "hello:greet"), {
+        name: "hello:greet",
+        description: "does greet",
+        script: versionASource,
+      });
     } finally {
       process.chdir(previousCwd);
       await rm(cwd, { recursive: true, force: true });
