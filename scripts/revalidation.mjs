@@ -954,7 +954,11 @@ function validateScopeAnchors(change, violations) {
         );
       } else if (!anchor.includes(change.requirementId)) {
         violations.push(
-          violation("scope-anchor-identity", change.id, `${name} must identify ${change.requirementId}`),
+          violation(
+            "scope-anchor-identity",
+            change.id,
+            `${name} must identify ${change.requirementId}`,
+          ),
         );
       }
     }
@@ -1797,7 +1801,9 @@ function parseRequirementsContract(markdown, violations) {
     if (definition !== null) {
       const id = definition[1];
       if (definitions.has(id)) {
-        violations.push(violation("duplicate-requirement", id, "requirement is defined more than once"));
+        violations.push(
+          violation("duplicate-requirement", id, "requirement is defined more than once"),
+        );
       } else {
         definitions.set(id, section);
       }
@@ -1808,7 +1814,9 @@ function parseRequirementsContract(markdown, violations) {
   for (const match of markdown.matchAll(/^\| ([A-Z]+-\d+) \| ([^|]+) \| ([^|]+) \|$/gm)) {
     const [, id, route, status] = match;
     if (dispositions.has(id)) {
-      violations.push(violation("duplicate-requirement-route", id, "traceability row appears more than once"));
+      violations.push(
+        violation("duplicate-requirement-route", id, "traceability row appears more than once"),
+      );
     } else {
       dispositions.set(id, { route: route.trim(), status: status.trim() });
     }
@@ -1828,7 +1836,9 @@ function parseRoadmapContract(markdown, violations) {
 
     const id = `PHASE-${String(number).padStart(2, "0")}`;
     if (phases.has(id)) {
-      violations.push(violation("duplicate-phase-route", id, "roadmap phase appears more than once"));
+      violations.push(
+        violation("duplicate-phase-route", id, "roadmap phase appears more than once"),
+      );
       continue;
     }
 
@@ -1851,15 +1861,29 @@ function validateRequirementChange(requirements, requirementId, change, violatio
   const section = requirements.definitions.get(requirementId);
   const expectedSection = change.action === "move-to-evidence" ? "Evidence and History" : section;
   if (section === undefined && change.action !== "move-to-evidence") {
-    violations.push(violation("missing-requirement-definition", requirementId, "active definition is absent"));
+    violations.push(
+      violation("missing-requirement-definition", requirementId, "active definition is absent"),
+    );
   }
 
   if (change.action === "move-to-evidence" && disposition.status !== "Evidence only") {
-    violations.push(violation("requirement-disposition", requirementId, "moved requirement must be evidence only"));
+    violations.push(
+      violation(
+        "requirement-disposition",
+        requirementId,
+        "moved requirement must be evidence only",
+      ),
+    );
   }
 
   if (change.action !== "move-to-evidence" && disposition.status === "Evidence only") {
-    violations.push(violation("requirement-disposition", requirementId, "active requirement cannot be evidence only"));
+    violations.push(
+      violation(
+        "requirement-disposition",
+        requirementId,
+        "active requirement cannot be evidence only",
+      ),
+    );
   }
 
   const afterParts = typeof change.afterAnchor === "string" ? change.afterAnchor.split(" :: ") : [];
@@ -1869,7 +1893,9 @@ function validateRequirementChange(requirements, requirementId, change, violatio
     afterParts[1] !== expectedSection ||
     !afterParts[2].startsWith(`${requirementId} —`)
   ) {
-    violations.push(violation("scope-after-anchor", id, "afterAnchor does not resolve to requirement"));
+    violations.push(
+      violation("scope-after-anchor", id, "afterAnchor does not resolve to requirement"),
+    );
   }
 }
 
@@ -1906,16 +1932,21 @@ function validatePhaseContracts(requirements, phases, rows, violations) {
       .map(([id]) => id)
       .sort();
     if (JSON.stringify([...phase.requirements].sort()) !== JSON.stringify(expectedRequirements)) {
-      violations.push(violation("phase-requirements", phaseId, "roadmap membership differs from traceability"));
+      violations.push(
+        violation("phase-requirements", phaseId, "roadmap membership differs from traceability"),
+      );
     }
 
-    const afterParts = typeof change.afterAnchor === "string" ? change.afterAnchor.split(" :: ") : [];
+    const afterParts =
+      typeof change.afterAnchor === "string" ? change.afterAnchor.split(" :: ") : [];
     if (
       afterParts.length !== 3 ||
       afterParts[0] !== ROADMAP_PATH ||
       afterParts[1] !== `${phaseId} / Phase ${number} ${phase.title}`
     ) {
-      violations.push(violation("scope-after-anchor", change.id, "afterAnchor does not resolve to phase"));
+      violations.push(
+        violation("scope-after-anchor", change.id, "afterAnchor does not resolve to phase"),
+      );
     }
   }
 }
@@ -1927,7 +1958,9 @@ function validatePlanningContracts(ledger, requirementsMarkdown, roadmapMarkdown
   const rows = new Map();
   for (const change of ledger.scopeChanges) {
     if (rows.has(change.id)) {
-      violations.push(violation("duplicate-scope-contract", change.id, "scope row appears more than once"));
+      violations.push(
+        violation("duplicate-scope-contract", change.id, "scope row appears more than once"),
+      );
     } else {
       rows.set(change.id, change);
     }
@@ -1937,7 +1970,9 @@ function validatePlanningContracts(ledger, requirementsMarkdown, roadmapMarkdown
   validatePhaseContracts(requirements, phases, rows, violations);
 
   if (ledger.scopeChanges.length !== 40 || rows.size !== 40) {
-    violations.push(violation("scope-contract-count", "scopeChanges", "expected exactly 40 unique rows"));
+    violations.push(
+      violation("scope-contract-count", "scopeChanges", "expected exactly 40 unique rows"),
+    );
   }
 
   return violations.sort((left, right) =>
