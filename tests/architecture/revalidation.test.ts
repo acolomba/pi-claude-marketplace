@@ -1188,10 +1188,47 @@ test("RVAL-04 scope-impact rejects changed requirement disposition", async (t) =
     status: 1,
     stdout: "",
     stderr:
+      "invalid-requirement-route: GGAT-02: moved requirement must use an evidence/history route\n" +
       "phase-requirements: PHASE-07: roadmap membership differs from traceability\n" +
       "requirement-disposition: GGAT-02: moved requirement must be evidence only\n",
   });
 });
+
+for (const row of [
+  {
+    title: "RVAL-04 scope-impact rejects an arbitrary active requirement route",
+    original: "| RVAL-01 | Phase 1 | Complete |",
+    replacement: "| RVAL-01 | Nowhere | Complete |",
+    expectedStderr:
+      "invalid-requirement-route: RVAL-01: active requirement must use one numbered phase and an active status\n" +
+      "phase-requirements: PHASE-01: roadmap membership differs from traceability\n",
+  },
+  {
+    title: "RVAL-04 scope-impact rejects an arbitrary evidence requirement route",
+    original: "| GGAT-02 | Evidence/history (formerly Phase 7) | Evidence only |",
+    replacement: "| GGAT-02 | Nowhere | Evidence only |",
+    expectedStderr:
+      "invalid-requirement-route: GGAT-02: moved requirement must use an evidence/history route\n",
+  },
+] as const) {
+  test(row.title, async (t) => {
+    // arrange
+    const projectRoot = await createScopeImpactFixture(t);
+    const contractPath = path.join(projectRoot, ".planning/REQUIREMENTS.md");
+    const contract = await readFile(contractPath, "utf8");
+    await writeFile(contractPath, contract.replace(row.original, row.replacement));
+
+    // act
+    const execution = runCli(projectRoot, ["scope-impact", "--check"]);
+
+    // assert
+    assert.deepStrictEqual(execution, {
+      status: 1,
+      stdout: "",
+      stderr: row.expectedStderr,
+    });
+  });
+}
 
 test("RVAL-04 scope-impact rejects a missing Phase 2-9 route", async (t) => {
   // arrange

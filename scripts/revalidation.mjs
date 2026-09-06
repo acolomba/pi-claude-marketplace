@@ -52,6 +52,9 @@ const FILE_PATH_PATTERN = /^[A-Za-z0-9._/-]+$/;
 const IDENTITY_PATTERN = /^[A-Za-z0-9._/][A-Za-z0-9._/#:-]*$/;
 const PLAN_PATTERN = /^\d{2}-\d{2}$/;
 const SCOPE_ACTIONS = new Set(["keep", "move-to-evidence", "narrow/split"]);
+const ACTIVE_REQUIREMENT_STATUSES = new Set(["Complete", "Pending"]);
+const ACTIVE_REQUIREMENT_ROUTE_PATTERN = /^Phase [1-9]$/;
+const EVIDENCE_REQUIREMENT_ROUTE_PATTERN = /^Evidence\/history \(formerly Phase [1-9]\)$/;
 const PUBLISH_JOURNAL_FIELDS = new Set(["status", "records"]);
 const PUBLISH_RECORD_FIELDS = new Set(["destination", "staged", "backup", "hadDestination"]);
 const PUBLISH_STATUSES = new Set(["staged", "published"]);
@@ -2087,7 +2090,7 @@ function parseRoadmapContract(markdown, violations) {
   const headings = [...markdown.matchAll(/^### Phase (\d+): (.+)$/gm)];
   for (const [index, match] of headings.entries()) {
     const number = Number(match[1]);
-    if (number < 2 || number > 9) {
+    if (number < 1 || number > 9) {
       continue;
     }
 
@@ -2134,12 +2137,41 @@ function validateRequirementChange(requirements, requirementId, change, locators
     );
   }
 
+  if (
+    change.action === "move-to-evidence" &&
+    disposition?.route !== undefined &&
+    !EVIDENCE_REQUIREMENT_ROUTE_PATTERN.test(disposition.route)
+  ) {
+    violations.push(
+      violation(
+        "invalid-requirement-route",
+        requirementId,
+        "moved requirement must use an evidence/history route",
+      ),
+    );
+  }
+
   if (change.action !== "move-to-evidence" && disposition?.status === "Evidence only") {
     violations.push(
       violation(
         "requirement-disposition",
         requirementId,
         "active requirement cannot be evidence only",
+      ),
+    );
+  }
+
+  if (
+    change.action !== "move-to-evidence" &&
+    disposition !== undefined &&
+    (!ACTIVE_REQUIREMENT_ROUTE_PATTERN.test(disposition.route) ||
+      !ACTIVE_REQUIREMENT_STATUSES.has(disposition.status))
+  ) {
+    violations.push(
+      violation(
+        "invalid-requirement-route",
+        requirementId,
+        "active requirement must use one numbered phase and an active status",
       ),
     );
   }
@@ -2264,11 +2296,11 @@ function validateRequirementContracts(requirements, allRows, validRowIds, locato
 }
 
 function validatePhaseContracts(requirements, phases, rows, locators, violations) {
-  for (let number = 2; number <= 9; number += 1) {
+  for (let number = 1; number <= 9; number += 1) {
     const phaseId = `PHASE-${String(number).padStart(2, "0")}`;
     const change = rows.get(`SCOPE-ROUTE-${phaseId}`);
     const phase = phases.get(phaseId);
-    if (change === undefined) {
+    if (number > 1 && change === undefined) {
       violations.push(violation("missing-scope-route", phaseId, "scope route is absent"));
       continue;
     }
@@ -2288,7 +2320,7 @@ function validatePhaseContracts(requirements, phases, rows, locators, violations
       );
     }
 
-    const afterParts = locators.get(change.id)?.after;
+    const afterParts = change === undefined ? undefined : locators.get(change.id)?.after;
     if (
       afterParts !== undefined &&
       afterParts[1] !== `${phaseId} / Phase ${number} ${phase.title}`
