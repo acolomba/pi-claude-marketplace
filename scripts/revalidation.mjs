@@ -19,6 +19,8 @@ const PHASE_ROOT = ".planning/phases/01-live-evidence-revalidation";
 const LEDGER_PATH = `${PHASE_ROOT}/01-REVALIDATION.json`;
 const MARKDOWN_PATH = `${PHASE_ROOT}/01-REVALIDATION.md`;
 const ASSIGNMENT_PATH = `${PHASE_ROOT}/01-CORPUS-ASSIGNMENT.md`;
+const SUPPORTED_VERSIONS = new Set([1]);
+const INVENTORY_MODES = new Set(["live", "fixture"]);
 const STATUSES = new Set(["confirmed", "stale", "superseded", "duplicate", "inconclusive"]);
 const ROUTES = new Set(["evidence-only closure", "deferred backlog", "operator decision"]);
 const CATEGORIES = new Set(["first-pass", "adversarial", "control"]);
@@ -186,12 +188,27 @@ export function validateLedger(ledger, context = {}) {
   const allowIncomplete = context.allowIncomplete ?? false;
   const allowInconclusive = context.allowInconclusive ?? false;
   const allowPendingDecisions = context.allowPendingDecisions ?? false;
+  const requireLive = context.requireLive ?? false;
   const decisionId = context.decisionId;
   const violations = [];
   for (const collection of ["files", "sourceClaims", "findings", "decisions", "scopeChanges"]) {
     if (!Array.isArray(ledger[collection])) {
       throw new TypeError(`ledger.${collection} must be an array`);
     }
+  }
+
+  if (!SUPPORTED_VERSIONS.has(ledger.version)) {
+    violations.push(violation("invalid-version", "version", String(ledger.version)));
+  }
+
+  if (!INVENTORY_MODES.has(ledger.inventoryMode)) {
+    violations.push(
+      violation("invalid-inventory-mode", "inventoryMode", String(ledger.inventoryMode)),
+    );
+  } else if (requireLive && ledger.inventoryMode !== "live") {
+    violations.push(
+      violation("canonical-inventory-mode", "inventoryMode", "canonical ledger must use live mode"),
+    );
   }
 
   const filePaths = ledger.files.map((file) => file.path);
@@ -793,6 +810,7 @@ function readJson(projectRoot, relativePath) {
 function validationContext(projectRoot, options) {
   return {
     projectRoot,
+    requireLive: true,
     allowIncomplete: options["allow-incomplete"] === true,
     allowInconclusive: options["allow-inconclusive"] === true,
     allowPendingDecisions: options["allow-pending-decisions"] === true,
