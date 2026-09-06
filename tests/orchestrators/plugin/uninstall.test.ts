@@ -1334,6 +1334,86 @@ test("TR-03 (non-AG-5 partial): resources.* filtered by outcome.dropped.*; sReco
   });
 });
 
+test("WLIF-06: a partial uninstall cascade that took an envelope off disk names the reload remedy", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-wlif06-failed-"));
+    try {
+      // arrange -- the partial-cascade shape above with one workflow among the
+      // artifacts the cascade REPORTED dropping before it threw. A command is
+      // then registered over a removed envelope AND the uninstall did not
+      // finish, so the row owes both facts; the case above, whose cascade drops
+      // no workflow, is the negative control that keeps the token gated.
+      const locations = locationsFor("project", cwd);
+      await seedState(locations.extensionRoot, {
+        schemaVersion: 1,
+        marketplaces: {
+          mp: {
+            name: "mp",
+            scope: "project",
+            source: pathSource("./src"),
+            addedFromCwd: cwd,
+            manifestPath: path.join(cwd, "marketplace.json"),
+            marketplaceRoot: cwd,
+            plugins: { hello: makePluginRecord({ skills: ["skill1"], workflows: ["mp:greet"] }) },
+          },
+        },
+      });
+
+      const stubCascade: typeof cascadeUnstagePlugin = () => {
+        const err = Object.assign(new Error("EACCES on agent unlink"), { code: "EACCES" });
+        return Promise.resolve({
+          ok: false,
+          dropped: {
+            skills: ["skill1"],
+            commands: [],
+            agents: [],
+            hooks: [],
+            mcpServers: [],
+            workflows: ["mp:greet"],
+          },
+          cause: err,
+        });
+      };
+
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      await uninstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        cascade: stubCascade,
+      });
+
+      // assert -- the token joins the failure reason at the tail rather than
+      // replacing it, in the same last position every other stamping verb gives
+      // it. Severity stays `error`: the uninstall was not carried out, which
+      // outranks the warning band the token carries alone.
+      assert.equal(notifications.length, 1);
+      assert.equal(notifications[0]?.severity, "error");
+      assert.ok(
+        (notifications[0]?.message ?? "").startsWith(
+          "A plugin operation has failed.\n\n● mp [project]\n" +
+            "  ⊘ hello v0.0.1 (failed) {permission denied, stale workflow command}\n",
+        ),
+        `WLIF-06: expected the tail token on the failure row; got "${notifications[0]?.message ?? ""}"`,
+      );
+      // The reload trailer is still structurally absent: the token is about a
+      // command that is already registered, not about something to pick up.
+      assert.equal(
+        (notifications[0]?.message ?? "").includes("/reload to pick up changes"),
+        false,
+        "WLIF-06: a failed uninstall must not emit the reload-hint trailer",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("TR-03 (AG-5 cause): full row preserved intact when cause instanceof AgentsUnstageFailureError", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-tr03-ag5-"));

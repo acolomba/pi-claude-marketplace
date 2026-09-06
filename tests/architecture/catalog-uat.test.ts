@@ -1568,6 +1568,33 @@ const FIXTURES: FixtureMap = {
         ],
       },
     },
+    // WLIF-06: the partial cascade removed a workflow envelope and then failed,
+    // so the token joins the failure reason at the tail. Severity stays `error`
+    // -- the uninstall was not carried out, which outranks the warning band the
+    // token carries alone -- and the reload trailer stays structurally absent.
+    "failure-stale-workflow-command": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "failed",
+                severity: "error",
+                needsReload: false,
+                name: "helper",
+                version: "1.0.0",
+                reasons: ["permission denied", "stale workflow command"],
+                cause: new Error("EACCES: permission denied, unlink '/path/to/file'"),
+              },
+            ],
+          },
+        ],
+      },
+    },
 
     // ATTR-04 / SCOPE-01 / M3 / M4: marketplace never added (or present only
     // in the other scope) -> LOUD standalone `marketplace-not-added` variant
@@ -5463,14 +5490,14 @@ test("catalog UAT: every <!-- catalog-state: --> annotation pairs byte-equal wit
   const catalog = await readFile(CATALOG_PATH, "utf8");
   const examples = loadCatalogExamples(catalog);
 
-  // Exact count, not a floor: 191 is the number of annotated examples in
+  // Exact count, not a floor: 192 is the number of annotated examples in
   // docs/output-catalog.md, and it is what stops a `loadCatalogExamples`
   // refactor from silently parsing a fraction of the corpus. Update it
   // deliberately when catalog examples are added or removed.
   assert.equal(
     examples.length,
-    191,
-    `Expected exactly 191 annotated catalog examples; found ${examples.length}. Check that the discriminator comments in docs/output-catalog.md were not lost, and update this count when examples are added.`,
+    192,
+    `Expected exactly 192 annotated catalog examples; found ${examples.length}. Check that the discriminator comments in docs/output-catalog.md were not lost, and update this count when examples are added.`,
   );
 
   const failures: Failure[] = [];

@@ -206,9 +206,20 @@ function emitCascadeFailure(args: {
   plugin: string;
   cause: Error;
   removedVersion: string | undefined;
+  staleWorkflowCommand: boolean;
   orchestrated: boolean;
 }): UninstallPluginOutcome | undefined {
-  const { ctx, pi, marketplace, scope, plugin, cause, removedVersion, orchestrated } = args;
+  const {
+    ctx,
+    pi,
+    marketplace,
+    scope,
+    plugin,
+    cause,
+    removedVersion,
+    staleWorkflowCommand,
+    orchestrated,
+  } = args;
   if (orchestrated) {
     return {
       status: "failed",
@@ -221,7 +232,17 @@ function emitCascadeFailure(args: {
   const failedRow: PluginFailedMessage = {
     status: "failed",
     name: plugin,
-    reasons: [narrowCascadeFailure(cause)],
+    // WLIF-06: a partial cascade that took envelopes off disk and then failed
+    // leaves those commands registered over nothing, so the token joins the
+    // failure reason at the tail rather than replacing it -- a row naming only
+    // the failure would report that nothing changed. Same gate as the clean
+    // arm and same tail position as every other stamping verb. Severity stays
+    // `error`: the uninstall was NOT carried out, which outranks the warning
+    // band the token carries alone.
+    reasons: [
+      narrowCascadeFailure(cause),
+      ...(staleWorkflowCommand ? (["stale workflow command"] as const) : []),
+    ],
     ...(removedVersion !== undefined && { version: removedVersion }),
     cause,
     // D-03/D-06: a failed uninstall -> error, no reload (nothing changed).
@@ -603,8 +624,11 @@ export async function uninstallPlugin(
   // the cascade REPORTED dropping, never from the length of the record's
   // workflow inventory -- the inventory can name envelopes the cascade failed to
   // remove, so its length answers a different question than "does a command
-  // linger". Captured outside the guard because the success row is composed
-  // after it.
+  // linger". Captured outside the guard because BOTH post-guard rows are
+  // composed after it: a partial cascade can strand a registered command
+  // exactly as a clean removal can, so the failure arm stamps from this same
+  // sentinel. Assigned the moment the cascade returns, ahead of the failure
+  // split, so the failing arms see what was already dropped.
   let retiredWorkflowCommand = false;
 
   try {
@@ -704,6 +728,7 @@ export async function uninstallPlugin(
       plugin,
       cause,
       removedVersion,
+      staleWorkflowCommand: retiredWorkflowCommand,
       orchestrated,
     });
   }
@@ -738,6 +763,7 @@ export async function uninstallPlugin(
       plugin,
       cause: cascadeFailure,
       removedVersion,
+      staleWorkflowCommand: retiredWorkflowCommand,
       orchestrated,
     });
   }

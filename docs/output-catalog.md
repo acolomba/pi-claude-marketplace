@@ -797,6 +797,22 @@ A plugin operation has failed.
 
 Marketplace header is bare (SUB-BRANCH A); plugin row is `failed` with the typed `permission denied` reason and a 4-space-indent `cause:` trailer (D-16-08). Severity: `error`. No reload-hint -- no state-changing status (a failed uninstall did not remove anything, so there is nothing to reload).
 
+### Failure after the cascade had already retired a workflow command (WLIF-06)
+
+<!-- catalog-state: failure-stale-workflow-command -->
+
+```text
+A plugin operation has failed.
+
+● official [user]
+  ⊘ helper v1.0.0 (failed) {permission denied, stale workflow command}
+    cause: EACCES: permission denied, unlink '/path/to/file'
+```
+
+A partial cascade that removed a workflow envelope and then failed on a later axis. The command that envelope registered is live over nothing AND the uninstall did not finish, so the row names both: a row reporting only the failure would say nothing changed, which is the opposite of what happened. The gate is the same one the clean `uninstall-stale-workflow-command` row above uses -- what the cascade REPORTED dropping -- read from the same sentinel, so the two arms of the verb cannot disagree about what counts as retired.
+
+The token sits LAST inside the brace, the position it takes on every stamping verb. Severity stays `error` rather than the `warning` the token carries alone: the uninstall was NOT carried out, and that outranks it. No reload-hint, exactly as on the plain failure row above -- the trailer is about NEW things a reload picks up, and this is a REMOVED thing a reload drops. This mirrors the `disable` verb, whose failed arm stamps on the same terms; withholding it here would report one fact inconsistently inside a single verb.
+
 ### Failure -- marketplace not added (ATTR-04 / SCOPE-01)
 
 Triggered when `uninstall <plugin>@<marketplace>` names a marketplace that was NEVER added in EITHER scope. A marketplace present only in the OTHER scope does NOT reach this state (SCOPE-01): nothing is installed at the requested scope, so the row's subject is the PLUGIN and it renders the `already-gone-cross-scope` state below. Naming the marketplace there would misdirect -- adding it at the requested scope would not make the uninstall succeed -- while a marketplace absent from BOTH scopes keeps this row so a typo'd marketplace name is not disguised as a plugin that merely is not installed. ATTR-04 makes this LOUD: the orchestrator emits the standalone `MarketplaceNotAddedMessage` variant (`{marketplace not added}` on the marketplace subject) instead of the former silent no-output. This is DISTINCT from the PU-5 already-gone path for a plugin record whose marketplace IS present (covered by the `already-gone-not-installed` state below). The `[scope]` bracket carries the REQUESTED scope: for an explicit `--scope` (or an other-scope-only target) the bracket communicates "not added in the scope you asked for" (SCOPE-01); the operator infers the other scope. A bare lifecycle form that misses in BOTH scopes carries no bracket. Two-block form: the `A marketplace operation has failed.` summary on the host `Error:` label line, then the bare column-0 detail row as its own block (GRAM-01 / GRAM-02). Severity `error`; no reload-hint.
