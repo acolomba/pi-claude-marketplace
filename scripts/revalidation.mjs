@@ -37,7 +37,12 @@ const PENDING_DECISION_IDS = Array.from(
   { length: 9 },
   (_, index) => `MF-DEC-${String(index + 1).padStart(2, "0")}`,
 );
-const SECRET_PATTERN = /(?:token|password|secret|authorization|api[-_]?key)\s*[=:]\s*\S+/i;
+const SECRET_ASSIGNMENT_PATTERN =
+  /["']?(?:token|password|secret|authorization|api[-_]?key)["']?\s*[=:]\s*["']?[^\s"',}]+/i;
+const SECRET_FLAG_PATTERN = /--(?:token|password|secret|authorization|api[-_]?key)(?:=|\s+)\S+/i;
+const AUTHORIZATION_HEADER_PATTERN = /\bauthorization\s*:\s*(?:basic|bearer)\s+\S+/i;
+const ABSOLUTE_HOME_PATTERN =
+  /(?:\/home\/[^/\s"'`]+|\/Users\/[^/\s"'`]+|\/root(?:\/|\b)|[A-Za-z]:[\\/]Users[\\/][^\\/\s"'`]+)/;
 
 function toPosix(candidate) {
   return candidate.split(path.sep).join("/");
@@ -49,6 +54,37 @@ function violation(code, target, message) {
 
 function isObject(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function containsSensitiveEvidence(value, visited = new Set()) {
+  if (typeof value === "string") {
+    return (
+      SECRET_ASSIGNMENT_PATTERN.test(value) ||
+      SECRET_FLAG_PATTERN.test(value) ||
+      AUTHORIZATION_HEADER_PATTERN.test(value) ||
+      ABSOLUTE_HOME_PATTERN.test(value)
+    );
+  }
+
+  if (value === null || typeof value !== "object" || visited.has(value)) {
+    return false;
+  }
+
+  visited.add(value);
+  const nested = Array.isArray(value) ? value : Object.values(value);
+  return nested.some((item) => containsSensitiveEvidence(item, visited));
+}
+
+function permittedValidationFields(validation) {
+  const fields = new Set(["method", "observed"]);
+  if (validation.method === "static-proof") {
+    fields.add("tool");
+  } else {
+    fields.add("command");
+    fields.add("exitCode");
+  }
+
+  return fields;
 }
 
 function assertSafeRelativePath(projectRoot, candidate, { mustExist = true } = {}) {
@@ -522,11 +558,21 @@ export function validateLedger(ledger, context = {}) {
       );
     }
 
-    const serializedValidation = JSON.stringify(validation ?? {});
-    if (
-      SECRET_PATTERN.test(serializedValidation) ||
-      serializedValidation.includes(`${path.sep}home${path.sep}`)
-    ) {
+    if (isObject(validation) && METHODS.has(validation.method)) {
+      const permittedFields = permittedValidationFields(validation);
+      const unexpectedFields = Object.keys(validation).filter((field) => !permittedFields.has(field));
+      if (unexpectedFields.length > 0) {
+        violations.push(
+          violation(
+            "unexpected-validation-field",
+            finding.id,
+            unexpectedFields.sort().join(", "),
+          ),
+        );
+      }
+    }
+
+    if (containsSensitiveEvidence(validation)) {
       violations.push(
         violation(
           "sensitive-evidence",
