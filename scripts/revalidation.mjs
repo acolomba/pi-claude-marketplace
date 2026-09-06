@@ -966,6 +966,36 @@ function validateScopeAnchors(change, violations) {
   }
 }
 
+function validateScopeRowIdentity(change, violations) {
+  if (typeof change.id !== "string" || typeof change.requirementId !== "string") {
+    return;
+  }
+
+  if (change.id.startsWith("SCOPE-REQ-") && change.id !== `SCOPE-REQ-${change.requirementId}`) {
+    violations.push(
+      violation(
+        "scope-row-identity",
+        change.id,
+        "requirement row key and requirementId must agree",
+      ),
+    );
+  }
+
+  if (
+    change.id.startsWith("SCOPE-ROUTE-") &&
+    (change.id !== `SCOPE-ROUTE-${change.requirementId}` ||
+      !/^PHASE-0[2-9]$/.test(change.requirementId))
+  ) {
+    violations.push(
+      violation(
+        "scope-row-identity",
+        change.id,
+        "route row key and Phase 2-9 requirementId must agree",
+      ),
+    );
+  }
+}
+
 function validateScopeChange(change, ledger, findings, violations) {
   if (!identityIsSafe(change.id)) {
     violations.push(
@@ -1018,6 +1048,7 @@ function validateScopeChange(change, ledger, findings, violations) {
   }
 
   validateScopeAnchors(change, violations);
+  validateScopeRowIdentity(change, violations);
 }
 
 function validateScopeChanges(ledger, findings, violations) {
@@ -2075,6 +2106,7 @@ function validatePlanningContracts(ledger, requirementsMarkdown, roadmapMarkdown
   const phases = parseRoadmapContract(roadmapMarkdown, violations);
   const rows = new Map();
   for (const change of ledger.scopeChanges) {
+    validateScopeRowIdentity(change, violations);
     if (rows.has(change.id)) {
       violations.push(
         violation("duplicate-scope-contract", change.id, "scope row appears more than once"),

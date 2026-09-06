@@ -1079,6 +1079,46 @@ test("RVAL-04 scope-impact rejects a misdirected afterAnchor", async (t) => {
   });
 });
 
+test("RVAL-04 scope-impact rejects a contradictory requirement row identity", async (t) => {
+  // arrange
+  const projectRoot = await createScopeImpactFixture(t);
+  const ledger = JSON.parse(await readFile(path.join(projectRoot, ledgerPath), "utf8")) as Ledger;
+  ledger.scopeChanges.find((change) => change.id === "SCOPE-REQ-AUTH-01")!.requirementId =
+    "PDEF-01";
+  await writeFile(path.join(projectRoot, ledgerPath), `${JSON.stringify(ledger, null, 2)}\n`);
+
+  // act
+  const execution = runCli(projectRoot, ["scope-impact", "--check"]);
+
+  // assert
+  assert.deepStrictEqual(execution, {
+    status: 1,
+    stdout: "",
+    stderr:
+      "scope-row-identity: SCOPE-REQ-AUTH-01: requirement row key and requirementId must agree\n",
+  });
+});
+
+test("RVAL-04 scope-impact rejects a contradictory route row identity", async (t) => {
+  // arrange
+  const projectRoot = await createScopeImpactFixture(t);
+  const ledger = JSON.parse(await readFile(path.join(projectRoot, ledgerPath), "utf8")) as Ledger;
+  ledger.scopeChanges.find((change) => change.id === "SCOPE-ROUTE-PHASE-02")!.requirementId =
+    "PHASE-03";
+  await writeFile(path.join(projectRoot, ledgerPath), `${JSON.stringify(ledger, null, 2)}\n`);
+
+  // act
+  const execution = runCli(projectRoot, ["scope-impact", "--check"]);
+
+  // assert
+  assert.deepStrictEqual(execution, {
+    status: 1,
+    stdout: "",
+    stderr:
+      "scope-row-identity: SCOPE-ROUTE-PHASE-02: route row key and Phase 2-9 requirementId must agree\n",
+  });
+});
+
 test("RVAL-04 scope-impact rejects duplicate traceability and phase declarations", async (t) => {
   // arrange
   const projectRoot = await createScopeImpactFixture(t);
