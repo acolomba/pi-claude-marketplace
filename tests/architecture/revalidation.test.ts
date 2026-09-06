@@ -1816,7 +1816,10 @@ test("publish recovery rejects crafted journals without deleting unrelated files
   assert.throws(() => {
     publishRevalidation(fixture.projectRoot, "{}\n", "markdown\n");
   }, /publish journal is malformed/);
-  assert.strictEqual(await readFile(path.join(fixture.projectRoot, victimPath), "utf8"), "keep me\n");
+  assert.strictEqual(
+    await readFile(path.join(fixture.projectRoot, victimPath), "utf8"),
+    "keep me\n",
+  );
 });
 
 for (const row of [

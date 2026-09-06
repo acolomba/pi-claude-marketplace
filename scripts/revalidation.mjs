@@ -50,12 +50,7 @@ const IDENTITY_PATTERN = /^[A-Za-z0-9._/][A-Za-z0-9._/#:-]*$/;
 const PLAN_PATTERN = /^\d{2}-\d{2}$/;
 const SCOPE_ACTIONS = new Set(["keep", "move-to-evidence", "narrow/split"]);
 const PUBLISH_JOURNAL_FIELDS = new Set(["status", "records"]);
-const PUBLISH_RECORD_FIELDS = new Set([
-  "destination",
-  "staged",
-  "backup",
-  "hadDestination",
-]);
+const PUBLISH_RECORD_FIELDS = new Set(["destination", "staged", "backup", "hadDestination"]);
 const PUBLISH_STATUSES = new Set(["staged", "published"]);
 const TRANSACTION_ID_PATTERN = /^\d+-\d+-[0-9a-f]+$/;
 
@@ -515,9 +510,7 @@ function validateFile(file, state, violations) {
   const linkedClaims = [...state.claims.values()].filter((claim) => claim.filePath === file.path);
   const actualIds = linkedClaims.map((claim) => claim.id).sort();
   if (!Array.isArray(file.claimIds)) {
-    violations.push(
-      violation("invalid-file-claim-ids", file.path, "claimIds must be an array"),
-    );
+    violations.push(violation("invalid-file-claim-ids", file.path, "claimIds must be an array"));
   } else if (JSON.stringify(actualIds) !== JSON.stringify([...file.claimIds].sort())) {
     violations.push(
       violation("file-claim-links", file.path, "declared claimIds do not match sourceClaims"),
@@ -1049,7 +1042,11 @@ export function validateShard(shard, assignment) {
     claims.some((claim) => !isObject(claim) || !assignedPathSet.has(claim.filePath))
   ) {
     violations.push(
-      violation("shard-claim-owner", shard.plan, "every shard claim must belong to an assigned file"),
+      violation(
+        "shard-claim-owner",
+        shard.plan,
+        "every shard claim must belong to an assigned file",
+      ),
     );
   }
 
