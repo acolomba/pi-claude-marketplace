@@ -317,10 +317,5 @@ export async function pendingReconcile(opts: PendingReconcileOptions): Promise<v
 
   // WR-06: the cascade arm carries the identical advisory lines the empty arm
   // carries, from the one render site that composes both.
-  notifyWithContext(opts.ctx, opts.pi, PENDING_CONTEXT, marketplaces, {
-    // The same conditional spread `pendingEmptyMessage` uses: under
-    // `exactOptionalPropertyTypes` an absent advisory list omits the key rather
-    // than assigning `undefined` to it.
-    ...(advisories !== undefined && { advisories }),
-  });
+  notifyWithContext(opts.ctx, opts.pi, PENDING_CONTEXT, marketplaces, { advisories });
 }

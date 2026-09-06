@@ -155,7 +155,14 @@ export function notifyWithContext<
   opts?: {
     readonly kind?: "cascade";
     readonly cardinality?: "single" | "plural";
-    readonly advisories?: readonly string[];
+    /**
+     * Explicitly `| undefined` where the two above are not: the only producer
+     * composes the list conditionally and hands over whatever it got, so the
+     * key would otherwise need a conditional spread at a call site under
+     * `exactOptionalPropertyTypes`. `kind` and `cardinality` stay strict --
+     * every site that passes one passes a concrete value.
+     */
+    readonly advisories?: readonly string[] | undefined;
   },
 ): void {
   // WR-01 seam: the rows are `Msg`-narrowed at the call site (a status the
