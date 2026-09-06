@@ -171,8 +171,28 @@ function routeIsValid(route) {
   return typeof route === "string" && (ROUTES.has(route) || /^Phase [2-9]\d*$/.test(route));
 }
 
-function terminalFinding(finding) {
-  return finding && finding.evidenceStatus !== "inconclusive";
+function resolveDuplicateTarget(finding, findings) {
+  const visited = new Set();
+  let cursor = finding;
+  while (cursor?.evidenceStatus === "duplicate") {
+    if (
+      typeof cursor.id !== "string" ||
+      visited.has(cursor.id) ||
+      typeof cursor.duplicateOf !== "string"
+    ) {
+      return undefined;
+    }
+
+    visited.add(cursor.id);
+    cursor = findings.get(cursor.duplicateOf);
+  }
+
+  return cursor;
+}
+
+function terminalFinding(finding, findings) {
+  const target = resolveDuplicateTarget(finding, findings);
+  return target !== undefined && target.evidenceStatus !== "inconclusive";
 }
 
 // Ledger validation intentionally centralizes cross-collection invariants so one
@@ -541,7 +561,7 @@ export function validateLedger(ledger, context = {}) {
       const prerequisites = (decision.premiseFindingIds ?? []).map((id) => findings.get(id));
       if (
         prerequisites.length === 0 ||
-        prerequisites.some((finding) => !terminalFinding(finding))
+        prerequisites.some((finding) => !terminalFinding(finding, findings))
       ) {
         violations.push(
           violation(
@@ -757,7 +777,7 @@ export function buildDecisionDossier(ledger, decisionId) {
 
   const findings = new Map(ledger.findings.map((finding) => [finding.id, finding]));
   const premises = (decision.premiseFindingIds ?? []).map((id) => findings.get(id));
-  if (premises.length === 0 || premises.some((finding) => !terminalFinding(finding))) {
+  if (premises.length === 0 || premises.some((finding) => !terminalFinding(finding, findings))) {
     throw new Error(`decision ${decisionId} has unresolved premises`);
   }
 
