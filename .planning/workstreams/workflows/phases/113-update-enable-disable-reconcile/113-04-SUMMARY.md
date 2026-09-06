@@ -422,3 +422,9 @@ No blockers.
 ---
 *Phase: 113-update-enable-disable-reconcile*
 *Completed: 2026-09-05*
+
+## Self-Check: PASSED
+
+- Files verified on disk: `shared/notify.ts`, `shared/notify-reasons.ts`, `orchestrators/plugin/shared.ts`, `orchestrators/types.ts`, the four stamp-site orchestrators, `docs/output-catalog.md`, the eleven test files, `REQUIREMENTS.md`, and this summary.
+- Commits verified in `git log`: `e9d79e31`, `2923eadc`, `e6647ebf`, `4124c9d3`.
+- `.planning/workstreams/workflows/STATE.md` and `ROADMAP.md`: not present in any of this plan's commits, per the orchestrator's ownership of those files. `REQUIREMENTS.md` was touched for the WLIF-04 row only, in the same commit as its evidence (`e6647ebf`).
