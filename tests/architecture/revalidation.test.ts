@@ -241,6 +241,14 @@ function runCli(projectRoot: string, args: readonly string[]): CliExecution {
     encoding: "utf8",
     env: environment,
   });
+  if (execution.error !== undefined) {
+    throw execution.error;
+  }
+
+  if (execution.signal !== null) {
+    throw new Error(`revalidation CLI terminated by signal ${execution.signal}`);
+  }
+
   return {
     status: execution.status,
     stdout: execution.stdout,
