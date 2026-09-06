@@ -280,6 +280,15 @@ async function destinationBytes(projectRoot: string): Promise<readonly [Buffer, 
   ]);
 }
 
+function publishJournalRecords(transactionId: string) {
+  return [ledgerPath, markdownPath].map((destination) => ({
+    destination,
+    staged: `${destination}.stage-${transactionId}`,
+    backup: `${destination}.backup-${transactionId}`,
+    hadDestination: true,
+  }));
+}
+
 function runInProcess(projectRoot: string, args: readonly string[]): CliExecution {
   const stdout: string[] = [];
   const stderr: string[] = [];
@@ -1630,20 +1639,14 @@ test("publish recovery rejects malformed journals and non-file transaction paths
     publishRevalidation(fixture.projectRoot, "{}\n", "markdown\n");
   }, /publish journal is malformed/);
   await rm(journalPath);
-  const stagedPath = `${ledgerPath}.stage-old`;
+  const records = publishJournalRecords("1-1-a");
+  const stagedPath = records[0]!.staged;
   await mkdir(path.join(fixture.projectRoot, stagedPath));
   await writeFile(
     journalPath,
     `${JSON.stringify({
       status: "published",
-      records: [
-        {
-          destination: ledgerPath,
-          staged: stagedPath,
-          backup: `${ledgerPath}.backup-old`,
-          hadDestination: true,
-        },
-      ],
+      records,
     })}\n`,
   );
   assert.throws(() => {
@@ -1651,42 +1654,53 @@ test("publish recovery rejects malformed journals and non-file transaction paths
   }, /write target must be a regular file/);
 });
 
+test("publish recovery rejects crafted journals without deleting unrelated files", async (t) => {
+  // arrange
+  const fixture = await createCliFixture(t);
+  const journalPath = path.join(fixture.projectRoot, phaseRoot, ".publish-journal.json");
+  const victimPath = "victim.txt";
+  await writeFile(path.join(fixture.projectRoot, victimPath), "keep me\n");
+  const records = publishJournalRecords("1-1-a");
+  records[0] = {
+    destination: victimPath,
+    staged: `${victimPath}.stage-1-1-a`,
+    backup: `${victimPath}.backup-1-1-a`,
+    hadDestination: false,
+  };
+  await writeFile(journalPath, `${JSON.stringify({ status: "staged", records })}\n`);
+
+  // act & assert
+  assert.throws(() => {
+    publishRevalidation(fixture.projectRoot, "{}\n", "markdown\n");
+  }, /publish journal is malformed/);
+  assert.strictEqual(await readFile(path.join(fixture.projectRoot, victimPath), "utf8"), "keep me\n");
+});
+
 test("publish recovery completes both staged rollback and published cleanup", async (t) => {
   // arrange
   const fixture = await createCliFixture(t);
   const journalPath = path.join(fixture.projectRoot, phaseRoot, ".publish-journal.json");
-  const staged = `${ledgerPath}.stage-old`;
+  const stagedRecords = publishJournalRecords("1-1-a");
+  stagedRecords[0]!.hadDestination = false;
+  const staged = stagedRecords[0]!.staged;
   await writeFile(path.join(fixture.projectRoot, staged), "staged\n");
   await writeFile(
     journalPath,
     `${JSON.stringify({
       status: "staged",
-      records: [
-        {
-          destination: ledgerPath,
-          staged,
-          backup: `${ledgerPath}.backup-old`,
-          hadDestination: false,
-        },
-      ],
+      records: stagedRecords,
     })}\n`,
   );
   publishRevalidation(fixture.projectRoot, "first\n", "first markdown\n");
 
-  const backup = `${ledgerPath}.backup-finished`;
+  const publishedRecords = publishJournalRecords("2-2-b");
+  const backup = publishedRecords[0]!.backup;
   await writeFile(path.join(fixture.projectRoot, backup), "old backup\n");
   await writeFile(
     journalPath,
     `${JSON.stringify({
       status: "published",
-      records: [
-        {
-          destination: ledgerPath,
-          staged: `${ledgerPath}.stage-finished`,
-          backup,
-          hadDestination: true,
-        },
-      ],
+      records: publishedRecords,
     })}\n`,
   );
 

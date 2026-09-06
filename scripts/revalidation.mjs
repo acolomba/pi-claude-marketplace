@@ -49,6 +49,15 @@ const FILE_PATH_PATTERN = /^[A-Za-z0-9._/-]+$/;
 const IDENTITY_PATTERN = /^[A-Za-z0-9._/][A-Za-z0-9._/#:-]*$/;
 const PLAN_PATTERN = /^\d{2}-\d{2}$/;
 const SCOPE_ACTIONS = new Set(["keep", "move-to-evidence", "narrow/split"]);
+const PUBLISH_JOURNAL_FIELDS = new Set(["status", "records"]);
+const PUBLISH_RECORD_FIELDS = new Set([
+  "destination",
+  "staged",
+  "backup",
+  "hadDestination",
+]);
+const PUBLISH_STATUSES = new Set(["staged", "published"]);
+const TRANSACTION_ID_PATTERN = /^\d+-\d+-[0-9a-f]+$/;
 
 function toPosix(candidate) {
   return candidate.split(path.sep).join("/");
@@ -1265,15 +1274,77 @@ function finishPublish(projectRoot, records) {
   }
 }
 
+function hasExactFields(value, expectedFields) {
+  return (
+    isObject(value) &&
+    Object.keys(value).length === expectedFields.size &&
+    Object.keys(value).every((field) => expectedFields.has(field))
+  );
+}
+
+function validatePublishJournal(journal, projectRoot, journalPath) {
+  const destinations = [LEDGER_PATH, MARKDOWN_PATH];
+  if (
+    !hasExactFields(journal, PUBLISH_JOURNAL_FIELDS) ||
+    !PUBLISH_STATUSES.has(journal.status) ||
+    !Array.isArray(journal.records) ||
+    journal.records.length !== destinations.length
+  ) {
+    throw new Error(`publish journal is malformed: ${journalPath}`);
+  }
+
+  const seenDestinations = new Set();
+  const transactionIds = new Set();
+  for (const record of journal.records) {
+    if (
+      !hasExactFields(record, PUBLISH_RECORD_FIELDS) ||
+      !destinations.includes(record.destination) ||
+      seenDestinations.has(record.destination) ||
+      typeof record.staged !== "string" ||
+      typeof record.backup !== "string" ||
+      typeof record.hadDestination !== "boolean"
+    ) {
+      throw new Error(`publish journal is malformed: ${journalPath}`);
+    }
+
+    const stagePrefix = `${record.destination}.stage-`;
+    if (!record.staged.startsWith(stagePrefix)) {
+      throw new Error(`publish journal is malformed: ${journalPath}`);
+    }
+
+    const transactionId = record.staged.slice(stagePrefix.length);
+    if (
+      !TRANSACTION_ID_PATTERN.test(transactionId) ||
+      record.backup !== `${record.destination}.backup-${transactionId}`
+    ) {
+      throw new Error(`publish journal is malformed: ${journalPath}`);
+    }
+
+    seenDestinations.add(record.destination);
+    transactionIds.add(transactionId);
+  }
+
+  if (
+    destinations.some((destination) => !seenDestinations.has(destination)) ||
+    transactionIds.size !== 1
+  ) {
+    throw new Error(`publish journal is malformed: ${journalPath}`);
+  }
+
+  for (const record of journal.records) {
+    for (const candidate of [record.destination, record.staged, record.backup]) {
+      assertSafeRelativePath(projectRoot, candidate, { mustExist: false });
+    }
+  }
+}
+
 function recoverPublish(projectRoot, journalPath) {
   if (lstatSync(journalPath, { throwIfNoEntry: false }) === undefined) {
     return;
   }
 
   const journal = JSON.parse(readFileSync(journalPath, "utf8"));
-  if (!isObject(journal) || !Array.isArray(journal.records)) {
-    throw new Error(`publish journal is malformed: ${journalPath}`);
-  }
+  validatePublishJournal(journal, projectRoot, journalPath);
 
   if (journal.status === "published") {
     finishPublish(projectRoot, journal.records);
