@@ -104,7 +104,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | WBRG-01..04, WPTH-01, WPTH-03..05 | Phase 111 | Complete (verified 9/9, 2026-09-05) |
 | WLIF-01, WLIF-03 | Phase 112 | Complete (verified 7/7, 2026-09-05) |
 | WLIF-02 | Phase 112 (type) -> Phase 113 (behavior) | Split - the archived milestone defines WLIF-02 as *update*, which the ROADMAP assigns to Phase 113. Phase 112 ships the widened ledger `phase` union; Phase 113 ships the update re-stage. Corrected 2026-09-05 from a row that booked all of WLIF-01..03 to Phase 112. |
-| WLIF-04..06, WFLW-04 | Phase 113 | Pending (re-land) |
+| WLIF-04 | Phase 113 -> Phase 112 | Complete - reinstall's replace semantics landed in `112-03` (`b6ed30e8`, `c97ca097`, `e785a865`), not in Phase 113. Corrected 2026-09-05 from a row that booked WLIF-04..06 together to Phase 113, and only after the evidence passed: `tests/orchestrators/plugin/reinstall.test.ts#WLIF-04: a reinstall REPLACES a workflow envelope at its recorded target` (old bytes gone, new bytes at the same target, record rewritten, adjacent plugin's envelope byte-unchanged) plus its sibling `#WLIF-04: a workflow the new version drops leaves neither an envelope nor a record entry`. |
+| WLIF-05, WLIF-06, WFLW-04 | Phase 113 | Pending (re-land) |
 | WDEP-01..04, WDOC-01..03 | Phase 114 | Pending (re-land) |
 | WGATE-01 | Phase 115 | Pending |
 | WGATE-02 | Phase 115 | Pending |

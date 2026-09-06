@@ -7978,7 +7978,7 @@ async function seedForeignEnvelope(savedDir: string): Promise<{
   return { path: foreignPath, bytes };
 }
 
-test("WLIF-01: a reinstall re-materializes the envelope over the recorded one", async () => {
+test("WLIF-04: a reinstall REPLACES a workflow envelope at its recorded target", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-workflows-replace-"));
     try {
@@ -7987,6 +7987,12 @@ test("WLIF-01: a reinstall re-materializes the envelope over the recorded one", 
       // distinguishable from the ones already at the target. The old record
       // naming the envelope is what puts the commit on its displace path
       // rather than into the occupancy refusal.
+      //
+      // WLIF-04 is "reinstall replaces workflow artifacts", and REPLACES is
+      // what separates this case from a first-write: the same target path holds
+      // different bytes afterwards. The pre-reinstall bytes are read here so
+      // "the old content is gone" is an assertion rather than an inference from
+      // the new content matching.
       const locations = locationsFor("project", cwd);
       const seeded = await seedMarketplace({
         cwd,
@@ -7996,6 +8002,7 @@ test("WLIF-01: a reinstall re-materializes the envelope over the recorded one", 
       });
       const envelopePath = path.join(locations.workflowsSavedDir, "hello:greet.json");
       assert.equal(await pathExists(envelopePath), true, "the install must place the envelope");
+      const beforeBytes = await readFile(envelopePath, "utf8");
       const foreign = await seedForeignEnvelope(locations.workflowsSavedDir);
       await writePluginTree(seeded.pluginRoot, "hello", {
         skill: "new skill",
@@ -8013,6 +8020,11 @@ test("WLIF-01: a reinstall re-materializes the envelope over the recorded one", 
 
       // assert
       assert.equal(outcome.partition, "reinstalled");
+      assert.notEqual(
+        await readFile(envelopePath, "utf8"),
+        beforeBytes,
+        "WLIF-04: the pre-reinstall envelope content is gone from the target",
+      );
       assert.deepStrictEqual(JSON.parse(await readFile(envelopePath, "utf8")), {
         name: "hello:greet",
         description: "greets again",
@@ -8025,6 +8037,10 @@ test("WLIF-01: a reinstall re-materializes the envelope over the recorded one", 
       // The commit's staging root is removed on success, so nothing is left
       // behind under the staging directory.
       assert.deepStrictEqual(await entriesOf(locations.workflowsStagingDir), []);
+      // WLIF-04: "replaces" is only meaningful against a boundary saying which
+      // artifacts it does NOT touch. The saved directory is shared, so an
+      // adjacent plugin's envelope sitting beside the replacement target has to
+      // come through byte-unchanged.
       assert.equal(await readFile(foreign.path, "utf8"), foreign.bytes);
     } finally {
       await rm(cwd, { force: true, recursive: true });
@@ -8331,7 +8347,7 @@ test("WLIF-01: the record names both envelopes a two-workflow reinstall wrote", 
   });
 });
 
-test("WLIF-01: a workflow the new version drops leaves neither an envelope nor a record entry", async () => {
+test("WLIF-04: a workflow the new version drops leaves neither an envelope nor a record entry", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-workflows-dropped-"));
     try {
