@@ -1034,6 +1034,47 @@ test("RVAL-04 scope-impact rejects a duplicate stable requirement definition", a
   });
 });
 
+test("RVAL-04 scope-impact rejects a coordinated stable requirement rename", async (t) => {
+  // arrange
+  const projectRoot = await createScopeImpactFixture(t);
+  const ledgerFile = path.join(projectRoot, ledgerPath);
+  const requirementsFile = path.join(projectRoot, ".planning/REQUIREMENTS.md");
+  const roadmapFile = path.join(projectRoot, ".planning/ROADMAP.md");
+  const ledger = JSON.parse(await readFile(ledgerFile, "utf8")) as Ledger;
+  const requirement = ledger.scopeChanges.find((change) => change.id === "SCOPE-REQ-AUTH-01")!;
+  requirement.id = "SCOPE-REQ-EVIL-99";
+  requirement.requirementId = "EVIL-99";
+  requirement.beforeAnchor = requirement.beforeAnchor!.replaceAll("AUTH-01", "EVIL-99");
+  requirement.afterAnchor = requirement.afterAnchor!.replaceAll("AUTH-01", "EVIL-99");
+  await writeFile(ledgerFile, `${JSON.stringify(ledger, null, 2)}\n`);
+  await writeFile(
+    requirementsFile,
+    (await readFile(requirementsFile, "utf8"))
+      .replace("- [ ] **AUTH-01**", "- [ ] **EVIL-99**")
+      .replace("| AUTH-01 |", "| EVIL-99 |"),
+  );
+  await writeFile(
+    roadmapFile,
+    (await readFile(roadmapFile, "utf8")).replace(
+      "**Requirements:** AUTH-01, TREF-01, TREF-02, TREF-03",
+      "**Requirements:** EVIL-99, TREF-01, TREF-02, TREF-03",
+    ),
+  );
+
+  // act
+  const execution = runCli(projectRoot, ["scope-impact", "--check"]);
+
+  // assert
+  assert.deepStrictEqual(execution, {
+    status: 1,
+    stdout: "",
+    stderr:
+      "unexpected-requirement-definition: EVIL-99: scope row is absent\n" +
+      "unexpected-requirement-route: EVIL-99: scope row is absent\n" +
+      "unexpected-scope-requirement: EVIL-99: requirement is absent from sealed stable-ID set\n",
+  });
+});
+
 test("RVAL-04 scope-impact rejects changed requirement clause text", async (t) => {
   // arrange
   const projectRoot = await createScopeImpactFixture(t);

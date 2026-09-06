@@ -55,6 +55,41 @@ const SCOPE_ACTIONS = new Set(["keep", "move-to-evidence", "narrow/split"]);
 const ACTIVE_REQUIREMENT_STATUSES = new Set(["Complete", "Pending"]);
 const ACTIVE_REQUIREMENT_ROUTE_PATTERN = /^Phase [1-9]$/;
 const EVIDENCE_REQUIREMENT_ROUTE_PATTERN = /^Evidence\/history \(formerly Phase [1-9]\)$/;
+const SEALED_REQUIREMENT_SIGNATURES = Object.freeze({
+  "AUTH-01": "sha256:c3360ab19e03e1ac631be057b6719c6a0ead7133d43dfddb6bdf986e7f9dc705",
+  "CLOSE-01": "sha256:5038d2654b1b586f426a829a351f73bf3106521d69ffa8d0f6b4b67c950f5fe8",
+  "CLOSE-02": "sha256:13b89fde745881211c3477c21eaef7a80f506141c6733589aa1d78fb806cb888",
+  "GGAT-01": "sha256:2145b59e3d6234e5ff6d89728b856ab70aaa7d0621a0d774db561d84ee85121c",
+  "GGAT-02": "sha256:700ee813841631827c9d44f695b073d508871d06a66f2b10bbecc61dd36bafc4",
+  "GGAT-03": "sha256:43f734b029cf17d4f78b4484da11f437612191d0ea4e243219f9dfc1de2437d2",
+  "GGAT-04": "sha256:b33d3909f4079ff3d89c17563e065980ac2a40f171d0c949e31636adcab31bb9",
+  "PDEF-01": "sha256:54da66a74fed58b6ef2ab7ab87ac65d3064ab6c83751cab105512205622b1d71",
+  "PDEF-02": "sha256:12933b475a3678800537e465e5ed272b7d3b4da9e848d7820ede21cd209176b6",
+  "PDEF-03": "sha256:cfce5fd5e06815cbfce7d45c3c53178653e6d285f4b182a2b2dfeaff620e889c",
+  "PDEF-04": "sha256:1cbf87f41a083034495844496415c90f02107d409ab7aed8982bb963a14c2732",
+  "PDEF-05": "sha256:9aeff0a015e9c3079fde2cd852475ce1620daa2a4cb7b026c7f30f3171fb5646",
+  "PDEF-06": "sha256:dc05fce3ad380a2d7a030f462515118e8aba38e0cc4e38df6cf2476e7dfd06fe",
+  "PDEF-07": "sha256:a9d783b02747093477ffa2aad81ea7af05e5a30bbc029cd01d86a7fdb8cac4e3",
+  "PDEF-08": "sha256:6d989ac4e50e112f2279de9e3d9f50b28a9dbb11bfc18beb89f5cdd5ef0854d1",
+  "RCOV-01": "sha256:a12a5b4343156b81943a818a81f02cf07dc8b6e39ca785137762702789dbe1fd",
+  "RCOV-02": "sha256:31b8511e6d7c060bffd047fef07e0b536ef6f61e7df81f8ff04653231af6a40d",
+  "RCOV-03": "sha256:72b3e7c32953e06484230e4ea157c886846ed76ec612ab4047a670d7f34262c9",
+  "RCOV-04": "sha256:f52861e75e225ee7629e13fc24a9e4b490535a7baac84ea9e4785946c9c0fd8b",
+  "RVAL-01": "sha256:de33e573383131c1cbb861a28b974d4509bd4f07e28fa9a83037433734e9015f",
+  "RVAL-02": "sha256:d70c409ab42d0995cdda6e5d03042ff7eb2feecb4f9e33b9b58330860ff740c2",
+  "RVAL-03": "sha256:3c72198ba0b112c023814679f7ed451f62dd7c2c671f4d1c465c68b4dc60e1db",
+  "RVAL-04": "sha256:2a48c26852dea528c2cd3c3f9843dfc10330fc6edd1cd741a005700c9a720c8a",
+  "TREF-01": "sha256:dbe9d6f4bdca2a3808f8e0edfd480854671aa02854a983016dae6705aad8b8ca",
+  "TREF-02": "sha256:56a7478cc98c976f0bb87038e4bdaa436c0a91165e816375ce9468c318208d7b",
+  "TREF-03": "sha256:cdbcf6327509c974862996a6d8e82fbddc26833bd91fae99d400f5c63635f35a",
+  "TREF-04": "sha256:d92c489e1cc277a5cb40c6f148efd6860a174c4cfcbd7131a95fe1290f7dc234",
+  "TREF-05": "sha256:f0ca943a02f3b58806190b1b409eb58890026b53052017b49faef34ff34dc58d",
+  "TREF-06": "sha256:8ac43a9ce3c26e72a4671aec4222ccb770e01932155d53245057eddf3a399f0c",
+  "TREF-07": "sha256:ef72747f3e8e459a5dc67e0e1505c0ef3a8afd20884d0cf8ed61ee01e16ce0fa",
+  "TREF-08": "sha256:102477e57597cff73f2f1c0c54fdff17ac06fa8fbed3377b47503638bacb6cdd",
+  "TREF-09": "sha256:5d9c55f187854aade7e83229619b3f788b2a3809b3695bb249890389ecb52f94",
+});
+const SEALED_REQUIREMENT_IDS = new Set(Object.keys(SEALED_REQUIREMENT_SIGNATURES));
 const PUBLISH_JOURNAL_FIELDS = new Set(["status", "records"]);
 const PUBLISH_RECORD_FIELDS = new Set(["destination", "staged", "backup", "hadDestination"]);
 const PUBLISH_STATUSES = new Set(["staged", "published"]);
@@ -2207,6 +2242,11 @@ function validateRequirementDisposition(requirementId, action, disposition, viol
 }
 
 function validateRequirementClause(requirements, requirementId, change, violations) {
+  const sealedSignature = SEALED_REQUIREMENT_SIGNATURES[requirementId];
+  if (sealedSignature === undefined) {
+    return;
+  }
+
   const clause =
     change.action === "move-to-evidence"
       ? requirements.clauses.history.get(requirementId)
@@ -2219,7 +2259,20 @@ function validateRequirementClause(requirements, requirementId, change, violatio
         "requirement clause is blank or absent",
       ),
     );
-  } else if (change.requirementSignature !== signRequirementClause(clause)) {
+    return;
+  }
+
+  if (change.requirementSignature !== sealedSignature) {
+    violations.push(
+      violation(
+        "requirement-signature",
+        requirementId,
+        "scope signature differs from sealed requirement contract",
+      ),
+    );
+  }
+
+  if (signRequirementClause(clause) !== sealedSignature) {
     violations.push(
       violation(
         "requirement-clause",
@@ -2260,6 +2313,10 @@ function requirementRows(rows) {
 }
 
 function validateRequiredRequirementRow(requirements, requirementId, change, violations) {
+  if (change === undefined) {
+    return;
+  }
+
   const hasDefinition = requirements.definitions.has(requirementId);
   const hasHistory = requirements.history.has(requirementId);
   const expectsHistory = change.action === "move-to-evidence";
@@ -2303,10 +2360,16 @@ function validateRequiredRequirementRows(requirements, rows, expectedIds, violat
   }
 }
 
-function validateUnexpectedRequirementIds(actualIds, expectedIds, code, violations) {
+function validateUnexpectedRequirementIds(
+  actualIds,
+  expectedIds,
+  code,
+  violations,
+  message = "scope row is absent",
+) {
   for (const requirementId of [...actualIds].sort()) {
     if (!expectedIds.has(requirementId)) {
-      violations.push(violation(code, requirementId, "scope row is absent"));
+      violations.push(violation(code, requirementId, message));
     }
   }
 }
@@ -2322,19 +2385,26 @@ function validateRequirementSets(requirements, rows, violations) {
     );
   }
 
-  const expectedIds = new Set([...rows.keys()].map((id) => id.slice("SCOPE-REQ-".length)));
-  validateRequiredRequirementRows(requirements, rows, expectedIds, violations);
+  const actualIds = new Set([...rows.keys()].map((id) => id.slice("SCOPE-REQ-".length)));
+  validateUnexpectedRequirementIds(
+    actualIds,
+    SEALED_REQUIREMENT_IDS,
+    "unexpected-scope-requirement",
+    violations,
+    "requirement is absent from sealed stable-ID set",
+  );
+  validateRequiredRequirementRows(requirements, rows, SEALED_REQUIREMENT_IDS, violations);
 
   const parsedIds = new Set([...requirements.definitions.keys(), ...requirements.history.keys()]);
   validateUnexpectedRequirementIds(
     parsedIds,
-    expectedIds,
+    SEALED_REQUIREMENT_IDS,
     "unexpected-requirement-definition",
     violations,
   );
   validateUnexpectedRequirementIds(
     requirements.dispositions.keys(),
-    expectedIds,
+    SEALED_REQUIREMENT_IDS,
     "unexpected-requirement-route",
     violations,
   );
@@ -2349,6 +2419,10 @@ function validateRequirementContracts(requirements, allRows, validRowIds, locato
     }
 
     const requirementId = id.slice("SCOPE-REQ-".length);
+    if (!SEALED_REQUIREMENT_IDS.has(requirementId)) {
+      continue;
+    }
+
     validateRequirementChange(requirements, requirementId, change, locators, violations);
   }
 }
