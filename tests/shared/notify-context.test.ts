@@ -179,7 +179,10 @@ test("a single cascade dispatches its row without a plural tally", (t) => {
   ];
 
   // act
-  notifyWithContext(harness.ctx, harness.pi, controlled.context, rows, "cascade", "single");
+  notifyWithContext(harness.ctx, harness.pi, controlled.context, rows, {
+    kind: "cascade",
+    cardinality: "single",
+  });
 
   // assert
   assert.deepStrictEqual(controlled.calls, [
@@ -220,7 +223,9 @@ test("plural marketplaces dispatch equal-status rows separately in input order",
   ];
 
   // act
-  notifyWithContext(harness.ctx, harness.pi, controlled.context, rows, undefined, "plural");
+  notifyWithContext(harness.ctx, harness.pi, controlled.context, rows, {
+    cardinality: "plural",
+  });
 
   // assert
   assert.deepStrictEqual(controlled.calls, [

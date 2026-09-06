@@ -131,11 +131,18 @@ export type MarketplaceRows<Msg> = WithPlugins<MarketplaceNotificationMessage, M
  * `/reload to pick up changes` trailer. `Messaging.label` feeds the trailing
  * tally on plural cascades.
  *
- * RLD-05 / D-07: `kind` defaults to the plain `"cascade"` arm. The
+ * RLD-05 / D-07: `opts.kind` defaults to the plain `"cascade"` arm. The
  * `/claude:plugin disable` command does not thread a distinguishing kind --
  * its fresh `(disabled)` row stamps `needsReload: true` directly, so the
  * `/reload to pick up changes` trailer fires via the RLD-02 OR-reduce of the
  * per-row stamps, not via a cascade-kind straddle.
+ *
+ * WR-06: the three optional envelope fields ride ONE `opts` bag rather than
+ * three trailing positionals. `kind` and `cardinality` are both optional
+ * string unions, so as positionals nothing distinguished their slots and a
+ * transposition at a call site would have type-checked; the bag names each
+ * one at every site that passes it. CONVENTIONS.md asks for the same shape for
+ * anything past two optional fields.
  */
 export function notifyWithContext<
   Status extends string,
@@ -145,9 +152,11 @@ export function notifyWithContext<
   pi: ExtensionAPI,
   context: CommandContext<Status, Msg>,
   rows: readonly MarketplaceRows<Msg>[],
-  kind?: "cascade",
-  cardinality?: "single" | "plural",
-  advisories?: readonly string[],
+  opts?: {
+    readonly kind?: "cascade";
+    readonly cardinality?: "single" | "plural";
+    readonly advisories?: readonly string[];
+  },
 ): void {
   // WR-01 seam: the rows are `Msg`-narrowed at the call site (a status the
   // render map omits is a compile error there); the cascade envelope consumes
@@ -165,17 +174,15 @@ export function notifyWithContext<
   // `<Operation>` prefix. A call site that omits `cardinality` (single-target
   // ops) gets no tally. These fields are read only by the tally composer in
   // `emitWithSummary` -- they never affect the per-row body or severity.
-  // WR-06: free-text advisory body lines the command composed itself. Threaded
-  // as a trailing optional in the same style as the two above, so every existing
-  // call site is untouched and its bytes are unchanged. The renderer folds them
-  // in after the body and before the tally; a command that omits them renders
-  // exactly what it rendered before.
+  // WR-06: free-text advisory body lines the command composed itself. The
+  // renderer folds them in after the body and before the tally; a command that
+  // omits them renders exactly what it rendered without them.
   const message: CascadeNotificationMessage = {
-    ...(kind === undefined ? {} : { kind }),
+    ...(opts?.kind === undefined ? {} : { kind: opts.kind }),
     marketplaces,
     label: context.Messaging.label,
-    ...(cardinality !== undefined && { cardinality }),
-    ...(advisories !== undefined && { advisories }),
+    ...(opts?.cardinality !== undefined && { cardinality: opts.cardinality }),
+    ...(opts?.advisories !== undefined && { advisories: opts.advisories }),
   };
 
   emitContextCascade(ctx, pi, message, (p, probe, mpScope) =>

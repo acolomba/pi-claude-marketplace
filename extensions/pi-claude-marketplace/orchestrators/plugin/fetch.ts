@@ -191,7 +191,7 @@ export async function fetchPlugins(opts: FetchPluginsOptions): Promise<void> {
   );
   const marketplaces: Plural<MarketplaceRows<FetchMsg>> = blocks;
 
-  notifyWithContext(ctx, pi, FETCH_CONTEXT, marketplaces, "cascade", cardinality);
+  notifyWithContext(ctx, pi, FETCH_CONTEXT, marketplaces, { kind: "cascade", cardinality });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

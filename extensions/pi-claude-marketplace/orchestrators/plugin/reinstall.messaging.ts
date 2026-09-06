@@ -196,7 +196,7 @@ export function renderReinstallPartitionAndNotify(
   // reinstall omits it (the row embeds the outcome). The structural
   // single-vs-plural signal is the invocation FORM, threaded from
   // `reinstallPlugins`.
-  notifyWithContext(ctx, pi, REINSTALL_CONTEXT, marketplaces, undefined, cardinality);
+  notifyWithContext(ctx, pi, REINSTALL_CONTEXT, marketplaces, { cardinality });
 }
 
 /**
