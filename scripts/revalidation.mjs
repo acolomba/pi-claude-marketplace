@@ -1841,6 +1841,81 @@ function parseRoadmapContract(markdown, violations) {
   return phases;
 }
 
+function validateRequirementChange(requirements, requirementId, change, violations) {
+  const id = `SCOPE-REQ-${requirementId}`;
+  const disposition = requirements.dispositions.get(requirementId);
+  const section = requirements.definitions.get(requirementId);
+  const expectedSection = change.action === "move-to-evidence" ? "Evidence and History" : section;
+  if (section === undefined && change.action !== "move-to-evidence") {
+    violations.push(violation("missing-requirement-definition", requirementId, "active definition is absent"));
+  }
+
+  if (change.action === "move-to-evidence" && disposition.status !== "Evidence only") {
+    violations.push(violation("requirement-disposition", requirementId, "moved requirement must be evidence only"));
+  }
+
+  if (change.action !== "move-to-evidence" && disposition.status === "Evidence only") {
+    violations.push(violation("requirement-disposition", requirementId, "active requirement cannot be evidence only"));
+  }
+
+  const afterParts = typeof change.afterAnchor === "string" ? change.afterAnchor.split(" :: ") : [];
+  if (
+    afterParts.length !== 3 ||
+    afterParts[0] !== REQUIREMENTS_PATH ||
+    afterParts[1] !== expectedSection ||
+    !afterParts[2].startsWith(`${requirementId} —`)
+  ) {
+    violations.push(violation("scope-after-anchor", id, "afterAnchor does not resolve to requirement"));
+  }
+}
+
+function validateRequirementContracts(requirements, rows, violations) {
+  for (const requirementId of requirements.dispositions.keys()) {
+    const id = `SCOPE-REQ-${requirementId}`;
+    const change = rows.get(id);
+    if (change === undefined) {
+      violations.push(violation("missing-scope-requirement", id, "scope row is absent"));
+      continue;
+    }
+
+    validateRequirementChange(requirements, requirementId, change, violations);
+  }
+}
+
+function validatePhaseContracts(requirements, phases, rows, violations) {
+  for (let number = 2; number <= 9; number += 1) {
+    const phaseId = `PHASE-${String(number).padStart(2, "0")}`;
+    const change = rows.get(`SCOPE-ROUTE-${phaseId}`);
+    const phase = phases.get(phaseId);
+    if (change === undefined) {
+      violations.push(violation("missing-scope-route", phaseId, "scope route is absent"));
+      continue;
+    }
+
+    if (phase === undefined) {
+      violations.push(violation("missing-phase-route", phaseId, "roadmap phase is absent"));
+      continue;
+    }
+
+    const expectedRequirements = [...requirements.dispositions.entries()]
+      .filter(([, disposition]) => disposition.route === `Phase ${number}`)
+      .map(([id]) => id)
+      .sort();
+    if (JSON.stringify([...phase.requirements].sort()) !== JSON.stringify(expectedRequirements)) {
+      violations.push(violation("phase-requirements", phaseId, "roadmap membership differs from traceability"));
+    }
+
+    const afterParts = typeof change.afterAnchor === "string" ? change.afterAnchor.split(" :: ") : [];
+    if (
+      afterParts.length !== 3 ||
+      afterParts[0] !== ROADMAP_PATH ||
+      afterParts[1] !== `${phaseId} / Phase ${number} ${phase.title}`
+    ) {
+      violations.push(violation("scope-after-anchor", change.id, "afterAnchor does not resolve to phase"));
+    }
+  }
+}
+
 function validatePlanningContracts(ledger, requirementsMarkdown, roadmapMarkdown) {
   const violations = [];
   const requirements = parseRequirementsContract(requirementsMarkdown, violations);
@@ -1854,71 +1929,13 @@ function validatePlanningContracts(ledger, requirementsMarkdown, roadmapMarkdown
     }
   }
 
-  const expectedRequirementIds = new Set(requirements.dispositions.keys());
-  for (const requirementId of expectedRequirementIds) {
-    const id = `SCOPE-REQ-${requirementId}`;
-    const change = rows.get(id);
-    if (change === undefined) {
-      violations.push(violation("missing-scope-requirement", id, "scope row is absent"));
-      continue;
-    }
-
-    const disposition = requirements.dispositions.get(requirementId);
-    const section = requirements.definitions.get(requirementId);
-    const expectedSection = change.action === "move-to-evidence" ? "Evidence and History" : section;
-    if (section === undefined && change.action !== "move-to-evidence") {
-      violations.push(violation("missing-requirement-definition", requirementId, "active definition is absent"));
-    }
-    if (change.action === "move-to-evidence" && disposition.status !== "Evidence only") {
-      violations.push(violation("requirement-disposition", requirementId, "moved requirement must be evidence only"));
-    }
-    if (change.action !== "move-to-evidence" && disposition.status === "Evidence only") {
-      violations.push(violation("requirement-disposition", requirementId, "active requirement cannot be evidence only"));
-    }
-    const afterParts = typeof change.afterAnchor === "string" ? change.afterAnchor.split(" :: ") : [];
-    if (
-      afterParts.length !== 3 ||
-      afterParts[0] !== REQUIREMENTS_PATH ||
-      afterParts[1] !== expectedSection ||
-      !afterParts[2].startsWith(`${requirementId} —`)
-    ) {
-      violations.push(violation("scope-after-anchor", id, "afterAnchor does not resolve to requirement"));
-    }
-  }
-
-  for (let number = 2; number <= 9; number += 1) {
-    const phaseId = `PHASE-${String(number).padStart(2, "0")}`;
-    const change = rows.get(`SCOPE-ROUTE-${phaseId}`);
-    const phase = phases.get(phaseId);
-    if (change === undefined) {
-      violations.push(violation("missing-scope-route", phaseId, "scope route is absent"));
-      continue;
-    }
-    if (phase === undefined) {
-      violations.push(violation("missing-phase-route", phaseId, "roadmap phase is absent"));
-      continue;
-    }
-
-    const expectedRequirements = [...requirements.dispositions.entries()]
-      .filter(([, disposition]) => disposition.route === `Phase ${number}`)
-      .map(([id]) => id)
-      .sort();
-    if (JSON.stringify([...phase.requirements].sort()) !== JSON.stringify(expectedRequirements)) {
-      violations.push(violation("phase-requirements", phaseId, "roadmap membership differs from traceability"));
-    }
-    const afterParts = typeof change.afterAnchor === "string" ? change.afterAnchor.split(" :: ") : [];
-    if (
-      afterParts.length !== 3 ||
-      afterParts[0] !== ROADMAP_PATH ||
-      afterParts[1] !== `${phaseId} / Phase ${number} ${phase.title}`
-    ) {
-      violations.push(violation("scope-after-anchor", change.id, "afterAnchor does not resolve to phase"));
-    }
-  }
+  validateRequirementContracts(requirements, rows, violations);
+  validatePhaseContracts(requirements, phases, rows, violations);
 
   if (ledger.scopeChanges.length !== 40 || rows.size !== 40) {
     violations.push(violation("scope-contract-count", "scopeChanges", "expected exactly 40 unique rows"));
   }
+
   return violations.sort((left, right) =>
     `${left.code}\0${left.target}`.localeCompare(`${right.code}\0${right.target}`),
   );
@@ -1929,6 +1946,7 @@ function readPlanningContract(projectRoot, candidate) {
   if (!lstatSync(absolutePath).isFile()) {
     throw new Error(`path must be a regular file: ${candidate}`);
   }
+
   return readFileSync(absolutePath, "utf8");
 }
 
@@ -1941,6 +1959,7 @@ function handleScopeImpact({ projectRoot, ledger, options, runtime }) {
     if (violations.length === 0) {
       runtime.stdout.write(`Scope impact valid: ${ledger.scopeChanges.length} records.\n`);
     }
+
     return;
   }
 

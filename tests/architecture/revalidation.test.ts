@@ -289,6 +289,7 @@ async function createScopeImpactFixture(t: TestContext): Promise<string> {
       await readFile(path.join(canonicalRoot, candidate), "utf8"),
     );
   }
+
   return projectRoot;
 }
 
