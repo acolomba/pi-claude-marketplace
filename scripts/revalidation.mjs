@@ -180,7 +180,16 @@ function validateReference(reference, projectRoot, target, violations) {
 }
 
 function routeIsValid(route) {
-  return typeof route === "string" && (ROUTES.has(route) || /^Phase [2-9]\d*$/.test(route));
+  if (ROUTES.has(route)) {
+    return true;
+  }
+
+  if (typeof route !== "string") {
+    return false;
+  }
+
+  const match = /^Phase (\d+)$/.exec(route);
+  return match !== null && Number(match[1]) >= 2;
 }
 
 function resolveDuplicateTarget(finding, findings) {
