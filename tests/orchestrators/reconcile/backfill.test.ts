@@ -12,7 +12,7 @@
 // with no promised call: an unpromised `notify` or `getAllTools` call throws.
 
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, test } from "node:test";
@@ -134,6 +134,8 @@ interface PluginTree {
   readonly lsp?: boolean;
   /** hooks.json whose kept handler carries a rewake field without `asyncRewake: true`. */
   readonly orphanRewakeHooks?: boolean;
+  /** A runnable workflow script, so a re-materialize would place an envelope. */
+  readonly workflow?: boolean;
 }
 
 async function writePluginTree(
@@ -162,6 +164,18 @@ async function writePluginTree(
     const commandDir = path.join(pluginRoot, "commands");
     await mkdir(commandDir, { recursive: true });
     await writeFile(path.join(commandDir, "deploy.md"), "# deploy\n\nbody\n");
+  }
+
+  if (tree.workflow === true) {
+    const workflowsDir = path.join(pluginRoot, "workflows");
+    await mkdir(workflowsDir, { recursive: true });
+    // A NAMED `meta` export: a default-export body classifies as skipped and
+    // stages nothing, so a case relying on it would prove nothing about
+    // whether a re-materialize ran.
+    await writeFile(
+      path.join(workflowsDir, "greet.js"),
+      'export const meta = { name: "greet", description: "greets" };\n',
+    );
   }
 
   if (tree.lsp === true) {
@@ -293,6 +307,20 @@ function readResultFor(state: ExtensionState, stateExisted: boolean): ScopeReadR
 }
 
 /** A seeded scope that has been read but not re-materialized. */
+/**
+ * Envelope file names under the host engine's saved workflows directory, or
+ * `[]` when the directory was never created. That directory lives under the
+ * hermetic HOME rather than under the scope root, so the scope-tree inventory
+ * the other cases assert cannot see it.
+ */
+async function savedWorkflowEntries(locations: ScopedLocations): Promise<string[]> {
+  try {
+    return (await readdir(locations.workflowsSavedDir)).sort();
+  } catch {
+    return [];
+  }
+}
+
 function seededScopeTree(): readonly string[] {
   return ["pi-claude-marketplace/", "pi-claude-marketplace/state.json"];
 }
@@ -1133,6 +1161,56 @@ describe("scanForceInstalledBackfills", () => {
     // assert
     assert.strictEqual(anyFailure, false);
     assert.deepStrictEqual(outcomes, []);
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), seeded);
+    assert.deepStrictEqual(await retryTree(locations.scopeRoot), seededScopeTree());
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("RECON-05: places no workflow envelope for a record whose supported set did not grow", async (t) => {
+    // arrange -- the record already claims `workflows`, and the source still
+    // ships exactly the one script it claimed, so the set did not grow. This is
+    // the SECOND of the two structures that keep a reload from rewriting
+    // executable code: the first is an empty plan bucket, this is the gate the
+    // backfill applies to the records the plan never reaches.
+    const { cwd, locations } = await createHermeticProjectScope(t, "workflows-no-growth");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      hello: { skill: "clean", workflow: true },
+    });
+    const seeded: ExtensionState = {
+      schemaVersion: 2,
+      lastReconciledExtensionVersion: STALE_STAMP,
+      marketplaces: {
+        mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
+          hello: pluginRecord({
+            pluginRoot: path.join(marketplaceRoot, "plugins", "hello"),
+            installable: false,
+            supported: ["skills", "workflows"],
+            unsupported: ["themes"],
+          }),
+        }),
+      },
+    };
+    await seedState(locations, seeded);
+    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+    const outcomes: PerEntryOutcome[] = [];
+
+    // act -- the gate is deliberately left OPEN (a stale stamp), so the scan
+    // does run and the skip is the growth test's doing, not the version test's.
+    const anyFailure = await scanForceInstalledBackfills(
+      backfillOptions(ctx, pi, cwd, gitOps),
+      "project",
+      seeded,
+      outcomes,
+    );
+
+    // assert -- the engine's saved directory is the one place a workflow
+    // re-materialize would show, and it sits OUTSIDE the scope root that the
+    // sibling cases' tree inventory covers, so it is asserted on its own.
+    assert.strictEqual(anyFailure, false);
+    assert.deepStrictEqual(outcomes, []);
+    assert.deepStrictEqual(await savedWorkflowEntries(locations), []);
     assert.deepStrictEqual(await loadState(locations.extensionRoot), seeded);
     assert.deepStrictEqual(await retryTree(locations.scopeRoot), seededScopeTree());
     assert.deepStrictEqual(clonedUrls(), []);

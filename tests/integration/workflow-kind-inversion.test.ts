@@ -1,13 +1,15 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
 import { pathSource } from "../../extensions/pi-claude-marketplace/domain/source.ts";
 import { installPlugin } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/install.ts";
+import { applyReconcile } from "../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { loadState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { EXTENSION_VERSION } from "../../extensions/pi-claude-marketplace/shared/extension-version.ts";
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
@@ -203,6 +205,158 @@ test("WINV-02 / WBRG-01: a workflow-bearing plugin installs with no partial flag
       // WLIF-01: the record names exactly the envelope the install placed. It
       // is the only inventory of it that survives the process.
       assert.deepStrictEqual(record.resources.workflows, ["hello:greet"]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// RECON-05: a load-time reconcile does not re-materialize workflow envelopes
+//
+// Two independent structures already give this guarantee -- a declared,
+// enabled, already-recorded plugin lands in no plan bucket, and the load-time
+// backfill returns before scanning once the extension version has been stamped.
+// The cases below pin the OBSERVABLE consequence of both, so a later change to
+// either cannot quietly start rewriting executable code on every load.
+//
+// Modification times are read back off the real files. They are backdated
+// first so that "no write happened" and "a write happened" are distinguishable
+// without depending on the timer resolution of two operations that can land in
+// the same millisecond -- the negative control at the bottom is what proves the
+// harness can still see a write after the backdating.
+// ──────────────────────────────────────────────────────────────────────────
+
+/** A time far enough in the past that any real write moves it. */
+const BACKDATED = new Date("2020-01-01T00:00:00.000Z");
+
+async function backdate(...paths: readonly string[]): Promise<void> {
+  for (const target of paths) {
+    await utimes(target, BACKDATED, BACKDATED);
+  }
+}
+
+async function mtimeMsOf(target: string): Promise<number> {
+  return (await stat(target)).mtimeMs;
+}
+
+test("RECON-05: two consecutive reconciles leave a workflow envelope untouched", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "workflow-reconcile-idem-"));
+    try {
+      // arrange
+      await seedWorkflowPlugin({ cwd, marketplaceRoot: path.join(cwd, "mp-src") });
+      const install = makeCtx();
+      await installPlugin({
+        ctx: install.ctx,
+        pi: install.pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+      const locations = locationsFor("project", cwd);
+      const envelopePath = path.join(locations.workflowsSavedDir, "hello:greet.json");
+      await stat(envelopePath);
+      await backdate(envelopePath, locations.stateJsonPath);
+
+      // act -- the FIRST load also closes the backfill's version gate, which is
+      // a state.json write by design, so only the envelope is claimed here.
+      const first = makeCtx();
+      await applyReconcile({ ctx: first.ctx, pi: first.pi, cwd, scope: "project" });
+      const envelopeAfterFirst = await mtimeMsOf(envelopePath);
+      const stateAfterFirst = await mtimeMsOf(locations.stateJsonPath);
+
+      const second = makeCtx();
+      await applyReconcile({ ctx: second.ctx, pi: second.pi, cwd, scope: "project" });
+
+      // assert -- the envelope is untouched by BOTH loads, and the second load
+      // touches nothing at all: the plugin is declared, enabled and recorded,
+      // so it lands in no plan bucket, and the stamp the first load wrote
+      // closes the backfill gate before it scans.
+      assert.strictEqual(envelopeAfterFirst, BACKDATED.getTime());
+      assert.strictEqual(await mtimeMsOf(envelopePath), BACKDATED.getTime());
+      assert.strictEqual(await mtimeMsOf(locations.stateJsonPath), stateAfterFirst);
+      // A clean, empty reconcile is documented as silent, so a notification is
+      // itself a regression -- it would mean an outcome row accumulated.
+      assert.deepStrictEqual(first.notifications, []);
+      assert.deepStrictEqual(second.notifications, []);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("RECON-05 negative control: a forced-open gate over a grown set DOES rewrite it", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "workflow-reconcile-control-"));
+    try {
+      // arrange -- the same install and the same mtime harness as the case
+      // above, then the two conditions that case relies on being absent:
+      // a recorded extension version that differs from the running constant
+      // (gate open) over a record the resolver can now support more of than it
+      // did (strict growth), which is what the backfill re-materializes.
+      await seedWorkflowPlugin({ cwd, marketplaceRoot: path.join(cwd, "mp-src") });
+      const install = makeCtx();
+      await installPlugin({
+        ctx: install.ctx,
+        pi: install.pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+      const locations = locationsFor("project", cwd);
+      const envelopePath = path.join(locations.workflowsSavedDir, "hello:greet.json");
+      const persisted = JSON.parse(await readFile(locations.stateJsonPath, "utf8")) as {
+        lastReconciledExtensionVersion?: string;
+        marketplaces: Record<
+          string,
+          {
+            plugins: Record<
+              string,
+              {
+                compatibility: {
+                  installable: boolean;
+                  notes: string[];
+                  supported: string[];
+                  unsupported: string[];
+                };
+              }
+            >;
+          }
+        >;
+      };
+      const record = persisted.marketplaces["mp"]?.plugins["hello"];
+      assert.ok(record, "precondition: the install must have written a record");
+      assert.notStrictEqual(
+        EXTENSION_VERSION,
+        "0.0.0",
+        "precondition: the forced stamp must differ from the running constant",
+      );
+      persisted.lastReconciledExtensionVersion = "0.0.0";
+      record.compatibility = {
+        installable: false,
+        notes: [],
+        supported: ["skills"],
+        unsupported: ["workflows"],
+      };
+      await writeFile(locations.stateJsonPath, JSON.stringify(persisted));
+      await backdate(envelopePath);
+
+      // act
+      const reconciled = makeCtx();
+      await applyReconcile({ ctx: reconciled.ctx, pi: reconciled.pi, cwd, scope: "project" });
+
+      // assert -- the SAME backdated-mtime harness the idempotence case uses
+      // observes the rewrite, so that case's "unchanged" assertions are
+      // measuring a write that this harness is capable of seeing.
+      assert.notStrictEqual(await mtimeMsOf(envelopePath), BACKDATED.getTime());
+      assert.deepStrictEqual(JSON.parse(await readFile(envelopePath, "utf8")), {
+        name: "hello:greet",
+        description: "greets",
+        script: 'export const meta = { name: "greet", description: "greets" };\n',
+      });
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

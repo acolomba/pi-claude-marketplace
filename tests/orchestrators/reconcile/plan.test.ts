@@ -64,18 +64,29 @@ function pluginRecord(
     readonly installable?: boolean;
     readonly skills?: readonly string[];
     readonly unsupported?: readonly string[];
+    /**
+     * Generated workflow names the record claims. A non-empty list also puts
+     * `workflows` in the supported set, because the two travel together on a
+     * real record and a record naming envelopes it does not claim to support
+     * is a shape no verb produces.
+     */
+    readonly workflows?: readonly string[];
   } = {},
 ): PluginRecord {
   const installable = options.installable ?? true;
   const skills = options.skills ?? ["skill-a"];
   const unsupported = options.unsupported ?? [];
+  const workflows = options.workflows ?? [];
   return {
     version: "1.0.0",
     resolvedSource: "/plugins/plugin-a",
     compatibility: {
       installable,
       notes: installable ? [] : ["partial"],
-      supported: skills.length === 0 ? [] : ["skills"],
+      supported: [
+        ...(skills.length === 0 ? [] : ["skills"]),
+        ...(workflows.length === 0 ? [] : ["workflows"]),
+      ],
       unsupported: [...unsupported],
     },
     resources: {
@@ -84,7 +95,7 @@ function pluginRecord(
       agents: [],
       mcpServers: [],
       hooks: [],
-      workflows: [],
+      workflows: [...workflows],
     },
     enabled,
     installedAt: "2026-01-01T00:00:00.000Z",
@@ -401,6 +412,41 @@ describe("planReconcile", () => {
           plugin: "ghost",
         },
       ],
+    });
+  });
+
+  test("RECON-05: a declared, enabled, workflow-bearing record lands in no bucket", () => {
+    // arrange -- the steady state a load-time reconcile meets after an install:
+    // the marketplace is declared and recorded, the plugin is declared enabled
+    // and recorded enabled, and the record names a workflow envelope. This is
+    // the FIRST of the two structures that keep a reload from rewriting
+    // executable code -- an empty plan means the apply path drives no
+    // orchestrator for this plugin at all.
+    const merged = mergedConfig(
+      { marketplace: { source: "./local-marketplace" } },
+      { "plugin-a@marketplace": { enabled: true } },
+    );
+    const state = stateWith({
+      marketplace: marketplaceRecord("marketplace", pathSource("./local-marketplace"), {
+        "plugin-a": pluginRecord(true, { workflows: ["plugin-a:greet"] }),
+      }),
+    });
+
+    // act
+    const result = planReconcile(merged, state, "project");
+
+    // assert -- every bucket, not just the install and enable ones. A record
+    // reaching `pluginsToUninstall` or `pluginsToDisable` would take the
+    // envelope off disk on a plain reload, which is the opposite failure.
+    assert.deepStrictEqual(result, {
+      scope: "project",
+      marketplacesToAdd: [],
+      marketplacesToRemove: [],
+      pluginsToInstall: [],
+      pluginsToUninstall: [],
+      pluginsToEnable: [],
+      pluginsToDisable: [],
+      sourceMismatches: [],
     });
   });
 
