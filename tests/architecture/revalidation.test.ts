@@ -875,6 +875,27 @@ test("RVAL-04 scope-impact rejects a missing requirement definition", async (t) 
   });
 });
 
+test("RVAL-04 scope-impact rejects a missing traceability row", async (t) => {
+  // arrange
+  const projectRoot = await createScopeImpactFixture(t);
+  const contractPath = path.join(projectRoot, ".planning/REQUIREMENTS.md");
+  const contract = await readFile(contractPath, "utf8");
+  await writeFile(
+    contractPath,
+    contract.replace("| GGAT-02 | Evidence/history (formerly Phase 7) | Evidence only |\n", ""),
+  );
+
+  // act
+  const execution = runCli(projectRoot, ["scope-impact", "--check"]);
+
+  // assert
+  assert.deepStrictEqual(execution, {
+    status: 1,
+    stdout: "",
+    stderr: "missing-requirement-route: GGAT-02: traceability row is absent\n",
+  });
+});
+
 test("RVAL-04 scope-impact rejects a duplicate stable requirement definition", async (t) => {
   // arrange
   const projectRoot = await createScopeImpactFixture(t);

@@ -1789,9 +1789,10 @@ function handleDecisionDossier({ ledger, options, runtime }) {
 
 function parseRequirementsContract(markdown, violations) {
   const definitions = new Map();
+  const history = new Map();
   let section = "";
   for (const line of markdown.split("\n")) {
-    const heading = line.match(/^### (.+)$/);
+    const heading = line.match(/^#{2,3} (.+)$/);
     if (heading !== null) {
       section = heading[1];
       continue;
@@ -1808,6 +1809,19 @@ function parseRequirementsContract(markdown, violations) {
         definitions.set(id, section);
       }
     }
+
+    const historical =
+      section === "Evidence and History" ? line.match(/^- \*\*([A-Z]+-\d+)\*\*/) : null;
+    if (historical !== null) {
+      const id = historical[1];
+      if (history.has(id)) {
+        violations.push(
+          violation("duplicate-requirement", id, "requirement is recorded more than once"),
+        );
+      } else {
+        history.set(id, section);
+      }
+    }
   }
 
   const dispositions = new Map();
@@ -1822,7 +1836,7 @@ function parseRequirementsContract(markdown, violations) {
     }
   }
 
-  return { definitions, dispositions };
+  return { definitions, history, dispositions };
 }
 
 function parseRoadmapContract(markdown, violations) {
@@ -1858,15 +1872,16 @@ function parseRoadmapContract(markdown, violations) {
 function validateRequirementChange(requirements, requirementId, change, violations) {
   const id = `SCOPE-REQ-${requirementId}`;
   const disposition = requirements.dispositions.get(requirementId);
-  const section = requirements.definitions.get(requirementId);
-  const expectedSection = change.action === "move-to-evidence" ? "Evidence and History" : section;
-  if (section === undefined && change.action !== "move-to-evidence") {
-    violations.push(
-      violation("missing-requirement-definition", requirementId, "active definition is absent"),
-    );
-  }
+  const expectedSection =
+    change.action === "move-to-evidence"
+      ? requirements.history.get(requirementId)
+      : requirements.definitions.get(requirementId);
 
-  if (change.action === "move-to-evidence" && disposition.status !== "Evidence only") {
+  if (
+    change.action === "move-to-evidence" &&
+    disposition?.status !== undefined &&
+    disposition.status !== "Evidence only"
+  ) {
     violations.push(
       violation(
         "requirement-disposition",
@@ -1876,7 +1891,7 @@ function validateRequirementChange(requirements, requirementId, change, violatio
     );
   }
 
-  if (change.action !== "move-to-evidence" && disposition.status === "Evidence only") {
+  if (change.action !== "move-to-evidence" && disposition?.status === "Evidence only") {
     violations.push(
       violation(
         "requirement-disposition",
@@ -1899,15 +1914,67 @@ function validateRequirementChange(requirements, requirementId, change, violatio
   }
 }
 
-function validateRequirementContracts(requirements, rows, violations) {
-  for (const requirementId of requirements.dispositions.keys()) {
-    const id = `SCOPE-REQ-${requirementId}`;
-    const change = rows.get(id);
-    if (change === undefined) {
-      violations.push(violation("missing-scope-requirement", id, "scope row is absent"));
-      continue;
+function requirementRows(rows) {
+  return new Map([...rows].filter(([id]) => id.startsWith("SCOPE-REQ-")));
+}
+
+function validateRequirementSets(requirements, rows, violations) {
+  if (rows.size !== 32) {
+    violations.push(
+      violation(
+        "scope-requirement-count",
+        "scopeChanges",
+        "expected exactly 32 unique requirement rows",
+      ),
+    );
+  }
+
+  const expectedIds = new Set([...rows.keys()].map((id) => id.slice("SCOPE-REQ-".length)));
+  for (const requirementId of [...expectedIds].sort()) {
+    const change = rows.get(`SCOPE-REQ-${requirementId}`);
+    const hasDefinition = requirements.definitions.has(requirementId);
+    const hasHistory = requirements.history.has(requirementId);
+    const expectsHistory = change.action === "move-to-evidence";
+    if ((expectsHistory && !hasHistory) || (!expectsHistory && !hasDefinition)) {
+      violations.push(
+        violation(
+          "missing-requirement-definition",
+          requirementId,
+          expectsHistory ? "evidence/history record is absent" : "active definition is absent",
+        ),
+      );
     }
 
+    if (!requirements.dispositions.has(requirementId)) {
+      violations.push(
+        violation("missing-requirement-route", requirementId, "traceability row is absent"),
+      );
+    }
+  }
+
+  const parsedIds = new Set([...requirements.definitions.keys(), ...requirements.history.keys()]);
+  for (const requirementId of [...parsedIds].sort()) {
+    if (!expectedIds.has(requirementId)) {
+      violations.push(
+        violation("unexpected-requirement-definition", requirementId, "scope row is absent"),
+      );
+    }
+  }
+
+  for (const requirementId of [...requirements.dispositions.keys()].sort()) {
+    if (!expectedIds.has(requirementId)) {
+      violations.push(
+        violation("unexpected-requirement-route", requirementId, "scope row is absent"),
+      );
+    }
+  }
+}
+
+function validateRequirementContracts(requirements, allRows, violations) {
+  const rows = requirementRows(allRows);
+  validateRequirementSets(requirements, rows, violations);
+  for (const [id, change] of rows) {
+    const requirementId = id.slice("SCOPE-REQ-".length);
     validateRequirementChange(requirements, requirementId, change, violations);
   }
 }
