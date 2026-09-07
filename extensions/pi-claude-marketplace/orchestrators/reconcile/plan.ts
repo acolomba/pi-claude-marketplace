@@ -96,42 +96,152 @@ interface MarketplaceDiff {
   readonly mismatches: readonly PlannedSourceMismatch[];
   /** Canonical recorded marketplace identity for each fulfilled declaration. */
   readonly recordedByDeclared: ReadonlyMap<string, string>;
+  /** Declarations whose source claim is ambiguous or multiply claimed. */
+  readonly conflictedDeclared: ReadonlySet<string>;
+  /** Recorded candidates retained unchanged while their claim is conflicted. */
+  readonly conflictedRecorded: ReadonlySet<string>;
 }
 
-/**
- * CR-01: find a recorded marketplace that carries the SAME
- * source as a declared entry whose config key matched no recorded name.
- * `addMarketplace` records under the MANIFEST-derived name -- which the user
- * cannot know in advance and which the config key does not have to match.
- * Without source-based matching, a declared key that differs from the
- * manifest name would oscillate forever: every reload would plan an add
- * (a network clone for github sources -- NFR-5 violation) AND a remove of
- * the previously recorded name (tearing down the marketplace and
- * uninstalling its plugins). Matching by source instead of name alone makes
- * back-to-back reconciles converge: the declaration is already honoured by
- * the existing record, so no action is planned in either direction.
- *
- * Records whose name IS declared are excluded (the name diff owns them);
- * records already claimed by another declared key are excluded so two
- * declared keys cannot both converge onto one record.
- */
-function findRecordedBySource(
+interface PendingMarketplaceClaim {
+  readonly declaredMarketplace: string;
+  readonly declaredSource: string;
+  readonly candidateMarketplace: string;
+}
+
+interface MarketplaceClaimConflict {
+  readonly declaredMarketplace: string;
+  readonly declaredSource: string;
+  readonly recordedSource: string;
+}
+
+interface MarketplaceClaims {
+  readonly recordedByDeclared: ReadonlyMap<string, string>;
+  readonly conflicts: readonly MarketplaceClaimConflict[];
+  readonly conflictedDeclared: ReadonlySet<string>;
+  readonly conflictedRecorded: ReadonlySet<string>;
+}
+
+interface MarketplaceClaimAccumulator {
+  readonly recordedByDeclared: Map<string, string>;
+  readonly conflicts: MarketplaceClaimConflict[];
+  readonly pending: PendingMarketplaceClaim[];
+  readonly conflictedRecorded: Set<string>;
+}
+
+function recordedSourceCandidates(
   recorded: ExtensionState["marketplaces"],
   declared: MergedConfig["marketplaces"],
-  alreadyClaimed: ReadonlySet<string>,
   declaredSource: string,
-): string | undefined {
+): string[] {
+  const candidates: string[] = [];
   for (const [name, record] of Object.entries(recorded)) {
-    if (declared[name] !== undefined || alreadyClaimed.has(name)) {
+    if (declared[name] !== undefined) {
       continue;
     }
 
     if (samePlannedSource(record.source, declaredSource) === "same") {
-      return name;
+      candidates.push(name);
     }
   }
 
-  return undefined;
+  return candidates.sort();
+}
+
+function collectMarketplaceClaim(
+  acc: MarketplaceClaimAccumulator,
+  declaredMarketplace: string,
+  declaredEntry: MergedConfig["marketplaces"][string],
+  declared: MergedConfig["marketplaces"],
+  recorded: ExtensionState["marketplaces"],
+): void {
+  if (recorded[declaredMarketplace] !== undefined) {
+    acc.recordedByDeclared.set(declaredMarketplace, declaredMarketplace);
+    return;
+  }
+
+  const candidates = recordedSourceCandidates(recorded, declared, declaredEntry.entry.source);
+  if (candidates.length > 1) {
+    acc.conflicts.push({
+      declaredMarketplace,
+      declaredSource: declaredEntry.entry.source,
+      recordedSource: `ambiguous recorded marketplaces: ${candidates.join(", ")}`,
+    });
+    for (const candidate of candidates) {
+      acc.conflictedRecorded.add(candidate);
+    }
+
+    return;
+  }
+
+  for (const candidateMarketplace of candidates) {
+    acc.pending.push({
+      declaredMarketplace,
+      declaredSource: declaredEntry.entry.source,
+      candidateMarketplace,
+    });
+  }
+}
+
+function indexPendingClaims(
+  pending: readonly PendingMarketplaceClaim[],
+): ReadonlyMap<string, readonly PendingMarketplaceClaim[]> {
+  const pendingByRecorded = new Map<string, PendingMarketplaceClaim[]>();
+  for (const claim of pending) {
+    const claims = pendingByRecorded.get(claim.candidateMarketplace) ?? [];
+    claims.push(claim);
+    pendingByRecorded.set(claim.candidateMarketplace, claims);
+  }
+
+  return pendingByRecorded;
+}
+
+function resolvePendingClaims(acc: MarketplaceClaimAccumulator): void {
+  for (const [candidateMarketplace, claims] of indexPendingClaims(acc.pending)) {
+    if (claims.length === 1) {
+      for (const claim of claims) {
+        acc.recordedByDeclared.set(claim.declaredMarketplace, candidateMarketplace);
+      }
+
+      continue;
+    }
+
+    acc.conflictedRecorded.add(candidateMarketplace);
+    for (const claim of claims) {
+      acc.conflicts.push({
+        declaredMarketplace: claim.declaredMarketplace,
+        declaredSource: claim.declaredSource,
+        recordedSource: `recorded marketplace claimed by multiple declarations: ${candidateMarketplace}`,
+      });
+    }
+  }
+}
+
+/** Resolves all source claims before any mutation bucket is built. */
+function buildMarketplaceClaims(
+  declared: MergedConfig["marketplaces"],
+  recorded: ExtensionState["marketplaces"],
+): MarketplaceClaims {
+  const acc: MarketplaceClaimAccumulator = {
+    recordedByDeclared: new Map<string, string>(),
+    conflicts: [],
+    pending: [],
+    conflictedRecorded: new Set<string>(),
+  };
+
+  for (const [declaredMarketplace, declaredEntry] of Object.entries(declared)) {
+    collectMarketplaceClaim(acc, declaredMarketplace, declaredEntry, declared, recorded);
+  }
+
+  resolvePendingClaims(acc);
+  acc.conflicts.sort((left, right) =>
+    left.declaredMarketplace.localeCompare(right.declaredMarketplace),
+  );
+  return {
+    recordedByDeclared: acc.recordedByDeclared,
+    conflicts: acc.conflicts,
+    conflictedDeclared: new Set(acc.conflicts.map((conflict) => conflict.declaredMarketplace)),
+    conflictedRecorded: acc.conflictedRecorded,
+  };
 }
 
 function diffMarketplaces(
@@ -142,32 +252,22 @@ function diffMarketplaces(
   const add: PlannedMarketplaceAdd[] = [];
   const remove: PlannedMarketplaceRemove[] = [];
   const mismatches: PlannedSourceMismatch[] = [];
-  const recordedByDeclared = new Map<string, string>();
-  // CR-01: recorded names claimed by a declared key whose name differs but
-  // whose source matches. Claimed records are steady state (no add planned
-  // for the declared key, no remove planned for the recorded name).
-  const sourceClaimed = new Set<string>();
-
   const declared = merged.marketplaces;
   const recorded = state.marketplaces;
+  const claims = buildMarketplaceClaims(declared, recorded);
+  const retainedRecorded = new Set(claims.recordedByDeclared.values());
 
   for (const [mpName, declaredEntry] of Object.entries(declared)) {
+    if (claims.conflictedDeclared.has(mpName)) {
+      continue;
+    }
+
     const recordedRecord = recorded[mpName];
     if (recordedRecord === undefined) {
-      // CR-01: before planning an add, check whether the declared SOURCE is
-      // already recorded under a different (manifest-derived) name. If so,
-      // the declaration is honoured -- planning an add here would clone on
-      // every load and the removal loop below would tear the record down,
-      // producing the perpetual remove/re-add churn this guard prevents.
-      const claimedName = findRecordedBySource(
-        recorded,
-        declared,
-        sourceClaimed,
-        declaredEntry.entry.source,
-      );
-      if (claimedName !== undefined) {
-        sourceClaimed.add(claimedName);
-        recordedByDeclared.set(mpName, claimedName);
+      // A unique source match means the declaration is already fulfilled by
+      // the recorded canonical identity. Planning an add here would clone it
+      // on every load and create perpetual remove/re-add churn.
+      if (claims.recordedByDeclared.has(mpName)) {
         continue;
       }
 
@@ -180,7 +280,6 @@ function diffMarketplaces(
       continue;
     }
 
-    recordedByDeclared.set(mpName, mpName);
     const match = samePlannedSource(recordedRecord.source, declaredEntry.entry.source);
     switch (match) {
       case "same":
@@ -209,11 +308,20 @@ function diffMarketplaces(
     }
   }
 
+  for (const conflict of claims.conflicts) {
+    mismatches.push({
+      scope,
+      cause: "source-mismatch",
+      marketplace: conflict.declaredMarketplace,
+      declaredSource: conflict.declaredSource,
+      recordedSource: conflict.recordedSource,
+    });
+  }
+
   for (const [mpName, mpRecord] of Object.entries(recorded)) {
-    // CR-01: a recorded name claimed by a declared key via source matching
-    // is NOT removed -- removing it would uninstall its plugins as
-    // collateral and the next reload would re-add (re-clone) it.
-    if (!recordedByDeclared.has(mpName) && !sourceClaimed.has(mpName)) {
+    // A claimed canonical record remains steady state. Conflict candidates
+    // also remain untouched: ambiguity is report-only and must fail closed.
+    if (!retainedRecorded.has(mpName) && !claims.conflictedRecorded.has(mpName)) {
       // WILL-03 / D-65.1-03: carry the recorded plugin names so the PENDING
       // projection can synthesize per-plugin `will uninstall` rows. The apply
       // path cascades these internally; do NOT add them to `pluginsToUninstall`
@@ -223,7 +331,14 @@ function diffMarketplaces(
     }
   }
 
-  return { add, remove, mismatches, recordedByDeclared };
+  return {
+    add,
+    remove,
+    mismatches,
+    recordedByDeclared: claims.recordedByDeclared,
+    conflictedDeclared: claims.conflictedDeclared,
+    conflictedRecorded: claims.conflictedRecorded,
+  };
 }
 
 interface PluginDiff {
@@ -265,7 +380,7 @@ function classifyDeclaredPlugin(
   declared: MergedConfig["plugins"][string],
   recordedKeys: ReadonlySet<string>,
   declaredMarketplaces: MergedConfig["marketplaces"],
-  recordedByDeclared: ReadonlyMap<string, string>,
+  marketplaceDiff: MarketplaceDiff,
   state: ExtensionState,
 ): void {
   const parsed = parsePluginKey(key);
@@ -299,7 +414,12 @@ function classifyDeclaredPlugin(
     return;
   }
 
-  const marketplace = recordedByDeclared.get(declaredMarketplace) ?? declaredMarketplace;
+  if (marketplaceDiff.conflictedDeclared.has(declaredMarketplace)) {
+    return;
+  }
+
+  const marketplace =
+    marketplaceDiff.recordedByDeclared.get(declaredMarketplace) ?? declaredMarketplace;
   acc.declaredKeys.add(`${plugin}@${marketplace}`);
 
   // D-04 consume-time default via S7's `isDeclaredEnabled`: an absent
@@ -364,6 +484,10 @@ function buildUninstallBucket(
   const uninstall: PlannedPluginUninstall[] = [];
   const retainedMarketplaces = new Set(marketplaceDiff.recordedByDeclared.values());
   for (const [mpName, mpRecord] of Object.entries(state.marketplaces)) {
+    if (marketplaceDiff.conflictedRecorded.has(mpName)) {
+      continue;
+    }
+
     if (!retainedMarketplaces.has(mpName)) {
       continue;
     }
@@ -402,7 +526,7 @@ function diffPlugins(
       declared,
       recordedKeys,
       merged.marketplaces,
-      marketplaceDiff.recordedByDeclared,
+      marketplaceDiff,
       state,
     );
   }

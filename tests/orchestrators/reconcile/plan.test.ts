@@ -103,10 +103,7 @@ describe("planReconcile", () => {
       { "formatter@declared-name": {} },
     );
     const state = stateWith({
-      "canonical-name": marketplaceRecord(
-        "canonical-name",
-        pathSource("./local-marketplace"),
-      ),
+      "canonical-name": marketplaceRecord("canonical-name", pathSource("./local-marketplace")),
     });
 
     // act
@@ -199,7 +196,7 @@ describe("planReconcile", () => {
 
   test("reports every recorded candidate when an alias source is ambiguous", () => {
     // arrange
-    const merged = mergedConfig({ alias: { source: "acme/actual" } });
+    const merged = mergedConfig({ alias: { source: "acme/actual" } }, { "formatter@alias": {} });
     const state = stateWith({
       zeta: marketplaceRecord("zeta", githubSource("acme/actual")),
       alpha: marketplaceRecord("alpha", githubSource("acme/actual")),
