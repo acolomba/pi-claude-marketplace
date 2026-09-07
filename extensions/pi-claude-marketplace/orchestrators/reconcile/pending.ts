@@ -57,13 +57,13 @@ import { PENDING_CONTEXT, type PendingMsg } from "./reconcile.messaging.ts";
 import type { PlannedPluginInstall, ReconcilePlan } from "./types.ts";
 import type { MergedConfig, ScopeLoadOutcome } from "../../persistence/config-merge.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
-import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
+import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
 import type { ContentReason } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 
 export interface PendingReconcileOptions {
-  readonly ctx: ExtensionContext;
-  readonly pi: ExtensionAPI;
+  readonly ctx: NotificationContext;
+  readonly pi: ToolInventory;
   /** Project-scope cwd (ignored for user scope). */
   readonly cwd: string;
   /** When omitted, fan-out across BOTH scopes (project-first per MSG-GR-3). */

@@ -42,7 +42,7 @@ import type {
 } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
-import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
+import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type { CommandContext } from "../../shared/notify-context.ts";
 import type { DegradeKind } from "../../shared/notify-reasons.ts";
@@ -1233,8 +1233,8 @@ export function applyPartialCascadeFold(
  * re-read the sibling `state.json` only to re-derive that same `false`.
  */
 export function emitMarketplaceNotAdded(args: {
-  readonly ctx: ExtensionContext;
-  readonly pi: ExtensionAPI;
+  readonly ctx: NotificationContext;
+  readonly pi: ToolInventory;
   readonly marketplace: string;
   readonly requestedScope: Scope | undefined;
   readonly orchestrated: boolean;
@@ -1302,8 +1302,8 @@ export function emitMarketplaceNotAdded(args: {
  * would close a module cycle.
  */
 export async function emitMarketplaceNotAddedSignal(args: {
-  readonly ctx: ExtensionContext;
-  readonly pi: ExtensionAPI;
+  readonly ctx: NotificationContext;
+  readonly pi: ToolInventory;
   readonly cwd: string;
   readonly context: CommandContext<"skipped", PluginSkippedMessage>;
   readonly cardinality: "single" | "plural";
@@ -1403,7 +1403,7 @@ export function splitStagingWarnings(warnings: {
  * user, exactly as the reconcile composer does.
  */
 export function surfaceDiscoveryWarnings(
-  ctx: ExtensionContext,
+  ctx: NotificationContext,
   args: {
     readonly plugin: string;
     readonly verb: "installed" | "updated" | "reinstalled";

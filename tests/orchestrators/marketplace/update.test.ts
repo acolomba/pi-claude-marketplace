@@ -41,9 +41,12 @@ import type {
 } from "../../../extensions/pi-claude-marketplace/orchestrators/types.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { GitCredentials } from "../../../extensions/pi-claude-marketplace/platform/git.ts";
+import type {
+  NotificationContext,
+  ToolInventory,
+} from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { Severity } from "../../../extensions/pi-claude-marketplace/shared/notify.ts";
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 interface MarketplaceGitOpsSeed {
   readonly checkoutThrows?: Error;
@@ -167,18 +170,20 @@ interface NotifyRecord {
   severity?: Severity;
 }
 
-function makeCtx(): { ctx: ExtensionContext; pi: ExtensionAPI; notifications: NotifyRecord[] } {
+function makeCtx(): {
+  ctx: NotificationContext;
+  pi: ToolInventory;
+  notifications: NotifyRecord[];
+} {
   const notifications: NotifyRecord[] = [];
-  const ctx = {
+  const ctx: NotificationContext = {
     ui: {
       notify(message: string, severity?: Severity): void {
         notifications.push(severity === undefined ? { message } : { message, severity });
       },
     },
-  } as ExtensionContext;
-  const pi = {
-    getAllTools: (): ReturnType<ExtensionAPI["getAllTools"]> => [],
-  } as ExtensionAPI;
+  };
+  const pi: ToolInventory = { getAllTools: () => [] };
   return { ctx, pi, notifications };
 }
 

@@ -100,7 +100,7 @@ import {
 import type { InstallFailureCapture, InstallLedgerResult } from "./install.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { DisabledPluginRecord, ExtensionState } from "../../persistence/state-io.ts";
-import type { ExtensionAPI, ExtensionContext, SoftDepStatus } from "../../platform/pi-api.ts";
+import type { NotificationContext, SoftDepStatus, ToolInventory } from "../../platform/pi-api.ts";
 import type { ContentReason, PluginFailedMessage, Reason } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { RollbackPartial } from "../../transaction/phase-ledger.ts";
@@ -181,9 +181,9 @@ export type EnableDisablePluginOutcome =
  * for the per-machine override file.
  */
 export interface EnableDisablePluginOptions {
-  readonly ctx: ExtensionContext;
+  readonly ctx: NotificationContext;
   /** Factory `pi` reference -- threaded into `notify()` for the single softDepStatus(pi) probe. */
-  readonly pi: ExtensionAPI;
+  readonly pi: ToolInventory;
   /** Project-scope cwd (ignored for user scope; see locationsFor). */
   readonly cwd: string;
   readonly marketplace: string;
@@ -574,8 +574,8 @@ async function resolveIdempotentOutcome(
  * plugin that merely is not installed.
  */
 async function emitUnresolvedTarget(args: {
-  readonly ctx: ExtensionContext;
-  readonly pi: ExtensionAPI;
+  readonly ctx: NotificationContext;
+  readonly pi: ToolInventory;
   readonly cwd: string;
   readonly marketplace: string;
   readonly plugin: string;
@@ -885,8 +885,8 @@ function classifyTransactionThrow(cause: Error): ContentReason {
  * row always carries a scope token (no ambiguous bareheader).
  */
 function emitResolutionFailure(args: {
-  ctx: ExtensionContext;
-  pi: ExtensionAPI;
+  ctx: NotificationContext;
+  pi: ToolInventory;
   marketplace: string;
   plugin: string;
   requestedScope: Scope | undefined;
@@ -937,8 +937,8 @@ function emitResolutionFailure(args: {
  * keeps its own `Status` / `Msg` instantiation.
  */
 function emitEnableDisableFailedRow(args: {
-  readonly ctx: ExtensionContext;
-  readonly pi: ExtensionAPI;
+  readonly ctx: NotificationContext;
+  readonly pi: ToolInventory;
   readonly enable: boolean;
   readonly marketplace: string;
   readonly scope: Scope;
@@ -1094,8 +1094,8 @@ function outcomeToTypedResult(args: {
  * orchestrator's cognitive complexity within the project's lint budget.
  */
 function dispatchOutcome(args: {
-  readonly ctx: ExtensionContext;
-  readonly pi: ExtensionAPI;
+  readonly ctx: NotificationContext;
+  readonly pi: ToolInventory;
   readonly marketplace: string;
   readonly scope: Scope;
   readonly plugin: string;

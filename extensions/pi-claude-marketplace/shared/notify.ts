@@ -5,7 +5,7 @@ import { softDepMarkers } from "./concerns/soft-dep.ts";
 import { assertNever, causeChainTrailer, manualRecoveryLeaks } from "./errors.ts";
 
 import type { Scope } from "./types.ts";
-import type { ExtensionAPI, ExtensionContext, SoftDepStatus } from "../platform/pi-api.ts";
+import type { NotificationContext, SoftDepStatus, ToolInventory } from "../platform/pi-api.ts";
 import type { HookSummaryEntry } from "./concerns/hooks.ts";
 import type { Dependency } from "./concerns/soft-dep.ts";
 
@@ -373,7 +373,7 @@ export type StatusToken = (typeof STATUS_TOKENS)[number];
  * line between message and Usage block is part of the user contract;
  * `tests/shared/notify-v2.test.ts` asserts it byte-for-byte.
  */
-export function notifyUsageError(ctx: ExtensionContext, message: UsageErrorMessage): void {
+export function notifyUsageError(ctx: NotificationContext, message: UsageErrorMessage): void {
   ctx.ui.notify(`${message.message}\n\n${message.usage}`, "error");
 }
 
@@ -397,7 +397,7 @@ export function notifyUsageError(ctx: ExtensionContext, message: UsageErrorMessa
  * per D-19-01; orchestrated-mode (cascade) callers use this seam.
  */
 export function notifyDiagnostic(
-  ctx: ExtensionContext,
+  ctx: NotificationContext,
   header: string,
   lines: readonly string[],
 ): void {
@@ -421,7 +421,7 @@ export function notifyDiagnostic(
  * Empty strings are silently ignored so the caller can pass an
  * `entry.rewakeSummary` field unconditionally without a guard.
  */
-export function notifyAsyncRewakeSummary(ctx: ExtensionContext, summary: string): void {
+export function notifyAsyncRewakeSummary(ctx: NotificationContext, summary: string): void {
   if (summary.length === 0) {
     return;
   }
@@ -454,7 +454,7 @@ export function notifyAsyncRewakeSummary(ctx: ExtensionContext, summary: string)
  * `tests/architecture/hooks-cap-notify.test.ts` against the
  * `stop-override-cap` block in `docs/output-catalog.md`.
  */
-export function notifyStopHookOverrideCap(ctx: ExtensionContext, pluginId: string): void {
+export function notifyStopHookOverrideCap(ctx: NotificationContext, pluginId: string): void {
   ctx.ui.notify(
     `Stop hook override cap reached.\n\n\`${pluginId}\`'s Stop hook blocked 8 times in a row; the turn ended despite its active block.`,
     "warning",
@@ -3737,7 +3737,11 @@ function composeReconcileAppliedBody(
  * semantics do not apply to read-only results). IL-2: exactly one
  * `ctx.ui.notify` call per invocation.
  */
-function emitWithSummary(ctx: ExtensionContext, message: NotificationMessage, body: string): void {
+function emitWithSummary(
+  ctx: NotificationContext,
+  message: NotificationMessage,
+  body: string,
+): void {
   const severity = computeSeverity(message);
   if (severity === undefined) {
     ctx.ui.notify(body);
@@ -3754,7 +3758,7 @@ function emitWithSummary(ctx: ExtensionContext, message: NotificationMessage, bo
  * `ctx.ui.notify` call per invocation (the seam performs it).
  */
 function dispatchInfoMessage(
-  ctx: ExtensionContext,
+  ctx: NotificationContext,
   message: Extract<NotificationMessage, { kind: StandaloneKind }>,
   probe: SoftDepStatus,
 ): void {
@@ -3814,8 +3818,8 @@ function dispatchInfoMessage(
  * computed from contents at notify time (SNM-14, SNM-15, SNM-16).
  */
 export function notify(
-  ctx: ExtensionContext,
-  pi: ExtensionAPI,
+  ctx: NotificationContext,
+  pi: ToolInventory,
   message: NotificationMessage,
 ): void {
   // Single soft-dep probe per invocation; threaded into every renderPluginRow
@@ -3905,8 +3909,8 @@ export function notify(
  * (IL-2, via `emitWithSummary`) discipline is preserved.
  */
 function emitCascadeWith(
-  ctx: ExtensionContext,
-  pi: ExtensionAPI,
+  ctx: NotificationContext,
+  pi: ToolInventory,
   message: CascadeNotificationMessage | ReconcileAppliedCascadeMessage,
   renderPluginRowBody: (
     p: PluginNotificationMessage,
@@ -3941,8 +3945,8 @@ function emitCascadeWith(
  * (`shouldEmitReloadHint`, RLD-02).
  */
 export function emitContextCascade(
-  ctx: ExtensionContext,
-  pi: ExtensionAPI,
+  ctx: NotificationContext,
+  pi: ToolInventory,
   message: CascadeNotificationMessage,
   renderPluginRowBody: (
     p: PluginNotificationMessage,
@@ -3970,8 +3974,8 @@ export function emitContextCascade(
  * body unchanged at info severity -- no summary prefix).
  */
 export function emitUpdateNoOpCascade(
-  ctx: ExtensionContext,
-  pi: ExtensionAPI,
+  ctx: NotificationContext,
+  pi: ToolInventory,
   message: CascadeNotificationMessage,
   renderPluginRowBody: (
     p: PluginNotificationMessage,
@@ -4010,8 +4014,8 @@ export function emitUpdateNoOpCascade(
  * byte form exactly (OUT-03 / OUT-04 / OUT-06 / D-03 / D-04).
  */
 export function emitReconcileAppliedContextCascade(
-  ctx: ExtensionContext,
-  pi: ExtensionAPI,
+  ctx: NotificationContext,
+  pi: ToolInventory,
   message: ReconcileAppliedCascadeMessage,
   renderPluginRowBody: (
     p: PluginNotificationMessage,
@@ -4208,7 +4212,7 @@ export function compareByNameThenScope(a: Sortable, b: Sortable): number {
  * all other code must use notify(ctx, pi, NotificationMessage) directly.
  */
 export function makeRawNotifyFn(
-  ctx: ExtensionContext,
+  ctx: NotificationContext,
 ): (message: string, severity?: Severity) => void {
   return (message: string, severity?: Severity): void => {
     if (severity === undefined) {

@@ -83,7 +83,7 @@ import {
 import { makePresenceProbe } from "./git-source-probe.ts";
 import { PLUGIN_INFO_CONTEXT, type PluginInfoCascadeMsg } from "./info.messaging.ts";
 
-import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
+import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
 import type { HookSummaryEntry } from "../../shared/concerns/hooks.ts";
 import type {
   ContentReason,
@@ -100,13 +100,13 @@ import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-h
 const BUCKET_A_EVENTS_SET: ReadonlySet<string> = new Set<string>(BUCKET_A_EVENTS);
 
 export interface GetPluginInfoOptions {
-  readonly ctx: ExtensionContext;
+  readonly ctx: NotificationContext;
   /**
    * Required by `notify(ctx, pi, message)` for the soft-dep probe (info
    * surfaces do not emit soft-dep markers, but the probe argument is
    * threaded for signature parity with the cascade arm).
    */
-  readonly pi: ExtensionAPI;
+  readonly pi: ToolInventory;
   readonly marketplace: string;
   readonly plugin: string;
   /** When omitted, fan-out across BOTH scopes (project-first per INFO-03). */
@@ -1419,7 +1419,7 @@ function buildNonPathInstalledRow(
  * re-exports (no-orchestrator-network gate, NFR-5).
  */
 interface InfoFetchContext {
-  readonly ctx: ExtensionContext;
+  readonly ctx: NotificationContext;
   readonly seam: InfoCloneCacheSeam;
   readonly credentialOps: CredentialOps;
   readonly deviceFlowHttp?: DeviceFlowHttp;

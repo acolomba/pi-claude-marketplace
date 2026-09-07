@@ -74,7 +74,7 @@ import {
 } from "./shared.ts";
 
 import type { ScopedLocations } from "../../persistence/locations.ts";
-import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
+import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
 import type {
   ContentReason,
   PluginFailedMessage,
@@ -131,9 +131,9 @@ export type RemoveMarketplaceOutcome =
     };
 
 export interface RemoveMarketplaceOptions {
-  readonly ctx: ExtensionContext;
+  readonly ctx: NotificationContext;
   /** Factory `pi` reference -- carries `getAllTools()` for RH-5 soft-dep probes. */
-  readonly pi: ExtensionAPI;
+  readonly pi: ToolInventory;
   readonly name: string;
   /** When omitted, `resolveScopeOrNotifyNotAdded` (standalone) / `resolveScopeOrFailedOutcome` (orchestrated) picks the scope; project takes precedence if found in both. */
   readonly scope?: Scope;

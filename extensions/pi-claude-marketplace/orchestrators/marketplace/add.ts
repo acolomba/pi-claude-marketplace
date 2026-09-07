@@ -85,7 +85,7 @@ import type { ScopeConfig } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { CredentialOps } from "../../platform/git-credential.ts";
-import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
+import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
 import type { ContentReason, Reason } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 
@@ -143,11 +143,11 @@ export type AddMarketplaceOutcome =
     };
 
 export interface AddMarketplaceOptions {
-  readonly ctx: ExtensionContext;
+  readonly ctx: NotificationContext;
   /**
    * Required by `notify(ctx, pi, message)` for soft-dep probing.
    */
-  readonly pi: ExtensionAPI;
+  readonly pi: ToolInventory;
   /** SC-5: the edge layer defaults this to "user"; orchestrator receives a fully resolved Scope. */
   readonly scope: Scope;
   /** Used to compute project-scope locations (`<cwd>/.pi`). Ignored when scope === "user". */
@@ -717,7 +717,7 @@ async function addGitClonedInGuard(args: {
 }
 
 async function addGithubInGuard(args: {
-  ctx: ExtensionContext;
+  ctx: NotificationContext;
   state: ExtensionState;
   locations: ScopedLocations;
   source: GitHubSource;
@@ -768,7 +768,7 @@ async function addGithubInGuard(args: {
  * for an unregistered host would key another provider's credential onto it.
  */
 async function addUrlInGuard(args: {
-  ctx: ExtensionContext;
+  ctx: NotificationContext;
   state: ExtensionState;
   locations: ScopedLocations;
   source: UrlSource;

@@ -15,7 +15,6 @@ import path from "node:path";
 import { test } from "node:test";
 
 import lockfile from "proper-lockfile";
-import { Type } from "typebox";
 
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import { setPluginEnabled } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts";
@@ -32,7 +31,11 @@ import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts"
 
 import type { CacheEntry } from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
 import type { EnableDisablePluginOutcome } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts";
-import type { ExtensionAPI, ExtensionContext, ToolInfo } from "@earendil-works/pi-coding-agent";
+import type {
+  NotificationContext,
+  ToolInventory,
+  ToolInventoryItem,
+} from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
 const require = createRequire(import.meta.url);
 const filesystemPromises = require("node:fs/promises") as typeof import("node:fs/promises");
@@ -42,7 +45,7 @@ interface NotifyRecord {
   severity?: string;
 }
 
-function makeCtx(cwd: string): { ctx: ExtensionContext; notifications: NotifyRecord[] } {
+function makeCtx(cwd: string): { ctx: NotificationContext; notifications: NotifyRecord[] } {
   const notifications: NotifyRecord[] = [];
   const ctx = {
     cwd,
@@ -51,28 +54,19 @@ function makeCtx(cwd: string): { ctx: ExtensionContext; notifications: NotifyRec
         notifications.push(severity === undefined ? { message } : { message, severity });
       },
     },
-  } as ExtensionContext;
+  };
   return { ctx, notifications };
 }
 
-function toolInfo(name: string): ToolInfo {
+function toolInfo(name: string): ToolInventoryItem {
   return {
     name,
-    description: `test tool ${name}`,
-    parameters: Type.Object({}),
-    sourceInfo: {
-      origin: "top-level",
-      path: `/test/tools/${name}.ts`,
-      scope: "temporary",
-      source: "test",
-    },
-  } satisfies ToolInfo;
+    sourceInfo: { source: "test" },
+  };
 }
 
-function makePi(toolNames: readonly string[] = []): ExtensionAPI {
-  return {
-    getAllTools: (): ReturnType<ExtensionAPI["getAllTools"]> => toolNames.map(toolInfo),
-  } as ExtensionAPI;
+function makePi(toolNames: readonly string[] = []): ToolInventory {
+  return { getAllTools: () => toolNames.map(toolInfo) };
 }
 
 /**
@@ -81,7 +75,7 @@ function makePi(toolNames: readonly string[] = []): ExtensionAPI {
  * default `makePi()` above reports BOTH companions unloaded, which is what
  * makes a row with a staged agent take the soft-dep marker.
  */
-function makePiWithSubagents(): ExtensionAPI {
+function makePiWithSubagents(): ToolInventory {
   return makePi(["subagent"]);
 }
 

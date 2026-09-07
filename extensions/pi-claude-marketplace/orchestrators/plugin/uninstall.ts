@@ -64,7 +64,7 @@ import {
 import { UNINSTALL_CONTEXT } from "./uninstall.messaging.ts";
 
 import type { ScopedLocations } from "../../persistence/locations.ts";
-import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
+import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
 import type {
   ContentReason,
   PluginFailedMessage,
@@ -128,9 +128,9 @@ export type UninstallPluginOutcome =
  * for PU-7 coverage; forced all-empty dropped for PU-8 zero-dropped coverage).
  */
 export interface UninstallPluginOptions {
-  readonly ctx: ExtensionContext;
+  readonly ctx: NotificationContext;
   /** Factory `pi` reference -- threaded into `notify()` for the single softDepStatus(pi) probe. */
-  readonly pi: ExtensionAPI;
+  readonly pi: ToolInventory;
   readonly scope?: Scope;
   /** Project-scope cwd (ignored for user scope; see locationsFor). */
   readonly cwd: string;
@@ -202,8 +202,8 @@ function narrowCascadeFailure(cause: Error): ContentReason {
  * to keep cognitive complexity inside the SonarJS lint budget.
  */
 function emitCascadeFailure(args: {
-  ctx: ExtensionContext;
-  pi: ExtensionAPI;
+  ctx: NotificationContext;
+  pi: ToolInventory;
   marketplace: string;
   scope: Scope;
   plugin: string;
@@ -254,8 +254,8 @@ function emitCascadeFailure(args: {
  * basename-only cause prevents an absolute-path information leak.
  */
 function emitConfigInvalid(args: {
-  ctx: ExtensionContext;
-  pi: ExtensionAPI;
+  ctx: NotificationContext;
+  pi: ToolInventory;
   marketplace: string;
   scope: Scope;
   plugin: string;
@@ -475,8 +475,8 @@ async function runPostUninstallCleanup(
  * container IS here and the only remedy is to install.
  */
 function emitAlreadyGone(args: {
-  readonly ctx: ExtensionContext;
-  readonly pi: ExtensionAPI;
+  readonly ctx: NotificationContext;
+  readonly pi: ToolInventory;
   readonly marketplace: string;
   readonly scope: Scope;
   readonly plugin: string;

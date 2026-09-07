@@ -172,7 +172,11 @@ import type { GitPluginRootResult, MaterializablePlugin } from "../../domain/res
 import type { GitBackedSource, ParsedSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
-import type { ExtensionAPI, ExtensionContext, SoftDepStatus } from "../../platform/pi-api.ts";
+import type {
+  NotificationContext,
+  SoftDepStatus,
+  ToolInventory,
+} from "../../platform/pi-api.ts";
 import type { HookSummaryEntry } from "../../shared/concerns/hooks.ts";
 import type { DegradeKind } from "../../shared/notify-reasons.ts";
 import type { ContentReason, PluginFailedMessage } from "../../shared/notify.ts";
@@ -231,9 +235,9 @@ export interface UpdateCloneCacheSeam {
 }
 
 export interface UpdatePluginsOptions {
-  readonly ctx: ExtensionContext;
+  readonly ctx: NotificationContext;
   /** Factory `pi` reference -- carries `getAllTools` for RH-3/RH-4 soft-dep probes. */
-  readonly pi: ExtensionAPI;
+  readonly pi: ToolInventory;
   readonly scope?: Scope;
   readonly cwd: string;
   readonly target: UpdatePluginsTarget;
@@ -496,7 +500,7 @@ export async function updatePlugins(opts: UpdatePluginsOptions): Promise<void> {
  * note is noise against it.
  */
 function surfaceUpdateDiscoveryWarnings(
-  ctx: ExtensionContext,
+  ctx: NotificationContext,
   outcomes: readonly { readonly outcome: PluginUpdateOutcome }[],
 ): void {
   for (const { outcome } of outcomes) {
@@ -605,8 +609,8 @@ function isPhase3aAggregateFailure(
  * emit an empty-marketplaces sentinel after a phase-3a abort.
  */
 function renderUpdateCascadeIfAny(
-  ctx: ExtensionContext,
-  pi: ExtensionAPI,
+  ctx: NotificationContext,
+  pi: ToolInventory,
   outcomes: readonly TargetedOutcome[],
   cardinality: "single" | "plural",
   // WR-01: the phase-3a abort path sets this so the never-silent no-op headline
@@ -770,8 +774,8 @@ interface ThreePhaseArgsBase {
 interface DirectThreePhaseArgs extends ThreePhaseArgsBase {
   /** Direct mode owns its notification surface. */
   readonly cascade: false;
-  readonly ctx: ExtensionContext;
-  readonly pi: ExtensionAPI;
+  readonly ctx: NotificationContext;
+  readonly pi: ToolInventory;
   readonly cardinality: "single" | "plural";
 }
 
@@ -858,7 +862,7 @@ function makeUpdateCloneProbe(
   seam: UpdateCloneCacheSeam,
   locations: ScopedLocations,
   auth: {
-    ctx?: ExtensionContext;
+    ctx?: NotificationContext;
     credentialOps: CredentialOps;
     deviceFlowHttp?: DeviceFlowHttp;
     authMemo?: Map<string, AuthAttemptResult>;
@@ -2798,8 +2802,8 @@ function outcomeToCascadePluginMessage(
  * . Orchestrator MUST NOT compose any of these.
  */
 function renderUpdateCascadeAndNotify(
-  ctx: ExtensionContext,
-  pi: ExtensionAPI,
+  ctx: NotificationContext,
+  pi: ToolInventory,
   outcomes: readonly TargetedOutcome[],
   cardinality: "single" | "plural",
   // WR-01: set on the phase-3a abort path. The failing plugin fired its own
@@ -2966,8 +2970,8 @@ function renderUpdateCascadeAndNotify(
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface NotifyDirectFailureArgs {
-  readonly ctx: ExtensionContext;
-  readonly pi: ExtensionAPI;
+  readonly ctx: NotificationContext;
+  readonly pi: ToolInventory;
   readonly cardinality: "single" | "plural";
   readonly marketplace: string;
   readonly scope: Scope;
@@ -3103,8 +3107,8 @@ function narrowDirectFailReason(err: Error): ContentReason {
  * trailer carries the diagnostic).
  */
 function notifyBareFormEnumerateFailure(args: {
-  readonly ctx: ExtensionContext;
-  readonly pi: ExtensionAPI;
+  readonly ctx: NotificationContext;
+  readonly pi: ToolInventory;
   readonly scope: Scope | undefined;
   readonly err: Error;
   readonly cardinality: "single" | "plural";

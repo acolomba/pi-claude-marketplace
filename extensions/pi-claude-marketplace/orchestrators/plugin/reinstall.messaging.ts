@@ -14,7 +14,7 @@ import {
   type PluginSkippedMessage,
 } from "../../shared/notify.ts";
 
-import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
+import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type {
   CommandContext,
@@ -142,8 +142,8 @@ export const REINSTALL_CONTEXT = {
 //   callers MUST NOT compose them.
 // - Reference: catalog UAT plugin-reinstall fixtures.
 export function renderReinstallPartitionAndNotify(
-  ctx: ExtensionContext,
-  pi: ExtensionAPI,
+  ctx: NotificationContext,
+  pi: ToolInventory,
   outcomes: readonly ReinstallPluginOutcome[],
   cardinality: "single" | "plural",
 ): void {

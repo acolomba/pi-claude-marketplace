@@ -147,7 +147,7 @@ import type { GitPluginRootResult, MaterializablePlugin } from "../../domain/res
 import type { GitHubSource, GitSubdirSource, UrlSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState, PluginInstallRecord } from "../../persistence/state-io.ts";
-import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
+import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
 import type { HookSummaryEntry } from "../../shared/concerns/hooks.ts";
 import type { DegradeKind } from "../../shared/notify-reasons.ts";
 import type {
@@ -176,8 +176,8 @@ export type RemoveDataDirFn = (
 export type DropMarketplaceCacheFn = typeof dropMarketplaceCache;
 
 export interface ReinstallPluginOptions {
-  readonly ctx: ExtensionContext;
-  readonly pi: ExtensionAPI;
+  readonly ctx: NotificationContext;
+  readonly pi: ToolInventory;
   readonly scope: Scope;
   readonly cwd: string;
   readonly marketplace: string;
@@ -241,8 +241,8 @@ export type ReinstallPluginsTarget =
   | { readonly kind: "plugin"; readonly plugin: string; readonly marketplace: string };
 
 export interface ReinstallPluginsOptions {
-  readonly ctx: ExtensionContext;
-  readonly pi: ExtensionAPI;
+  readonly ctx: NotificationContext;
+  readonly pi: ToolInventory;
   readonly scope?: Scope;
   readonly cwd: string;
   readonly target: ReinstallPluginsTarget;
@@ -608,7 +608,7 @@ export async function reinstallPlugins(
  * consumers.
  */
 function surfaceReinstallDiscoveryWarnings(
-  ctx: ExtensionContext,
+  ctx: NotificationContext,
   outcomes: readonly ReinstallPluginOutcome[],
 ): void {
   for (const outcome of outcomes) {
@@ -1113,7 +1113,7 @@ function makeReinstallCloneProbe(
   recordedSha: string,
   cloneUrl: string,
   auth: {
-    ctx: ExtensionContext;
+    ctx: NotificationContext;
     credentialOps: CredentialOps;
     deviceFlowHttp?: DeviceFlowHttp;
     authMemo?: Map<string, AuthAttemptResult>;
@@ -1193,7 +1193,7 @@ async function resolveInstallable(input: {
   readonly locations: ScopedLocations;
   readonly recordedSha: string | undefined;
   readonly seam: ReinstallCloneCacheSeam;
-  readonly ctx: ExtensionContext;
+  readonly ctx: NotificationContext;
   readonly credentialOps: CredentialOps;
   readonly deviceFlowHttp?: DeviceFlowHttp;
   readonly authMemo?: Map<string, AuthAttemptResult>;

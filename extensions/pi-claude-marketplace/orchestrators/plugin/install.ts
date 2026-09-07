@@ -173,7 +173,7 @@ import type { GitBackedSource } from "../../domain/source.ts";
 import type { ScopeConfig } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
-import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
+import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
 import type { HookSummaryEntry } from "../../shared/concerns/hooks.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type { ContentReason } from "../../shared/notify.ts";
@@ -205,9 +205,9 @@ export type InstallPluginNotifications =
   { readonly mode: "standalone" } | { readonly mode: "orchestrated" };
 
 export interface InstallPluginOptions {
-  readonly ctx: ExtensionContext;
+  readonly ctx: NotificationContext;
   /** Factory `pi` reference -- carries `getAllTools()` for RH-3/RH-4 soft-dep probes. */
-  readonly pi: ExtensionAPI;
+  readonly pi: ToolInventory;
   readonly scope: Scope;
   /** Project-scope cwd (ignored for user scope; see locationsFor). */
   readonly cwd: string;
@@ -435,7 +435,7 @@ export interface InstallLedgerOptions {
    * / failure itself (that is the caller's concern); `ctx` is here solely to
    * wire the auth notify seam for the clone probe.
    */
-  readonly ctx: ExtensionContext;
+  readonly ctx: NotificationContext;
   readonly scope: Scope;
   readonly cwd: string;
   readonly marketplace: string;
@@ -551,7 +551,7 @@ function makeInstallCloneProbe(
   seam: InstallCloneCacheSeam,
   locations: ScopedLocations,
   auth: {
-    ctx: ExtensionContext;
+    ctx: NotificationContext;
     credentialOps: CredentialOps;
     deviceFlowHttp?: DeviceFlowHttp;
     authMemo?: Map<string, AuthAttemptResult>;
@@ -1670,7 +1670,7 @@ function composeDisabledRow(installCtx: InstallCtx): InstallMsg {
   };
 }
 
-function composeInstalledRow(installCtx: InstallCtx, pi: ExtensionAPI): InstallMsg {
+function composeInstalledRow(installCtx: InstallCtx, pi: ToolInventory): InstallMsg {
   const { plugin } = installCtx;
   const declaresAgents = installCtx.stagedAgentNames.length > 0;
   const declaresMcp = installCtx.stagedMcpServerNames.length > 0;
@@ -1790,8 +1790,8 @@ function buildInstalledOutcome(
  * same scope and `renderScopeBracket` suppresses the duplicate.
  */
 function failedRowOutcome(args: {
-  readonly ctx: ExtensionContext;
-  readonly pi: ExtensionAPI;
+  readonly ctx: NotificationContext;
+  readonly pi: ToolInventory;
   readonly marketplace: string;
   readonly scope: Scope;
   readonly plugin: string;
@@ -1845,8 +1845,8 @@ function failedRowOutcome(args: {
  */
 function handleInstallThrow(args: {
   readonly err: unknown;
-  readonly ctx: ExtensionContext;
-  readonly pi: ExtensionAPI;
+  readonly ctx: NotificationContext;
+  readonly pi: ToolInventory;
   readonly marketplace: string;
   readonly scope: Scope;
   readonly plugin: string;

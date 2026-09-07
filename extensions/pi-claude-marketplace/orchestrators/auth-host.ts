@@ -35,7 +35,7 @@ import { makeRawNotifyFn } from "../shared/notify.ts";
 import type { DeviceFlowHttp } from "../domain/github-auth.ts";
 import type { CredentialOps } from "../platform/git-credential.ts";
 import type { AuthAttemptResult, OnAuthRequiredFn } from "../platform/git.ts";
-import type { ExtensionContext } from "../platform/pi-api.ts";
+import type { NotificationContext } from "../platform/pi-api.ts";
 import type { GitAuthBundle } from "./marketplace/shared.ts";
 
 // Re-export the credential/auth surface the network-gated plugin orchestrators
@@ -78,7 +78,7 @@ export const NO_PROVIDER_CAUSE = (host: string): string =>
 export function buildAuthForHost(args: {
   host: string;
   credentialOps: CredentialOps;
-  ctx: ExtensionContext;
+  ctx: NotificationContext;
   deviceFlowHttp?: DeviceFlowHttp;
   authMemo?: Map<string, AuthAttemptResult>;
 }): GitAuthBundle | undefined {
@@ -134,7 +134,7 @@ export function buildCloneAuth(
   cloneUrl: string,
   kind: "url" | "git-subdir" | "github",
   auth: {
-    readonly ctx: ExtensionContext;
+    readonly ctx: NotificationContext;
     readonly credentialOps: CredentialOps;
     readonly deviceFlowHttp?: DeviceFlowHttp;
     readonly authMemo?: Map<string, AuthAttemptResult>;

@@ -50,7 +50,7 @@ import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { CredentialOps } from "../../platform/git-credential.ts";
 import type { OnAuthRequiredFn } from "../../platform/git.ts";
-import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
+import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
 import type { ContentReason } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 
@@ -521,7 +521,7 @@ export async function resolveScopeFromState(
  * so both UpdateMarketplaceOptions and RemoveMarketplaceOptions satisfy it.
  */
 export async function resolveScopeOrNotifyNotAdded(
-  opts: { ctx: ExtensionContext; pi: ExtensionAPI; name: string; scope?: Scope },
+  opts: { ctx: NotificationContext; pi: ToolInventory; name: string; scope?: Scope },
   userLocations: ScopedLocations,
   projectLocations: ScopedLocations,
 ): Promise<{ scope: Scope; locations: ScopedLocations } | undefined> {

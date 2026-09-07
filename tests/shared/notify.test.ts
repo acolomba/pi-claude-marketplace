@@ -128,7 +128,7 @@ test("notify renders single installed plugin with empty deps under added marketp
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -162,7 +162,7 @@ test("notify renders installed plugin with agents dep + probe unloaded (soft-dep
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -197,7 +197,7 @@ test("notify renders updated plugin with version arrow + mcp dep marker", (t) =>
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -231,7 +231,7 @@ test("notify renders reinstalled plugin with both deps loaded (no soft-dep marke
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -264,7 +264,7 @@ test("notify renders uninstalled plugin (no dependencies field, ICON_AVAILABLE)"
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -294,7 +294,7 @@ test("notify renders available plugin (MSG-PL-6 carve-out: NO scope bracket ever
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -324,7 +324,7 @@ test("notify renders unavailable plugin with reasons (MSG-PL-6 carve-out: NO sco
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -354,7 +354,7 @@ test("USTAT-01 / D-64-01: notify renders unsupported plugin with the ⊖ glyph (
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -387,7 +387,7 @@ test("USTAT-01 / D-64-01: notify renders unsupported plugin with version and {ls
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -420,7 +420,7 @@ test("XSURF-01: unsupported install-failure row with partialHint emits the --for
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -454,7 +454,7 @@ test("XSURF-01: unsupported row WITHOUT partialHint stays byte-frozen (no traile
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -491,7 +491,7 @@ test("XSURF-03: force-upgradable update-decline row with partialHint emits the -
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -525,7 +525,7 @@ test("XSURF-03: list-inventory force-upgradable row WITHOUT partialHint stays by
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -560,7 +560,7 @@ test("notify renders upgradable plugin with version and reasons brace", (t) => {
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -591,7 +591,7 @@ test("FSTAT-02 / D-66-03: force-installed renders the ◉ glyph distinct from �
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -630,7 +630,7 @@ test("WR-03: force-installed success row threads dependencies -> soft-dep marker
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -663,7 +663,7 @@ test("WR-03: force-installed INVENTORY row (no dependencies) renders no soft-dep
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
 
   // assert
@@ -695,7 +695,7 @@ test("FSTAT-04 / D-66-03: force-upgradable reuses the ● glyph like the upgrada
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -722,7 +722,7 @@ test("FSTAT-06 / D-66-04: will-install force modifier renders (will partially in
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -746,7 +746,7 @@ test("FSTAT-06 / D-66-04: will-install WITHOUT the force modifier renders (will 
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
 
   // assert
@@ -778,7 +778,7 @@ test("notify renders benign skipped plugin with up-to-date reason (info severity
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -813,7 +813,7 @@ test("notify renders failed plugin with reasons only -- no cause, no rollback (e
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -832,7 +832,7 @@ test("notify renders added marketplace header alone (empty plugins -> header-onl
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -848,7 +848,7 @@ test("notify renders removed marketplace header alone (empty plugins -> header-o
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -864,7 +864,7 @@ test("notify renders updated marketplace header alone (empty plugins -> header-o
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -889,7 +889,7 @@ test("notify renders failed marketplace header alone (empty plugins -> NO reload
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -917,7 +917,7 @@ test("D-48-A: bare-(failed) add `failure-unreachable` form is byte-unchanged (re
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -948,7 +948,7 @@ test("D-48-A: bare-(failed) update `mp-failure-network` header is byte-unchanged
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -979,7 +979,7 @@ test("D-48-A: a reasons-omitted failed marketplace arm renders bare `(failed)` (
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -1001,7 +1001,7 @@ test("notify renders autoupdate enabled marketplace header alone (UXG-04 <autoup
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -1017,7 +1017,7 @@ test("notify renders autoupdate disabled marketplace header alone (UXG-04 <no au
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -1043,7 +1043,7 @@ test("notify renders idempotent-enable marketplace header with <autoupdate> mark
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -1071,7 +1071,7 @@ test("notify severity tier mp-skipped: idempotent-disable marketplace renders <n
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -1097,7 +1097,7 @@ test('UXG-05: marketplace update no-op (mp.skipped + reasons:["up-to-date"], plu
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -1130,7 +1130,7 @@ test('UXG-05 (UAT Test-3 gap): autoupdate-ON no-op payload (mp.skipped + reasons
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -1169,7 +1169,7 @@ test("notify benign-only cascade: benign mp.skipped coexists with healthy plugin
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -1202,7 +1202,7 @@ test("notify renders SUB-BRANCH B list-surface marketplace header with autoupdat
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -1218,7 +1218,7 @@ test("notify renders header-only block on empty plugins under added marketplace 
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -1249,7 +1249,7 @@ test("RLD-04: list-shaped message with an installed inventory row (needsReload:f
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -1288,7 +1288,7 @@ test("RLD-02: cascade-shaped message with an installed transition row (needsRelo
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -1324,7 +1324,7 @@ test("PL-4: installed inventory row with description emits a 4-space-indented se
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
   const body = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
 
   // assert
@@ -1357,7 +1357,7 @@ test("PL-4: upgradable row with description emits description line", (t) => {
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
   const body = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
 
   // assert
@@ -1389,7 +1389,7 @@ test("PL-4: available row with description emits description line", (t) => {
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
   const body = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
 
   // assert
@@ -1421,7 +1421,7 @@ test("PL-4: unavailable row with description emits description line", (t) => {
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
   const body = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
 
   // assert
@@ -1453,7 +1453,7 @@ test("PL-4 / CR-01: unsupported row with description emits description line", (t
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
   const body = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
 
   // assert
@@ -1487,7 +1487,7 @@ test("PL-4: disabled inventory row with description emits description line", (t)
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
   const body = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
 
   // assert
@@ -1512,7 +1512,7 @@ test("PL-4: description absent -- no second line emitted", (t) => {
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
   const body = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
 
   // assert
@@ -1535,7 +1535,7 @@ test("PL-4: description exactly 66 chars -- emitted verbatim (no truncation)", (
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
   const body = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
 
   // assert
@@ -1561,7 +1561,7 @@ test("PL-4: description 67 chars -- truncated to 63 + '...' (column 66)", (t) =>
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
   const body = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
 
   // assert
@@ -1586,7 +1586,7 @@ test("PL-4: empty string description -- no second line emitted", (t) => {
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
   const body = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
 
   // assert
@@ -1602,7 +1602,7 @@ test("D-22-04 NEGATIVE: empty `marketplace add` ({status:'added', plugins:[]}) e
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -1622,7 +1622,7 @@ test("D-22-04 NEGATIVE: empty `marketplace remove` ({status:'removed', plugins:[
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -1657,7 +1657,7 @@ test("D-22-04 NEGATIVE: no-op `marketplace update` (all plugin rows skipped) emi
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -1684,7 +1684,7 @@ test("D-22-04 POSITIVE: `marketplace remove` that uninstalled >=1 plugin emits t
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -1721,7 +1721,7 @@ test("D-22-04 POSITIVE: `marketplace update` with >=1 changed plugin emits the /
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -1739,7 +1739,7 @@ test("notify renders (no marketplaces) sentinel for empty marketplaces array (no
   const msg: NotificationMessage = { marketplaces: [] };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -1761,7 +1761,7 @@ test("notify renders bare marketplace header when mp.status and mp.details are b
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -1793,7 +1793,7 @@ test("notify renders single-plugin payload as 2-line body (header + 2-space inde
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -1843,7 +1843,7 @@ test("notify preserves caller-supplied plugin order across multi-plugin payload 
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -1892,7 +1892,7 @@ test("notify joins multi-marketplace blocks with single blank line and appends r
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -1927,7 +1927,7 @@ test("notify emits inline [scope] bracket on plugin row when p.scope set (orphan
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -1961,7 +1961,7 @@ test("notify omits scope bracket on plugin row when p.scope is undefined (non-or
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -2012,7 +2012,7 @@ test("notify omits scope bracket on installed plugin row when p.scope === mp.sco
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -2062,7 +2062,7 @@ test("notify emits [project] bracket on installed plugin row when p.scope !== mp
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -2109,7 +2109,7 @@ test("notify omits scope bracket on updated plugin row when p.scope === mp.scope
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -2159,7 +2159,7 @@ test("notify emits [project] bracket on failed plugin row when p.scope !== mp.sc
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -2207,7 +2207,7 @@ test("notify renders rollbackPartial child rows at 4-space indent for failed plu
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -2246,7 +2246,7 @@ test("notify renders nested cause chains: per-plugin at 4-space indent, per-phas
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -2291,7 +2291,7 @@ test("notify emits per-plugin cause-chain inline below each failed row (multi-ca
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -2326,7 +2326,7 @@ test("notify severity tier info: installed plugin in added marketplace -> argume
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -2357,7 +2357,7 @@ test('notify severity tier warning: single actionable skipped plugin -> argument
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -2397,7 +2397,7 @@ test('notify severity tier error first-match: failed + skipped in same payload -
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -2431,7 +2431,7 @@ test("notify suppresses reload-hint when payload contains only failed statuses (
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -2491,7 +2491,7 @@ test("notify renders manual recovery plugin with cause-chain trailer (warning se
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -2532,7 +2532,7 @@ test("AS-7: manual recovery row names the leaked paths from ManualRecoveryError.
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -2571,7 +2571,7 @@ test("AS-7: manual recovery row with no leaks emits no leaked-paths child row", 
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
   const rendered = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
 
   // assert
@@ -2603,7 +2603,7 @@ test("notify renders single-version hash row as v#<7hex> via renderVersion choke
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -2637,7 +2637,7 @@ test("D-77-01 / PURL-09 notify renders single-version sha row as v#<7hex> via re
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -2672,7 +2672,7 @@ test("notify renders update arrow with hash on both sides as v#<7hex> → v#<7he
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -2706,7 +2706,7 @@ test("notify passes a SemVer version through unchanged -> v1.0.0 (non-hash pass-
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -2739,7 +2739,7 @@ test('UXG-02 (D-28-03/06): actionable plugin skip ("not installed") computes war
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -2780,7 +2780,7 @@ test("UXG-02 (D-28-09): mixed cascade (benign skip + actionable skip) computes w
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -2813,7 +2813,7 @@ test("UXG-02 (D-28-06): plugin skip with empty reasons:[] computes warning (allB
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -2840,7 +2840,7 @@ test("UXG-02 (D-28-08): mp-level skip with reasons OMITTED computes warning -- s
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -2875,7 +2875,7 @@ test("UXG-07 (D-29-02/03): error -- single failed plugin under failed mp -> 'Som
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -2910,7 +2910,7 @@ test("UXG-07 (D-29-03): error -- single failed plugin, non-failed mp -> 'A plugi
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -2953,7 +2953,7 @@ test("UXG-07 (D-29-03): error -- two failed plugins, non-failed mp -> 'Some plug
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -2983,7 +2983,7 @@ test("UXG-07 (D-29-03): error -- failed mp only, no plugin rows -> 'A marketplac
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -3017,7 +3017,7 @@ test("UXG-07 (D-29-03/04): warning -- single actionable-skip plugin -> 'A plugin
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -3054,7 +3054,7 @@ test("UXG-07 (D-29-04): warning -- manual-recovery plugin counts as an actionabl
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -3104,7 +3104,7 @@ test("UXG-07 (D-29-03/04): warning -- two actionable-skip plugins + one actionab
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -3141,7 +3141,7 @@ test("UXG-07 (D-29-02): info severity -- NO summary line prepended (byte-identic
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -3181,7 +3181,7 @@ test("UXG-07 (D-29-02): error -- summary prepended BEFORE cascade body AND reloa
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -3221,7 +3221,7 @@ test("UXG-07 (D-29-02): warning -- benign-only cascade routes to INFO so NO summ
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -3250,7 +3250,7 @@ function pluginInfoDescriptionBlock(t: TestContext, description: string): string
       componentsResolved: false,
     },
   };
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
   const body = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
   const lines = body.split("\n");
   return lines.slice(2);
@@ -3360,7 +3360,7 @@ test("GRAM-01 / GRAM-02: standalone {marketplace not added} row renders the two-
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -3389,7 +3389,7 @@ test("GRAM-02: standalone failed plugin-info renders `A plugin operation has fai
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -3416,7 +3416,7 @@ test("INFO-04: {marketplace not added} row never carries a reload-hint (read-onl
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
   const body = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
 
   // assert
@@ -3440,7 +3440,7 @@ test("INFO-01: renderMarketplaceInfo (github source + ref + lastUpdated + descri
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
 
   // assert
@@ -3469,7 +3469,7 @@ test("INFO-01: renderMarketplaceInfo (path source, no lastUpdated, no descriptio
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
 
   // assert
@@ -3505,7 +3505,7 @@ test("INFO-02 / INFO-05: renderPluginInfo (componentsResolved:true with sorted c
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
 
   // assert
@@ -3542,7 +3542,7 @@ test("INFO-05: renderPluginInfo (componentsResolved:false emits the `components:
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
 
   // assert
@@ -3583,7 +3583,7 @@ test("SURF-02 / D-63-04: renderer emits multi-line `hooks:` block at 4-space hea
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
 
   // assert
@@ -3624,7 +3624,7 @@ test("SURF-02 / D-63-04: empty hooks ([]) emits NO `hooks:` header; non-hooks ki
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
 
   // assert
@@ -3661,7 +3661,7 @@ test("SURF-02 / D-63-04: undefined hooks (field omitted) emits NO `hooks:` heade
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
 
   // assert
@@ -3703,7 +3703,7 @@ test("SURF-02: lenient `HookSummaryEntry` arm renders `<event> (unsupported)` wh
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
 
   // assert
@@ -3744,7 +3744,7 @@ test("INFO-03: marketplace-info-cascade with a single block byte-equals the bare
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -3786,7 +3786,7 @@ test("INFO-03: marketplace-info-cascade with two blocks renders project-first th
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -3828,7 +3828,7 @@ test("INFO-03: marketplace-info-cascade severity is always info (no second arg) 
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
 
   // assert
@@ -3863,7 +3863,7 @@ test("INFO-03 + INFO-01: single-block fan-out (github source, all optional field
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
 
   // assert
@@ -3897,7 +3897,7 @@ test("INFO-03 + INFO-01: single-block fan-out (path source, minimal) byte form o
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
 
   // assert
@@ -3932,7 +3932,7 @@ test("INFO-02: plugin-info-cascade with a single block byte-equals the bare plug
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -3981,7 +3981,7 @@ test("INFO-02 + INFO-03: plugin-info-cascade with two blocks renders project-fir
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -4037,7 +4037,7 @@ test("INFO-02: plugin-info-cascade severity is always info (no second arg) and n
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
 
   // assert
@@ -4078,7 +4078,7 @@ test("INFO-02: plugin-info-cascade single block installed with resolved componen
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
 
   // assert
@@ -4121,7 +4121,7 @@ test("INFO-05: plugin-info-cascade single block components-not-resolved emits th
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
 
   // assert
@@ -4179,10 +4179,10 @@ test("an omitted cascade kind renders byte-identically to an explicit cascade ki
       },
     ],
   };
-  notify(ctxNoKind as never, pi as never, noKindMsg);
+  notify(ctxNoKind as never, pi, noKindMsg);
 
   // act
-  notify(ctxWithKind as never, pi as never, withKindMsg);
+  notify(ctxWithKind as never, pi, withKindMsg);
   const noKindArgs = ctxNoKind.ui.notify.mock.calls[0]!.arguments;
   const withKindArgs = ctxWithKind.ui.notify.mock.calls[0]!.arguments;
 
@@ -4209,7 +4209,7 @@ test("WILL-01: marketplace add renders a bare header + will-install plugin child
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -4233,7 +4233,7 @@ test("DIFF-02: will-uninstall plugin under existing (no-status) marketplace bloc
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
 
   // assert
@@ -4259,7 +4259,7 @@ test("DIFF-02: will-enable + will-disable rows under same marketplace", (t) => {
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
 
   // assert
@@ -4282,7 +4282,7 @@ test("DIFF-02: cross-scope orphan-fold -- plugin scope differs from marketplace 
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
 
   // assert
@@ -4308,7 +4308,7 @@ test("DIFF-02: will-* cascade emits NO /reload to pick up changes trailer (pendi
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
   const emitted = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
 
   // assert
@@ -4333,7 +4333,7 @@ test("DIFF-02: will-* cascade computes info severity (no second arg to ctx.ui.no
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
 
   // assert
@@ -4364,7 +4364,7 @@ test("D-54-01: (disabled) inventory row renders subject-first with version under
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
 
   // assert
@@ -4387,7 +4387,7 @@ test("D-54-01: (disabled) inventory row without version omits the v<version> slo
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
 
   // assert
@@ -4419,7 +4419,7 @@ test("D-54-01: (disabled) inventory row with orphan-fold scope bracket -- explic
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
 
   // assert
@@ -4451,7 +4451,7 @@ test("D-54-01: (disabled) inventory row WITHOUT orphan-fold -- p.scope matches m
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
 
   // assert
@@ -4482,7 +4482,7 @@ test("UAT-03 / RLD-05: a fresh (disabled) row stamping needsReload:true DOES emi
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
 
   // assert
@@ -4521,7 +4521,7 @@ test("UAT-03 / RLD-05: a (disabled) inventory row stamping needsReload:false sta
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
 
   // assert
@@ -4552,7 +4552,7 @@ test("D-54-01 / ENBL idempotency: (skipped) {already enabled} row routes to info
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
 
   // assert
@@ -4586,7 +4586,7 @@ test("D-54-01 / ENBL idempotency: (skipped) {already disabled} row routes to inf
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
 
   // assert
@@ -4622,7 +4622,7 @@ test("D-54-01: enable cascade (installed plugin row under added mp header) emits
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
 
   // assert
@@ -4656,7 +4656,7 @@ test("D-54-01: disable cascade (uninstalled plugin row under list-arm mp) emits 
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
 
   // assert
@@ -4706,7 +4706,7 @@ test("RECON-04: success cascade -- mixed marketplace add + plugin install across
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -4738,7 +4738,7 @@ test("RECON-04: success cascade NEVER emits `/reload to pick up changes` trailer
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
   const emitted = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
 
   // assert
@@ -4782,7 +4782,7 @@ test("RECON-04: soft-fail per-entry -- failed mp row mixed with successful insta
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
 
   // assert
@@ -4814,7 +4814,7 @@ test("RECON-04: CFG-03 invalid-config row carries BASENAME only (T-55-02-01 info
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
   const args = ctx.ui.notify.mock.calls[0]!.arguments;
 
   // assert
@@ -4862,7 +4862,7 @@ test("SURF-05 / D-63-08: installed row renders `(installed) {orphan rewake}` via
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -4910,7 +4910,7 @@ test("CLASS-01 / D-86-01: installed row renders `(installed) {malformed skill}` 
   };
 
   // act
-  notify(ctx as never, pi as never, msg);
+  notify(ctx as never, pi, msg);
 
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
@@ -5534,7 +5534,7 @@ test("emitContextCascade composes controlled rows, a plural tally, and a reload 
   };
 
   // act
-  emitContextCascade(ctx as never, pi as never, message as never, renderRow);
+  emitContextCascade(ctx as never, pi, message as never, renderRow);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
@@ -5559,7 +5559,7 @@ test("emitContextCascade renders an empty cascade sentinel", (t) => {
   >[2];
 
   // act
-  emitContextCascade(ctx as never, pi as never, message, renderRow);
+  emitContextCascade(ctx as never, pi, message, renderRow);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, ["(no marketplaces)"]);
@@ -5576,7 +5576,7 @@ test("emitUpdateNoOpCascade emits only the fixed headline for an empty cascade",
   >[2];
 
   // act
-  emitUpdateNoOpCascade(ctx as never, pi as never, message, renderRow);
+  emitUpdateNoOpCascade(ctx as never, pi, message, renderRow);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
@@ -5612,7 +5612,7 @@ test("emitUpdateNoOpCascade keeps a benign body above the fixed headline", (t) =
   } satisfies Parameters<typeof emitUpdateNoOpCascade>[2];
 
   // act
-  emitUpdateNoOpCascade(ctx as never, pi as never, message, renderRow);
+  emitUpdateNoOpCascade(ctx as never, pi, message, renderRow);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
@@ -5650,7 +5650,7 @@ test("emitReconcileAppliedContextCascade suppresses reload while preserving tall
   } satisfies Parameters<typeof emitReconcileAppliedContextCascade>[2];
 
   // act
-  emitReconcileAppliedContextCascade(ctx as never, pi as never, message, renderRow);
+  emitReconcileAppliedContextCascade(ctx as never, pi, message, renderRow);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
@@ -5675,7 +5675,7 @@ test("notify renders a central remote row without inferred reasons", (t) => {
   } satisfies NotificationMessage;
 
   // act
-  notify(ctx as never, pi as never, message);
+  notify(ctx as never, pi, message);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
@@ -5709,7 +5709,7 @@ test("notify counts a warning in a plural tally", (t) => {
   } satisfies NotificationMessage;
 
   // act
-  notify(ctx as never, pi as never, message);
+  notify(ctx as never, pi, message);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
@@ -5743,7 +5743,7 @@ for (const { name, tally, expected } of [
     } satisfies NotificationMessage;
 
     // act
-    notify(ctx as never, pi as never, message);
+    notify(ctx as never, pi, message);
 
     // assert
     assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [expected]);
@@ -5762,7 +5762,7 @@ test("an empty default plural tally reports zero successes", (t) => {
   } satisfies NotificationMessage;
 
   // act
-  notify(ctx as never, pi as never, message);
+  notify(ctx as never, pi, message);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
@@ -5788,7 +5788,7 @@ test("a marketplace-level reload stamp emits the trailer", (t) => {
   } satisfies NotificationMessage;
 
   // act
-  notify(ctx as never, pi as never, message);
+  notify(ctx as never, pi, message);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
@@ -5810,7 +5810,7 @@ test("marketplace info renders complete URL-source fields", (t) => {
   } satisfies NotificationMessage;
 
   // act
-  notify(ctx as never, pi as never, message);
+  notify(ctx as never, pi, message);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
@@ -5880,7 +5880,7 @@ for (const { name, plugin, expected } of [
     } satisfies NotificationMessage;
 
     // act
-    notify(ctx as never, pi as never, message);
+    notify(ctx as never, pi, message);
 
     // assert
     assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [expected]);
@@ -5894,7 +5894,7 @@ test("reconcile-pending-empty emits the exact zero-action advisory", (t) => {
   const message = { kind: "reconcile-pending-empty" } satisfies NotificationMessage;
 
   // act
-  notify(ctx as never, pi as never, message);
+  notify(ctx as never, pi, message);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
@@ -5930,7 +5930,7 @@ test("context emission renders the disabled enable hint", (t) => {
   } satisfies Parameters<typeof emitContextCascade>[2];
 
   // act
-  emitContextCascade(ctx as never, pi as never, message, renderRow);
+  emitContextCascade(ctx as never, pi, message, renderRow);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
@@ -5966,7 +5966,7 @@ test("reconcile applied summarizes mixed failed subjects", (t) => {
   } satisfies NotificationMessage;
 
   // act
-  notify(ctx as never, pi as never, message);
+  notify(ctx as never, pi, message);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
@@ -6023,7 +6023,7 @@ for (const { name, message, expected } of [
     const renderRow = t.mock.fn<Parameters<typeof emitContextCascade>[3]>(() => "unused");
 
     // act
-    emitContextCascade(ctx as never, pi as never, message as never, renderRow);
+    emitContextCascade(ctx as never, pi, message as never, renderRow);
 
     // assert
     assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, expected);
@@ -6042,7 +6042,7 @@ test("notify rejects an unknown marketplace status", (t) => {
   // act & assert
   assert.throws(
     () => {
-      notify(ctx as never, pi as never, message as never);
+      notify(ctx as never, pi, message as never);
     },
     {
       name: "Error",
@@ -6068,7 +6068,7 @@ test("notify rejects an unknown plugin status", (t) => {
   // act & assert
   assert.throws(
     () => {
-      notify(ctx as never, pi as never, message as never);
+      notify(ctx as never, pi, message as never);
     },
     {
       name: "Error",
@@ -6092,7 +6092,7 @@ test("notify rejects an unknown marketplace source kind", (t) => {
   // act & assert
   assert.throws(
     () => {
-      notify(ctx as never, pi as never, message as never);
+      notify(ctx as never, pi, message as never);
     },
     {
       name: "Error",
@@ -6116,7 +6116,7 @@ test("notify rejects an unknown plugin-info status", (t) => {
   // act & assert
   assert.throws(
     () => {
-      notify(ctx as never, pi as never, message as never);
+      notify(ctx as never, pi, message as never);
     },
     {
       name: "Error",
@@ -6140,7 +6140,7 @@ test("notify rejects an unknown plugin-info component-resolution arm", (t) => {
   // act & assert
   assert.throws(
     () => {
-      notify(ctx as never, pi as never, message as never);
+      notify(ctx as never, pi, message as never);
     },
     {
       name: "Error",
@@ -6158,7 +6158,7 @@ test("notify rejects an unknown top-level kind", (t) => {
   // act & assert
   assert.throws(
     () => {
-      notify(ctx as never, pi as never, message as never);
+      notify(ctx as never, pi, message as never);
     },
     {
       name: "Error",
@@ -6176,7 +6176,7 @@ test("the standalone dispatcher rejects a discriminator changed after narrowing"
   // act & assert
   assert.throws(
     () => {
-      notify(ctx as never, pi as never, message as never);
+      notify(ctx as never, pi, message as never);
     },
     {
       name: "Error",
@@ -6197,7 +6197,7 @@ test("severity computation rejects a discriminator changed after narrowing", (t)
   // act & assert
   assert.throws(
     () => {
-      notify(ctx as never, pi as never, message as never);
+      notify(ctx as never, pi, message as never);
     },
     {
       name: "Error",
@@ -6216,7 +6216,7 @@ test("summary computation preserves its read-only empty fallback after narrowing
   ]);
 
   // act
-  notify(ctx as never, pi as never, message as never);
+  notify(ctx as never, pi, message as never);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
@@ -6237,7 +6237,7 @@ test("summary computation rejects a discriminator changed after narrowing", (t) 
   // act & assert
   assert.throws(
     () => {
-      notify(ctx as never, pi as never, message as never);
+      notify(ctx as never, pi, message as never);
     },
     {
       name: "Error",
@@ -6256,7 +6256,7 @@ test("reload-hint computation rejects a discriminator changed after narrowing", 
   // act & assert
   assert.throws(
     () => {
-      emitContextCascade(ctx as never, pi as never, message as never, renderRow);
+      emitContextCascade(ctx as never, pi, message as never, renderRow);
     },
     {
       name: "Error",
@@ -6293,7 +6293,7 @@ test("a list-surface marketplace with autoupdate disabled omits the marker", (t)
   } satisfies NotificationMessage;
 
   // act
-  notify(ctx as never, pi as never, message);
+  notify(ctx as never, pi, message);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, ["● official [user]"]);
@@ -6319,7 +6319,7 @@ test("a warning reconcile cascade summarizes a marketplace subject", (t) => {
   } satisfies NotificationMessage;
 
   // act
-  notify(ctx as never, pi as never, message);
+  notify(ctx as never, pi, message);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
@@ -6351,7 +6351,7 @@ test("a non-failed plugin fallback preserves the empty standalone summary", (t) 
   };
 
   // act
-  notify(ctx as never, pi as never, message as never);
+  notify(ctx as never, pi, message as never);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
@@ -6384,7 +6384,7 @@ test("a defined empty cause does not add an indented cause trailer", (t) => {
   };
 
   // act
-  notify(ctx as never, pi as never, message as never);
+  notify(ctx as never, pi, message as never);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
@@ -6406,7 +6406,7 @@ test("a URL marketplace without a ref omits the fragment suffix", (t) => {
   } satisfies NotificationMessage;
 
   // act
-  notify(ctx as never, pi as never, message);
+  notify(ctx as never, pi, message);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
@@ -6424,7 +6424,7 @@ test("an absent marketplace without a scope omits the scope bracket", (t) => {
   } satisfies NotificationMessage;
 
   // act
-  notify(ctx as never, pi as never, message);
+  notify(ctx as never, pi, message);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
@@ -6449,7 +6449,7 @@ for (const { scope, expectedReason } of [
     } satisfies NotificationMessage;
 
     // act
-    notify(ctx as never, pi as never, message);
+    notify(ctx as never, pi, message);
 
     // assert
     assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
@@ -6470,7 +6470,7 @@ test("an absent marketplace claiming a sibling scope with no bracket keeps the p
   } satisfies NotificationMessage;
 
   // act
-  notify(ctx as never, pi as never, message);
+  notify(ctx as never, pi, message);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
@@ -6489,7 +6489,7 @@ test("an empty applied reconcile cascade renders the empty sentinel", (t) => {
   } satisfies NotificationMessage;
 
   // act
-  notify(ctx as never, pi as never, message);
+  notify(ctx as never, pi, message);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, ["(no marketplaces)"]);
@@ -6519,7 +6519,7 @@ test("a failed stale-gate row emits its dedicated recovery trailer", (t) => {
   } satisfies NotificationMessage;
 
   // act
-  notify(ctx as never, pi as never, message);
+  notify(ctx as never, pi, message);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
@@ -6552,7 +6552,7 @@ test("the central disabled arm preserves a caller-stamped reason", (t) => {
   } satisfies NotificationMessage;
 
   // act
-  notify(ctx as never, pi as never, message);
+  notify(ctx as never, pi, message);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
@@ -6591,7 +6591,7 @@ for (const { name, plugin, expected } of [
     } satisfies NotificationMessage;
 
     // act
-    notify(ctx as never, pi as never, message);
+    notify(ctx as never, pi, message);
 
     // assert
     assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [expected]);
@@ -6638,7 +6638,7 @@ for (const { name, reasons, expected } of [
     } satisfies NotificationMessage;
 
     // act
-    notify(ctx as never, pi as never, message);
+    notify(ctx as never, pi, message);
 
     // assert
     assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [expected]);
@@ -6669,7 +6669,7 @@ test("a single-target label remains inert without plural cardinality", (t) => {
   } satisfies NotificationMessage;
 
   // act
-  notify(ctx as never, pi as never, message);
+  notify(ctx as never, pi, message);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [

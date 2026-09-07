@@ -138,13 +138,13 @@ import type { ParsedSource, UrlSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { CredentialOps } from "../../platform/git-credential.ts";
-import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
+import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
 import type { ContentReason, PluginFailedMessage } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { PluginUpdateFn, PluginUpdateOutcome } from "../types.ts";
 
 export interface UpdateMarketplaceOptions {
-  readonly ctx: ExtensionContext;
+  readonly ctx: NotificationContext;
   /** Single marketplace by name. Required for `updateMarketplace`; rejected by `updateAllMarketplaces` (which derives the list from state). */
   readonly name: string;
   readonly scope?: Scope;
@@ -161,7 +161,7 @@ export interface UpdateMarketplaceOptions {
    * optional) so every `notify(ctx, pi, ...)` call has a non-null reference;
    * the renderer threads `softDepStatus(pi)` internally at notify-time.
    */
-  readonly pi: ExtensionAPI;
+  readonly pi: ToolInventory;
   /**
    * AUTH-02 injection seam. Defaults to DEFAULT_CREDENTIAL_OPS which
    * wraps `git credential fill/approve/reject` via subprocess. Tests
@@ -178,13 +178,13 @@ export interface UpdateMarketplaceOptions {
 }
 
 export interface UpdateAllMarketplacesOptions {
-  readonly ctx: ExtensionContext;
+  readonly ctx: NotificationContext;
   readonly scope?: Scope;
   readonly cwd: string;
   readonly gitOps?: GitOps;
   readonly pluginUpdate?: PluginUpdateFn;
   /** See `UpdateMarketplaceOptions.pi`. */
-  readonly pi: ExtensionAPI;
+  readonly pi: ToolInventory;
   /**
    * AUTH-02 injection seam. Defaults to DEFAULT_CREDENTIAL_OPS which
    * wraps `git credential fill/approve/reject` via subprocess. Tests
@@ -279,14 +279,14 @@ export async function updateAllMarketplaces(opts: UpdateAllMarketplacesOptions):
 }
 
 interface RefreshOneArgs {
-  readonly ctx: ExtensionContext;
+  readonly ctx: NotificationContext;
   readonly cardinality: "single" | "plural";
   readonly name: string;
   readonly scope: Scope;
   readonly locations: ScopedLocations;
   readonly gitOps: GitOps;
   readonly pluginUpdate?: PluginUpdateFn;
-  readonly pi: ExtensionAPI;
+  readonly pi: ToolInventory;
   readonly credentialOps: CredentialOps;
   readonly deviceFlowHttp?: DeviceFlowHttp;
 }

@@ -42,7 +42,7 @@
 
 import type { PerEntryOutcome } from "./apply-outcomes.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
-import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
+import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { GitOps } from "../marketplace/shared.ts";
 
@@ -248,8 +248,8 @@ export function emptyReconcilePlan(scope: Scope): ReconcilePlan {
  * `pending.ts::pendingReconcile`'s scope fan-out).
  */
 export interface ApplyReconcileOptions {
-  readonly ctx: ExtensionContext;
-  readonly pi: ExtensionAPI;
+  readonly ctx: NotificationContext;
+  readonly pi: ToolInventory;
   /** Project-scope cwd (ignored for the user scope). */
   readonly cwd: string;
   readonly scope?: Scope;
