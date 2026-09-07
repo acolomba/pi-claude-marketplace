@@ -2964,6 +2964,8 @@ const FIXTURES: FixtureMap = {
     "path-source": {
       pi: piWithBothLoaded(),
       message: {
+        label: "Marketplace add",
+        cardinality: "single",
         marketplaces: [{ name: "local-mp", scope: "user", status: "added", plugins: [] }],
       },
     },
@@ -2971,6 +2973,8 @@ const FIXTURES: FixtureMap = {
     "github-source": {
       pi: piWithBothLoaded(),
       message: {
+        label: "Marketplace add",
+        cardinality: "single",
         marketplaces: [
           {
             name: "claude-plugins-official",
@@ -2986,6 +2990,8 @@ const FIXTURES: FixtureMap = {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",
       message: {
+        label: "Marketplace add",
+        cardinality: "single",
         marketplaces: [
           {
             name: "unreachable-mp",
@@ -3007,6 +3013,8 @@ const FIXTURES: FixtureMap = {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",
       message: {
+        label: "Marketplace add",
+        cardinality: "single",
         marketplaces: [
           {
             name: "claude-plugins-official",
@@ -3025,6 +3033,8 @@ const FIXTURES: FixtureMap = {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",
       message: {
+        label: "Marketplace add",
+        cardinality: "single",
         marketplaces: [
           {
             name: "claude-plugins-official",
@@ -3043,6 +3053,8 @@ const FIXTURES: FixtureMap = {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",
       message: {
+        label: "Marketplace add",
+        cardinality: "single",
         marketplaces: [
           {
             name: "git@github.com:foo/bar.git",
@@ -3061,6 +3073,8 @@ const FIXTURES: FixtureMap = {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",
       message: {
+        label: "Marketplace add",
+        cardinality: "single",
         marketplaces: [
           {
             name: "./missing-mp",
@@ -3079,6 +3093,8 @@ const FIXTURES: FixtureMap = {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",
       message: {
+        label: "Marketplace add",
+        cardinality: "single",
         marketplaces: [
           {
             name: "anthropics/claude-plugins-official",
@@ -3103,6 +3119,8 @@ const FIXTURES: FixtureMap = {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",
       message: {
+        label: "Marketplace add",
+        cardinality: "single",
         marketplaces: [
           {
             name: "https://gitlab.com/acme/private-mp",
@@ -3824,6 +3842,8 @@ const FIXTURES: FixtureMap = {
     clean: {
       pi: piWithBothLoaded(),
       message: {
+        label: "Marketplace remove",
+        cardinality: "single",
         marketplaces: [
           {
             name: "local-mp",
@@ -3841,6 +3861,8 @@ const FIXTURES: FixtureMap = {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",
       message: {
+        label: "Marketplace remove",
+        cardinality: "single",
         marketplaces: [
           {
             name: "local-mp",
@@ -3893,7 +3915,7 @@ const FIXTURES: FixtureMap = {
   // -------------------------------------------------------------------------
   // /claude:plugin marketplace update -- marketplace + plugin cascade.
   // -------------------------------------------------------------------------
-  "/claude:plugin marketplace update <name>": {
+  "/claude:plugin marketplace update [<name>]": {
     // UXG-05: autoupdate-OFF manifest-only refresh splits into a no-op
     // (`skipped {up-to-date}`) and a changed (`updated`) state. Per UXG-02 /
     // D-28-07 the benign `up-to-date` no-op computes INFO (no
@@ -3901,6 +3923,8 @@ const FIXTURES: FixtureMap = {
     "update-no-op-skipped": {
       pi: piWithBothLoaded(),
       message: {
+        label: "Marketplace update",
+        cardinality: "single",
         marketplaces: [
           {
             name: "local-mp",
@@ -3924,6 +3948,8 @@ const FIXTURES: FixtureMap = {
       // Benign `up-to-date` no-op -> INFO per UXG-02 / D-28-07 (no
       // `expectedSeverity`); byte form unchanged.
       message: {
+        label: "Marketplace update",
+        cardinality: "single",
         marketplaces: [
           {
             name: "official",
@@ -3945,6 +3971,8 @@ const FIXTURES: FixtureMap = {
     "update-autoupdate-disabled-repin": {
       pi: piWithBothLoaded(),
       message: {
+        label: "Marketplace update",
+        cardinality: "single",
         marketplaces: [
           {
             name: "disabled-mp",
@@ -3975,6 +4003,8 @@ const FIXTURES: FixtureMap = {
       pi: piWithBothLoaded(),
       expectedSeverity: "warning",
       message: {
+        label: "Marketplace update",
+        cardinality: "single",
         marketplaces: [
           {
             name: "auto-skip",
@@ -3998,6 +4028,8 @@ const FIXTURES: FixtureMap = {
     "manifest-refresh-changed": {
       pi: piWithBothLoaded(),
       message: {
+        label: "Marketplace update",
+        cardinality: "single",
         marketplaces: [{ name: "local-mp", scope: "user", status: "updated", plugins: [] }],
       },
     },
@@ -4006,6 +4038,8 @@ const FIXTURES: FixtureMap = {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",
       message: {
+        label: "Marketplace update",
+        cardinality: "single",
         marketplaces: [
           {
             name: "official",
@@ -4051,6 +4085,8 @@ const FIXTURES: FixtureMap = {
     "autoupdate-partially-installed-already-degraded": {
       pi: piWithBothLoaded(),
       message: {
+        label: "Marketplace update",
+        cardinality: "single",
         marketplaces: [
           {
             name: "official",
@@ -4083,6 +4119,8 @@ const FIXTURES: FixtureMap = {
       pi: piWithBothLoaded(),
       expectedSeverity: "warning",
       message: {
+        label: "Marketplace update",
+        cardinality: "single",
         marketplaces: [
           {
             name: "official",
@@ -4109,6 +4147,8 @@ const FIXTURES: FixtureMap = {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",
       message: {
+        label: "Marketplace update",
+        cardinality: "single",
         marketplaces: [
           {
             name: "official",
@@ -4134,6 +4174,8 @@ const FIXTURES: FixtureMap = {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",
       message: {
+        label: "Marketplace update",
+        cardinality: "single",
         marketplaces: [
           {
             name: "official",
@@ -4150,6 +4192,72 @@ const FIXTURES: FixtureMap = {
                 needsReload: false,
               },
             ],
+          },
+        ],
+      },
+    },
+
+    "update-all-empty": {
+      pi: piWithBothLoaded(),
+      message: {
+        label: "Marketplace update",
+        cardinality: "plural",
+        marketplaces: [],
+      },
+    },
+
+    "update-all-one": {
+      pi: piWithBothLoaded(),
+      message: {
+        label: "Marketplace update",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "alpha",
+            scope: "project",
+            status: "skipped",
+            severity: "info",
+            needsReload: false,
+            reasons: ["up-to-date"],
+            plugins: [],
+          },
+        ],
+      },
+    },
+
+    "update-all-many-alpha": {
+      pi: piWithBothLoaded(),
+      message: {
+        label: "Marketplace update",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "alpha",
+            scope: "project",
+            status: "skipped",
+            severity: "info",
+            needsReload: false,
+            reasons: ["up-to-date"],
+            plugins: [],
+          },
+        ],
+      },
+    },
+
+    "update-all-many-beta": {
+      pi: piWithBothLoaded(),
+      message: {
+        label: "Marketplace update",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "beta",
+            scope: "project",
+            status: "skipped",
+            severity: "info",
+            needsReload: false,
+            reasons: ["up-to-date"],
+            plugins: [],
           },
         ],
       },
@@ -5294,14 +5402,14 @@ test("catalog UAT: every <!-- catalog-state: --> annotation pairs byte-equal wit
   const catalog = await readFile(CATALOG_PATH, "utf8");
   const examples = loadCatalogExamples(catalog);
 
-  // Exact count, not a floor: 186 is the number of annotated examples in
+  // Exact count, not a floor: 190 is the number of annotated examples in
   // docs/output-catalog.md, and it is what stops a `loadCatalogExamples`
   // refactor from silently parsing a fraction of the corpus. Update it
   // deliberately when catalog examples are added or removed.
   assert.equal(
     examples.length,
-    186,
-    `Expected exactly 186 annotated catalog examples; found ${examples.length}. Check that the discriminator comments in docs/output-catalog.md were not lost, and update this count when examples are added.`,
+    190,
+    `Expected exactly 190 annotated catalog examples; found ${examples.length}. Check that the discriminator comments in docs/output-catalog.md were not lost, and update this count when examples are added.`,
   );
 
   const failures: Failure[] = [];

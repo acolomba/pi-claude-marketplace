@@ -218,6 +218,7 @@ export async function updateMarketplace(opts: UpdateMarketplaceOptions): Promise
   await refreshOneMarketplace({
     ctx: opts.ctx,
     pi: opts.pi,
+    cardinality: "single",
     name: opts.name,
     scope: resolved.scope,
     locations: resolved.locations,
@@ -256,7 +257,7 @@ export async function updateAllMarketplaces(opts: UpdateAllMarketplacesOptions):
     // OUT-07 / D-12: empty inventory -> Plural (zero rows). Renders the
     // `(no marketplaces)` sentinel via the central seam the spine reuses.
     const emptyRows: Plural<MarketplaceRows<UpdateRowMsg>> = [];
-    notifyWithContext(opts.ctx, opts.pi, UPDATE_CONTEXT, emptyRows);
+    notifyWithContext(opts.ctx, opts.pi, UPDATE_CONTEXT, emptyRows, undefined, "plural");
     return;
   }
 
@@ -265,6 +266,7 @@ export async function updateAllMarketplaces(opts: UpdateAllMarketplacesOptions):
     await refreshOneMarketplace({
       ctx: opts.ctx,
       pi: opts.pi,
+      cardinality: "plural",
       name: t.name,
       scope: t.scope,
       locations: t.locations,
@@ -278,6 +280,7 @@ export async function updateAllMarketplaces(opts: UpdateAllMarketplacesOptions):
 
 interface RefreshOneArgs {
   readonly ctx: ExtensionContext;
+  readonly cardinality: "single" | "plural";
   readonly name: string;
   readonly scope: Scope;
   readonly locations: ScopedLocations;
@@ -682,7 +685,7 @@ function transportReason(err: Error): ContentReason | undefined {
 }
 
 async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
-  const { ctx, name, scope, locations, pluginUpdate, pi } = args;
+  const { ctx, cardinality, name, scope, locations, pluginUpdate, pi } = args;
 
   let snapshot: RefreshSnapshot | undefined;
   try {
@@ -713,7 +716,7 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
       // D-03: a failed marketplace update -> error.
       { name, scope, status: "failed", severity: "error", plugins: [failedRow] },
     ];
-    notifyWithContext(ctx, pi, UPDATE_CONTEXT, failedRows);
+    notifyWithContext(ctx, pi, UPDATE_CONTEXT, failedRows, undefined, cardinality);
     return;
   }
 
@@ -772,7 +775,7 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
       const skippedRows: Single<MarketplaceRows<UpdateRowMsg>> = [
         { name, scope, status: "skipped", reasons: ["up-to-date"], plugins: [] },
       ];
-      notifyWithContext(ctx, pi, UPDATE_CONTEXT, skippedRows);
+      notifyWithContext(ctx, pi, UPDATE_CONTEXT, skippedRows, undefined, cardinality);
       return;
     }
 
@@ -780,7 +783,7 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
     const updatedRows: Single<MarketplaceRows<UpdateRowMsg>> = [
       { name, scope, status: "updated", plugins: [] },
     ];
-    notifyWithContext(ctx, pi, UPDATE_CONTEXT, updatedRows);
+    notifyWithContext(ctx, pi, UPDATE_CONTEXT, updatedRows, undefined, cardinality);
     return;
   }
 
@@ -808,7 +811,7 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
     const noopRows: Single<MarketplaceRows<UpdateRowMsg>> = [
       { name, scope, status: "skipped", reasons: ["up-to-date"], plugins: [] },
     ];
-    notifyWithContext(ctx, pi, UPDATE_CONTEXT, noopRows);
+    notifyWithContext(ctx, pi, UPDATE_CONTEXT, noopRows, undefined, cardinality);
     return;
   }
 
@@ -834,7 +837,7 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
       plugins: outcomes.map((o) => outcomeToCascadePluginMessage(o, scope)),
     },
   ];
-  notifyWithContext(ctx, pi, UPDATE_CONTEXT, cascadeRows);
+  notifyWithContext(ctx, pi, UPDATE_CONTEXT, cascadeRows, undefined, cardinality);
 }
 
 /**

@@ -2323,8 +2323,7 @@ test("updateAllMarketplaces forwards optional Device Flow and plugin cascade por
     // assert
     assert.deepStrictEqual(notifications, [
       {
-        message:
-          "● batch-mp [project] (skipped) {up-to-date}\n\nMarketplace update: 1 success",
+        message: "● batch-mp [project] (skipped) {up-to-date}\n\nMarketplace update: 1 success",
       },
     ]);
     assert.deepStrictEqual(cascadeCalls, [

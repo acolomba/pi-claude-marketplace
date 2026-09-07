@@ -2365,9 +2365,55 @@ A marketplace operation has failed.
 
 ______________________________________________________________________
 
-## `/claude:plugin marketplace update <name>`
+## `/claude:plugin marketplace update [<name>]`
 
-Single marketplace, multi-plugin cascade. The marketplace header carries `(updated)`; plugin rows indent two spaces underneath. On the autoupdate-OFF path (manifest-only refresh, no plugin cascade) the header distinguishes a no-op from a genuine change: an unchanged manifest renders `(skipped) {up-to-date}` (UXG-05), a changed manifest renders `(updated)`. The same no-op vs changed distinction applies on the autoupdate-ON cascade path: when the validated manifest content is unchanged AND every cascaded plugin is `unchanged` (up-to-date), the marketplace converges to the SAME `(skipped) {up-to-date}` byte form (`plugins: []`, no cascade rows) rather than `(updated)`.
+With `<name>`, this is a single marketplace, multi-plugin cascade and emits no tally. Without `<name>`, it is structurally plural before target discovery. The all-marketplaces implementation preserves one notification per target; each notification carries the plural tally because cardinality follows the invocation rather than that notification's row count. The marketplace header carries `(updated)`; plugin rows indent two spaces underneath. On the autoupdate-OFF path (manifest-only refresh, no plugin cascade) the header distinguishes a no-op from a genuine change: an unchanged manifest renders `(skipped) {up-to-date}` (UXG-05), a changed manifest renders `(updated)`. The same no-op vs changed distinction applies on the autoupdate-ON cascade path: when the validated manifest content is unchanged AND every cascaded plugin is `unchanged` (up-to-date), the marketplace converges to the SAME `(skipped) {up-to-date}` byte form (`plugins: []`, no cascade rows) rather than `(updated)`.
+
+### All marketplaces -- empty
+
+<!-- catalog-state: update-all-empty -->
+
+```text
+(no marketplaces)
+
+Marketplace update: 0 successes
+```
+
+The no-name invocation remains plural when target discovery finds nothing.
+
+### All marketplaces -- one target
+
+<!-- catalog-state: update-all-one -->
+
+```text
+● alpha [project] (skipped) {up-to-date}
+
+Marketplace update: 1 success
+```
+
+One discovered target does not change the invocation to single.
+
+### All marketplaces -- many targets, first notification
+
+<!-- catalog-state: update-all-many-alpha -->
+
+```text
+● alpha [project] (skipped) {up-to-date}
+
+Marketplace update: 1 success
+```
+
+### All marketplaces -- many targets, second notification
+
+<!-- catalog-state: update-all-many-beta -->
+
+```text
+● beta [project] (skipped) {up-to-date}
+
+Marketplace update: 1 success
+```
+
+The two blocks above are the ordered notifications from one two-target invocation. The command keeps its existing per-target emission behavior; both emissions retain the all-target invocation's plural cardinality.
 
 ### Autoupdate-off manifest refresh -- no change (no-op)
 
