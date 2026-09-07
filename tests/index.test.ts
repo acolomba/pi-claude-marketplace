@@ -573,6 +573,24 @@ test("registers the slash command and the two read-only tools alongside the brid
   verifyBoundary();
 });
 
+test("constructs one hooks runtime for registration and project hydration", async () => {
+  // arrange
+  const source = await readFile(
+    path.join(import.meta.dirname, "../extensions/pi-claude-marketplace/index.ts"),
+    "utf8",
+  );
+  const runtimeConstructions = source.match(/createHooksRuntime\(\)/g) ?? [];
+
+  // act
+  const hydrationConstruction = source.match(
+    /createHooksHydration\(hooksRuntime, \{ loadState \}\)/g,
+  );
+
+  // assert
+  assert.deepStrictEqual(runtimeConstructions, ["createHooksRuntime()"]);
+  assert.deepStrictEqual(hydrationConstruction, ["createHooksHydration(hooksRuntime, { loadState })"]);
+});
+
 test("discovers prompts under the working directory the event names, not the one the process runs in", async (t) => {
   // arrange
   const scope = await createHermeticScope(t, "invocation-cwd");

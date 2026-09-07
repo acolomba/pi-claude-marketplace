@@ -33,6 +33,7 @@ import {
   removePluginConfigFromCache,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
 import { MATCH_ALL_IF } from "../../../extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts";
+import { createHooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import {
   bumpEpoch,
   getRoutingBucket,
@@ -1281,36 +1282,37 @@ test(
       },
     };
     const config = makeConfig([{ event: "PreToolUse", handlers: 1, prefix: "cached" }]);
-    addPluginConfigToCache(
-      "project",
-      "alpha",
-      "first",
-      asAbsolutePluginRoot(path.join(root, "old", "first")),
+    const runtime = createHooksRuntime();
+    runtime.setParsedConfig("project\x00alpha\x00first", {
+      scope: "project",
+      marketplace: "alpha",
+      pluginId: "first",
+      resolvedSource: asAbsolutePluginRoot(path.join(root, "old", "first")),
       config,
-      new Map(),
-    );
-    addPluginConfigToCache(
-      "project",
-      "beta",
-      "second",
-      asAbsolutePluginRoot(path.join(root, "old", "second")),
+      ifPredicates: new Map(),
+    });
+    runtime.setParsedConfig("project\x00beta\x00second", {
+      scope: "project",
+      marketplace: "beta",
+      pluginId: "second",
+      resolvedSource: asAbsolutePluginRoot(path.join(root, "old", "second")),
       config,
-      new Map(),
-    );
-    addPluginConfigToCache(
-      "user",
-      "alpha",
-      "first",
-      asAbsolutePluginRoot(path.join(root, "user", "first")),
+      ifPredicates: new Map(),
+    });
+    runtime.setParsedConfig("user\x00alpha\x00first", {
+      scope: "user",
+      marketplace: "alpha",
+      pluginId: "first",
+      resolvedSource: asAbsolutePluginRoot(path.join(root, "user", "first")),
       config,
-      new Map(),
-    );
+      ifPredicates: new Map(),
+    });
 
     // act
-    const hooksHydration = createHooksHydration(hydrationReader);
+    const hooksHydration = createHooksHydration(runtime, hydrationReader);
 
     await hooksHydration.hydrateProjectScopeForCwd(root);
-    const cache = Array.from(parsedConfigEntries().values()).map((entry) => ({
+    const cache = Array.from(runtime.parsedConfigEntries().values()).map((entry) => ({
       scope: entry.scope,
       marketplace: entry.marketplace,
       pluginId: entry.pluginId,
@@ -1370,8 +1372,9 @@ test(
     });
     const { pi, registrations, messages } = makeRecordingPi();
     const context = makeContext(projectRoot, root);
+    const runtime = createHooksRuntime();
 
-    const hooksHydration = createHooksHydration(hydrationReader);
+    const hooksHydration = createHooksHydration(runtime, hydrationReader);
     await hooksHydration.registerHooksBridge(pi, {
       ctx: context,
       cwd: factoryRoot,
@@ -1386,7 +1389,7 @@ test(
 
     // assert
     assert.strictEqual(sessionStartUpdate, undefined);
-    assert.deepStrictEqual(Array.from(parsedConfigEntries()), []);
+    assert.deepStrictEqual(Array.from(runtime.parsedConfigEntries()), []);
     assert.deepStrictEqual(messages, []);
     assert.strictEqual(registrations.length, 11);
     assert.deepStrictEqual(diagnostics, [

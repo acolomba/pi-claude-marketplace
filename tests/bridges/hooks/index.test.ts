@@ -23,6 +23,7 @@ import {
   removeHookConfig as definingRemoveHookConfig,
   writeHookConfig as definingWriteHookConfig,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/stage.ts";
+import { createHooksRuntime as definingCreateHooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 
 import type * as HooksBarrel from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import type { HooksHydrationReader } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
@@ -88,6 +89,22 @@ describe("createHooksHydration", () => {
 
     // assert
     assert.strictEqual(hooksCreateHooksHydration, expectedCreateHooksHydration);
+  });
+});
+
+describe("createHooksRuntime", () => {
+  test("re-exports the lifecycle owner factory", async () => {
+    // arrange
+    const hooksBarrel = await import(
+      "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts"
+    );
+    const expectedCreateHooksRuntime = definingCreateHooksRuntime;
+
+    // act
+    const hooksCreateHooksRuntime = Reflect.get(hooksBarrel, "createHooksRuntime");
+
+    // assert
+    assert.strictEqual(hooksCreateHooksRuntime, expectedCreateHooksRuntime);
   });
 });
 
