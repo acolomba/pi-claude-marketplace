@@ -1306,7 +1306,7 @@ function isOutcome(
 async function prepareUpdateHandles(
   args: ThreePhaseArgs,
   preflight: PluginPreflight,
-  agentsSourceDir: string | null,
+  agentsDirs: readonly string[],
 ): Promise<PrepHandles> {
   const { plugin, marketplace, cwd, locations } = args;
   const { installable, record } = preflight;
@@ -1343,7 +1343,7 @@ async function prepareUpdateHandles(
       pluginRoot: installable.pluginRoot,
       pluginDataDir,
       resolved: installable,
-      agentsSourceDir,
+      agentsDirs,
       knownSkills: handles.skills.result.recorded.map((record) => record.generatedName),
       // AG-7 opt-in: forward the direct-path `--map-model` setting. The
       // cascade entrypoint never sets `args.mapModel`, so cascade re-
@@ -2274,7 +2274,7 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<UpdateRunOutco
   const generatedNames = await discoverGeneratedNames(plugin, installable);
   const stateForGuard = removePluginRecord(preflight.state, marketplace, plugin);
   assertNoCrossPluginConflicts(scope, generatedNames, stateForGuard);
-  const handles = await prepareUpdateHandles(args, preflight, generatedNames.agentsSourceDir);
+  const handles = await prepareUpdateHandles(args, preflight, generatedNames.agentsDirs);
 
   // ─── Phase 2a: pre-commit intent-mark (TR-04) ─────────────────────────────
   //
