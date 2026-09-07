@@ -204,6 +204,27 @@ export interface EnableDisablePluginOptions {
   readonly notifications?: EnableDisablePluginNotifications;
 }
 
+/** Owns only the semantic transaction steps composed by enable and disable. */
+export interface EnableDisableTransaction {
+  readonly cascadeUnstagePlugin: typeof cascadeUnstagePlugin;
+  readonly rebuildHookRoutes: typeof rebuildRoutingTables;
+  readonly removeHooksFromRuntime: typeof removePluginConfigFromCache;
+  readonly runInstallLedger: typeof runInstallLedger;
+  readonly selectConfigWriteTarget: typeof selectDeclaringConfigWriteTarget;
+  readonly withLockedStateTransaction: typeof withLockedStateTransaction;
+  readonly writeConfigEntries: typeof writeAdoptingConfigEntries;
+}
+
+const REAL_ENABLE_DISABLE_TRANSACTION: EnableDisableTransaction = {
+  cascadeUnstagePlugin,
+  rebuildHookRoutes: rebuildRoutingTables,
+  removeHooksFromRuntime: removePluginConfigFromCache,
+  runInstallLedger,
+  selectConfigWriteTarget: selectDeclaringConfigWriteTarget,
+  withLockedStateTransaction,
+  writeConfigEntries: writeAdoptingConfigEntries,
+};
+
 /** Outcome sentinel populated by the withStateGuard closure. */
 type SetEnabledOutcome =
   | { kind: "idempotent" }
@@ -241,6 +262,7 @@ type SetEnabledOutcome =
  * `StateLockHeldError` and every fresh enable would fail.
  */
 async function runEnableBranch(
+  transaction: EnableDisableTransaction,
   opts: EnableDisablePluginOptions,
   scope: Scope,
   locations: ScopedLocations,
@@ -278,7 +300,7 @@ async function runEnableBranch(
   // it rethrows (D-02 PI-14 bypass preserves the raw error).
   const capture: InstallFailureCapture = { rollbackPartials: [], version: undefined };
   try {
-    const result = await runInstallLedger(
+    const result = await transaction.runInstallLedger(
       state,
       locations,
       {
@@ -348,13 +370,19 @@ async function runEnableBranch(
  * error here, not a runtime corruption.
  */
 async function runDisableBranch(
+  transaction: EnableDisableTransaction,
   opts: EnableDisablePluginOptions,
   scope: Scope,
   locations: ScopedLocations,
   installed: InstalledPluginRecord,
 ): Promise<{ outcome: SetEnabledOutcome; saveShrunken: boolean; disabled?: DisabledPluginRecord }> {
   const recordedVersion = installed.version;
-  const cascade = await cascadeUnstagePlugin(opts.plugin, opts.marketplace, locations, installed);
+  const cascade = await transaction.cascadeUnstagePlugin(
+    opts.plugin,
+    opts.marketplace,
+    locations,
+    installed,
+  );
   if (isFailedUnstageOutcome(cascade)) {
     // I3: cascade.dropped lists artifacts already unstaged before the throw.
     // Fold them into the record so state.json never claims artifacts gone
@@ -369,7 +397,7 @@ async function runDisableBranch(
     // so dispatch does not try to spawn a now-deleted handler. Mirrors
     // the uninstall.ts cache-mutation invariant.
     if (cascade.dropped.hooks.length > 0) {
-      dropCachedHooks(scope, opts.marketplace, opts.plugin, "partial-cascade ", false);
+      dropCachedHooks(transaction, scope, opts.marketplace, opts.plugin, "partial-cascade ", false);
     }
 
     return {
@@ -403,7 +431,7 @@ async function runDisableBranch(
   // drop the parsed-config cache entry and rebuild the routing table in
   // lockstep so subsequent dispatch events bypass the now-disabled plugin
   // without requiring /reload (NFR-2). Mirrors the uninstall.ts invariant.
-  dropCachedHooks(scope, opts.marketplace, opts.plugin, "", true);
+  dropCachedHooks(transaction, scope, opts.marketplace, opts.plugin, "", true);
 
   return { outcome: { kind: "fresh", version: recordedVersion }, saveShrunken: false, disabled };
 }
@@ -450,6 +478,7 @@ function primaryDisableFailureReason(cause: Error): ContentReason {
  * expected secondary symptom of the cascade throw, so it stays terse.
  */
 function dropCachedHooks(
+  transaction: EnableDisableTransaction,
   scope: Scope,
   marketplace: string,
   plugin: string,
@@ -457,8 +486,8 @@ function dropCachedHooks(
   unexpected: boolean,
 ): void {
   try {
-    removePluginConfigFromCache(scope, marketplace, plugin);
-    rebuildRoutingTables();
+    transaction.removeHooksFromRuntime(scope, marketplace, plugin);
+    transaction.rebuildHookRoutes();
   } catch (cacheErr) {
     const consequence = unexpected
       ? " -- hooks for this plugin remain active in the running process until the disable's /reload rebuilds the routing table from state.json"
@@ -516,11 +545,12 @@ type SelectedConfigWriteTarget = Extract<DeclaringConfigWriteTarget, { kind: "se
  * acknowledged trade-off pending a return-type widen.
  */
 async function writeEnabledFlagBack(
+  transaction: EnableDisableTransaction,
   write: EnabledFlagWriteTarget,
   selection: SelectedConfigWriteTarget,
   state: ExtensionState,
 ): Promise<void> {
-  await writeAdoptingConfigEntries({
+  await transaction.writeConfigEntries({
     current: selection.current,
     sibling: selection.sibling,
     state,
@@ -547,6 +577,7 @@ async function writeEnabledFlagBack(
  * classification as-is, exactly like the autoupdate analog.
  */
 async function resolveIdempotentOutcome(
+  transaction: EnableDisableTransaction,
   write: EnabledFlagWriteTarget,
   selection: SelectedConfigWriteTarget,
   state: ExtensionState,
@@ -558,7 +589,7 @@ async function resolveIdempotentOutcome(
     return { kind: "idempotent" };
   }
 
-  await writeEnabledFlagBack(write, selection, state);
+  await writeEnabledFlagBack(transaction, write, selection, state);
   return { kind: "fresh", version: installed.version };
 }
 
@@ -642,14 +673,8 @@ async function emitUnresolvedTarget(args: {
  * and asserts the complete cascade, so a regression on an exercised path fails
  * there. An arm the matrix does not reach is not covered by either.
  */
-export function setPluginEnabled(
-  opts: EnableDisablePluginOptions & { notifications: { mode: "orchestrated" } },
-): Promise<EnableDisablePluginOutcome>;
-export function setPluginEnabled(
-  opts: EnableDisablePluginOptions,
-): Promise<EnableDisablePluginOutcome | undefined>;
-
-export async function setPluginEnabled(
+async function setPluginEnabledWithTransaction(
+  transaction: EnableDisableTransaction,
   opts: EnableDisablePluginOptions,
 ): Promise<EnableDisablePluginOutcome | undefined> {
   const { ctx, pi, cwd, marketplace, plugin, enable } = opts;
@@ -725,7 +750,7 @@ export async function setPluginEnabled(
     // enable/disable branch dispatch, the I3 shrunken-record save, and the
     // UAT-05 config write-back; keeping that order visible here is what makes
     // the save-vs-throw discipline auditable.
-    outcome = await withLockedStateTransaction(
+    outcome = await transaction.withLockedStateTransaction(
       locations,
       async (tx): Promise<SetEnabledOutcome> => {
         // D-103-13: ONE selection, made before anything reads a config path, so
@@ -734,7 +759,7 @@ export async function setPluginEnabled(
         // the local config -- the WB-01 discipline that sibling reads happen
         // fresh under the lock the write also holds. UAT-05: the sibling path is
         // the scope's OTHER file, for the merged-view membership test only.
-        const selection = await selectDeclaringConfigWriteTarget({
+        const selection = await transaction.selectConfigWriteTarget({
           locations,
           local: opts.local,
           key: `${plugin}@${marketplace}`,
@@ -770,14 +795,27 @@ export async function setPluginEnabled(
         // disabled PARTIAL record is idempotent on `disable` and re-materializes
         // on `enable`, at parity with the canonical disabled record.
         if (isRecordedButDisabled(installed) === !enable) {
-          return resolveIdempotentOutcome(write, selection, state, installed);
+          return resolveIdempotentOutcome(transaction, write, selection, state, installed);
         }
 
         let branchOutcome: SetEnabledOutcome;
         if (enable) {
-          branchOutcome = await runEnableBranch(opts, scope, locations, state, installed);
+          branchOutcome = await runEnableBranch(
+            transaction,
+            opts,
+            scope,
+            locations,
+            state,
+            installed,
+          );
         } else {
-          const disableResult = await runDisableBranch(opts, scope, locations, installed);
+          const disableResult = await runDisableBranch(
+            transaction,
+            opts,
+            scope,
+            locations,
+            installed,
+          );
           branchOutcome = disableResult.outcome;
           // ENBL-02: on a clean disable, replace the map slot with the branded
           // `DisabledPluginRecord` the branch built via `toDisabledRecord`
@@ -811,7 +849,7 @@ export async function setPluginEnabled(
         // user-authored base declaration. The config is the reconcile's INPUT;
         // only standalone commands author declarations.
         if (!orchestrated) {
-          await writeEnabledFlagBack(write, selection, state);
+          await writeEnabledFlagBack(transaction, write, selection, state);
         }
 
         await tx.save();
@@ -858,6 +896,26 @@ export async function setPluginEnabled(
   dispatchOutcome({ ctx, pi, marketplace, scope, plugin, enable, configBasename, outcome });
   return undefined;
 }
+
+/** Bind enable/disable orchestration to one required semantic transaction owner. */
+export function createSetPluginEnabled(transaction: EnableDisableTransaction) {
+  function configuredSetPluginEnabled(
+    opts: EnableDisablePluginOptions & { notifications: { mode: "orchestrated" } },
+  ): Promise<EnableDisablePluginOutcome>;
+  function configuredSetPluginEnabled(
+    opts: EnableDisablePluginOptions,
+  ): Promise<EnableDisablePluginOutcome | undefined>;
+  function configuredSetPluginEnabled(
+    opts: EnableDisablePluginOptions,
+  ): Promise<EnableDisablePluginOutcome | undefined> {
+    return setPluginEnabledWithTransaction(transaction, opts);
+  }
+
+  return configuredSetPluginEnabled;
+}
+
+/** Production enable/disable operation composed through the real transaction adapter. */
+export const setPluginEnabled = createSetPluginEnabled(REAL_ENABLE_DISABLE_TRANSACTION);
 
 /**
  * Closed-set reason for an orchestrated transaction

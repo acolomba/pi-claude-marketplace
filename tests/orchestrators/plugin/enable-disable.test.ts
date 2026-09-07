@@ -72,10 +72,7 @@ function makePi(toolNames: readonly string[] = []): ToolInventory {
 }
 
 test("enable-disable exposes its required transaction factory", () => {
-  assert.strictEqual(
-    typeof Reflect.get(enableDisableModule, "createSetPluginEnabled"),
-    "function",
-  );
+  assert.strictEqual(typeof Reflect.get(enableDisableModule, "createSetPluginEnabled"), "function");
 });
 
 /**

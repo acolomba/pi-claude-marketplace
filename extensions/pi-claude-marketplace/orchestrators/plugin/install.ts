@@ -527,6 +527,17 @@ type InstallLedgerCtxResult =
   | { readonly kind: "installed"; readonly installCtx: InstallCtx }
   | { readonly kind: "marketplace-absent" };
 
+/** Owns install's lock and phase-ledger schedule without exposing filesystem authority. */
+export interface InstallTransaction {
+  readonly runPhases: typeof runPhases;
+  readonly withLockedStateTransaction: typeof withLockedStateTransaction;
+}
+
+const REAL_INSTALL_TRANSACTION: InstallTransaction = {
+  runPhases: (...args) => runPhases(...args),
+  withLockedStateTransaction: (...args) => withLockedStateTransaction(...args),
+};
+
 /**
  * PURL-01..04 / PURL-09 / D-77-01..06: build the clone-materializing
  * `resolveGitPluginRoot` callback plus a getter for the resolved sha it
@@ -807,7 +818,17 @@ export async function runInstallLedger(
   opts: InstallLedgerOptions,
   capture?: InstallFailureCapture,
 ): Promise<InstallLedgerResult> {
-  const result = await runInstallLedgerBody(state, locations, opts, capture);
+  return runInstallLedgerWith(REAL_INSTALL_TRANSACTION, state, locations, opts, capture);
+}
+
+async function runInstallLedgerWith(
+  transaction: InstallTransaction,
+  state: ExtensionState,
+  locations: ScopedLocations,
+  opts: InstallLedgerOptions,
+  capture?: InstallFailureCapture,
+): Promise<InstallLedgerResult> {
+  const result = await runInstallLedgerBody(transaction, state, locations, opts, capture);
   if (result.kind === "marketplace-absent") {
     return result;
   }
@@ -834,6 +855,7 @@ function toInstallLedgerSummary(c: InstallCtx): InstallLedgerSummary {
  * declaring module holds the working context.
  */
 async function runInstallLedgerBody(
+  transaction: InstallTransaction,
   state: ExtensionState,
   locations: ScopedLocations,
   opts: InstallLedgerOptions,
@@ -1252,7 +1274,7 @@ async function runInstallLedgerBody(
     statePhase,
   ];
 
-  const result = await runPhases(phases, ctxLocal);
+  const result = await transaction.runPhases(phases, ctxLocal);
   if (isFailedRunPhasesResult(result)) {
     // The transaction owner is the sole identity/containment/partial rule.
     // Capture its raw rows and best-known version before rethrowing its error;
@@ -1921,7 +1943,10 @@ function handleInstallThrow(args: {
 // order of those steps stays visible here; the step bodies themselves are
 // extracted above (`buildInstallLedgerOptions`, `collectPostCommitWarnings`,
 // `composeInstalledRow`, `buildInstalledOutcome`, `handleInstallThrow`).
-export async function installPlugin(opts: InstallPluginOptions): Promise<InstallPluginOutcome> {
+async function installPluginWithTransaction(
+  transaction: InstallTransaction,
+  opts: InstallPluginOptions,
+): Promise<InstallPluginOutcome> {
   const { ctx, pi, scope, cwd, marketplace, plugin } = opts;
   const locations = locationsFor(scope, cwd);
 
@@ -2000,7 +2025,7 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
     // state.json -- `withStateGuard` saved unconditionally on closure
     // return, bumping state.json's mtime on every abort, diverging from the
     // documented no-save abort discipline the sibling commands follow.
-    await withLockedStateTransaction(locations, async (tx) => {
+    await transaction.withLockedStateTransaction(locations, async (tx) => {
       // D-103-16: ONE selection, made before anything reads a config path, so
       // the CFG-03 load, the DFEN-05 precedence read and BOTH write arms below
       // address the same physical file. It runs inside the lock because it
@@ -2054,6 +2079,7 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
       // already holds the scope lock, and the post-guard path below reads
       // context fields the outward summary withholds.
       const result = await runInstallLedgerBody(
+        transaction,
         state,
         locations,
         buildInstallLedgerOptions(opts, { scope, cwd, marketplace, plugin }),
@@ -2430,6 +2456,16 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
 
   return buildInstalledOutcome(installCtx, postCommitWarnings, disabledInstall.landed);
 }
+
+/** Bind install orchestration to one required semantic transaction owner. */
+export function createInstallPlugin(
+  transaction: InstallTransaction,
+): (opts: InstallPluginOptions) => Promise<InstallPluginOutcome> {
+  return (opts) => installPluginWithTransaction(transaction, opts);
+}
+
+/** Production install operation composed through the real transaction adapter. */
+export const installPlugin = createInstallPlugin(REAL_INSTALL_TRANSACTION);
 
 // D-19-03 / CMC-17 / MSG-RP-1: the PluginFailedMessage.rollbackPartial
 // field (SNM-09 + SNM-10) is the structural rollback-partial channel; the
