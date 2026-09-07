@@ -132,6 +132,43 @@ describe("planReconcile", () => {
     });
   });
 
+  test("keeps the declared plugin target when its marketplace is new", () => {
+    // arrange
+    const merged = mergedConfig(
+      { "declared-name": { source: "./local-marketplace" } },
+      { "formatter@declared-name": {} },
+    );
+
+    // act
+    const result = planReconcile(merged, stateWith(), "project");
+
+    // assert
+    assert.deepStrictEqual(result, {
+      scope: "project",
+      marketplacesToAdd: [
+        {
+          scope: "project",
+          marketplace: "declared-name",
+          source: "./local-marketplace",
+          configSource: "base",
+        },
+      ],
+      marketplacesToRemove: [],
+      pluginsToInstall: [
+        {
+          scope: "project",
+          plugin: "formatter",
+          marketplace: "declared-name",
+          configSource: "base",
+        },
+      ],
+      pluginsToUninstall: [],
+      pluginsToEnable: [],
+      pluginsToDisable: [],
+      sourceMismatches: [],
+    });
+  });
+
   test("claims an alternate recorded name after skipping declared and different-source records", () => {
     // arrange
     const merged = mergedConfig({

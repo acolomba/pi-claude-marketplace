@@ -94,8 +94,8 @@ interface MarketplaceDiff {
   readonly add: readonly PlannedMarketplaceAdd[];
   readonly remove: readonly PlannedMarketplaceRemove[];
   readonly mismatches: readonly PlannedSourceMismatch[];
-  /** Set of marketplace names that are declared AND recorded. */
-  readonly declaredAndRecorded: ReadonlySet<string>;
+  /** Canonical recorded marketplace identity for each fulfilled declaration. */
+  readonly recordedByDeclared: ReadonlyMap<string, string>;
 }
 
 /**
@@ -142,7 +142,7 @@ function diffMarketplaces(
   const add: PlannedMarketplaceAdd[] = [];
   const remove: PlannedMarketplaceRemove[] = [];
   const mismatches: PlannedSourceMismatch[] = [];
-  const declaredAndRecorded = new Set<string>();
+  const recordedByDeclared = new Map<string, string>();
   // CR-01: recorded names claimed by a declared key whose name differs but
   // whose source matches. Claimed records are steady state (no add planned
   // for the declared key, no remove planned for the recorded name).
@@ -167,6 +167,7 @@ function diffMarketplaces(
       );
       if (claimedName !== undefined) {
         sourceClaimed.add(claimedName);
+        recordedByDeclared.set(mpName, claimedName);
         continue;
       }
 
@@ -179,7 +180,7 @@ function diffMarketplaces(
       continue;
     }
 
-    declaredAndRecorded.add(mpName);
+    recordedByDeclared.set(mpName, mpName);
     const match = samePlannedSource(recordedRecord.source, declaredEntry.entry.source);
     switch (match) {
       case "same":
@@ -212,7 +213,7 @@ function diffMarketplaces(
     // CR-01: a recorded name claimed by a declared key via source matching
     // is NOT removed -- removing it would uninstall its plugins as
     // collateral and the next reload would re-add (re-clone) it.
-    if (declared[mpName] === undefined && !sourceClaimed.has(mpName)) {
+    if (!recordedByDeclared.has(mpName) && !sourceClaimed.has(mpName)) {
       // WILL-03 / D-65.1-03: carry the recorded plugin names so the PENDING
       // projection can synthesize per-plugin `will uninstall` rows. The apply
       // path cascades these internally; do NOT add them to `pluginsToUninstall`
@@ -222,7 +223,7 @@ function diffMarketplaces(
     }
   }
 
-  return { add, remove, mismatches, declaredAndRecorded };
+  return { add, remove, mismatches, recordedByDeclared };
 }
 
 interface PluginDiff {
@@ -249,6 +250,7 @@ interface DeclaredPluginAccumulator {
   readonly enable: PlannedPluginEnable[];
   readonly disable: PlannedPluginDisable[];
   readonly dangling: PlannedSourceMismatch[];
+  readonly declaredKeys: Set<string>;
 }
 
 /**
@@ -263,6 +265,7 @@ function classifyDeclaredPlugin(
   declared: MergedConfig["plugins"][string],
   recordedKeys: ReadonlySet<string>,
   declaredMarketplaces: MergedConfig["marketplaces"],
+  recordedByDeclared: ReadonlyMap<string, string>,
   state: ExtensionState,
 ): void {
   const parsed = parsePluginKey(key);
@@ -279,27 +282,30 @@ function classifyDeclaredPlugin(
     return;
   }
 
-  const { plugin, marketplace } = parsed;
+  const { plugin, marketplace: declaredMarketplace } = parsed;
 
   // Dangling reference: the plugin's marketplace is not DECLARED. This
   // deliberately includes the recorded-but-undeclared case (the marketplace
   // is in `marketplacesToRemove`): installing into / disabling under a
   // marketplace being torn down is contradictory, so the entry surfaces as
   // a diagnostic instead of an install/disable action.
-  if (declaredMarketplaces[marketplace] === undefined) {
+  if (declaredMarketplaces[declaredMarketplace] === undefined) {
     acc.dangling.push({
       scope,
       cause: "dangling-reference",
-      marketplace,
+      marketplace: declaredMarketplace,
       plugin,
     });
     return;
   }
 
+  const marketplace = recordedByDeclared.get(declaredMarketplace) ?? declaredMarketplace;
+  acc.declaredKeys.add(`${plugin}@${marketplace}`);
+
   // D-04 consume-time default via S7's `isDeclaredEnabled`: an absent
   // `enabled` field includes; only an explicit `false` excludes.
   const enabledExplicitFalse = !isDeclaredEnabled(declared.entry);
-  const recorded = recordedKeys.has(key);
+  const recorded = recordedKeys.has(`${plugin}@${marketplace}`);
 
   if (enabledExplicitFalse) {
     // WR-05 convergence: the terminal state of a successful disable is
@@ -350,20 +356,21 @@ function classifyDeclaredPlugin(
  * would double-bill the work).
  */
 function buildUninstallBucket(
-  merged: MergedConfig,
   state: ExtensionState,
   scope: Scope,
   marketplaceDiff: MarketplaceDiff,
+  declaredPluginKeys: ReadonlySet<string>,
 ): PlannedPluginUninstall[] {
   const uninstall: PlannedPluginUninstall[] = [];
+  const retainedMarketplaces = new Set(marketplaceDiff.recordedByDeclared.values());
   for (const [mpName, mpRecord] of Object.entries(state.marketplaces)) {
-    if (!merged.marketplaces[mpName] && !marketplaceDiff.declaredAndRecorded.has(mpName)) {
+    if (!retainedMarketplaces.has(mpName)) {
       continue;
     }
 
     for (const pluginName of Object.keys(mpRecord.plugins)) {
       const key = `${pluginName}@${mpName}`;
-      if (merged.plugins[key] === undefined) {
+      if (!declaredPluginKeys.has(key)) {
         uninstall.push({ scope, plugin: pluginName, marketplace: mpName });
       }
     }
@@ -378,14 +385,29 @@ function diffPlugins(
   scope: Scope,
   marketplaceDiff: MarketplaceDiff,
 ): PluginDiff {
-  const acc: DeclaredPluginAccumulator = { install: [], enable: [], disable: [], dangling: [] };
+  const acc: DeclaredPluginAccumulator = {
+    install: [],
+    enable: [],
+    disable: [],
+    dangling: [],
+    declaredKeys: new Set<string>(),
+  };
   const recordedKeys = buildRecordedKeys(state);
 
   for (const [key, declared] of Object.entries(merged.plugins)) {
-    classifyDeclaredPlugin(acc, scope, key, declared, recordedKeys, merged.marketplaces, state);
+    classifyDeclaredPlugin(
+      acc,
+      scope,
+      key,
+      declared,
+      recordedKeys,
+      merged.marketplaces,
+      marketplaceDiff.recordedByDeclared,
+      state,
+    );
   }
 
-  const uninstall = buildUninstallBucket(merged, state, scope, marketplaceDiff);
+  const uninstall = buildUninstallBucket(state, scope, marketplaceDiff, acc.declaredKeys);
 
   return {
     install: acc.install,
