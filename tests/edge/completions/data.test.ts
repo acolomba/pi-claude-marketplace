@@ -68,6 +68,7 @@ import {
 import {
   createCompletionCache,
   resetCompletionCache,
+  transitionCompletionCache,
 } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 
 import type {
@@ -497,7 +498,11 @@ describe("getPluginToMarketplacesMap", () => {
     });
 
     // act
-    const candidatesByPlugin = await getPluginToMarketplacesMap("install", resolver);
+    const candidatesByPlugin = await getPluginToMarketplacesMap(
+      "install",
+      resolver,
+      transitionCompletionCache,
+    );
 
     // assert
     assert.deepStrictEqual(Array.from(candidatesByPlugin), [
@@ -515,7 +520,12 @@ describe("getPluginToMarketplacesMap", () => {
     });
 
     // act
-    const candidatesByPlugin = await getPluginToMarketplacesMap("install", resolver, options);
+    const candidatesByPlugin = await getPluginToMarketplacesMap(
+      "install",
+      resolver,
+      transitionCompletionCache,
+      options,
+    );
 
     // assert
     assert.deepStrictEqual(Array.from(candidatesByPlugin), [
@@ -539,7 +549,11 @@ describe("getPluginToMarketplacesMap", () => {
     });
 
     // act
-    const candidatesByPlugin = await getPluginToMarketplacesMap("install", resolver);
+    const candidatesByPlugin = await getPluginToMarketplacesMap(
+      "install",
+      resolver,
+      transitionCompletionCache,
+    );
 
     // assert
     assert.deepStrictEqual(Array.from(candidatesByPlugin), [["fresh", ["official"]]]);
@@ -563,7 +577,12 @@ describe("getPluginToMarketplacesMap", () => {
     });
 
     // act
-    const candidatesByPlugin = await getPluginToMarketplacesMap("install", resolver, options);
+    const candidatesByPlugin = await getPluginToMarketplacesMap(
+      "install",
+      resolver,
+      transitionCompletionCache,
+      options,
+    );
 
     // assert
     assert.deepStrictEqual(Array.from(candidatesByPlugin), [
@@ -581,7 +600,11 @@ describe("getPluginToMarketplacesMap", () => {
       });
 
       // act
-      const candidatesByPlugin = await getPluginToMarketplacesMap(mode, resolver);
+      const candidatesByPlugin = await getPluginToMarketplacesMap(
+        mode,
+        resolver,
+        transitionCompletionCache,
+      );
 
       // assert
       assert.deepStrictEqual(Array.from(candidatesByPlugin), [
@@ -603,9 +626,14 @@ describe("getPluginToMarketplacesMap", () => {
       });
 
       // act
-      const candidatesByPlugin = await getPluginToMarketplacesMap(mode, resolver, {
-        partial: true,
-      });
+      const candidatesByPlugin = await getPluginToMarketplacesMap(
+        mode,
+        resolver,
+        transitionCompletionCache,
+        {
+          partial: true,
+        },
+      );
 
       // assert
       assert.deepStrictEqual(Array.from(candidatesByPlugin), [
@@ -627,7 +655,11 @@ describe("getPluginToMarketplacesMap", () => {
     });
 
     // act
-    const candidatesByPlugin = await getPluginToMarketplacesMap("uninstall", resolver);
+    const candidatesByPlugin = await getPluginToMarketplacesMap(
+      "uninstall",
+      resolver,
+      transitionCompletionCache,
+    );
 
     // assert
     assert.deepStrictEqual(Array.from(candidatesByPlugin), [
@@ -647,9 +679,14 @@ describe("getPluginToMarketplacesMap", () => {
     });
 
     // act
-    const candidatesByPlugin = await getPluginToMarketplacesMap("uninstall", resolver, {
-      targetScope: "user",
-    });
+    const candidatesByPlugin = await getPluginToMarketplacesMap(
+      "uninstall",
+      resolver,
+      transitionCompletionCache,
+      {
+        targetScope: "user",
+      },
+    );
 
     // assert
     assert.deepStrictEqual(Array.from(candidatesByPlugin), [["user-side", ["official"]]]);
@@ -663,8 +700,17 @@ describe("getPluginToMarketplacesMap", () => {
     });
 
     // act
-    const withoutPartial = await getPluginToMarketplacesMap("fetch", resolver);
-    const withPartial = await getPluginToMarketplacesMap("fetch", resolver, { partial: true });
+    const withoutPartial = await getPluginToMarketplacesMap(
+      "fetch",
+      resolver,
+      transitionCompletionCache,
+    );
+    const withPartial = await getPluginToMarketplacesMap(
+      "fetch",
+      resolver,
+      transitionCompletionCache,
+      { partial: true },
+    );
 
     // assert
     assert.deepStrictEqual(Array.from(withoutPartial), [
@@ -687,9 +733,14 @@ describe("getPluginToMarketplacesMap", () => {
     });
 
     // act
-    const candidatesByPlugin = await getPluginToMarketplacesMap("fetch", resolver, {
-      targetScope: "project",
-    });
+    const candidatesByPlugin = await getPluginToMarketplacesMap(
+      "fetch",
+      resolver,
+      transitionCompletionCache,
+      {
+        targetScope: "project",
+      },
+    );
 
     // assert
     assert.deepStrictEqual(Array.from(candidatesByPlugin), [["project-side", ["internal"]]]);
@@ -711,10 +762,15 @@ describe("getPluginToMarketplacesMap", () => {
     });
 
     // act
-    const candidatesByPlugin = await getPluginToMarketplacesMap("info", resolver, {
-      targetScope: "project",
-      partial: true,
-    });
+    const candidatesByPlugin = await getPluginToMarketplacesMap(
+      "info",
+      resolver,
+      transitionCompletionCache,
+      {
+        targetScope: "project",
+        partial: true,
+      },
+    );
 
     // assert
     assert.deepStrictEqual(Array.from(candidatesByPlugin), [
@@ -737,7 +793,11 @@ describe("getPluginToMarketplacesMap", () => {
     });
 
     // act
-    const candidatesByPlugin = await getPluginToMarketplacesMap("uninstall", resolver);
+    const candidatesByPlugin = await getPluginToMarketplacesMap(
+      "uninstall",
+      resolver,
+      transitionCompletionCache,
+    );
 
     // assert
     assert.deepStrictEqual(Array.from(candidatesByPlugin), [["shared", ["mp-a", "mp-b"]]]);
@@ -754,7 +814,11 @@ describe("getPluginToMarketplacesMap", () => {
     });
 
     // act
-    const candidatesByPlugin = await getPluginToMarketplacesMap("uninstall", resolver);
+    const candidatesByPlugin = await getPluginToMarketplacesMap(
+      "uninstall",
+      resolver,
+      transitionCompletionCache,
+    );
 
     // assert
     assert.deepStrictEqual(Array.from(candidatesByPlugin), [["held", ["official"]]]);
@@ -768,7 +832,11 @@ describe("getPluginToMarketplacesMap", () => {
     });
 
     // act
-    const candidatesByPlugin = await getPluginToMarketplacesMap("uninstall", resolver);
+    const candidatesByPlugin = await getPluginToMarketplacesMap(
+      "uninstall",
+      resolver,
+      transitionCompletionCache,
+    );
 
     // assert
     assert.deepStrictEqual(Array.from(candidatesByPlugin), [["held", ["official"]]]);
@@ -785,7 +853,7 @@ describe("getPluginToMarketplacesMap", () => {
 
     // act & assert
     await assert.rejects(
-      () => getPluginToMarketplacesMap("uninstall", resolver),
+      () => getPluginToMarketplacesMap("uninstall", resolver, transitionCompletionCache),
       (error: unknown) => {
         assert.strictEqual(error, stateFailure);
         return true;
@@ -813,9 +881,16 @@ describe("getPluginRefCompletions", () => {
     const { resolver } = await seedResolver(t, "ref-unique", twoMarketplaceSeed());
 
     // act
-    const items = await getPluginRefCompletions("update", "so", "update", resolver, {
-      allowMarketplaceOnly: true,
-    });
+    const items = await getPluginRefCompletions(
+      "update",
+      "so",
+      "update",
+      resolver,
+      transitionCompletionCache,
+      {
+        allowMarketplaceOnly: true,
+      },
+    );
 
     // assert
     assert.deepStrictEqual(items, [{ label: "solo@mp-a", value: "update solo@mp-a " }]);
@@ -826,9 +901,16 @@ describe("getPluginRefCompletions", () => {
     const { resolver } = await seedResolver(t, "ref-multi", twoMarketplaceSeed());
 
     // act
-    const items = await getPluginRefCompletions("update", "sh", "update", resolver, {
-      allowMarketplaceOnly: true,
-    });
+    const items = await getPluginRefCompletions(
+      "update",
+      "sh",
+      "update",
+      resolver,
+      transitionCompletionCache,
+      {
+        allowMarketplaceOnly: true,
+      },
+    );
 
     // assert
     assert.deepStrictEqual(items, [{ label: "shared@", value: "update shared@" }]);
@@ -839,9 +921,16 @@ describe("getPluginRefCompletions", () => {
     const { resolver } = await seedResolver(t, "ref-all", twoMarketplaceSeed());
 
     // act
-    const items = await getPluginRefCompletions("update", "", "", resolver, {
-      allowMarketplaceOnly: true,
-    });
+    const items = await getPluginRefCompletions(
+      "update",
+      "",
+      "",
+      resolver,
+      transitionCompletionCache,
+      {
+        allowMarketplaceOnly: true,
+      },
+    );
 
     // assert
     assert.deepStrictEqual(items, [
@@ -855,12 +944,26 @@ describe("getPluginRefCompletions", () => {
     const { resolver } = await seedResolver(t, "ref-case", twoMarketplaceSeed());
 
     // act
-    const upperCaseMatches = await getPluginRefCompletions("update", "SO", "update", resolver, {
-      allowMarketplaceOnly: true,
-    });
-    const exactCaseMatches = await getPluginRefCompletions("update", "so", "update", resolver, {
-      allowMarketplaceOnly: true,
-    });
+    const upperCaseMatches = await getPluginRefCompletions(
+      "update",
+      "SO",
+      "update",
+      resolver,
+      transitionCompletionCache,
+      {
+        allowMarketplaceOnly: true,
+      },
+    );
+    const exactCaseMatches = await getPluginRefCompletions(
+      "update",
+      "so",
+      "update",
+      resolver,
+      transitionCompletionCache,
+      {
+        allowMarketplaceOnly: true,
+      },
+    );
 
     // assert
     assert.deepStrictEqual(upperCaseMatches, []);
@@ -872,9 +975,16 @@ describe("getPluginRefCompletions", () => {
     const { resolver } = await seedResolver(t, "ref-mp-half", twoMarketplaceSeed());
 
     // act
-    const items = await getPluginRefCompletions("update", "shared@mp-", "update", resolver, {
-      allowMarketplaceOnly: true,
-    });
+    const items = await getPluginRefCompletions(
+      "update",
+      "shared@mp-",
+      "update",
+      resolver,
+      transitionCompletionCache,
+      {
+        allowMarketplaceOnly: true,
+      },
+    );
 
     // assert
     assert.deepStrictEqual(items, [
@@ -888,9 +998,16 @@ describe("getPluginRefCompletions", () => {
     const { resolver } = await seedResolver(t, "ref-mp-half-narrow", twoMarketplaceSeed());
 
     // act
-    const items = await getPluginRefCompletions("update", "shared@mp-b", "update", resolver, {
-      allowMarketplaceOnly: true,
-    });
+    const items = await getPluginRefCompletions(
+      "update",
+      "shared@mp-b",
+      "update",
+      resolver,
+      transitionCompletionCache,
+      {
+        allowMarketplaceOnly: true,
+      },
+    );
 
     // assert
     assert.deepStrictEqual(items, [{ label: "shared@mp-b", value: "update shared@mp-b " }]);
@@ -901,9 +1018,16 @@ describe("getPluginRefCompletions", () => {
     const { resolver } = await seedResolver(t, "ref-mp-half-unknown", twoMarketplaceSeed());
 
     // act
-    const items = await getPluginRefCompletions("update", "ghost@", "update", resolver, {
-      allowMarketplaceOnly: true,
-    });
+    const items = await getPluginRefCompletions(
+      "update",
+      "ghost@",
+      "update",
+      resolver,
+      transitionCompletionCache,
+      {
+        allowMarketplaceOnly: true,
+      },
+    );
 
     // assert
     assert.deepStrictEqual(items, []);
@@ -914,9 +1038,16 @@ describe("getPluginRefCompletions", () => {
     const { resolver } = await seedResolver(t, "ref-bare", twoMarketplaceSeed());
 
     // act
-    const items = await getPluginRefCompletions("update", "@", "update", resolver, {
-      allowMarketplaceOnly: true,
-    });
+    const items = await getPluginRefCompletions(
+      "update",
+      "@",
+      "update",
+      resolver,
+      transitionCompletionCache,
+      {
+        allowMarketplaceOnly: true,
+      },
+    );
 
     // assert
     assert.deepStrictEqual(items, [
@@ -930,9 +1061,16 @@ describe("getPluginRefCompletions", () => {
     const { resolver } = await seedResolver(t, "ref-bare-narrow", twoMarketplaceSeed());
 
     // act
-    const items = await getPluginRefCompletions("update", "@mp-b", "update", resolver, {
-      allowMarketplaceOnly: true,
-    });
+    const items = await getPluginRefCompletions(
+      "update",
+      "@mp-b",
+      "update",
+      resolver,
+      transitionCompletionCache,
+      {
+        allowMarketplaceOnly: true,
+      },
+    );
 
     // assert
     assert.deepStrictEqual(items, [{ label: "@mp-b", value: "update @mp-b " }]);
@@ -947,9 +1085,16 @@ describe("getPluginRefCompletions", () => {
     const { resolver } = await seedResolver(t, "ref-bare-denied", twoMarketplaceSeed());
 
     // act
-    const items = await getPluginRefCompletions("update", "@", "update", resolver, {
-      allowMarketplaceOnly: false,
-    });
+    const items = await getPluginRefCompletions(
+      "update",
+      "@",
+      "update",
+      resolver,
+      transitionCompletionCache,
+      {
+        allowMarketplaceOnly: false,
+      },
+    );
 
     // assert
     assert.deepStrictEqual(items, []);
@@ -966,11 +1111,18 @@ describe("getPluginRefCompletions", () => {
     });
 
     // act
-    const items = await getPluginRefCompletions("update", "", "update", resolver, {
-      allowMarketplaceOnly: false,
-      targetScope: "user",
-      partial: true,
-    });
+    const items = await getPluginRefCompletions(
+      "update",
+      "",
+      "update",
+      resolver,
+      transitionCompletionCache,
+      {
+        allowMarketplaceOnly: false,
+        targetScope: "user",
+        partial: true,
+      },
+    );
 
     // assert
     assert.deepStrictEqual(items, [

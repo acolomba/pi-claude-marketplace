@@ -49,7 +49,9 @@ import {
   registerClaudePluginCommand,
 } from "../../extensions/pi-claude-marketplace/edge/register.ts";
 import { TOP_LEVEL_USAGE } from "../../extensions/pi-claude-marketplace/edge/router.ts";
+import { makeLocationsResolver } from "../../extensions/pi-claude-marketplace/orchestrators/edge-deps.ts";
 import { saveState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { transitionCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { createGitOpsFake } from "../platform/git-ops-fake.ts";
 
 import { createNotificationBoundary } from "./notification-boundary.ts";
@@ -347,6 +349,37 @@ describe("registerClaudePluginCommand", () => {
 
     // act
     const candidates = await registration.getArgumentCompletions?.("list ");
+
+    // assert
+    assert.deepStrictEqual(candidates, expectedCandidates);
+    verifyRegistrar();
+  });
+
+  test("routes registered plugin completions through the transition cache", async (t) => {
+    // arrange
+    const scope = await createHermeticScope(t, "completion-cache");
+    const marketplace = "cache-mp";
+    await seedProjectMarketplace(scope.cwd, marketplace);
+    const resolver = makeLocationsResolver(scope.cwd);
+    const cachePath = await resolver.pluginCachePath("project", marketplace);
+    transitionCompletionCache.invalidateMarketplaceCache("project", marketplace);
+    t.after(() => {
+      transitionCompletionCache.invalidateMarketplaceCache("project", marketplace);
+    });
+    await transitionCompletionCache.getPluginIndex(cachePath, "project", marketplace, () =>
+      Promise.resolve([{ name: "cache-row", status: "installed" }]),
+    );
+    await rm(cachePath);
+    const { registration, verifyRegistrar } = registerCommandUnderTest();
+    const expectedCandidates = [
+      {
+        label: "cache-row@cache-mp",
+        value: "uninstall --scope project cache-row@cache-mp ",
+      },
+    ];
+
+    // act
+    const candidates = await registration.getArgumentCompletions?.("uninstall --scope project ");
 
     // assert
     assert.deepStrictEqual(candidates, expectedCandidates);
