@@ -1762,6 +1762,7 @@ describe("emitMarketplaceNotAddedSignal", () => {
       pi,
       cwd: "/work/project",
       context,
+      cardinality: "plural",
       err: new MarketplaceNotAddedSignal("mp", "project", { scope: "project", plugin: "hello" }),
     });
 
@@ -1777,7 +1778,11 @@ describe("emitMarketplaceNotAddedSignal", () => {
     ]);
     assert.deepStrictEqual(notifications, [
       {
-        message: "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello (skipped)",
+        message:
+          "A plugin operation has failed.\n\n" +
+          "● mp [project]\n" +
+          "  ⊘ hello (skipped)\n\n" +
+          "Plugin reinstall: 1 failure",
         severity: "error",
       },
     ]);
@@ -1801,6 +1806,7 @@ describe("emitMarketplaceNotAddedSignal", () => {
         pi,
         cwd,
         context,
+        cardinality: "single",
         err: new MarketplaceNotAddedSignal("ghost", "user"),
       });
 

@@ -2667,6 +2667,7 @@ test("standalone enable renders the exact orphan-rewake byte form", async () => 
           "● mp [user]\n  ● foo v1.2.3 (installed) {orphan rewake}\n\n/reload to pick up changes",
       },
     ]);
+    assert.doesNotMatch(notifications[0]!.message, /\n\nPlugin (?:enable|disable):/u);
   });
 });
 
