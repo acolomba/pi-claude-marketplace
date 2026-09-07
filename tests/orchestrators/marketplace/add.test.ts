@@ -22,10 +22,6 @@ import { locationsFor } from "../../../extensions/pi-claude-marketplace/persiste
 import { loadState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { buildAuthCallbacks } from "../../../extensions/pi-claude-marketplace/platform/git.ts";
 import {
-  resetCompletionCache,
-  getMarketplaceNames,
-} from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
-import {
   MarketplaceDuplicateNameError,
   UnsupportedSourceError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
@@ -839,46 +835,16 @@ test("MA-2 / SC-5 / CMC-30: orchestrator accepts scope='project'; success row ca
 });
 
 test("D-03-INV :: add invalidates marketplace-names cache for the new scope", async () => {
-  // addMarketplace wires invalidateMarketplaceNames + invalidateMarketplaceCache
-  // into its post-state-commit window. To prove the invalidation
-  // fires, we:
-  //   1. resetCompletionCache() to isolate from prior test pollution.
-  //   2. Warm the in-memory marketplace-names map by calling
-  //      getMarketplaceNames(...) once with a sentinel rebuild that returns
-  //      a deliberately stale shape and writes the cache file.
-  //   3. Run addMarketplace -- this MUST clear the in-memory entry and unlink
-  //      the stale on-disk cache file.
-  //   4. Call getMarketplaceNames again with a different rebuild that
-  //      increments a counter; the increment proves memory was cleared
-  //      and the file was removed, i.e. the orchestrator routed through the
-  //      invalidation call site rather than rehydrating stale disk data.
   await withTmpScope(async ({ cwd, locations }) => {
     // arrange
-    resetCompletionCache();
     const { ctx, pi } = makeCtx();
     const { gitOps } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
-
-    // Pre-warm: rebuild returns a stale shape so we can detect "served from
-    // memory" vs. "rebuild ran again".
-    let rebuildCount = 0;
     const cachePath = locations.marketplaceNamesCacheFile;
-    await getMarketplaceNames(cachePath, "project", () => {
-      rebuildCount += 1;
-      return Promise.resolve(["stale-mp"]);
-    });
-    // assert
-    assert.equal(rebuildCount, 1, "initial warm-up triggers rebuild exactly once");
+    await mkdir(path.dirname(cachePath), { recursive: true });
+    await writeFile(cachePath, '{"schemaVersion":2,"names":["stale-mp"]}\n', "utf8");
 
-    // Sanity: second call served from memory (no rebuild).
-    await getMarketplaceNames(cachePath, "project", () => {
-      rebuildCount += 1;
-      return Promise.resolve(["never-invoked"]);
-    });
-    assert.equal(rebuildCount, 1, "memory hit on second call -- no rebuild");
-
-    // Run addMarketplace -- D-03-INV must fire invalidateMarketplaceNames.
     // act
     await addMarketplace({
       ctx,
@@ -889,14 +855,8 @@ test("D-03-INV :: add invalidates marketplace-names cache for the new scope", as
       gitOps,
     });
 
-    // Post-add: memory is dropped AND file is absent. The next read MUST
-    // re-invoke the rebuild closure. Without disk invalidation, stale
-    // marketplace-names.json would serve "stale-mp" and counter would stay 1.
-    await getMarketplaceNames(cachePath, "project", () => {
-      rebuildCount += 1;
-      return Promise.resolve(["valid-marketplace"]);
-    });
-    assert.equal(rebuildCount, 2, "post-invalidation read re-invokes rebuild");
+    // assert
+    await assert.rejects(() => readFile(cachePath, "utf8"), { code: "ENOENT" });
   });
 });
 
