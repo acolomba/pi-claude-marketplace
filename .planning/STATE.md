@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 05
 current_phase_name: Injection and Ownership Design
 status: executing
-stopped_at: Completed 05-02-PLAN.md
-last_updated: "2026-09-07T20:24:58.685Z"
+stopped_at: Completed Phase 05 Wave 2 through 05-07-PLAN.md
+last_updated: "2026-09-07T23:01:44.581Z"
 last_activity: 2026-09-07
-last_activity_desc: Phase 05 Plan 02 complete; ready for Plan 05-03
-state_head: caf552094254ce74970b4206cd0c30969e3ffaf0
+last_activity_desc: Phase 05 Wave 2 complete through Plan 05-07; ready for Plan 05-08
+state_head: 99aab60104f8f34bc2d99562ba158d06170a0433
 progress:
   total_phases: 9
   completed_phases: 3
   total_plans: 127
-  completed_plans: 96
+  completed_plans: 101
   percent: 33
 ---
 
@@ -33,9 +33,9 @@ component as a working Pi artifact.
 
 Phase: 05 (Injection and Ownership Design) — EXECUTING
 Next: Execute Phase 5
-Plan: 3 of 33
+Plan: 8 of 33
 Status: Ready to execute
-Last activity: 2026-09-07 — Phase 05 Plan 02 complete; hooks hydration and staging ports verified
+Last activity: 2026-09-07 — Phase 05 Wave 2 complete; ports, HooksRuntime, and CompletionCache verified
 
 ## Performance Metrics
 
@@ -276,6 +276,11 @@ Last activity: 2026-09-07 — Phase 05 Plan 02 complete; hooks hydration and sta
 | Phase 03 P11                            | 34min    | 2 tasks | 11 files |
 | Phase 05 P01                            | 28min    | 2 tasks | 4 files  |
 | Phase 05 P02                            | 33min    | 2 tasks | 8 files  |
+| Phase 05 P03                            | 24min    | 2 tasks | 4 files  |
+| Phase 05 P04                            | 21min    | 2 tasks | 2 files  |
+| Phase 05 P05                            | 32min    | 2 tasks | 8 files  |
+| Phase 05 P06                            | 31min    | 2 tasks | 4 files  |
+| Phase 05 P07                            | 33min    | 2 tasks | 9 files  |
 
 ## Accumulated Context
 
@@ -727,23 +732,23 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 05-02-PLAN.md
+**Stopped at:** Completed Phase 05 Wave 2 through 05-07-PLAN.md
 
 Phase 04 completed all seven plans and closed AUTH-01 and TREF-01 through
 TREF-03. Independent verification passed 4/4 with no behavioral or UAT gap;
 the complete quality gate passed 5,397 unit tests and 32 integration tests.
-Phase 5 planning passed independent review. Plan 05-01 completed the required
-skills-removal and path-safety port tracer; Wave 2 is ready.
+Phase 5 planning passed independent review. Plans 05-01 through 05-07 completed
+the hidden-dependency ports plus the HooksRuntime and CompletionCache cores.
 
 **Resume file:** None
 
 **Read beside it:** `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`, the
 Phase 01 terminal evidence ledger, and Phase 5's roadmap criteria.
 
-Last session: 2026-09-07T20:24:58.238Z
+Last session: 2026-09-07T23:01:44.218Z
 
-**Next:** Execute Phase 5 Plans 05-02 through 05-07 in Wave 2 from the verified
-plans while preserving the TREF-04 through TREF-06 boundaries.
+**Next:** Execute Phase 5 Plan 05-08 while preserving the TREF-04 through
+TREF-06 boundaries.
 
 ## Deferred Verification
 
