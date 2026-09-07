@@ -34,8 +34,8 @@ component as a working Pi artifact.
 Phase: Milestone v1.19 complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-09-07 — Completed quick task 260907-qar: marked backlog
-entries WFLW-01 and DFEN-01 closed
+Last activity: 2026-09-07 — Completed quick task 260907-qsx: Sonar way
+ruleset enforced on extensions/ at lint time
 
 ## Performance Metrics
 
@@ -415,6 +415,7 @@ None for roadmap creation.
 | 260907-l4w | Fix issue #155: agents bridge frontmatter parser mangles YAML multiline (block scalar) description values | 2026-09-07 | c82a731b | [260907-l4w-fix-issue-155-agents-bridge-frontmatter-](./quick/260907-l4w-fix-issue-155-agents-bridge-frontmatter-/) |
 | 260907-m38 | Implement SKFM-01: repair a single-line frontmatter scalar whose only defect is an unquoted colon | 2026-09-07 | 66be4e43 | [260907-m38-implement-skfm-01-repair-single-line-fro](./quick/260907-m38-implement-skfm-01-repair-single-line-fro/) |
 | 260907-qar | mark backlog entries WFLW-01 and DFEN-01 closed | 2026-09-07 | 32396cff | [260907-qar-mark-backlog-entries-wflw-01-and-dfen-01](./quick/260907-qar-mark-backlog-entries-wflw-01-and-dfen-01/) |
+| 260907-qsx | adopt SonarJS recommended ruleset for extensions | 2026-09-07 | fe1313c6 | [260907-qsx-adopt-sonarjs-recommended-ruleset-for-ex](./quick/260907-qsx-adopt-sonarjs-recommended-ruleset-for-ex/) |
 
 ## Deferred Items
 
