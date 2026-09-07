@@ -1465,6 +1465,85 @@ test("same-runtime registration invalidates an earlier callback before lazy hydr
   assert.strictEqual(registrations.length, 22);
 });
 
+test("separate runtimes keep their current callbacks live and route through their own buckets", async (t) => {
+  // arrange
+  ownRoutingState(t);
+  const root = await mkdtemp(path.join(tmpdir(), "hooks-router-runtime-isolation-"));
+  t.after(() => rm(root, { recursive: true, force: true, maxRetries: 3 }));
+  ownAgentRoot(t, path.join(root, "agent"));
+  const reader: HooksHydrationReader = {
+    loadState(): Promise<ExtensionState> {
+      return Promise.resolve({ schemaVersion: 2, marketplaces: {} });
+    },
+  };
+  const firstRuntime = createHooksRuntime();
+  const secondRuntime = createHooksRuntime();
+  const firstHydration = createHooksHydration(firstRuntime, reader);
+  const secondHydration = createHooksHydration(secondRuntime, reader);
+  const firstPi = makeRecordingPi();
+  const secondPi = makeRecordingPi();
+  const firstDispatched: string[] = [];
+  const secondDispatched: string[] = [];
+  const firstExecutor: HookExecutor = (entry) => {
+    firstDispatched.push(entry.pluginId);
+    return Promise.resolve({ kind: "noop" });
+  };
+
+  const secondExecutor: HookExecutor = (entry) => {
+    secondDispatched.push(entry.pluginId);
+    return Promise.resolve({ kind: "noop" });
+  };
+
+  const firstCwd = path.join(root, "first");
+  const secondCwd = path.join(root, "second");
+  await firstHydration.registerHooksBridge(firstPi.pi, {
+    ctx: makeContext(firstCwd, root),
+    cwd: firstCwd,
+    executor: firstExecutor,
+  });
+  await secondHydration.registerHooksBridge(secondPi.pi, {
+    ctx: makeContext(secondCwd, root),
+    cwd: secondCwd,
+    executor: secondExecutor,
+  });
+  const entryFor = (pluginId: string, cwd: string): RoutingEntry => ({
+    scope: "project",
+    marketplace: "catalog",
+    pluginId,
+    resolvedSource: asAbsolutePluginRoot(path.join(cwd, pluginId)),
+    claudeEvent: "PreToolUse",
+    matcher: parseMatcher("Bash"),
+    rawMatcher: "Bash",
+    handlerDecl: { type: "command", command: `run-${pluginId}` },
+    declarationIndex: 0,
+    ifPredicate: MATCH_ALL_IF,
+  });
+  firstRuntime.setRoutingBucket("PreToolUse", [entryFor("first-plugin", firstCwd)]);
+  secondRuntime.setRoutingBucket("PreToolUse", [entryFor("second-plugin", secondCwd)]);
+  const toolCall = {
+    type: "tool_call",
+    toolCallId: "runtime-isolation-call",
+    toolName: "bash",
+    input: { command: "printf isolated" },
+  } satisfies ToolCallEvent;
+
+  // act
+  await registeredHandler(firstPi.registrations, "tool_call")(
+    toolCall,
+    makeContext(firstCwd, root),
+  );
+  await registeredHandler(secondPi.registrations, "tool_call")(
+    toolCall,
+    makeContext(secondCwd, root),
+  );
+
+  // assert
+  assert.deepStrictEqual(firstDispatched, ["first-plugin"]);
+  assert.deepStrictEqual(secondDispatched, ["second-plugin"]);
+  assert.deepStrictEqual(firstPi.messages, []);
+  assert.deepStrictEqual(secondPi.messages, []);
+});
+
 test(
   "registerHooksBridge degrades corrupt scope state and leaves unused shared directories absent",
   { concurrency: false },

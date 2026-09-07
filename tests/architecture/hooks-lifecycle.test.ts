@@ -23,9 +23,21 @@
 //     under `orchestrators/plugin/` so it is not relevant to this scan.
 
 import assert from "node:assert/strict";
-import { readFile, readdir } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
+
+import { createHooksHydration } from "../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
+import { createHooksRuntime } from "../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
+import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
+
+import type { HooksHydrationReader } from "../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
+import type { ExtensionState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import type {
+  ExtensionAPI,
+  ExtensionContext,
+} from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
 // Repo-relative paths to the four orchestrators we pin + the event-router
 // where the WR-01 prefix lives.
@@ -329,4 +341,110 @@ test("WR-03 Block F: every orchestrators/plugin/*.ts that mutates the cache also
     scanned >= 4,
     `WR-03 Block F: expected at least 4 orchestrators with cache mutations + rebuild; found ${String(scanned)}`,
   );
+});
+
+test("same-runtime reload makes every retained registration inert before argument access", async (t) => {
+  // arrange
+  const root = await mkdtemp(path.join(tmpdir(), "hooks-lifecycle-generation-"));
+  const priorAgentRoot = process.env.PI_CODING_AGENT_DIR;
+  process.env.PI_CODING_AGENT_DIR = path.join(root, "agent");
+  t.after(async () => {
+    if (priorAgentRoot === undefined) {
+      delete process.env.PI_CODING_AGENT_DIR;
+    } else {
+      process.env.PI_CODING_AGENT_DIR = priorAgentRoot;
+    }
+
+    await rm(root, { recursive: true, force: true, maxRetries: 3 });
+  });
+  const readRoots: string[] = [];
+  const reader: HooksHydrationReader = {
+    loadState(extensionRoot: string): Promise<ExtensionState> {
+      readRoots.push(extensionRoot);
+      return Promise.resolve({ schemaVersion: 2, marketplaces: {} });
+    },
+  };
+  const registrations: Array<{ readonly event: string; readonly handler: unknown }> = [];
+  const messages: unknown[] = [];
+  const pi = {
+    on(event: string, handler: unknown): void {
+      registrations.push({ event, handler });
+    },
+    sendMessage(message: unknown): void {
+      messages.push(message);
+    },
+  } as ExtensionAPI;
+  const runtime = createHooksRuntime();
+  const hydration = createHooksHydration(runtime, reader);
+  const factoryRoot = path.join(root, "factory");
+  const projectRoot = path.join(root, "project");
+  const registrationContext = { cwd: factoryRoot } as ExtensionContext;
+  await hydration.registerHooksBridge(pi, { ctx: registrationContext, cwd: factoryRoot });
+  await hydration.registerHooksBridge(pi, { ctx: registrationContext, cwd: factoryRoot });
+  const staleRegistrations = registrations.slice(0, 11);
+  const liveRegistrations = registrations.slice(11);
+  const registrationOrder = [
+    "session_start",
+    "session_shutdown",
+    "session_before_compact",
+    "session_compact",
+    "input",
+    "tool_call",
+    "tool_result",
+    "before_agent_start",
+    "agent_end",
+    "agent_settled",
+    "input",
+  ];
+  const runtimeBefore = JSON.stringify({
+    generation: runtime.currentGeneration(),
+    cache: Array.from(runtime.parsedConfigEntries()),
+    routes: Array.from(runtime.routingTableEntries()),
+    pending: runtime.pendingSessionStartContextEntries(),
+  });
+  const readsBefore = [...readRoots];
+  const forbiddenArgument = new Proxy(
+    {},
+    {
+      get(_target, property): never {
+        throw new Error(`stale callback read argument property ${String(property)}`);
+      },
+    },
+  );
+
+  // act
+  for (const registration of staleRegistrations) {
+    assert.strictEqual(typeof registration.handler, "function");
+    const result = (registration.handler as (...args: unknown[]) => unknown)(
+      forbiddenArgument,
+      forbiddenArgument,
+    );
+    assert.strictEqual(await Promise.resolve(result), undefined);
+  }
+
+  const runtimeAfterStale = JSON.stringify({
+    generation: runtime.currentGeneration(),
+    cache: Array.from(runtime.parsedConfigEntries()),
+    routes: Array.from(runtime.routingTableEntries()),
+    pending: runtime.pendingSessionStartContextEntries(),
+  });
+  const liveSessionStart = liveRegistrations[0]?.handler;
+  assert.strictEqual(typeof liveSessionStart, "function");
+  const liveResult = (liveSessionStart as (...args: unknown[]) => unknown)(
+    { type: "session_start", reason: "startup" },
+    { cwd: projectRoot },
+  );
+
+  // assert
+  assert.deepStrictEqual(
+    registrations.map(({ event }) => event),
+    [...registrationOrder, ...registrationOrder],
+  );
+  assert.deepStrictEqual(readRoots, [
+    ...readsBefore,
+    locationsFor("project", projectRoot).extensionRoot,
+  ]);
+  assert.strictEqual(runtimeAfterStale, runtimeBefore);
+  assert.strictEqual(await Promise.resolve(liveResult), undefined);
+  assert.deepStrictEqual(messages, []);
 });
