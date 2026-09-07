@@ -400,9 +400,7 @@ test("declares plural cardinality when import produces zero rows", async (t) => 
 
   // assert
   assert.deepStrictEqual(importResult, emptyImportResult());
-  assert.deepStrictEqual(notifications, [
-    { message: "(no marketplaces)\n\nImport: 0 successes" },
-  ]);
+  assert.deepStrictEqual(notifications, [{ message: "(no marketplaces)\n\nImport: 0 successes" }]);
   verifyBoundary();
 });
 
@@ -1002,9 +1000,7 @@ test("warns about a plugin whose marketplace declares no supported source and re
 
   // assert
   assert.deepStrictEqual(importResult, expectedResult);
-  assert.deepStrictEqual(notifications, [
-    { message: "(no marketplaces)\n\nImport: 0 successes" },
-  ]);
+  assert.deepStrictEqual(notifications, [{ message: "(no marketplaces)\n\nImport: 0 successes" }]);
   verifyBoundary();
 });
 
@@ -1038,9 +1034,7 @@ test("carries the settings loader's own diagnostics onto the result", async (t) 
 
   // assert
   assert.deepStrictEqual(importResult, expectedResult);
-  assert.deepStrictEqual(notifications, [
-    { message: "(no marketplaces)\n\nImport: 0 successes" },
-  ]);
+  assert.deepStrictEqual(notifications, [{ message: "(no marketplaces)\n\nImport: 0 successes" }]);
   verifyBoundary();
 });
 

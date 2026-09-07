@@ -532,8 +532,7 @@ const plannedInstallRows = [
     },
     rendered: "● cr (will partially install)",
     expectedMessage:
-      "● mp-github [project]\n  ● cr (will partially install)\n\n" +
-      "Reconcile pending: 1 success",
+      "● mp-github [project]\n  ● cr (will partially install)\n\n" + "Reconcile pending: 1 success",
   },
   {
     condition: "a candidate that resolves cleanly",
@@ -541,8 +540,7 @@ const plannedInstallRows = [
       await stagePlannedInstall(cwd, locations, { degrade: false });
     },
     rendered: "● cr (will install)",
-    expectedMessage:
-      "● mp-github [project]\n  ● cr (will install)\n\nReconcile pending: 1 success",
+    expectedMessage: "● mp-github [project]\n  ● cr (will install)\n\nReconcile pending: 1 success",
   },
   {
     condition: "a marketplace that is declared but not recorded",
@@ -562,8 +560,7 @@ const plannedInstallRows = [
       await writeFile(manifestPath, "{ not valid json at all", "utf8");
     },
     rendered: "● cr (will install)",
-    expectedMessage:
-      "● mp-github [project]\n  ● cr (will install)\n\nReconcile pending: 1 success",
+    expectedMessage: "● mp-github [project]\n  ● cr (will install)\n\nReconcile pending: 1 success",
   },
   {
     condition: "a recorded manifest that omits the planned plugin",
@@ -579,8 +576,7 @@ const plannedInstallRows = [
       );
     },
     rendered: "● cr (will install)",
-    expectedMessage:
-      "● mp-github [project]\n  ● cr (will install)\n\nReconcile pending: 1 success",
+    expectedMessage: "● mp-github [project]\n  ● cr (will install)\n\nReconcile pending: 1 success",
   },
 ] satisfies readonly {
   readonly condition: string;
