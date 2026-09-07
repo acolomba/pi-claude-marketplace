@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  createHooksHydration as definingCreateHooksHydration,
   hydrateProjectScopeForCwd as definingHydrateProjectScopeForCwd,
   readAndCachePluginHooks as definingReadAndCachePluginHooks,
   rebuildRoutingTables as definingRebuildRoutingTables,
@@ -9,6 +10,7 @@ import {
   removePluginConfigFromCache as definingRemovePluginConfigFromCache,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
 import {
+  createHooksHydration,
   hydrateProjectScopeForCwd,
   readAndCachePluginHooks,
   rebuildRoutingTables,
@@ -23,8 +25,13 @@ import {
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/stage.ts";
 
 import type * as HooksBarrel from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
+import type { HooksHydrationReader } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 
 type Public<Name extends keyof typeof HooksBarrel> = Name;
+
+void ({
+  loadState: () => Promise.resolve({ schemaVersion: 2, marketplaces: {} }),
+} satisfies HooksHydrationReader);
 
 // @ts-expect-error the barrel keeps accumulateStream internal
 void ("accumulateStream" satisfies Public<"accumulateStream">);
@@ -70,6 +77,19 @@ void ("STDERR_MAX_BYTES" satisfies Public<"STDERR_MAX_BYTES">);
 void ("STDOUT_MAX_BYTES" satisfies Public<"STDOUT_MAX_BYTES">);
 // @ts-expect-error the barrel keeps TRANSLATORS internal
 void ("TRANSLATORS" satisfies Public<"TRANSLATORS">);
+
+describe("createHooksHydration", () => {
+  test("re-exports the defining binding", () => {
+    // arrange
+    const expectedCreateHooksHydration = definingCreateHooksHydration;
+
+    // act
+    const hooksCreateHooksHydration = createHooksHydration;
+
+    // assert
+    assert.strictEqual(hooksCreateHooksHydration, expectedCreateHooksHydration);
+  });
+});
 
 describe("hydrateProjectScopeForCwd", () => {
   test("re-exports the defining binding", () => {

@@ -22,10 +22,10 @@ import {
   spawnAndRegister,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts";
 import { adaptObservationResultForEvent } from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts";
-import * as eventRouterModule from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
 import {
   addPluginConfigToCache,
   beforeAgentStartHandlerFor,
+  createHooksHydration,
   hydrateProjectScopeForCwd,
   readAndCachePluginHooks,
   rebuildRoutingTables,
@@ -58,6 +58,7 @@ import { saveState } from "../../../extensions/pi-claude-marketplace/persistence
 
 import type { SpawnDeps } from "../../../extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts";
 import type { HookExecutor } from "../../../extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts";
+import type { HooksHydrationReader } from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
 import type { HooksConfig } from "../../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type {
@@ -67,25 +68,6 @@ import type {
   ExtensionContext,
   ToolCallEvent,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
-
-interface HooksHydrationReaderContract {
-  readonly loadState: (extensionRoot: string) => Promise<ExtensionState>;
-}
-
-interface HooksHydrationContract {
-  readonly hydrateProjectScopeForCwd: (cwd: string) => Promise<void>;
-  readonly registerHooksBridge: typeof registerHooksBridge;
-}
-
-type CreateHooksHydrationContract = (
-  reader: HooksHydrationReaderContract,
-) => HooksHydrationContract;
-
-function requireCreateHooksHydration(): CreateHooksHydrationContract {
-  const createHooksHydration = Reflect.get(eventRouterModule, "createHooksHydration");
-  assert.strictEqual(typeof createHooksHydration, "function");
-  return createHooksHydration as CreateHooksHydrationContract;
-}
 
 /**
  * Unit tests for `bridges/hooks/event-router.ts` -- the hooks-bridge
@@ -1292,7 +1274,7 @@ test(
     const locations = locationsFor("project", root);
     const readRoots: string[] = [];
     const loadError = new Error("project state refused");
-    const hydrationReader: HooksHydrationReaderContract = {
+    const hydrationReader: HooksHydrationReader = {
       loadState(extensionRoot: string): Promise<ExtensionState> {
         readRoots.push(extensionRoot);
         return Promise.reject(loadError);
@@ -1325,7 +1307,7 @@ test(
     );
 
     // act
-    const hooksHydration = requireCreateHooksHydration()(hydrationReader);
+    const hooksHydration = createHooksHydration(hydrationReader);
 
     await hooksHydration.hydrateProjectScopeForCwd(root);
     const cache = Array.from(parsedConfigEntries().values()).map((entry) => ({
@@ -1363,14 +1345,14 @@ test(
     const factoryProjectLocations = locationsFor("project", factoryRoot);
     const projectLocations = locationsFor("project", projectRoot);
     const readRoots: string[] = [];
-    const hydrationReader: HooksHydrationReaderContract = {
-      async loadState(extensionRoot: string): Promise<ExtensionState> {
+    const hydrationReader: HooksHydrationReader = {
+      loadState(extensionRoot: string): Promise<ExtensionState> {
         readRoots.push(extensionRoot);
         if (extensionRoot === factoryProjectLocations.extensionRoot) {
-          throw new Error("factory project state refused");
+          return Promise.reject(new Error("factory project state refused"));
         }
 
-        return { schemaVersion: 2, marketplaces: {} };
+        return Promise.resolve({ schemaVersion: 2, marketplaces: {} });
       },
     };
     const previousDebug = process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
@@ -1389,7 +1371,7 @@ test(
     const { pi, registrations, messages } = makeRecordingPi();
     const context = makeContext(projectRoot, root);
 
-    const hooksHydration = requireCreateHooksHydration()(hydrationReader);
+    const hooksHydration = createHooksHydration(hydrationReader);
     await hooksHydration.registerHooksBridge(pi, {
       ctx: context,
       cwd: factoryRoot,
