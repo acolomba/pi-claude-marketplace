@@ -72,7 +72,6 @@ import {
   notifyWithContext,
   type MarketplaceRows,
   type Plural,
-  type Single,
 } from "../../shared/notify-context.ts";
 import { isScopeBearingListRow } from "../../shared/notify.ts";
 import {
@@ -1515,7 +1514,7 @@ export async function listPlugins(opts: ListPluginsOptions): Promise<void> {
     // seam (the trailer fires when at least one
     // installed/updated/reinstalled/uninstalled plugin row is present;
     // pure available/unavailable/upgradable lists emit no trailer).
-    notifyWithContext(ctx, pi, LIST_CONTEXT, marketplaces);
+    notifyWithContext(ctx, pi, LIST_CONTEXT, marketplaces, undefined, "plural");
   } catch (err) {
     // Aggregate list-failure path. The list surface has no dedicated
     // catalog state for orchestrator-level failure (D-19-03 Option B):
@@ -1556,10 +1555,11 @@ export async function listPlugins(opts: ListPluginsOptions): Promise<void> {
       scope: opts.scope ?? "user",
       plugins: [failedRow],
     };
-    // OUT-07 / D-12: the synthetic list-failure surface emits exactly one
-    // marketplace row, so its slot is typed `Single<Row>` (a 1-tuple).
-    const failureRows: Single<MarketplaceRows<ListMsg>> = [mp];
-    notifyWithContext(ctx, pi, LIST_CONTEXT, failureRows);
+    // OUT-07 / D-12: cardinality follows the list invocation, not the number
+    // of rows produced by this failure arm. It remains a plural operation even
+    // though the synthetic failure occupies one marketplace block.
+    const failureRows: Plural<MarketplaceRows<ListMsg>> = [mp];
+    notifyWithContext(ctx, pi, LIST_CONTEXT, failureRows, undefined, "plural");
   }
 }
 

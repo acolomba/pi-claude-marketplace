@@ -2233,7 +2233,7 @@ function emitFetchSkip(
   }
 
   const rows: Plural<MarketplaceRows<PluginInfoCascadeMsg>> = [first, ...remaining];
-  notifyWithContext(opts.ctx, opts.pi, PLUGIN_INFO_CONTEXT, rows);
+  notifyWithContext(opts.ctx, opts.pi, PLUGIN_INFO_CONTEXT, rows, undefined, "single");
 }
 
 export async function getPluginInfo(opts: GetPluginInfoOptions): Promise<void> {

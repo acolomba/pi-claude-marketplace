@@ -1012,6 +1012,7 @@ test("GRAM-04: both-scopes missing plugin emits per-scope `error` + summary, NOT
         "  ⊘ ghost (failed) {not in manifest}",
       ].join("\n"),
     );
+    assert.doesNotMatch(notifications[1]!.message, /\n\nPlugin info:/u);
   });
 });
 
@@ -2950,6 +2951,7 @@ test("plugin info manifest absent: D-96-04 / ENBL-17: `info --fetch` on a disabl
         "  ⊘ alpha v1.0.0 (skipped) {already disabled}",
       ].join("\n"),
     );
+    assert.doesNotMatch(notifications[1]!.message, /\n\nPlugin info:/u);
     // ONE row, not one per cause: a `(skipped)` row for the manifest-absence
     // cause beside the disabled one would be the concatenation regression the
     // single `skipReason` field exists to make unrepresentable.

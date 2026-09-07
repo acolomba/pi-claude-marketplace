@@ -72,7 +72,7 @@ type NotificationUi = Omit<ExtensionContext["ui"], "notify"> & {
   readonly notify: (message: string, severity?: NotificationSeverity) => void;
 };
 
-function makeCtx(): {
+function makeCtx(options: { readonly recordTally?: boolean } = {}): {
   ctx: ExtensionContext;
   pi: ExtensionAPI;
   notifications: NotifyRecord[];
@@ -90,7 +90,19 @@ function makeCtx(): {
     .twice();
   when(() => ui.notify)
     .thenReturn((message, severity) => {
-      notifications.push(severity === undefined ? { message } : { message, severity });
+      // Most of this owner suite predates operation tallies and owns the list
+      // body rather than repeating the same suffix in every row-classification
+      // case. Keep those body assertions focused, while the zero/one/many cases
+      // opt into the complete message and pin exact tally bytes.
+      const recordedMessage =
+        options.recordTally === true
+          ? message
+          : message.replace(/\n\nPlugin list: \d+ \w+(?:, \d+ \w+)*$/u, "");
+      notifications.push(
+        severity === undefined
+          ? { message: recordedMessage }
+          : { message: recordedMessage, severity },
+      );
     })
     .once();
 
@@ -303,7 +315,7 @@ test("CMC-10: empty state in both scopes renders V2 `(no marketplaces)` sentinel
   // docs/output-catalog.md:139-145 -- `<!-- catalog-state: empty -->`.
   await withHermeticHome(async ({ cwd }) => {
     // arrange
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, pi, notifications, ui } = makeCtx({ recordTally: true });
     // act
     await listPlugins({ ctx, pi, cwd });
     // assert
@@ -347,7 +359,7 @@ test("PL-1: no flags = every bucket (installed, available, unavailable)", async 
       installablePluginDirs: ["alpha", "beta"],
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, pi, notifications, ui } = makeCtx({ recordTally: true });
     // act
     await listPlugins({ ctx, pi, cwd, scope: "user" });
     // assert
@@ -3384,7 +3396,7 @@ test("plugin list manifest absent: INV-01: an enabled, fully supported record ab
       installed: { alpha: { version: "1.0.0" } },
     });
 
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, pi, notifications, ui } = makeCtx({ recordTally: true });
     // act
     await listPlugins({ ctx, pi, cwd, scope: "user" });
     // assert
@@ -4413,6 +4425,8 @@ test("listPlugins normalizes a non-Error notification failure before reporting i
           "● (list) [user]",
           "  ⊘ (list) (failed) {unreadable}",
           "    cause: ui unavailable",
+          "",
+          "Plugin list: 1 failure",
         ].join("\n"),
         severity: "error",
       },
