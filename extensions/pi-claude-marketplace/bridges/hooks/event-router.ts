@@ -737,7 +737,7 @@ export async function registerHooksBridge(
     // unsolicited mkdir on a pristine scope would create
     // `<scopeRoot>/pi-claude-marketplace/...` and violate WR-05 (the "no
     // files on a clean reconcile" invariant pinned by
-    // tests/edge/index-handler.test.ts). When no plugin declares
+    // tests/index.test.ts). When no plugin declares
     // SessionStart hooks the env-file path will never be set, so the
     // dir's absence is harmless. Idempotent across `/reload` via mkdir {
     // recursive }; failures route through hookDebugLog.

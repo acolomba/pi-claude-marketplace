@@ -13,7 +13,7 @@
 
 **Run Commands:**
 ```bash
-npm test                 # unit-ish suite: tests/{architecture,bridges,domain,edge,helpers,orchestrators,persistence,platform,shared,transaction}/**/*.test.ts
+npm test                 # unit-ish suite: tests/{architecture,bridges,domain,edge,orchestrators,persistence,platform,shared,transaction}/**/*.test.ts plus tests/index.test.ts
 npm run test:integration # tests/integration/**/*.test.ts
 npm run test:e2e         # tests/e2e/**/*.test.ts (PI_CM_E2E_REF=pinned)
 npm run test:coverage    # runs unit + integration + e2e each with --experimental-test-coverage, emits coverage/{unit,integration,e2e}.lcov
@@ -26,16 +26,16 @@ npm run check            # typecheck && lint && fallow && format:check && test &
 
 **Location:** separate `tests/` tree, not co-located with source. Mirrors the `extensions/pi-claude-marketplace/` layer structure one-to-one.
 
-**Verified directory listing of `tests/` (2026-08-18):**
+**Verified directory listing of `tests/` (2026-09-07):**
 ```
 tests/
+├── index.test.ts     # extension-factory suite, named explicitly in the `npm test` glob
 ├── architecture/     # architectural boundary/gate tests (grep/AST-scan the source tree)
 ├── bridges/
 ├── domain/
 ├── edge/
 ├── e2e/              # separate script (test:e2e), not part of `npm test`
 ├── fixtures/         # static JSON/data fixtures consumed by tests; NO .test.ts files here
-├── helpers/          # shared mocks/utilities; contains its own tests (e.g. source-scan.test.ts)
 ├── integration/      # separate script (test:integration), not part of `npm test`
 ├── live-uat/         # standalone operator-run .mjs drivers, NOT .test.ts, excluded from the typed tree and from ESLint's typed project
 ├── orchestrators/
@@ -46,10 +46,10 @@ tests/
 ```
 There is **no `tests/docs` directory** — do not reference one. `tests/fixtures/` and `tests/live-uat/` hold zero `.test.ts` suites; `live-uat/*.mjs` are standalone command-line drivers, each invoked directly with `node tests/live-uat/<file>.mjs`, never imported by any module (each carries a `fallow-ignore-file unused-file` marker for that reason).
 
-**Verified counts (2026-08-18):**
-- 230 total `.test.ts` files under `tests/`
-- 214 of those fall under the `npm test` glob (`architecture,bridges,domain,edge,helpers,orchestrators,persistence,platform,shared,transaction`)
-- 10 under `tests/integration/`
+**Verified counts (2026-09-07):**
+- 276 total `.test.ts` files under `tests/`
+- 255 of those fall under the `npm test` glob (`architecture,bridges,domain,edge,orchestrators,persistence,platform,shared,transaction`), plus the explicitly named `tests/index.test.ts`
+- 14 under `tests/integration/`
 - 6 under `tests/e2e/`
 
 **Naming:**
@@ -88,31 +88,37 @@ test("happy path: write succeeds with 2-space indent + trailing newline (AS-1)",
 
 ## Mocking
 
-**Framework:** No mocking library (no Sinon, no `node:test`'s built-in mock). All test doubles are hand-written factory functions in `tests/helpers/`.
+**Framework:** No mocking library (no Sinon, no `node:test`'s built-in mock). All test doubles are hand-written factory functions. There is no shared `tests/helpers/` directory — a double lives beside the layer it doubles, and a double used by only one suite is defined inside that suite's own file.
 
-**Patterns** (`tests/helpers/credential-mock.ts`, mirroring `tests/helpers/git-mock.ts`):
+**Patterns** (`tests/platform/credential-ops-fake.ts`, mirroring `tests/platform/git-ops-fake.ts` and `tests/domain/device-flow-fake.ts`):
 ```typescript
-export interface MockCredentialState {
-  store: Map<string, GitCredentials>;
-  fillCalls: { host: string }[];
-  approveCalls: { host: string; cred: GitCredentials }[];
-  rejectCalls: { host: string; cred: GitCredentials }[];
-  fillThrows?: Error;
-  approveThrows?: Error;
-  rejectThrows?: Error;
+export interface CredentialOpsFakeOptions {
+  readonly boundary: "memory";
+  readonly credentials?: ReadonlyArray<readonly [host: string, credential: GitCredentials]>;
+  readonly fillError?: Error;
+  readonly approveError?: Error;
+  readonly rejectError?: Error;
+}
+
+export interface CredentialOpsFake {
+  readonly credentialOps: CredentialOps;
+  readonly calls: CredentialOpsFakeCalls;
+  storedCredential(host: string): GitCredentials | null;
 }
 ```
-- Closure-scoped state object, exposing a `state` handle tests can assert against directly (call logs, throw overrides) and a `CredentialOps`-shaped object satisfying the production interface
-- `makeMock*` factory naming (`makeMockCredentialOps`, `makeMockGitOps`, `makeMockDeviceFlowHttp`)
-- Mocks are **pure in-memory**: no filesystem ops, no environment mutation, no subprocess spawn — explicitly called out in the header comment for `credential-mock.ts` ("credential mocks do NOT need a real keychain backend")
-- Mocks import production types with `import type` only, so the mock file never pulls runtime production code into a test-helper module (deliberate discipline noted in the file header, applied even though the ESLint platform import boundary only constrains production code)
-- Throw-simulation is opt-in per call (`fillThrows?: Error`, etc.) so a test can exercise its own try/catch around a specific seam (e.g. simulating ENOENT or a subprocess timeout) without a full mocking-library API
+- `create*Fake` factory naming for the shared doubles (`createCredentialOpsFake`, `createGitOpsFake`, `createDeviceFlowFake`); suite-local doubles that no other file needs keep the older `makeMock*` naming and are declared in the `.test.ts` file that uses them
+- Closure-scoped state, exposing a production-interface-shaped object plus a read-only `calls` handle tests assert against directly
+- `boundary: "memory"` is a required option the factory re-checks at runtime, so a double can never be constructed without the caller stating that it stands in for a real boundary
+- Doubles are **pure in-memory**: no filesystem ops, no environment mutation, no subprocess spawn
+- Doubles import production types with `import type` only, so the file never pulls runtime production code in (deliberate discipline, applied even though the ESLint platform import boundary only constrains production code)
+- Error-simulation is opt-in per call (`fillError?: Error`, etc.) so a test can exercise its own try/catch around a specific seam (e.g. simulating ENOENT or a subprocess timeout) without a full mocking-library API
+- Each shared double is paired with a `*-contract.ts` module (`tests/platform/credential-ops-contract.ts`, `tests/platform/git-ops-contract.ts`, `tests/domain/device-flow-contract.ts`) exporting one named case list run against BOTH the fake and the real implementation, so the double cannot drift from the boundary it stands in for
 
 **What to Mock:**
 - External subprocess/network/credential-store boundaries: `git` operations (`GitOps`), OS credential helper subprocess calls (`CredentialOps`), device-flow HTTP calls (`DeviceFlowHttp`)
 
 **What NOT to Mock:**
-- The filesystem for state/config I/O — tests use real `mkdtemp` temp directories throughout, never an in-memory fs layer (confirmed: no `withHermeticHome`-style fs-mocking helper exists in `tests/helpers/`; each test manages its own real temp dir and cleans it up in `finally`)
+- The filesystem for state/config I/O — tests use real `mkdtemp` temp directories throughout, never an in-memory fs layer (there is no shared fs-mocking helper; the `withHermeticHome` wrappers that appear in several suites are file-local and each still mkdtemps a real directory, and each test cleans up its own temp dir in `finally`)
 - Production modules under test — dependency injection is used instead of module-mocking/monkey-patching; see CONVENTIONS.md's "Dependency injection over test-only seams" for the underlying principle (`bridges/hooks/routing-state.ts` is the non-test worked example of the same discipline)
 
 **Public-interface testing philosophy:** tests are written against a module's exported public interface, not against internals reached by exporting them solely "for test." When testing a unit is hard through its public surface, that difficulty is treated as signal that an inner concern wants to be extracted into its own module (with its own public interface) — not a reason to widen the original module's exports to satisfy a test. Passing a dependency (e.g. `spawn`, `gitOps`, `credentialOps`) into a function as a parameter is the sanctioned way to make that dependency testable, because it becomes part of the function's real public interface rather than a back door; a module-global `_setSpawnForTest`-style seam is the anti-pattern this guards against.
@@ -121,10 +127,10 @@ export interface MockCredentialState {
 
 **Test Data:**
 - Static JSON/data fixtures live under `tests/fixtures/` (e.g. `tests/fixtures/hookify-hooks.json`, `tests/fixtures/hooks-notification-only.json`, `tests/fixtures/ralph-wiggum-hooks.json`), plus nested fixture directories like `tests/fixtures/bad-imports/` and `tests/fixtures/import-command/`
-- Programmatic seed helpers, e.g. `tests/helpers/marketplace-seed.ts`, build in-memory or on-disk marketplace/plugin structures for a test to install/reconcile against
+- Programmatic seed helpers, e.g. `tests/edge/handlers/marketplace-seed.ts`, build in-memory or on-disk marketplace/plugin structures for a test to install/reconcile against
 
 **Location:**
-- `tests/fixtures/` for static data; `tests/helpers/` for both mocks and seed-building functions (helpers has its own `.test.ts` file, `tests/helpers/source-scan.test.ts`, testing the helper logic itself — e.g. `source-scan.ts`'s `stripComments`/`assertNoForbiddenSurface` used by the architecture gates)
+- `tests/fixtures/` for static data. Doubles, seed builders and shared mechanics have no directory of their own — each sits in the layer directory of the thing it serves, and carries its own `.test.ts` where the helper logic itself needs covering (e.g. `tests/architecture/source-scan.ts` + `source-scan.test.ts` for the `stripComments`/`assertNoForbiddenSurface` mechanic the architecture gates share)
 
 ## Coverage
 
@@ -141,10 +147,10 @@ npm run test:coverage
 ## Test Types
 
 **Unit Tests:**
-- The bulk of `tests/{bridges,domain,edge,helpers,orchestrators,persistence,platform,shared,transaction}/` — exercise a single module's exported functions against real temp-directory filesystem state and injected mocks for external boundaries
+- The bulk of `tests/{bridges,domain,edge,orchestrators,persistence,platform,shared,transaction}/` — exercise a single module's exported functions against real temp-directory filesystem state and injected mocks for external boundaries
 
 **Architecture Tests:**
-- `tests/architecture/` — a distinct category from unit tests: source-tree grep/AST scans (`tests/helpers/source-scan.ts`'s `assertNoForbiddenSurface`, `stripComments`) or programmatic config introspection (loading `eslint.config.js` at test time) that assert structural invariants hold across the whole codebase, e.g. `tests/architecture/no-orchestrator-network.test.ts` (NFR-5: no orchestrator file may import `gitOps`/`platform/git` except the exempted `clone-cache.ts` seam) and `tests/architecture/import-boundaries.test.ts` (D-11/D-21-02: the layered import matrix, the ledger-to-ledger directed-edge ban, and an ALLOWLIST over the `fallow dead-code` invocation's tokens -- the `import-x/no-cycle` rule it used to pin was removed after being measured inert, and cycles are now gated by that bare fallow run)
+- `tests/architecture/` — a distinct category from unit tests: source-tree grep/AST scans (`tests/architecture/source-scan.ts`'s `assertNoForbiddenSurface`, `stripComments`) or programmatic config introspection (loading `eslint.config.js` at test time) that assert structural invariants hold across the whole codebase, e.g. `tests/architecture/no-orchestrator-network.test.ts` (NFR-5: no orchestrator file may import `gitOps`/`platform/git` except the exempted `clone-cache.ts` seam) and `tests/architecture/import-boundaries.test.ts` (D-11/D-21-02: the layered import matrix, the ledger-to-ledger directed-edge ban, and an ALLOWLIST over the `fallow dead-code` invocation's tokens -- the `import-x/no-cycle` rule it used to pin was removed after being measured inert, and cycles are now gated by that bare fallow run)
 
 **Integration Tests:**
 - `tests/integration/` (10 files, `npm run test:integration`) — exercise multiple layers together (e.g. full install/uninstall ledgers against real temp-directory scope roots) without a live network dependency
