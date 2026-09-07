@@ -64,7 +64,8 @@ export function assertSafeName(name: string, label?: string): void {
  * acme), matching Pi's `/skill:<name>` invocation surface.
  *
  * Pi validates skill names as lowercase a-z, 0-9, and hyphens only, so skills
- * cannot use the colon separator that command prompt filenames use.
+ * cannot use the colon separator that command prompt filenames carry on
+ * POSIX.
  */
 export function generatedSkillName(plugin: string, source: string): string {
   assertSafeName(plugin);
@@ -84,26 +85,35 @@ export function generatedSkillName(plugin: string, source: string): string {
 /**
  * Command name generator (RN-1 / CM-2).
  *
- * Format: `<plugin>:<command>` -- the SEPARATOR is a colon, distinct from
- * the dash separator used by skills/agents. The `<plugin>-` prefix is
- * elided from `source` (acme + acme-foo -> acme:foo, NOT acme:acme-foo).
+ * Format: `<plugin><separator><command>`, where the separator comes from
+ * `commandNamespaceSeparator()`: a colon on POSIX, matching what Claude Code
+ * registers, and a dash on Windows, because the generated name becomes a
+ * filename and NTFS forbids a colon in one. The `<plugin>-` prefix is elided
+ * from `source` (acme + acme-foo -> acme:foo, NOT acme:acme-foo).
  *
  * CM-4: `source` may be a `/`-separated relative path reflecting
  * a nested command file (e.g. "build/web" for commands/build/web.md). RN-2
  * forbids path separators in a single safe name, so the path is split into
  * segments and each segment is validated independently; the `<plugin>-`
  * prefix is elided from the FIRST segment only; and the segments are joined
- * with `:` so the nested file becomes `<plugin>:build:web` -- matching
- * Claude Code's nested-command convention. A flat source ("foo") has a
- * single segment and behaves exactly as before ("acme:foo"); "acme-foo"
- * still elides to "acme:foo".
+ * with the separator, so the nested file becomes `<plugin>:build:web` --
+ * matching Claude Code's nested-command convention -- or
+ * `<plugin>-build-web` on Windows. A flat source ("foo") has a single
+ * segment; "acme-foo" elides to the same name "foo" produces.
+ *
+ * The dash separator makes two sources collide on Windows: in plugin "acme",
+ * `commands/foo.md` and `commands/acme-foo.md` both name "acme-foo". That is
+ * the D-07 first-wins skip, which discovery already resolves with a warning
+ * naming the winner, and it is the collision shape `generatedSkillName` has
+ * on every platform.
  *
  * D-141-02: an elision that would empty the head does not fire. A head of
  * exactly "acme-" in plugin "acme" keeps its verbatim form, so
  * `commands/acme-.md` becomes "acme:acme-" and `commands/acme-/lint.md`
  * becomes "acme:acme-:lint" -- the two names Claude Code registers for the
- * same tree. The elision exists to remove a stutter, and a head that is
- * nothing but the stutter has no command name left underneath it.
+ * same tree -- and "acme-acme-" / "acme-acme--lint" on Windows. The elision
+ * exists to remove a stutter, and a head that is nothing but the stutter has
+ * no command name left underneath it.
  *
  * Commands only. `generatedSkillName` and `generatedAgentName` keep their
  * throw, because Pi validates a skill name and rejects both a trailing and
@@ -129,8 +139,8 @@ export function generatedCommandName(plugin: string, source: string): string {
   assertSafeName(elidedHead, `elided command path head in "${source}"`);
 
   const generated = [plugin, elidedHead, ...segments.slice(1)].join(commandNamespaceSeparator());
-  // Note: assertSafeName on the colon-bearing form -- colon is allowed
-  // (PRD §6.5 RN-2 forbids only "/" and "\"), so this passes.
+  // PRD §6.5 RN-2 forbids only "/" and "\", so a name joined with either
+  // separator passes.
   assertSafeName(generated);
 
   return generated;

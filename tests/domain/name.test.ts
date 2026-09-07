@@ -300,16 +300,38 @@ describe("generatedCommandName", () => {
     });
   }
 
-  test('generates "acme-foo" from "foo" on win32', (t) => {
-    // arrange
-    setCasePlatform(t, "win32");
+  for (const { plugin, source, expectedCommandName } of [
+    { plugin: "acme", source: "foo", expectedCommandName: "acme-foo" },
+    { plugin: "acme", source: "acme-foo", expectedCommandName: "acme-foo" },
+    {
+      plugin: "acme",
+      source: "build/web",
+      expectedCommandName: "acme-build-web",
+    },
+    {
+      plugin: "acme",
+      source: "acme-tools/lint",
+      expectedCommandName: "acme-tools-lint",
+    },
+    {
+      plugin: "acme",
+      source: "acme-",
+      expectedCommandName: "acme-acme-",
+    },
+  ]) {
+    test(`generates ${JSON.stringify(expectedCommandName)} from ${JSON.stringify(source)} on win32`, (t) => {
+      // arrange
+      setCasePlatform(t, "win32");
+      const pluginName = plugin;
+      const sourceName = source;
 
-    // act
-    const commandName = generatedCommandName("acme", "foo");
+      // act
+      const commandName = generatedCommandName(pluginName, sourceName);
 
-    // assert
-    assert.strictEqual(commandName, "acme-foo");
-  });
+      // assert
+      assert.strictEqual(commandName, expectedCommandName);
+    });
+  }
 
   for (const { pluginName, sourceName, errorMessage } of [
     {
