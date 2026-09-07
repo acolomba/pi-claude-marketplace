@@ -2,47 +2,45 @@
 gsd_state_version: "1.0"
 milestone: refine-unit-tests
 milestone_name: Refine Unit Tests
-current_phase: 03
-current_phase_name: Production Defect Corrections
-status: executing
-stopped_at: Completed 03-09; next 03-11
-last_updated: "2026-09-07T11:28:54.171Z"
+current_phase: 4
+current_phase_name: Hermetic Test Infrastructure
+status: planning
+stopped_at: Phase 03 complete, ready to plan Phase 4
+last_updated: "2026-09-07T12:20:34.249Z"
 last_activity: 2026-09-07
-last_activity_desc: Phase 03 execution started
-state_head: a584a96f0d9fab51be68834a449fb5afd00b430e
+last_activity_desc: Phase 03 complete, transitioned to Phase 4
 progress:
   total_phases: 9
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 87
-  completed_plans: 86
-  percent: 11
+  completed_plans: 87
+  percent: 22
 ---
 
 # Project State
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-09-05 after refine-unit-tests Phase 2)
+See: `.planning/PROJECT.md` (updated 2026-09-07 after refine-unit-tests Phase 3)
 
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 03 — Production Defect Corrections
-terminal evidence ledger.
+**Current focus:** Phase 4 — Hermetic Test Infrastructure
 
 ## Current Position
 
-Phase: 03 (Production Defect Corrections) — EXECUTING
-Next: Discuss Phase 03
-Plan: 14 of 14
-Status: Ready to execute
-Last activity: 2026-09-07 — Phase 03 execution started
+Phase: 4 — Hermetic Test Infrastructure
+Next: Discuss Phase 4
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-09-07 — Phase 03 complete, transitioned to Phase 4
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 223
+- Total plans completed: 237
 - Average recorded duration: 12.4 min
 - Total recorded execution time: 35 hr 10 min
 
@@ -58,6 +56,7 @@ Last activity: 2026-09-07 — Phase 03 execution started
 | 113. Orchestrator Support       |    35 | 7h 46m recorded  | 16.6 min recorded |
 | 01. Live Evidence Revalidation  |    69 | 15h 18m recorded | 13.3 min recorded |
 | 02                              |     3 | -                | -                 |
+| 03                              |    14 | -                | -                 |
 
 **Recent Trend:** Phase 02 closed three production-defect requirements in three plans; independent verification passed 3/3 with 257/257 focused tests and nine complete direct-coverage gates.
 **Per-Plan Metrics:**
@@ -258,20 +257,21 @@ Last activity: 2026-09-07 — Phase 03 execution started
 | Phase 02 P01                            | 18min    | 2 tasks | 6 files  |
 | Phase 02 P02                            | 17min    | 2 tasks | 5 files  |
 | Phase 02 P03                            | 13min    | 2 tasks | 2 files  |
-| Phase 01 P70 | 19min | 2 tasks | 3 files |
-| Phase 03 P01 | 183min | 2 tasks | 4 files |
-| Phase 03 P02 | 13min | 2 tasks | 8 files |
-| Phase 03 P04 | 3min | 2 tasks | 6 files |
-| Phase 03 P05 | 2min | 2 tasks | 6 files |
-| Phase 03 P08 | 7min | 2 tasks | 8 files |
-| Phase 03 P13 | 10min | 3 tasks | 6 files |
-| Phase 03 P03 | 13min | 3 tasks | 11 files |
-| Phase 03 P06 | 6min | 2 tasks | 2 files |
-| Phase 03 P12 | 8min | 2 tasks | 4 files |
-| Phase 03 P14 | 9min | 2 tasks | 3 files |
-| Phase 03 P07 | 34min | 3 tasks | 9 files |
-| Phase 03 P10 | 9min | 2 tasks | 10 files |
-| Phase 03 P09 | 12min | 2 tasks | 11 files |
+| Phase 01 P70                            | 19min    | 2 tasks | 3 files  |
+| Phase 03 P01                            | 183min   | 2 tasks | 4 files  |
+| Phase 03 P02                            | 13min    | 2 tasks | 8 files  |
+| Phase 03 P04                            | 3min     | 2 tasks | 6 files  |
+| Phase 03 P05                            | 2min     | 2 tasks | 6 files  |
+| Phase 03 P08                            | 7min     | 2 tasks | 8 files  |
+| Phase 03 P13                            | 10min    | 3 tasks | 6 files  |
+| Phase 03 P03                            | 13min    | 3 tasks | 11 files |
+| Phase 03 P06                            | 6min     | 2 tasks | 2 files  |
+| Phase 03 P12                            | 8min     | 2 tasks | 4 files  |
+| Phase 03 P14                            | 9min     | 2 tasks | 3 files  |
+| Phase 03 P07                            | 34min    | 3 tasks | 9 files  |
+| Phase 03 P10                            | 9min     | 2 tasks | 10 files |
+| Phase 03 P09                            | 12min    | 2 tasks | 11 files |
+| Phase 03 P11                            | 34min    | 2 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -665,6 +665,9 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 03]: Shared plugin emitters require caller-owned cardinality instead of inferring it from the number of result rows.
 - [Phase 03]: Lifecycle cardinality follows parsed target structure before rows exist. — Result count cannot distinguish a named target from a bulk invocation that produced one or zero rows.
 - [Phase 03]: Empty bulk update retains its fixed no-op headline. — The update no-op contract is independent from realized-transition tally arithmetic.
+- [Phase 03]: Structural cardinality is mandatory at notifyWithContext — Producer invocation shape, not rendered row count, determines whether a tally is required.
+- [Phase 03]: Scope-narrowed fan-out commands remain plural — Filtering a plural command to one result must still render its operation tally, while named singular commands remain tally-free.
+- [Phase 03]: Plugin-list projections validate their exact aggregate trailer — Reduced row comparisons must not hide a missing or inaccurate user-visible tally.
 
 ### Pending Todos
 
@@ -674,9 +677,10 @@ None for roadmap creation.
 
 - `gsd-tools query phase.complete` cannot write root planning files while the
   three archived workstream directories remain. The active `refine-unit-tests`
-  milestone is root-scoped, so Phase 2's canonical transition was simulated in
-  an isolated flat copy, inspected, and applied by hand. Later phase transitions
-  will require the same guarded procedure unless workstream routing is repaired.
+  milestone is root-scoped, so the Phase 2 and Phase 3 canonical transitions
+  were simulated in isolated flat copies, inspected, and applied by hand. Later
+  phase transitions will require the same guarded procedure unless workstream
+  routing is repaired.
 - RESOLVED by 117-12: D-117-20 in `117-CONTEXT.md` now reads 190 complete numeric records + 7 accepted D-116-01a shortfalls + 7 type-only, matching the operator decision taken in plan 117-11 and the retained all-pair artifact. The superseded 197 + 7 wording is gone.
 
 ## Deferred Items
@@ -716,25 +720,25 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 03-09; next 03-11
+**Stopped at:** Phase 03 complete, ready to plan Phase 4
 
-Phase 01 is sealed at 69/69 plans. Phase 02 Plans 01 through 03 completed
-PDEF-03, PDEF-02, and PDEF-04 with typed fail-closed input, path, and lifecycle
-boundaries. Independent verification passed 3/3 with no behavior, UAT, or
-security gaps. Phase 03 is ready for discussion and planning.
+Phase 03 completed all 14 plans and closed PDEF-01, PDEF-05, PDEF-06, PDEF-07,
+and PDEF-08. Independent verification passed 5/5 with no behavioral, UAT, or
+security gap; the complete quality gate passed 5,385 unit tests and 32
+integration tests. Phase 4 is ready for discussion and planning.
 
-**Resume file:** .planning/phases/03-production-defect-corrections/03-09-PLAN.md
+**Resume file:** None
 
-**Read beside it:** `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`, and the
-Phase 01 terminal evidence ledger and scope-impact crosswalk routed to Phase 03.
+**Read beside it:** `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`, the
+Phase 01 terminal evidence ledger, and Phase 4's roadmap criteria.
 
-Last session: 2026-09-07T11:28:53.829Z
+Last session: 2026-09-07T12:20:34.249Z
 
-**Next:** Discuss Phase 03 Production Defect Corrections, then research and plan
-only the terminal findings that still reproduce.
+**Next:** Discuss Phase 4 Hermetic Test Infrastructure, then plan only the
+terminal test-infrastructure findings routed to AUTH-01 and TREF-01..03.
 
 ## Deferred Verification
 
-| Phase | State | Resume |
-|-------|-------|--------|
-| 01 | verification_deferred_gaps | `$gsd-plan-phase 01 --gaps` |
+| Phase | State                      | Resume                      |
+| ----- | -------------------------- | --------------------------- |
+| 01    | verification_deferred_gaps | `$gsd-plan-phase 01 --gaps` |

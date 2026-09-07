@@ -44,8 +44,7 @@ Two things the next milestone inherits, both deliberate rather than unfinished:
   `edge/handlers/shared.ts` each fall exactly one branch short. Five are
   compiler-forced, two structurally unreachable, and `!`/`as` are barred
   throughout `extensions/`, so each closes only by a production rewrite. They are
-  pinned by identity in their own pairs and filed as ledger entries 15-19, 21 and
-  22. While any of them stands, `npm run test:coverage:direct:all` exits 1 on a
+  pinned by identity in their own pairs and filed as ledger entries 15-19, 21 and 22. While any of them stands, `npm run test:coverage:direct:all` exits 1 on a
   clean tree by design.
 - **Documentation drift from the relocations** — five ledger entries naming test
   paths that phases 117-02/04/05 vacated, plus `.planning/codebase/TESTING.md`
@@ -87,7 +86,7 @@ Plans:
 
 - [x] 01-01-PLAN.md — Build the production-quality evidence-gate tracer and its complete validator foundation
 
-**Wave 2** *(blocked on Wave 1 completion)*
+**Wave 2** _(blocked on Wave 1 completion)_
 
 - [x] 01-02-PLAN.md — Individually revalidate corpus paths 001-002 into one bounded exclusive shard
 - [x] 01-03-PLAN.md — Individually revalidate corpus paths 003-005 into one bounded exclusive shard
@@ -143,63 +142,63 @@ Plans:
 - [x] 01-53-PLAN.md — Individually revalidate corpus paths 106-108 into one bounded exclusive shard
 - [x] 01-54-PLAN.md — Individually revalidate corpus paths 109-110 into one bounded exclusive shard
 
-**Wave 3** *(blocked on Wave 2 completion)*
+**Wave 3** _(blocked on Wave 2 completion)_
 
 - [x] 01-55-PLAN.md — Repair bounded shard/schema defects and publish the transport-complete canonical evidence ledger
 
-**Wave 4** *(blocked on Wave 3 completion)*
+**Wave 4** _(blocked on Wave 3 completion)_
 
 - [x] 01-56-PLAN.md — Canonicalize duplicates and resolve every evidence-method conflict in the merged ledger
 
-**Wave 5** *(blocked on Wave 4 completion)*
+**Wave 5** _(blocked on Wave 4 completion)_
 
 - [x] 01-57-PLAN.md — Close all 109 remaining evidence gaps with current terminal proof while preserving the nine pending operator decisions
 
-**Wave 6** *(blocked on Wave 5 completion)*
+**Wave 6** _(blocked on Wave 5 completion)_
 
 - [x] 01-58-PLAN.md — Select trace-preserving removal for MF-DEC-01 from 24 terminal premise roots
 
-**Wave 7** *(blocked on Wave 6 completion)*
+**Wave 7** _(blocked on Wave 6 completion)_
 
 - [x] 01-59-PLAN.md — Close MF-DEC-04 evidence-only from stale sole premise SNC-F001
 
-**Wave 8** *(blocked on Wave 7 completion)*
+**Wave 8** _(blocked on Wave 7 completion)_
 
 - [x] 01-60-PLAN.md — Select one-to-one source-claim mapping for MF-DEC-05
 
-**Wave 9** *(blocked on Wave 8 completion)*
+**Wave 9** _(blocked on Wave 8 completion)_
 
 - [x] 01-61-PLAN.md — Resolve MF-DEC-06 as one evidence dossier and blocking checkpoint
 
-**Wave 10** *(blocked on Wave 9 completion)*
+**Wave 10** _(blocked on Wave 9 completion)_
 
 - [x] 01-62-PLAN.md — Resolve MF-DEC-02 as one evidence dossier and blocking checkpoint
 
-**Wave 11** *(blocked on Wave 10 completion)*
+**Wave 11** _(blocked on Wave 10 completion)_
 
 - [x] 01-63-PLAN.md — Resolve MF-DEC-03 as one evidence dossier and blocking checkpoint
 
-**Wave 12** *(blocked on Wave 11 completion)*
+**Wave 12** _(blocked on Wave 11 completion)_
 
 - [x] 01-64-PLAN.md — Resolve MF-DEC-07 as one evidence dossier and blocking checkpoint
 
-**Wave 13** *(blocked on Wave 12 completion)*
+**Wave 13** _(blocked on Wave 12 completion)_
 
 - [x] 01-65-PLAN.md — Resolve MF-DEC-08 as one evidence dossier and blocking checkpoint
 
-**Wave 14** *(blocked on Wave 13 completion)*
+**Wave 14** _(blocked on Wave 13 completion)_
 
 - [x] 01-66-PLAN.md — Resolve MF-DEC-09 as one evidence dossier and blocking checkpoint
 
-**Wave 15** *(blocked on Wave 14 completion)*
+**Wave 15** _(blocked on Wave 14 completion)_
 
 - [x] 01-67-PLAN.md — Derive the complete evidence-backed scope-impact crosswalk before editing planning contracts
 
-**Wave 16** *(blocked on Wave 15 completion)*
+**Wave 16** _(blocked on Wave 15 completion)_
 
 - [x] 01-68-PLAN.md — Apply the validated crosswalk to requirements and Phase 2-9 roadmap contracts with explicit history
 
-**Wave 17** *(blocked on Wave 16 completion)*
+**Wave 17** _(blocked on Wave 16 completion)_
 
 - [x] 01-69-PLAN.md — Rewrite the active milestone scope from the completed ledger and seal Phase 1 as the hard evidence gate
 
@@ -228,11 +227,11 @@ Plans:
 
 - [x] 02-01-PLAN.md — Make malformed MCP field classification truthful, shared, typed, and fail-closed
 
-**Wave 2** *(blocked on Wave 1 completion)*
+**Wave 2** _(blocked on Wave 1 completion)_
 
 - [x] 02-02-PLAN.md — Normalize shared path containment and prove affected live consumers
 
-**Wave 3** *(blocked on Wave 2 completion)*
+**Wave 3** _(blocked on Wave 2 completion)_
 
 - [x] 02-03-PLAN.md — Contain discovery failures, preserve progress, and prove reload recovery
 
@@ -251,7 +250,7 @@ Plans:
 **Goal:** Fix each remaining confirmed production defect with regression evidence.
 **Depends on:** Phase 2
 **Requirements:** PDEF-01, PDEF-05, PDEF-06, PDEF-07, PDEF-08
-**Plans:** 13/14 plans executed
+**Plans:** 14/14 plans complete
 
 **Success Criteria**:
 
@@ -278,25 +277,25 @@ Plans:
 - [x] 03-08-PLAN.md — Declare autoupdate and list cardinality from invocation structure.
 - [x] 03-13-PLAN.md — Declare marketplace mutation cardinality from invocation structure.
 
-**Wave 2** *(blocked on Wave 1 completion)*
+**Wave 2** _(blocked on Wave 1 completion)_
 
 - [x] 03-03-PLAN.md — Migrate update/reinstall agent paths and remove the singular representation.
 - [x] 03-06-PLAN.md — Route install rollback failures through the transaction-owned formatter.
 - [x] 03-12-PLAN.md — Remove the async no-producer branch and obsolete domain guard.
 - [x] 03-14-PLAN.md — Declare import and reconcile cardinality without changing alias state.
 
-**Wave 3** *(blocked on Wave 2 completion)*
+**Wave 3** _(blocked on Wave 2 completion)_
 
 - [x] 03-07-PLAN.md — Use typed failure reasons and retain structured update-cleanup diagnostics.
 - [x] 03-10-PLAN.md — Declare cardinality for remaining plugin-surface producers.
 
-**Wave 4** *(blocked on Wave 3 completion)*
+**Wave 4** _(blocked on Wave 3 completion)_
 
 - [x] 03-09-PLAN.md — Declare lifecycle notification cardinality after owner corrections land.
 
-**Wave 5** *(blocked on Wave 4 completion)*
+**Wave 5** _(blocked on Wave 4 completion)_
 
-- [ ] 03-11-PLAN.md — Require cardinality at the shared boundary, update output docs, and seal the phase.
+- [x] 03-11-PLAN.md — Require cardinality at the shared boundary, update output docs, and seal the phase.
 
 ### Phase 4: Hermetic Test Infrastructure
 
@@ -422,14 +421,14 @@ baseline, which still includes both pairs; neither is a terminal shortfall.
 
 ## Progress
 
-| Phase | Plans Complete | Status | Completed |
-| ----- | -------------- | ------ | --------- |
-| 1. Live Evidence Revalidation | 70/70 | In Progress|  |
-| 2. Containment and Input Safety | 3/3 | Complete    | 2026-09-05 |
-| 3. Production Defect Corrections | 13/14 | In Progress|  |
-| 4. Hermetic Test Infrastructure | 0/0 | Not started | — |
-| 5. Injection and Ownership Design | 0/0 | Not started | — |
-| 6. Assertion and Module Refinement | 0/0 | Not started | — |
-| 7. Gate Integrity | 0/0 | Not started | — |
-| 8. Direct Coverage | 0/0 | Not started | — |
-| 9. Final Quality and Backlog Closure | 0/0 | Not started | — |
+| Phase                                | Plans Complete | Status      | Completed  |
+| ------------------------------------ | -------------- | ----------- | ---------- |
+| 1. Live Evidence Revalidation        | 70/70          | In Progress |            |
+| 2. Containment and Input Safety      | 3/3            | Complete    | 2026-09-05 |
+| 3. Production Defect Corrections     | 14/14          | Complete    | 2026-09-07 |
+| 4. Hermetic Test Infrastructure      | 0/0            | Not started | —          |
+| 5. Injection and Ownership Design    | 0/0            | Not started | —          |
+| 6. Assertion and Module Refinement   | 0/0            | Not started | —          |
+| 7. Gate Integrity                    | 0/0            | Not started | —          |
+| 8. Direct Coverage                   | 0/0            | Not started | —          |
+| 9. Final Quality and Backlog Closure | 0/0            | Not started | —          |
