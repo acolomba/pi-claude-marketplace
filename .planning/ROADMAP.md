@@ -348,7 +348,7 @@ Plans:
 **Goal:** Expose legitimate test seams with correctly owned runtime state and public contracts.
 **Depends on:** Phase 4
 **Requirements:** TREF-04, TREF-05, TREF-06
-**Plans:** 7/33 plans executed
+**Plans:** 8/33 plans executed
 
 **Success Criteria**:
 
@@ -378,7 +378,7 @@ Plans:
 
 **Wave 3** _(blocked on Wave 2 completion)_
 
-- [ ] 05-08-PLAN.md — Resolve marketplace-name memory after a fresh consumer census.
+- [x] 05-08-PLAN.md — Resolve marketplace-name memory after a fresh consumer census.
 - [ ] 05-09-PLAN.md — Bind one HooksRuntime through registration and hydration.
 
 **Wave 4** _(blocked on Wave 3 completion)_
@@ -567,7 +567,7 @@ baseline, which still includes both pairs; neither is a terminal shortfall.
 | 2. Containment and Input Safety      | 3/3            | Complete    | 2026-09-05 |
 | 3. Production Defect Corrections     | 14/14          | Complete    | 2026-09-07 |
 | 4. Hermetic Test Infrastructure      | 7/7            | Complete    | 2026-09-07 |
-| 5. Injection and Ownership Design    | 7/33           | In Progress | —          |
+| 5. Injection and Ownership Design    | 8/33           | In Progress | —          |
 | 6. Assertion and Module Refinement   | 0/0            | Not started | —          |
 | 7. Gate Integrity                    | 0/0            | Not started | —          |
 | 8. Direct Coverage                   | 0/0            | Not started | —          |
