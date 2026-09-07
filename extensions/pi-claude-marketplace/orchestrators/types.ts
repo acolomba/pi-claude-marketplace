@@ -7,6 +7,7 @@
 // D-01's escalation note about a future BridgeOps<Prep, Target>
 // belonging at this same path.
 
+import type { CleanupFailure } from "../shared/errors.ts";
 import type { DegradeKind } from "../shared/notify-reasons.ts";
 import type { ContentReason } from "../shared/notify.ts";
 import type { Scope } from "../shared/types.ts";
@@ -151,6 +152,7 @@ export type UpdatePhaseBridge = "skills" | "commands" | "agents" | "hooks" | "mc
 export interface UpdatePhaseFailure {
   readonly phase: UpdatePhaseBridge;
   readonly msg: string;
+  readonly cleanupFailures?: readonly CleanupFailure[];
 }
 
 export interface PluginUpdateBase {
@@ -336,6 +338,7 @@ export interface PluginUpdateFailedOutcome extends PluginUpdateBase {
   readonly notes: readonly string[];
   readonly reasons?: readonly ContentReason[];
   readonly phaseFailures?: readonly UpdatePhaseFailure[];
+  readonly cleanupFailures?: readonly CleanupFailure[];
   readonly cause?: Error;
 }
 

@@ -42,13 +42,14 @@ import {
   loadState,
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import {
+  CleanupContextError,
   InvalidMarketplaceManifestError,
   MarketplaceNotFoundError,
   PluginUpdateConcurrencyError,
   PluginUpdatePhase3Error,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
@@ -1789,6 +1790,7 @@ test("updateSinglePlugin classifies a plugin removed after preflight as concurre
         assert.ok(marketplace !== undefined);
         delete marketplace.plugins["hello"];
         writeFileSync(locations.stateJsonPath, JSON.stringify(state));
+        chmodSync(locations.skillsStagingDir, 0o500);
       });
       process.chdir(cwd);
 
@@ -1800,6 +1802,18 @@ test("updateSinglePlugin classifies a plugin removed after preflight as concurre
       assert.equal(outcome.partition, "failed");
       assert.deepEqual(outcome.reasons, ["concurrently uninstalled"]);
       assert.match(outcome.notes?.[0] ?? "", /concurrently uninstalled/);
+      assert.ok(outcome.cause instanceof CleanupContextError);
+      assert.equal(outcome.cause.primary.name, "PluginUpdateConcurrencyError");
+      const cleanupFailure = outcome.cleanupFailures?.[0];
+      assert.ok(cleanupFailure !== undefined);
+      const residualNames = await readdir(locations.skillsStagingDir);
+      assert.equal(residualNames.length, 1);
+      assert.deepStrictEqual(cleanupFailure, {
+        phase: "abort",
+        artifact: "skills",
+        path: path.join(locations.skillsStagingDir, residualNames[0]!),
+        cause: cleanupFailure.cause,
+      });
       assert.equal(
         (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins["hello"],
         undefined,
@@ -1807,6 +1821,8 @@ test("updateSinglePlugin classifies a plugin removed after preflight as concurre
     } finally {
       stagingWatch?.close();
       process.chdir(previousCwd);
+      const locations = locationsFor("project", cwd);
+      await chmod(locations.skillsStagingDir, 0o700).catch(() => undefined);
       await rm(cwd, { recursive: true, force: true });
     }
   });
@@ -1825,11 +1841,16 @@ test("updateSinglePlugin classifies a version changed after preflight as concurr
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
         marketplaceName: "mp",
-        manifestPlugins: { hello: { version: "1.0.1", hasSkill: true } },
+        manifestPlugins: { hello: { version: "1.0.1", hasSkill: false, hasCommand: true } },
         installedVersions: { hello: "1.0.0" },
       });
-      await mkdir(locations.skillsStagingDir, { recursive: true });
-      stagingWatch = watch(locations.skillsStagingDir, () => {
+      const initialState = await loadState(locations.extensionRoot);
+      const initialRecord = initialState.marketplaces["mp"]?.plugins["hello"];
+      assert.ok(initialRecord !== undefined);
+      initialRecord.resources.skills = [];
+      await saveState(locations.extensionRoot, initialState);
+      await mkdir(locations.commandsStagingDir, { recursive: true });
+      stagingWatch = watch(locations.commandsStagingDir, () => {
         if (didMutate) {
           return;
         }
@@ -2175,6 +2196,90 @@ test("an agents staging cleanup leak becomes a rollback partial and retry conver
     }
   });
 });
+
+for (const cleanupCase of [
+  {
+    artifact: "skills",
+    manifest: { version: "1.0.1", hasSkill: true },
+    stagingRoot: (locations: ReturnType<typeof locationsFor>) => locations.skillsStagingDir,
+    label: "skills staging directory",
+  },
+  {
+    artifact: "commands",
+    manifest: { version: "1.0.1", hasCommand: true },
+    stagingRoot: (locations: ReturnType<typeof locationsFor>) => locations.commandsStagingDir,
+    label: "commands staging directory",
+  },
+  {
+    artifact: "agents",
+    manifest: { version: "1.0.1", hasAgent: true },
+    stagingRoot: (locations: ReturnType<typeof locationsFor>) => locations.agentsStagingDir,
+    label: "agents staging directory",
+  },
+] as const) {
+  test(`a ${cleanupCase.artifact} commit cleanup failure retains an exact structured descriptor`, async () => {
+    await withHermeticHome(async () => {
+      const cwd = await mkdtemp(path.join(tmpdir(), `update-${cleanupCase.artifact}-context-`));
+      const previousCwd = process.cwd();
+      let stateWatch: ReturnType<typeof watchStateTransition> | undefined;
+      const locations = locationsFor("project", cwd);
+      const stagingRoot = cleanupCase.stagingRoot(locations);
+      try {
+        // arrange
+        await seedPathMarketplace({
+          cwd,
+          marketplaceRoot: path.join(cwd, "mp-src"),
+          marketplaceName: "mp",
+          manifestPlugins: { hello: cleanupCase.manifest },
+          installedVersions: { hello: "1.0.0" },
+        });
+        stateWatch = watchStateTransition(
+          locations,
+          (state) =>
+            state.marketplaces["mp"]?.plugins["hello"]?.compatibility.notes.includes(
+              "update-in-progress",
+            ) === true,
+          () => {
+            chmodSync(stagingRoot, 0o500);
+          },
+        );
+        process.chdir(cwd);
+
+        // act
+        const outcome = await updateSinglePlugin("hello", "mp", "project");
+
+        // assert
+        assert.equal(outcome.partition, "failed");
+        assert.equal(stateWatch.fired(), true);
+        assert.ok(outcome.partition === "failed");
+        const phaseFailure = outcome.phaseFailures?.find(
+          ({ phase }) => phase === cleanupCase.artifact,
+        );
+        assert.ok(phaseFailure !== undefined);
+        const cleanupFailure = phaseFailure.cleanupFailures?.[0];
+        assert.ok(cleanupFailure !== undefined);
+        const residualNames = await readdir(stagingRoot);
+        assert.equal(residualNames.length, 1);
+        const expectedPath = path.join(stagingRoot, residualNames[0]!);
+        assert.deepStrictEqual(cleanupFailure, {
+          phase: "commit",
+          artifact: cleanupCase.artifact,
+          path: expectedPath,
+          cause: cleanupFailure.cause,
+        });
+        assert.ok(cleanupFailure.cause instanceof Error);
+        assert.match(cleanupFailure.cause.message, new RegExp(cleanupCase.label));
+        assert.equal(Object.isFrozen(cleanupFailure), true);
+        assert.equal(Object.isFrozen(phaseFailure.cleanupFailures), true);
+      } finally {
+        stateWatch?.close();
+        process.chdir(previousCwd);
+        await chmod(stagingRoot, 0o700).catch(() => undefined);
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
 
 test("an MCP commit permission failure becomes a rollback partial and retry converges", async () => {
   await withHermeticHome(async () => {
@@ -3165,7 +3270,8 @@ for (const { title, makeFailure, reason } of [
   },
   {
     title: "classifies stable network errno marketplace refresh failures",
-    makeFailure: () => Object.assign(new Error("opaque transport failure"), { code: "ENETUNREACH" }),
+    makeFailure: () =>
+      Object.assign(new Error("opaque transport failure"), { code: "ENETUNREACH" }),
     reason: "network unreachable",
   },
   {
@@ -3174,6 +3280,24 @@ for (const { title, makeFailure, reason } of [
       Object.assign(new MarketplaceNotFoundError("official", ["project"]), {
         message: "opaque typed absence",
       }),
+    reason: "not found",
+  },
+  {
+    title: "keeps the primary reason when structured cleanup context is present",
+    makeFailure: () =>
+      new CleanupContextError(
+        Object.assign(new MarketplaceNotFoundError("official", ["project"]), {
+          message: "opaque typed absence",
+        }),
+        [
+          {
+            phase: "abort",
+            artifact: "mcp",
+            path: "/scope/mcp.json",
+            cause: new Error("cleanup failed"),
+          },
+        ],
+      ),
     reason: "not found",
   },
   {
@@ -3378,6 +3502,15 @@ test("prepare-handles-fail: MCP collision aborts partial handles without keyword
         assert.equal(outcome.name, "hello");
         assert.deepEqual(outcome.reasons, ["not in manifest"]);
         assert.ok((outcome.notes ?? []).length > 0, "failed outcome must carry error notes");
+        for (const stagingRoot of [
+          locations.skillsStagingDir,
+          locations.commandsStagingDir,
+          locations.agentsStagingDir,
+        ]) {
+          if (await pathExists(stagingRoot)) {
+            assert.deepStrictEqual(await readdir(stagingRoot), []);
+          }
+        }
       } finally {
         process.chdir(prevCwd);
       }

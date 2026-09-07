@@ -12,7 +12,7 @@
 //
 //  (prepare): sequential bridge prepare* into tmp (skills -> commands
 //  -> agents -> mcp). Any throw triggers abort of already-prepared handles
-//  + appendLeaks of cleanup-leak descriptors.
+//  + structured cleanup-failure descriptors.
 //
 //  (state-guard swap with old-resource snapshot): inside
 //  `withStateGuard` re-read the plugin record, ST-9 stale-version check,
@@ -107,14 +107,19 @@ import { isRecordedButDisabled, loadState } from "../../persistence/state-io.ts"
 import { softDepStatus } from "../../platform/pi-api.ts";
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
 import {
-  appendLeaks,
+  CleanupContextError,
+  cleanupFailuresFromError,
   composeErrorWithCauseChain,
   errorMessage,
+  errorWithCleanupFailures,
   InvalidMarketplaceManifestError,
   MarketplaceNotFoundError,
   PluginShapeError,
   PluginUpdateConcurrencyError,
   PluginUpdatePhase3Error,
+  type CleanupArtifact,
+  type CleanupFailure,
+  type CleanupLifecycle,
   type Phase3Failure,
 } from "../../shared/errors.ts";
 import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
@@ -638,10 +643,15 @@ export const updateSinglePlugin: PluginUpdateFn = async (plugin, marketplace, sc
     //
     // Pre-narrow to a closed-set `Reason` so the cascade consumer reads the
     // typed producer value directly instead of reparsing its display note.
+    const cleanupFailures = cleanupFailuresFromError(err);
     const base: PluginUpdateOutcome = {
       partition: "failed",
       name: plugin,
       notes: [composeErrorWithCauseChain(err)],
+      ...(cleanupFailures.length > 0 && {
+        cause: err as Error,
+        cleanupFailures,
+      }),
       // CMC-13: required booleans on every
       // PluginUpdateOutcome partition. `(failed)` rows do NOT render
       // the soft-dep marker (MSG-SD-3), so the value is `false`.
@@ -658,9 +668,10 @@ export const updateSinglePlugin: PluginUpdateFn = async (plugin, marketplace, sc
  * fallback is `not in manifest`.
  */
 function reasonsFromTypedError(err: unknown): readonly ContentReason[] {
-  if (err instanceof PluginUpdateConcurrencyError) {
+  const primary = err instanceof CleanupContextError ? err.primary : err;
+  if (primary instanceof PluginUpdateConcurrencyError) {
     return [
-      err.kind === "plugin-updated" ? "concurrently updated" : "concurrently uninstalled",
+      primary.kind === "plugin-updated" ? "concurrently updated" : "concurrently uninstalled",
     ] as const;
   }
 
@@ -669,8 +680,8 @@ function reasonsFromTypedError(err: unknown): readonly ContentReason[] {
   // legacy notes-substring parse (which would land on the permissive
   // `not in manifest` default for both narrowSkipReasons and
   // narrowFailReasons).
-  if (err instanceof Error) {
-    const code = (err as NodeJS.ErrnoException).code;
+  if (primary instanceof Error) {
+    const code = (primary as NodeJS.ErrnoException).code;
     if (code === "EACCES" || code === "EPERM") {
       return ["permission denied"] as const;
     }
@@ -1359,7 +1370,7 @@ async function prepareUpdateHandles(
       sourcePath: `${installable.pluginRoot}#mcpServers`,
     });
   } catch (err) {
-    throw appendLeaks(err, await abortPartialHandles(handles));
+    throw errorWithCleanupFailures(err, await abortPartialHandles(handles, "prepare"));
   }
 
   return handles as PrepHandles;
@@ -1386,29 +1397,102 @@ function collectUpdateWarnings(handles: PrepHandles, cascade: boolean): readonly
   return Object.freeze([...discovery, ...(cascade ? bridge : [])]);
 }
 
-async function abortPartialHandles(handles: Partial<PrepHandles>): Promise<(string | undefined)[]> {
-  const leaks: (string | undefined)[] = [];
+async function abortPartialHandles(
+  handles: Partial<PrepHandles>,
+  phase: Extract<CleanupLifecycle, "prepare">,
+): Promise<readonly CleanupFailure[]> {
+  const failures: CleanupFailure[] = [];
   if (handles.agents !== undefined) {
-    leaks.push(await abortPreparedAgents(handles.agents));
+    appendCleanupFailure(
+      failures,
+      phase,
+      "agents",
+      agentsCleanupPath(handles.agents),
+      await abortPreparedAgents(handles.agents),
+    );
   }
 
   if (handles.commands !== undefined) {
-    await abortPreparedCommands(handles.commands);
+    appendCleanupFailure(
+      failures,
+      phase,
+      "commands",
+      commandsCleanupPath(handles.commands),
+      await abortPreparedCommands(handles.commands),
+    );
   }
 
   if (handles.skills !== undefined) {
-    await abortPreparedSkills(handles.skills);
+    appendCleanupFailure(
+      failures,
+      phase,
+      "skills",
+      skillsCleanupPath(handles.skills),
+      await abortPreparedSkills(handles.skills),
+    );
   }
 
-  return leaks;
+  return Object.freeze(failures);
 }
 
-async function abortHandles(handles: PrepHandles): Promise<(string | undefined)[]> {
+async function abortHandles(handles: PrepHandles): Promise<readonly CleanupFailure[]> {
   abortPreparedMcp(handles.mcp);
-  const leaks = [await abortPreparedAgents(handles.agents)];
-  await abortPreparedCommands(handles.commands);
-  await abortPreparedSkills(handles.skills);
-  return leaks;
+  const failures: CleanupFailure[] = [];
+  appendCleanupFailure(
+    failures,
+    "abort",
+    "agents",
+    agentsCleanupPath(handles.agents),
+    await abortPreparedAgents(handles.agents),
+  );
+  appendCleanupFailure(
+    failures,
+    "abort",
+    "commands",
+    commandsCleanupPath(handles.commands),
+    await abortPreparedCommands(handles.commands),
+  );
+  appendCleanupFailure(
+    failures,
+    "abort",
+    "skills",
+    skillsCleanupPath(handles.skills),
+    await abortPreparedSkills(handles.skills),
+  );
+  return Object.freeze(failures);
+}
+
+function skillsCleanupPath(handle: PreparedSkillsStaging): string {
+  return handle.kind === "staged" ? handle.stagingRoot : "skills staging";
+}
+
+function commandsCleanupPath(handle: PreparedCommandsStaging): string {
+  return handle.kind === "staged" ? handle.stagingRoot : "commands staging";
+}
+
+function agentsCleanupPath(handle: PreparedAgentsStaging): string {
+  return handle.kind === "staged" ? handle.stagingDir : "agents staging";
+}
+
+function appendCleanupFailure(
+  failures: CleanupFailure[],
+  phase: CleanupLifecycle,
+  artifact: CleanupArtifact,
+  cleanupPath: string,
+  diagnostic: string | undefined,
+): void {
+  if (diagnostic === undefined) {
+    return;
+  }
+
+  failures.push(
+    Object.freeze({
+      phase,
+      artifact,
+      path: cleanupPath,
+      cause: new Error(diagnostic),
+    }),
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2083,10 +2167,16 @@ async function commitUpdatePhase3a(
   try {
     const leak = await commitPreparedSkills(handles.skills);
     if (leak !== undefined) {
+      const cleanupFailure = commitCleanupFailure(
+        "skills",
+        skillsCleanupPath(handles.skills),
+        leak,
+      );
       failures.push({
         phase: "skills",
         msg: `skills staging cleanup leak: ${leak}`,
-        cause: new Error(leak),
+        cause: cleanupFailureCause(cleanupFailure),
+        cleanupFailures: Object.freeze([cleanupFailure]),
       });
     }
   } catch (err) {
@@ -2094,7 +2184,20 @@ async function commitUpdatePhase3a(
   }
 
   try {
-    await commitPreparedCommands(handles.commands);
+    const leak = await commitPreparedCommands(handles.commands);
+    if (leak !== undefined) {
+      const cleanupFailure = commitCleanupFailure(
+        "commands",
+        commandsCleanupPath(handles.commands),
+        leak,
+      );
+      failures.push({
+        phase: "commands",
+        msg: `commands staging cleanup leak: ${leak}`,
+        cause: cleanupFailureCause(cleanupFailure),
+        cleanupFailures: Object.freeze([cleanupFailure]),
+      });
+    }
   } catch (err) {
     failures.push({ phase: "commands", msg: errorMessage(err), cause: err as Error });
   }
@@ -2102,10 +2205,16 @@ async function commitUpdatePhase3a(
   try {
     const leak = await commitPreparedAgents(handles.agents);
     if (leak !== undefined) {
+      const cleanupFailure = commitCleanupFailure(
+        "agents",
+        agentsCleanupPath(handles.agents),
+        leak,
+      );
       failures.push({
         phase: "agents",
         msg: `agents staging cleanup leak: ${leak}`,
-        cause: new Error(leak),
+        cause: cleanupFailureCause(cleanupFailure),
+        cleanupFailures: Object.freeze([cleanupFailure]),
       });
     }
   } catch (err) {
@@ -2126,6 +2235,23 @@ async function commitUpdatePhase3a(
   }
 
   return { failures, hookEntries };
+}
+
+function commitCleanupFailure(
+  artifact: Extract<CleanupArtifact, "skills" | "commands" | "agents">,
+  cleanupPath: string,
+  diagnostic: string,
+): CleanupFailure {
+  return Object.freeze({
+    phase: "commit",
+    artifact,
+    path: cleanupPath,
+    cause: new Error(diagnostic),
+  });
+}
+
+function cleanupFailureCause(failure: CleanupFailure): CleanupContextError {
+  return new CleanupContextError(new Error(`${failure.artifact} commit cleanup failed`), [failure]);
 }
 
 function hasUpdatePhase3Failures(
@@ -2187,7 +2313,11 @@ function composePhase3FailureOutcome(
     // emits these inline and filters them before its local mapper; the
     // marketplace cascade consumer reads `reasons[0]` directly.
     reasons: ["rollback partial"] as const,
-    phaseFailures: failures.map((f) => ({ phase: f.phase, msg: f.msg })),
+    phaseFailures: failures.map((f) => ({
+      phase: f.phase,
+      msg: f.msg,
+      ...(f.cleanupFailures !== undefined && { cleanupFailures: f.cleanupFailures }),
+    })),
     // declaresAgents / declaresMcp are required `boolean`. `(failed)` rows
     // do not render the soft-dep marker.
     declaresAgents: false,
@@ -2291,7 +2421,7 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<UpdateRunOutco
   } catch (err) {
     // Intent-mark failure (typically ST-9 stale-version): abort all prep
     // handles + rethrow.
-    throw appendLeaks(err, await abortHandles(handles));
+    throw errorWithCleanupFailures(err, await abortHandles(handles));
   }
 
   // ─── Phase 3a: physical replace; aggregate failures across bridges ────────
@@ -2881,28 +3011,30 @@ function rollbackPartialCauseSlot(p: UpdatePhase3Failure): { readonly cause: Err
 function narrowDirectFailReason(err: Error): ContentReason {
   // Phase-3 aggregate failures are surfaced via reasonOverride; here we
   // handle the enumerate / syncClone / phase-2 paths only.
-  if (err instanceof MarketplaceNotFoundError) {
+  const primary = err instanceof CleanupContextError ? err.primary : err;
+
+  if (primary instanceof MarketplaceNotFoundError) {
     return "not found";
   }
 
-  if (err instanceof PluginUpdatePhase3Error) {
+  if (primary instanceof PluginUpdatePhase3Error) {
     return "rollback partial";
   }
 
-  if (err instanceof PluginUpdateConcurrencyError) {
-    return err.kind === "plugin-updated" ? "concurrently updated" : "concurrently uninstalled";
+  if (primary instanceof PluginUpdateConcurrencyError) {
+    return primary.kind === "plugin-updated" ? "concurrently updated" : "concurrently uninstalled";
   }
 
-  if (err instanceof InvalidMarketplaceManifestError) {
+  if (primary instanceof InvalidMarketplaceManifestError) {
     return "invalid manifest";
   }
 
-  const transportReason = classifyGitTransportFailure(err);
+  const transportReason = classifyGitTransportFailure(primary);
   if (transportReason !== undefined) {
     return transportReason;
   }
 
-  const code = (err as NodeJS.ErrnoException).code;
+  const code = (primary as NodeJS.ErrnoException).code;
   if (code === "EACCES" || code === "EPERM") {
     return "permission denied";
   }

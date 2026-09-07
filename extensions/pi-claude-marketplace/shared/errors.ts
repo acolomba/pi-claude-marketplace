@@ -63,6 +63,67 @@ function* causeChain(err: unknown): Generator {
   }
 }
 
+export type CleanupLifecycle = "prepare" | "abort" | "commit" | "rollback";
+export type CleanupArtifact = "skills" | "commands" | "agents" | "mcp";
+
+/** Immutable diagnostic for one terminal artifact-cleanup failure. */
+export interface CleanupFailure {
+  readonly phase: CleanupLifecycle;
+  readonly artifact: CleanupArtifact;
+  readonly path: string;
+  readonly cause: Error;
+}
+
+/**
+ * Secondary cleanup context wrapped around an unchanged operational failure.
+ * `cause` and `primary` both retain the original Error instance; cleanup facts
+ * stay structured until the cause-chain renderer formats them for display.
+ */
+export class CleanupContextError extends Error {
+  readonly primary: Error;
+  readonly cleanupFailures: readonly CleanupFailure[];
+
+  constructor(primary: Error, cleanupFailures: readonly CleanupFailure[]) {
+    super(primary.message, { cause: primary });
+    this.name = "CleanupContextError";
+    this.primary = primary;
+    this.cleanupFailures = Object.freeze(
+      cleanupFailures.map((failure) => Object.freeze({ ...failure })),
+    );
+  }
+}
+
+/** Preserve the primary error and append immutable cleanup facts when present. */
+export function errorWithCleanupFailures(
+  err: unknown,
+  cleanupFailures: readonly CleanupFailure[],
+): Error {
+  const normalized = err instanceof Error ? err : new Error(errorMessage(err));
+  if (cleanupFailures.length === 0) {
+    return normalized;
+  }
+
+  if (normalized instanceof CleanupContextError) {
+    return new CleanupContextError(normalized.primary, [
+      ...normalized.cleanupFailures,
+      ...cleanupFailures,
+    ]);
+  }
+
+  return new CleanupContextError(normalized, cleanupFailures);
+}
+
+/** Return the first structured cleanup collection in a bounded cause chain. */
+export function cleanupFailuresFromError(err: unknown): readonly CleanupFailure[] {
+  for (const link of causeChain(err)) {
+    if (link instanceof CleanupContextError) {
+      return link.cleanupFailures;
+    }
+  }
+
+  return Object.freeze([]);
+}
+
 /**
  * MSG-CC-1 (CMC-18): depth-5 Error.cause walker rendered as
  * `cause: <l1> -> <l2> -> ... [(truncated)]`. Returns `""` when `err` is
@@ -111,6 +172,11 @@ export function causeChainTrailer(err: unknown): string {
 }
 
 function linkMessage(c: unknown): string {
+  if (c instanceof CleanupContextError) {
+    const details = c.cleanupFailures.map(renderCleanupFailure).join("; ");
+    return `${c.message} (cleanup: ${details})`;
+  }
+
   if (c instanceof Error) {
     return c.message;
   }
@@ -120,6 +186,12 @@ function linkMessage(c: unknown): string {
   }
 
   return Object.prototype.toString.call(c);
+}
+
+function renderCleanupFailure(failure: CleanupFailure): string {
+  const basename = failure.path.replace(/^.*[\\/]/u, "");
+  const diagnostic = failure.cause.message.split(failure.path).join(basename);
+  return `${failure.phase} ${failure.artifact} ${basename}: ${diagnostic}`;
 }
 
 /**
@@ -331,9 +403,7 @@ export class ConcurrentUninstallError extends Error {
  * remains diagnostic text only.
  */
 export type PluginUpdateConcurrencyKind =
-  | "marketplace-removed"
-  | "plugin-uninstalled"
-  | "plugin-updated";
+  "marketplace-removed" | "plugin-uninstalled" | "plugin-updated";
 
 export class PluginUpdateConcurrencyError extends Error {
   readonly kind: PluginUpdateConcurrencyKind;
@@ -374,6 +444,7 @@ export class PluginUpdateConcurrencyError extends Error {
     if (options.expectedVersion !== undefined) {
       this.expectedVersion = options.expectedVersion;
     }
+
     if (options.actualVersion !== undefined) {
       this.actualVersion = options.actualVersion;
     }
@@ -401,8 +472,6 @@ function pluginUpdateConcurrencyMessage(args: {
       return `Plugin "${args.plugin}" was concurrently updated; expected version "${
         args.expectedVersion ?? "unknown"
       }", found "${args.actualVersion ?? "unknown"}".`;
-    default:
-      return assertNever(args.kind);
   }
 }
 
@@ -441,6 +510,7 @@ export interface Phase3Failure {
   readonly phase: "skills" | "commands" | "agents" | "hooks" | "mcp";
   readonly msg: string;
   readonly cause: unknown;
+  readonly cleanupFailures?: readonly CleanupFailure[];
 }
 
 export class PluginUpdatePhase3Error extends Error {

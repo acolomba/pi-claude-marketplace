@@ -832,8 +832,17 @@ describe("PluginUpdateConcurrencyError", () => {
   for (const { error, expectedMessage } of [
     {
       error: new PluginUpdateConcurrencyError("marketplace-removed", "acme", "official"),
-      expectedMessage:
-        'Marketplace "official" disappeared from state during update of "acme".',
+      expectedMessage: 'Marketplace "official" disappeared from state during update of "acme".',
+    },
+    {
+      error: new PluginUpdateConcurrencyError("marketplace-removed", "acme", "official", {
+        lifecycle: "finalize",
+      }),
+      expectedMessage: 'Marketplace "official" disappeared from state during finalize of "acme".',
+    },
+    {
+      error: new PluginUpdateConcurrencyError("plugin-uninstalled", "acme", "official"),
+      expectedMessage: 'Plugin "acme" was concurrently uninstalled.',
     },
     {
       error: new PluginUpdateConcurrencyError("plugin-uninstalled", "acme", "official", {
@@ -848,6 +857,11 @@ describe("PluginUpdateConcurrencyError", () => {
       }),
       expectedMessage:
         'Plugin "acme" was concurrently updated; expected version "1.0.0", found "1.0.1".',
+    },
+    {
+      error: new PluginUpdateConcurrencyError("plugin-updated", "acme", "official"),
+      expectedMessage:
+        'Plugin "acme" was concurrently updated; expected version "unknown", found "unknown".',
     },
   ] as const) {
     test(`exposes stable ${error.kind} facts`, () => {
@@ -894,7 +908,7 @@ describe("CleanupContextError", () => {
     assert.equal(Object.isFrozen(error.cleanupFailures), true);
     assert.equal(Object.isFrozen(error.cleanupFailures[0]), true);
     assert.match(causeChainTrailer(error), /abort commands uuid/);
-    assert.ok(!causeChainTrailer(error).includes("\/scope\/commands-staging"));
+    assert.ok(!causeChainTrailer(error).includes("/scope/commands-staging"));
   });
 
   test("returns the primary error unchanged when cleanup succeeds", () => {
