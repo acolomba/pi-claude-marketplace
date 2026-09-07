@@ -145,8 +145,8 @@ describe("NON_TOOL_EVENT_CLOSED_SETS", () => {
     const expectedClosedSets = {
       SessionStart: new Set(["startup", "resume"]),
       SessionEnd: new Set(),
-      PreCompact: new Set(),
-      PostCompact: new Set(),
+      PreCompact: new Set(["manual", "auto"]),
+      PostCompact: new Set(["manual", "auto"]),
       StopFailure: new Set([
         "rate_limit",
         "overloaded",
