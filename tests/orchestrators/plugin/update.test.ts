@@ -43,6 +43,12 @@ import {
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
+import {
+  InvalidMarketplaceManifestError,
+  MarketplaceNotFoundError,
+  PluginUpdateConcurrencyError,
+  PluginUpdatePhase3Error,
+} from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
@@ -3159,33 +3165,59 @@ for (const { title, makeFailure, reason } of [
   },
   {
     title: "classifies missing marketplace refresh targets",
-    makeFailure: () => new Error("remote ref not found"),
+    makeFailure: () =>
+      Object.assign(new MarketplaceNotFoundError("official", ["project"]), {
+        message: "opaque typed absence",
+      }),
     reason: "not found",
   },
   {
     title: "classifies rollback marketplace refresh failures",
-    makeFailure: () => new Error("rollback could not complete"),
+    makeFailure: () =>
+      Object.assign(
+        new PluginUpdatePhase3Error("replace failed", [
+          { phase: "skills", msg: "replace failed", cause: new Error("disk failure") },
+        ]),
+        { message: "opaque typed phase failure" },
+      ),
     reason: "rollback partial",
   },
   {
     title: "classifies concurrently removed marketplace refresh targets",
-    makeFailure: () => new Error("marketplace concurrently removed"),
+    makeFailure: () =>
+      Object.assign(new PluginUpdateConcurrencyError("marketplace-removed", "hello", "official"), {
+        message: "opaque typed concurrency",
+      }),
     reason: "concurrently uninstalled",
   },
   {
     title: "classifies concurrently uninstalled marketplace refresh targets",
-    makeFailure: () => new Error("plugin concurrently uninstalled"),
+    makeFailure: () =>
+      Object.assign(new PluginUpdateConcurrencyError("plugin-uninstalled", "hello", "official"), {
+        message: "opaque typed concurrency",
+      }),
     reason: "concurrently uninstalled",
   },
   {
     title: "classifies concurrently updated marketplace refresh targets",
-    makeFailure: () => new Error("plugin concurrently updated"),
+    makeFailure: () =>
+      Object.assign(new PluginUpdateConcurrencyError("plugin-updated", "hello", "official"), {
+        message: "opaque typed concurrency",
+      }),
     reason: "concurrently updated",
   },
   {
     title: "classifies invalid marketplace refresh failures",
-    makeFailure: () => new Error("invalid remote manifest"),
+    makeFailure: () =>
+      Object.assign(new InvalidMarketplaceManifestError("manifest rejected"), {
+        message: "opaque typed manifest failure",
+      }),
     reason: "invalid manifest",
+  },
+  {
+    title: "does not classify rollback keywords on an unknown error",
+    makeFailure: () => new Error("rollback invalid network concurrently updated"),
+    reason: "unreadable manifest",
   },
 ] as const) {
   test(title, async () => {
