@@ -866,7 +866,10 @@ const NODE_HOOKS_HYDRATION_READER: HooksHydrationReader = {
 const NODE_HOOKS_HYDRATION = createHooksHydration(NODE_HOOKS_HYDRATION_READER);
 
 /** Hydrates project hooks through the Node-backed state reader. */
-export const hydrateProjectScopeForCwd = NODE_HOOKS_HYDRATION.hydrateProjectScopeForCwd;
+export async function hydrateProjectScopeForCwd(cwd: string): Promise<void> {
+  // The bound operation opens with deleteParsedConfig before it reads project state.
+  await NODE_HOOKS_HYDRATION.hydrateProjectScopeForCwd(cwd);
+}
 
 /** Registers the hooks bridge through the Node-backed state reader. */
 export const registerHooksBridge = NODE_HOOKS_HYDRATION.registerHooksBridge;
