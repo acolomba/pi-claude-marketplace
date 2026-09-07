@@ -18,6 +18,7 @@ import test from "node:test";
 import { mock, verify, when } from "strong-mock";
 
 import { addMarketplace } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts";
+import { loadConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { loadState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { buildAuthCallbacks } from "../../../extensions/pi-claude-marketplace/platform/git.ts";
@@ -837,16 +838,19 @@ test("MA-2 / SC-5 / CMC-30: orchestrator accepts scope='project'; success row ca
 test("D-03-INV :: add invalidates marketplace-names cache for the new scope", async () => {
   await withTmpScope(async ({ cwd, locations }) => {
     // arrange
-    const { ctx, pi } = makeCtx();
+    const { ctx, pi, notifications } = makeCtx();
     const { gitOps } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
     const cachePath = locations.marketplaceNamesCacheFile;
+    const unrelatedPath = path.join(locations.cacheDir, "unrelated.json");
+    const unrelatedBytes = '{"preserved":true}\n';
     await mkdir(path.dirname(cachePath), { recursive: true });
     await writeFile(cachePath, '{"schemaVersion":2,"names":["stale-mp"]}\n', "utf8");
+    await writeFile(unrelatedPath, unrelatedBytes, "utf8");
 
     // act
-    await addMarketplace({
+    const outcome = await addMarketplace({
       ctx,
       pi,
       scope: "project",
@@ -854,9 +858,70 @@ test("D-03-INV :: add invalidates marketplace-names cache for the new scope", as
       rawSource: "anthropics/claude-plugins-official",
       gitOps,
     });
+    const persisted = await loadState(locations.extensionRoot);
+    const recorded = persisted.marketplaces["valid-marketplace"];
+    assert.ok(recorded);
+    const { lastUpdatedAt, ...stableRecord } = recorded;
+    const config = await loadConfig(locations.configJsonPath);
+    const tree = (await readdir(locations.scopeRoot, { recursive: true })).sort();
+    const sourceRoot = await locations.sourceCloneDir("valid-marketplace");
 
     // assert
+    assert.strictEqual(outcome, undefined);
+    assert.deepStrictEqual(notifications, [{ message: "● valid-marketplace [project] (added)" }]);
+    assert.deepStrictEqual(
+      { ...persisted, marketplaces: { "valid-marketplace": stableRecord } },
+      {
+        schemaVersion: 2,
+        marketplaces: {
+          "valid-marketplace": {
+            name: "valid-marketplace",
+            scope: "project",
+            source: {
+              kind: "github",
+              raw: "anthropics/claude-plugins-official",
+              owner: "anthropics",
+              repo: "claude-plugins-official",
+            },
+            addedFromCwd: cwd,
+            manifestPath: path.join(sourceRoot, ".claude-plugin", "marketplace.json"),
+            marketplaceRoot: sourceRoot,
+            plugins: {},
+          },
+        },
+      },
+    );
+    assert.strictEqual(Number.isFinite(Date.parse(lastUpdatedAt)), true);
+    assert.deepStrictEqual(config, {
+      status: "valid",
+      filePath: locations.configJsonPath,
+      config: {
+        schemaVersion: 1,
+        marketplaces: {
+          "valid-marketplace": { source: "anthropics/claude-plugins-official" },
+        },
+      },
+    });
+    assert.deepStrictEqual(tree, [
+      "claude-plugins.json",
+      "pi-claude-marketplace",
+      path.join("pi-claude-marketplace", "cache"),
+      path.join("pi-claude-marketplace", "cache", "unrelated.json"),
+      path.join("pi-claude-marketplace", "sources"),
+      path.join("pi-claude-marketplace", "sources-staging"),
+      path.join("pi-claude-marketplace", "sources", "valid-marketplace"),
+      path.join("pi-claude-marketplace", "sources", "valid-marketplace", ".claude-plugin"),
+      path.join(
+        "pi-claude-marketplace",
+        "sources",
+        "valid-marketplace",
+        ".claude-plugin",
+        "marketplace.json",
+      ),
+      path.join("pi-claude-marketplace", "state.json"),
+    ]);
     await assert.rejects(() => readFile(cachePath, "utf8"), { code: "ENOENT" });
+    assert.strictEqual(await readFile(unrelatedPath, "utf8"), unrelatedBytes);
   });
 });
 
