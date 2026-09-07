@@ -470,13 +470,19 @@ interface TransitionRegistrationOwner {
 
 type RegistrationOwner = RuntimeRegistrationOwner | TransitionRegistrationOwner;
 
+type RegistrationCallbackFactory<Args extends readonly unknown[], Result> = (
+  epoch: number,
+) => (...args: Args) => Result;
+
 function bindRegistrationCallback<Args extends readonly unknown[], Result>(
   owner: RegistrationOwner,
   capturedGeneration: number,
-  callback: (...args: Args) => Result,
+  capturedEpoch: number,
+  routingState: EventRouterRoutingState,
+  callbackForEpoch: RegistrationCallbackFactory<Args, Result>,
 ): (...args: Args) => Result | undefined {
   if (owner.kind === "transition") {
-    return callback;
+    return callbackForEpoch(capturedEpoch);
   }
 
   return (...args: Args): Result | undefined => {
@@ -484,7 +490,8 @@ function bindRegistrationCallback<Args extends readonly unknown[], Result>(
       return undefined;
     }
 
-    return callback(...args);
+    mirrorRuntimeRoutingState(routingState);
+    return callbackForEpoch(currentEpoch())(...args);
   };
 }
 
@@ -813,6 +820,17 @@ async function registerHooksBridgeWith(
       : TRANSITION_ROUTING_STATE;
   const capturedGeneration = owner.kind === "runtime" ? owner.runtime.advanceGeneration() : 0;
   const capturedEpoch = bumpEpoch();
+  function bind<Args extends readonly unknown[], Result>(
+    callbackForEpoch: RegistrationCallbackFactory<Args, Result>,
+  ): (...args: Args) => Result | undefined {
+    return bindRegistrationCallback(
+      owner,
+      capturedGeneration,
+      capturedEpoch,
+      routingState,
+      callbackForEpoch,
+    );
+  }
 
   // /reload re-enters this factory and must not leak a stale SessionStart
   // additionalContext entry from the prior session into the new buffer.
@@ -898,74 +916,52 @@ async function registerHooksBridgeWith(
   // The pi.on call count (DISP-01: 11) and locked event-name set (10) are
   // unchanged: this wraps the existing session_start handler, it does not
   // add a registration.
-  const sessionStartHandler = compositeHandlerFor("SessionStart", capturedEpoch, pi, opts.executor);
   pi.on(
     "session_start",
-    bindRegistrationCallback(owner, capturedGeneration, async (event, ctx) => {
-      try {
-        await hydrateProjectScopeForCwdWith(reader, ctx.cwd, routingState);
-        rebuildRoutingTablesWith(routingState);
-        if (owner.kind === "runtime") {
-          mirrorRuntimeRoutingState(routingState);
+    bind((epoch) => {
+      const sessionStartHandler = compositeHandlerFor("SessionStart", epoch, pi, opts.executor);
+      return async (event, ctx) => {
+        try {
+          await hydrateProjectScopeForCwdWith(reader, ctx.cwd, routingState);
+          rebuildRoutingTablesWith(routingState);
+          if (owner.kind === "runtime") {
+            mirrorRuntimeRoutingState(routingState);
+          }
+
+          if (routingState.getRoutingBucket("SessionStart").some((e) => e.scope === "project")) {
+            await ensureSharedDataDir(locationsFor("project", ctx.cwd));
+          }
+        } catch (err) {
+          hookDebugLog(`session_start lazy project hydrate skipped: ${errorMessage(err)}`);
         }
 
-        if (routingState.getRoutingBucket("SessionStart").some((e) => e.scope === "project")) {
-          await ensureSharedDataDir(locationsFor("project", ctx.cwd));
-        }
-      } catch (err) {
-        hookDebugLog(`session_start lazy project hydrate skipped: ${errorMessage(err)}`);
-      }
-
-      return sessionStartHandler(event, ctx);
+        return sessionStartHandler(event, ctx);
+      };
     }),
   );
   pi.on(
     "session_shutdown",
-    bindRegistrationCallback(
-      owner,
-      capturedGeneration,
-      compositeHandlerFor("SessionEnd", capturedEpoch, pi, opts.executor),
-    ),
+    bind((epoch) => compositeHandlerFor("SessionEnd", epoch, pi, opts.executor)),
   );
   pi.on(
     "session_before_compact",
-    bindRegistrationCallback(
-      owner,
-      capturedGeneration,
-      compositeHandlerFor("PreCompact", capturedEpoch, pi, opts.executor),
-    ),
+    bind((epoch) => compositeHandlerFor("PreCompact", epoch, pi, opts.executor)),
   );
   pi.on(
     "session_compact",
-    bindRegistrationCallback(
-      owner,
-      capturedGeneration,
-      compositeHandlerFor("PostCompact", capturedEpoch, pi, opts.executor),
-    ),
+    bind((epoch) => compositeHandlerFor("PostCompact", epoch, pi, opts.executor)),
   );
   pi.on(
     "input",
-    bindRegistrationCallback(
-      owner,
-      capturedGeneration,
-      compositeHandlerFor("UserPromptSubmit", capturedEpoch, pi, opts.executor),
-    ),
+    bind((epoch) => compositeHandlerFor("UserPromptSubmit", epoch, pi, opts.executor)),
   );
   pi.on(
     "tool_call",
-    bindRegistrationCallback(
-      owner,
-      capturedGeneration,
-      compositeHandlerFor("PreToolUse", capturedEpoch, pi, opts.executor),
-    ),
+    bind((epoch) => compositeHandlerFor("PreToolUse", epoch, pi, opts.executor)),
   );
   pi.on(
     "tool_result",
-    bindRegistrationCallback(
-      owner,
-      capturedGeneration,
-      toolResultCompositeHandler(capturedEpoch, pi, opts.executor),
-    ),
+    bind((epoch) => toolResultCompositeHandler(epoch, pi, opts.executor)),
   );
   // SessionStart additionalContext drain: every agent turn fires
   // before_agent_start; the handler returns early when the pending
@@ -973,26 +969,18 @@ async function registerHooksBridgeWith(
   // turn.
   pi.on(
     "before_agent_start",
-    bindRegistrationCallback(
-      owner,
-      capturedGeneration,
-      beforeAgentStartHandlerFor(capturedEpoch),
-    ),
+    bind((epoch) => beforeAgentStartHandlerFor(epoch)),
   );
   // Settle-time turn-boundary dispatch: agent_end caches the run's
   // last-assistant message; agent_settled reads it and gates on stopReason
   // to run the Stop / StopFailure buckets (STOP-01).
   pi.on(
     "agent_end",
-    bindRegistrationCallback(owner, capturedGeneration, agentEndCacheHandler(capturedEpoch)),
+    bind((epoch) => agentEndCacheHandler(epoch)),
   );
   pi.on(
     "agent_settled",
-    bindRegistrationCallback(
-      owner,
-      capturedGeneration,
-      settleHandlerFor(capturedEpoch, pi, opts.executor),
-    ),
+    bind((epoch) => settleHandlerFor(epoch, pi, opts.executor)),
   );
   // STOP-07 loop-protection reset: a dedicated second `input` subscription
   // (distinct from the UserPromptSubmit dispatch handler above) clears
@@ -1001,7 +989,7 @@ async function registerHooksBridgeWith(
   // NOT pass through `input`, so the flag never self-clears.
   pi.on(
     "input",
-    bindRegistrationCallback(owner, capturedGeneration, inputResetHandlerFor(capturedEpoch)),
+    bind((epoch) => inputResetHandlerFor(epoch)),
   );
 }
 
