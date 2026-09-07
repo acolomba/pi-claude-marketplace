@@ -155,7 +155,6 @@ import {
   applyPartialCascadeFold,
   assertNoCrossPluginConflicts,
   cloneMarketplaceRecordForTargetScope,
-  pickAgentsSourceDir,
   removePluginRecord,
   resolveInstallMarketplaceSource,
   resolvePluginVersion,
@@ -333,6 +332,8 @@ interface InstallCtx {
   // `partially-available` arm (admitted under --partial) flows through the same
   // materialize phases. Excludes `unavailable` (no pluginRoot).
   readonly resolved: MaterializablePlugin;
+  /** Exact ordered directory list used by both conflict preview and agent staging. */
+  readonly agentsDirs: readonly string[];
   readonly version: string;
   // D-77-02 / PURL-09: the full 40-hex resolved commit sha for git-source
   // installs, captured by the clone-materializing resolve callback (the
@@ -899,6 +900,7 @@ async function runInstallLedgerBody(
     marketplace,
     plugin,
     resolved: installable,
+    agentsDirs: generatedNames.agentsDirs,
     version,
     // D-77-02: git-source installs carry the full 40-hex resolved sha; path /
     // github-name sources leave it undefined (no key => omitted from the record).
@@ -1014,7 +1016,7 @@ async function runInstallLedgerBody(
         pluginRoot: c.resolved.pluginRoot,
         pluginDataDir: c.pluginDataDir,
         resolved: c.resolved,
-        agentsSourceDir: pickAgentsSourceDir(c.resolved),
+        agentsDirs: c.agentsDirs,
         knownSkills: c.stagedSkillNames,
         // AG-7 opt-in: `--map-model` on /claude:plugin install threads
         // the flag down to here. When the user did not pass the flag

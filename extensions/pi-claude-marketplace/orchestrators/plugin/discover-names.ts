@@ -13,11 +13,11 @@
 // no-cross-bridge-imports boundary rule, so the per-kind barrels are the
 // only bridge entry points here.
 
+import path from "node:path";
+
 import { discoverPluginAgents } from "../../bridges/agents/index.ts";
 import { discoverPluginCommands } from "../../bridges/commands/index.ts";
 import { discoverPluginSkills } from "../../bridges/skills/index.ts";
-
-import { pickAgentsSourceDir } from "./shared.ts";
 
 import type { MaterializablePlugin } from "../../domain/resolver.ts";
 
@@ -25,7 +25,15 @@ export interface DiscoveredGeneratedNames {
   readonly skills: readonly string[];
   readonly commands: readonly string[];
   readonly agents: readonly string[];
+  readonly agentsDirs: readonly string[];
+  /** Temporary update/reinstall migration seam; removed by Plan 03-03. */
   readonly agentsSourceDir: string | null;
+}
+
+function resolvedAgentsDirs(resolved: MaterializablePlugin): readonly string[] {
+  return resolved.componentPaths.agents.map((agentsDir) =>
+    path.resolve(resolved.pluginRoot, agentsDir),
+  );
 }
 
 /**
@@ -51,16 +59,14 @@ export async function discoverGeneratedNames(
     pluginName: plugin,
     resolved,
   });
-  const agentsSourceDir = pickAgentsSourceDir(resolved);
-  const agentsDiscovery =
-    agentsSourceDir === null
-      ? { discovered: [] as readonly { readonly generatedName: string }[] }
-      : await discoverPluginAgents({ pluginName: plugin, agentsDirs: [agentsSourceDir] });
+  const agentsDirs = resolvedAgentsDirs(resolved);
+  const agentsDiscovery = await discoverPluginAgents({ pluginName: plugin, agentsDirs });
 
   return {
     skills: skillsDiscovery.discovered.map((s) => s.generatedName),
     commands: commandsDiscovery.discovered.map((c) => c.generatedName),
     agents: agentsDiscovery.discovered.map((a) => a.generatedName),
-    agentsSourceDir,
+    agentsDirs,
+    agentsSourceDir: agentsDirs[0] ?? null,
   };
 }
