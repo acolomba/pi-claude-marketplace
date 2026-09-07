@@ -22,6 +22,7 @@ import {
   spawnAndRegister,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts";
 import { adaptObservationResultForEvent } from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts";
+import * as eventRouterModule from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
 import {
   addPluginConfigToCache,
   beforeAgentStartHandlerFor,
@@ -66,6 +67,25 @@ import type {
   ExtensionContext,
   ToolCallEvent,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+
+interface HooksHydrationReaderContract {
+  readonly loadState: (extensionRoot: string) => Promise<ExtensionState>;
+}
+
+interface HooksHydrationContract {
+  readonly hydrateProjectScopeForCwd: (cwd: string) => Promise<void>;
+  readonly registerHooksBridge: typeof registerHooksBridge;
+}
+
+type CreateHooksHydrationContract = (
+  reader: HooksHydrationReaderContract,
+) => HooksHydrationContract;
+
+function requireCreateHooksHydration(): CreateHooksHydrationContract {
+  const createHooksHydration = Reflect.get(eventRouterModule, "createHooksHydration");
+  assert.strictEqual(typeof createHooksHydration, "function");
+  return createHooksHydration as CreateHooksHydrationContract;
+}
 
 /**
  * Unit tests for `bridges/hooks/event-router.ts` -- the hooks-bridge
@@ -1270,8 +1290,14 @@ test(
     const root = await mkdtemp(path.join(tmpdir(), "hooks-router-project-replace-"));
     t.after(() => rm(root, { recursive: true, force: true, maxRetries: 3 }));
     const locations = locationsFor("project", root);
-    await mkdir(locations.extensionRoot, { recursive: true });
-    await writeFile(path.join(locations.extensionRoot, "state.json"), "{", "utf8");
+    const readRoots: string[] = [];
+    const loadError = new Error("project state refused");
+    const hydrationReader: HooksHydrationReaderContract = {
+      loadState(extensionRoot: string): Promise<ExtensionState> {
+        readRoots.push(extensionRoot);
+        return Promise.reject(loadError);
+      },
+    };
     const config = makeConfig([{ event: "PreToolUse", handlers: 1, prefix: "cached" }]);
     addPluginConfigToCache(
       "project",
@@ -1299,7 +1325,9 @@ test(
     );
 
     // act
-    await hydrateProjectScopeForCwd(root);
+    const hooksHydration = requireCreateHooksHydration()(hydrationReader);
+
+    await hooksHydration.hydrateProjectScopeForCwd(root);
     const cache = Array.from(parsedConfigEntries().values()).map((entry) => ({
       scope: entry.scope,
       marketplace: entry.marketplace,
@@ -1315,6 +1343,77 @@ test(
         pluginId: "first",
         resolvedSource: path.join(root, "user", "first"),
       },
+    ]);
+    assert.deepStrictEqual(readRoots, [locations.extensionRoot]);
+  },
+);
+
+test(
+  "registerHooksBridge shares one reader across ordered factory and lazy hydration",
+  { concurrency: false },
+  async (t) => {
+    // arrange
+    ownRoutingState(t);
+    const root = await mkdtemp(path.join(tmpdir(), "hooks-router-reader-order-"));
+    t.after(() => rm(root, { recursive: true, force: true, maxRetries: 3 }));
+    const factoryRoot = path.join(root, "factory");
+    const projectRoot = path.join(root, "project");
+    ownAgentRoot(t, path.join(root, "agent"));
+    const userLocations = locationsFor("user", factoryRoot);
+    const factoryProjectLocations = locationsFor("project", factoryRoot);
+    const projectLocations = locationsFor("project", projectRoot);
+    const readRoots: string[] = [];
+    const hydrationReader: HooksHydrationReaderContract = {
+      async loadState(extensionRoot: string): Promise<ExtensionState> {
+        readRoots.push(extensionRoot);
+        if (extensionRoot === factoryProjectLocations.extensionRoot) {
+          throw new Error("factory project state refused");
+        }
+
+        return { schemaVersion: 2, marketplaces: {} };
+      },
+    };
+    const previousDebug = process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+    process.env.PI_CLAUDE_MARKETPLACE_DEBUG = "1";
+    t.after(() => {
+      if (previousDebug === undefined) {
+        delete process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+      } else {
+        process.env.PI_CLAUDE_MARKETPLACE_DEBUG = previousDebug;
+      }
+    });
+    const diagnostics: string[] = [];
+    t.mock.method(console, "error", (diagnostic: unknown) => {
+      diagnostics.push(String(diagnostic));
+    });
+    const { pi, registrations, messages } = makeRecordingPi();
+    const context = makeContext(projectRoot, root);
+
+    const hooksHydration = requireCreateHooksHydration()(hydrationReader);
+    await hooksHydration.registerHooksBridge(pi, {
+      ctx: context,
+      cwd: factoryRoot,
+    });
+    const sessionStart = registeredHandler(registrations, "session_start");
+
+    // act
+    const sessionStartUpdate = await sessionStart(
+      { type: "session_start", reason: "startup" },
+      context,
+    );
+
+    // assert
+    assert.strictEqual(sessionStartUpdate, undefined);
+    assert.deepStrictEqual(Array.from(parsedConfigEntries()), []);
+    assert.deepStrictEqual(messages, []);
+    assert.strictEqual(registrations.length, 11);
+    assert.deepStrictEqual(diagnostics, [
+      `[hooks] hydrate: loadState failed for scope=project extensionRoot=${factoryProjectLocations.extensionRoot}: factory project state refused`,
+    ]);
+    assert.deepStrictEqual(readRoots, [
+      userLocations.extensionRoot,
+      factoryProjectLocations.extensionRoot,
+      projectLocations.extensionRoot,
     ]);
   },
 );
