@@ -256,7 +256,9 @@ test("explicit project list renders one GitHub source without a source suffix", 
     await listMarketplaces(options);
 
     // assert
-    assert.deepStrictEqual(boundary.notifications, [{ message: "● official [project]" }]);
+    assert.deepStrictEqual(boundary.notifications, [
+      { message: "● official [project]\n\nMarketplace list: 1 success" },
+    ]);
     assert.deepStrictEqual(await snapshotWorkspace(home, cwd), before);
     verify(boundary.ctx);
     verify(boundary.pi);
@@ -300,7 +302,9 @@ test("local config overrides base config and renders the exact autoupdate marker
     await listMarketplaces(options);
 
     // assert
-    assert.deepStrictEqual(boundary.notifications, [{ message: "● auto [project] <autoupdate>" }]);
+    assert.deepStrictEqual(boundary.notifications, [
+      { message: "● auto [project] <autoupdate>\n\nMarketplace list: 1 success" },
+    ]);
     assert.deepStrictEqual(await snapshotWorkspace(home, cwd), before);
     verify(boundary.ctx);
     verify(boundary.pi);
@@ -337,7 +341,9 @@ test("lastUpdatedAt remains stored but renders no timestamp or status marker", a
     await listMarketplaces(options);
 
     // assert
-    assert.deepStrictEqual(boundary.notifications, [{ message: "● dated [project]" }]);
+    assert.deepStrictEqual(boundary.notifications, [
+      { message: "● dated [project]\n\nMarketplace list: 1 success" },
+    ]);
     assert.deepStrictEqual(await snapshotWorkspace(home, cwd), before);
     verify(boundary.ctx);
     verify(boundary.pi);
@@ -373,7 +379,9 @@ test("explicit user list renders only the user scope", async () => {
     await listMarketplaces(options);
 
     // assert
-    assert.deepStrictEqual(boundary.notifications, [{ message: "● user-only [user]" }]);
+    assert.deepStrictEqual(boundary.notifications, [
+      { message: "● user-only [user]\n\nMarketplace list: 1 success" },
+    ]);
     assert.deepStrictEqual(await snapshotWorkspace(home, cwd), before);
     verify(boundary.ctx);
     verify(boundary.pi);
@@ -506,7 +514,9 @@ test("invalid local config is ignored while the valid base autoupdate value rend
 
     // assert
     assert.deepStrictEqual(boundary.notifications, [
-      { message: "● fallback [project] <autoupdate>" },
+      {
+        message: "● fallback [project] <autoupdate>\n\nMarketplace list: 1 success",
+      },
     ]);
     assert.deepStrictEqual(await snapshotWorkspace(home, cwd), before);
     verify(boundary.ctx);

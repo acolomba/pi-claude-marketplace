@@ -2914,25 +2914,42 @@ const FIXTURES: FixtureMap = {
   "/claude:plugin marketplace list": {
     empty: {
       pi: piWithBothLoaded(),
-      message: { marketplaces: [] },
+      message: {
+        label: "Marketplace list",
+        cardinality: "plural",
+        marketplaces: [],
+      },
+    },
+
+    single: {
+      pi: piWithBothLoaded(),
+      message: {
+        label: "Marketplace list",
+        cardinality: "plural",
+        marketplaces: [{ name: "alpha", scope: "project", severity: "info", plugins: [] }],
+      },
     },
 
     "mixed-scopes": {
       pi: piWithBothLoaded(),
       message: {
+        label: "Marketplace list",
+        cardinality: "plural",
         marketplaces: [
           {
             name: "alpha",
             scope: "project",
             details: { autoupdate: true },
+            severity: "info",
             plugins: [],
           },
-          { name: "alpha", scope: "user", plugins: [] },
-          { name: "beta", scope: "user", plugins: [] },
+          { name: "alpha", scope: "user", severity: "info", plugins: [] },
+          { name: "beta", scope: "user", severity: "info", plugins: [] },
           {
             name: "zeta",
             scope: "project",
             details: { autoupdate: true },
+            severity: "info",
             plugins: [],
           },
         ],
@@ -4166,10 +4183,12 @@ const FIXTURES: FixtureMap = {
   // -------------------------------------------------------------------------
   // /claude:plugin marketplace autoupdate -- marketplace-only flag flip.
   // -------------------------------------------------------------------------
-  "/claude:plugin marketplace autoupdate|noautoupdate <name>": {
+  "/claude:plugin marketplace autoupdate|noautoupdate [<name>]": {
     "enable-fresh": {
       pi: piWithBothLoaded(),
       message: {
+        label: "Marketplace autoupdate",
+        cardinality: "single",
         marketplaces: [{ name: "foo", scope: "user", status: "autoupdate enabled", plugins: [] }],
       },
     },
@@ -4177,6 +4196,8 @@ const FIXTURES: FixtureMap = {
     "disable-fresh": {
       pi: piWithBothLoaded(),
       message: {
+        label: "Marketplace noautoupdate",
+        cardinality: "single",
         marketplaces: [{ name: "foo", scope: "user", status: "autoupdate disabled", plugins: [] }],
       },
     },
@@ -4186,6 +4207,8 @@ const FIXTURES: FixtureMap = {
       // Benign idempotent flip (`already autoupdate` in BENIGN_REASONS) ->
       // INFO per UXG-02 / D-28-07 (no `expectedSeverity`); byte form unchanged.
       message: {
+        label: "Marketplace autoupdate",
+        cardinality: "single",
         marketplaces: [
           {
             name: "foo",
@@ -4205,6 +4228,8 @@ const FIXTURES: FixtureMap = {
       // Benign idempotent flip (`already no autoupdate` in BENIGN_REASONS) ->
       // INFO per UXG-02 / D-28-07 (no `expectedSeverity`); byte form unchanged.
       message: {
+        label: "Marketplace noautoupdate",
+        cardinality: "single",
         marketplaces: [
           {
             name: "foo",
@@ -4213,6 +4238,46 @@ const FIXTURES: FixtureMap = {
             severity: "info",
             needsReload: false,
             reasons: ["already no autoupdate"],
+            plugins: [],
+          },
+        ],
+      },
+    },
+
+    "all-empty": {
+      pi: piWithBothLoaded(),
+      message: {
+        label: "Marketplace autoupdate",
+        cardinality: "plural",
+        marketplaces: [],
+      },
+    },
+
+    "all-one": {
+      pi: piWithBothLoaded(),
+      message: {
+        label: "Marketplace autoupdate",
+        cardinality: "plural",
+        marketplaces: [
+          { name: "foo", scope: "project", status: "autoupdate enabled", plugins: [] },
+        ],
+      },
+    },
+
+    "all-many": {
+      pi: piWithBothLoaded(),
+      message: {
+        label: "Marketplace autoupdate",
+        cardinality: "plural",
+        marketplaces: [
+          { name: "foo", scope: "project", status: "autoupdate enabled", plugins: [] },
+          {
+            name: "bar",
+            scope: "user",
+            status: "skipped",
+            severity: "info",
+            needsReload: false,
+            reasons: ["already autoupdate"],
             plugins: [],
           },
         ],
@@ -5229,14 +5294,14 @@ test("catalog UAT: every <!-- catalog-state: --> annotation pairs byte-equal wit
   const catalog = await readFile(CATALOG_PATH, "utf8");
   const examples = loadCatalogExamples(catalog);
 
-  // Exact count, not a floor: 182 is the number of annotated examples in
+  // Exact count, not a floor: 186 is the number of annotated examples in
   // docs/output-catalog.md, and it is what stops a `loadCatalogExamples`
   // refactor from silently parsing a fraction of the corpus. Update it
   // deliberately when catalog examples are added or removed.
   assert.equal(
     examples.length,
-    182,
-    `Expected exactly 182 annotated catalog examples; found ${examples.length}. Check that the discriminator comments in docs/output-catalog.md were not lost, and update this count when examples are added.`,
+    186,
+    `Expected exactly 186 annotated catalog examples; found ${examples.length}. Check that the discriminator comments in docs/output-catalog.md were not lost, and update this count when examples are added.`,
   );
 
   const failures: Failure[] = [];

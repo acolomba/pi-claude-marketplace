@@ -1459,9 +1459,23 @@ Marketplace-list surface. Each marketplace renders as a list-surface header carr
 
 ```text
 (no marketplaces)
+
+Marketplace list: 0 successes
 ```
 
-Empty top-level `marketplaces: []` renders the sentinel literal per D-16-17. No reload-hint, no severity arg.
+Empty top-level `marketplaces: []` renders the sentinel literal per D-16-17. Because list is structurally plural, the zero-result tally remains visible. No reload-hint, no severity arg.
+
+### Single marketplace
+
+<!-- catalog-state: single -->
+
+```text
+● alpha [project]
+
+Marketplace list: 1 success
+```
+
+A one-row result is still a plural list invocation. Cardinality follows the command shape, not the result count.
 
 ### Mixed scopes -- per-scope rendering
 
@@ -1475,9 +1489,11 @@ Empty top-level `marketplaces: []` renders the sentinel literal per D-16-17. No 
 ● beta [user]
 
 ● zeta [project] <autoupdate>
+
+Marketplace list: 4 successes
 ```
 
-Four marketplace blocks joined by one blank line each (D-16-07). Each list-surface header is SUB-BRANCH B (mp.status undefined; details set). `<autoupdate>` appears only when `details.autoupdate === true`. The `details.lastUpdatedAt` field is retained in state but is not rendered (UXG-01). Caller-supplied order is preserved (D-16-06); the catalog uses an alphabetic ordering for readability. No reload-hint, no severity arg.
+Four marketplace blocks joined by one blank line each (D-16-07), followed by the plural tally. Each list-surface header is SUB-BRANCH B (mp.status undefined; details set). `<autoupdate>` appears only when `details.autoupdate === true`. The `details.lastUpdatedAt` field is retained in state but is not rendered (UXG-01). Caller-supplied order is preserved (D-16-06); the catalog uses an alphabetic ordering for readability. No reload-hint, no severity arg.
 
 ______________________________________________________________________
 
@@ -2723,9 +2739,9 @@ Triggered when the target config file fails CFG-03 validation. The orchestrator 
 
 ______________________________________________________________________
 
-## `/claude:plugin marketplace autoupdate|noautoupdate <name>`
+## `/claude:plugin marketplace autoupdate|noautoupdate [<name>]`
 
-Marketplace-only flag flip. The orchestrator emits a single marketplace block with no plugin children; the block's `mp.status` discriminates between the V2 outcomes. V2 distinguishes six user-visible states for this surface: fresh-flip enable, fresh-flip disable, idempotent enable (no-op), idempotent disable (no-op), and -- when the marketplace persistence record cannot be found -- the standalone `{marketplace not added}` failure in two forms (explicit `--scope` carrying the scope bracket, and the bare absent-from-both form; ATTR-05 / D-48-C Shape 1). The per-state catalog blocks below give the exact byte form for each outcome. UXG-04: the flip surface now renders the autoupdate state as the `<autoupdate>` / `<no autoupdate>` marker (byte-form parity with the list surface), reversing the Phase 17.1 / D-18-05 status-token design; fresh flips render the bare marker, idempotent no-ops render the marker plus an `{already autoupdate}` / `{already no autoupdate}` idempotence brace. This shares byte form with the list-surface markers documented under [`## /claude:plugin marketplace list`](#claudeplugin-marketplace-list), but the two surfaces differ: the **list** surface conveys autoupdate-off by marker _absence_ (it emits `<autoupdate>` iff `mp.details.autoupdate === true`, with no off-marker), whereas this **flip** surface emits the explicit `<no autoupdate>` off-marker. The `<no autoupdate>` off-marker is therefore emitted only on this flip surface, never on the list surface (UXG-04 does not change the list surface).
+Marketplace-only flag flip. With `<name>`, the invocation is structurally single and emits no tally. Without `<name>`, it targets all marketplaces, is structurally plural, and emits a tally for zero, one, or many results. Cardinality is selected from invocation structure before any rows exist. Each marketplace block has no plugin children; the block's `mp.status` discriminates between the V2 outcomes. UXG-04: the flip surface renders the autoupdate state as the `<autoupdate>` / `<no autoupdate>` marker. Fresh flips render the bare marker, while idempotent no-ops add an `{already autoupdate}` / `{already no autoupdate}` brace. This shares byte form with the list-surface markers documented under [`## /claude:plugin marketplace list`](#claudeplugin-marketplace-list), but the two surfaces differ: the **list** surface conveys autoupdate-off by marker _absence_, whereas this **flip** surface emits the explicit `<no autoupdate>` off-marker.
 
 ### Fresh enable
 
@@ -2766,6 +2782,44 @@ Idempotent no-op -- the flag was already in the requested state. `mp.status` = `
 ```
 
 Idempotent no-op -- the flag was already in the requested state. `mp.status` = `"skipped"`; `mp.reasons` = `["already no autoupdate"]`; UXG-04 renders the explicit `<no autoupdate>` off-marker plus the `{already no autoupdate}` idempotence brace (no `(skipped)` token); severity = `info` (`already no autoupdate` is in the benign closed set, so this benign no-op computes info -- the second arg is omitted -- per UXG-02 / D-28-06/07); reload-hint suppressed.
+
+### All marketplaces -- empty
+
+<!-- catalog-state: all-empty -->
+
+```text
+(no marketplaces)
+
+Marketplace autoupdate: 0 successes
+```
+
+The no-name invocation is plural even when no marketplace rows exist.
+
+### All marketplaces -- one result
+
+<!-- catalog-state: all-one -->
+
+```text
+● foo [project] <autoupdate>
+
+Marketplace autoupdate: 1 success
+```
+
+One result does not turn the plural invocation into a single-target operation.
+
+### All marketplaces -- many results
+
+<!-- catalog-state: all-many -->
+
+```text
+● foo [project] <autoupdate>
+
+● bar [user] <autoupdate> {already autoupdate}
+
+Marketplace autoupdate: 2 successes
+```
+
+Changed and already-correct rows both count as successful plural outcomes.
 
 ### Failure -- missing marketplace (explicit `--scope`)
 
