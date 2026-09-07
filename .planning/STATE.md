@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 03
 current_phase_name: Production Defect Corrections
 status: executing
-stopped_at: Completed 03-13-PLAN.md
-last_updated: "2026-09-07T09:39:32.302Z"
+stopped_at: Completed 03-03-PLAN.md
+last_updated: "2026-09-07T09:57:48.896Z"
 last_activity: 2026-09-07
 last_activity_desc: Phase 03 execution started
-state_head: b38f064628865925820efcda98ec21bf2a167ab0
+state_head: f986cdd62346f3388f8bcbc3df52fe5aa44b4de0
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 87
-  completed_plans: 79
+  completed_plans: 80
   percent: 11
 ---
 
@@ -34,7 +34,7 @@ terminal evidence ledger.
 
 Phase: 03 (Production Defect Corrections) — EXECUTING
 Next: Discuss Phase 03
-Plan: 7 of 14
+Plan: 8 of 14
 Status: Ready to execute
 Last activity: 2026-09-07 — Phase 03 execution started
 
@@ -265,6 +265,7 @@ Last activity: 2026-09-07 — Phase 03 execution started
 | Phase 03 P05 | 2min | 2 tasks | 6 files |
 | Phase 03 P08 | 7min | 2 tasks | 8 files |
 | Phase 03 P13 | 10min | 3 tasks | 6 files |
+| Phase 03 P03 | 13min | 3 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -645,6 +646,9 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 03]: Marketplace add, remove, and named update are single; all-target update is plural before result discovery. — Invocation structure owns tally semantics, so empty, one-result, and many-result executions remain consistent.
 - [Phase 03]: All-target marketplace update preserves one notification per target while threading plural cardinality to each. — The notification metadata correction must not change transaction or sequencing behavior.
 - [Phase 03]: Marketplace mutation catalog fixtures cover D-28 exact output alongside owner tests. — New aggregate tally bytes are part of the public notification contract.
+- [Phase 03]: Update and reinstall reuse discovery's ordered agentsDirs list for preview, staging, and rollback. — One resolver-owned representation prevents preview and mutation from observing different directory subsets.
+- [Phase 03]: The singular agentsSourceDir compatibility member, helper, and bridge input union are removed. — All production consumers now accept the promoted ordered-list contract.
+- [Phase 03]: Multi-directory test fixture branches were extracted instead of suppressed. — Fallow identified two new cognitive-complexity breaches, and small helpers restored the health gate.
 
 ### Pending Todos
 
@@ -696,19 +700,19 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 03-13-PLAN.md
+**Stopped at:** Completed 03-03-PLAN.md
 
 Phase 01 is sealed at 69/69 plans. Phase 02 Plans 01 through 03 completed
 PDEF-03, PDEF-02, and PDEF-04 with typed fail-closed input, path, and lifecycle
 boundaries. Independent verification passed 3/3 with no behavior, UAT, or
 security gaps. Phase 03 is ready for discussion and planning.
 
-**Resume file:** .planning/phases/03-production-defect-corrections/03-03-PLAN.md
+**Resume file:** .planning/phases/03-production-defect-corrections/03-06-PLAN.md
 
 **Read beside it:** `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`, and the
 Phase 01 terminal evidence ledger and scope-impact crosswalk routed to Phase 03.
 
-Last session: 2026-09-07T09:39:31.986Z
+Last session: 2026-09-07T09:57:48.577Z
 
 **Next:** Discuss Phase 03 Production Defect Corrections, then research and plan
 only the terminal findings that still reproduce.
