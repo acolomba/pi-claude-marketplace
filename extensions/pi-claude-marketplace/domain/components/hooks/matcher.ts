@@ -2,6 +2,9 @@ import { CLAUDE_TO_PI_TOOL_NAMES, type PiToolName } from "../hook-tool-names.ts"
 
 const SAFE_MATCHER_CHARS = /^[A-Za-z0-9_|-]+$/;
 const MCP_SEGMENT = /^[A-Za-z0-9_-]+$/;
+const CLAUDE_TO_PI_TOOL_NAME_LOOKUP: ReadonlyMap<string, PiToolName> = new Map(
+  Object.entries(CLAUDE_TO_PI_TOOL_NAMES),
+);
 
 export type ParsedMatcher =
   | { kind: "match-all" }
@@ -47,7 +50,7 @@ export function parseMatcher(raw: string): ParsedMatcher {
       return { kind: "regex" };
     }
 
-    const piTool = (CLAUDE_TO_PI_TOOL_NAMES as Record<string, PiToolName | undefined>)[token];
+    const piTool = CLAUDE_TO_PI_TOOL_NAME_LOOKUP.get(token);
     if (piTool === undefined) {
       return { kind: "unmapped", token };
     }
