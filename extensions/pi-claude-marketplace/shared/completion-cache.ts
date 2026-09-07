@@ -451,11 +451,7 @@ export interface CompletionCache {
   /** Removes one scoped marketplace from memory while retaining its disk cache. */
   invalidateMarketplaceCache(scope: Scope, marketplace: string): void;
   /** Removes one scoped marketplace from memory and disk. */
-  dropMarketplaceCache(
-    pluginCachePath: string,
-    scope: Scope,
-    marketplace: string,
-  ): Promise<void>;
+  dropMarketplaceCache(pluginCachePath: string, scope: Scope, marketplace: string): Promise<void>;
   /** Removes one scope's marketplace-names entry from memory and disk. */
   invalidateMarketplaceNames(marketplaceNamesCachePath: string, scope: Scope): Promise<void>;
 }

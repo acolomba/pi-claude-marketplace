@@ -110,9 +110,7 @@ function flagCompletions(
 
   const verb = catalogVerbForHead(positionalHead);
   if (verb !== null) {
-    flags.push(
-      ...(completionFlagEntries(verb) as { name: string; description: string }[]),
-    );
+    flags.push(...(completionFlagEntries(verb) as { name: string; description: string }[]));
   }
 
   return flags
