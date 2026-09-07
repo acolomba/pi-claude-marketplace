@@ -348,7 +348,7 @@ Plans:
 **Goal:** Expose legitimate test seams with correctly owned runtime state and public contracts.
 **Depends on:** Phase 4
 **Requirements:** TREF-04, TREF-05, TREF-06
-**Plans:** TBD
+**Plans:** 0/33 plans complete
 
 **Success Criteria**:
 
@@ -360,6 +360,120 @@ Plans:
    ownership without reset exports created only for tests.
 3. Tests exercise public contracts, and terminal test-only exports, reset
    hooks, and test-shaped branches follow their trace-preserving removal route.
+
+Plans:
+
+**Wave 1**
+
+- [ ] 05-01-PLAN.md — Prove required production ports through skills unstage and path safety.
+
+**Wave 2** _(blocked on Wave 1 completion)_
+
+- [ ] 05-02-PLAN.md — Classify hooks hydration and staging capabilities.
+- [ ] 05-03-PLAN.md — Classify plugin fetch-status and info capabilities.
+- [ ] 05-04-PLAN.md — Isolate the reconcile state-reader race without weakening composition.
+- [ ] 05-05-PLAN.md — Introduce four separate semantic transaction ports.
+- [ ] 05-06-PLAN.md — Introduce the instance-owned HooksRuntime core.
+- [ ] 05-07-PLAN.md — Introduce the factory-owned CompletionCache read path.
+
+**Wave 3** _(blocked on Wave 2 completion)_
+
+- [ ] 05-08-PLAN.md — Resolve marketplace-name memory after a fresh consumer census.
+- [ ] 05-09-PLAN.md — Bind one HooksRuntime through registration and hydration.
+
+**Wave 4** _(blocked on Wave 3 completion)_
+
+- [ ] 05-10-PLAN.md — Route dispatch, event adaptation, pending context, and settle state through the runtime.
+
+**Wave 5** _(blocked on Wave 4 completion)_
+
+- [ ] 05-11-PLAN.md — Move async-rewake child and PID-operation memory into the runtime.
+
+**Wave 6** _(blocked on Wave 5 completion)_
+
+- [ ] 05-12-PLAN.md — Establish final root and edge lifecycle plumbing.
+
+**Wave 7** _(blocked on Wave 6 completion)_
+
+- [ ] 05-13-PLAN.md — Trace runtime ownership through install and reconcile.
+
+**Wave 8** _(blocked on Wave 7 completion)_
+
+- [ ] 05-14-PLAN.md — Route enable and disable through lifecycle ownership.
+
+**Wave 9** _(blocked on Wave 8 completion)_
+
+- [ ] 05-15-PLAN.md — Route direct and reconciled uninstall through lifecycle ownership.
+
+**Wave 10** _(blocked on Wave 9 completion)_
+
+- [ ] 05-16-PLAN.md — Route import mutations through lifecycle ownership.
+
+**Wave 11** _(blocked on Wave 10 completion)_
+
+- [ ] 05-17-PLAN.md — Route update and marketplace cascades through lifecycle ownership.
+
+**Wave 12** _(blocked on Wave 11 completion)_
+
+- [ ] 05-18-PLAN.md — Route reinstall and reconcile backfill through lifecycle ownership.
+
+**Wave 13** _(blocked on Wave 12 completion)_
+
+- [ ] 05-19-PLAN.md — Route marketplace add invalidation through the lifecycle cache.
+
+**Wave 14** _(blocked on Wave 13 completion)_
+
+- [ ] 05-20-PLAN.md — Route marketplace remove invalidation through the lifecycle cache.
+
+**Wave 15** _(blocked on Wave 14 completion)_
+
+- [ ] 05-21-PLAN.md — Route marketplace update invalidation through the lifecycle cache.
+
+**Wave 16** _(blocked on Wave 15 completion)_
+
+- [ ] 05-22-PLAN.md — Route plugin install invalidation through the registered cache.
+
+**Wave 17** _(blocked on Wave 16 completion)_
+
+- [ ] 05-23-PLAN.md — Route plugin update invalidation through the registered cache.
+
+**Wave 18** _(blocked on Wave 17 completion)_
+
+- [ ] 05-24-PLAN.md — Route reinstall and backfill invalidation through the registered cache.
+
+**Wave 19** _(blocked on Wave 18 completion)_
+
+- [ ] 05-25-PLAN.md — Route direct and reconciled uninstall invalidation through the registered cache.
+
+**Wave 20** _(blocked on Wave 19 completion)_
+
+- [ ] 05-26-PLAN.md — Prove the completed lifecycle graph and stale-callback contract.
+
+**Wave 21** _(blocked on Wave 20 completion)_
+
+- [ ] 05-27-PLAN.md — Preserve exactly the apply and bootstrap composition exceptions.
+- [ ] 05-28-PLAN.md — Migrate hooks unit reset callers to fresh runtime fixtures.
+- [ ] 05-29-PLAN.md — Migrate hooks integration reset callers to fresh lifecycle fixtures.
+
+**Wave 22** _(blocked on Wave 21 completion)_
+
+- [ ] 05-30-PLAN.md — Migrate completion reset callers to fresh cache fixtures.
+
+**Wave 23** _(blocked on Wave 22 completion)_
+
+- [ ] 05-31-PLAN.md — Delete terminal reset surfaces after a fresh zero-caller census.
+- [ ] 05-32-PLAN.md — Remove the BOOLEAN_FLAGS test surface while retaining public proofs.
+
+**Wave 24** _(blocked on Wave 23 completion)_
+
+- [ ] 05-33-PLAN.md — Seal classification, ownership, security, Fallow, and repository gates.
+
+**Cross-cutting constraints:**
+
+- New ports are required, consumer-owned, production-used capabilities with real adapters; no optional default, dead seam, `__deps`, or test-only export is permitted.
+- One lifecycle-owned HooksRuntime and one factory-owned CompletionCache serve each extension load; production behavior, not test cleanup, owns any transition or invalidation.
+- Production operation order, rollback, diagnostics, state/configuration bytes, scope trees, results, and notifications remain exact; `applyReconcile` and `bootstrapClaudePlugin` remain the only two behavioral-composition exceptions.
+- Phase 6 retains global-patch removal and large module splits. The existing `scripts/revalidation.mjs` Fallow comment remains byte-exact, and Phase 5 adds no suppression.
 
 ### Phase 6: Assertion and Module Refinement
 
