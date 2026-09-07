@@ -752,7 +752,7 @@ test("PDEF-01: reinstall stages every agent directory and warns on a later dupli
       });
 
       assert.strictEqual(outcome.partition, "reinstalled");
-      assert.deepStrictEqual(outcome.notes, [expectedWarning]);
+      assert.deepStrictEqual(outcome.notes, [`warning: ${expectedWarning}`]);
       const state = await loadState(locations.extensionRoot);
       assert.deepStrictEqual(state.marketplaces.mp?.plugins.hello?.resources.agents, [
         `${GENERATED_AGENT_PREFIX}hello-shared`,

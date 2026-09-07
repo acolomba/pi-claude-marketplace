@@ -949,7 +949,7 @@ async function runLockedReinstall(
     installable,
     pluginDataDir,
     oldRecord: oldSnapshot,
-    agentsSourceDir: generated.agentsSourceDir,
+    agentsDirs: generated.agentsDirs,
   });
   const { replacements, hookEntries } = await replaceAll(handles, {
     locations,
@@ -1196,7 +1196,7 @@ async function prepareAllHandles(input: {
   readonly installable: MaterializablePlugin;
   readonly pluginDataDir: string;
   readonly oldRecord: PluginInstallRecord;
-  readonly agentsSourceDir: string | null;
+  readonly agentsDirs: readonly string[];
 }): Promise<PreparedHandles> {
   const handles: PartialPreparedHandles = {};
   try {
@@ -1229,7 +1229,7 @@ async function prepareAllHandles(input: {
       pluginRoot: input.installable.pluginRoot,
       pluginDataDir: input.pluginDataDir,
       resolved: input.installable,
-      agentsSourceDir: input.agentsSourceDir,
+      agentsDirs: input.agentsDirs,
       knownSkills: handles.skills.result.recorded.map((r) => r.generatedName),
       // SUB-02: project-scope ${CLAUDE_PROJECT_DIR} resolves to the install cwd.
       cwd: input.cwd,
