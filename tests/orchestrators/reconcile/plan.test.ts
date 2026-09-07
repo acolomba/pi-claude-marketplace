@@ -96,6 +96,42 @@ function stateWith(marketplaces: Record<string, MarketplaceRecord> = {}): Extens
 }
 
 describe("planReconcile", () => {
+  test("resolves a declared alias to the canonical recorded plugin target", () => {
+    // arrange
+    const merged = mergedConfig(
+      { "declared-name": { source: "./local-marketplace" } },
+      { "formatter@declared-name": {} },
+    );
+    const state = stateWith({
+      "canonical-name": marketplaceRecord(
+        "canonical-name",
+        pathSource("./local-marketplace"),
+      ),
+    });
+
+    // act
+    const result = planReconcile(merged, state, "project");
+
+    // assert
+    assert.deepStrictEqual(result, {
+      scope: "project",
+      marketplacesToAdd: [],
+      marketplacesToRemove: [],
+      pluginsToInstall: [
+        {
+          scope: "project",
+          plugin: "formatter",
+          marketplace: "canonical-name",
+          configSource: "base",
+        },
+      ],
+      pluginsToUninstall: [],
+      pluginsToEnable: [],
+      pluginsToDisable: [],
+      sourceMismatches: [],
+    });
+  });
+
   test("claims an alternate recorded name after skipping declared and different-source records", () => {
     // arrange
     const merged = mergedConfig({
