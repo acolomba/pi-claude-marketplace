@@ -6,18 +6,18 @@
 
 **Files:**
 - `kebab-case.ts` throughout (`atomic-json.ts`, `git-failure-classifiers.ts`, `notify-context.ts`)
-- Suffix conventions signal role: `*-mock.ts` (test doubles, `tests/helpers/credential-mock.ts`), `*.test.ts` (tests), `errors.ts` / `errors-bridges.ts` (typed error classes grouped by layer)
+- Suffix conventions signal role: `*-fake.ts` (test doubles, `tests/platform/credential-ops-fake.ts`), `*-contract.ts` (a shared case list run against both a fake and the real implementation, `tests/platform/credential-ops-contract.ts`), `*.test.ts` (tests), `errors.ts` / `errors-bridges.ts` (typed error classes grouped by layer)
 
 **Functions:**
 - `camelCase`, verb-first (`atomicWriteJson`, `findProviderForHost`, `loadMarketplaceManifestUncached`)
-- Mock factories use `makeMock*` prefix (`makeMockCredentialOps`, `makeMockGitOps`, `makeMockDeviceFlowHttp`)
+- Shared test doubles use a `create*Fake` factory (`createCredentialOpsFake`, `createGitOpsFake`, `createDeviceFlowFake`); suite-local doubles declared inside the `.test.ts` that uses them keep the older `makeMock*` prefix (`makeMockGitOps`, `makeMockCredentialOps`, `makeMockDeviceFlowHttp`)
 - Classifier/predicate functions use `is*`/`classify*`/`looksLike*` naming
 
 **Variables:**
 - `camelCase`; `SCREAMING_SNAKE_CASE` for module-level constants (`GITHUB_PROVIDER`)
 
 **Types:**
-- `PascalCase` for interfaces, types, classes (`GitAuthProvider`, `CredentialOps`, `MockCredentialState`)
+- `PascalCase` for interfaces, types, classes (`GitAuthProvider`, `CredentialOps`, `CredentialOpsFake`)
 - Error classes always suffixed `Error` and always `extends Error` (see Error Handling below)
 
 ## Code Style
@@ -54,7 +54,7 @@
 - `duplicates.threshold: 3`; `duplicates.ignoredClones` currently holds exactly two entries (`dup:cc950b18:2`, `dup:6d8c002d:2`) — both retained clones live in `tests/live-uat/manifest-absence-canary.mjs` and `tests/live-uat/stop-canary.mjs`, and each is justified with an inline comment header in **both** files (fallow's `ignoredClones` is typed `string[]`, so the per-clone justification cannot live in the JSON and lives in the source instead). **Fingerprint keys are content-addressed (`dup:<hash>`) and stable; do not use the index-suffixed `dup:<hash>-NN` form anywhere — it is not stable across runs.**
 - Dead-code suppressions: exactly **9** `fallow-ignore` markers exist repo-wide as of this analysis (verify with `grep -a -rn "fallow-ignore" extensions/ tests/`), all scoped to `unused-type`/`unused-export`/`private-type-leak`/`unused-file` — never to complexity or duplication. Two live in `tests/live-uat/*.mjs` (whole-file `fallow-ignore-file unused-file`, marking the standalone operator-run UAT drivers as intentionally unreachable from the import graph); the remaining seven are `fallow-ignore-next-line` markers on compile-time proof/pin types in `extensions/pi-claude-marketplace/{shared/notify-reasons.ts, domain/resolver.ts, orchestrators/marketplace/{add,remove}.messaging.ts}` whose only purpose is to satisfy `noUnusedLocals`/`no-unused-vars` for a TypeScript type-level assertion that no runtime code ever imports.
 - `npm run fallow:audit` gates PRs on newly-introduced findings only (delta mode), distinct from the full `npm run fallow` gate used locally and in `npm run check`.
-- **A gate wants a test that plants the violation, not one that reads the config.** `import-x/no-cycle` (the ESLint half of the circular-import gate) was configured-but-inert for a period while a test that merely re-read the rule config from `eslint.config.js` stayed green. `tests/architecture/import-boundaries.test.ts` and `tests/architecture/no-orchestrator-network.test.ts` now verify by **planting**: they either scan real source files for forbidden import/call tokens (`assertNoForbiddenSurface`, `tests/helpers/source-scan.ts`) or programmatically load the flat config and assert its zones match an independently-maintained expected matrix — never a bare "the rule object exists" check. Apply this pattern to any new architectural gate: prove the rule actually fires on a real (or planted) violation, not just that its configuration is present.
+- **A gate wants a test that plants the violation, not one that reads the config.** `import-x/no-cycle` (the ESLint half of the circular-import gate) was configured-but-inert for a period while a test that merely re-read the rule config from `eslint.config.js` stayed green. `tests/architecture/import-boundaries.test.ts` and `tests/architecture/no-orchestrator-network.test.ts` now verify by **planting**: they either scan real source files for forbidden import/call tokens (`assertNoForbiddenSurface`, `tests/architecture/source-scan.ts`) or programmatically load the flat config and assert its zones match an independently-maintained expected matrix — never a bare "the rule object exists" check. Apply this pattern to any new architectural gate: prove the rule actually fires on a real (or planted) violation, not just that its configuration is present.
 
 ## Import Organization
 
@@ -70,7 +70,7 @@
 
 - `newlines-between: "always"` — blank line between each group
 - `alphabetize: { order: "asc", caseInsensitive: true }` within each group
-- Type-only imports (`import type { ... }`) are grouped separately and placed last — see `tests/shared/atomic-json.test.ts` and `tests/helpers/credential-mock.ts` for the pattern:
+- Type-only imports (`import type { ... }`) are grouped separately and placed last — see `tests/shared/atomic-json.test.ts` and `tests/platform/credential-ops-fake.ts` for the pattern:
   ```ts
   import assert from "node:assert/strict";
   import test from "node:test";
@@ -78,7 +78,7 @@
   import { atomicWriteJson } from "../../extensions/pi-claude-marketplace/shared/atomic-json.ts";
   ```
 - Test files import production modules with explicit `.ts` extensions (ESM-native resolution, no build step for tests)
-- Test-helper mocks use **type-only** imports of production types to avoid pulling runtime code into pure-mock files (see the header comment in `tests/helpers/credential-mock.ts`: "Type-only import for CredentialOps so the helper file does not import the production module at runtime")
+- Test doubles use **type-only** imports of production types so the double never pulls the production module into the test graph at runtime (`tests/platform/credential-ops-fake.ts` imports `CredentialOps` and `GitCredentials` with `import type` only)
 
 **Path Aliases:**
 - None detected — imports use relative paths (`../../extensions/pi-claude-marketplace/...`)
@@ -126,7 +126,7 @@ Errors that wrap an underlying cause pass `{ cause }` through the `Error` constr
 **When to Comment:**
 - Non-obvious "why", not "what" — see `.claude/rules/typescript-comments.md`
 - Comments and test titles cite durable spec IDs (`D-NN`, `NFR-N`, `PRL-NN`, `MA-N`, `ATTR-NN`, etc.) as traceability anchors, not GSD process artifacts (no `Phase NN`, `Plan NN`, `Wave N`, `Pitfall N` references — these rot as planning docs are archived)
-- File-level or class-level JSDoc-style block comments explain rationale, cross-references to sibling files, and behavior contracts (see `tests/helpers/credential-mock.ts` header, and `extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts` header describing why the module exists where it does and the import invariant that keeps a cycle from reforming)
+- File-level or class-level JSDoc-style block comments explain rationale, cross-references to sibling files, and behavior contracts (see `tests/architecture/source-scan.ts` header, and `extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts` header describing why the module exists where it does and the import invariant that keeps a cycle from reforming)
 
 **JSDoc/TSDoc:**
 - Used selectively above exported classes/functions with non-obvious behavior; not required on every export
@@ -140,7 +140,7 @@ Errors that wrap an underlying cause pass `{ cause }` through the `Error` constr
 
 **Return Values:** All exported functions must have explicit return type annotations (`@typescript-eslint/explicit-module-boundary-types: "error"`).
 
-**Dependency injection over test-only seams:** when a function needs to be testable against a side-effecting dependency (subprocess spawn, git ops, credential store), pass that dependency in as a parameter — making it part of the function's public interface — rather than exposing a `_setXForTest`-style module-global seam that reaches inside the module from a test. If testing a unit is hard without such a seam, treat that difficulty as a signal the dependency wants to be an explicit collaborator (its own module/interface), not a reason to punch a test-only hole in the production module. `extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts` is the worked example of extracting shared state into its own leaf module specifically so the modules that need it can take it as an explicit import rather than reaching into a hub module's internals; the same principle applies to `makeMockGitOps`/`makeMockCredentialOps`-style factories throughout `tests/helpers/`, which are injected as constructor/function arguments (never patched onto a shared global) — see `tests/helpers/credential-mock.ts` ("buildAuthCallbacks tests inject this mock the same way add/update tests inject makeMockGitOps").
+**Dependency injection over test-only seams:** when a function needs to be testable against a side-effecting dependency (subprocess spawn, git ops, credential store), pass that dependency in as a parameter — making it part of the function's public interface — rather than exposing a `_setXForTest`-style module-global seam that reaches inside the module from a test. If testing a unit is hard without such a seam, treat that difficulty as a signal the dependency wants to be an explicit collaborator (its own module/interface), not a reason to punch a test-only hole in the production module. `extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts` is the worked example of extracting shared state into its own leaf module specifically so the modules that need it can take it as an explicit import rather than reaching into a hub module's internals; the same principle applies to the `createGitOpsFake`/`createCredentialOpsFake` factories, which are injected as constructor/function arguments (never patched onto a shared global). Each shared double sits beside the layer it doubles rather than in a helpers directory, and is paired with a `*-contract.ts` case list run against both the fake and the real implementation so the two cannot drift.
 
 ## Module Design
 
