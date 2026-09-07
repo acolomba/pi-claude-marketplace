@@ -251,7 +251,7 @@ Plans:
 **Goal:** Fix each remaining confirmed production defect with regression evidence.
 **Depends on:** Phase 2
 **Requirements:** PDEF-01, PDEF-05, PDEF-06, PDEF-07, PDEF-08
-**Plans:** 12/14 plans executed
+**Plans:** 13/14 plans executed
 
 **Success Criteria**:
 
@@ -292,7 +292,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 03-09-PLAN.md — Declare lifecycle notification cardinality after owner corrections land.
+- [x] 03-09-PLAN.md — Declare lifecycle notification cardinality after owner corrections land.
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
@@ -426,7 +426,7 @@ baseline, which still includes both pairs; neither is a terminal shortfall.
 | ----- | -------------- | ------ | --------- |
 | 1. Live Evidence Revalidation | 70/70 | In Progress|  |
 | 2. Containment and Input Safety | 3/3 | Complete    | 2026-09-05 |
-| 3. Production Defect Corrections | 12/14 | In Progress|  |
+| 3. Production Defect Corrections | 13/14 | In Progress|  |
 | 4. Hermetic Test Infrastructure | 0/0 | Not started | — |
 | 5. Injection and Ownership Design | 0/0 | Not started | — |
 | 6. Assertion and Module Refinement | 0/0 | Not started | — |

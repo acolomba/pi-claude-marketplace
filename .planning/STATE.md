@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 03
 current_phase_name: Production Defect Corrections
 status: executing
-stopped_at: Completed 03-10-PLAN.md
-last_updated: "2026-09-07T11:14:40.401Z"
+stopped_at: Completed 03-09; next 03-11
+last_updated: "2026-09-07T11:28:54.171Z"
 last_activity: 2026-09-07
 last_activity_desc: Phase 03 execution started
-state_head: 0ee1de7125eb2d8ae7f007244657a1ff50fa9d87
+state_head: a584a96f0d9fab51be68834a449fb5afd00b430e
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 87
-  completed_plans: 85
+  completed_plans: 86
   percent: 11
 ---
 
@@ -34,7 +34,7 @@ terminal evidence ledger.
 
 Phase: 03 (Production Defect Corrections) — EXECUTING
 Next: Discuss Phase 03
-Plan: 13 of 14
+Plan: 14 of 14
 Status: Ready to execute
 Last activity: 2026-09-07 — Phase 03 execution started
 
@@ -271,6 +271,7 @@ Last activity: 2026-09-07 — Phase 03 execution started
 | Phase 03 P14 | 9min | 2 tasks | 3 files |
 | Phase 03 P07 | 34min | 3 tasks | 9 files |
 | Phase 03 P10 | 9min | 2 tasks | 10 files |
+| Phase 03 P09 | 12min | 2 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -662,6 +663,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 03]: Update cleanup failures remain immutable secondary context; the original operational Error stays primary and successful cleanup stays silent.
 - [Phase 03]: Plugin notification cardinality derives from parsed invocation shape before result enumeration; named targets are single and list or container-wide targets are plural.
 - [Phase 03]: Shared plugin emitters require caller-owned cardinality instead of inferring it from the number of result rows.
+- [Phase 03]: Lifecycle cardinality follows parsed target structure before rows exist. — Result count cannot distinguish a named target from a bulk invocation that produced one or zero rows.
+- [Phase 03]: Empty bulk update retains its fixed no-op headline. — The update no-op contract is independent from realized-transition tally arithmetic.
 
 ### Pending Todos
 
@@ -713,7 +716,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 03-10-PLAN.md
+**Stopped at:** Completed 03-09; next 03-11
 
 Phase 01 is sealed at 69/69 plans. Phase 02 Plans 01 through 03 completed
 PDEF-03, PDEF-02, and PDEF-04 with typed fail-closed input, path, and lifecycle
@@ -725,7 +728,7 @@ security gaps. Phase 03 is ready for discussion and planning.
 **Read beside it:** `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`, and the
 Phase 01 terminal evidence ledger and scope-impact crosswalk routed to Phase 03.
 
-Last session: 2026-09-07T11:14:40.069Z
+Last session: 2026-09-07T11:28:53.829Z
 
 **Next:** Discuss Phase 03 Production Defect Corrections, then research and plan
 only the terminal findings that still reproduce.
