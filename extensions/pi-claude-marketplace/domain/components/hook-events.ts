@@ -34,8 +34,9 @@ import type { ClaudeHookEvent } from "../../shared/concerns/hooks.ts";
  * other events open/advance one. Both are admitted at the resolver layer
  * here; their matcher dispositions live in the tables below (`Stop`: the
  * `null` no-matcher sentinel like `UserPromptSubmit`; `StopFailure`: the
- * closed error-type set like `SessionStart`). Whether an admitted event is
- * actually dispatchable is tracked separately by `DISPATCHABLE_EVENTS`.
+ * closed error-type set like `SessionStart`). Every admitted event currently
+ * has a dispatch translator; each dispatch owner pins that invariant with an
+ * exhaustive record keyed by `DispatchableEvent`.
  */
 export const BUCKET_A_EVENTS = [
   "SessionStart",
@@ -84,57 +85,13 @@ export const TOOL_EVENTS = [
 export type ToolEvent = (typeof TOOL_EVENTS)[number];
 
 /**
- * The bucket-A events whose Pi-side payload translators are wired -- a
- * subset of `BUCKET_A_EVENTS` that the dispatch/rewake tables and the
- * translator-test tables key on. The subset is retained (rather than
- * collapsed back into `BucketAEvent`) because the two-step
- * admission-then-dispatch pattern is reused by future bucket promotions:
- * an event can be admitted at the resolver layer before its dispatch
- * translator exists (D-87-04). `Stop` / `StopFailure` are now folded in --
- * they are dispatched by the settle handler off `agent_settled` rather than
- * a per-Pi-event composite, so the subset currently equals the full
- * admission tuple.
- *
- * The `as const satisfies readonly BucketAEvent[]` pin makes "every
- * dispatchable event is an admitted bucket-A event" a compile-time
- * invariant -- same shape as the `TOOL_EVENTS` subset above. Order
- * matches `BUCKET_A_EVENTS` as a deterministic registration order for
- * downstream consumers.
+ * Compatibility name for the exact admitted event union and the key domain
+ * for the dispatch/rewake/translator tables (D-87-04). Both dispatch owners
+ * accept the admitted union directly and index exhaustive records without a
+ * runtime membership guard. `Stop` / `StopFailure` are dispatched by the
+ * settle handler off `agent_settled` rather than a per-Pi-event composite.
  */
-const DISPATCHABLE_EVENTS = [
-  "SessionStart",
-  "UserPromptSubmit",
-  "PreToolUse",
-  "PostToolUse",
-  "PostToolUseFailure",
-  "PreCompact",
-  "PostCompact",
-  "SessionEnd",
-  "Stop",
-  "StopFailure",
-] as const satisfies readonly BucketAEvent[];
-
-/**
- * Literal union of dispatchable event names. Subset of `BucketAEvent`;
- * the key domain for the dispatch/rewake/translator tables (D-87-04).
- */
-export type DispatchableEvent = (typeof DISPATCHABLE_EVENTS)[number];
-
-/**
- * Runtime membership set + type guard for the dispatchable subset. The
- * dispatch index sites (`dispatch-exec.buildPayload`,
- * `async-rewake/registry`) narrow a `BucketAEvent` to `DispatchableEvent`
- * before indexing the translator tables. Every admitted event is now
- * dispatchable, so the non-dispatchable arm those sites guard is a defensive
- * belt (debug-log + noop) that no live event reaches; the guard is retained
- * so a future admission that outruns its translator degrades to noop rather
- * than a type error (D-87-04).
- */
-const DISPATCHABLE_MEMBERS: ReadonlySet<string> = new Set(DISPATCHABLE_EVENTS);
-
-export function isDispatchableEvent(event: BucketAEvent): event is DispatchableEvent {
-  return DISPATCHABLE_MEMBERS.has(event);
-}
+export type DispatchableEvent = BucketAEvent;
 
 /**
  * Literal union of non-tool bucket-A event names. The complement of
