@@ -251,7 +251,7 @@ Plans:
 **Goal:** Fix each remaining confirmed production defect with regression evidence.
 **Depends on:** Phase 2
 **Requirements:** PDEF-01, PDEF-05, PDEF-06, PDEF-07, PDEF-08
-**Plans:** 9/14 plans executed
+**Plans:** 10/14 plans executed
 
 **Success Criteria**:
 
@@ -283,7 +283,7 @@ Plans:
 - [x] 03-03-PLAN.md — Migrate update/reinstall agent paths and remove the singular representation.
 - [x] 03-06-PLAN.md — Route install rollback failures through the transaction-owned formatter.
 - [x] 03-12-PLAN.md — Remove the async no-producer branch and obsolete domain guard.
-- [ ] 03-14-PLAN.md — Declare import and reconcile cardinality without changing alias state.
+- [x] 03-14-PLAN.md — Declare import and reconcile cardinality without changing alias state.
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -426,7 +426,7 @@ baseline, which still includes both pairs; neither is a terminal shortfall.
 | ----- | -------------- | ------ | --------- |
 | 1. Live Evidence Revalidation | 70/70 | In Progress|  |
 | 2. Containment and Input Safety | 3/3 | Complete    | 2026-09-05 |
-| 3. Production Defect Corrections | 9/14 | In Progress|  |
+| 3. Production Defect Corrections | 10/14 | In Progress|  |
 | 4. Hermetic Test Infrastructure | 0/0 | Not started | — |
 | 5. Injection and Ownership Design | 0/0 | Not started | — |
 | 6. Assertion and Module Refinement | 0/0 | Not started | — |
