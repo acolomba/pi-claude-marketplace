@@ -472,6 +472,18 @@ function withoutTempSuffix(message: string): string {
   return message.replaceAll(/claude-plugins\.json\.\d+/g, "claude-plugins.json.<tmp>");
 }
 
+test("exposes the required reconcile state-reader factory", async () => {
+  // act
+  const applyModule: object =
+    await import("../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts");
+
+  // assert
+  const createApplyReconcile = Object.hasOwn(applyModule, "createApplyReconcile")
+    ? (applyModule as Record<string, unknown>)["createApplyReconcile"]
+    : undefined;
+  assert.equal(typeof createApplyReconcile, "function");
+});
+
 describe("applyReconcile", () => {
   test("WR-05: leaves a scope with neither a state file nor a configuration file untouched and silent", async (t) => {
     // arrange
@@ -2736,12 +2748,14 @@ describe("applyReconcile", () => {
     verifyBoundary();
   });
 
-  test("RECON-02: a marketplace another process removed first renders a not-added failure rather than a removal", async (t) => {
+  test("RECON-02: a selected project snapshot races a competing removal while the user scope still completes", async (t) => {
     // arrange
-    const { cwd, project } = await createHermeticScopes(t, "remove-converged");
-    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {});
+    const { cwd, project, user } = await createHermeticScopes(t, "remove-converged");
+    const projectSource = await writeMarketplaceSource(cwd, "project-mp-src", "mp", {});
+    const userSource = await writeMarketplaceSource(cwd, "user-mp-src", "mp", {});
     await writeUnder(project.configJsonPath, configBytes({ marketplaces: {} }));
-    const recorded: ExtensionState = {
+    await writeUnder(user.configJsonPath, configBytes({ marketplaces: {} }));
+    const projectRecorded: ExtensionState = {
       schemaVersion: 2,
       lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
@@ -2749,21 +2763,61 @@ describe("applyReconcile", () => {
           cwd,
           scope: "project",
           marketplace: "mp",
-          rawSource: marketplaceRoot,
-          manifestPath,
-          marketplaceRoot,
+          rawSource: projectSource.marketplaceRoot,
+          manifestPath: projectSource.manifestPath,
+          marketplaceRoot: projectSource.marketplaceRoot,
         }),
       },
     };
-    await seedState(project, recorded);
-    // Reads in order: the planner's locked read, then the removal's own scope
-    // resolution. Only the second sees the competitor's result.
-    raceStateFromRead(t, project, 2, { ...recorded, marketplaces: {} });
+    const userRecorded: ExtensionState = {
+      schemaVersion: 2,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "user",
+          marketplace: "mp",
+          rawSource: userSource.marketplaceRoot,
+          manifestPath: userSource.manifestPath,
+          marketplaceRoot: userSource.marketplaceRoot,
+        }),
+      },
+    };
+    await seedState(project, projectRecorded);
+    await seedState(user, userRecorded);
+    await writeUnder(path.join(project.scopeRoot, "unrelated.txt"), "project bytes\n");
+    await writeUnder(path.join(user.scopeRoot, "unrelated.txt"), "user bytes\n");
+    const readerRoots: string[] = [];
+    interface ReconcileStateReaderForTest {
+      readonly loadState: typeof loadState;
+    }
+    const reader: ReconcileStateReaderForTest = {
+      async loadState(extensionRoot) {
+        const selected = await loadState(extensionRoot);
+        readerRoots.push(extensionRoot);
+        if (extensionRoot === project.extensionRoot) {
+          await saveState(extensionRoot, { ...selected, marketplaces: {} });
+        }
+
+        return selected;
+      },
+    };
+    const applyModule: object =
+      await import("../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts");
+    const createApplyReconcileCandidate = Object.hasOwn(applyModule, "createApplyReconcile")
+      ? (applyModule as Record<string, unknown>)["createApplyReconcile"]
+      : undefined;
+    assert.equal(typeof createApplyReconcileCandidate, "function");
+    const createApplyReconcile = createApplyReconcileCandidate as (
+      reader: ReconcileStateReaderForTest,
+    ) => typeof applyReconcile;
+    const applyWithReader = createApplyReconcile(reader);
     const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
-    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps });
+    await applyWithReader({ ctx, pi, cwd, gitOps });
+    await applyWithReader({ ctx, pi, cwd, gitOps });
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -2773,11 +2827,49 @@ describe("applyReconcile", () => {
           "\n" +
           "⊘ mp [project] (failed) {not found}\n" +
           "\n" +
-          "Reconcile: 1 failure",
+          "● mp [user] (removed)\n" +
+          "\n" +
+          "Reconcile: 1 failure, 1 success",
         severity: "error",
       },
     ]);
+    const expectedProjectState: ExtensionState = {
+      ...projectRecorded,
+      marketplaces: {},
+    };
+    const expectedUserState: ExtensionState = {
+      ...userRecorded,
+      marketplaces: {},
+    };
+    assert.deepStrictEqual(await loadState(project.extensionRoot), expectedProjectState);
+    assert.deepStrictEqual(await loadState(user.extensionRoot), expectedUserState);
+    assert.deepStrictEqual(await retryTree(project.scopeRoot), [
+      "claude-plugins.json",
+      "pi-claude-marketplace/",
+      "pi-claude-marketplace/state.json",
+      "unrelated.txt",
+    ]);
+    assert.deepStrictEqual(await retryTree(user.scopeRoot), [
+      "claude-plugins.json",
+      "pi-claude-marketplace/",
+      "pi-claude-marketplace/state.json",
+      "unrelated.txt",
+    ]);
+    assert.equal(
+      await readFile(path.join(project.scopeRoot, "unrelated.txt"), "utf8"),
+      "project bytes\n",
+    );
+    assert.equal(
+      await readFile(path.join(user.scopeRoot, "unrelated.txt"), "utf8"),
+      "user bytes\n",
+    );
     assert.deepStrictEqual(clonedUrls(), []);
+    assert.deepStrictEqual(readerRoots, [
+      project.extensionRoot,
+      user.extensionRoot,
+      project.extensionRoot,
+      user.extensionRoot,
+    ]);
     verifyBoundary();
   });
 });
