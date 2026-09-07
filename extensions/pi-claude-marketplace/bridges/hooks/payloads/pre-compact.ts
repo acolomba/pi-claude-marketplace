@@ -19,9 +19,7 @@ export interface PreCompactStdin {
   readonly trigger: "auto" | "manual";
 }
 
-function compactTrigger(
-  reason: SessionBeforeCompactEvent["reason"],
-): PreCompactStdin["trigger"] {
+function compactTrigger(reason: SessionBeforeCompactEvent["reason"]): PreCompactStdin["trigger"] {
   return reason === "manual" ? "manual" : "auto";
 }
 
