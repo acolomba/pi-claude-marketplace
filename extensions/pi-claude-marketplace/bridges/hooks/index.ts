@@ -11,12 +11,15 @@
 // is reached through the injected `HookExecutor` parameter, not this barrel.
 
 export {
+  createHooksHydration,
   hydrateProjectScopeForCwd,
   readAndCachePluginHooks,
   registerHooksBridge,
   rebuildRoutingTables,
   removePluginConfigFromCache,
 } from "./event-router.ts";
+
+export type { HooksHydration, HooksHydrationReader } from "./event-router.ts";
 
 // LIFE-03 / D-63-02: hooks bridge write/remove primitives. Private helpers
 // (`assertNoSymlinkEscapeInHooksSubtree`, `hookConfigPathFor`) are NOT

@@ -421,6 +421,20 @@ interface HydratedScope {
   readonly loc: ScopedLocations;
 }
 
+/** Required persisted-state operation for hooks hydration. */
+export interface HooksHydrationReader {
+  readonly loadState: (extensionRoot: string) => Promise<ExtensionState>;
+}
+
+/** Hooks hydration operations bound to one required state reader. */
+export interface HooksHydration {
+  readonly hydrateProjectScopeForCwd: (cwd: string) => Promise<void>;
+  readonly registerHooksBridge: (
+    pi: ExtensionAPI,
+    opts: { ctx: ExtensionContext; cwd: string; executor?: HookExecutor },
+  ) => Promise<void>;
+}
+
 /**
  * D-59-02 factory-time hydrate. Walks both scopes (user via
  * `getAgentDir()` indirection through `locationsFor`, project via
@@ -436,10 +450,13 @@ interface HydratedScope {
  * to `(unavailable) {unsupported hooks}` on the next state read, so a
  * silent omission here is the correct factory-time disposition.
  */
-async function hydrateCacheFromDisk(opts: {
-  ctx: ExtensionContext;
-  cwd: string;
-}): Promise<readonly HydratedScope[]> {
+async function hydrateCacheFromDisk(
+  opts: {
+    ctx: ExtensionContext;
+    cwd: string;
+  },
+  reader: HooksHydrationReader,
+): Promise<readonly HydratedScope[]> {
   const hydrated: HydratedScope[] = [];
 
   for (const scope of SCOPES) {
@@ -447,7 +464,7 @@ async function hydrateCacheFromDisk(opts: {
 
     let state: ExtensionState;
     try {
-      state = await loadState(loc.extensionRoot);
+      state = await reader.loadState(loc.extensionRoot);
     } catch (err) {
       // A corrupt state.json should not block the bridge from coming up;
       // route the detail through the OBS-01 seam and use the default state
@@ -600,7 +617,10 @@ async function tryHydrateOnePlugin(
  * DISP-02: cache mutations only; no pi.on, no epoch bump, no rebuild --
  * the caller's `applyReconcile` rebuilds the routing tables per scope.
  */
-export async function hydrateProjectScopeForCwd(cwd: string): Promise<void> {
+async function hydrateProjectScopeForCwdWith(
+  reader: HooksHydrationReader,
+  cwd: string,
+): Promise<void> {
   // WR-01: factory-time hydrate ran with `cwd = homedir()` because
   // `resources_discover` had not fired yet, so any project-scope entries
   // in `parsedConfigCache` were hydrated against the wrong project root
@@ -629,7 +649,7 @@ export async function hydrateProjectScopeForCwd(cwd: string): Promise<void> {
 
   let state: ExtensionState;
   try {
-    state = await loadState(loc.extensionRoot);
+    state = await reader.loadState(loc.extensionRoot);
   } catch (err) {
     hookDebugLog(
       `hydrate-project: loadState failed for cwd=${cwd} extensionRoot=${loc.extensionRoot}: ${errorMessage(err)}`,
@@ -702,7 +722,8 @@ async function ensureSharedDataDir(loc: ScopedLocations): Promise<void> {
  * interface, where a `_setExecutorForTest` module seam would instead reach
  * inside `dispatch.ts`.
  */
-export async function registerHooksBridge(
+async function registerHooksBridgeWith(
+  reader: HooksHydrationReader,
   pi: ExtensionAPI,
   opts: { ctx: ExtensionContext; cwd: string; executor?: HookExecutor },
 ): Promise<void> {
@@ -726,7 +747,7 @@ export async function registerHooksBridge(
   // cycles; reapOrphans below covers cross-process crash recovery.
   shutdownInMemoryChildren();
 
-  const hydrated = await hydrateCacheFromDisk(opts);
+  const hydrated = await hydrateCacheFromDisk(opts, reader);
   for (const { loc } of hydrated) {
     rebuildRoutingTables();
     // D-60-06: ensure the per-session `_shared` data dir exists so a
@@ -783,7 +804,7 @@ export async function registerHooksBridge(
   const sessionStartHandler = compositeHandlerFor("SessionStart", capturedEpoch, pi, opts.executor);
   pi.on("session_start", async (event, ctx) => {
     try {
-      await hydrateProjectScopeForCwd(ctx.cwd);
+      await hydrateProjectScopeForCwdWith(reader, ctx.cwd);
       rebuildRoutingTables();
       if (getRoutingBucket("SessionStart").some((e) => e.scope === "project")) {
         await ensureSharedDataDir(locationsFor("project", ctx.cwd));
@@ -820,3 +841,32 @@ export async function registerHooksBridge(
   // NOT pass through `input`, so the flag never self-clears.
   pi.on("input", inputResetHandlerFor(capturedEpoch));
 }
+
+/** Binds every hooks hydration path to one required state reader. */
+export function createHooksHydration(reader: HooksHydrationReader): HooksHydration {
+  return {
+    async hydrateProjectScopeForCwd(cwd: string): Promise<void> {
+      await hydrateProjectScopeForCwdWith(reader, cwd);
+    },
+    async registerHooksBridge(
+      pi: ExtensionAPI,
+      opts: { ctx: ExtensionContext; cwd: string; executor?: HookExecutor },
+    ): Promise<void> {
+      await registerHooksBridgeWith(reader, pi, opts);
+    },
+  };
+}
+
+const NODE_HOOKS_HYDRATION_READER: HooksHydrationReader = {
+  async loadState(extensionRoot: string): Promise<ExtensionState> {
+    return loadState(extensionRoot);
+  },
+};
+
+const NODE_HOOKS_HYDRATION = createHooksHydration(NODE_HOOKS_HYDRATION_READER);
+
+/** Hydrates project hooks through the Node-backed state reader. */
+export const hydrateProjectScopeForCwd = NODE_HOOKS_HYDRATION.hydrateProjectScopeForCwd;
+
+/** Registers the hooks bridge through the Node-backed state reader. */
+export const registerHooksBridge = NODE_HOOKS_HYDRATION.registerHooksBridge;

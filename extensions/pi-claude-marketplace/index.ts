@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 
-import { hydrateProjectScopeForCwd, registerHooksBridge } from "./bridges/hooks/index.ts";
+import { createHooksHydration } from "./bridges/hooks/index.ts";
 import { registerClaudeMarketplaceTools, registerClaudePluginCommand } from "./edge/register.ts";
 import { aggregateDiscoveredResources } from "./orchestrators/discover.ts";
 import { DEFAULT_GIT_OPS } from "./orchestrators/marketplace/shared.ts";
@@ -8,6 +8,7 @@ import { updateSinglePlugin } from "./orchestrators/plugin/update.ts";
 import { recomputePluginPath } from "./orchestrators/plugin-path.ts";
 import { applyReconcile } from "./orchestrators/reconcile/apply.ts";
 import { locationsFor } from "./persistence/locations.ts";
+import { loadState } from "./persistence/state-io.ts";
 import { hookDebugLog } from "./shared/debug-log.ts";
 import { errorMessage } from "./shared/errors.ts";
 import { makeRawNotifyFn } from "./shared/notify.ts";
@@ -27,6 +28,7 @@ import type {
 // alternative would race against the first session_start because the loader
 // does not see the un-awaited inner Promise.
 export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Promise<void> {
+  const hooksHydration = createHooksHydration({ loadState });
   const onResourcesDiscover = pi.on.bind(pi) as unknown as (
     event: "resources_discover",
     handler: (
@@ -59,7 +61,7 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
   // the 7 pi.on calls + user-scope cache hydrate inside `registerHooksBridge`
   // are guaranteed to complete BEFORE the first Pi event fires.
   const placeholderCtx = {} as unknown as ExtensionContext;
-  await registerHooksBridge(pi, { ctx: placeholderCtx, cwd: homedir() });
+  await hooksHydration.registerHooksBridge(pi, { ctx: placeholderCtx, cwd: homedir() });
 
   onResourcesDiscover("resources_discover", async (event, ctx) => {
     // D-59-02 deferred project-scope hydrate: the factory-time bridge
@@ -67,7 +69,7 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
     // here BEFORE applyReconcile rebuilds the per-scope routing tables.
     // Failures are swallowed by the helper itself via the OBS-01 seam.
     try {
-      await hydrateProjectScopeForCwd(event.cwd);
+      await hooksHydration.hydrateProjectScopeForCwd(event.cwd);
     } catch {
       // Defensive: hydrateProjectScopeForCwd already swallows loadState
       // failures internally via hookDebugLog. A bubbled throw here would
