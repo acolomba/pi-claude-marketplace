@@ -7,6 +7,7 @@ import {
   generatedCommandName,
   generatedSkillName,
 } from "../../extensions/pi-claude-marketplace/domain/name.ts";
+import { setCasePlatform } from "../platform/case-platform.ts";
 
 describe("assertSafeName", () => {
   for (const name of ["a", "Foo.Bar_Baz-123", "acme:foo", "pi-claude-marketplace-acme-bot"]) {
@@ -298,6 +299,17 @@ describe("generatedCommandName", () => {
       assert.strictEqual(commandName, expectedCommandName);
     });
   }
+
+  test('generates "acme-foo" from "foo" on win32', (t) => {
+    // arrange
+    setCasePlatform(t, "win32");
+
+    // act
+    const commandName = generatedCommandName("acme", "foo");
+
+    // assert
+    assert.strictEqual(commandName, "acme-foo");
+  });
 
   for (const { pluginName, sourceName, errorMessage } of [
     {

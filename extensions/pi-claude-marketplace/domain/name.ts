@@ -5,6 +5,8 @@
 // functions (one shared helper that handled all three was a recurring bug
 // surface).
 
+import { commandNamespaceSeparator } from "../platform/os.ts";
+
 /**
  * RN-2: validate that a name is safe to use as a path basename / generated
  * resource name. Throws Error with descriptive message on failure.
@@ -126,7 +128,7 @@ export function generatedCommandName(plugin: string, source: string): string {
   // strip down to an unsafe remainder ("acme-." leaves ".").
   assertSafeName(elidedHead, `elided command path head in "${source}"`);
 
-  const generated = [plugin, elidedHead, ...segments.slice(1)].join(":");
+  const generated = [plugin, elidedHead, ...segments.slice(1)].join(commandNamespaceSeparator());
   // Note: assertSafeName on the colon-bearing form -- colon is allowed
   // (PRD §6.5 RN-2 forbids only "/" and "\"), so this passes.
   assertSafeName(generated);
