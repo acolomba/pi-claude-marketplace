@@ -1341,6 +1341,61 @@ describe("applyReconcile", () => {
     verifyBoundary();
   });
 
+  test("D-27: an ambiguous alias source reports a conflict without changing canonical state", async (t) => {
+    // arrange
+    const { cwd, project } = await createHermeticScopes(t, "ambiguous-alias");
+    const source = await writeMarketplaceSource(cwd, "canonical-src", "canonical-name", {});
+    const declaration = configBytes({
+      marketplaces: { "declared-name": { source: source.marketplaceRoot } },
+    });
+    await writeUnder(project.configJsonPath, declaration);
+    const initialState = {
+      schemaVersion: 2 as const,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+      marketplaces: {
+        zeta: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "zeta",
+          rawSource: source.marketplaceRoot,
+          manifestPath: source.manifestPath,
+          marketplaceRoot: source.marketplaceRoot,
+        }),
+        alpha: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "alpha",
+          rawSource: source.marketplaceRoot,
+          manifestPath: source.manifestPath,
+          marketplaceRoot: source.marketplaceRoot,
+        }),
+      },
+    };
+    await seedState(project, initialState);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A marketplace operation has failed.\n" +
+          "\n" +
+          "⊘ declared-name [project] (failed) {source mismatch}\n" +
+          "\n" +
+          "Reconcile: 1 failure",
+        severity: "error",
+      },
+    ]);
+    assert.deepStrictEqual(await loadState(project.extensionRoot), initialState);
+    assert.equal(await readFile(project.configJsonPath, "utf8"), declaration);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
   test("WARN-01: an install whose skill frontmatter cannot be parsed keeps the installed row, names the degrade, and reports the parse detail on the diagnostic channel", async (t) => {
     // arrange
     const { cwd, project } = await createHermeticScopes(t, "install-degraded");
