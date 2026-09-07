@@ -1,6 +1,19 @@
 import { lstat, readlink } from "node:fs/promises";
 import path from "node:path";
 
+import type { Stats } from "node:fs";
+
+/** Required filesystem inspection effects for path safety decisions. */
+export interface PathSafetyInspector {
+  readonly lstat: (target: string) => Promise<Stats>;
+  readonly readlink: (target: string) => Promise<string>;
+}
+
+/** Path safety operations bound to a required filesystem inspector. */
+export interface PathSafetyGuard {
+  readonly assertPathInside: (parent: string, child: string, label: string) => Promise<void>;
+}
+
 /**
  * Path containment violation -- the resolved child is not inside the parent
  * boundary. Inherits PI-14 handling: NEVER folded into "rollback partial"
@@ -69,16 +82,14 @@ function hasLexicalTraversal(child: string): boolean {
 }
 
 /**
- * Refuse if `child` is not contained by `parent`, OR if any path component
- * from `parent` down to `child` (inclusive of `child` if it exists) is a
- * symbolic link.
+ * Create a path safety guard with an explicit filesystem inspector.
  *
- * Walks components by computing `path.relative(parent, child)` and applying
- * each segment to `parent` in turn. Per-component cost: 1x lstat() per segment,
- * negligible compared to the IO that follows.
+ * Refuses a child outside its parent or containing any symlink from the
+ * parent boundary down to the child. Lexical decisions run before filesystem
+ * inspection, and every path segment is inspected in traversal order.
  *
  * D-14: refuse all symlinks (PRD doesn't specify symlink behavior).
- * D-15: single chokepoint -- every PS-1 callsite uses this function, no
+ * D-15: single chokepoint -- every PS-1 callsite uses this guard, no
  * per-bridge wrappers.
  * D-16: walk every parent component, not just the leaf (catches the case
  * where a parent dir is a symlink).
@@ -91,62 +102,64 @@ function hasLexicalTraversal(child: string): boolean {
  * attacker", so this residual risk is acceptable. Documented here so a future
  * hardening pass can find it.
  */
-export async function assertPathInside(
-  parent: string,
-  child: string,
-  label: string,
-): Promise<void> {
-  // This raw-spelling decision must precede normalization and filesystem work.
-  if (hasLexicalTraversal(child)) {
-    const normalizedParent = path.resolve(parent);
-    const normalizedChild = path.resolve(child);
-    throw new LexicalTraversalError(normalizedParent, normalizedChild, label);
-  }
+export function createPathSafetyGuard(inspector: PathSafetyInspector): PathSafetyGuard {
+  return {
+    async assertPathInside(parent: string, child: string, label: string): Promise<void> {
+      // This raw-spelling decision must precede normalization and filesystem work.
+      if (hasLexicalTraversal(child)) {
+        const normalizedParent = path.resolve(parent);
+        const normalizedChild = path.resolve(child);
+        throw new LexicalTraversalError(normalizedParent, normalizedChild, label);
+      }
 
-  const normalizedParent = path.resolve(parent);
-  const normalizedChild = path.resolve(child);
+      const normalizedParent = path.resolve(parent);
+      const normalizedChild = path.resolve(child);
 
-  // String-level containment check first -- cheap, no FS touch.
-  if (!isPathInside(normalizedParent, normalizedChild)) {
-    throw new PathContainmentError(normalizedParent, normalizedChild, label);
-  }
+      // String-level containment check first -- cheap, no FS touch.
+      if (!isPathInside(normalizedParent, normalizedChild)) {
+        throw new PathContainmentError(normalizedParent, normalizedChild, label);
+      }
 
-  // Walk every parent component from `parent` down to `child` (inclusive).
-  // Start AT `parent` (the boundary itself is trusted) and descend toward
-  // `child`, lstat'ing each intermediate path.
-  const relative = path.relative(normalizedParent, normalizedChild);
-  const segments = relative === "" ? [] : relative.split(path.sep);
+      // Walk every parent component from `parent` down to `child` (inclusive).
+      // Start AT `parent` (the boundary itself is trusted) and descend toward
+      // `child`, lstat'ing each intermediate path.
+      const relative = path.relative(normalizedParent, normalizedChild);
+      const segments = relative === "" ? [] : relative.split(path.sep);
 
-  let current = normalizedParent;
-  for (const segment of segments) {
-    current = path.join(current, segment);
-    const canContinue = await assertNoSymlinkSegment(
-      normalizedParent,
-      normalizedChild,
-      label,
-      current,
-    );
-    if (!canContinue) {
-      return;
-    }
-  }
+      let current = normalizedParent;
+      for (const segment of segments) {
+        current = path.join(current, segment);
+        const canContinue = await assertNoSymlinkSegment(
+          inspector,
+          normalizedParent,
+          normalizedChild,
+          label,
+          current,
+        );
+        if (!canContinue) {
+          return;
+        }
+      }
+    },
+  };
 }
 
 async function assertNoSymlinkSegment(
+  inspector: PathSafetyInspector,
   parent: string,
   child: string,
   label: string,
   current: string,
 ): Promise<boolean> {
   try {
-    const stats = await lstat(current);
+    const stats = await inspector.lstat(current);
     if (stats.isSymbolicLink()) {
       throw new SymlinkRefusedError(
         parent,
         child,
         label,
         current,
-        await readSymlinkTarget(current),
+        await readSymlinkTarget(inspector, current),
       );
     }
 
@@ -168,12 +181,25 @@ async function assertNoSymlinkSegment(
   }
 }
 
-async function readSymlinkTarget(current: string): Promise<string> {
+async function readSymlinkTarget(
+  inspector: PathSafetyInspector,
+  current: string,
+): Promise<string> {
   try {
-    return await readlink(current);
+    return await inspector.readlink(current);
   } catch {
     // Leave target as "<unreadable>" -- the link path itself is what matters
     // for the user-visible error.
     return "<unreadable>";
   }
 }
+
+const NODE_PATH_SAFETY_INSPECTOR: PathSafetyInspector = {
+  lstat: async (target: string): Promise<Stats> => lstat(target),
+  readlink: async (target: string): Promise<string> => readlink(target),
+};
+
+const NODE_PATH_SAFETY_GUARD = createPathSafetyGuard(NODE_PATH_SAFETY_INSPECTOR);
+
+/** Refuse path traversal and symlinks using the Node filesystem inspector. */
+export const assertPathInside = NODE_PATH_SAFETY_GUARD.assertPathInside;
