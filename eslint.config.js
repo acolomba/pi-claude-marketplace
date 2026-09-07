@@ -296,6 +296,37 @@ export default tseslint.config(
     },
   },
   {
+    // Sonar way, enforced locally. `sonarjs.configs.recommended` is the
+    // plugin's port of the Sonar way profile: 217 rules at "error" and the
+    // other 62 off. 200 of those 217 are active in the TypeScript Sonar way
+    // profile SonarCloud runs against this project, so a violation caught
+    // here is one the pull-request gate would have reported -- found before
+    // the push rather than after it.
+    //
+    // Scoped to mirror `sonar.sources` in sonar-project.properties.
+    // `sonar.test.exclusions` drops tests/**, so SonarCloud never reads the
+    // test tree; enforcing there would gate code Sonar does not grade. It
+    // would also fail on a deliberate house idiom -- the
+    // `void (x satisfies T)` compile-time assertion trips sonarjs/void-use
+    // 797 times under tests/.
+    //
+    // The rules are SPREAD rather than the config being extended, for two
+    // reasons. `recommended` re-declares the `sonarjs` plugin this file
+    // already declares above, and ESLint 10 refuses that ("Cannot redefine
+    // plugin"). It also carries no `files` key, so as a config entry it
+    // would apply to every file ESLint touches.
+    files: ["extensions/pi-claude-marketplace/**/*.ts"],
+    rules: {
+      ...sonarjs.configs.recommended.rules,
+      // Re-asserted after the spread because `recommended` sets a bare
+      // "error" here, which drops the threshold. The plugin's own default
+      // is 15 and Sonar way runs S3776 at 15, so nothing changes today --
+      // but the number is also paired with fallow's `health.maxCognitive`,
+      // and leaning on a default makes that agreement implicit.
+      "sonarjs/cognitive-complexity": ["error", 15],
+    },
+  },
+  {
     // BLOCK D: Test fixtures override. Canary fixtures under
     // tests/fixtures/bad-imports/ INTENTIONALLY violate the import-x rules;
     // the canary test (Plan 05) spawns eslint manually on them, so normal CI
