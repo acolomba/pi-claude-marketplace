@@ -107,7 +107,7 @@ import {
 import { pathExists } from "../../shared/fs-utils.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
 import { skipSeverity } from "../../shared/notify-reasons.ts";
-import { compareByNameThenScope, notify } from "../../shared/notify.ts";
+import { compareByNameThenScope } from "../../shared/notify.ts";
 import {
   withLockedStateTransaction,
   type LockedStateTransaction,
@@ -350,9 +350,14 @@ export async function reinstallPlugin(
         severity: reasons.includes("not installed") ? "error" : skipSeverity(reasons),
         needsReload: false,
       };
-      notifyWithContext(ctx, pi, REINSTALL_CONTEXT, [
-        { name: marketplace, scope, plugins: [skippedRow] },
-      ]);
+      notifyWithContext(
+        ctx,
+        pi,
+        REINSTALL_CONTEXT,
+        [{ name: marketplace, scope, plugins: [skippedRow] }],
+        undefined,
+        "single",
+      );
     }
 
     return locked.outcome;
@@ -409,9 +414,14 @@ export async function reinstallPlugin(
     locked.outcome,
     undefined,
   );
-  notifyWithContext(ctx, pi, REINSTALL_CONTEXT, [
-    { name: marketplace, scope, plugins: [reinstalledRow] },
-  ]);
+  notifyWithContext(
+    ctx,
+    pi,
+    REINSTALL_CONTEXT,
+    [{ name: marketplace, scope, plugins: [reinstalledRow] }],
+    undefined,
+    "single",
+  );
 
   // S5: when the config write-back loadConfig returned `invalid`, emit a
   // separate warning row so the user sees that the on-disk artifacts were
@@ -421,23 +431,30 @@ export async function reinstallPlugin(
     const targetBasename = path.basename(
       opts.local === true ? locations.configLocalJsonPath : locations.configJsonPath,
     );
-    notifyWithContext(ctx, pi, REINSTALL_CONTEXT, [
-      {
-        name: marketplace,
-        scope,
-        plugins: [
-          {
-            status: "failed",
-            name: plugin,
-            reasons: ["invalid manifest"] as const,
-            cause: new Error(`Config file "${targetBasename}" failed schema validation.`),
-            // D-03/D-06: invalid config write-back -> error, no reload.
-            severity: "error" as const,
-            needsReload: false,
-          },
-        ],
-      },
-    ]);
+    notifyWithContext(
+      ctx,
+      pi,
+      REINSTALL_CONTEXT,
+      [
+        {
+          name: marketplace,
+          scope,
+          plugins: [
+            {
+              status: "failed",
+              name: plugin,
+              reasons: ["invalid manifest"] as const,
+              cause: new Error(`Config file "${targetBasename}" failed schema validation.`),
+              // D-03/D-06: invalid config write-back -> error, no reload.
+              severity: "error" as const,
+              needsReload: false,
+            },
+          ],
+        },
+      ],
+      undefined,
+      "single",
+    );
   }
 
   return locked.outcome;
@@ -497,9 +514,14 @@ function handleSinglePluginFailure(
           severity: "error",
           needsReload: false,
         } satisfies PluginFailedMessage);
-    notifyWithContext(ctx, pi, REINSTALL_CONTEXT, [
-      { name: marketplace, scope, plugins: [failureRow] },
-    ]);
+    notifyWithContext(
+      ctx,
+      pi,
+      REINSTALL_CONTEXT,
+      [{ name: marketplace, scope, plugins: [failureRow] }],
+      undefined,
+      "single",
+    );
   }
 
   return {
@@ -535,7 +557,7 @@ export async function reinstallPlugins(
     // sentinel at the top-level / standalone-cascade boundary; the closest
     // analog is the list-surface `(no marketplaces)` rendering. Severity:
     // undefined (info).
-    notify(ctx, pi, { marketplaces: [] });
+    notifyWithContext(ctx, pi, REINSTALL_CONTEXT, [], undefined, cardinality);
     return [];
   }
 
@@ -657,9 +679,14 @@ async function handleEnumerationFailure(
     severity: "error",
     needsReload: false,
   };
-  notifyWithContext(ctx, pi, REINSTALL_CONTEXT, [
-    { name: targetingMp, scope: targetingScope, plugins: [failedRow] },
-  ]);
+  notifyWithContext(
+    ctx,
+    pi,
+    REINSTALL_CONTEXT,
+    [{ name: targetingMp, scope: targetingScope, plugins: [failedRow] }],
+    undefined,
+    cardinality,
+  );
 }
 
 async function enumerateReinstallTargets(

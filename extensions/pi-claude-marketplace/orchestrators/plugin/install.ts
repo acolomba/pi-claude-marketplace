@@ -1805,21 +1805,28 @@ function failedRowOutcome(args: {
     return { status: "failed", error, cause };
   }
 
-  notifyWithContext(ctx, pi, INSTALL_CONTEXT, [
-    {
-      name: marketplace,
-      scope,
-      plugins: [
-        {
-          status: "failed",
-          severity: "error" as const,
-          name: plugin,
-          reasons,
-          cause: error,
-        },
-      ],
-    },
-  ]);
+  notifyWithContext(
+    ctx,
+    pi,
+    INSTALL_CONTEXT,
+    [
+      {
+        name: marketplace,
+        scope,
+        plugins: [
+          {
+            status: "failed",
+            severity: "error" as const,
+            name: plugin,
+            reasons,
+            cause: error,
+          },
+        ],
+      },
+    ],
+    undefined,
+    "single",
+  );
   return { status: "failed", error, cause };
 }
 
@@ -1865,13 +1872,20 @@ function handleInstallThrow(args: {
     return classifyInstallFailure(err, formatOrchestratedCause(err));
   }
 
-  notifyWithContext(ctx, pi, INSTALL_CONTEXT, [
-    {
-      name: marketplace,
-      scope,
-      plugins: [failureMessage],
-    },
-  ]);
+  notifyWithContext(
+    ctx,
+    pi,
+    INSTALL_CONTEXT,
+    [
+      {
+        name: marketplace,
+        scope,
+        plugins: [failureMessage],
+      },
+    ],
+    undefined,
+    "single",
+  );
   const wrapped = err instanceof Error ? err : new Error(errorMessage(err));
   return { status: "failed", error: wrapped, cause: formatOrchestratedCause(err) };
 }
@@ -2347,21 +2361,28 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
       return { status: "failed", error: cascadeError, cause };
     }
 
-    notifyWithContext(ctx, pi, INSTALL_CONTEXT, [
-      {
-        name: marketplace,
-        scope,
-        plugins: [
-          {
-            status: "failed",
-            severity: "error" as const,
-            name: plugin,
-            reasons: [] as const,
-            cause: cascadeError,
-          },
-        ],
-      },
-    ]);
+    notifyWithContext(
+      ctx,
+      pi,
+      INSTALL_CONTEXT,
+      [
+        {
+          name: marketplace,
+          scope,
+          plugins: [
+            {
+              status: "failed",
+              severity: "error" as const,
+              name: plugin,
+              reasons: [] as const,
+              cause: cascadeError,
+            },
+          ],
+        },
+      ],
+      undefined,
+      "single",
+    );
     return { status: "failed", error: cascadeError, cause };
   }
 
@@ -2382,17 +2403,24 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
     // Exactly ONE notification per install (IL-2), whichever row the install
     // produced -- the DFEN-04 disabled row when the cascade unstaged
     // everything, the success row otherwise.
-    notifyWithContext(ctx, pi, INSTALL_CONTEXT, [
-      {
-        name: marketplace,
-        scope,
-        plugins: [
-          disabledInstall.landed
-            ? composeDisabledRow(installCtx)
-            : composeInstalledRow(installCtx, pi),
-        ],
-      },
-    ]);
+    notifyWithContext(
+      ctx,
+      pi,
+      INSTALL_CONTEXT,
+      [
+        {
+          name: marketplace,
+          scope,
+          plugins: [
+            disabledInstall.landed
+              ? composeDisabledRow(installCtx)
+              : composeInstalledRow(installCtx, pi),
+          ],
+        },
+      ],
+      undefined,
+      "single",
+    );
     surfaceDiscoveryWarnings(ctx, {
       plugin,
       verb: "installed",
