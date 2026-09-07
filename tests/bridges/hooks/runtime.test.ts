@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { RingBuffer } from "../../../extensions/pi-claude-marketplace/bridges/hooks/async-rewake/ring-buffer.ts";
+import { createHooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 
@@ -11,76 +12,8 @@ import type {
   PendingSessionStartContext,
   RoutingEntry,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
+import type { HooksRuntimeChildEntry } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import type { AssistantMessage } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
-
-interface ExpectedRuntimeChildEntry {
-  readonly dispatchId: string;
-  readonly pid: number;
-  readonly scope: "user" | "project";
-  readonly marketplace: string;
-  readonly pluginId: string;
-  readonly claudeEvent: "PreToolUse";
-  readonly spawnedAt: string;
-  readonly rewakeMessage: string | undefined;
-  readonly rewakeSummary: string | undefined;
-  readonly child: ChildLike;
-  readonly ladder: TimerLadder;
-  readonly stdoutBuffer: RingBuffer;
-  readonly stderrBuffer: RingBuffer;
-  readonly capturedGeneration: number;
-  readonly loc: ReturnType<typeof locationsFor>;
-}
-
-interface ExpectedHooksRuntime {
-  readonly currentGeneration: () => number;
-  readonly advanceGeneration: () => number;
-  readonly setParsedConfig: (key: string, entry: CacheEntry) => void;
-  readonly deleteParsedConfig: (key: string) => void;
-  readonly parsedConfigEntries: () => ReadonlyMap<string, CacheEntry>;
-  readonly getRoutingBucket: (event: "PreToolUse") => readonly RoutingEntry[];
-  readonly setRoutingBucket: (event: "PreToolUse", entries: readonly RoutingEntry[]) => void;
-  readonly routingTableEntries: () => ReadonlyMap<string, readonly RoutingEntry[]>;
-  readonly appendPendingSessionStartContext: (entry: PendingSessionStartContext) => void;
-  readonly pendingSessionStartContextEntries: () => readonly PendingSessionStartContext[];
-  readonly drainPendingSessionStartContext: () => readonly PendingSessionStartContext[];
-  readonly preparePendingContextForRegistration: () => void;
-  readonly prepareSettleForRegistration: () => void;
-  readonly recordLastAssistant: (message: AssistantMessage | undefined) => void;
-  readonly takeLastAssistant: () => AssistantMessage | undefined;
-  readonly isStopHookActive: () => boolean;
-  readonly recordStopReentry: () => { readonly reenter: boolean; readonly notifyCap: boolean };
-  readonly recordStopNonReentry: () => void;
-  readonly recordUserInput: () => void;
-  readonly registerChild: (entry: ExpectedRuntimeChildEntry) => void;
-  readonly takeChild: (dispatchId: string) => ExpectedRuntimeChildEntry | undefined;
-  readonly pidTableEntries: (
-    loc: ReturnType<typeof locationsFor>,
-  ) => readonly {
-    readonly pid: number;
-    readonly dispatchId: string;
-    readonly scope: "user" | "project";
-    readonly marketplace: string;
-    readonly plugin: string;
-    readonly spawnedAt: string;
-  }[];
-  readonly shutdownChildren: () => void;
-  readonly runPidTableOperation: (
-    key: string,
-    operation: () => Promise<void>,
-  ) => Promise<void>;
-}
-
-interface ExpectedRuntimeModule {
-  readonly createHooksRuntime?: () => ExpectedHooksRuntime;
-}
-
-async function loadRuntime(): Promise<ExpectedHooksRuntime> {
-  const runtimeModule: ExpectedRuntimeModule = await import(
-    "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts"
-  ).catch(() => ({}));
-  assert.strictEqual(typeof runtimeModule.createHooksRuntime, "function");
-  return runtimeModule.createHooksRuntime();
-}
 
 function cacheEntry(pluginId: string): CacheEntry {
   return {
@@ -118,9 +51,26 @@ function assistantMessage(text: string): AssistantMessage {
   return {
     role: "assistant",
     content: [{ type: "text", text }],
+    api: "anthropic-messages",
+    provider: "anthropic",
+    model: "test-model",
+    usage: {
+      input: 0,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+      totalTokens: 0,
+      cost: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        total: 0,
+      },
+    },
     stopReason: "stop",
     timestamp: 1,
-  } as AssistantMessage;
+  };
 }
 
 function runtimeChildEntry(
@@ -128,7 +78,7 @@ function runtimeChildEntry(
   pid: number,
   calls: string[],
   loc: ReturnType<typeof locationsFor>,
-): ExpectedRuntimeChildEntry {
+): HooksRuntimeChildEntry {
   const child = {
     kill(signal?: NodeJS.Signals): boolean {
       calls.push(`kill:${dispatchId}:${signal ?? "none"}`);
@@ -160,10 +110,10 @@ function runtimeChildEntry(
   };
 }
 
-test("keeps every state family isolated between runtime instances", async () => {
+test("keeps every state family isolated between runtime instances", () => {
   // arrange
-  const firstRuntime = await loadRuntime();
-  const secondRuntime = await loadRuntime();
+  const firstRuntime = createHooksRuntime();
+  const secondRuntime = createHooksRuntime();
   const firstCacheEntry = cacheEntry("first-plugin");
   const firstRoutingEntry = routingEntry("first-plugin", 0);
   const firstPendingEntry = {
@@ -209,9 +159,9 @@ test("keeps every state family isolated between runtime instances", async () => 
   assert.deepStrictEqual(calls, []);
 });
 
-test("preserves replacement order and returns collection snapshots", async () => {
+test("preserves replacement order and returns collection snapshots", () => {
   // arrange
-  const runtime = await loadRuntime();
+  const runtime = createHooksRuntime();
   const firstCacheEntry = cacheEntry("first-plugin");
   const replacementCacheEntry = cacheEntry("replacement-plugin");
   const firstRoute = routingEntry("first-plugin", 0);
@@ -240,12 +190,12 @@ test("preserves replacement order and returns collection snapshots", async () =>
   assert.deepStrictEqual(bucketSnapshot, [firstRoute, secondRoute]);
   assert.deepStrictEqual(Array.from(tableSnapshot), [["PreToolUse", [firstRoute, secondRoute]]]);
   assert.deepStrictEqual(runtime.getRoutingBucket("PreToolUse"), [secondRoute]);
-  assert.deepStrictEqual(runtime.getRoutingBucket("SessionEnd" as "PreToolUse"), []);
+  assert.deepStrictEqual(runtime.getRoutingBucket("SessionEnd"), []);
 });
 
-test("appends and drains pending context once in declaration order", async () => {
+test("appends and drains pending context once in declaration order", () => {
   // arrange
-  const runtime = await loadRuntime();
+  const runtime = createHooksRuntime();
   const firstEntry = {
     context: "first context",
     pluginId: "first-plugin",
@@ -276,9 +226,9 @@ test("appends and drains pending context once in declaration order", async () =>
   assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), []);
 });
 
-test("applies settle registration, input, and bounded reentry transitions", async () => {
+test("applies settle registration, input, and bounded reentry transitions", () => {
   // arrange
-  const runtime = await loadRuntime();
+  const runtime = createHooksRuntime();
   const firstMessage = assistantMessage("first message");
   const replacementMessage = assistantMessage("replacement message");
 
@@ -316,21 +266,31 @@ test("applies settle registration, input, and bounded reentry transitions", asyn
   assert.strictEqual(runtime.isStopHookActive(), false);
 });
 
-test("owns child removal, PID snapshots, and shutdown per runtime", async () => {
+test("owns child removal, PID snapshots, and shutdown per runtime", () => {
   // arrange
-  const firstRuntime = await loadRuntime();
-  const secondRuntime = await loadRuntime();
+  const firstRuntime = createHooksRuntime();
+  const secondRuntime = createHooksRuntime();
   const calls: string[] = [];
   const loc = locationsFor("project", "/workspace");
   const equivalentLoc = locationsFor("project", "/workspace");
   const otherLoc = locationsFor("project", "/other-workspace");
   const removedEntry = runtimeChildEntry("dispatch-removed", 1, calls, loc);
   const stoppedEntry = runtimeChildEntry("dispatch-stopped", 2, calls, loc);
+  const throwingEntry = {
+    ...runtimeChildEntry("dispatch-throwing", 4, calls, loc),
+    child: {
+      kill(signal?: NodeJS.Signals): boolean {
+        calls.push(`kill:dispatch-throwing:${signal ?? "none"}`);
+        throw new Error("child already exited");
+      },
+    } satisfies ChildLike,
+  } satisfies HooksRuntimeChildEntry;
   const peerEntry = runtimeChildEntry("dispatch-peer", 3, calls, loc);
 
   // act
   firstRuntime.registerChild(removedEntry);
   firstRuntime.registerChild(stoppedEntry);
+  firstRuntime.registerChild(throwingEntry);
   secondRuntime.registerChild(peerEntry);
   const firstPidSnapshot = firstRuntime.pidTableEntries(equivalentLoc);
   const unrelatedPidSnapshot = firstRuntime.pidTableEntries(otherLoc);
@@ -360,6 +320,14 @@ test("owns child removal, PID snapshots, and shutdown per runtime", async () => 
       plugin: "plugin-dispatch-stopped",
       spawnedAt: "2026-09-07T00:00:02.000Z",
     },
+    {
+      pid: 4,
+      dispatchId: "dispatch-throwing",
+      scope: "project",
+      marketplace: "catalog",
+      plugin: "plugin-dispatch-throwing",
+      spawnedAt: "2026-09-07T00:00:04.000Z",
+    },
   ]);
   assert.deepStrictEqual(unrelatedPidSnapshot, []);
   assert.deepStrictEqual(firstAfterShutdown, []);
@@ -373,12 +341,17 @@ test("owns child removal, PID snapshots, and shutdown per runtime", async () => 
       spawnedAt: "2026-09-07T00:00:03.000Z",
     },
   ]);
-  assert.deepStrictEqual(calls, ["cancel:dispatch-stopped", "kill:dispatch-stopped:SIGKILL"]);
+  assert.deepStrictEqual(calls, [
+    "cancel:dispatch-stopped",
+    "kill:dispatch-stopped:SIGKILL",
+    "cancel:dispatch-throwing",
+    "kill:dispatch-throwing:SIGKILL",
+  ]);
 });
 
 test("serializes each PID path and continues after an operation rejects", async () => {
   // arrange
-  const runtime = await loadRuntime();
+  const runtime = createHooksRuntime();
   const calls: string[] = [];
   let releaseFirst: (() => void) | undefined;
   const firstGate = new Promise<void>((resolve) => {
@@ -391,11 +364,13 @@ test("serializes each PID path and continues after an operation rejects", async 
     await firstGate;
     calls.push("first:end");
   });
-  const secondOperation = runtime.runPidTableOperation("first-path", async () => {
+  const secondOperation = runtime.runPidTableOperation("first-path", () => {
     calls.push("second");
+    return Promise.resolve();
   });
-  const otherPathOperation = runtime.runPidTableOperation("other-path", async () => {
+  const otherPathOperation = runtime.runPidTableOperation("other-path", () => {
     calls.push("other");
+    return Promise.resolve();
   });
   await otherPathOperation;
   const callsBeforeRelease = [...calls];
@@ -406,8 +381,9 @@ test("serializes each PID path and continues after an operation rejects", async 
     return Promise.reject(new Error("pid write failed"));
   });
   await assert.rejects(rejectedOperation, { message: "pid write failed" });
-  await runtime.runPidTableOperation("first-path", async () => {
+  await runtime.runPidTableOperation("first-path", () => {
     calls.push("after-reject");
+    return Promise.resolve();
   });
 
   // assert
