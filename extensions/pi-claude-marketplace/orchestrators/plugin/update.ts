@@ -132,7 +132,7 @@ import {
   type Plural,
 } from "../../shared/notify-context.ts";
 import { companionSeverity, skipSeverity } from "../../shared/notify-reasons.ts";
-import { compareByNameThenScope, notify } from "../../shared/notify.ts";
+import { compareByNameThenScope } from "../../shared/notify.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 import { withLockedStateTransaction, withStateGuard } from "../../transaction/with-state-guard.ts";
 import { DEFAULT_CREDENTIAL_OPS, buildAuthForHost, hostFromCloneUrl } from "../auth-host.ts";
@@ -318,7 +318,8 @@ function makeSyncCloneOnce(
 function buildDirectThreePhaseArgs(
   opts: UpdatePluginsOptions,
   target: ResolvedTarget,
-): ThreePhaseArgs {
+  cardinality: "single" | "plural",
+): DirectThreePhaseArgs {
   return {
     plugin: target.plugin,
     marketplace: target.marketplace,
@@ -331,6 +332,7 @@ function buildDirectThreePhaseArgs(
     // runThreePhaseUpdate. Cascade mode leaves it undefined -- the cascade
     // orchestrator owns its own notify call.
     pi: opts.pi,
+    cardinality,
     // AG-7 opt-in: `--map-model`. The cascade entrypoint never sets it, so
     // cascade re-installs always omit `model:`.
     mapModel: opts.mapModel ?? false,
@@ -380,9 +382,7 @@ export async function updatePlugins(opts: UpdatePluginsOptions): Promise<void> {
   }
 
   if (targets.length === 0) {
-    // empty-targets success: `marketplaces: []` round-trips through notify
-    // to the (no marketplaces) sentinel. Severity: undefined. No reload-hint.
-    notify(ctx, pi, { marketplaces: [] });
+    notifyUpdateNoOpWithContext(ctx, pi, UPDATE_CONTEXT, [], cardinality);
     return;
   }
 
@@ -410,6 +410,7 @@ export async function updatePlugins(opts: UpdatePluginsOptions): Promise<void> {
       notifyDirectFailure({
         ctx,
         pi,
+        cardinality,
         marketplace: t.marketplace,
         scope: t.scope,
         // The marketplace is implicated but no single plugin "caused" the
@@ -423,7 +424,7 @@ export async function updatePlugins(opts: UpdatePluginsOptions): Promise<void> {
 
     let outcome: UpdateRunOutcome;
     try {
-      outcome = await runThreePhaseUpdate(buildDirectThreePhaseArgs(opts, t));
+      outcome = await runThreePhaseUpdate(buildDirectThreePhaseArgs(opts, t, cardinality));
     } catch (err) {
       // PUP-9 direct path: phase-2-or-earlier throws (including PI-14
       // PathContainmentError, ST-9 stale-version, prep-phase errors) surface
@@ -435,6 +436,7 @@ export async function updatePlugins(opts: UpdatePluginsOptions): Promise<void> {
       notifyDirectFailure({
         ctx,
         pi,
+        cardinality,
         marketplace: t.marketplace,
         scope: t.scope,
         pluginName: t.plugin,
@@ -552,7 +554,13 @@ async function handleEnumerateFailure(
   // scopes and propagates any I/O / schema-validation throw. The bare form has
   // no marketplace identity to thread into the row.
   if (target.kind === "all") {
-    notifyBareFormEnumerateFailure({ ctx, pi, scope: explicitScope, err: err as Error });
+    notifyBareFormEnumerateFailure({
+      ctx,
+      pi,
+      scope: explicitScope,
+      err: err as Error,
+      cardinality,
+    });
     return;
   }
 
@@ -569,6 +577,7 @@ async function handleEnumerateFailure(
   notifyDirectFailure({
     ctx,
     pi,
+    cardinality,
     marketplace: target.marketplace,
     // No state.json was read yet, so explicit scope is the best fact available;
     // default to "project" when omitted.
@@ -763,6 +772,7 @@ interface DirectThreePhaseArgs extends ThreePhaseArgsBase {
   readonly cascade: false;
   readonly ctx: ExtensionContext;
   readonly pi: ExtensionAPI;
+  readonly cardinality: "single" | "plural";
 }
 
 interface CascadeThreePhaseArgs extends ThreePhaseArgsBase {
@@ -2299,6 +2309,7 @@ function composePhase3FailureOutcome(
     notifyDirectFailure({
       ctx: args.ctx,
       pi: args.pi,
+      cardinality: args.cardinality,
       marketplace: args.marketplace,
       scope: args.scope,
       pluginName: args.plugin,
@@ -2350,23 +2361,30 @@ function notifyInvalidConfigWriteBack(args: DirectThreePhaseArgs): void {
   const targetBasename = path.basename(
     args.local === true ? args.locations.configLocalJsonPath : args.locations.configJsonPath,
   );
-  notifyWithContext(args.ctx, args.pi, UPDATE_CONTEXT, [
-    {
-      name: args.marketplace,
-      scope: args.scope,
-      plugins: [
-        {
-          status: "failed",
-          name: args.plugin,
-          reasons: ["invalid manifest"] as const,
-          cause: new Error(`Config file "${targetBasename}" failed schema validation.`),
-          // D-03/D-06: invalid-config abort -> error, no reload.
-          severity: "error" as const,
-          needsReload: false,
-        },
-      ],
-    },
-  ]);
+  notifyWithContext(
+    args.ctx,
+    args.pi,
+    UPDATE_CONTEXT,
+    [
+      {
+        name: args.marketplace,
+        scope: args.scope,
+        plugins: [
+          {
+            status: "failed",
+            name: args.plugin,
+            reasons: ["invalid manifest"] as const,
+            cause: new Error(`Config file "${targetBasename}" failed schema validation.`),
+            // D-03/D-06: invalid-config abort -> error, no reload.
+            severity: "error" as const,
+            needsReload: false,
+          },
+        ],
+      },
+    ],
+    undefined,
+    args.cardinality,
+  );
 }
 
 // The three-phase update body sequences preflight, the D-UPD disabled-record
@@ -2911,7 +2929,7 @@ function renderUpdateCascadeAndNotify(
     // nothing to update` line below it. The line can NEVER vanish (a
     // `tally {count: 0}` override would collapse to `""` in composeTally; this
     // owns the headline instead). Info severity, no reload-hint.
-    notifyUpdateNoOpWithContext(ctx, pi, UPDATE_CONTEXT, marketplaces);
+    notifyUpdateNoOpWithContext(ctx, pi, UPDATE_CONTEXT, marketplaces, cardinality);
     return;
   }
 
@@ -2950,6 +2968,7 @@ function renderUpdateCascadeAndNotify(
 interface NotifyDirectFailureArgs {
   readonly ctx: ExtensionContext;
   readonly pi: ExtensionAPI;
+  readonly cardinality: "single" | "plural";
   readonly marketplace: string;
   readonly scope: Scope;
   readonly pluginName: string;
@@ -2998,13 +3017,20 @@ function notifyDirectFailure(args: NotifyDirectFailureArgs): void {
         })),
       }),
   };
-  notifyWithContext(ctx, pi, UPDATE_CONTEXT, [
-    {
-      name: marketplace,
-      scope,
-      plugins: [failedRow],
-    },
-  ]);
+  notifyWithContext(
+    ctx,
+    pi,
+    UPDATE_CONTEXT,
+    [
+      {
+        name: marketplace,
+        scope,
+        plugins: [failedRow],
+      },
+    ],
+    undefined,
+    args.cardinality,
+  );
 }
 
 /**
@@ -3081,6 +3107,7 @@ function notifyBareFormEnumerateFailure(args: {
   readonly pi: ExtensionAPI;
   readonly scope: Scope | undefined;
   readonly err: Error;
+  readonly cardinality: "single" | "plural";
 }): void {
   const { ctx, pi, scope, err } = args;
   const reasons: readonly ContentReason[] = [narrowDirectFailReason(err)];
@@ -3097,13 +3124,20 @@ function notifyBareFormEnumerateFailure(args: {
     severity: "error",
     needsReload: false,
   };
-  notifyWithContext(ctx, pi, UPDATE_CONTEXT, [
-    {
-      name: SYNTHETIC_UPDATE_PLACEHOLDER_NAME,
-      scope: scope ?? "user",
-      plugins: [failedRow],
-    },
-  ]);
+  notifyWithContext(
+    ctx,
+    pi,
+    UPDATE_CONTEXT,
+    [
+      {
+        name: SYNTHETIC_UPDATE_PLACEHOLDER_NAME,
+        scope: scope ?? "user",
+        plugins: [failedRow],
+      },
+    ],
+    undefined,
+    args.cardinality,
+  );
 }
 
 /**

@@ -231,13 +231,20 @@ function emitCascadeFailure(args: {
     severity: "error",
     needsReload: false,
   };
-  notifyWithContext(ctx, pi, UNINSTALL_CONTEXT, [
-    {
-      name: marketplace,
-      scope,
-      plugins: [failedRow],
-    },
-  ]);
+  notifyWithContext(
+    ctx,
+    pi,
+    UNINSTALL_CONTEXT,
+    [
+      {
+        name: marketplace,
+        scope,
+        plugins: [failedRow],
+      },
+    ],
+    undefined,
+    "single",
+  );
   return undefined;
 }
 
@@ -262,23 +269,30 @@ function emitConfigInvalid(args: {
     return { status: "failed", reason: "invalid manifest", error: invalidErr, cause };
   }
 
-  notifyWithContext(ctx, pi, UNINSTALL_CONTEXT, [
-    {
-      name: marketplace,
-      scope,
-      plugins: [
-        {
-          status: "failed",
-          name: plugin,
-          reasons: ["invalid manifest"] as const,
-          cause: invalidErr,
-          // D-03/D-06: invalid-config abort -> error, no reload.
-          severity: "error" as const,
-          needsReload: false,
-        },
-      ],
-    },
-  ]);
+  notifyWithContext(
+    ctx,
+    pi,
+    UNINSTALL_CONTEXT,
+    [
+      {
+        name: marketplace,
+        scope,
+        plugins: [
+          {
+            status: "failed",
+            name: plugin,
+            reasons: ["invalid manifest"] as const,
+            cause: invalidErr,
+            // D-03/D-06: invalid-config abort -> error, no reload.
+            severity: "error" as const,
+            needsReload: false,
+          },
+        ],
+      },
+    ],
+    undefined,
+    "single",
+  );
   return undefined;
 }
 
@@ -481,9 +495,14 @@ function emitAlreadyGone(args: {
     severity: "error",
     needsReload: false,
   };
-  notifyWithContext(ctx, pi, UNINSTALL_CONTEXT, [
-    { name: marketplace, scope, plugins: [failedRow] },
-  ]);
+  notifyWithContext(
+    ctx,
+    pi,
+    UNINSTALL_CONTEXT,
+    [{ name: marketplace, scope, plugins: [failedRow] }],
+    undefined,
+    "single",
+  );
   return undefined;
 }
 
@@ -766,12 +785,19 @@ export async function uninstallPlugin(
     severity: "info",
     needsReload: true,
   };
-  notifyWithContext(ctx, pi, UNINSTALL_CONTEXT, [
-    {
-      name: marketplace,
-      scope,
-      plugins: [uninstalledRow],
-    },
-  ]);
+  notifyWithContext(
+    ctx,
+    pi,
+    UNINSTALL_CONTEXT,
+    [
+      {
+        name: marketplace,
+        scope,
+        plugins: [uninstalledRow],
+      },
+    ],
+    undefined,
+    "single",
+  );
   return undefined;
 }

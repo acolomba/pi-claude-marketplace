@@ -225,7 +225,8 @@ export function notifyUpdateWithContext<
  * render map and folds the hard-coded `Plugin update: nothing to update` headline
  * below them, so the summary line can never vanish. NO `cardinality` / `tally` --
  * the headline is a fixed constant owned by `emitUpdateNoOpCascade`, not the
- * `composeTally` success math.
+ * `composeTally` success math. Cardinality remains structural metadata on the
+ * envelope so every update notification retains the invocation form.
  */
 export function notifyUpdateNoOpWithContext<
   Status extends string,
@@ -235,6 +236,7 @@ export function notifyUpdateNoOpWithContext<
   pi: ExtensionAPI,
   context: CommandContext<Status, Msg>,
   rows: readonly MarketplaceRows<Msg>[],
+  cardinality: "single" | "plural",
 ): void {
   // Same type-safe widening as `notifyWithContext`: `MarketplaceRows<Msg>` is a
   // genuine subtype of `MarketplaceNotificationMessage[]` (no cast).
@@ -242,6 +244,7 @@ export function notifyUpdateNoOpWithContext<
   const message: CascadeNotificationMessage = {
     marketplaces,
     label: context.Messaging.label,
+    cardinality,
   };
 
   emitUpdateNoOpCascade(ctx, pi, message, (p, probe, mpScope) =>
