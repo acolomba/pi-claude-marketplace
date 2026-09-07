@@ -2956,6 +2956,7 @@ test("PI-13: entry declares dependencies -> V2 dropped per D-19-01 (no PR-5 trai
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, undefined);
       assert.match(notifications[0]?.message ?? "", /● hello v\S+ \(installed\)/);
+      assert.doesNotMatch(notifications[0]?.message ?? "", /Plugin install:/);
       // Defense-in-depth: the dropped PR-5 phrase must NOT leak onto the
       // V2 notification surface (it does NOT appear on the success line
       // either -- the renderer has no field for it).

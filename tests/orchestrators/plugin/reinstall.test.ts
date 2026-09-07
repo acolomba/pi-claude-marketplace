@@ -1765,7 +1765,7 @@ test("PRL-15 batch soft dependency warnings aggregate successful restaged resour
 // Additional coverage tests for uncovered paths
 // -----------------------------------------------------------------------
 
-test("GAP-01: reinstallPlugins with no installed plugins emits empty-marketplaces notice", async () => {
+test("GAP-01: an empty bulk reinstall retains its zero-success tally", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-no-plugins-"));
     try {
@@ -1778,7 +1778,10 @@ test("GAP-01: reinstallPlugins with no installed plugins emits empty-marketplace
 
       assert.deepEqual([...outcomes], []);
       assert.equal(notifications.length, 1);
-      assert.equal(notifications[0]?.message, "(no marketplaces)");
+      assert.equal(
+        notifications[0]?.message,
+        "(no marketplaces)\n\nPlugin reinstall: 0 successes",
+      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
