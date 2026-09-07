@@ -974,7 +974,7 @@ for (const row of [
   {
     title: "RVAL-04 scope-impact ignores a fenced traceability row",
     contract: ".planning/REQUIREMENTS.md",
-    original: "| AUTH-01 | Phase 4 | Pending |",
+    original: "| AUTH-01 | Phase 4 | Complete |",
     replacement: (original: string) => `\`\`\`md\n${original}\n\`\`\``,
     expectedStderr:
       "missing-requirement-route: AUTH-01: traceability row is absent\n" +
@@ -1085,7 +1085,7 @@ test("RVAL-04 scope-impact rejects a coordinated stable requirement rename", asy
   await writeFile(
     requirementsFile,
     (await readFile(requirementsFile, "utf8"))
-      .replace("- [ ] **AUTH-01**", "- [ ] **EVIL-99**")
+      .replace("- [x] **AUTH-01**", "- [x] **EVIL-99**")
       .replace("| AUTH-01 |", "| EVIL-99 |"),
   );
   await writeFile(

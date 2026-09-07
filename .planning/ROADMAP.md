@@ -302,7 +302,7 @@ Plans:
 **Goal:** Make confirmed test infrastructure isolated, typed, and faithful to production collaborators.
 **Depends on:** Phase 3
 **Requirements:** AUTH-01, TREF-01, TREF-02, TREF-03
-**Plans:** 0/7 plans complete
+**Plans:** 7/7 plans complete
 
 **Success Criteria**:
 
@@ -320,28 +320,28 @@ Plans:
 Plans:
 **Wave 1**
 
-- [ ] 04-01-PLAN.md — Create the case-owned Pi environment boundary and migrate direct install/list owners.
+- [x] 04-01-PLAN.md — Create the case-owned Pi environment boundary and migrate direct install/list owners.
 
 **Wave 2**
 
-- [ ] 04-02-PLAN.md — Isolate effective MCP staging and remaining terminal user-scope helpers.
+- [x] 04-02-PLAN.md — Isolate effective MCP staging and remaining terminal user-scope helpers.
 
 **Wave 3**
 
-- [ ] 04-03-PLAN.md — Preserve function-bearing Git auth and remove downstream workarounds.
+- [x] 04-03-PLAN.md — Preserve function-bearing Git auth and remove downstream workarounds.
 
 **Wave 4**
 
-- [ ] 04-04-PLAN.md — Add hostile-host, optional collaborator, and realistic auth-failure proofs.
-- [ ] 04-05-PLAN.md — Introduce exact Pi ports and remove marketplace/enable-disable broad casts.
+- [x] 04-04-PLAN.md — Add hostile-host, optional collaborator, and realistic auth-failure proofs.
+- [x] 04-05-PLAN.md — Introduce exact Pi ports and remove marketplace/enable-disable broad casts.
 
 **Wave 5**
 
-- [ ] 04-06-PLAN.md — Carry exact typed Pi collaborators through plugin orchestration tests.
+- [x] 04-06-PLAN.md — Carry exact typed Pi collaborators through plugin orchestration tests.
 
 **Wave 6**
 
-- [ ] 04-07-PLAN.md — Apply the exact 16-factory role-name decision and run complete verification.
+- [x] 04-07-PLAN.md — Apply the exact 16-factory role-name decision and run complete verification.
 
 ### Phase 5: Injection and Ownership Design
 
@@ -452,7 +452,7 @@ baseline, which still includes both pairs; neither is a terminal shortfall.
 | 1. Live Evidence Revalidation        | 70/70          | In Progress |            |
 | 2. Containment and Input Safety      | 3/3            | Complete    | 2026-09-05 |
 | 3. Production Defect Corrections     | 14/14          | Complete    | 2026-09-07 |
-| 4. Hermetic Test Infrastructure      | 0/0            | Not started | —          |
+| 4. Hermetic Test Infrastructure      | 7/7            | Complete    | 2026-09-07 |
 | 5. Injection and Ownership Design    | 0/0            | Not started | —          |
 | 6. Assertion and Module Refinement   | 0/0            | Not started | —          |
 | 7. Gate Integrity                    | 0/0            | Not started | —          |

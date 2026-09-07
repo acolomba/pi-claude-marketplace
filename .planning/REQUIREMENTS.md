@@ -41,18 +41,18 @@ component as a working Pi artifact.
 - [x] **PDEF-08**: The one-to-one reconcile-alias source-claim map fails closed
       while preserving manifest-derived state identity; independently terminal
       agent-discovery, compact-trigger, and rollback behavior keeps its own route.
-- [ ] **AUTH-01**: Terminal auth tests cover hostile-host rejection, optional
+- [x] **AUTH-01**: Terminal auth tests cover hostile-host rejection, optional
       collaborator behavior, and realistic authentication-failure propagation.
 
 ### Test Architecture
 
-- [ ] **TREF-01**: Terminal hermeticity gaps use case-owned temporary filesystem
+- [x] **TREF-01**: Terminal hermeticity gaps use case-owned temporary filesystem
       state and cannot read or write the developer's real home, Pi agent directory,
       or MCP configuration.
-- [ ] **TREF-02**: Shared external-failure doubles preserve function-bearing
+- [x] **TREF-02**: Shared external-failure doubles preserve function-bearing
       collaborators, including authentication bundles, with production-faithful
       behavior.
-- [ ] **TREF-03**: Tests use typed production-domain values and exact role-named
+- [x] **TREF-03**: Tests use typed production-domain values and exact role-named
       doubles without broad-cast laundering or test-helper terminology in
       production.
 - [ ] **TREF-04**: Each terminal hidden dependency is classified: use real
@@ -163,10 +163,10 @@ Roadmap creation assigns each requirement to exactly one phase.
 | PDEF-06     | Phase 3                             | Complete      |
 | PDEF-07     | Phase 3                             | Complete      |
 | PDEF-08     | Phase 3                             | Complete      |
-| AUTH-01     | Phase 4                             | Pending       |
-| TREF-01     | Phase 4                             | Pending       |
-| TREF-02     | Phase 4                             | Pending       |
-| TREF-03     | Phase 4                             | Pending       |
+| AUTH-01     | Phase 4                             | Complete      |
+| TREF-01     | Phase 4                             | Complete      |
+| TREF-02     | Phase 4                             | Complete      |
+| TREF-03     | Phase 4                             | Complete      |
 | TREF-04     | Phase 5                             | Pending       |
 | TREF-05     | Phase 5                             | Pending       |
 | TREF-06     | Phase 5                             | Pending       |

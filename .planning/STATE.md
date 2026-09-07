@@ -2,46 +2,45 @@
 gsd_state_version: "1.0"
 milestone: refine-unit-tests
 milestone_name: Refine Unit Tests
-current_phase: 4
-current_phase_name: Hermetic Test Infrastructure
+current_phase: 5
+current_phase_name: Injection and Ownership Design
 status: planning
-stopped_at: Phase 03 complete, ready to plan Phase 4
-last_updated: "2026-09-07T12:48:04.103Z"
+stopped_at: Phase 04 complete, ready to plan Phase 5
+last_updated: "2026-09-07T14:09:55.000Z"
 last_activity: 2026-09-07
-last_activity_desc: Phase 03 complete, transitioned to Phase 4
-state_head: f911797cdae466f126758615fecf7eb8ea891f59
+last_activity_desc: Phase 04 complete, transitioned to Phase 5
 progress:
   total_phases: 9
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 94
-  completed_plans: 87
-  percent: 22
+  completed_plans: 94
+  percent: 33
 ---
 
 # Project State
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-09-07 after refine-unit-tests Phase 3)
+See: `.planning/PROJECT.md` (updated 2026-09-07 after refine-unit-tests Phase 4)
 
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 4 — Hermetic Test Infrastructure
+**Current focus:** Phase 5 — Injection and Ownership Design
 
 ## Current Position
 
-Phase: 4 — Hermetic Test Infrastructure
-Next: Discuss Phase 4
+Phase: 5 — Injection and Ownership Design
+Next: Discuss Phase 5
 Plan: Not started
 Status: Ready to plan
-Last activity: 2026-09-07 — Phase 03 complete, transitioned to Phase 4
+Last activity: 2026-09-07 — Phase 04 complete, transitioned to Phase 5
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 237
+- Total plans completed: 244
 - Average recorded duration: 12.4 min
 - Total recorded execution time: 35 hr 10 min
 
@@ -58,8 +57,9 @@ Last activity: 2026-09-07 — Phase 03 complete, transitioned to Phase 4
 | 01. Live Evidence Revalidation  |    69 | 15h 18m recorded | 13.3 min recorded |
 | 02                              |     3 | -                | -                 |
 | 03                              |    14 | -                | -                 |
+| 04                              |     7 | -                | -                 |
 
-**Recent Trend:** Phase 02 closed three production-defect requirements in three plans; independent verification passed 3/3 with 257/257 focused tests and nine complete direct-coverage gates.
+**Recent Trend:** Phase 04 closed four hermeticity, auth-fidelity, and typed-collaborator requirements in seven plans; independent verification passed 4/4 and the complete gate passed 5,397 unit plus 32 integration tests.
 **Per-Plan Metrics:**
 
 | Plan                                    | Duration | Tasks   | Files    |
@@ -669,6 +669,9 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 03]: Structural cardinality is mandatory at notifyWithContext — Producer invocation shape, not rendered row count, determines whether a tally is required.
 - [Phase 03]: Scope-narrowed fan-out commands remain plural — Filtering a plural command to one result must still render its operation tally, while named singular commands remain tally-free.
 - [Phase 03]: Plugin-list projections validate their exact aggregate trailer — Reduced row comparisons must not hide a missing or inaccurate user-visible tally.
+- [Phase 04]: Hermetic user-scope fixtures control `HOME` and `PI_CODING_AGENT_DIR` beneath one case-owned root and restore both variables by original property presence.
+- [Phase 04]: Shared Git fake snapshots preserve function-bearing authentication bundles and callback identity while copying only mutable data fields.
+- [Phase 04]: Production consumers declare narrow Pi ports; local configurable doubles use role-only names while reusable concern-owned abstractions retain `create*Fake` names.
 
 ### Pending Todos
 
@@ -678,7 +681,7 @@ None for roadmap creation.
 
 - `gsd-tools query phase.complete` cannot write root planning files while the
   three archived workstream directories remain. The active `refine-unit-tests`
-  milestone is root-scoped, so the Phase 2 and Phase 3 canonical transitions
+  milestone is root-scoped, so the Phase 2 through Phase 4 canonical transitions
   were simulated in isolated flat copies, inspected, and applied by hand. Later
   phase transitions will require the same guarded procedure unless workstream
   routing is repaired.
@@ -721,22 +724,23 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Phase 03 complete, ready to plan Phase 4
+**Stopped at:** Phase 04 complete, ready to plan Phase 5
 
-Phase 03 completed all 14 plans and closed PDEF-01, PDEF-05, PDEF-06, PDEF-07,
-and PDEF-08. Independent verification passed 5/5 with no behavioral, UAT, or
-security gap; the complete quality gate passed 5,385 unit tests and 32
-integration tests. Phase 4 is ready for discussion and planning.
+Phase 04 completed all seven plans and closed AUTH-01 and TREF-01 through
+TREF-03. Independent verification passed 4/4 with no behavioral or UAT gap;
+the complete quality gate passed 5,397 unit tests and 32 integration tests.
+Phase 5 is ready for discussion and planning.
 
 **Resume file:** None
 
 **Read beside it:** `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`, the
-Phase 01 terminal evidence ledger, and Phase 4's roadmap criteria.
+Phase 01 terminal evidence ledger, and Phase 5's roadmap criteria.
 
-Last session: 2026-09-07T12:48:03.704Z
+Last session: 2026-09-07T14:09:55.000Z
 
-**Next:** Discuss Phase 4 Hermetic Test Infrastructure, then plan only the
-terminal test-infrastructure findings routed to AUTH-01 and TREF-01..03.
+**Next:** Discuss Phase 5 Injection and Ownership Design, then plan only the
+terminal hidden-dependency, mutable-state, and public-contract findings routed
+to TREF-04 through TREF-06.
 
 ## Deferred Verification
 
