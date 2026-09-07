@@ -213,6 +213,7 @@ function assertRetryPartialFailure(
   outcome: Awaited<ReturnType<typeof installPlugin>>,
   expectedPrefix: string,
   expectedTail: RegExp,
+  wrapped = false,
 ): string {
   assert.deepStrictEqual(Object.keys(outcome).sort(), ["cause", "error", "status"]);
   assert.strictEqual(outcome.status, "failed");
@@ -221,7 +222,10 @@ function assertRetryPartialFailure(
   const tail = outcome.error.message.slice(expectedPrefix.length);
   assert.match(tail, expectedTail);
   const expectedMessage = `${expectedPrefix}${tail}`;
-  assert.strictEqual(outcome.cause, retryCauseChain(expectedMessage));
+  const expectedCause = wrapped
+    ? `${expectedMessage}\n\ncause: ${expectedMessage} -> ${expectedMessage}`
+    : retryCauseChain(expectedMessage);
+  assert.strictEqual(outcome.cause, expectedCause);
   return expectedMessage;
 }
 
@@ -9250,10 +9254,11 @@ test("retry proof: install: non-containment undo failure reports ordered rollbac
         first,
         retryStagingMkdirPrefix(locations.commandsStagingDir),
         RETRY_STAGING_UUID,
+        true,
       );
-      assert.ok(first.error.cause instanceof Error);
-      assert.strictEqual(first.error.cause.message, expectedCause);
-      assert.strictEqual(first.error.cause.cause, undefined);
+      const rollbackError = (first as { readonly error: Error }).error;
+      assert.ok(rollbackError.cause instanceof Error);
+      assert.strictEqual(rollbackError.cause.message, expectedCause);
       assert.deepStrictEqual(second, {
         declaresAgents: false,
         declaresMcp: false,
@@ -9267,7 +9272,7 @@ test("retry proof: install: non-containment undo failure reports ordered rollbac
             "A plugin operation has failed.\n\n" +
             "● mp [project]\n" +
             "  ⊘ retryable v0.0.1 (failed) {rollback partial}\n" +
-            `    cause: ${expectedCause}\n` +
+            `    cause: ${expectedCause} -> ${expectedCause}\n` +
             "    [skills] (rollback failed)\n" +
             "      cause: skill undo denied",
           severity: "error",

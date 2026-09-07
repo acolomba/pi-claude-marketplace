@@ -18,7 +18,7 @@
 //                            (plugin.json > entry.version > hash) delegated
 //                            to `shared.ts::resolvePluginVersion`
 //       runPhases(phases, ctx)                             // D-01 5-phase ledger
-//       capture rollbackPartials, throw raw error          // D-02 PI-14 bypass
+//       format rollback result, capture rows, throw error  // D-02 PI-14 bypass
 //   })
 //
 // CR-01: the ledger body is extracted into the exported
@@ -123,7 +123,6 @@ import {
   type DegradeKind,
 } from "../../shared/notify-reasons.ts";
 import { notify } from "../../shared/notify.ts";
-import { PathContainmentError } from "../../shared/path-safety.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 import {
   runPhases,
@@ -131,6 +130,7 @@ import {
   type RollbackPartial,
   type RunPhasesResult,
 } from "../../transaction/phase-ledger.ts";
+import { formatRollbackError } from "../../transaction/rollback.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 import { DEFAULT_CREDENTIAL_OPS, buildCloneAuth } from "../auth-host.ts";
 import { cascadeUnstagePlugin, crossScopeFlag } from "../marketplace/shared.ts";
@@ -474,9 +474,9 @@ export interface InstallLedgerOptions {
 
 /**
  * Mutable failure-capture channel for `runInstallLedger`. Populated BEFORE
- * the ledger error is rethrown so the caller's catch site can compose
- * rollback-partial rows (`PluginFailedMessage.rollbackPartial`) and the
- * best-known version at throw time.
+ * the formatted ledger error is rethrown so the caller's catch site can
+ * compose rollback-partial rows (`PluginFailedMessage.rollbackPartial`) and
+ * retain the best-known version at throw time.
  */
 export interface InstallFailureCapture {
   rollbackPartials: readonly RollbackPartial[];
@@ -792,10 +792,11 @@ async function preflightInstallResolve(
  * receives the state mutation and exactly one explicit save persists it
  * (single-writer, ST-7 / D-06).
  *
- * Failure contract: throws the raw orchestration error (PI-14 bypass
- * preserved). When `capture` is provided, `capture.rollbackPartials` /
- * `capture.version` are populated BEFORE the rethrow so the caller's catch
- * can compose rollback-partial rows.
+ * Failure contract: delegates identity, containment bypass, and cause wrapping
+ * to `formatRollbackError`. When `capture` is provided,
+ * `capture.rollbackPartials` / `capture.version` are populated BEFORE the
+ * formatted error is rethrown so the caller's catch can compose structured
+ * rollback-partial rows.
  *
  * Success returns the outward `InstallLedgerSummary` projection, not the
  * ledger's working context -- see that type for why.
@@ -1253,23 +1254,16 @@ async function runInstallLedgerBody(
 
   const result = await runPhases(phases, ctxLocal);
   if (isFailedRunPhasesResult(result)) {
-    // Capture the rollbackPartials + best-known-version BEFORE
-    // re-throwing. The caller's catch block threads
-    // `capture.rollbackPartials` into `PluginFailedMessage.rollbackPartial`
-    // (per-phase typed `cause?: Error` carried verbatim from the
-    // ledger -- no synthesis). PathContainmentError bypasses the
-    // rollback-partial path verbatim per PI-14: the catch detects the
-    // error class, omits the `rollbackPartial` field, and lets the
-    // renderer surface the PathContainmentError's text through the
-    // cause-chain trailer.
+    // The transaction owner is the sole identity/containment/partial rule.
+    // Capture its raw rows and best-known version before rethrowing its error;
+    // the caller only projects those structured values into the notification.
+    const rollback = formatRollbackError(result, result.error);
     if (capture !== undefined) {
-      capture.rollbackPartials = result.rollbackPartials;
+      capture.rollbackPartials = rollback.rollbackPartials;
       capture.version = ctxLocal.version;
     }
 
-    // `runPhases` normalizes every failed phase throw to Error before it
-    // returns the `ok: false` arm, so this narrowed result always carries it.
-    throw result.error;
+    throw rollback.error;
   }
 
   return { kind: "installed", installCtx: ctxLocal };
@@ -1833,17 +1827,13 @@ function failedRowOutcome(args: {
  * D-19-03 failure routing for a throw out of the state guard. Priority,
  * highest first:
  *
- *   1. PI-14 PathContainmentError -- bare PluginFailedMessage with
- *      reasons: [] and cause: err. The renderer surfaces the message via
- *      the 4-space-indent cause-chain trailer; NO rollback-partial
- *      children even when partials are present (PI-14 bypass).
- *   2. Rollback-partial -- PluginFailedMessage with reasons:
- *      ["rollback partial"] plus the phase-ledger's typed
- *      `RollbackPartial[]` threaded directly (no synthesis from `.msg`).
- *   3. Entity-shape errors (PI-3 / PI-4 / PI-5) -- the classifier's
+ *   1. Formatted ledger errors -- `formatRollbackError` has already preserved
+ *      containment errors or wrapped partial failures and supplied the raw
+ *      rollback rows. This function only projects those values.
+ *   2. Entity-shape errors (PI-3 / PI-4 / PI-5) -- the classifier's
  *      `status: "failed" | "unavailable"` discriminator is preserved
  *      verbatim.
- *   4. Generic runtime error -- reasons: [] and cause: err; the renderer
+ *   3. Generic runtime error -- reasons: [] and cause: err; the renderer
  *      suppresses the empty brace per D-15-01.
  */
 function handleInstallThrow(args: {
@@ -1857,11 +1847,8 @@ function handleInstallThrow(args: {
   readonly orchestrated: boolean;
 }): InstallPluginOutcome {
   const { err, ctx, pi, marketplace, scope, plugin, capture, orchestrated } = args;
-  const isPathContainment = err instanceof PathContainmentError;
-  const rolledBackPartial = !isPathContainment && capture.rollbackPartials.length > 0;
-  const entityErrorRow = isPathContainment
-    ? undefined
-    : classifyEntityShapeError(err, { plugin, marketplace, scope });
+  const rolledBackPartial = capture.rollbackPartials.length > 0;
+  const entityErrorRow = classifyEntityShapeError(err, { plugin, marketplace, scope });
   const failureMessage = composeInstallFailureMessage({
     err,
     plugin,
@@ -1899,17 +1886,16 @@ function handleInstallThrow(args: {
  * Failure modes funnel through three paths inside the single catch
  * site:
  *   1. Guard-closure throw (PI-3 / PI-4 / PI-5 / PI-6 / PI-7 errors,
- *      ConcurrentInstallError from PI-15 layer (a), and the rolled-up
- *      ledger error captured as failureRollbackPartials) -> notify()
+ *      ConcurrentInstallError from PI-15 layer (a), and the transaction-
+ *      formatted ledger error) -> notify()
  *      with `PluginFailedMessage` carrying the typed `cause` and
  *      (when rollback partials are present) the
  *      `rollbackPartial: readonly { phase; cause? }[]` field. The renderer
  *      handles all indentation + cause-chain rendering automatically
  * .
- *   2. PathContainmentError originating in a bridge prepare or undo path
- *      propagates VERBATIM: its message becomes `cause` on the
- *      `PluginFailedMessage` and never surfaces as a rollback-partial
- *      (PI-14 bypass).
+ *   2. PathContainmentError originating in a bridge prepare or undo path is
+ *      preserved by `formatRollbackError`: its message becomes `cause` on the
+ *      `PluginFailedMessage` and never surfaces as a rollback partial.
  *   3. Post-state-commit pluginDataDir mkdir failure / cache-refresh
  *      failure / agentForeignFailures rows / bridgeWarnings rows /
  *      PI-13 deps note are DROPPED in standalone mode per D-19-01.
@@ -2422,7 +2408,9 @@ export async function installPlugin(opts: InstallPluginOptions): Promise<Install
 // renderer at shared/notify.ts::composeRollbackPartialLines drives all
 // indentation (4-space rollback-child row + 6-space per-phase cause-chain
 // trailer). The transaction/phase-ledger.ts RollbackPartial exposes the
-// typed cause?: Error, threaded directly into the field.
+// typed cause?: Error, threaded directly into the field. Error identity,
+// containment suppression, and partial wrapping have already been decided by
+// transaction/rollback.ts::formatRollbackError before this projection runs.
 
 /**
  * Compose the per-variant plugin notification for the install failure
