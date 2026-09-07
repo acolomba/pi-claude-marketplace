@@ -251,7 +251,7 @@ Plans:
 **Goal:** Fix each remaining confirmed production defect with regression evidence.
 **Depends on:** Phase 2
 **Requirements:** PDEF-01, PDEF-05, PDEF-06, PDEF-07, PDEF-08
-**Plans:** 11 plans
+**Plans:** 14 plans
 
 **Success Criteria**:
 
@@ -269,16 +269,33 @@ Plans:
    compact, and rollback behavior keeps its own contract.
 
 Plans:
+**Wave 1**
+
 - [ ] 03-01-PLAN.md — Make reconcile alias claims one-to-one, fail-closed, and convergent.
 - [ ] 03-02-PLAN.md — Promote ordered multi-directory agent paths through staging and install.
-- [ ] 03-03-PLAN.md — Migrate update/reinstall agent paths and remove the singular representation.
 - [ ] 03-04-PLAN.md — Correct manual/auto compact triggers at both hook payload owners.
-- [ ] 03-05-PLAN.md — Harden hook lookups and remove trace-proven no-producer dispatch branches.
+- [ ] 03-05-PLAN.md — Harden hook lookups and remove the synchronous no-producer dispatch branch.
+- [ ] 03-08-PLAN.md — Declare autoupdate and list cardinality from invocation structure.
+- [ ] 03-13-PLAN.md — Declare marketplace mutation cardinality from invocation structure.
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 03-03-PLAN.md — Migrate update/reinstall agent paths and remove the singular representation.
 - [ ] 03-06-PLAN.md — Route install rollback failures through the transaction-owned formatter.
+- [ ] 03-12-PLAN.md — Remove the async no-producer branch and obsolete domain guard.
+- [ ] 03-14-PLAN.md — Declare import and reconcile cardinality without changing alias state.
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 03-07-PLAN.md — Use typed failure reasons and retain structured update-cleanup diagnostics.
-- [ ] 03-08-PLAN.md — Declare marketplace notification cardinality from invocation structure.
+- [ ] 03-10-PLAN.md — Declare cardinality for remaining plugin-surface producers.
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
 - [ ] 03-09-PLAN.md — Declare lifecycle notification cardinality after owner corrections land.
-- [ ] 03-10-PLAN.md — Declare cardinality for remaining plugin, import, and reconcile producers.
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
 - [ ] 03-11-PLAN.md — Require cardinality at the shared boundary, update output docs, and seal the phase.
 
 ### Phase 4: Hermetic Test Infrastructure
