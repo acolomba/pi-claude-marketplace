@@ -41,7 +41,6 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
-import { isDispatchableEvent } from "../../../domain/components/hook-events.ts";
 import { hookDebugLog } from "../../../shared/debug-log.ts";
 import { errorMessage } from "../../../shared/errors.ts";
 import { notifyAsyncRewakeSummary } from "../../../shared/notify.ts";
@@ -220,17 +219,6 @@ export async function spawnAndRegister(
   const spawnImpl = deps.spawnImpl ?? spawn;
   const makeDispatchId = deps.dispatchId ?? (() => randomUUID());
   const pidTableWriter = deps.pidTableWriter ?? writePidTable;
-  // D-87-04: narrow the admitted event to the dispatchable subset before
-  // indexing the translator table. `Stop` / `StopFailure` never reach this
-  // path -- no Pi event routes them to an async-rewake spawn (their entries in
-  // `TRANSLATORS` above are inert) -- so this arm is a defensive belt
-  // (debug-log + return), not live behavior.
-  if (!isDispatchableEvent(entry.claudeEvent)) {
-    hookDebugLog(
-      `async-rewake: ${entry.claudeEvent} is admitted but not dispatchable (${entry.pluginId}); skipping spawn`,
-    );
-    return;
-  }
 
   try {
     const dispatchId = makeDispatchId();

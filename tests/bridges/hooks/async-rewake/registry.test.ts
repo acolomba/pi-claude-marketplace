@@ -667,44 +667,6 @@ test("registers a child whose optional stdin pipe is absent", { concurrency: fal
   }
 });
 
-test("skips a non-dispatchable event without spawning or persisting", async () => {
-  // arrange
-  const root = await mkdtemp(path.join(tmpdir(), "async-registry-nondispatch-"));
-  resetRoutingState();
-  shutdownInMemoryChildren();
-  const locations = locationsFor("project", root);
-  const entry = createEntry(root);
-  Reflect.set(entry, "claudeEvent", "FutureAdmittedEvent");
-  const context = createContext(root, "session-nondispatch", true);
-  const pi = createPi();
-  const spawnCalls: SpawnCall[] = [];
-  const child = createChild(24_682);
-
-  try {
-    // act
-    await spawnAndRegister(entry, { stop_hook_active: false }, context.context, pi.pi, locations, {
-      spawnImpl: createSpawn(child.child, spawnCalls),
-      dispatchId: () => "dispatch-nondispatch",
-    });
-    const tableState = await stat(pidTablePath(locations)).catch(filesystemErrorCode);
-
-    // assert
-    assert.deepStrictEqual(spawnCalls, []);
-    assert.strictEqual(tableState, "ENOENT");
-    assert.deepStrictEqual(child.signals, []);
-    assert.deepStrictEqual(pi.messages, []);
-    assert.deepStrictEqual(context.notifications, []);
-  } finally {
-    shutdownInMemoryChildren();
-    resetRoutingState();
-    child.child.removeAllListeners();
-    child.stdin?.destroy();
-    child.stdout.destroy();
-    child.stderr.destroy();
-    await rm(root, { recursive: true, force: true, maxRetries: 3 });
-  }
-});
-
 test("contains a synchronous spawn failure with semantic diagnostics", async (t) => {
   // arrange
   const root = await mkdtemp(path.join(tmpdir(), "async-registry-spawn-throw-"));
