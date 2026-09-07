@@ -271,10 +271,11 @@ export const NON_TOOL_EVENT_CLOSED_SETS = {
   // safe value with the Claude SessionEnd reason vocabulary.
   // Empty set -- every non-empty matcher trips TOOL-02.
   SessionEnd: new Set<string>([]),
-  // D-58-06: Pi compact events carry no `trigger` field. Empty set --
-  // every non-empty matcher trips TOOL-02 (only match-all supportable).
-  PreCompact: new Set<string>([]),
-  PostCompact: new Set<string>([]),
+  // D-58-06 / PDEF-08: Pi compact reasons project onto Claude's complete
+  // trigger vocabulary: `manual` remains manual, while threshold and overflow
+  // both project to `auto`.
+  PreCompact: new Set(["manual", "auto"]),
+  PostCompact: new Set(["manual", "auto"]),
   // UserPromptSubmit and Stop intentionally omitted -- the null sentinel in
   // NON_TOOL_EVENT_FIELDS is their no-matcher-support disposition.
   // SFAIL-03: the closed error-type vocabulary for StopFailure, built from
