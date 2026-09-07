@@ -939,16 +939,6 @@ export async function resolvePluginVersion(
   return computeHashVersion(installable.pluginRoot);
 }
 
-/** Bridge adapter for the resolver's `componentPaths.agents` array shape. */
-export function pickAgentsSourceDir(installable: MaterializablePlugin): string | null {
-  const first = installable.componentPaths.agents[0];
-  if (first === undefined) {
-    return null;
-  }
-
-  return path.isAbsolute(first) ? first : path.join(installable.pluginRoot, first);
-}
-
 function compareNames(a: string, b: string): number {
   return a.localeCompare(b);
 }

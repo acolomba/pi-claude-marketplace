@@ -26,8 +26,6 @@ export interface DiscoveredGeneratedNames {
   readonly commands: readonly string[];
   readonly agents: readonly string[];
   readonly agentsDirs: readonly string[];
-  /** Temporary update/reinstall migration seam; removed by Plan 03-03. */
-  readonly agentsSourceDir: string | null;
 }
 
 function resolvedAgentsDirs(resolved: MaterializablePlugin): readonly string[] {
@@ -67,6 +65,5 @@ export async function discoverGeneratedNames(
     commands: commandsDiscovery.discovered.map((c) => c.generatedName),
     agents: agentsDiscovery.discovered.map((a) => a.generatedName),
     agentsDirs,
-    agentsSourceDir: agentsDirs[0] ?? null,
   };
 }

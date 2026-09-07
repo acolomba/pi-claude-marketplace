@@ -55,21 +55,13 @@ import type {
   ConvertedAgent,
   DiscoveredAgent,
   PreparedAgentsStaging,
-  PrepareStageAgentsInput,
   ReplacePreparedAgentsOptions,
+  StageAgentsInput,
   StageAgentsCommitResult,
   StagedAgentRecord,
   UnstageAgentFailure,
 } from "./types.ts";
 import type { AgentsIndexEntry } from "../../persistence/agents-index-schema.ts";
-
-function agentsDirsFromInput(input: PrepareStageAgentsInput): readonly string[] {
-  if ("agentsDirs" in input) {
-    return input.agentsDirs;
-  }
-
-  return input.agentsSourceDir === null ? [] : [input.agentsSourceDir];
-}
 
 type AgentsReplacementInternals = Readonly<{
   backupRoot: string;
@@ -91,7 +83,7 @@ const agentsReplacementInternals = new WeakMap<
  * failure during the staging-dir write.
  *
  * Steps:
- *   1. Discover (or [] if agentsSourceDir === null)
+ *   1. Discover every resolved agent directory in resolver order (or none)
  *   2. AG-12 collision detection within this plugin
  *   3. Convert (AG-7 mapping pipeline)
  *   4. Load index, partition by (marketplace, plugin)
@@ -103,7 +95,7 @@ const agentsReplacementInternals = new WeakMap<
  *  10. Aggregate warnings + index corruptions
  */
 export async function prepareStagePluginAgents(
-  input: PrepareStageAgentsInput,
+  input: StageAgentsInput,
 ): Promise<PreparedAgentsStaging> {
   const {
     locations,
@@ -121,12 +113,11 @@ export async function prepareStagePluginAgents(
   // This is the sole point where scope and cwd meet before convertAgent runs.
   const projectDir = locations.scope === "project" ? cwd : undefined;
 
-  // Step 1: discover every directory in resolver order. The singular input
-  // arm is a temporary compatibility seam for update/reinstall; downstream
-  // discovery receives only the canonical list representation.
+  // Step 1: discover every directory in resolver order. This is the canonical
+  // source representation shared by preview and live staging.
   const discoverResult = await discoverPluginAgents({
     pluginName,
-    agentsDirs: agentsDirsFromInput(input),
+    agentsDirs: input.agentsDirs,
   });
   const discovered: readonly DiscoveredAgent[] = discoverResult.discovered;
   const discoverWarnings: readonly string[] = discoverResult.warnings;

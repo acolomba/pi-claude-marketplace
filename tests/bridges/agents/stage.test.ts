@@ -295,7 +295,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
       pluginRoot,
       pluginDataDir,
       resolved,
-      agentsSourceDir,
+      agentsDirs: [agentsSourceDir],
       knownSkills: ["acme-helper"],
       mapModel: true,
     });
@@ -370,7 +370,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
       pluginRoot,
       pluginDataDir,
       resolved,
-      agentsSourceDir,
+      agentsDirs: [agentsSourceDir],
     });
 
     // assert
@@ -468,7 +468,7 @@ Duplicate body.
       pluginRoot,
       pluginDataDir,
       resolved,
-      agentsSourceDir,
+      agentsDirs: [agentsSourceDir],
       mapModel: true,
     });
 
@@ -570,7 +570,7 @@ Review files.
       pluginRoot,
       pluginDataDir,
       resolved,
-      agentsSourceDir,
+      agentsDirs: [agentsSourceDir],
     });
 
     // assert
@@ -658,7 +658,7 @@ Review files.
           pluginRoot,
           pluginDataDir,
           resolved,
-          agentsSourceDir,
+          agentsDirs: [agentsSourceDir],
         }),
       (error: unknown) => {
         assert.ok(error instanceof AgentOwnershipConflictError);
@@ -720,7 +720,7 @@ Review files.
       pluginRoot,
       pluginDataDir,
       resolved,
-      agentsSourceDir,
+      agentsDirs: [agentsSourceDir],
     }).then(
       () => undefined,
       (reason: unknown) => reason,
@@ -862,7 +862,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
       pluginRoot,
       pluginDataDir,
       resolved,
-      agentsSourceDir,
+      agentsDirs: [agentsSourceDir],
       knownSkills: ["acme-helper"],
       mapModel: true,
     });
@@ -967,7 +967,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
       pluginRoot,
       pluginDataDir,
       resolved,
-      agentsSourceDir,
+      agentsDirs: [agentsSourceDir],
     });
 
     // act
@@ -1057,7 +1057,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
       pluginRoot,
       pluginDataDir,
       resolved,
-      agentsSourceDir,
+      agentsDirs: [agentsSourceDir],
     });
 
     // act
@@ -1144,7 +1144,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
       pluginRoot,
       pluginDataDir,
       resolved,
-      agentsSourceDir,
+      agentsDirs: [agentsSourceDir],
     });
     assert.strictEqual(prepared.kind, "staged");
     await rm(previousTarget);
@@ -1209,7 +1209,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
       pluginRoot,
       pluginDataDir,
       resolved,
-      agentsSourceDir,
+      agentsDirs: [agentsSourceDir],
     });
     assert.strictEqual(prepared.kind, "staged");
     await mkdir(locations.agentsDir, { recursive: true });
@@ -1275,7 +1275,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
       pluginRoot,
       pluginDataDir,
       resolved,
-      agentsSourceDir,
+      agentsDirs: [agentsSourceDir],
     });
     assert.strictEqual(prepared.kind, "staged");
     await mkdir(locations.agentsDir, { recursive: true });
@@ -1354,7 +1354,7 @@ describe("abortPreparedAgents", () => {
       pluginRoot,
       pluginDataDir,
       resolved,
-      agentsSourceDir: null,
+      agentsDirs: [],
     });
 
     // act
@@ -1396,7 +1396,7 @@ describe("abortPreparedAgents", () => {
       pluginRoot,
       pluginDataDir,
       resolved,
-      agentsSourceDir,
+      agentsDirs: [agentsSourceDir],
     });
     assert.strictEqual(prepared.kind, "staged");
 
@@ -1438,7 +1438,7 @@ describe("replacePreparedAgents", () => {
       pluginRoot,
       pluginDataDir,
       resolved,
-      agentsSourceDir: null,
+      agentsDirs: [],
     });
 
     // act
@@ -1502,7 +1502,7 @@ describe("replacePreparedAgents", () => {
       pluginRoot,
       pluginDataDir,
       resolved,
-      agentsSourceDir,
+      agentsDirs: [agentsSourceDir],
     });
     assert.strictEqual(prepared.kind, "staged");
 
@@ -1586,7 +1586,7 @@ describe("replacePreparedAgents", () => {
       pluginRoot,
       pluginDataDir,
       resolved,
-      agentsSourceDir,
+      agentsDirs: [agentsSourceDir],
     });
     assert.strictEqual(prepared.kind, "staged");
 
@@ -1704,7 +1704,7 @@ Current.
       pluginRoot,
       pluginDataDir,
       resolved,
-      agentsSourceDir,
+      agentsDirs: [agentsSourceDir],
     });
     assert.strictEqual(prepared.kind, "staged");
 
@@ -1753,7 +1753,7 @@ Current.
       pluginRoot,
       pluginDataDir,
       resolved,
-      agentsSourceDir,
+      agentsDirs: [agentsSourceDir],
     });
     assert.strictEqual(prepared.kind, "staged");
 
@@ -1843,7 +1843,7 @@ Current.
       pluginRoot,
       pluginDataDir,
       resolved,
-      agentsSourceDir,
+      agentsDirs: [agentsSourceDir],
     });
     assert.strictEqual(prepared.kind, "staged");
     await rm(targetPath);
@@ -1892,7 +1892,7 @@ Current.
       pluginRoot,
       pluginDataDir,
       resolved,
-      agentsSourceDir,
+      agentsDirs: [agentsSourceDir],
     });
     assert.strictEqual(prepared.kind, "staged");
     await mkdir(locations.agentsDir, { recursive: true });
@@ -1972,7 +1972,7 @@ Current.
       pluginRoot,
       pluginDataDir,
       resolved,
-      agentsSourceDir,
+      agentsDirs: [agentsSourceDir],
     });
     assert.strictEqual(prepared.kind, "staged");
 
@@ -2035,7 +2035,7 @@ Current.
       pluginRoot,
       pluginDataDir,
       resolved,
-      agentsSourceDir,
+      agentsDirs: [agentsSourceDir],
     });
     assert.strictEqual(prepared.kind, "staged");
     await mkdir(locations.agentsDir, { recursive: true });
@@ -2098,7 +2098,7 @@ Current.
       pluginRoot,
       pluginDataDir,
       resolved,
-      agentsSourceDir,
+      agentsDirs: [agentsSourceDir],
     });
     assert.strictEqual(prepared.kind, "staged");
 
@@ -2170,7 +2170,7 @@ describe("rollbackAgentsReplacement", () => {
       pluginRoot,
       pluginDataDir,
       resolved,
-      agentsSourceDir,
+      agentsDirs: [agentsSourceDir],
     });
     assert.strictEqual(prepared.kind, "staged");
     const replacement = await replacePreparedAgents(prepared);
@@ -2219,7 +2219,7 @@ describe("rollbackAgentsReplacement", () => {
       pluginRoot,
       pluginDataDir,
       resolved,
-      agentsSourceDir,
+      agentsDirs: [agentsSourceDir],
     });
     assert.strictEqual(prepared.kind, "staged");
     const unknownReplacement = { kind: "replaced", prepared } satisfies AgentsReplacement;
@@ -2293,7 +2293,7 @@ Current.
       pluginRoot,
       pluginDataDir,
       resolved,
-      agentsSourceDir,
+      agentsDirs: [agentsSourceDir],
     });
     assert.strictEqual(prepared.kind, "staged");
     const replacement = await replacePreparedAgents(prepared);
@@ -2365,7 +2365,7 @@ Current.
       pluginRoot,
       pluginDataDir,
       resolved,
-      agentsSourceDir,
+      agentsDirs: [agentsSourceDir],
     });
     assert.strictEqual(prepared.kind, "staged");
     const replacement = await replacePreparedAgents(prepared);
@@ -2424,7 +2424,7 @@ Current.
       pluginRoot,
       pluginDataDir,
       resolved,
-      agentsSourceDir,
+      agentsDirs: [agentsSourceDir],
     });
     assert.strictEqual(prepared.kind, "staged");
     const unknownReplacement = { kind: "replaced", prepared } satisfies AgentsReplacement;

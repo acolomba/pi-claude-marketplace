@@ -18,7 +18,6 @@ import {
   MarketplaceNotAddedSignal,
   missIsNotInstalled,
   maybeWritePluginConfigBack,
-  pickAgentsSourceDir,
   removePluginRecord,
   resolveCrossScopePluginTarget,
   resolveInstalledMarketplaceTarget,
@@ -1350,41 +1349,6 @@ describe("resolvePluginVersion", () => {
       // assert
       assert.equal(version, "hash-e3b0c44298fc");
     });
-  });
-});
-
-describe("pickAgentsSourceDir", () => {
-  test("returns null when no agent source is declared", () => {
-    // arrange
-    const installable = makeMaterializablePlugin("/plugins/alpha");
-
-    // act
-    const agentsSourceDir = pickAgentsSourceDir(installable);
-
-    // assert
-    assert.equal(agentsSourceDir, null);
-  });
-
-  test("returns an absolute first agent source unchanged", () => {
-    // arrange
-    const installable = makeMaterializablePlugin("/plugins/alpha", ["/shared/agents", "other"]);
-
-    // act
-    const agentsSourceDir = pickAgentsSourceDir(installable);
-
-    // assert
-    assert.equal(agentsSourceDir, "/shared/agents");
-  });
-
-  test("resolves a relative first agent source beneath the plugin root", () => {
-    // arrange
-    const installable = makeMaterializablePlugin("/plugins/alpha", ["agents", "other"]);
-
-    // act
-    const agentsSourceDir = pickAgentsSourceDir(installable);
-
-    // assert
-    assert.equal(agentsSourceDir, "/plugins/alpha/agents");
   });
 });
 
