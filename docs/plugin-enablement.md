@@ -54,7 +54,7 @@ The following are recognized but not delivered. They are listed here so a reader
 Two absences are recorded affirmatively rather than by silence:
 
 - **This document is not byte-gated.** [`docs/output-catalog.md`](output-catalog.md) is the only document in this repository bound to an automated byte-equality runner. This contract is prose, checked by reading; nothing fails if a claim here drifts from the code it describes. Read it as a record, not as an enforced guarantee.
-- **The central row renderer's drop of the pre-install token is not covered by the byte-equality runner.** The two documented list-surface states that carry `{installs disabled}` are driven through the list surface's own render context rather than through the central row renderer, whose arms deliberately drop the reason field. What covers that drop is the live-field guard `tests/shared/notify-not-installed-reasons.test.ts`, not the catalog: if a producer ever renders a declaring row through the central arm, the catalog will not catch it.
+- **The central row renderer's drop of the pre-install token is not covered by the byte-equality runner.** The two documented list-surface states that carry `{installs disabled}` are driven through the list surface's own render context rather than through the central row renderer, whose arms deliberately drop the reason field. What covers that drop is the pair of central-arm cases in `tests/shared/notify.test.ts` -- "the central available arm omits a reason that no central producer stamps" and its `remote` twin -- not the catalog: if a producer ever renders a declaring row through the central arm, the catalog will not catch it.
 
 ## Further reading
 

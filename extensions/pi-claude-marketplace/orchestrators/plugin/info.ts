@@ -1210,11 +1210,11 @@ function skipReasonFor(
  * builder, so neither `makeFetchProbe` call site is reachable from here: a
  * signature that cannot express a fetch is a stronger guarantee than a branch
  * that declines one, and adding a `fetchCtx` parameter would silently dissolve
- * it. What keeps that true under change is the zero-call suite in
- * `tests/orchestrators/plugin/info-manifest-absent.test.ts`, which injects the
- * clone-cache and credential seams and pins every counter on both mocks at 0
- * for a `--fetch` run -- an assertion that can fail, not a reading of the
- * control flow.
+ * it. What keeps that true under change is the pair of zero-call INFO-12 cases
+ * in `tests/orchestrators/plugin/info.test.ts`, which inject the clone-cache
+ * and credential seams and pin every counter on both mocks at 0 -- once for a
+ * `--fetch` run and once for a bare `info` run -- an assertion that can fail,
+ * not a reading of the control flow.
  */
 async function buildStateOnlyInstalledRow(
   pluginName: string,

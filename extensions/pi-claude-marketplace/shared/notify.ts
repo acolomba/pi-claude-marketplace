@@ -397,7 +397,7 @@ export type StatusToken = (typeof STATUS_TOKENS)[number];
  * line. The on-the-wire string is
  * `${message.message}\n\n${message.usage}` (SNM-13). The blank
  * line between message and Usage block is part of the user contract;
- * `tests/shared/notify-v2.test.ts` asserts it byte-for-byte.
+ * `tests/shared/notify.test.ts` asserts it byte-for-byte (the SNM-13 case).
  */
 export function notifyUsageError(ctx: ExtensionContext, message: UsageErrorMessage): void {
   ctx.ui.notify(`${message.message}\n\n${message.usage}`, "error");

@@ -3835,7 +3835,7 @@ test("D-100-08 / ENBL-17: bare info (no --scope) with a disabled record in one s
 // Declaration order from the parsed file is preserved.
 //
 // The byte-form of the `hooks:` block itself is locked end-to-end in
-// `tests/shared/notify-v2.test.ts` (renderer unit tests). These
+// `tests/shared/notify.test.ts` (the SURF-02 / D-63-04 renderer unit case). These
 // orchestrator-level fixtures verify the integration: the info.ts
 // re-parse from disk produces the `HookSummaryEntry[]` that flows into
 // the renderer at the correct alphabetical slot.

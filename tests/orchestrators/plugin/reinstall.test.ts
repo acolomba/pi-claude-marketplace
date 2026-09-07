@@ -1400,8 +1400,8 @@ test("260525-cjr C9: same-name cross-scope reinstall -> project-scope row render
   // tie-break on `MarketplaceRow.scope` never fires. This test seeds
   // the SAME marketplace name in BOTH scopes so the tie-break is
   // exercised end-to-end through the cascade renderer (NOT just via
-  // the unit test on `compareByNameThenScope` in
-  // `tests/presentation/sort.test.ts`).
+  // the unit cases on `compareByNameThenScope` in
+  // `tests/shared/notify.test.ts`).
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-same-name-scopes-"));
     try {
