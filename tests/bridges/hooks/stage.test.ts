@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import type { Dirent, Stats } from "node:fs";
 import {
   mkdir,
   mkdtemp,
+  lstat,
   readFile,
   readdir,
   readlink,
@@ -16,14 +16,17 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import * as hooksStageModule from "../../../extensions/pi-claude-marketplace/bridges/hooks/stage.ts";
 import {
+  createWriteHookConfig,
   hookConfigPathFor,
   removeHookConfig,
   writeHookConfig,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/stage.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { SymlinkRefusedError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
+
+import type { HooksTreeInspector } from "../../../extensions/pi-claude-marketplace/bridges/hooks/stage.ts";
+import type { Dirent, Stats } from "node:fs";
 
 interface CasePaths {
   readonly scopeRoot: string;
@@ -32,26 +35,7 @@ interface CasePaths {
   readonly locations: ReturnType<typeof locationsFor>;
 }
 
-interface HooksTreeInspectorContract {
-  readonly lstat: (target: string) => Promise<Stats>;
-  readonly readdir: (directory: string) => Promise<Dirent[]>;
-  readonly readlink: (target: string) => Promise<string>;
-  readonly realpath: (target: string) => Promise<string>;
-}
-
-type WriteHookConfigContract = typeof writeHookConfig;
-
-type CreateWriteHookConfigContract = (
-  inspector: HooksTreeInspectorContract,
-) => WriteHookConfigContract;
-
-function requireCreateWriteHookConfig(): CreateWriteHookConfigContract {
-  const createWriteHookConfig = Reflect.get(hooksStageModule, "createWriteHookConfig");
-  assert.strictEqual(typeof createWriteHookConfig, "function");
-  return createWriteHookConfig as CreateWriteHookConfigContract;
-}
-
-function realHooksTreeInspector(): HooksTreeInspectorContract {
+function realHooksTreeInspector(): HooksTreeInspector {
   return {
     lstat(target: string): Promise<Stats> {
       return lstat(target);
@@ -377,7 +361,7 @@ test("uses the unreadable target marker when the required inspector cannot read 
     });
     const inspectionCalls: string[] = [];
     const nodeInspector = realHooksTreeInspector();
-    const inspector: HooksTreeInspectorContract = {
+    const inspector: HooksTreeInspector = {
       lstat(target: string): Promise<Stats> {
         inspectionCalls.push(`lstat:${target}`);
         return nodeInspector.lstat(target);
@@ -395,7 +379,7 @@ test("uses the unreadable target marker when the required inspector cannot read 
         return nodeInspector.realpath(target);
       },
     };
-    const writeHookConfigWithInspector = requireCreateWriteHookConfig()(inspector);
+    const writeHookConfigWithInspector = createWriteHookConfig(inspector);
     const expectedStagePath = path.join(locations.hooksDir, PLUGIN, "hooks.json");
     const expectedError = {
       name: "SymlinkRefusedError",
@@ -471,7 +455,7 @@ test("preserves an in-tree symlink refusal when a resolved target becomes a link
       resolveInitialLink = resolve;
     });
     const nodeInspector = realHooksTreeInspector();
-    const inspector: HooksTreeInspectorContract = {
+    const inspector: HooksTreeInspector = {
       ...nodeInspector,
       async realpath(target: string): Promise<string> {
         if (target === linkPath) {
@@ -489,7 +473,7 @@ test("preserves an in-tree symlink refusal when a resolved target becomes a link
         return nodeInspector.realpath(target);
       },
     };
-    const writeHookConfigWithInspector = requireCreateWriteHookConfig()(inspector);
+    const writeHookConfigWithInspector = createWriteHookConfig(inspector);
     const expectedStagePath = path.join(locations.hooksDir, PLUGIN, "hooks.json");
     let rejection: unknown;
 
@@ -537,6 +521,79 @@ test("preserves an in-tree symlink refusal when a resolved target becomes a link
   }
 });
 
+test("propagates a path walk failure caused by a resolved target replacement", async () => {
+  const { locations, pluginRoot, scopeRoot } = await allocateCasePaths(
+    "hooks-stage-replaced-target-file-",
+  );
+  try {
+    // arrange
+    const hooksDirectory = path.join(pluginRoot, "hooks");
+    const originalTarget = path.join(pluginRoot, "original-target");
+    const nestedTarget = path.join(originalTarget, "nested");
+    await mkdir(hooksDirectory, { recursive: true });
+    await mkdir(nestedTarget, { recursive: true });
+    const normalizedPluginRoot = await realpath(pluginRoot);
+    const normalizedOriginalTarget = await realpath(originalTarget);
+    const normalizedNestedTarget = await realpath(nestedTarget);
+    const linkPath = path.join(hooksDirectory, "alias");
+    await createDirectoryLink(normalizedNestedTarget, linkPath);
+    let resolveInitialLink: (() => void) | undefined;
+    const initialLinkResolved = new Promise<void>((resolve) => {
+      resolveInitialLink = resolve;
+    });
+    const nodeInspector = realHooksTreeInspector();
+    const inspector: HooksTreeInspector = {
+      ...nodeInspector,
+      async realpath(target: string): Promise<string> {
+        if (target === linkPath) {
+          const resolved = await nodeInspector.realpath(target);
+          resolveInitialLink?.();
+          return resolved;
+        }
+
+        if (target === normalizedPluginRoot) {
+          await initialLinkResolved;
+          await rm(normalizedOriginalTarget, { recursive: true, force: true });
+          await writeFile(normalizedOriginalTarget, "replaced by file\n");
+        }
+
+        return nodeInspector.realpath(target);
+      },
+    };
+    const writeHookConfigWithInspector = createWriteHookConfig(inspector);
+    const expectedStagePath = path.join(locations.hooksDir, PLUGIN, "hooks.json");
+    const expectedMissingPath = path.join(normalizedOriginalTarget, "nested");
+    let rejection: unknown;
+
+    // act
+    try {
+      await writeHookConfigWithInspector({
+        locations,
+        pluginName: PLUGIN,
+        pluginRoot: normalizedPluginRoot,
+        hooksValue: HOOKS_VALUE,
+      });
+    } catch (error) {
+      rejection = error;
+    }
+
+    const stagedState = await stat(expectedStagePath).then(() => "present", filesystemErrorCode);
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        code: (rejection as NodeJS.ErrnoException).code,
+        path: (rejection as NodeJS.ErrnoException).path,
+        syscall: (rejection as NodeJS.ErrnoException).syscall,
+      },
+      { code: "ENOTDIR", path: expectedMissingPath, syscall: "lstat" },
+    );
+    assert.strictEqual(stagedState, "ENOENT");
+  } finally {
+    await rm(scopeRoot, { recursive: true, force: true, maxRetries: 3 });
+  }
+});
+
 test("propagates an unexpected hook directory read failure unchanged", async () => {
   const { locations, pluginRoot, scopeRoot } = await allocateCasePaths(
     "hooks-stage-readdir-error-",
@@ -547,14 +604,14 @@ test("propagates an unexpected hook directory read failure unchanged", async () 
     const normalizedPluginRoot = await realpath(pluginRoot);
     const readError = Object.assign(new Error("hooks directory read denied"), { code: "EACCES" });
     const inspectionCalls: string[] = [];
-    const inspector: HooksTreeInspectorContract = {
+    const inspector: HooksTreeInspector = {
       ...realHooksTreeInspector(),
       readdir(directory: string): Promise<Dirent[]> {
         inspectionCalls.push(directory);
         return Promise.reject(readError);
       },
     };
-    const writeHookConfigWithInspector = requireCreateWriteHookConfig()(inspector);
+    const writeHookConfigWithInspector = createWriteHookConfig(inspector);
     const expectedStagePath = path.join(locations.hooksDir, PLUGIN, "hooks.json");
     let rejection: unknown;
 
@@ -598,7 +655,7 @@ test("propagates an unexpected hook entry inspection failure unchanged", async (
     });
     const inspectionCalls: string[] = [];
     const nodeInspector = realHooksTreeInspector();
-    const inspector: HooksTreeInspectorContract = {
+    const inspector: HooksTreeInspector = {
       ...nodeInspector,
       lstat(target: string): Promise<Stats> {
         inspectionCalls.push(target);
@@ -609,7 +666,7 @@ test("propagates an unexpected hook entry inspection failure unchanged", async (
         return nodeInspector.lstat(target);
       },
     };
-    const writeHookConfigWithInspector = requireCreateWriteHookConfig()(inspector);
+    const writeHookConfigWithInspector = createWriteHookConfig(inspector);
     const expectedStagePath = path.join(locations.hooksDir, PLUGIN, "hooks.json");
     let rejection: unknown;
 
