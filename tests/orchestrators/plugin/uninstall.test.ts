@@ -28,7 +28,10 @@ import {
   resetCompletionCache,
   getPluginIndex,
 } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
-import { MarketplaceNotFoundError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import {
+  MarketplaceNotFoundError,
+  StateLockHeldError,
+} from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { SymlinkRefusedError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
 
@@ -1299,6 +1302,47 @@ for (const { code, reason } of [
     });
   });
 }
+
+test("cascade failure maps StateLockHeldError to lock held independently of its message", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-cascade-lock-held-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedFullPlugin(locations, "mp", "hello", cwd);
+      const cause = new StateLockHeldError("project", locations.stateLockFile);
+      cause.message = "wording deliberately unrelated to contention";
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      const outcome = await uninstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        cascade: cascadeFailure(cause),
+      });
+
+      // assert
+      assert.equal(outcome, undefined);
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n● mp [project]\n" +
+            "  ⊘ hello v0.0.1 (failed) {lock held}\n" +
+            "    cause: wording deliberately unrelated to contention",
+          severity: "error",
+        },
+      ]);
+      const state = await loadState(locations.extensionRoot);
+      assert.ok(state.marketplaces["mp"]?.plugins["hello"] !== undefined);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
 
 test("cascade failure maps an unclassified error to unreadable", async () => {
   await withHermeticHome(async () => {
