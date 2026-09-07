@@ -3062,8 +3062,7 @@ function makeMockGitOps(
   const gitOps: typeof fake.gitOps = {
     ...fake.gitOps,
     async clone(cloneOptions) {
-      const { auth: _auth, ...cloneWithoutCallbacks } = cloneOptions;
-      await fake.gitOps.clone(cloneWithoutCallbacks);
+      await fake.gitOps.clone(cloneOptions);
     },
     async resolveRef(resolveOptions) {
       if (resolveOptions.ref === "refs/remotes/origin/HEAD") {
@@ -3076,8 +3075,7 @@ function makeMockGitOps(
       return fake.gitOps.resolveRef(resolveOptions);
     },
     async resolveRemoteRef(resolveOptions) {
-      const { auth: _auth, ...resolveWithoutCallbacks } = resolveOptions;
-      return fake.gitOps.resolveRemoteRef(resolveWithoutCallbacks);
+      return fake.gitOps.resolveRemoteRef(resolveOptions);
     },
   };
   return {

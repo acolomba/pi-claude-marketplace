@@ -138,15 +138,10 @@ function makeMockGitOps(initial: GitOpsAdapterOptions = {}) {
   const gitOps: GitOps = {
     ...git.gitOps,
     async clone(options) {
-      const { auth, ...authlessOptions } = options;
-      await git.gitOps.clone(authlessOptions);
+      await git.gitOps.clone(options);
       await initial.onClone?.(options.dir);
       if (Object.hasOwn(initial, "cloneThrows")) {
         throw initial.cloneThrows;
-      }
-
-      if (auth !== undefined) {
-        Object.assign(git.state.calls.clone.at(-1) ?? {}, { auth });
       }
     },
   };

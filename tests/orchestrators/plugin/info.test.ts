@@ -176,18 +176,10 @@ function makeMockGitOps(initial: GitOpsAdapterOptions = {}) {
   const gitOps: GitOps = {
     ...git.gitOps,
     async clone(options) {
-      const { auth, ...authlessOptions } = options;
-      await git.gitOps.clone(authlessOptions);
-      if (auth !== undefined) {
-        Object.assign(git.state.calls.clone.at(-1) ?? {}, { auth });
-      }
+      await git.gitOps.clone(options);
     },
     async fetch(options) {
-      const { auth, ...authlessOptions } = options;
-      await git.gitOps.fetch(authlessOptions);
-      if (auth !== undefined) {
-        Object.assign(git.state.calls.fetch.at(-1) ?? {}, { auth });
-      }
+      await git.gitOps.fetch(options);
     },
     async resolveRef(options) {
       try {
@@ -202,13 +194,7 @@ function makeMockGitOps(initial: GitOpsAdapterOptions = {}) {
       }
     },
     async resolveRemoteRef(options) {
-      const { auth, ...authlessOptions } = options;
-      const oid = await git.gitOps.resolveRemoteRef(authlessOptions);
-      if (auth !== undefined) {
-        Object.assign(git.state.calls.resolveRemoteRef.at(-1) ?? {}, { auth });
-      }
-
-      return oid;
+      return git.gitOps.resolveRemoteRef(options);
     },
   };
 

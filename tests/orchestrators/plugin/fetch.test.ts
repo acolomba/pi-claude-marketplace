@@ -156,8 +156,7 @@ function gitBoundary(options: GitBoundaryOptions): GitBoundary {
       schedule.push(
         `clone ${cloneOptions.url} ref=${cloneOptions.ref ?? "-"} single=${String(cloneOptions.singleBranch ?? false)} auth=${cloneOptions.auth?.host ?? "-"}`,
       );
-      const { auth: _auth, ...authlessOptions } = cloneOptions;
-      await git.gitOps.clone(authlessOptions);
+      await git.gitOps.clone(cloneOptions);
       if (options.writeHead === true) {
         await mkdir(path.join(cloneOptions.dir, ".git"), { recursive: true });
         await writeFile(path.join(cloneOptions.dir, ".git", "HEAD"), `${git.state.head}\n`);
@@ -171,8 +170,7 @@ function gitBoundary(options: GitBoundaryOptions): GitBoundary {
       schedule.push(
         `fetch remote=${options.remote ?? "-"} ref=${options.ref ?? "-"} auth=${options.auth?.host ?? "-"}`,
       );
-      const { auth: _auth, ...authlessOptions } = options;
-      await git.gitOps.fetch(authlessOptions);
+      await git.gitOps.fetch(options);
     },
     async forceUpdateRef(options) {
       schedule.push(`force-update ${options.ref}=${options.value}`);
@@ -199,8 +197,7 @@ function gitBoundary(options: GitBoundaryOptions): GitBoundary {
       schedule.push(
         `resolve-remote ${options.url} ref=${options.ref ?? "-"} auth=${options.auth?.host ?? "-"}`,
       );
-      const { auth: _auth, ...authlessOptions } = options;
-      return git.gitOps.resolveRemoteRef(authlessOptions);
+      return git.gitOps.resolveRemoteRef(options);
     },
   };
   return { gitOps, schedule };

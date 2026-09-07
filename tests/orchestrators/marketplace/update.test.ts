@@ -84,21 +84,13 @@ function makeMockGitOps(options: MarketplaceGitOpsSeed = {}) {
   const gitOps: typeof git.gitOps = {
     ...git.gitOps,
     async fetch(fetchOptions): Promise<void> {
-      const { auth, ...cloneableOptions } = fetchOptions;
-      try {
-        await git.gitOps.fetch(cloneableOptions);
-        if (
-          fetchOptions.ref !== undefined &&
-          /^[a-f0-9]{40}$/i.test(fetchOptions.ref) &&
-          options.remoteRefs?.[`refs/remotes/origin/${fetchOptions.ref}`] === undefined
-        ) {
-          Reflect.deleteProperty(git.state.localRefs, `refs/remotes/origin/${fetchOptions.ref}`);
-        }
-      } finally {
-        const recorded = git.state.calls.fetch.at(-1);
-        if (recorded !== undefined && auth !== undefined) {
-          Object.assign(recorded, { auth });
-        }
+      await git.gitOps.fetch(fetchOptions);
+      if (
+        fetchOptions.ref !== undefined &&
+        /^[a-f0-9]{40}$/i.test(fetchOptions.ref) &&
+        options.remoteRefs?.[`refs/remotes/origin/${fetchOptions.ref}`] === undefined
+      ) {
+        Reflect.deleteProperty(git.state.localRefs, `refs/remotes/origin/${fetchOptions.ref}`);
       }
     },
   };
