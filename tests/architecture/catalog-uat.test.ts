@@ -829,6 +829,8 @@ const FIXTURES: FixtureMap = {
           pi as never,
           LIST_CONTEXT,
           AVAILABLE_INSTALLS_DISABLED_ROWS,
+          undefined,
+          "single",
         );
       },
     },
@@ -897,7 +899,14 @@ const FIXTURES: FixtureMap = {
       pi: piWithBothLoaded(),
       message: { marketplaces: REMOTE_INSTALLS_DISABLED_ROWS },
       emit: (ctx, pi) => {
-        notifyWithContext(ctx as never, pi as never, LIST_CONTEXT, REMOTE_INSTALLS_DISABLED_ROWS);
+        notifyWithContext(
+          ctx as never,
+          pi as never,
+          LIST_CONTEXT,
+          REMOTE_INSTALLS_DISABLED_ROWS,
+          undefined,
+          "single",
+        );
       },
     },
 
