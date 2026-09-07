@@ -300,6 +300,7 @@ test("PU-1: cascade order observable end-state -- all four bridges' resources re
         notifications[0]?.message,
         "● mp [project]\n  ○ hello v0.0.1 (uninstalled)\n\n/reload to pick up changes",
       );
+      assert.doesNotMatch(notifications[0]?.message ?? "", /Plugin uninstall:/);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

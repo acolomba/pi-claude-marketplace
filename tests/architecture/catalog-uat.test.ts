@@ -2122,7 +2122,7 @@ const FIXTURES: FixtureMap = {
         marketplaces: [],
       },
       emit: (ctx, pi) => {
-        notifyUpdateNoOpWithContext(ctx as never, pi as never, UPDATE_CONTEXT, []);
+        notifyUpdateNoOpWithContext(ctx as never, pi as never, UPDATE_CONTEXT, [], "plural");
       },
     },
 
@@ -2449,23 +2449,29 @@ const FIXTURES: FixtureMap = {
         ],
       },
       emit: (ctx, pi) => {
-        notifyUpdateNoOpWithContext(ctx as never, pi as never, UPDATE_CONTEXT, [
-          {
-            name: "mp",
-            scope: "project",
-            plugins: [
-              {
-                status: "partially-upgradable",
-                severity: "info",
-                needsReload: false,
-                partialHint: true,
-                name: "hello",
-                version: "1.0.0",
-                reasons: ["lsp"],
-              },
-            ],
-          },
-        ]);
+        notifyUpdateNoOpWithContext(
+          ctx as never,
+          pi as never,
+          UPDATE_CONTEXT,
+          [
+            {
+              name: "mp",
+              scope: "project",
+              plugins: [
+                {
+                  status: "partially-upgradable",
+                  severity: "info",
+                  needsReload: false,
+                  partialHint: true,
+                  name: "hello",
+                  version: "1.0.0",
+                  reasons: ["lsp"],
+                },
+              ],
+            },
+          ],
+          "plural",
+        );
       },
     },
 

@@ -299,7 +299,7 @@ test("the no-op update wrapper emits its fixed headline for no rows", (t) => {
   const controlled = createControlledContext(t, "Plugin update");
 
   // act
-  notifyUpdateNoOpWithContext(harness.ctx, harness.pi, controlled.context, []);
+  notifyUpdateNoOpWithContext(harness.ctx, harness.pi, controlled.context, [], "plural");
 
   // assert
   assert.deepStrictEqual(controlled.calls, []);
@@ -320,7 +320,7 @@ test("the no-op update wrapper dispatches surviving rows before its headline", (
   ];
 
   // act
-  notifyUpdateNoOpWithContext(harness.ctx, harness.pi, controlled.context, rows);
+  notifyUpdateNoOpWithContext(harness.ctx, harness.pi, controlled.context, rows, "plural");
 
   // assert
   assert.deepStrictEqual(controlled.calls, [

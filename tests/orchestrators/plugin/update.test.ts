@@ -691,7 +691,7 @@ async function rewriteManifest(
 
 // ─── PUP-1: empty target ───────────────────────────────────────────────────────
 
-test("PUP-1: bare form against empty state -> '(no marketplaces)' silent success", async () => {
+test("PUP-1: a bare update against empty state reports its no-op headline", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "update-pup1-empty-"));
     try {
@@ -699,10 +699,7 @@ test("PUP-1: bare form against empty state -> '(no marketplaces)' silent success
       await updatePlugins({ ctx, pi, scope: "project", cwd, target: { kind: "all" } });
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, undefined);
-      // Empty-targets shape mirrors orchestrators/marketplace/update.ts --
-      // notify({ marketplaces: [] }) renders the renderer's
-      // `(no marketplaces)` sentinel per D-16-17.
-      assert.equal(notifications[0]?.message, "(no marketplaces)");
+      assert.equal(notifications[0]?.message, "Plugin update: nothing to update");
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -8140,6 +8137,7 @@ test("WR-05: a bare-form update whose scope state is unreadable fails on the syn
       );
       // The cause chain is the only carrier of which file could not be read.
       assert.match(body, /cause: state\.json at .* is not valid JSON/, `no cause in:\n${body}`);
+      assert.match(body, /Plugin update: 1 failure$/);
       assert.equal(notifications[0]?.severity, "error");
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -8169,6 +8167,7 @@ test("a marketplace target with unreadable state reports its marketplace identit
       assert.equal(notifications.length, 1);
       assert.match(notifications[0]?.message ?? "", /● mp \[project\]/);
       assert.match(notifications[0]?.message ?? "", /⊘ \(mp\) \(failed\) \{unreadable manifest\}/);
+      assert.match(notifications[0]?.message ?? "", /Plugin update: 1 failure$/);
       assert.equal(notifications[0]?.severity, "error");
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -8199,6 +8198,7 @@ test("a plugin target with unreadable state reports its plugin identity", async 
       assert.equal(notifications.length, 1);
       assert.match(notifications[0]?.message ?? "", /● mp \[project\]/);
       assert.match(notifications[0]?.message ?? "", /⊘ hello \(failed\) \{unreadable manifest\}/);
+      assert.doesNotMatch(notifications[0]?.message ?? "", /Plugin update:/);
       assert.equal(notifications[0]?.severity, "error");
     } finally {
       await rm(cwd, { recursive: true, force: true });
