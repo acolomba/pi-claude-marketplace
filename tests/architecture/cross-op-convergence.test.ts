@@ -40,9 +40,6 @@
 // stray call, but the pre-guard miss returns before it is reached.
 
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import path from "node:path";
 import test from "node:test";
 
 import { setMarketplaceAutoupdate } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/autoupdate.ts";
@@ -54,6 +51,7 @@ import { reinstallPlugins } from "../../extensions/pi-claude-marketplace/orchest
 import { uninstallPlugin } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
 import { updatePlugins } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/update.ts";
 import { createGitOpsFake } from "../platform/git-ops-fake.ts";
+import { withHermeticEnvironment } from "../platform/hermetic-environment.ts";
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
@@ -87,22 +85,7 @@ function makeCtx(): { ctx: ExtensionContext; pi: ExtensionAPI; notifications: No
 }
 
 async function withHermeticHome<T>(fn: (env: { cwd: string }) => Promise<T>): Promise<T> {
-  const originalHome = process.env.HOME;
-  const home = await mkdtemp(path.join(tmpdir(), "xop-home-"));
-  const cwd = await mkdtemp(path.join(tmpdir(), "xop-cwd-"));
-  process.env.HOME = home;
-  try {
-    return await fn({ cwd });
-  } finally {
-    if (originalHome === undefined) {
-      delete process.env.HOME;
-    } else {
-      process.env.HOME = originalHome;
-    }
-
-    await rm(home, { recursive: true, force: true });
-    await rm(cwd, { recursive: true, force: true });
-  }
+  return withHermeticEnvironment("xop-", ({ cwd }) => fn({ cwd }));
 }
 
 const NAME = "ghost-mp";

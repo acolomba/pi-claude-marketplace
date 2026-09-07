@@ -32,6 +32,7 @@ import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
+import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
 import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type {
@@ -192,26 +193,7 @@ function makeCtx(): { ctx: ExtensionContext; pi: ExtensionAPI; notifications: No
 async function withHermeticHome<T>(
   fn: (env: { home: string; cwd: string }) => Promise<T>,
 ): Promise<T> {
-  const originalHome = process.env.HOME;
-  const home = await mkdtemp(path.join(tmpdir(), "mp-update-home-"));
-  const cwd = await mkdtemp(path.join(tmpdir(), "mp-update-cwd-"));
-  process.env.HOME = home;
-  try {
-    return await fn({ home, cwd });
-  } finally {
-    if (originalHome === undefined) {
-      delete process.env.HOME;
-    } else {
-      process.env.HOME = originalHome;
-    }
-
-    // A best-effort migration persist (write-file-atomic, fired off by
-    // loadState without await) may still be renaming state.json.<rand> into
-    // place when teardown runs; retry removal so the transient tmp entry does
-    // not yield ENOTEMPTY on macOS.
-    await rm(home, { recursive: true, force: true, maxRetries: 10 });
-    await rm(cwd, { recursive: true, force: true, maxRetries: 10 });
-  }
+  return withHermeticEnvironment("mp-update-", ({ cwd, home }) => fn({ cwd, home }));
 }
 
 /**

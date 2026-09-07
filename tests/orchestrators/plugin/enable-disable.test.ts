@@ -9,9 +9,8 @@
 // public entry point `setPluginEnabled`.
 
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { createRequire, syncBuiltinESMExports } from "node:module";
-import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 
@@ -29,6 +28,7 @@ import { locationsFor } from "../../../extensions/pi-claude-marketplace/persiste
 import { loadState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { MarketplaceNotFoundError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { notify } from "../../../extensions/pi-claude-marketplace/shared/notify.ts";
+import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
 import type { CacheEntry } from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
 import type { EnableDisablePluginOutcome } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts";
@@ -88,22 +88,7 @@ function makePiWithSubagents(): ExtensionAPI {
 async function withHermeticHome<T>(
   fn: (env: { cwd: string; home: string }) => Promise<T>,
 ): Promise<T> {
-  const originalHome = process.env.HOME;
-  const home = await mkdtemp(path.join(tmpdir(), "enable-disable-home-"));
-  const cwd = await mkdtemp(path.join(tmpdir(), "enable-disable-cwd-"));
-  process.env.HOME = home;
-  try {
-    return await fn({ cwd, home });
-  } finally {
-    if (originalHome === undefined) {
-      delete process.env.HOME;
-    } else {
-      process.env.HOME = originalHome;
-    }
-
-    await rm(home, { recursive: true, force: true });
-    await rm(cwd, { recursive: true, force: true });
-  }
+  return withHermeticEnvironment("enable-disable-", ({ cwd, home }) => fn({ cwd, home }));
 }
 
 // Construct a state.json for the user scope where a marketplace `mp` contains

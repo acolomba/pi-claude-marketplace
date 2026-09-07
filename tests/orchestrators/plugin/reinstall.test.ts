@@ -40,6 +40,7 @@ import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
+import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
 import { retryTree } from "./scope-tree-inventory.ts";
 
@@ -83,22 +84,14 @@ function makeCtx(piOverrides?: { readonly toolNames?: readonly string[] }): {
 }
 
 async function withHermeticHome<T>(fn: () => Promise<T>): Promise<T> {
-  const hermeticHome = await mkdtemp(path.join(tmpdir(), "reinstall-home-"));
-  const prevHome = process.env.HOME;
-  process.env.HOME = hermeticHome;
-  resetCompletionCache();
-  try {
-    return await fn();
-  } finally {
+  return withHermeticEnvironment("reinstall-", async () => {
     resetCompletionCache();
-    if (prevHome === undefined) {
-      delete process.env.HOME;
-    } else {
-      process.env.HOME = prevHome;
+    try {
+      return await fn();
+    } finally {
+      resetCompletionCache();
     }
-
-    await rm(hermeticHome, { recursive: true, force: true });
-  }
+  });
 }
 
 interface SeededReinstallAgent {

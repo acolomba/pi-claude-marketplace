@@ -29,9 +29,8 @@
 
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
-import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, symlink, writeFile } from "node:fs/promises";
 import { syncBuiltinESMExports } from "node:module";
-import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
@@ -63,6 +62,7 @@ import {
 } from "../../edge/handlers/marketplace-seed.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
+import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
 import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
@@ -265,33 +265,18 @@ function makeCtx(expectedNotifications = 1): {
   return { ctx, pi, notifications };
 }
 
-/**
- * Run a callback with HOME pointing at a tmp dir so user-scope state
- * is hermetic. Restores HOME after.
- */
 async function withHermeticHome<T>(
   fn: (env: { home: string; cwd: string }) => Promise<T>,
 ): Promise<T> {
-  const originalHome = process.env.HOME;
-  const home = await mkdtemp(path.join(tmpdir(), "plug-info-home-"));
-  const cwd = await mkdtemp(path.join(tmpdir(), "plug-info-cwd-"));
-  process.env.HOME = home;
-  try {
-    return await fn({ home, cwd });
-  } finally {
-    for (const verifyInteractions of pendingInteractionVerifications.splice(0)) {
-      verifyInteractions();
+  return withHermeticEnvironment("plug-info-", async ({ cwd, home }) => {
+    try {
+      return await fn({ cwd, home });
+    } finally {
+      for (const verifyInteractions of pendingInteractionVerifications.splice(0)) {
+        verifyInteractions();
+      }
     }
-
-    if (originalHome === undefined) {
-      delete process.env.HOME;
-    } else {
-      process.env.HOME = originalHome;
-    }
-
-    await rm(home, { recursive: true, force: true });
-    await rm(cwd, { recursive: true, force: true });
-  }
+  });
 }
 
 interface SeedPathMarketplaceOpts {

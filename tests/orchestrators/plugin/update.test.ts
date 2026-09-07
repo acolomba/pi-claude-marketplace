@@ -53,6 +53,7 @@ import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
+import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
 import type { AuthAttemptResult } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
 import type {
@@ -325,20 +326,7 @@ function capturingUpdateSeam(gitOps: GitOps): {
 }
 
 async function withHermeticHome<T>(fn: () => Promise<T>): Promise<T> {
-  const hermeticHome = await mkdtemp(path.join(tmpdir(), "update-home-"));
-  const prevHome = process.env.HOME;
-  process.env.HOME = hermeticHome;
-  try {
-    return await fn();
-  } finally {
-    if (prevHome === undefined) {
-      delete process.env.HOME;
-    } else {
-      process.env.HOME = prevHome;
-    }
-
-    await rm(hermeticHome, { recursive: true, force: true });
-  }
+  return withHermeticEnvironment("update-", fn);
 }
 
 async function seedGitUpdateMarketplace(opts: {
