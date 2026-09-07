@@ -94,6 +94,13 @@ export interface StageAgentsInput {
   readonly cwd: string;
 }
 
+/** Temporary typed compatibility input for update/reinstall; removed by Plan 03-03. */
+export type PrepareStageAgentsInput =
+  | StageAgentsInput
+  | (Omit<StageAgentsInput, "agentsDirs"> & {
+      readonly agentsSourceDir: string | null;
+    });
+
 /**
  * Per-agent stage record. Read to populate state.json.installs.
  */

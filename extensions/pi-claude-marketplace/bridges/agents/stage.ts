@@ -55,19 +55,13 @@ import type {
   ConvertedAgent,
   DiscoveredAgent,
   PreparedAgentsStaging,
+  PrepareStageAgentsInput,
   ReplacePreparedAgentsOptions,
   StageAgentsCommitResult,
-  StageAgentsInput,
   StagedAgentRecord,
   UnstageAgentFailure,
 } from "./types.ts";
 import type { AgentsIndexEntry } from "../../persistence/agents-index-schema.ts";
-
-type LegacyStageAgentsInput = Omit<StageAgentsInput, "agentsDirs"> & {
-  readonly agentsSourceDir: string | null;
-};
-
-type PrepareStageAgentsInput = StageAgentsInput | LegacyStageAgentsInput;
 
 function agentsDirsFromInput(input: PrepareStageAgentsInput): readonly string[] {
   if ("agentsDirs" in input) {

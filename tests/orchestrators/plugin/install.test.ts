@@ -344,6 +344,18 @@ interface SeededAgentSource {
   readonly body?: string;
 }
 
+async function writeAgentComponent(pluginRoot: string, agent: SeededAgentSource): Promise<void> {
+  const agentsDir = path.join(pluginRoot, agent.directory ?? "agents");
+  await mkdir(agentsDir, { recursive: true });
+  const name = agent.frontmatterName ?? agent.sourceName;
+  const description = agent.description === undefined ? "" : `description: ${agent.description}\n`;
+  const tools = agent.tools ?? "Read,Grep";
+  await writeFile(
+    path.join(agentsDir, `${agent.sourceName}.md`),
+    `---\nname: ${name}\n${description}tools: ${tools}\n---\n\n${agent.body ?? "Body.\n"}`,
+  );
+}
+
 async function writePluginComponents(
   pluginRoot: string,
   opts: {
@@ -374,14 +386,7 @@ async function writePluginComponents(
   }
 
   for (const agent of opts.agents ?? []) {
-    const agentsDir = path.join(pluginRoot, agent.directory ?? "agents");
-    await mkdir(agentsDir, { recursive: true });
-    const name = agent.frontmatterName ?? agent.sourceName;
-    const tools = agent.tools ?? "Read,Grep";
-    await writeFile(
-      path.join(agentsDir, `${agent.sourceName}.md`),
-      `---\nname: ${name}\n${agent.description === undefined ? "" : `description: ${agent.description}\n`}tools: ${tools}\n---\n\n${agent.body ?? "Body.\n"}`,
-    );
+    await writeAgentComponent(pluginRoot, agent);
   }
 
   if (opts.mcpServers !== undefined) {
