@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.19
 status: Awaiting next milestone
 stopped_at: Milestone v1.19 closed and archived; awaiting the next milestone
-last_updated: "2026-09-04T03:59:38.393Z"
-last_activity: 2026-09-03
-last_activity_desc: Milestone v1.19 completed and archived
+last_updated: "2026-09-07T20:23:50Z"
+last_activity: 2026-09-07
+last_activity_desc: Completed quick task 260907-m38 (SKFM-01 scalar repair)
 state_head: 609eb6981589605a03daa90eddc1a1dd8b711228
 progress:
   total_phases: 10
@@ -34,7 +34,8 @@ component as a working Pi artifact.
 Phase: Milestone v1.19 complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-09-03 — Milestone v1.19 completed and archived
+Last activity: 2026-09-07 — Completed quick task 260907-m38: SKFM-01 single-line
+frontmatter scalar repair in the skills bridge
 
 ## Performance Metrics
 
@@ -406,6 +407,13 @@ None for roadmap creation.
   hand. Phases 115 through 117 and milestone close will hit the same wall until the
   stale workstream directories are retired or v1.19 is given its own workstream.
 - RESOLVED by 117-12: D-117-20 in `117-CONTEXT.md` now reads 190 complete numeric records + 7 accepted D-116-01a shortfalls + 7 type-only, matching the operator decision taken in plan 117-11 and the retained all-pair artifact. The superseded 197 + 7 wording is gone.
+
+### Quick Tasks Completed
+
+| #          | Description                                                                                                 | Date       | Commit   | Directory                                                                                            |
+| ---------- | ----------------------------------------------------------------------------------------------------------- | ---------- | -------- | ---------------------------------------------------------------------------------------------------- |
+| 260907-l4w | Fix issue #155: agents bridge frontmatter parser mangles YAML multiline (block scalar) description values | 2026-09-07 | c82a731b | [260907-l4w-fix-issue-155-agents-bridge-frontmatter-](./quick/260907-l4w-fix-issue-155-agents-bridge-frontmatter-/) |
+| 260907-m38 | Implement SKFM-01: repair a single-line frontmatter scalar whose only defect is an unquoted colon | 2026-09-07 | 66be4e43 | [260907-m38-implement-skfm-01-repair-single-line-fro](./quick/260907-m38-implement-skfm-01-repair-single-line-fro/) |
 
 ## Deferred Items
 

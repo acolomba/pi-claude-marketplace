@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.18.2] - 2026-09-07
+
+- An agent whose `description` uses a YAML block scalar now installs with its full text. It used to install with the bare `>` or `|` indicator, which broke auto-discovery. Thanks to @kevinkirkup (#155).
+- Indented agent frontmatter lines no longer surface as phantom keys in the generated file's `droppedFields` provenance.
+- A skill whose only frontmatter defect is an unquoted colon in a single-line value now installs with its real description instead of the generated placeholder.
+
 ## [0.18.1] - 2026-08-29
 
 - Structurally valid plugins that declare `workflows` or contain a literal `workflows/` directory now report `(partially-available) {workflows}`.

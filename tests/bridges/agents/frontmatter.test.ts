@@ -308,6 +308,309 @@ Body.
     // assert
     assert.deepStrictEqual(parsedAgentFile, expectedParsedAgentFile);
   });
+
+  test("folds a block scalar description without lifting its colon line into a key", () => {
+    // arrange
+    const sourceAgentFile = `---
+name: reviewer
+description: >
+  Reviews files and reports: findings
+  across the whole change set.
+tools: Read
+---
+Body.
+`;
+    const expectedParsedAgentFile = {
+      raw: {
+        name: "reviewer",
+        description: "Reviews files and reports: findings across the whole change set.",
+        tools: "Read",
+      },
+      body: "Body.\n",
+    };
+
+    // act
+    const parsedAgentFile = parseFrontmatter(sourceAgentFile);
+
+    // assert
+    assert.deepStrictEqual(parsedAgentFile, expectedParsedAgentFile);
+  });
+
+  for (const { blockHeader, blockOutcome, expectedDescription } of [
+    {
+      blockHeader: ">",
+      blockOutcome: "folded onto one line",
+      expectedDescription: "first line second line",
+    },
+    {
+      blockHeader: ">-",
+      blockOutcome: "folded onto one line",
+      expectedDescription: "first line second line",
+    },
+    {
+      blockHeader: ">+",
+      blockOutcome: "folded onto one line",
+      expectedDescription: "first line second line",
+    },
+    {
+      blockHeader: ">2",
+      blockOutcome: "folded onto one line",
+      expectedDescription: "first line second line",
+    },
+    {
+      blockHeader: "|",
+      blockOutcome: "kept on separate lines",
+      expectedDescription: "first line\nsecond line",
+    },
+    {
+      blockHeader: "|-",
+      blockOutcome: "kept on separate lines",
+      expectedDescription: "first line\nsecond line",
+    },
+    {
+      blockHeader: "|+",
+      blockOutcome: "kept on separate lines",
+      expectedDescription: "first line\nsecond line",
+    },
+    {
+      blockHeader: "|2",
+      blockOutcome: "kept on separate lines",
+      expectedDescription: "first line\nsecond line",
+    },
+  ]) {
+    test(`returns a ${blockHeader} block scalar ${blockOutcome}`, () => {
+      // arrange
+      const sourceAgentFile = `---
+description: ${blockHeader}
+  first line
+  second line
+tools: Read
+---
+Body.
+`;
+      const expectedParsedAgentFile = {
+        raw: { description: expectedDescription, tools: "Read" },
+        body: "Body.\n",
+      };
+
+      // act
+      const parsedAgentFile = parseFrontmatter(sourceAgentFile);
+
+      // assert
+      assert.deepStrictEqual(parsedAgentFile, expectedParsedAgentFile);
+    });
+  }
+
+  test("returns a literal block that runs to the closing delimiter", () => {
+    // arrange
+    const sourceAgentFile = `---
+name: reviewer
+description: |
+  First line.
+  Second line: with a colon.
+---
+Body.
+`;
+    const expectedParsedAgentFile = {
+      raw: {
+        name: "reviewer",
+        description: "First line.\nSecond line: with a colon.",
+      },
+      body: "Body.\n",
+    };
+
+    // act
+    const parsedAgentFile = parseFrontmatter(sourceAgentFile);
+
+    // assert
+    assert.deepStrictEqual(parsedAgentFile, expectedParsedAgentFile);
+  });
+
+  test("keeps blank-line separators and more-indented lines while folding", () => {
+    // arrange
+    const sourceAgentFile = `---
+description: >
+
+  First paragraph line
+  continues here.
+
+  Second paragraph.
+    more indented literal
+
+    deeper after blank
+  back to base: with colon
+tools: Read
+---
+Body.
+`;
+    const expectedParsedAgentFile = {
+      raw: {
+        description:
+          "First paragraph line continues here.\nSecond paragraph.\n  more indented literal\n\n  deeper after blank\nback to base: with colon",
+        tools: "Read",
+      },
+      body: "Body.\n",
+    };
+
+    // act
+    const parsedAgentFile = parseFrontmatter(sourceAgentFile);
+
+    // assert
+    assert.deepStrictEqual(parsedAgentFile, expectedParsedAgentFile);
+  });
+
+  test("returns an empty value for a block header with no continuation lines", () => {
+    // arrange
+    const sourceAgentFile = `---
+description: >
+tools: Read
+---
+Body.
+`;
+    const expectedParsedAgentFile = {
+      raw: { description: "", tools: "Read" },
+      body: "Body.\n",
+    };
+
+    // act
+    const parsedAgentFile = parseFrontmatter(sourceAgentFile);
+
+    // assert
+    assert.deepStrictEqual(parsedAgentFile, expectedParsedAgentFile);
+  });
+
+  test("returns a quoted block indicator as a verbatim value", () => {
+    // arrange
+    const sourceAgentFile = `---
+description: ">"
+---
+Body.
+`;
+    const expectedParsedAgentFile = {
+      raw: { description: '">"' },
+      body: "Body.\n",
+    };
+
+    // act
+    const parsedAgentFile = parseFrontmatter(sourceAgentFile);
+
+    // assert
+    assert.deepStrictEqual(parsedAgentFile, expectedParsedAgentFile);
+  });
+
+  test("collects an indented mapping as one multiline value without phantom keys", () => {
+    // arrange
+    const sourceAgentFile = `---
+provenance:
+  generatedBy: pi-claude-marketplace
+
+  sourcePath: agents/reviewer.md
+name: reviewer
+---
+Body.
+`;
+    const expectedParsedAgentFile = {
+      raw: {
+        provenance: "generatedBy: pi-claude-marketplace\n\nsourcePath: agents/reviewer.md",
+        name: "reviewer",
+      },
+      body: "Body.\n",
+    };
+
+    // act
+    const parsedAgentFile = parseFrontmatter(sourceAgentFile);
+
+    // assert
+    assert.deepStrictEqual(parsedAgentFile, expectedParsedAgentFile);
+  });
+
+  test("ignores an indented key line with no key awaiting continuation", () => {
+    // arrange
+    const sourceAgentFile = `---
+  stray: value
+name: reviewer
+---
+Body.
+`;
+    const expectedParsedAgentFile = {
+      raw: { name: "reviewer" },
+      body: "Body.\n",
+    };
+
+    // act
+    const parsedAgentFile = parseFrontmatter(sourceAgentFile);
+
+    // assert
+    assert.deepStrictEqual(parsedAgentFile, expectedParsedAgentFile);
+  });
+
+  test("ignores an indented non-dash line between folded dash items", () => {
+    // arrange
+    const sourceAgentFile = `---
+skills:
+  - alpha
+  stray: value
+  - beta
+---
+Body.
+`;
+    const expectedParsedAgentFile = {
+      raw: { skills: "alpha,beta" },
+      body: "Body.\n",
+    };
+
+    // act
+    const parsedAgentFile = parseFrontmatter(sourceAgentFile);
+
+    // assert
+    assert.deepStrictEqual(parsedAgentFile, expectedParsedAgentFile);
+  });
+
+  test("keeps dash lines under a block header as block text", () => {
+    // arrange
+    const sourceAgentFile = `---
+description: |
+  - not a list item
+  - second line
+tools: Read
+---
+Body.
+`;
+    const expectedParsedAgentFile = {
+      raw: {
+        description: "- not a list item\n- second line",
+        tools: "Read",
+      },
+      body: "Body.\n",
+    };
+
+    // act
+    const parsedAgentFile = parseFrontmatter(sourceAgentFile);
+
+    // assert
+    assert.deepStrictEqual(parsedAgentFile, expectedParsedAgentFile);
+  });
+
+  test("folds dash items written at column zero", () => {
+    // arrange
+    const sourceAgentFile = `---
+skills:
+- alpha
+- beta
+---
+Body.
+`;
+    const expectedParsedAgentFile = {
+      raw: { skills: "alpha,beta" },
+      body: "Body.\n",
+    };
+
+    // act
+    const parsedAgentFile = parseFrontmatter(sourceAgentFile);
+
+    // assert
+    assert.deepStrictEqual(parsedAgentFile, expectedParsedAgentFile);
+  });
 });
 
 describe("emitGeneratedAgentFile", () => {
