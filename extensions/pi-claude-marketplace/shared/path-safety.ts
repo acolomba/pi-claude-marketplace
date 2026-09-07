@@ -181,10 +181,7 @@ async function assertNoSymlinkSegment(
   }
 }
 
-async function readSymlinkTarget(
-  inspector: PathSafetyInspector,
-  current: string,
-): Promise<string> {
+async function readSymlinkTarget(inspector: PathSafetyInspector, current: string): Promise<string> {
   try {
     return await inspector.readlink(current);
   } catch {
