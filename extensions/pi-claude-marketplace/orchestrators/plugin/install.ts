@@ -296,12 +296,12 @@ export interface InstallPluginOptions {
   /**
    * PROV-03 / D-79-05 injection seam. Defaults to DEFAULT_CREDENTIAL_OPS at use.
    * The git-source clone probe passes it to `buildCloneAuth` so a provider
-   * host authenticates host-keyed; tests inject makeMockCredentialOps().
+   * host authenticates host-keyed; callers can inject a CredentialOps collaborator.
    */
   readonly credentialOps?: CredentialOps;
   /**
    * PROV-03 Device Flow HTTP seam. Undefined = the real device-flow endpoints;
-   * tests inject makeMockDeviceFlowHttp() so the flow runs network-free.
+   * callers can inject a DeviceFlowHttp collaborator so the flow runs network-free.
    */
   readonly deviceFlowHttp?: DeviceFlowHttp;
   /**

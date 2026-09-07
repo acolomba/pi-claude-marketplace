@@ -56,7 +56,7 @@ interface CredentialAdapterOptions {
   readonly store?: ReadonlyMap<string, GitCredentials>;
 }
 
-function makeMockCredentialOps(initial: CredentialAdapterOptions = {}) {
+function createCredentialOps(initial: CredentialAdapterOptions = {}) {
   const credentials = createCredentialOpsFake({
     boundary: "memory",
     credentials: [...(initial.store ?? new Map<string, GitCredentials>()).entries()],
@@ -80,7 +80,7 @@ interface DeviceFlowAdapterOptions {
   readonly pollQueue?: readonly PollResult[];
 }
 
-function makeMockDeviceFlowHttp(initial: DeviceFlowAdapterOptions = {}) {
+function createDeviceFlowHttp(initial: DeviceFlowAdapterOptions = {}) {
   const deviceFlow = createDeviceFlowFake({
     boundary: "memory",
     network: "disabled",
@@ -122,7 +122,7 @@ const ALLOWED_MARKETPLACE_REMOTES = [
   "https://gitlab.com/team/mp.git",
 ] as const;
 
-function makeMockGitOps(initial: GitOpsAdapterOptions = {}) {
+function createGitOps(initial: GitOpsAdapterOptions = {}) {
   const git = createGitOpsFake({
     boundary: "memory",
     allowedRemoteUrls: ALLOWED_MARKETPLACE_REMOTES,
@@ -239,7 +239,7 @@ test("MA-5: github source clones, validates, renames, mutates state, emits V2 su
   await withTmpScope(async ({ cwd, locations }) => {
     // arrange
     const { ctx, pi, notifications } = makeCtx();
-    const { gitOps, state } = makeMockGitOps({
+    const { gitOps, state } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
 
@@ -287,7 +287,7 @@ test("MA-5: github HTTPS source with #ref clones the canonical repo URL at that 
   await withTmpScope(async ({ cwd }) => {
     // arrange
     const { ctx, pi } = makeCtx();
-    const { gitOps, state } = makeMockGitOps({
+    const { gitOps, state } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
 
@@ -327,7 +327,7 @@ test("MA-6 / ATTR-07: pre-existing non-empty sources/<name>/ renders (failed) {s
     await mkdir(finalDir, { recursive: true });
     await writeFile(path.join(finalDir, ".stale"), "x");
 
-    const { gitOps } = makeMockGitOps({
+    const { gitOps } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
 
@@ -359,7 +359,7 @@ test("MA-8 / ATTR-07: duplicate name in same scope renders (failed) {duplicate n
   await withTmpScope(async ({ cwd }) => {
     // arrange
     const { ctx, pi } = makeCtx();
-    const { gitOps: gitOps1 } = makeMockGitOps({
+    const { gitOps: gitOps1 } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
     // First add succeeds.
@@ -374,7 +374,7 @@ test("MA-8 / ATTR-07: duplicate name in same scope renders (failed) {duplicate n
     });
 
     const { ctx: ctx2, pi: pi2, notifications: n2 } = makeCtx();
-    const { gitOps: gitOps2 } = makeMockGitOps({
+    const { gitOps: gitOps2 } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
     // ATTR-07: second add for same name routes through notify, no raw throw.
@@ -403,7 +403,7 @@ test("MA-9 / ATTR-07: invalid manifest after clone renders (failed) {invalid man
   await withTmpScope(async ({ cwd, locations }) => {
     // arrange
     const { ctx, pi, notifications } = makeCtx();
-    const { gitOps, state } = makeMockGitOps({
+    const { gitOps, state } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("invalid-manifest"),
     });
 
@@ -466,7 +466,7 @@ test("classifies an invalid manifest through a staging-cleanup leak and preserve
     // arrange
     const { ctx, pi, notifications } = makeCtx();
     let stagingRoot = "";
-    const { gitOps, state } = makeMockGitOps({
+    const { gitOps, state } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("invalid-manifest"),
       onClone: async (directory) => {
         stagingRoot = path.dirname(directory);
@@ -517,7 +517,7 @@ test("MA-10 / ATTR-07: unknown source kind renders (failed) {unsupported source}
   await withTmpScope(async ({ cwd }) => {
     // arrange
     const { ctx, pi, notifications } = makeCtx();
-    const { gitOps, state } = makeMockGitOps();
+    const { gitOps, state } = createGitOps();
 
     // ATTR-07: no raw throw -- the unsupported-source precondition routes
     // through notify on the raw source subject (pre-clone, pre-name -> A2).
@@ -559,7 +559,7 @@ for (const source of [
     await withTmpScope(async ({ cwd, locations }) => {
       // arrange
       const { ctx, pi, notifications } = makeCtx(0);
-      const { gitOps, state } = makeMockGitOps();
+      const { gitOps, state } = createGitOps();
       const expectedError = new UnsupportedSourceError(
         `Cannot add marketplace from "[object Object]": unsupported source kind ${source.kind}`,
       );
@@ -610,7 +610,7 @@ test("NFR-5: path-source add never calls gitOps", async () => {
       const fixtureSrc = fixtureMarketplaceDir("valid-marketplace");
       await cp(fixtureSrc, localMpDir, { recursive: true });
 
-      const { gitOps, state } = makeMockGitOps();
+      const { gitOps, state } = createGitOps();
 
       // Use absolute path so domain/source.ts classifies as path source.
       // act
@@ -672,7 +672,7 @@ test("normalizes a non-Error config-write throw after a path mutation", async (t
     const localMarketplace = await mkdtemp(path.join(cwd, "config-throw-marketplace-"));
     await cp(fixtureMarketplaceDir("valid-marketplace"), localMarketplace, { recursive: true });
     const { ctx, pi, notifications } = makeCtx(0);
-    const { gitOps, state } = makeMockGitOps();
+    const { gitOps, state } = createGitOps();
     const originalDirname = path.dirname.bind(path);
     t.mock.method(path, "dirname", (value: string) => {
       if (value === locations.configJsonPath) {
@@ -723,7 +723,7 @@ test("MA-3: path source accepts a direct path to marketplace.json (not just the 
     try {
       await cp(fixtureMarketplaceDir("valid-marketplace"), localMpDir, { recursive: true });
       const directManifestPath = path.join(localMpDir, ".claude-plugin", "marketplace.json");
-      const { gitOps } = makeMockGitOps();
+      const { gitOps } = createGitOps();
 
       // act
       await addMarketplace({
@@ -773,7 +773,7 @@ test("CR-02 / MA-4: ~/path is expanded against $HOME for the on-disk probe; sour
       await mkdir(path.dirname(localMpDir), { recursive: true });
       await cp(fixtureMarketplaceDir("valid-marketplace"), localMpDir, { recursive: true });
 
-      const { gitOps, state } = makeMockGitOps();
+      const { gitOps, state } = createGitOps();
       // act
       await addMarketplace({
         ctx,
@@ -823,7 +823,7 @@ test("MA-2 / SC-5 / CMC-30: orchestrator accepts scope='project'; success row ca
   await withTmpScope(async ({ cwd }) => {
     // arrange
     const { ctx, pi, notifications } = makeCtx();
-    const { gitOps } = makeMockGitOps({
+    const { gitOps } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
     // Use project scope so we get a real tmp scope root; the assertion
@@ -856,7 +856,7 @@ test("D-03-INV :: add invalidates marketplace-names cache for the new scope", as
     // arrange
     resetCompletionCache();
     const { ctx, pi } = makeCtx();
-    const { gitOps } = makeMockGitOps({
+    const { gitOps } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
 
@@ -907,7 +907,7 @@ test("keeps a committed path add successful when marketplace-name cache cleanup 
     await cp(fixtureMarketplaceDir("valid-marketplace"), localMarketplace, { recursive: true });
     await mkdir(locations.marketplaceNamesCacheFile, { recursive: true });
     const { ctx, pi, notifications } = makeCtx(0);
-    const { gitOps, state } = makeMockGitOps();
+    const { gitOps, state } = createGitOps();
 
     // act
     const outcome = await addMarketplace({
@@ -953,7 +953,7 @@ test("keeps a committed path add successful when post-commit mirror seeding cann
       '[remote "origin"]\n  url = https://example.com/state-backed.git\n',
     );
     const { ctx, pi, notifications } = makeCtx(0);
-    const { gitOps, state } = makeMockGitOps();
+    const { gitOps, state } = createGitOps();
 
     // act
     const outcome = await addMarketplace({
@@ -1000,7 +1000,7 @@ test("ATTR-07: a Unix domain socket path renders (failed) {source missing}", asy
       server.listen(socketPath, resolve);
     });
     try {
-      const { gitOps } = makeMockGitOps();
+      const { gitOps } = createGitOps();
       // act
       await addMarketplace({ ctx, pi, scope: "project", cwd, rawSource: socketPath, gitOps });
 
@@ -1033,7 +1033,7 @@ test("ATTR-07: a missing path source (ENOENT) renders (failed) {source missing}"
     // arrange
     const { ctx, pi, notifications } = makeCtx();
     const missingDir = path.join(tmpdir(), `mp-add-absent-${process.pid}-${Date.now()}`, "nope");
-    const { gitOps, state } = makeMockGitOps();
+    const { gitOps, state } = createGitOps();
 
     // act
     await addMarketplace({ ctx, pi, scope: "project", cwd, rawSource: missingDir, gitOps });
@@ -1061,7 +1061,7 @@ test("MA-8 (path source) / ATTR-07: duplicate name in same scope renders (failed
     try {
       await cp(fixtureMarketplaceDir("valid-marketplace"), localMpDir, { recursive: true });
 
-      const { gitOps: gitOps1 } = makeMockGitOps();
+      const { gitOps: gitOps1 } = createGitOps();
       // act
       await addMarketplace({
         ctx: ctx1,
@@ -1073,7 +1073,7 @@ test("MA-8 (path source) / ATTR-07: duplicate name in same scope renders (failed
       });
 
       const { ctx: ctx2, pi: pi2, notifications: n2 } = makeCtx();
-      const { gitOps: gitOps2 } = makeMockGitOps();
+      const { gitOps: gitOps2 } = createGitOps();
       await addMarketplace({
         ctx: ctx2,
         pi: pi2,
@@ -1111,7 +1111,7 @@ test("CR-02 / expandTildePath: bare '~' resolves to os.homedir() exactly", async
       // so '~' (which resolves to home) is the marketplace root.
       await cp(fixtureMarketplaceDir("valid-marketplace"), home, { recursive: true });
 
-      const { gitOps } = makeMockGitOps();
+      const { gitOps } = createGitOps();
       // act
       await addMarketplace({ ctx, pi, scope: "project", cwd, rawSource: "~", gitOps });
 
@@ -1144,7 +1144,7 @@ test("CMP-1: same marketplace name in user scope and project scope are independe
     await withTmpScope(async ({ cwd }) => {
       // arrange
       const { ctx: ctx1, pi: pi1, notifications: n1 } = makeCtx();
-      const { gitOps: gitOps1 } = makeMockGitOps({
+      const { gitOps: gitOps1 } = createGitOps({
         fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
       });
       // act
@@ -1160,7 +1160,7 @@ test("CMP-1: same marketplace name in user scope and project scope are independe
       assert.equal(n1[0]?.severity, undefined, "project-scope add emits no error");
 
       const { ctx: ctx2, pi: pi2, notifications: n2 } = makeCtx();
-      const { gitOps: gitOps2 } = makeMockGitOps({
+      const { gitOps: gitOps2 } = createGitOps({
         fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
       });
       // Same marketplace name but user scope -- MUST NOT throw MarketplaceDuplicateNameError.
@@ -1206,11 +1206,11 @@ test("AUTH-01 add: credentialOps.fill HIT bypasses Device Flow and clones with t
     const { ctx, pi, notifications } = makeCtx();
 
     // Pre-seed a stored credential for github.com so fill returns a HIT.
-    const { credOps: credentialOps, state: credState } = makeMockCredentialOps({
+    const { credOps: credentialOps, state: credState } = createCredentialOps({
       store: new Map([["github.com", { username: "x-access-token", password: "stored-token" }]]),
     });
 
-    const { gitOps, state } = makeMockGitOps({
+    const { gitOps, state } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
 
@@ -1263,10 +1263,10 @@ test("AUTH-01 add: credentialOps.fill MISS triggers Device Flow which produces a
     const { ctx, pi, notifications } = makeCtx(2);
 
     // Empty store -> fill returns null (MISS).
-    const { credOps: credentialOps, state: credState } = makeMockCredentialOps();
+    const { credOps: credentialOps, state: credState } = createCredentialOps();
 
     // Device Flow http mock: immediate success poll.
-    const { http: deviceFlowHttp } = makeMockDeviceFlowHttp({
+    const { http: deviceFlowHttp } = createDeviceFlowHttp({
       deviceCode: {
         device_code: "MOCK_DEVICE_CODE",
         user_code: "ABCD-1234",
@@ -1284,7 +1284,7 @@ test("AUTH-01 add: credentialOps.fill MISS triggers Device Flow which produces a
       ],
     });
 
-    const { gitOps, state } = makeMockGitOps({
+    const { gitOps, state } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
 
@@ -1344,11 +1344,11 @@ test("AUTH-01 add: the GitAuthBundle is forwarded by reference into gitOps.clone
     // arrange
     const { ctx, pi } = makeCtx();
 
-    const { credOps: credentialOps } = makeMockCredentialOps();
+    const { credOps: credentialOps } = createCredentialOps();
 
-    const { http: deviceFlowHttp } = makeMockDeviceFlowHttp();
+    const { http: deviceFlowHttp } = createDeviceFlowHttp();
 
-    const { gitOps, state } = makeMockGitOps({
+    const { gitOps, state } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
 
@@ -1388,7 +1388,7 @@ test("RECON-03 orchestrated mode -- github source success returns { status: 'add
   await withTmpScope(async ({ cwd }) => {
     // arrange
     const { ctx, pi, notifications } = makeCtx();
-    const { gitOps } = makeMockGitOps({
+    const { gitOps } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
 
@@ -1417,7 +1417,7 @@ test("RECON-03 orchestrated mode -- unsupported source returns { status: 'failed
   await withTmpScope(async ({ cwd }) => {
     // arrange
     const { ctx, pi, notifications } = makeCtx();
-    const { gitOps, state } = makeMockGitOps();
+    const { gitOps, state } = createGitOps();
 
     // act
     const outcome = await addMarketplace({
@@ -1447,7 +1447,7 @@ test("orchestrated mode normalizes a non-Error opaque failure without mutation",
   await withTmpScope(async ({ cwd, locations }) => {
     // arrange
     const { ctx, pi, notifications } = makeCtx(0);
-    const { gitOps, state } = makeMockGitOps();
+    const { gitOps, state } = createGitOps();
     t.mock.method(path, "basename", () => {
       // eslint-disable-next-line @typescript-eslint/only-throw-error -- this case proves the public unknown-throw normalizer.
       throw "opaque add failure";
@@ -1500,7 +1500,7 @@ test("normalizes a structurally classified exotic throw in orchestrated mode", a
       },
     );
     const { ctx, pi, notifications } = makeCtx(0);
-    const { gitOps, state } = makeMockGitOps();
+    const { gitOps, state } = createGitOps();
     t.mock.method(path, "basename", () => {
       // eslint-disable-next-line @typescript-eslint/only-throw-error -- an exotic thenable-free value exercises unknown-throw normalization.
       throw exoticDuplicate;
@@ -1544,7 +1544,7 @@ test("cleans the final clone when state-record construction fails after rename",
   await withTmpScope(async ({ cwd, locations }) => {
     // arrange
     const { ctx, pi, notifications } = makeCtx(0);
-    const { gitOps, state } = makeMockGitOps({
+    const { gitOps, state } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
     let prototypeReads = 0;
@@ -1615,7 +1615,7 @@ test("RECON-03 orchestrated mode -- duplicate-name (path source) returns typed M
     try {
       await cp(fixtureMarketplaceDir("valid-marketplace"), localMpDir, { recursive: true });
 
-      const { gitOps: gitOps1 } = makeMockGitOps();
+      const { gitOps: gitOps1 } = createGitOps();
       // Seed the duplicate via a standalone add.
       // act
       await addMarketplace({
@@ -1628,7 +1628,7 @@ test("RECON-03 orchestrated mode -- duplicate-name (path source) returns typed M
       });
 
       const { ctx: ctx2, pi: pi2, notifications: n2 } = makeCtx();
-      const { gitOps: gitOps2 } = makeMockGitOps();
+      const { gitOps: gitOps2 } = createGitOps();
       const outcome = await addMarketplace({
         ctx: ctx2,
         pi: pi2,
@@ -1661,7 +1661,7 @@ test("RECON-03 orchestrated mode -- rethrowPreconditionErrors still rethrows typ
     try {
       await cp(fixtureMarketplaceDir("valid-marketplace"), localMpDir, { recursive: true });
 
-      const { gitOps: gitOps1 } = makeMockGitOps();
+      const { gitOps: gitOps1 } = createGitOps();
       // act
       await addMarketplace({
         ctx: ctx1,
@@ -1673,7 +1673,7 @@ test("RECON-03 orchestrated mode -- rethrowPreconditionErrors still rethrows typ
       });
 
       const { ctx: ctx2, pi: pi2, notifications: n2 } = makeCtx();
-      const { gitOps: gitOps2 } = makeMockGitOps();
+      const { gitOps: gitOps2 } = createGitOps();
 
       // assert
       await assert.rejects(
@@ -1701,7 +1701,7 @@ test("RECON-03 standalone-default mode -- omitted notifications option remains b
   await withTmpScope(async ({ cwd }) => {
     // arrange
     const { ctx, pi, notifications } = makeCtx();
-    const { gitOps } = makeMockGitOps({
+    const { gitOps } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
 
@@ -1732,7 +1732,7 @@ test("WB-01: standalone add writes the marketplace entry to claude-plugins.json 
   await withTmpScope(async ({ cwd, locations }) => {
     // arrange
     const { ctx, pi } = makeCtx();
-    const { gitOps } = makeMockGitOps({
+    const { gitOps } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
 
@@ -1773,7 +1773,7 @@ test("WB-01: --local routes the write to claude-plugins.local.json and never tou
   await withTmpScope(async ({ cwd, locations }) => {
     // arrange
     const { ctx, pi } = makeCtx();
-    const { gitOps } = makeMockGitOps({
+    const { gitOps } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
 
@@ -1810,7 +1810,7 @@ test("WR-09 / T-56-02-01: orchestrated-mode add SKIPS config write-back (neither
   await withTmpScope(async ({ cwd, locations }) => {
     // arrange
     const { ctx, pi } = makeCtx();
-    const { gitOps } = makeMockGitOps({
+    const { gitOps } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
 
@@ -1842,7 +1842,7 @@ test("CFG-03 / T-56-02-05: --local path with an invalid config aborts the add; b
     await writeFile(locations.configLocalJsonPath, "{ not valid json", "utf8");
 
     const { ctx, pi, notifications } = makeCtx();
-    const { gitOps } = makeMockGitOps({
+    const { gitOps } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
 
@@ -1881,7 +1881,7 @@ test("WR-07: config write failure after the clone rename cleans up the final clo
   await withTmpScope(async ({ cwd, locations }) => {
     // arrange
     const { ctx, pi, notifications } = makeCtx();
-    const { gitOps } = makeMockGitOps({
+    const { gitOps } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
 
@@ -1933,7 +1933,7 @@ test("cleans a URL clone after state-save failure and a second invocation conver
   await withTmpScope(async ({ cwd, locations }) => {
     // arrange
     const firstBoundary = makeCtx(0);
-    const firstGit = makeMockGitOps({
+    const firstGit = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
       onClone: async () => {
         await mkdir(locations.stateJsonPath, { recursive: true });
@@ -1960,7 +1960,7 @@ test("cleans a URL clone after state-save failure and a second invocation conver
     const finalCloneAfterFailure = await pathExists(finalClone);
     await rm(locations.stateJsonPath, { recursive: true, force: true });
     const secondBoundary = makeCtx();
-    const secondGit = makeMockGitOps({
+    const secondGit = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
     const secondOutcome = await addMarketplace({
@@ -2004,7 +2004,7 @@ test("MURL-01: url source clones source.url `.git`-suffixed with NO auth key in 
   await withTmpScope(async ({ cwd }) => {
     // arrange
     const { ctx, pi } = makeCtx();
-    const { gitOps, state } = makeMockGitOps({
+    const { gitOps, state } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
 
@@ -2036,7 +2036,7 @@ test("MURL-01: url source with a #ref clones at that ref with singleBranch and s
   await withTmpScope(async ({ cwd }) => {
     // arrange
     const { ctx, pi } = makeCtx();
-    const { gitOps, state } = makeMockGitOps({
+    const { gitOps, state } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
 
@@ -2073,7 +2073,7 @@ test("MURL-01: after a successful url add, state records source.kind === 'url' a
   await withTmpScope(async ({ cwd, locations }) => {
     // arrange
     const { ctx, pi } = makeCtx();
-    const { gitOps } = makeMockGitOps({
+    const { gitOps } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
 
@@ -2109,7 +2109,7 @@ test("D-76-08: a url clone throwing an HttpError with statusCode 401 renders (fa
       code: "HttpError",
       data: { statusCode: 401 },
     });
-    const { gitOps } = makeMockGitOps({
+    const { gitOps } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
       cloneThrows: httpErr,
     });
@@ -2142,7 +2142,7 @@ test("D-76-08: a url clone HttpError with statusCode 403 also renders (failed) {
     // arrange
     const { ctx, pi, notifications } = makeCtx();
     const httpErr = httpError(403);
-    const { gitOps } = makeMockGitOps({
+    const { gitOps } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
       cloneThrows: httpErr,
     });
@@ -2168,7 +2168,7 @@ test("D-76-09: a missing repository HttpError renders (failed) {source missing} 
   await withTmpScope(async ({ cwd }) => {
     // arrange
     const { ctx, pi, notifications } = makeCtx();
-    const { gitOps } = makeMockGitOps({
+    const { gitOps } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
       cloneThrows: httpError(404),
     });
@@ -2203,7 +2203,7 @@ for (const { statusCode, reason } of [
     await withTmpScope(async ({ cwd }) => {
       // arrange
       const { ctx, pi, notifications } = makeCtx();
-      const { gitOps } = makeMockGitOps({
+      const { gitOps } = createGitOps({
         fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
         cloneThrows: httpError(statusCode),
       });
@@ -2236,7 +2236,7 @@ test("D-76-09 orchestrated mode -- a gone repository returns the source-missing 
     // arrange
     const { ctx, pi, notifications } = makeCtx(0);
     const cloneThrows = httpError(410);
-    const { gitOps } = makeMockGitOps({
+    const { gitOps } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
       cloneThrows,
     });
@@ -2272,7 +2272,7 @@ test("GAUTH-02: a declined/failed Device Flow (UserCanceledError) renders (faile
     // isomorphic-git throws as `UserCanceledError` -- NOT an HttpError
     // 401/403 and NOT a network errno.
     const authError = Object.assign(new Error("cancelled"), { code: "UserCanceledError" });
-    const { gitOps } = makeMockGitOps({
+    const { gitOps } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
       cloneThrows: authError,
     });
@@ -2306,7 +2306,7 @@ test("GAUTH-02 orchestrated mode -- UserCanceledError returns { status: 'failed'
     // arrange
     const { ctx, pi, notifications } = makeCtx();
     const authError = Object.assign(new Error("cancelled"), { code: "UserCanceledError" });
-    const { gitOps } = makeMockGitOps({
+    const { gitOps } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
       cloneThrows: authError,
     });
@@ -2336,7 +2336,7 @@ test("MURL-01 regression: github source is byte-identical -- Device Flow auth st
   await withTmpScope(async ({ cwd }) => {
     // arrange
     const { ctx, pi } = makeCtx();
-    const { gitOps, state } = makeMockGitOps({
+    const { gitOps, state } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
 
@@ -2379,12 +2379,12 @@ test("PROV-04 / D-79-03: a no-provider url add that 401s renders the bare (faile
     // D-79-03: marketplace add keeps its no-child-rows invariant (D-01/D-10),
     // so the no-provider cause line renders ONLY on the update path's
     // cause-carrying child row -- the add row stays the bare closed-set token.
-    const { credOps: credentialOps } = makeMockCredentialOps();
+    const { credOps: credentialOps } = createCredentialOps();
     const httpErr = Object.assign(new Error("HTTP 401 from clone"), {
       code: "HttpError",
       data: { statusCode: 401 },
     });
-    const { gitOps } = makeMockGitOps({
+    const { gitOps } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
       cloneThrows: httpErr,
     });
@@ -2417,9 +2417,9 @@ test("PROV-02: a public no-provider url add clones authless -- no auth key, no c
   await withTmpScope(async ({ cwd }) => {
     // arrange
     const { ctx, pi, notifications } = makeCtx();
-    const { credOps: credentialOps, state: credState } = makeMockCredentialOps();
-    const { http: deviceFlowHttp, state: httpState } = makeMockDeviceFlowHttp();
-    const { gitOps, state } = makeMockGitOps({
+    const { credOps: credentialOps, state: credState } = createCredentialOps();
+    const { http: deviceFlowHttp, state: httpState } = createDeviceFlowHttp();
+    const { gitOps, state } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
 
@@ -2455,10 +2455,10 @@ test("PROV-01: a url add whose host case-folds to github.com carries the provide
   await withTmpScope(async ({ cwd }) => {
     // arrange
     const { ctx, pi } = makeCtx();
-    const { gitOps, state } = makeMockGitOps({
+    const { gitOps, state } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
-    const { credOps: credentialOps } = makeMockCredentialOps();
+    const { credOps: credentialOps } = createCredentialOps();
 
     // The case-sensitive github.com prefix check leaves this a `url` source,
     // but URL host parsing lowercases to github.com -- a provider-registered
@@ -2489,10 +2489,10 @@ test("GAUTH-02 / MURL-01: a gitlab.com url add clones .git-suffixed WITH the Git
   await withTmpScope(async ({ cwd }) => {
     // arrange
     const { ctx, pi } = makeCtx();
-    const { gitOps, state } = makeMockGitOps({
+    const { gitOps, state } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
-    const { credOps: credentialOps } = makeMockCredentialOps();
+    const { credOps: credentialOps } = createCredentialOps();
 
     // Unlike the gitlab.example.com adds above (MURL-01, PROV-02), gitlab.com
     // is claimed by GITLAB_PROVIDER (exact-match hostMatch) -- the real

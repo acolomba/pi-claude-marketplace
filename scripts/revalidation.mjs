@@ -101,14 +101,14 @@ const SEALED_REQUIREMENT_ROUTES = Object.freeze({
   }),
   "GGAT-03": Object.freeze({ route: "Phase 7", status: "Pending" }),
   "GGAT-04": Object.freeze({ route: "Phase 7", status: "Pending" }),
-  "PDEF-01": Object.freeze({ route: "Phase 3", status: "Pending" }),
+  "PDEF-01": Object.freeze({ route: "Phase 3", status: "Complete" }),
   "PDEF-02": Object.freeze({ route: "Phase 2", status: "Complete" }),
   "PDEF-03": Object.freeze({ route: "Phase 2", status: "Complete" }),
   "PDEF-04": Object.freeze({ route: "Phase 2", status: "Complete" }),
-  "PDEF-05": Object.freeze({ route: "Phase 3", status: "Pending" }),
-  "PDEF-06": Object.freeze({ route: "Phase 3", status: "Pending" }),
-  "PDEF-07": Object.freeze({ route: "Phase 3", status: "Pending" }),
-  "PDEF-08": Object.freeze({ route: "Phase 3", status: "Pending" }),
+  "PDEF-05": Object.freeze({ route: "Phase 3", status: "Complete" }),
+  "PDEF-06": Object.freeze({ route: "Phase 3", status: "Complete" }),
+  "PDEF-07": Object.freeze({ route: "Phase 3", status: "Complete" }),
+  "PDEF-08": Object.freeze({ route: "Phase 3", status: "Complete" }),
   "RCOV-01": Object.freeze({ route: "Phase 8", status: "Pending" }),
   "RCOV-02": Object.freeze({ route: "Phase 8", status: "Pending" }),
   "RCOV-03": Object.freeze({ route: "Phase 8", status: "Pending" }),
@@ -2098,7 +2098,9 @@ function parseRequirementLocations(markdown, violations) {
 
 function parseRequirementDispositions(markdown, violations) {
   const dispositions = new Map();
-  for (const match of markdown.matchAll(/^\| ([A-Z]+-\d+) \| ([^|]+) \| ([^|]+) \|$/gm)) {
+  for (const match of markdown.matchAll(
+    /^\|[ \t]+([A-Z]+-\d+)[ \t]+\|[ \t]+([^|]+)[ \t]+\|[ \t]+([^|]+)[ \t]+\|$/gm,
+  )) {
     const [, id, route, status] = match;
     if (dispositions.has(id)) {
       violations.push(

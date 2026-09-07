@@ -44,7 +44,7 @@ interface CredentialAdapterOptions {
   readonly rejectThrows?: Error;
 }
 
-function makeMockCredentialOps(initial: CredentialAdapterOptions = {}) {
+function createCredentialOps(initial: CredentialAdapterOptions = {}) {
   const credentials = createCredentialOpsFake({
     boundary: "memory",
     credentials: [...(initial.store ?? new Map<string, GitCredentials>()).entries()],
@@ -78,7 +78,7 @@ interface DeviceFlowAdapterOptions {
   readonly pollTokenThrows?: Error;
 }
 
-function makeMockDeviceFlowHttp(initial: DeviceFlowAdapterOptions = {}) {
+function createDeviceFlowHttp(initial: DeviceFlowAdapterOptions = {}) {
   const deviceFlow = createDeviceFlowFake({
     boundary: "memory",
     network: "disabled",
@@ -139,10 +139,10 @@ function makeNotifyCapture(): {
 
 test("AUTH-01 add path E2E: fill-miss triggers Device Flow, token stored via approve", async () => {
   // Empty store: fill returns null (MISS).
-  const { credOps, state: credState } = makeMockCredentialOps();
+  const { credOps, state: credState } = createCredentialOps();
 
   // Device Flow: immediate success, no sleep (interval: 0).
-  const { http } = makeMockDeviceFlowHttp({
+  const { http } = createDeviceFlowHttp({
     pollQueue: [
       {
         kind: "success",
@@ -210,12 +210,12 @@ test("AUTH-01 add path E2E: fill-miss triggers Device Flow, token stored via app
 
 test("AUTH-02 / AUTH-08 silent reuse: fill-hit returns stored cred, no Device Flow", async () => {
   // Pre-seeded store: fill returns stored_token_e2e (HIT).
-  const { credOps, state: credState } = makeMockCredentialOps({
+  const { credOps, state: credState } = createCredentialOps({
     store: new Map([["github.com", { username: "x-access-token", password: "stored_token_e2e" }]]),
   });
 
   // Device Flow mock present but should NEVER be invoked in this test.
-  const { http } = makeMockDeviceFlowHttp();
+  const { http } = createDeviceFlowHttp();
 
   const { notifyCalls, notifyFn } = makeNotifyCapture();
 
@@ -259,12 +259,12 @@ test("AUTH-02 / AUTH-08 silent reuse: fill-hit returns stored cred, no Device Fl
 
 test("AUTH-07 reject-evict-reflow: onAuthFailure evicts cred, next fill-miss re-triggers Device Flow", async () => {
   // Pre-seeded store: a stale token.
-  const { credOps, state: credState } = makeMockCredentialOps({
+  const { credOps, state: credState } = createCredentialOps({
     store: new Map([["github.com", { username: "x-access-token", password: "stale_token" }]]),
   });
 
   // First-round Device Flow mock: succeeds with a fresh token after eviction.
-  const { http: dfHttp1 } = makeMockDeviceFlowHttp({
+  const { http: dfHttp1 } = createDeviceFlowHttp({
     pollQueue: [
       {
         kind: "success",
@@ -318,7 +318,7 @@ test("AUTH-07 reject-evict-reflow: onAuthFailure evicts cred, next fill-miss re-
   // Second round: dfHttp1 was never called (onAuthFailure does not go through
   // Device Flow; it only evicts and cancels). Create a fresh mock with a
   // distinct user_code so the round-2 notify assertion is unambiguous.
-  const { http: dfHttp2, state: dfState2 } = makeMockDeviceFlowHttp({
+  const { http: dfHttp2, state: dfState2 } = createDeviceFlowHttp({
     pollQueue: [
       {
         kind: "success",

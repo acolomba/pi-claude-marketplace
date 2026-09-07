@@ -5806,7 +5806,7 @@ const INSTALL_REMOTE_URLS = [
   "https://gitlab.example.com/o/r.git",
 ] as const;
 
-function makeMockGitOps(options: {
+function createGitOps(options: {
   readonly fixtureSourceDir: string;
   readonly cloneThrows?: Error;
   readonly head?: string;
@@ -5995,7 +5995,7 @@ test("PURL-01/02/09: url-source install materializes a clone, records sha-<12hex
         fixtureRepoDir,
       });
 
-      const { gitOps, state: gitState } = makeMockGitOps({ fixtureSourceDir: fixtureRepoDir });
+      const { gitOps, state: gitState } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
       const { ctx, pi } = makeCtx();
       await installPlugin({
         ctx,
@@ -6064,7 +6064,7 @@ test("PURL-04: a second install of the same url+sha does NOT clone again (dedup)
         }),
       );
 
-      const { gitOps, state: gitState } = makeMockGitOps({ fixtureSourceDir: fixtureRepoDir });
+      const { gitOps, state: gitState } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
       const seam = seamWith(gitOps);
       const { ctx, pi } = makeCtx();
       await installPlugin({
@@ -6125,7 +6125,7 @@ test("PURL-03: git-subdir install resolves pluginRoot = cloneRoot + subdir", asy
         subdirPath: "packages/gp",
       });
 
-      const { gitOps } = makeMockGitOps({ fixtureSourceDir: fixtureRepoDir });
+      const { gitOps } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
       const { ctx, pi } = makeCtx();
       await installPlugin({
         ctx,
@@ -6173,7 +6173,7 @@ test("PURL-03: a git-subdir path escaping the clone root fails the install", asy
         fixtureRepoDir,
       });
 
-      const { gitOps } = makeMockGitOps({ fixtureSourceDir: fixtureRepoDir });
+      const { gitOps } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
       const { ctx, pi, notifications } = makeCtx();
       await installPlugin({
         ctx,
@@ -6216,7 +6216,7 @@ test("PURL-03: a missing git-subdir path fails the install", async () => {
         subdirPath: "packages/present",
       });
 
-      const { gitOps } = makeMockGitOps({ fixtureSourceDir: fixtureRepoDir });
+      const { gitOps } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
       const { ctx, pi, notifications } = makeCtx();
       await installPlugin({
         ctx,
@@ -6270,7 +6270,7 @@ test("D-77-06: a github-object source dedups to the same clone as a url naming t
         }),
       );
 
-      const { gitOps, state: gitState } = makeMockGitOps({ fixtureSourceDir: fixtureRepoDir });
+      const { gitOps, state: gitState } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
       const seam = seamWith(gitOps);
       const { ctx, pi } = makeCtx();
       await installPlugin({
@@ -6331,7 +6331,7 @@ test("MIRR-01/MIRR-03: an unpinned url source materializes the mirror and record
       // The mirror seam reads HEAD from the refreshed clone, not resolveRemoteRef;
       // seed the mock HEAD so the checked-out sha is deterministic.
       const headSha = "0f1e2d3c4b5a69788796a5b4c3d2e1f0aabbccdd";
-      const { gitOps, state: gitState } = makeMockGitOps({
+      const { gitOps, state: gitState } = createGitOps({
         fixtureSourceDir: fixtureRepoDir,
         head: headSha,
         localRefs: { "refs/heads/main": headSha },
@@ -6395,7 +6395,7 @@ test("MIRR-01/MIRR-03: an unpinned git-subdir source materializes the mirror und
       });
 
       const headSha = "1a2b3c4d5e6f70819283a4b5c6d7e8f901234567";
-      const { gitOps } = makeMockGitOps({
+      const { gitOps } = createGitOps({
         fixtureSourceDir: fixtureRepoDir,
         head: headSha,
         localRefs: { "refs/heads/main": headSha },
@@ -6457,7 +6457,7 @@ test("MIRR-01 regression: a PINNED install still records a per-sha <12hex>-<12he
         fixtureRepoDir,
       });
 
-      const { gitOps } = makeMockGitOps({ fixtureSourceDir: fixtureRepoDir });
+      const { gitOps } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
       const { ctx, pi } = makeCtx();
       await installPlugin({
         ctx,
@@ -6508,7 +6508,7 @@ test("PURL-09 / sha over ref: a source with both ref and sha records the sha's v
 
       // remoteResolveMap maps the ref to a DIFFERENT sha; sha must win.
       const refSha = "ffffffffffffffffffffffffffffffffffffffff";
-      const { gitOps, state: gitState } = makeMockGitOps({
+      const { gitOps, state: gitState } = createGitOps({
         fixtureSourceDir: fixtureRepoDir,
         remoteResolveMap: { "v2.0.0": refSha },
       });
@@ -6894,7 +6894,7 @@ test("plugin install authentication: threads a GitHub provider bundle to the pin
         pluginName: "gh",
         source: { source: "github", repo: "org/repo", sha: GIT_SOURCE_SHA },
       });
-      const git = makeMockGitOps({ fixtureSourceDir: fixtureRepoDir });
+      const git = createGitOps({ fixtureSourceDir: fixtureRepoDir });
       const authCapture = captureInstallAuth(seamWith(git.gitOps));
       const credentials = createCredentialOpsFake({ boundary: "memory" });
       const deviceFlow = installDeviceFlow();
@@ -6964,7 +6964,7 @@ test("plugin install authentication: leaves a providerless clone authless", asyn
         pluginName: "public",
         source: { source: "url", url: cloneUrl, sha: GIT_SOURCE_SHA },
       });
-      const git = makeMockGitOps({ fixtureSourceDir: fixtureRepoDir });
+      const git = createGitOps({ fixtureSourceDir: fixtureRepoDir });
       const authCapture = captureInstallAuth(seamWith(git.gitOps));
       const credentials = createCredentialOpsFake({ boundary: "memory" });
       const { ctx, notifications, pi } = makeCtx();
@@ -7023,7 +7023,7 @@ test("plugin install authentication: threads the GitLab provider bundle onto the
         pluginName: "gitlab",
         source: { source: "url", url: cloneUrl, sha: GIT_SOURCE_SHA },
       });
-      const git = makeMockGitOps({ fixtureSourceDir: fixtureRepoDir });
+      const git = createGitOps({ fixtureSourceDir: fixtureRepoDir });
       const authCapture = captureInstallAuth(seamWith(git.gitOps));
       const credentials = createCredentialOpsFake({ boundary: "memory" });
       const deviceFlow = installDeviceFlow();
@@ -7101,7 +7101,7 @@ test("plugin install authentication: memoizes one Device Flow result across same
           ],
         }),
       );
-      const git = makeMockGitOps({ fixtureSourceDir: fixtureRepoDir });
+      const git = createGitOps({ fixtureSourceDir: fixtureRepoDir });
       const authCapture = captureInstallAuth(seamWith(git.gitOps));
       const credentials = createCredentialOpsFake({ boundary: "memory" });
       const deviceFlow = installDeviceFlow({
@@ -7227,7 +7227,7 @@ test("plugin install authentication: classifies a providerless 401 without a cau
         code: "HttpError",
         data: { statusCode: 401 },
       });
-      const git = makeMockGitOps({ cloneThrows: cloneError, fixtureSourceDir: fixtureRepoDir });
+      const git = createGitOps({ cloneThrows: cloneError, fixtureSourceDir: fixtureRepoDir });
       const credentials = createCredentialOpsFake({ boundary: "memory" });
       const { ctx, notifications, pi } = makeCtx();
 
@@ -7280,7 +7280,7 @@ test("plugin install authentication: preserves a network failure outside authent
       const cloneError = Object.assign(new Error("connect ENETUNREACH 10.0.0.1:443"), {
         code: "ENETUNREACH",
       });
-      const git = makeMockGitOps({ cloneThrows: cloneError, fixtureSourceDir: fixtureRepoDir });
+      const git = createGitOps({ cloneThrows: cloneError, fixtureSourceDir: fixtureRepoDir });
       const credentials = createCredentialOpsFake({ boundary: "memory" });
       const { ctx, notifications, pi } = makeCtx();
 
@@ -7330,7 +7330,7 @@ test("plugin install authentication: contains a non-Error clone failure without 
         pluginName: "oddball",
         source: { source: "url", url: "https://gitlab.example.com/o/r", sha: GIT_SOURCE_SHA },
       });
-      const git = makeMockGitOps({ fixtureSourceDir: fixtureRepoDir });
+      const git = createGitOps({ fixtureSourceDir: fixtureRepoDir });
       const cloneCache = seamWith(git.gitOps);
       const seam: InstallCloneCacheSeam = {
         materializeOrRefreshPluginMirror: cloneCache.materializeOrRefreshPluginMirror,
@@ -7390,7 +7390,7 @@ test("plugin install authentication: classifies a cancelled Device Flow clone wi
         source: { source: "github", repo: "org/private", sha: GIT_SOURCE_SHA },
       });
       const cloneError = Object.assign(new Error("cancelled"), { code: "UserCanceledError" });
-      const git = makeMockGitOps({ cloneThrows: cloneError, fixtureSourceDir: fixtureRepoDir });
+      const git = createGitOps({ cloneThrows: cloneError, fixtureSourceDir: fixtureRepoDir });
       const credentials = createCredentialOpsFake({ boundary: "memory" });
       const deviceFlow = installDeviceFlow();
       const { ctx, notifications, pi } = makeCtx();
@@ -8364,7 +8364,7 @@ test("an unpinned ref-only source forwards the moving ref to its cold mirror clo
         source: { ref: "main", source: "url", url: "https://example.com/org/repo" },
       });
       const headSha = "1234567890abcdef1234567890abcdef12345678";
-      const git = makeMockGitOps({
+      const git = createGitOps({
         fixtureSourceDir: fixtureRepoDir,
         head: headSha,
         localRefs: { "refs/heads/main": headSha },

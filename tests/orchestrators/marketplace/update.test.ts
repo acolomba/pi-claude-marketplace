@@ -62,7 +62,7 @@ function fixtureMarketplaceDir(
   return path.join(path.dirname(new URL(import.meta.url).pathname), "_fixtures", name);
 }
 
-function makeMockGitOps(options: MarketplaceGitOpsSeed = {}) {
+function createGitOps(options: MarketplaceGitOpsSeed = {}) {
   const remoteRefs = Object.fromEntries(
     Object.entries(options.remoteRefs ?? {}).map(([ref, oid]) => [
       ref.replace(/^refs\/remotes\/origin\//, ""),
@@ -113,7 +113,7 @@ function makeMockGitOps(options: MarketplaceGitOpsSeed = {}) {
   };
 }
 
-function makeMockCredentialOps(
+function createCredentialOps(
   options: { readonly store?: ReadonlyMap<string, GitCredentials> } = {},
 ) {
   const credentials = createCredentialOpsFake({
@@ -151,7 +151,7 @@ function makeForbiddenGitOps(): { readonly calls: Array<keyof GitOps>; readonly 
   };
 }
 
-function makeMockDeviceFlowHttp() {
+function createDeviceFlowHttp() {
   return createDeviceFlowFake({
     boundary: "memory",
     network: "disabled",
@@ -322,7 +322,7 @@ test("marketplace update transport: classifies a providerless HTTP 403 as authen
       code: "HttpError",
       data: { statusCode: 403 },
     });
-    const { gitOps, state } = makeMockGitOps({ fetchThrows: transportError });
+    const { gitOps, state } = createGitOps({ fetchThrows: transportError });
 
     // act
     await updateMarketplace({
@@ -355,7 +355,7 @@ test("marketplace update transport: classifies a providerless HTTP 500 as networ
       code: "HttpError",
       data: { statusCode: 500 },
     });
-    const { gitOps, state } = makeMockGitOps({ fetchThrows: transportError });
+    const { gitOps, state } = createGitOps({ fetchThrows: transportError });
 
     // act
     await updateMarketplace({
@@ -386,7 +386,7 @@ test("marketplace update transport: folds a non-Error rejection into network unr
     const manifestPath = path.join(cloneDir, ".claude-plugin", "marketplace.json");
     const manifestBytes = await readFile(manifestPath, "utf8");
     const { ctx, pi, notifications } = makeCtx();
-    const git = makeMockGitOps();
+    const git = createGitOps();
     const gitOps: GitOps = {
       ...git.gitOps,
       // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the primitive rejection is the contract under test.
@@ -421,11 +421,11 @@ test("marketplace update transport: leaves Device Flow idle for a public URL ref
     const { cloneDir } = await seedUrlMarketplace({ cwd, name: "urlmp-device", ref: "main" });
     const { ctx, pi, notifications } = makeCtx();
     const remoteOid = "abcdef0000000000000000000000000000000011";
-    const { gitOps, state } = makeMockGitOps({
+    const { gitOps, state } = createGitOps({
       remoteRefs: { "refs/remotes/origin/main": remoteOid },
     });
-    const { credOps: credentialOps, state: credentialState } = makeMockCredentialOps();
-    const deviceFlow = makeMockDeviceFlowHttp();
+    const { credOps: credentialOps, state: credentialState } = createCredentialOps();
+    const deviceFlow = createDeviceFlowHttp();
 
     // act
     await updateMarketplace({
@@ -463,11 +463,11 @@ test("marketplace update transport: carries the GitHub auth bundle without invok
     });
     const { ctx, pi, notifications } = makeCtx();
     const remoteOid = "abcdef0000000000000000000000000000000012";
-    const { gitOps, state } = makeMockGitOps({
+    const { gitOps, state } = createGitOps({
       remoteRefs: { "refs/remotes/origin/main": remoteOid },
     });
-    const { credOps: credentialOps, state: credentialState } = makeMockCredentialOps();
-    const deviceFlow = makeMockDeviceFlowHttp();
+    const { credOps: credentialOps, state: credentialState } = createCredentialOps();
+    const deviceFlow = createDeviceFlowHttp();
 
     // act
     await updateMarketplace({
@@ -526,7 +526,7 @@ test("MU-4 + D-14: github source refreshes via fetch+forceUpdateRef+checkout in 
     // arrange
     await seedGithubMarketplace({ cwd, name: "official", ref: "main" });
     const { ctx, pi, notifications } = makeCtx();
-    const { gitOps, state } = makeMockGitOps({
+    const { gitOps, state } = createGitOps({
       remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000001" },
     });
 
@@ -568,7 +568,7 @@ test("MURL-03 + D-14: url source refreshes via fetch+forceUpdateRef+checkout wit
     // arrange
     await seedUrlMarketplace({ cwd, name: "urlmp", ref: "main" });
     const { ctx, pi } = makeCtx();
-    const { gitOps, state } = makeMockGitOps({
+    const { gitOps, state } = createGitOps({
       remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000009" },
     });
 
@@ -600,7 +600,7 @@ test("MURL-03: unpinned url refresh follows the default-branch head-advance path
     await seedUrlMarketplace({ cwd, name: "urlmp-default" });
     const { ctx, pi } = makeCtx();
     const remoteSha = "abcdef0000000000000000000000000000000010";
-    const { gitOps, state } = makeMockGitOps({
+    const { gitOps, state } = createGitOps({
       remoteRefs: {
         "refs/remotes/origin/HEAD": remoteSha,
         "refs/remotes/origin/main": remoteSha,
@@ -639,7 +639,7 @@ test("PROV-04 / D-79-03: a no-provider url refresh that 401s renders {authentica
       code: "HttpError",
       data: { statusCode: 401 },
     });
-    const { gitOps, state } = makeMockGitOps({ fetchThrows: httpErr });
+    const { gitOps, state } = createGitOps({ fetchThrows: httpErr });
 
     // act
     await updateMarketplace({ ctx, pi, name: "urlmp-private", scope: "project", cwd, gitOps });
@@ -678,7 +678,7 @@ test("GAUTH-02: a declined/failed Device Flow (UserCanceledError) on refresh ren
     // isomorphic-git throws as `UserCanceledError` -- NOT an HttpError
     // 401/403 and NOT a network errno.
     const authError = Object.assign(new Error("cancelled"), { code: "UserCanceledError" });
-    const { gitOps } = makeMockGitOps({ fetchThrows: authError });
+    const { gitOps } = createGitOps({ fetchThrows: authError });
 
     // act
     await updateMarketplace({ ctx, pi, name: "declined", scope: "project", cwd, gitOps });
@@ -699,7 +699,7 @@ test("UXG-05: github-source refresh whose manifest content CHANGES renders `(upd
     // arrange
     const { cloneDir } = await seedGithubMarketplace({ cwd, name: "official", ref: "main" });
     const { ctx, pi, notifications } = makeCtx();
-    const { gitOps } = makeMockGitOps({
+    const { gitOps } = createGitOps({
       remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000003" },
     });
 
@@ -797,7 +797,7 @@ test("CR-01 / D-14 default-branch: forceUpdateRef target is refs/heads/<branch>,
     await seedGithubMarketplace({ cwd, name: "defaultbranch" });
     const { ctx, pi } = makeCtx();
     const remoteSha = "abcdef000000000000000000000000000000000a";
-    const { gitOps, state } = makeMockGitOps({
+    const { gitOps, state } = createGitOps({
       remoteRefs: {
         "refs/remotes/origin/HEAD": remoteSha,
         "refs/remotes/origin/main": remoteSha,
@@ -837,7 +837,7 @@ test("CR-01 / D-14 default-branch: detached HEAD -> checkout SHA directly, no fo
     await seedGithubMarketplace({ cwd, name: "detached" });
     const { ctx, pi } = makeCtx();
     const remoteSha = "abcdef000000000000000000000000000000000b";
-    const { gitOps, state } = makeMockGitOps({
+    const { gitOps, state } = createGitOps({
       remoteRefs: {
         "refs/remotes/origin/HEAD": remoteSha,
         "refs/remotes/origin/main": remoteSha,
@@ -868,7 +868,7 @@ test("D-14: detached-HEAD path checks out SHA directly without forceUpdateRef", 
     // Mock has the SHA available as a 40-char hex; resolveRef of
     // refs/remotes/origin/<sha> will throw (no such branch), forcing
     // the detached path.
-    const { gitOps, state } = makeMockGitOps();
+    const { gitOps, state } = createGitOps();
 
     // act
     await updateMarketplace({ ctx, pi, name: "pinned", scope: "project", cwd, gitOps });
@@ -890,7 +890,7 @@ test("D-14: SHA-no-longer-exists (checkout throws) surfaces as notifyError with 
     // arrange
     await seedGithubMarketplace({ cwd, name: "rewritten", ref: "deadbeef" });
     const { ctx, pi, notifications } = makeCtx();
-    const { gitOps } = makeMockGitOps({
+    const { gitOps } = createGitOps({
       checkoutThrows: new Error("mock: ref deadbeef no longer exists on remote"),
     });
 
@@ -921,7 +921,7 @@ test("CR-05 / MU-5: pre-fetch failure (gitOps.fetch throws) does NOT append 'Ret
     const { ctx, pi, notifications } = makeCtx();
     // Simulate DNS / network-unreachable on fetch -- cloneAdvanced must
     // stay false, so the retry hint is suppressed.
-    const { gitOps } = makeMockGitOps({
+    const { gitOps } = createGitOps({
       fetchThrows: new Error("mock: ENETUNREACH https://github.com"),
     });
     // act
@@ -956,7 +956,7 @@ test("MU-5: clone advances + manifest re-validation fails -- 'Retry the command.
     const { cloneDir } = await seedGithubMarketplace({ cwd, name: "broken" });
 
     const { ctx, pi, notifications } = makeCtx();
-    const { gitOps } = makeMockGitOps({
+    const { gitOps } = createGitOps({
       remoteRefs: { "refs/remotes/origin/HEAD": "abcdef0000000000000000000000000000000003" },
       localRefs: { HEAD: "abcdef0000000000000000000000000000000003" },
     });
@@ -1018,7 +1018,7 @@ test("WR-02: corrupt pre-existing manifest routes to (failed), never a silent no
     );
 
     const { ctx, pi, notifications } = makeCtx();
-    const { gitOps } = makeMockGitOps({
+    const { gitOps } = createGitOps({
       remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000123" },
     });
     // act
@@ -1118,7 +1118,7 @@ test("ATTR-10: path-source MALFORMED-JSON manifest renders `(failed) {invalid ma
       await seedPathMarketplace({ cwd, name: "bad-json", marketplaceRoot: localMpDir });
 
       const { ctx, pi, notifications } = makeCtx();
-      const { gitOps } = makeMockGitOps();
+      const { gitOps } = createGitOps();
       // act
       await updateMarketplace({ ctx, pi, name: "bad-json", scope: "project", cwd, gitOps });
 
@@ -1153,7 +1153,7 @@ test("ATTR-10: path-source SCHEMA-INVALID manifest renders `(failed) {invalid ma
       await seedPathMarketplace({ cwd, name: "bad-schema", marketplaceRoot: localMpDir });
 
       const { ctx, pi, notifications } = makeCtx();
-      const { gitOps } = makeMockGitOps();
+      const { gitOps } = createGitOps();
       // act
       await updateMarketplace({ ctx, pi, name: "bad-schema", scope: "project", cwd, gitOps });
 
@@ -1188,7 +1188,7 @@ test("NFR-5: path-source update FAILURE (invalid manifest) still calls zero gitO
       await seedPathMarketplace({ cwd, name: "local-bad", marketplaceRoot: localMpDir });
 
       const { ctx, pi, notifications } = makeCtx();
-      const { gitOps, state } = makeMockGitOps();
+      const { gitOps, state } = createGitOps();
       // act
       await updateMarketplace({ ctx, pi, name: "local-bad", scope: "project", cwd, gitOps });
 
@@ -1220,7 +1220,7 @@ test("github-source no-errno refresh failure still renders `{network unreachable
     // manifest branch did NOT swallow the github network default.
     await seedGithubMarketplace({ cwd, name: "ghnet", ref: "main" });
     const { ctx, pi, notifications } = makeCtx();
-    const { gitOps } = makeMockGitOps({
+    const { gitOps } = createGitOps({
       // Plain Error: message mentions ENETUNREACH but carries no `.code` errno,
       // so reasonsFromCascadeError returns undefined and the network default
       // fires for this github source.
@@ -1252,7 +1252,7 @@ test("MU-6 + MU-8: cascade runs ONLY when autoupdate=true; pluginUpdate called o
       plugins: { hello: makePluginRecord() },
     });
     const { ctx, pi } = makeCtx();
-    const { gitOps } = makeMockGitOps({
+    const { gitOps } = createGitOps({
       remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000004" },
     });
     const calls: { plugin: string; marketplace: string }[] = [];
@@ -1306,7 +1306,7 @@ test("MU-6: cascade skipped when autoupdate=false (default)", async () => {
       plugins: { hello: makePluginRecord() },
     });
     const { ctx, pi } = makeCtx();
-    const { gitOps } = makeMockGitOps({
+    const { gitOps } = createGitOps({
       remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000005" },
     });
     let pluginUpdateCalled = false;
@@ -1372,7 +1372,7 @@ test("LIFE-06: cascade mapper carries a preflight `not in manifest` skip through
     assert.ok(before !== undefined);
 
     const { ctx, pi, notifications } = makeCtx();
-    const { gitOps } = makeMockGitOps({
+    const { gitOps } = createGitOps({
       remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000009" },
     });
     // The exact outcome shape the shared preflight produces for a record whose
@@ -1459,7 +1459,7 @@ test("LIFE-06: autoupdate cascade through the REAL single-plugin update renders 
       assert.ok(before !== undefined);
 
       const { ctx, pi, notifications } = makeCtx();
-      const { gitOps } = makeMockGitOps();
+      const { gitOps } = createGitOps();
       // act
       await updateMarketplace({
         ctx,
@@ -1559,7 +1559,7 @@ test("WR-10: an autoupdate cascade over a disabled record whose pin moved render
       );
 
       const { ctx, pi, notifications } = makeCtx();
-      const { gitOps } = makeMockGitOps();
+      const { gitOps } = createGitOps();
       // act
       await updateMarketplace({
         ctx,
@@ -1616,7 +1616,7 @@ test("CMC-26 / MSG-GR-3: cascade body emits per-plugin rows sorted alphabeticall
       },
     });
     const { ctx, pi, notifications } = makeCtx();
-    const { gitOps } = makeMockGitOps({
+    const { gitOps } = createGitOps({
       remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000006" },
     });
     // PluginUpdateOutcome is a discriminated union; each partition variant
@@ -1722,7 +1722,7 @@ test("MU-9 + MSG-RH-1: success emits canonical reload hint trailer for updated p
       plugins: { x: makePluginRecord(), a: makePluginRecord() },
     });
     const { ctx, pi, notifications } = makeCtx();
-    const { gitOps } = makeMockGitOps({
+    const { gitOps } = createGitOps({
       remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000007" },
     });
     const pluginUpdate: PluginUpdateFn = async (plugin) =>
@@ -1771,7 +1771,7 @@ test("UXG-05 (UAT Test-3 gap) + RH-1 + SNM-33 / D-22-01: autoupdate-ON cascade a
     // The mock git ops advance the ref but do NOT rewrite the seeded
     // `valid-marketplace` fixture, so the refresh re-validates byte-identical
     // manifest content -> snapshot.changed === false.
-    const { gitOps } = makeMockGitOps({
+    const { gitOps } = createGitOps({
       remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000008" },
     });
     const pluginUpdate: PluginUpdateFn = async (plugin) =>
@@ -1826,7 +1826,7 @@ test("UXG-05 (UAT Test-3 gap) regression guard: autoupdate-ON cascade where a pl
     // NOT rewrite the seeded fixture, so snapshot.changed === false. The ONLY
     // difference is the cascade outcome -- a plugin actually updated, so
     // outcomes.every(unchanged) is false and the no-op gate does NOT fire.
-    const { gitOps } = makeMockGitOps({
+    const { gitOps } = createGitOps({
       remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000009" },
     });
     const pluginUpdate: PluginUpdateFn = async (plugin) =>
@@ -1890,7 +1890,7 @@ test("NFR-5: path-source update calls zero gitOps methods", async () => {
         },
       });
       const { ctx, pi } = makeCtx();
-      const { gitOps, state } = makeMockGitOps();
+      const { gitOps, state } = createGitOps();
       // act
       await updateMarketplace({ ctx, pi, name: "local", scope: "project", cwd, gitOps });
 
@@ -1920,7 +1920,7 @@ test("D-03-INV :: update invalidates plugin cache for that marketplace", async (
     resetCompletionCache();
     await seedGithubMarketplace({ cwd, name: "official", ref: "main" });
     const { ctx, pi } = makeCtx();
-    const { gitOps } = makeMockGitOps({
+    const { gitOps } = createGitOps({
       remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000001" },
     });
 
@@ -1965,7 +1965,7 @@ test("a newly degraded autoupdate cascade emits its partial row and warning enve
       plugins: { hello: makePluginRecord() },
     });
     const { ctx, pi, notifications } = makeCtx();
-    const { gitOps } = makeMockGitOps({
+    const { gitOps } = createGitOps({
       remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000042" },
     });
     const pluginUpdate: PluginUpdateFn = async (plugin) =>
@@ -2031,7 +2031,7 @@ test("260525-cjr B2: cascadeAutoupdates catch -> EACCES surfaces as `{permission
       plugins: { alpha: makePluginRecord() },
     });
     const { ctx, pi, notifications } = makeCtx();
-    const { gitOps } = makeMockGitOps({
+    const { gitOps } = createGitOps({
       remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000999" },
     });
     const pluginUpdate: PluginUpdateFn = () => {
@@ -2082,7 +2082,7 @@ test("260525-cjr B2: cascadeAutoupdates catch -> ENOENT surfaces as `{source mis
       plugins: { alpha: makePluginRecord() },
     });
     const { ctx, pi, notifications } = makeCtx();
-    const { gitOps } = makeMockGitOps({
+    const { gitOps } = createGitOps({
       remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000999" },
     });
     const pluginUpdate: PluginUpdateFn = () => {
@@ -2120,7 +2120,7 @@ test("260525-cjr B2: cascadeAutoupdates catch -> generic Error falls through to 
       plugins: { alpha: makePluginRecord() },
     });
     const { ctx, pi, notifications } = makeCtx();
-    const { gitOps } = makeMockGitOps({
+    const { gitOps } = createGitOps({
       remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000999" },
     });
     const pluginUpdate: PluginUpdateFn = () =>
@@ -2162,7 +2162,7 @@ test("a non-Error cascade rejection safely renders the unreadable-manifest fallb
       plugins: { alpha: makePluginRecord() },
     });
     const { ctx, pi, notifications } = makeCtx();
-    const { gitOps } = makeMockGitOps({
+    const { gitOps } = createGitOps({
       remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000999" },
     });
     // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- this boundary must safely tolerate non-Error JavaScript rejections.
@@ -2216,7 +2216,7 @@ test("SC-6 / MU-1: updateAllMarketplaces (no scope) processes user-scope marketp
     });
 
     const { ctx, pi, notifications } = makeCtx();
-    const { gitOps } = makeMockGitOps({
+    const { gitOps } = createGitOps({
       remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000010" },
     });
 
@@ -2244,7 +2244,7 @@ test("SC-6 / MU-1: updateAllMarketplaces (no scope) with both scopes empty notif
   await withHermeticHome(async ({ cwd }) => {
     // arrange
     const { ctx, pi, notifications } = makeCtx();
-    const { gitOps } = makeMockGitOps();
+    const { gitOps } = createGitOps();
 
     // act
     await updateAllMarketplaces({ ctx, pi, cwd, gitOps }); // no scope filter
@@ -2275,7 +2275,7 @@ test("updateAllMarketplaces forwards optional Device Flow and plugin cascade por
     const locations = locationsFor("project", cwd);
     const configBytes = await readFile(locations.configJsonPath, "utf8");
     const { ctx, pi, notifications } = makeCtx();
-    const deviceFlow = makeMockDeviceFlowHttp();
+    const deviceFlow = createDeviceFlowHttp();
     const cascadeCalls: Array<{ marketplace: string; plugin: string; scope: Scope }> = [];
     const pluginUpdate: PluginUpdateFn = (plugin, marketplace, scope) => {
       cascadeCalls.push({ marketplace, plugin, scope });
@@ -2399,7 +2399,7 @@ test("refreshRecord: unsupported source kind surfaces as notifyError (lines 219-
     });
 
     const { ctx, pi, notifications } = makeCtx();
-    const { gitOps } = makeMockGitOps();
+    const { gitOps } = createGitOps();
 
     // act
     await updateMarketplace({ ctx, pi, name: "unsupported-mp", scope: "project", cwd, gitOps });
@@ -2428,7 +2428,7 @@ test("updateMarketplace: explicit-scope missing marketplace -> standalone {marke
     // arrange
     // Leave state empty -- no marketplace named "ghost".
     const { ctx, pi, notifications } = makeCtx();
-    const { gitOps } = makeMockGitOps();
+    const { gitOps } = createGitOps();
 
     // act
     await updateMarketplace({ ctx, pi, name: "ghost", scope: "project", cwd, gitOps });
@@ -2457,7 +2457,7 @@ test("CMP-4 / SCOPE-01: explicit --scope user against a project-only marketplace
     // seedGithubMarketplace seeds the PROJECT scope; ask for USER explicitly.
     await seedGithubMarketplace({ cwd, name: "mp" });
     const { ctx, pi, notifications } = makeCtx();
-    const { gitOps } = makeMockGitOps();
+    const { gitOps } = createGitOps();
 
     await updateMarketplace({ ctx, pi, name: "mp", scope: "user", cwd, gitOps });
 
@@ -2488,7 +2488,7 @@ test("CR-01 TOCTOU: refreshOneMarketplace silently no-ops on a removed marketpla
   await withHermeticHome(async ({ cwd }) => {
     // arrange
     const { ctx, pi, notifications } = makeCtx();
-    const { gitOps, state: gitState } = makeMockGitOps();
+    const { gitOps, state: gitState } = createGitOps();
 
     // act
     await assert.doesNotReject(async () =>
@@ -2530,7 +2530,7 @@ test("updateMarketplace: bare-form missing marketplace -> bracketless {marketpla
     // arrange
     // Leave state empty -- no marketplace named "ghost" in either scope.
     const { ctx, pi, notifications } = makeCtx();
-    const { gitOps } = makeMockGitOps();
+    const { gitOps } = createGitOps();
 
     // act
     await assert.doesNotReject(async () =>
@@ -2581,7 +2581,7 @@ test("validateManifestAtRoot: stale manifestPath and marketplaceRoot are correct
     });
 
     const { ctx, pi, notifications } = makeCtx();
-    const { gitOps } = makeMockGitOps({
+    const { gitOps } = createGitOps({
       remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000011" },
     });
 
@@ -2633,11 +2633,11 @@ test("AUTH-02 update: credentialOps.fill HIT yields silent reuse -- NO Device Fl
 
     // Pre-seed the credential store for github.com so fill() returns the
     // stored token without triggering Device Flow.
-    const { credOps: credentialOps, state: credState } = makeMockCredentialOps({
+    const { credOps: credentialOps, state: credState } = createCredentialOps({
       store: new Map([["github.com", { username: "x-access-token", password: "stored-token" }]]),
     });
 
-    const { gitOps, state } = makeMockGitOps({
+    const { gitOps, state } = createGitOps({
       remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000020" },
     });
 
@@ -2690,9 +2690,9 @@ test("AUTH-02 update: the GitAuthBundle is forwarded by reference into refreshGi
     // Empty store: fill() returns null. Device Flow would normally trigger
     // when onAuth is invoked, but gitOps.fetch is a pure stub so the
     // callbacks are never called -- only the bundle reference is checked.
-    const { credOps: credentialOps } = makeMockCredentialOps();
+    const { credOps: credentialOps } = createCredentialOps();
 
-    const { gitOps, state } = makeMockGitOps({
+    const { gitOps, state } = createGitOps({
       remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000021" },
     });
 
@@ -2741,7 +2741,7 @@ test("WR-12: the autoupdate cascade row is byte-identical to the standalone upda
       plugins: { hello: makePluginRecord() },
     });
     const { ctx, pi, notifications } = makeCtx();
-    const { gitOps } = makeMockGitOps({
+    const { gitOps } = createGitOps({
       remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000031" },
     });
     const pluginUpdate: PluginUpdateFn = async (plugin) =>

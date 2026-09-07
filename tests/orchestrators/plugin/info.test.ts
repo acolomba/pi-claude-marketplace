@@ -104,7 +104,7 @@ async function withFsPromiseFault<T>(
   }
 }
 
-function makeMockCredentialOps() {
+function createCredentialOps() {
   const credentials = createCredentialOpsFake({ boundary: "memory" });
   return {
     credOps: credentials.credentialOps,
@@ -141,7 +141,7 @@ const ALLOWED_INFO_REMOTES = [
   "https://github.com/owner/gh-mp.git",
 ] as const;
 
-function makeMockGitOps(initial: GitOpsAdapterOptions = {}) {
+function createGitOps(initial: GitOpsAdapterOptions = {}) {
   const normalizedRemoteRefs = Object.fromEntries(
     Object.entries(initial.remoteRefs ?? {}).map(([ref, oid]) => [
       ref.replace(/^refs\/remotes\/[^/]+\//, ""),
@@ -3130,8 +3130,8 @@ test("plugin info manifest absent: INFO-12 / NFR-5: `info --fetch` on a manifest
       installed: { alpha: { version: "1.0.0" } },
     });
 
-    const { gitOps, state: gitState } = makeMockGitOps({});
-    const { credOps: credentialOps, state: credState } = makeMockCredentialOps();
+    const { gitOps, state: gitState } = createGitOps({});
+    const { credOps: credentialOps, state: credState } = createCredentialOps();
     const { ctx, pi, notifications } = makeCtx(2);
     // act
     await getPluginInfo({
@@ -3185,8 +3185,8 @@ test("plugin info manifest absent: INFO-12 / NFR-5: bare `info` on a manifest-ab
     });
 
     // The seams are supplied but `fetch` is omitted: nothing may run.
-    const { gitOps, state: gitState } = makeMockGitOps({});
-    const { credOps: credentialOps, state: credState } = makeMockCredentialOps();
+    const { gitOps, state: gitState } = createGitOps({});
+    const { credOps: credentialOps, state: credState } = createCredentialOps();
     const { ctx, pi, notifications } = makeCtx();
     // act
     await getPluginInfo({
@@ -3230,8 +3230,8 @@ test("plugin info manifest absent: INFO-12 / NFR-5: a git-source-shaped manifest
       installed: { alpha: { version: "1.0.0", resolvedSource: "https://example.com/repo" } },
     });
 
-    const { gitOps, state: gitState } = makeMockGitOps({});
-    const { credOps: credentialOps, state: credState } = makeMockCredentialOps();
+    const { gitOps, state: gitState } = createGitOps({});
+    const { credOps: credentialOps, state: credState } = createCredentialOps();
     const { ctx, pi, notifications } = makeCtx(2);
     // act
     await getPluginInfo({
@@ -3296,8 +3296,8 @@ test("plugin info manifest absent: ENBL-17 / NFR-5: a DISABLED manifest-absent r
       },
     });
 
-    const { gitOps, state: gitState } = makeMockGitOps({});
-    const { credOps: credentialOps, state: credState } = makeMockCredentialOps();
+    const { gitOps, state: gitState } = createGitOps({});
+    const { credOps: credentialOps, state: credState } = createCredentialOps();
     const { ctx, pi, notifications } = makeCtx(2);
     // act
     await getPluginInfo({
@@ -3375,8 +3375,8 @@ test("plugin info manifest absent: ENBL-17 / NFR-5: `info --fetch` on a DISABLED
       installed: { alpha: { version: "1.0.0", disabled: true } },
     });
 
-    const { gitOps, state: gitState } = makeMockGitOps({});
-    const { credOps: credentialOps, state: credState } = makeMockCredentialOps();
+    const { gitOps, state: gitState } = createGitOps({});
+    const { credOps: credentialOps, state: credState } = createCredentialOps();
     const { ctx, pi, notifications } = makeCtx(2);
     // act
     await getPluginInfo({
@@ -5113,8 +5113,8 @@ test("FTCH-03: info --fetch on a COLD pinned git plugin materializes the clone t
       },
     });
 
-    const { gitOps, state: gitState } = makeMockGitOps({ fixtureSourceDir: fixtureRepoDir });
-    const { credOps: credentialOps } = makeMockCredentialOps();
+    const { gitOps, state: gitState } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
+    const { credOps: credentialOps } = createCredentialOps();
     const { ctx, pi, notifications } = makeCtx();
     // act
     await getPluginInfo({
@@ -5162,8 +5162,8 @@ test("D-81-04: info --fetch degrades to `components: not resolved` + an existing
     const netErr = Object.assign(new Error("getaddrinfo ENOTFOUND example.com"), {
       code: "ENOTFOUND",
     });
-    const { gitOps } = makeMockGitOps({ cloneThrows: netErr });
-    const { credOps: credentialOps } = makeMockCredentialOps();
+    const { gitOps } = createGitOps({ cloneThrows: netErr });
+    const { credOps: credentialOps } = createCredentialOps();
     const { ctx, pi, notifications } = makeCtx();
 
     // getPluginInfo MUST resolve (not reject) even though the fetch threw.
@@ -5206,8 +5206,8 @@ test("NFR-5: bare info (no --fetch) on a COLD git plugin makes ZERO git-seam cal
     });
 
     // The seam is provided but `fetch` is omitted: the hook must NOT run.
-    const { gitOps, state: gitState } = makeMockGitOps({});
-    const { credOps: credentialOps } = makeMockCredentialOps();
+    const { gitOps, state: gitState } = createGitOps({});
+    const { credOps: credentialOps } = createCredentialOps();
     const { ctx, pi, notifications } = makeCtx();
     // act
     await getPluginInfo({
@@ -5249,8 +5249,8 @@ test("OUT-05 / NFR-5 / OUT-03: a COLD git plugin whose entry declares `defaultEn
     // defect rather than a consented fetch. Counting the calls is what makes
     // this evidence: a source grep says the module holds no git import, while
     // the count says the injected surface was never reached at run time.
-    const { gitOps, state: gitState } = makeMockGitOps({});
-    const { credOps: credentialOps } = makeMockCredentialOps();
+    const { gitOps, state: gitState } = createGitOps({});
+    const { credOps: credentialOps } = createCredentialOps();
     const { ctx, pi, notifications } = makeCtx();
     // act
     await getPluginInfo({
@@ -5315,8 +5315,8 @@ test("D-78-04 / D-81-04: info --fetch on an INSTALLED git plugin with a missing 
     const netErr = Object.assign(new Error("getaddrinfo ENOTFOUND example.com"), {
       code: "ENOTFOUND",
     });
-    const { gitOps } = makeMockGitOps({ cloneThrows: netErr });
-    const { credOps: credentialOps } = makeMockCredentialOps();
+    const { gitOps } = createGitOps({ cloneThrows: netErr });
+    const { credOps: credentialOps } = createCredentialOps();
     const { ctx, pi, notifications } = makeCtx();
     // act
     await getPluginInfo({
@@ -5381,8 +5381,8 @@ test("FTCH-03 / D-78-04: info --fetch on an installed git plugin with a missing 
       installed: { gplug: { version: "1.0.0" } },
     });
 
-    const { gitOps, state: gitState } = makeMockGitOps({ fixtureSourceDir: fixtureRepoDir });
-    const { credOps: credentialOps } = makeMockCredentialOps();
+    const { gitOps, state: gitState } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
+    const { credOps: credentialOps } = createCredentialOps();
     const { ctx, pi, notifications } = makeCtx();
     // act
     await getPluginInfo({
@@ -5441,13 +5441,13 @@ test("FTCH-03 / MIRR-02: info --fetch on an UNPINNED not-installed source materi
       },
     });
 
-    const { gitOps, state: gitState } = makeMockGitOps({
+    const { gitOps, state: gitState } = createGitOps({
       fixtureSourceDir: fixtureRepoDir,
       head: MIRROR_HEAD,
       localRefs: { "refs/heads/main": MIRROR_HEAD },
       remoteRefs: { "refs/remotes/origin/HEAD": MIRROR_HEAD },
     });
-    const { credOps: credentialOps } = makeMockCredentialOps();
+    const { credOps: credentialOps } = createCredentialOps();
     const { ctx, pi, notifications } = makeCtx();
     // act
     await getPluginInfo({
@@ -5497,8 +5497,8 @@ test("FTCH-06: info --fetch folds an HttpError 401 seam throw to `{authenticatio
       code: "HttpError",
       data: { statusCode: 401 },
     });
-    const { gitOps } = makeMockGitOps({ cloneThrows: authErr });
-    const { credOps: credentialOps } = makeMockCredentialOps();
+    const { gitOps } = createGitOps({ cloneThrows: authErr });
+    const { credOps: credentialOps } = createCredentialOps();
     const { ctx, pi, notifications } = makeCtx();
     // act
     await getPluginInfo({
@@ -5541,8 +5541,8 @@ test("FTCH-06: info --fetch folds a UserCanceledError (denied/expired Device Flo
     const canceledErr = Object.assign(new Error("auth canceled"), {
       code: "UserCanceledError",
     });
-    const { gitOps } = makeMockGitOps({ cloneThrows: canceledErr });
-    const { credOps: credentialOps } = makeMockCredentialOps();
+    const { gitOps } = createGitOps({ cloneThrows: canceledErr });
+    const { credOps: credentialOps } = createCredentialOps();
     const { ctx, pi, notifications } = makeCtx();
     // act
     await getPluginInfo({
@@ -5916,8 +5916,8 @@ test("OUT-05 / OUT-03: a degraded `(remote)` row reporting a read failure carrie
     const netErr = Object.assign(new Error("getaddrinfo ENOTFOUND example.com"), {
       code: "ENOTFOUND",
     });
-    const { gitOps } = makeMockGitOps({ cloneThrows: netErr });
-    const { credOps: credentialOps } = makeMockCredentialOps();
+    const { gitOps } = createGitOps({ cloneThrows: netErr });
+    const { credOps: credentialOps } = createCredentialOps();
     const { ctx, pi, notifications } = makeCtx();
     // act
     await getPluginInfo({
@@ -6634,8 +6634,8 @@ test("a generic explicit-fetch failure uses the probe fallback exactly", async (
         ],
       },
     });
-    const { gitOps } = makeMockGitOps({ cloneThrows: new Error("fetch failed") });
-    const { credOps: credentialOps } = makeMockCredentialOps();
+    const { gitOps } = createGitOps({ cloneThrows: new Error("fetch failed") });
+    const { credOps: credentialOps } = createCredentialOps();
     const { ctx, pi, notifications } = makeCtx();
 
     // act

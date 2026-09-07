@@ -3036,7 +3036,7 @@ const REINSTALL_REMOTE_URLS = [
   "https://gitlab.example.com/o/r.git",
 ] as const;
 
-function makeMockGitOps(
+function createGitOps(
   options: {
     readonly fixtureSourceDir?: string;
     readonly cloneThrows?: Error;
@@ -3183,7 +3183,7 @@ async function seedInstalledGitSourcePlugin(opts: {
     },
   });
 
-  const { gitOps } = makeMockGitOps({ fixtureSourceDir: fixtureRepoDir });
+  const { gitOps } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
   const { ctx, pi } = makeCtx();
   await installPlugin({
     ctx,
@@ -3262,7 +3262,7 @@ test("plugin reinstall authentication: a cold GitHub cache threads one provider 
         pluginCloneKey("https://github.com/org/repo", GIT_SOURCE_SHA),
       );
       await rm(cloneRoot, { recursive: true, force: true });
-      const { gitOps, state: gitState } = makeMockGitOps({
+      const { gitOps, state: gitState } = createGitOps({
         fixtureSourceDir: path.join(cwd, "repo-fixture"),
       });
       const { seam, captured } = capturingReinstallSeam(gitOps);
@@ -3323,7 +3323,7 @@ test("plugin reinstall authentication: a non-provider host threads no auth bundl
         pluginCloneKey("https://gitlab.example.com/o/r", GIT_SOURCE_SHA),
       );
       await rm(cloneRoot, { recursive: true, force: true });
-      const { gitOps } = makeMockGitOps({ fixtureSourceDir: path.join(cwd, "repo-fixture") });
+      const { gitOps } = createGitOps({ fixtureSourceDir: path.join(cwd, "repo-fixture") });
       const { seam, captured } = capturingReinstallSeam(gitOps);
       const { credentialOps, calls: credentialCalls } = createCredentialOpsFake({
         boundary: "memory",
@@ -3418,7 +3418,7 @@ test("plugin reinstall authentication: a bulk cold-cache sweep shares one host m
           },
         },
       });
-      const { gitOps } = makeMockGitOps({ fixtureSourceDir: fixtureRepoDir });
+      const { gitOps } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
       const bundles: (GitAuthBundle | undefined)[] = [];
       const seam: ReinstallCloneCacheSeam = {
         materializePluginClone: (args) => {
@@ -3486,7 +3486,7 @@ test("a url-source reinstall completes on a warm cache with clone and resolveRem
 
       // A GitOps stub whose clone AND resolveRemoteRef both throw: any network
       // touch fails the reinstall. The warm cache must short-circuit both.
-      const { gitOps, state: gitState } = makeMockGitOps({
+      const { gitOps, state: gitState } = createGitOps({
         cloneThrows: new Error("network unreachable: clone"),
         resolveRemoteRefThrows: new Error("network unreachable: resolveRemoteRef"),
       });
@@ -3527,7 +3527,7 @@ test("a git-source reinstall carries the recorded resolvedSha, version, and inst
       assert.ok(before !== undefined, "the seeded install records a git-source plugin");
       assert.equal(before.resolvedSha, GIT_SOURCE_SHA, "install recorded the resolvedSha");
 
-      const { gitOps } = makeMockGitOps({
+      const { gitOps } = createGitOps({
         cloneThrows: new Error("network unreachable: clone"),
         resolveRemoteRefThrows: new Error("network unreachable: resolveRemoteRef"),
       });
@@ -3576,7 +3576,7 @@ test("a cold-cache git-source reinstall re-materializes from the recorded sha wi
       // clone) but whose resolveRemoteRef still throws: the pin must come from
       // the recorded sha, never from a ref re-resolution.
       const fixtureRepoDir = path.join(cwd, "repo-fixture");
-      const { gitOps, state: gitState } = makeMockGitOps({
+      const { gitOps, state: gitState } = createGitOps({
         fixtureSourceDir: fixtureRepoDir,
         resolveRemoteRefThrows: new Error("network unreachable: resolveRemoteRef"),
       });
@@ -3623,7 +3623,7 @@ test("a git-subdir reinstall honors clone-root subdir containment (pluginRoot un
         subdirPath: "packages/gp",
       });
 
-      const { gitOps } = makeMockGitOps({
+      const { gitOps } = createGitOps({
         cloneThrows: new Error("network unreachable: clone"),
         resolveRemoteRefThrows: new Error("network unreachable: resolveRemoteRef"),
       });
@@ -3757,7 +3757,7 @@ test("MIRR-06 / PRL-07: an unpinned reinstall repairs fs-only from the warm mirr
 
       // A gitOps whose clone AND resolveRemoteRef both throw: any network touch
       // fails the reinstall. The warm mirror must repair fs-only.
-      const { gitOps, state: gitState } = makeMockGitOps({
+      const { gitOps, state: gitState } = createGitOps({
         cloneThrows: new Error("network unreachable: clone"),
         resolveRemoteRefThrows: new Error("network unreachable: resolveRemoteRef"),
       });
@@ -3814,7 +3814,7 @@ test("MIRR-06 / D-79.1-04: an unpinned reinstall with only a per-sha clone (no m
       // clone + resolveRemoteRef both throw: a warm per-sha clone repairs with
       // no network; the mirror dir is absent so the arm falls through to the
       // recorded-sha per-sha path.
-      const { gitOps, state: gitState } = makeMockGitOps({
+      const { gitOps, state: gitState } = createGitOps({
         cloneThrows: new Error("network unreachable: clone"),
         resolveRemoteRefThrows: new Error("network unreachable: resolveRemoteRef"),
       });
@@ -3867,7 +3867,7 @@ test("MIRR-06 / PRL-07: an unpinned reinstall with neither mirror nor per-sha cl
       // clone throws: PRL-07 forbids a network materialize on reinstall, so a
       // cold source must NOT clone successfully -- it fails clean (the same
       // degrade a cold per-sha reinstall hits today).
-      const { gitOps, state: gitState } = makeMockGitOps({
+      const { gitOps, state: gitState } = createGitOps({
         cloneThrows: new Error("network unreachable: clone"),
         resolveRemoteRefThrows: new Error("network unreachable: resolveRemoteRef"),
       });
@@ -5613,7 +5613,7 @@ test("an unpinned git-subdir reinstall repairs from the warm mirror without exte
         resolvedSha: MIRROR_HEAD_SHA,
         source: { source: "git-subdir", url: cloneUrl, path: "packages/gp" },
       });
-      const { gitOps, state: gitState } = makeMockGitOps({
+      const { gitOps, state: gitState } = createGitOps({
         cloneThrows: new Error("unexpected clone"),
         resolveRemoteRefThrows: new Error("unexpected remote resolution"),
       });
@@ -5660,7 +5660,7 @@ test("an unpinned git-subdir reinstall reports a missing mirror subdirectory wit
         resolvedSha: MIRROR_HEAD_SHA,
         source: { source: "git-subdir", url: cloneUrl, path: "packages/missing" },
       });
-      const { gitOps, state: gitState } = makeMockGitOps({
+      const { gitOps, state: gitState } = createGitOps({
         cloneThrows: new Error("unexpected clone"),
       });
       const { ctx, pi } = makeCtx();
@@ -5707,7 +5707,7 @@ test("a pinned git-subdir reinstall reports a missing cached subdirectory", asyn
           sha: GIT_SOURCE_SHA,
         },
       });
-      const { gitOps, state: gitState } = makeMockGitOps({
+      const { gitOps, state: gitState } = createGitOps({
         cloneThrows: new Error("unexpected clone"),
       });
       const { ctx, pi } = makeCtx();

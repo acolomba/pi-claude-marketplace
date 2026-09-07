@@ -279,15 +279,23 @@ async function createCliFixture(t: TestContext): Promise<CliFixture> {
   return { projectRoot, corpusPath, ledger, shard };
 }
 
+function compactTraceabilityRows(markdown: string): string {
+  return markdown.replace(
+    /^\|[ \t]+([A-Z]+-\d+)[ \t]+\|[ \t]+([^|\n]*?)[ \t]+\|[ \t]+([^|\n]*?)[ \t]+\|$/gm,
+    "| $1 | $2 | $3 |",
+  );
+}
+
 async function createScopeImpactFixture(t: TestContext): Promise<string> {
   const projectRoot = await mkdtemp(path.join(tmpdir(), "revalidation-scope-impact-"));
   t.after(() => rm(projectRoot, { recursive: true, force: true }));
   const canonicalRoot = fileURLToPath(new URL("../..", import.meta.url));
   for (const candidate of [ledgerPath, ".planning/REQUIREMENTS.md", ".planning/ROADMAP.md"]) {
     await mkdir(path.dirname(path.join(projectRoot, candidate)), { recursive: true });
+    const source = await readFile(path.join(canonicalRoot, candidate), "utf8");
     await writeFile(
       path.join(projectRoot, candidate),
-      await readFile(path.join(canonicalRoot, candidate), "utf8"),
+      candidate === ".planning/REQUIREMENTS.md" ? compactTraceabilityRows(source) : source,
     );
   }
 
@@ -912,7 +920,7 @@ test("RVAL-04 scope-impact rejects a missing requirement definition", async (t) 
   const projectRoot = await createScopeImpactFixture(t);
   const contractPath = path.join(projectRoot, ".planning/REQUIREMENTS.md");
   const contract = await readFile(contractPath, "utf8");
-  await writeFile(contractPath, contract.replace(/- \[ \] \*\*PDEF-01\*\*:[\s\S]*?(?=\n- \[)/, ""));
+  await writeFile(contractPath, contract.replace(/- \[x\] \*\*PDEF-01\*\*:[\s\S]*?(?=\n- \[)/, ""));
 
   // act
   const execution = runCli(projectRoot, ["scope-impact", "--check"]);
@@ -954,9 +962,9 @@ for (const row of [
     title: "RVAL-04 scope-impact ignores a commented requirement definition",
     contract: ".planning/REQUIREMENTS.md",
     original:
-      "- [ ] **PDEF-01**: Each terminally confirmed production defect routed to Phase 3\n" +
-      "  has a direct owner regression that fails without the correction and passes\n" +
-      "  with it; stale, struck, and evidence-only claims authorize no implementation.",
+      "- [x] **PDEF-01**: Each terminally confirmed production defect routed to Phase 3\n" +
+      "      has a direct owner regression that fails without the correction and passes\n" +
+      "      with it; stale, struck, and evidence-only claims authorize no implementation.",
     replacement: (original: string) => `<!--\n${original}\n-->`,
     expectedStderr:
       "missing-requirement-clause: PDEF-01: requirement clause is blank or absent\n" +
@@ -1112,10 +1120,10 @@ test("RVAL-04 scope-impact rejects changed requirement clause text", async (t) =
   await writeFile(
     contractPath,
     contract.replace(
-      "- [ ] **PDEF-01**: Each terminally confirmed production defect routed to Phase 3\n" +
-        "  has a direct owner regression that fails without the correction and passes\n" +
-        "  with it; stale, struck, and evidence-only claims authorize no implementation.",
-      "- [ ] **PDEF-01**: Unrelated prose retains the stable ID and section.",
+      "- [x] **PDEF-01**: Each terminally confirmed production defect routed to Phase 3\n" +
+        "      has a direct owner regression that fails without the correction and passes\n" +
+        "      with it; stale, struck, and evidence-only claims authorize no implementation.",
+      "- [x] **PDEF-01**: Unrelated prose retains the stable ID and section.",
     ),
   );
 
@@ -1155,8 +1163,8 @@ for (const row of [
   {
     title: "RVAL-04 scope-impact rejects a blank active requirement clause",
     requirementId: "PDEF-01",
-    pattern: /- \[ \] \*\*PDEF-01\*\*:[\s\S]*?(?=\n- \[)/,
-    replacement: "- [ ] **PDEF-01**:",
+    pattern: /- \[x\] \*\*PDEF-01\*\*:[\s\S]*?(?=\n- \[)/,
+    replacement: "- [x] **PDEF-01**:",
   },
   {
     title: "RVAL-04 scope-impact rejects a blank evidence requirement clause",
@@ -1333,8 +1341,8 @@ test("RVAL-04 scope-impact rejects a coordinated active phase reassignment", asy
   await writeFile(
     requirementsFile,
     (await readFile(requirementsFile, "utf8")).replace(
-      "| PDEF-01 | Phase 3 | Pending |",
-      "| PDEF-01 | Phase 4 | Pending |",
+      "| PDEF-01 | Phase 3 | Complete |",
+      "| PDEF-01 | Phase 4 | Complete |",
     ),
   );
   await writeFile(
@@ -1708,7 +1716,7 @@ test("RVAL-04 scope-impact rejects an active evidence-only requirement", async (
   const contract = await readFile(contractPath, "utf8");
   await writeFile(
     contractPath,
-    contract.replace("| PDEF-01 | Phase 3 | Pending |", "| PDEF-01 | Phase 3 | Evidence only |"),
+    contract.replace("| PDEF-01 | Phase 3 | Complete |", "| PDEF-01 | Phase 3 | Evidence only |"),
   );
 
   // act

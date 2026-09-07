@@ -118,7 +118,7 @@ async function seedGithubMarketplaceForSync(cwd: string): Promise<void> {
   });
 }
 
-function makeMockGitOps(
+function createGitOps(
   options: {
     readonly fixtureSourceDir?: string;
     readonly head?: string;
@@ -1108,7 +1108,7 @@ test("updatePlugins preserves a generated skill preload in the staged agent", as
         installedVersions: { hello: "1.0.0" },
       });
       await seedAgentSkillPreload(seeded.marketplaceRoot);
-      const git = makeMockGitOps();
+      const git = createGitOps();
       const credentials = createCredentialOpsFake({ boundary: "memory" });
       const deviceFlow = createDeviceFlowFake({
         boundary: "memory",
@@ -1363,7 +1363,7 @@ test("PUP-2: two plugins in SAME github marketplace -> syncCloneOnce calls fetch
       });
 
       const { ctx, pi } = makeCtx();
-      const { gitOps, state } = makeMockGitOps({
+      const { gitOps, state } = createGitOps({
         remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000001" },
       });
 
@@ -1403,7 +1403,7 @@ test("NFR-5: path-source marketplace update calls zero gitOps primitives", async
       });
 
       const { ctx, pi } = makeCtx();
-      const { gitOps, state } = makeMockGitOps();
+      const { gitOps, state } = createGitOps();
 
       await updatePlugins({
         ctx,
@@ -3174,7 +3174,7 @@ test("syncClone-fail: gitOps.fetch throws -> notifyError fired and updatePlugins
       const { ctx, pi, notifications } = makeCtx();
       // fetchThrows causes refreshGitHubClone -> gitOps.fetch to throw,
       // which propagates through syncCloneOnce and is caught at lines 207-213.
-      const { gitOps } = makeMockGitOps({
+      const { gitOps } = createGitOps({
         fetchThrows: new Error("network: connection refused"),
         remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000001" },
       });
@@ -3203,7 +3203,7 @@ test("syncClone-fail: a non-Error injected rejection is normalized at the direct
     try {
       // arrange
       await seedGithubMarketplaceForSync(cwd);
-      const { gitOps: baseGitOps } = makeMockGitOps({
+      const { gitOps: baseGitOps } = createGitOps({
         remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000001" },
       });
       const rejectNonError = Promise.reject.bind(Promise);
@@ -3342,7 +3342,7 @@ for (const { title, makeFailure, reason } of [
       try {
         // arrange
         await seedGithubMarketplaceForSync(cwd);
-        const { gitOps } = makeMockGitOps({
+        const { gitOps } = createGitOps({
           fetchThrows: makeFailure(),
           remoteRefs: {
             "refs/remotes/origin/main": "abcdef0000000000000000000000000000000001",
@@ -3673,7 +3673,7 @@ test("a later marketplace removed during an earlier refresh aborts before its ow
           zzz: marketplaceRecord("zzz", zzzClone),
         },
       });
-      const { gitOps } = makeMockGitOps({
+      const { gitOps } = createGitOps({
         remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000001" },
       });
       const originalFetch = gitOps.fetch.bind(gitOps);
@@ -3748,7 +3748,7 @@ test("swapState-mp-gone: marketplace removed via gitOps.fetch side-effect -> gra
 
       const stateJsonPath = locations.stateJsonPath;
 
-      const { gitOps } = makeMockGitOps({
+      const { gitOps } = createGitOps({
         remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000001" },
       });
       const originalFetch = gitOps.fetch.bind(gitOps);
@@ -3822,7 +3822,7 @@ test("swapState-plugin-gone: plugin removed from state between enumerateTargets 
 
       const stateJsonPath = locations.stateJsonPath;
 
-      const { gitOps } = makeMockGitOps({
+      const { gitOps } = createGitOps({
         remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000001" },
       });
       const originalFetch = gitOps.fetch.bind(gitOps);
@@ -3911,7 +3911,7 @@ test("swapState-version-advanced: version advanced during fetch -> update runs a
 
       const stateJsonPath = locations.stateJsonPath;
 
-      const { gitOps } = makeMockGitOps({
+      const { gitOps } = createGitOps({
         remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000001" },
       });
       const originalFetch = gitOps.fetch.bind(gitOps);
@@ -6678,7 +6678,7 @@ test("PURL-06 / D-78-05 pinned sha-change: manifest sha differs from recorded ->
         recordedSha: SHA_OLD,
       });
 
-      const { gitOps } = makeMockGitOps({ fixtureSourceDir: fixtureRepoDir });
+      const { gitOps } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
       const { ctx, pi } = makeCtx();
       await updatePlugins({
         ctx,
@@ -6741,7 +6741,7 @@ test("a post-commit clone cleanup failure preserves the successful update", asyn
           chmodSync(locations.pluginClonesDir, 0o000);
         },
       );
-      const { gitOps } = makeMockGitOps({ fixtureSourceDir: path.join(cwd, "repo-fixture") });
+      const { gitOps } = createGitOps({ fixtureSourceDir: path.join(cwd, "repo-fixture") });
       const { ctx, pi, notifications } = makeCtx();
 
       // act
@@ -6786,7 +6786,7 @@ test("PURL-06 / D-78-05 pinned unchanged: manifest sha equals recorded -> outcom
         recordedSha: SHA_OLD,
       });
 
-      const { gitOps, state: gitState } = makeMockGitOps({ fixtureSourceDir: fixtureRepoDir });
+      const { gitOps, state: gitState } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
       const { ctx, pi, notifications } = makeCtx();
       await updatePlugins({
         ctx,
@@ -6855,7 +6855,7 @@ test("ENBL-09 / PURL-09: refreshing a DISABLED git-source record moves resolvedS
       };
       await saveState(locations.extensionRoot, seededState);
 
-      const { gitOps } = makeMockGitOps({ fixtureSourceDir: fixtureRepoDir });
+      const { gitOps } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
       const { ctx, pi } = makeCtx();
       await updatePlugins({
         ctx,
@@ -6925,7 +6925,7 @@ test("a disabled pin refresh swallows post-commit clone cleanup failure", async 
           chmodSync(locations.pluginClonesDir, 0o000);
         },
       );
-      const { gitOps } = makeMockGitOps({ fixtureSourceDir: fixtureRepoDir });
+      const { gitOps } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
       const { ctx, pi, notifications } = makeCtx();
 
       // act
@@ -6972,7 +6972,7 @@ test("MIRR-01/MIRR-03 unpinned update: refreshes the mirror in place and re-anch
       });
 
       // The mirror seam reads HEAD from the refreshed clone (no resolveRemoteRef).
-      const { gitOps, state: gitState } = makeMockGitOps({
+      const { gitOps, state: gitState } = createGitOps({
         fixtureSourceDir: fixtureRepoDir,
         head: SHA_NEW,
         localRefs: { "refs/heads/main": SHA_NEW },
@@ -7052,7 +7052,7 @@ test("PURL-06 / D-78-01 shared clone NOT GC'd: two git plugins share the old url
         },
       });
 
-      const { gitOps } = makeMockGitOps({ fixtureSourceDir: fixtureRepoDir });
+      const { gitOps } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
       const { ctx, pi } = makeCtx();
       await updatePlugins({
         ctx,
@@ -7104,7 +7104,7 @@ test("MIRR-01 / NFR-3 vanished repo: unpinned mirror update whose clone throws -
       // the clone throw propagates through the probe unchanged.
       const networkError = new Error("getaddrinfo ENOTFOUND example.com") as NodeJS.ErrnoException;
       networkError.code = "ENOTFOUND";
-      const { gitOps } = makeMockGitOps({
+      const { gitOps } = createGitOps({
         fixtureSourceDir: fixtureRepoDir,
         cloneThrows: networkError,
       });
@@ -7228,7 +7228,7 @@ test("PURL-03 pinned git-subdir update: the new clone's subdir anchors the plugi
         recordedSha: SHA_OLD,
       });
 
-      const { gitOps, state: gitState } = makeMockGitOps({ fixtureSourceDir: fixtureRepoDir });
+      const { gitOps, state: gitState } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
       const { ctx, pi } = makeCtx();
       await updatePlugins({
         ctx,
@@ -7274,7 +7274,7 @@ test("PURL-03 pinned git-subdir update whose declared path is ABSENT in the new 
         recordedSha: SHA_OLD,
       });
 
-      const { gitOps } = makeMockGitOps({ fixtureSourceDir: fixtureRepoDir });
+      const { gitOps } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
       const { ctx, pi, notifications } = makeCtx();
       await updatePlugins({
         ctx,
@@ -7321,7 +7321,7 @@ test("MIRR-01 unpinned git-subdir update: the refreshed mirror's subdir anchors 
         recordedSha: SHA_OLD,
       });
 
-      const { gitOps } = makeMockGitOps({
+      const { gitOps } = createGitOps({
         fixtureSourceDir: fixtureRepoDir,
         head: SHA_NEW,
         localRefs: { "refs/heads/main": SHA_NEW },
@@ -7367,7 +7367,7 @@ test("MIRR-01 unpinned git-subdir update whose declared path is ABSENT in the re
         recordedSha: SHA_OLD,
       });
 
-      const { gitOps } = makeMockGitOps({
+      const { gitOps } = createGitOps({
         fixtureSourceDir: fixtureRepoDir,
         head: SHA_NEW,
         localRefs: { "refs/heads/main": SHA_NEW },
@@ -7414,7 +7414,7 @@ test("plugin update authentication: a pinned provider update threads auth to the
         recordedSha: SHA_OLD,
         versionTag: "9.9.9",
       });
-      const { gitOps } = makeMockGitOps({ fixtureSourceDir: path.join(cwd, "repo-fixture") });
+      const { gitOps } = createGitOps({ fixtureSourceDir: path.join(cwd, "repo-fixture") });
       const { seam, captured } = capturingUpdateSeam(gitOps);
       const credentialOps = makeCredentialOps();
       const deviceFlowHttp = makeDeviceFlowHttp();
@@ -7464,7 +7464,7 @@ test("plugin update authentication: an unpinned provider update threads auth to 
         recordedSha: SHA_OLD,
         versionTag: "9.9.9",
       });
-      const { gitOps } = makeMockGitOps({
+      const { gitOps } = createGitOps({
         fixtureSourceDir: path.join(cwd, "repo-fixture"),
         head: SHA_NEW,
         localRefs: { "refs/heads/main": SHA_NEW },
@@ -7551,7 +7551,7 @@ test("NFR-3 device-flow auth failure: a clone throw shaped UserCanceledError cla
       // error) makes platform/git.ts's onAuth return `{ cancel: true }`, which
       // isomorphic-git throws as `UserCanceledError` -- NOT HttpError 401/403.
       const authError = Object.assign(new Error("cancelled"), { code: "UserCanceledError" });
-      const { gitOps } = makeMockGitOps({
+      const { gitOps } = createGitOps({
         fixtureSourceDir: fixtureRepoDir,
         cloneThrows: authError,
       });
@@ -8302,7 +8302,7 @@ test("ST-9: a version that advanced under an in-flight update aborts on the inte
         recordedSha: SHA_OLD,
       });
 
-      const { gitOps } = makeMockGitOps({ fixtureSourceDir: path.join(cwd, "repo-fixture-new") });
+      const { gitOps } = createGitOps({ fixtureSourceDir: path.join(cwd, "repo-fixture-new") });
       const { ctx, pi, notifications } = makeCtx();
       await updatePlugins({
         ctx,
@@ -8362,7 +8362,7 @@ test("ST-9: a record uninstalled under an in-flight update aborts instead of res
         recordedSha: SHA_OLD,
       });
 
-      const { gitOps } = makeMockGitOps({ fixtureSourceDir: path.join(cwd, "repo-fixture-new") });
+      const { gitOps } = createGitOps({ fixtureSourceDir: path.join(cwd, "repo-fixture-new") });
       const { ctx, pi, notifications } = makeCtx();
       await updatePlugins({
         ctx,
@@ -8416,7 +8416,7 @@ test("a marketplace removed under an in-flight update is not resurrected", async
         entrySource: { source: "url", url: cloneUrl, sha: SHA_NEW },
         recordedSha: SHA_OLD,
       });
-      const { gitOps } = makeMockGitOps({
+      const { gitOps } = createGitOps({
         fixtureSourceDir: path.join(cwd, "repo-fixture-new"),
       });
       const { ctx, pi, notifications } = makeCtx();
@@ -8462,7 +8462,7 @@ test("a disabled update does not recreate a concurrently removed marketplace", a
         recordedSha: SHA_OLD,
       });
       await markGitPluginDisabled(locations);
-      const { gitOps } = makeMockGitOps({
+      const { gitOps } = createGitOps({
         fixtureSourceDir: path.join(cwd, "repo-fixture-new"),
       });
       const { ctx, pi, notifications } = makeCtx();
@@ -8507,7 +8507,7 @@ test("a disabled update does not recreate a concurrently removed plugin", async 
         recordedSha: SHA_OLD,
       });
       await markGitPluginDisabled(locations);
-      const { gitOps } = makeMockGitOps({
+      const { gitOps } = createGitOps({
         fixtureSourceDir: path.join(cwd, "repo-fixture-new"),
       });
       const { ctx, pi, notifications } = makeCtx();
@@ -8558,7 +8558,7 @@ test("a disabled update accepts a concurrent writer that already stored the next
       });
       await markGitPluginDisabled(locations);
       const nextCloneRoot = await locations.pluginCloneDir(pluginCloneKey(cloneUrl, SHA_NEW));
-      const { gitOps } = makeMockGitOps({
+      const { gitOps } = createGitOps({
         fixtureSourceDir: path.join(cwd, "repo-fixture-new"),
       });
       const { ctx, pi, notifications } = makeCtx();

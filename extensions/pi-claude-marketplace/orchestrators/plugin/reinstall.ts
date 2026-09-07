@@ -198,7 +198,7 @@ export interface ReinstallPluginOptions {
    * clone so auth is never exercised (offline parity, PURL-07).
    */
   readonly credentialOps?: CredentialOps;
-  /** PROV-03 Device Flow HTTP seam; tests inject makeMockDeviceFlowHttp(). */
+  /** PROV-03 Device Flow HTTP seam; callers can inject a network-free collaborator. */
   readonly deviceFlowHttp?: DeviceFlowHttp;
   /**
    * D-79-02 once-per-host memo. The bulk path (`reinstallPlugins`) shares ONE

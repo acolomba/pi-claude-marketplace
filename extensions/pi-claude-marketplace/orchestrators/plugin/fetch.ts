@@ -106,7 +106,7 @@ export interface FetchPluginsOptions {
   readonly cloneCacheSeam?: FetchCloneCacheSeam;
   /** Defaults to DEFAULT_CREDENTIAL_OPS at use (auth at install parity, D-81-05). */
   readonly credentialOps?: CredentialOps;
-  /** Device Flow HTTP seam; tests inject makeMockDeviceFlowHttp(). */
+  /** Device Flow HTTP seam; callers can inject a network-free collaborator. */
   readonly deviceFlowHttp?: DeviceFlowHttp;
 }
 

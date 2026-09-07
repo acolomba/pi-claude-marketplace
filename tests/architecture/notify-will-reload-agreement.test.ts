@@ -245,7 +245,7 @@ const IMMEDIATE_FIXTURES: readonly AgreementFixture[] = [
 
 function render(fixture: AgreementFixture): string {
   const ctx = makeCtx();
-  notify(ctx as never, fixture.pi as never, fixture.message);
+  notify(ctx as never, fixture.pi, fixture.message);
   assert.equal(
     ctx.ui.notify.mock.calls.length,
     1,

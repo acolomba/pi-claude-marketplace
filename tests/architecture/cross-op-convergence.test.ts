@@ -69,7 +69,7 @@ interface NotifyRecord {
   severity?: string;
 }
 
-function makeMockGitOps() {
+function createGitOps() {
   return createGitOpsFake({ boundary: "memory" });
 }
 
@@ -193,7 +193,7 @@ const INVOKERS: Record<string, Invoker> = {
   // pre-guard miss short-circuits before it is reached (NFR-5). update.test.ts
   // SC#1.
   "marketplace update": async ({ ctx, pi, cwd, mode }) => {
-    const { gitOps } = makeMockGitOps();
+    const { gitOps } = createGitOps();
     await updateMarketplace({
       ctx,
       pi,

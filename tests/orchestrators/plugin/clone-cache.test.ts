@@ -61,7 +61,7 @@ const ALLOWED_CLONE_CACHE_REMOTES = [
   "https://gitlab.example.com/o/r.git",
 ] as const;
 
-function makeMockGitOps(initial: GitOpsAdapterOptions = {}) {
+function createGitOps(initial: GitOpsAdapterOptions = {}) {
   const normalizedRemoteRefs = Object.fromEntries(
     Object.entries(initial.remoteRefs ?? {}).map(([ref, oid]) => [
       ref.replace(/^refs\/remotes\/[^/]+\//, ""),
@@ -211,7 +211,7 @@ void test("D-77-04: a pinned source uses the default git surface without remote 
 
 void test("PURL-02/04: materializePluginClone clones into staging, checks out the pin, returns a plugin-clones path", async () => {
   const locations = await freshLocations();
-  const { gitOps, state } = makeMockGitOps();
+  const { gitOps, state } = createGitOps();
 
   const cloneRoot = await materializePluginClone({
     locations,
@@ -231,7 +231,7 @@ void test("PURL-02/04: materializePluginClone clones into staging, checks out th
 
 void test("PURL-04: a second materialize of the same url+sha triggers zero additional clones (dedup)", async () => {
   const locations = await freshLocations();
-  const { gitOps, state } = makeMockGitOps();
+  const { gitOps, state } = createGitOps();
 
   const first = await materializePluginClone({
     locations,
@@ -254,7 +254,7 @@ void test("PURL-04: a second materialize of the same url+sha triggers zero addit
 void test("PURL-02: a warm cache returns offline even when gitOps.clone throws", async () => {
   const locations = await freshLocations();
   // Pre-create the key dir so the warm-cache short-circuit fires.
-  const { gitOps } = makeMockGitOps({ cloneThrows: new Error("network down") });
+  const { gitOps } = createGitOps({ cloneThrows: new Error("network down") });
   const keyDir = await locations.pluginCloneDir(
     // Recompute the key the same way the seam does, via a first (throwing-free)
     // materialize would -- but here we pre-seed the dir directly.
@@ -278,7 +278,7 @@ void test("PURL-02: a warm cache returns offline even when gitOps.clone throws",
 
 void test("Pitfall: sha wins over ref -- checkout pins the sha, clone singleBranch uses the ref", async () => {
   const locations = await freshLocations();
-  const { gitOps, state } = makeMockGitOps();
+  const { gitOps, state } = createGitOps();
 
   await materializePluginClone({
     locations,
@@ -309,7 +309,7 @@ function commitNotFetchedError(ref: string): Error {
 
 void test("PURL-04: a pin outside the ref-hint closure triggers ONE full fetch then retries the checkout to success", async () => {
   const locations = await freshLocations();
-  const base = makeMockGitOps();
+  const base = createGitOps();
   let fullyFetched = false;
   const checkouts: string[] = [];
   const gitOps = {
@@ -359,7 +359,7 @@ void test("PURL-04: a pin outside the ref-hint closure triggers ONE full fetch t
 
 void test("PURL-04: a pin reachable within the ref-hint closure stays on the fast path with no recovery fetch", async () => {
   const locations = await freshLocations();
-  const { gitOps, state } = makeMockGitOps();
+  const { gitOps, state } = createGitOps();
 
   await materializePluginClone({
     locations,
@@ -375,7 +375,7 @@ void test("PURL-04: a pin reachable within the ref-hint closure stays on the fas
 
 void test("PURL-04: a still-unreachable pin fails clean after the retry (fetch does not make it appear)", async () => {
   const locations = await freshLocations();
-  const base = makeMockGitOps();
+  const base = createGitOps();
   const gitOps = {
     ...base.gitOps,
     async checkout(opts: Parameters<typeof base.gitOps.checkout>[0]): Promise<void> {
@@ -406,7 +406,7 @@ void test("PURL-04: a still-unreachable pin fails clean after the retry (fetch d
 
 void test("PURL-04: a NO-ref clone whose checkout throws CommitNotFetchedError fails immediately with zero recovery fetches", async () => {
   const locations = await freshLocations();
-  const base = makeMockGitOps();
+  const base = createGitOps();
   const gitOps = {
     ...base.gitOps,
     async checkout(opts: Parameters<typeof base.gitOps.checkout>[0]): Promise<void> {
@@ -439,7 +439,7 @@ void test("PURL-04: a NO-ref clone whose checkout throws CommitNotFetchedError f
 
 void test("PURL-04: a ref-hint clone whose checkout throws a NON-CommitNotFetchedError does NOT trigger the recovery fetch", async () => {
   const locations = await freshLocations();
-  const base = makeMockGitOps();
+  const base = createGitOps();
   const gitOps = {
     ...base.gitOps,
     async checkout(): Promise<void> {
@@ -487,7 +487,7 @@ void test("PROV-03: the recovery fetch threads the auth bundle so a private pin 
     onAuthRequired: async (): Promise<{ ok: false; reason: string; authAttempted: true }> =>
       Promise.resolve({ ok: false, reason: "no", authAttempted: true }),
   };
-  const base = makeMockGitOps();
+  const base = createGitOps();
   let fullyFetched = false;
   const gitOps = {
     ...base.gitOps,
@@ -525,7 +525,7 @@ void test("PROV-03: the recovery fetch threads the auth bundle so a private pin 
 
 void test("PROV-02/PROV-03: materializePluginClone with NO auth records a cloneCall whose auth is undefined (public-only, byte-identical)", async () => {
   const locations = await freshLocations();
-  const { gitOps, state } = makeMockGitOps();
+  const { gitOps, state } = createGitOps();
 
   await materializePluginClone({
     locations,
@@ -540,7 +540,7 @@ void test("PROV-02/PROV-03: materializePluginClone with NO auth records a cloneC
 
 void test("PROV-03: materializePluginClone with an auth bundle threads it to gitOps.clone", async () => {
   const locations = await freshLocations();
-  const { gitOps, state } = makeMockGitOps();
+  const { gitOps, state } = createGitOps();
 
   const auth = {
     credentialOps: {
@@ -578,7 +578,7 @@ void test("Pitfall: an EEXIST/ENOTEMPTY rename is a warm-cache win (no rethrow)"
   // A concurrent winner materializes the key dir AFTER our presence check but
   // BEFORE our rename. Simulate by creating the (non-empty) key dir inside the
   // checkout callback -- the step that runs between presence-check and rename.
-  const base = makeMockGitOps();
+  const base = createGitOps();
   const racingGitOps = {
     ...base.gitOps,
     async checkout(opts: { dir: string; ref: string }): Promise<void> {
@@ -601,7 +601,7 @@ void test("Pitfall: an EEXIST/ENOTEMPTY rename is a warm-cache win (no rethrow)"
 void test("MA-9: a non-race promotion failure cleans staging and preserves the rename error", async () => {
   // arrange
   const locations = await freshLocations();
-  const base = makeMockGitOps();
+  const base = createGitOps();
   const gitOps: GitOps = {
     ...base.gitOps,
     async checkout(options): Promise<void> {
@@ -631,7 +631,7 @@ void test("MA-9: a non-race promotion failure cleans staging and preserves the r
 
 void test("MA-9: a clone failure cleans staging and rethrows with the leak suffix appended", async () => {
   const locations = await freshLocations();
-  const { gitOps, state } = makeMockGitOps({ cloneThrows: new Error("clone boom") });
+  const { gitOps, state } = createGitOps({ cloneThrows: new Error("clone boom") });
 
   await assert.rejects(
     () =>
@@ -654,7 +654,7 @@ void test("MA-9: a clone failure cleans staging and rethrows with the leak suffi
 
 void test("D-77-05: resolvePluginPin resolves an unpinned source's remote HEAD to the pin", async () => {
   const HEAD = "cccccccccccccccccccccccccccccccccccccccc";
-  const { gitOps, state } = makeMockGitOps({ remoteHead: HEAD });
+  const { gitOps, state } = createGitOps({ remoteHead: HEAD });
   const source: UrlSource = {
     kind: "url",
     raw: "https://example.com/repo",
@@ -675,7 +675,7 @@ void test("D-77-05: resolvePluginPin resolves an unpinned source's remote HEAD t
 
 void test("PROV-03 (Q1): resolvePluginPin forwards an auth bundle into resolveRemoteRef for an unpinned private HEAD resolution", async () => {
   const HEAD = "ffffffffffffffffffffffffffffffffffffffff";
-  const { gitOps, state } = makeMockGitOps({ remoteHead: HEAD });
+  const { gitOps, state } = createGitOps({ remoteHead: HEAD });
   const auth = {
     credentialOps: {
       fill: async (): Promise<null> => Promise.resolve(null),
@@ -704,7 +704,7 @@ void test("PROV-03 (Q1): resolvePluginPin forwards an auth bundle into resolveRe
 });
 
 void test("PROV-02: resolvePluginPin with NO auth records a bare resolveRemoteRef call (public-only, byte-identical)", async () => {
-  const { gitOps, state } = makeMockGitOps({ remoteHead: PIN_40 });
+  const { gitOps, state } = createGitOps({ remoteHead: PIN_40 });
   const source: UrlSource = {
     kind: "url",
     raw: "https://example.com/repo",
@@ -717,7 +717,7 @@ void test("PROV-02: resolvePluginPin with NO auth records a bare resolveRemoteRe
 });
 
 void test("Pitfall: resolvePluginPin does NOT call resolveRemoteRef when a sha is set", async () => {
-  const { gitOps, state } = makeMockGitOps({
+  const { gitOps, state } = createGitOps({
     remoteHead: "dddddddddddddddddddddddddddddddddddddddd",
   });
   const source: UrlSource = {
@@ -735,7 +735,7 @@ void test("Pitfall: resolvePluginPin does NOT call resolveRemoteRef when a sha i
 
 void test("D-77-05: resolvePluginPin resolves a ref (no sha) to its remote sha", async () => {
   const TAG = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee0";
-  const { gitOps, state } = makeMockGitOps({
+  const { gitOps, state } = createGitOps({
     remoteHead: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     remoteResolveMap: { "v1.0.0": TAG },
   });
@@ -758,7 +758,7 @@ void test("D-77-05: resolvePluginPin resolves a ref (no sha) to its remote sha",
 void test("PROV-03: resolvePluginPin forwards auth while resolving a named private ref", async () => {
   // arrange
   const refPin = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee0";
-  const { gitOps, state } = makeMockGitOps({ remoteResolveMap: { private: refPin } });
+  const { gitOps, state } = createGitOps({ remoteResolveMap: { private: refPin } });
   const auth = {
     credentialOps: {
       approve: async (): Promise<void> => Promise.resolve(),
@@ -791,7 +791,7 @@ void test("PROV-03: resolvePluginPin forwards auth while resolving a named priva
 });
 
 void test("D-77-06: resolvePluginPin reconstructs the canonical github url", async () => {
-  const { gitOps } = makeMockGitOps({ remoteHead: PIN_40 });
+  const { gitOps } = createGitOps({ remoteHead: PIN_40 });
   const source = githubSource("owner/repo");
 
   const resolved = await resolvePluginPin({ source, gitOps });
@@ -801,7 +801,7 @@ void test("D-77-06: resolvePluginPin reconstructs the canonical github url", asy
 });
 
 void test("D-77-04: resolvePluginPin returns the git-subdir url verbatim as the clone url", async () => {
-  const { gitOps } = makeMockGitOps({ remoteHead: PIN_40 });
+  const { gitOps } = createGitOps({ remoteHead: PIN_40 });
   const source: GitSubdirSource = {
     kind: "git-subdir",
     raw: "https://example.com/mono",
@@ -818,7 +818,7 @@ void test("D-77-04: resolvePluginPin returns the git-subdir url verbatim as the 
 });
 
 void test("MURL-01 / PURL-09: resolvePluginPin sends a `.git`-suffixed url but returns the canonical suffix-less cloneUrl", async () => {
-  const { gitOps, state } = makeMockGitOps({ remoteHead: PIN_40 });
+  const { gitOps, state } = createGitOps({ remoteHead: PIN_40 });
   const source: UrlSource = {
     kind: "url",
     raw: "https://gitlab.example.com/o/r",
@@ -840,7 +840,7 @@ void test("MURL-01 / PURL-09: resolvePluginPin sends a `.git`-suffixed url but r
 });
 
 void test("MURL-01 / PURL-04: resolvePluginPin adds exactly one suffix to an already-suffixed git-subdir url", async () => {
-  const { gitOps, state } = makeMockGitOps({ remoteHead: PIN_40 });
+  const { gitOps, state } = createGitOps({ remoteHead: PIN_40 });
   const source: GitSubdirSource = {
     kind: "git-subdir",
     raw: "https://example.com/mono.git",
@@ -855,7 +855,7 @@ void test("MURL-01 / PURL-04: resolvePluginPin adds exactly one suffix to an alr
 });
 
 void test("MURL-01 / PURL-09: resolvePluginPin sends the suffixed github url and returns the suffix-less canonical one", async () => {
-  const { gitOps, state } = makeMockGitOps({ remoteHead: PIN_40 });
+  const { gitOps, state } = createGitOps({ remoteHead: PIN_40 });
   const source = githubSource("owner/repo");
 
   const resolved = await resolvePluginPin({ source, gitOps });
@@ -866,7 +866,7 @@ void test("MURL-01 / PURL-09: resolvePluginPin sends the suffixed github url and
 
 void test("MURL-01 / PURL-04: materializePluginClone clones the suffixed url but keys the dir off the canonical one", async () => {
   const locations = await freshLocations();
-  const { gitOps, state } = makeMockGitOps();
+  const { gitOps, state } = createGitOps();
 
   const cloneRoot = await materializePluginClone({
     locations,
@@ -889,8 +889,8 @@ const MIRROR_HEAD = "fedcba9876543210fedcba9876543210fedcba98";
 // refreshGitHubClone's default-branch form (ref undefined) needs
 // refs/remotes/origin/HEAD to resolve, so seed remoteRefs accordingly. HEAD
 // reads back MIRROR_HEAD.
-function mirrorGitOps(): ReturnType<typeof makeMockGitOps> {
-  return makeMockGitOps({
+function mirrorGitOps(): ReturnType<typeof createGitOps> {
+  return createGitOps({
     head: MIRROR_HEAD,
     localRefs: { "refs/heads/main": MIRROR_HEAD },
     remoteRefs: { "refs/remotes/origin/HEAD": MIRROR_HEAD },
@@ -989,7 +989,7 @@ void test("MIRR-02: two successive calls both succeed; the second refreshes rath
 void test("MIRR-01: ref-set mirror clones singleBranch with the ref hint and tracks it (no fixed-pin checkout)", async () => {
   const locations = await freshLocations();
   const TAG_HEAD = "0011223344556677889900112233445566778899";
-  const { gitOps, state } = makeMockGitOps({
+  const { gitOps, state } = createGitOps({
     head: TAG_HEAD,
     localRefs: { "refs/heads/main": TAG_HEAD },
     remoteRefs: { "refs/remotes/origin/v2.0.0": TAG_HEAD },
@@ -1102,7 +1102,7 @@ void test("MIRR-03: a concurrent create losing the rename race treats the winner
 
 void test("MIRR-01/03: a clone failure cleans staging and rethrows the original error", async () => {
   const locations = await freshLocations();
-  const { gitOps, state } = makeMockGitOps({ cloneThrows: new Error("mirror clone boom") });
+  const { gitOps, state } = createGitOps({ cloneThrows: new Error("mirror clone boom") });
 
   await assert.rejects(
     () =>
@@ -1374,7 +1374,7 @@ void test("SEED-04: reachable pins seed per-SHA clones in exact manifest order",
     ],
   });
   await saveMarketplace(locations, marketplaceRoot, GITHUB_REPO_URL);
-  const { gitOps, state } = makeMockGitOps();
+  const { gitOps, state } = createGitOps();
 
   // act
   await seedSameRepoPluginMirrors({ locations, marketplaceName: "marketplace", gitOps });
@@ -1403,7 +1403,7 @@ void test("SEED-04: an unreachable pin is cleaned and a later unpinned entry sti
   });
   await saveMarketplace(locations, marketplaceRoot, GITHUB_REPO_URL);
   const checkoutError = commitNotFetchedError(PIN_40);
-  const { gitOps } = makeMockGitOps({ checkoutThrows: checkoutError });
+  const { gitOps } = createGitOps({ checkoutThrows: checkoutError });
 
   // act
   await seedSameRepoPluginMirrors({ locations, marketplaceName: "marketplace", gitOps });
@@ -1425,7 +1425,7 @@ void test("SEED-04: a concurrent winner preserves its clone and the losing stagi
   });
   await saveMarketplace(locations, marketplaceRoot, GITHUB_REPO_URL);
   const cloneRoot = await locations.pluginCloneDir(pluginCloneKey(GITHUB_REPO_URL, PIN_40));
-  const base = makeMockGitOps();
+  const base = createGitOps();
   const gitOps: GitOps = {
     ...base.gitOps,
     async checkout(options): Promise<void> {
@@ -1454,7 +1454,7 @@ void test("SEED-04: a later-call rename failure is isolated and the next entry s
     ],
   });
   await saveMarketplace(locations, marketplaceRoot, GITHUB_REPO_URL);
-  const base = makeMockGitOps();
+  const base = createGitOps();
   const gitOps: GitOps = {
     ...base.gitOps,
     async checkout(options): Promise<void> {

@@ -5367,7 +5367,7 @@ function checkCatalogExample(example: CatalogExample): Failure[] {
             cardinality: "plural" as const,
           }
         : fixture.message;
-    notify(ctx as never, fixture.pi as never, message);
+    notify(ctx as never, fixture.pi, message);
   }
 
   assert.equal(
@@ -5461,7 +5461,7 @@ test("XSURF-03: update-decline partially-upgradable reason brace === list partia
 
   // The list-inventory row (no partialHint -> no trailer).
   const listCtx = makeCtx();
-  notify(listCtx as never, piWithBothLoaded() as never, {
+  notify(listCtx as never, piWithBothLoaded(), {
     marketplaces: [
       {
         name: "mp",
@@ -5473,7 +5473,7 @@ test("XSURF-03: update-decline partially-upgradable reason brace === list partia
 
   // The update-decline row (partialHint -> update trailer + warning severity).
   const declineCtx = makeCtx();
-  notify(declineCtx as never, piWithBothLoaded() as never, {
+  notify(declineCtx as never, piWithBothLoaded(), {
     label: "Plugin update",
     cardinality: "single",
     marketplaces: [
@@ -5518,7 +5518,7 @@ test("UGRM-02 scope discipline: a non-update bulk cascade keeps `N successes` (n
   // update-scoped UGRM-02 override must NOT leak into other ops -- this proves
   // install / reinstall / marketplace / import keep `N success(es)`.
   const ctx = makeCtx();
-  notify(ctx as never, piWithBothLoaded() as never, {
+  notify(ctx as never, piWithBothLoaded(), {
     label: "Plugin reinstall",
     cardinality: "plural",
     marketplaces: [

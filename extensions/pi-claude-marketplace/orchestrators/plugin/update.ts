@@ -172,11 +172,7 @@ import type { GitPluginRootResult, MaterializablePlugin } from "../../domain/res
 import type { GitBackedSource, ParsedSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
-import type {
-  NotificationContext,
-  SoftDepStatus,
-  ToolInventory,
-} from "../../platform/pi-api.ts";
+import type { NotificationContext, SoftDepStatus, ToolInventory } from "../../platform/pi-api.ts";
 import type { HookSummaryEntry } from "../../shared/concerns/hooks.ts";
 import type { DegradeKind } from "../../shared/notify-reasons.ts";
 import type { ContentReason, PluginFailedMessage } from "../../shared/notify.ts";
@@ -272,10 +268,10 @@ export interface UpdatePluginsOptions {
    * PROV-03 / D-79-05 injection seam. Defaults to DEFAULT_CREDENTIAL_OPS at use.
    * The git-source candidate probe passes it to `buildAuthForHost` so an
    * unpinned private update authenticates at pin-resolution (Q1) and the
-   * re-clone authenticates (PROV-03). Tests inject makeMockCredentialOps().
+   * re-clone authenticates (PROV-03). Callers can inject a CredentialOps collaborator.
    */
   readonly credentialOps?: CredentialOps;
-  /** PROV-03 Device Flow HTTP seam; tests inject makeMockDeviceFlowHttp(). */
+  /** PROV-03 Device Flow HTTP seam; callers can inject a network-free collaborator. */
   readonly deviceFlowHttp?: DeviceFlowHttp;
   /** D-79-02 once-per-host memo shared across a bulk update. */
   readonly authMemo?: Map<string, AuthAttemptResult>;

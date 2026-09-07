@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test, type TestContext } from "node:test";
 
+import { createCredentialOpsFake } from "./credential-ops-fake.ts";
 import {
   GIT_OPS_CASE_NAMES,
   gitOpsContractCases,
@@ -8,7 +9,6 @@ import {
   type GitOpsContractParticipant,
   type GitOpsFactory,
 } from "./git-ops-contract.ts";
-import { createCredentialOpsFake } from "./credential-ops-fake.ts";
 import { createGitOpsFake } from "./git-ops-fake.ts";
 
 import type { GitAuthBundle } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
