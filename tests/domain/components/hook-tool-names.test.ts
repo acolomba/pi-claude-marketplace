@@ -107,6 +107,9 @@ describe("mapPiToClaudeToolName", () => {
     { suppliedToolName: "Bash", expectedClaudeToolName: "Bash" },
     { suppliedToolName: "Read", expectedClaudeToolName: "Read" },
     { suppliedToolName: "Glob", expectedClaudeToolName: "Glob" },
+    { suppliedToolName: "toString", expectedClaudeToolName: "toString" },
+    { suppliedToolName: "constructor", expectedClaudeToolName: "constructor" },
+    { suppliedToolName: "__proto__", expectedClaudeToolName: "__proto__" },
   ]) {
     test(`passes ${JSON.stringify(suppliedToolName)} through`, () => {
       // arrange
