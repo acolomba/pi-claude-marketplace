@@ -320,11 +320,8 @@ describe("getPluginIndex", () => {
     await rm(cachePath);
 
     // act
-    const rows = await secondCache.getPluginIndex(
-      cachePath,
-      "project",
-      "instance-private",
-      () => Promise.resolve(secondRows),
+    const rows = await secondCache.getPluginIndex(cachePath, "project", "instance-private", () =>
+      Promise.resolve(secondRows),
     );
 
     // assert
