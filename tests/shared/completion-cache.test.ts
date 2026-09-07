@@ -5,6 +5,7 @@ import path from "node:path";
 import { describe, test } from "node:test";
 
 import {
+  createCompletionCache,
   dropMarketplaceCache,
   getMarketplaceNames,
   getPluginIndex,
@@ -291,12 +292,7 @@ describe("getPluginIndex", () => {
     const cachePath = path.join(directory, "plugin-index.json");
     const expectedRows = [{ name: "memory-row", status: "installed" }] satisfies PluginIndexRow[];
     const rebuild = t.mock.fn(() => Promise.resolve(expectedRows));
-    const completionCacheModule: unknown = await import(
-      "../../extensions/pi-claude-marketplace/shared/completion-cache.ts"
-    );
-    const createCache = Reflect.get(completionCacheModule as object, "createCompletionCache");
-    assert.strictEqual(typeof createCache, "function");
-    const cache = createCache();
+    const cache = createCompletionCache();
     t.after(() => rm(directory, { recursive: true, force: true }));
     await cache.getPluginIndex(cachePath, "user", "instance-reuse", rebuild);
     await rm(cachePath);
@@ -315,13 +311,8 @@ describe("getPluginIndex", () => {
     const cachePath = path.join(directory, "plugin-index.json");
     const firstRows = [{ name: "first-row", status: "installed" }] satisfies PluginIndexRow[];
     const secondRows = [{ name: "second-row", status: "available" }] satisfies PluginIndexRow[];
-    const completionCacheModule: unknown = await import(
-      "../../extensions/pi-claude-marketplace/shared/completion-cache.ts"
-    );
-    const createCache = Reflect.get(completionCacheModule as object, "createCompletionCache");
-    assert.strictEqual(typeof createCache, "function");
-    const firstCache = createCache();
-    const secondCache = createCache();
+    const firstCache = createCompletionCache();
+    const secondCache = createCompletionCache();
     t.after(() => rm(directory, { recursive: true, force: true }));
     await firstCache.getPluginIndex(cachePath, "project", "instance-private", () =>
       Promise.resolve(firstRows),

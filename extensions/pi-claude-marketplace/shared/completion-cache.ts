@@ -36,8 +36,12 @@
 //   invalidateMarketplaceCache(scope, mp) -- memory-only drop
 //   dropMarketplaceCache(path, scope, mp) -- memory drop + unlink (ENOENT silent)
 //
-// Test seam
-//   resetCompletionCache() -- clear both in-memory maps between cases.
+// Ownership
+//   createCompletionCache() -- owns one private plugin-index memory map.
+//   transitionCompletionCache -- bounded production owner until root composition.
+//
+// Legacy test seam
+//   resetCompletionCache() -- clear names memory and replace transition plugin memory.
 //
 // TC-8 discriminator: callers wrap manifest-load failures in
 // ManifestSoftFailError; everything else propagates. The cache module cannot
@@ -130,16 +134,16 @@ export interface PluginIndexRow {
 }
 
 // ---------------------------------------------------------------------------
-// In-memory maps. Single-threaded JS event loop = no locking. Keyed by
-// `${scope}` for marketplace names, `${scope}::${marketplace}` for plugin
-// index (string keys preferred over struct keys for hash simplicity).
+// Marketplace-name ownership moves in Plan 05-08. Plugin-index ownership is
+// created per CompletionCache instance below.
 // ---------------------------------------------------------------------------
 
 const memMarketplaceNames = new Map<string /* scope */, readonly string[]>();
-const memPluginIndex = new Map<
-  string /* `${scope}::${marketplace}` */,
-  { rows: readonly PluginIndexRow[]; loadedAt: number }
->();
+
+interface PluginIndexMemoryEntry {
+  readonly rows: readonly PluginIndexRow[];
+  readonly loadedAt: number;
+}
 
 /** 10-minute TTL safety net for the plugin index (D-03 -- catches concurrent-process changes). */
 const PLUGIN_INDEX_TTL_MS = 10 * 60 * 1000;
@@ -293,7 +297,8 @@ export interface GetPluginIndexOptions {
  *
  * TC-9: any other rebuild throw propagates verbatim (e.g. state.json error).
  */
-export async function getPluginIndex(
+async function getPluginIndexWithMemory(
+  memPluginIndex: Map<string, PluginIndexMemoryEntry>,
   pluginCachePath: string,
   scope: Scope,
   marketplace: string,
@@ -380,7 +385,7 @@ export async function getPluginIndex(
  * would let the next completion process rehydrate stale names from disk.
  * ENOENT on the file is silent (already absent is OK).
  */
-export async function invalidateMarketplaceNames(
+async function invalidateMarketplaceNamesWithMemory(
   marketplaceNamesCachePath: string,
   scope: Scope,
 ): Promise<void> {
@@ -397,7 +402,11 @@ export async function invalidateMarketplaceNames(
 }
 
 /** Drop the in-memory plugin-index entry for (`scope`, `marketplace`). File on disk is left intact. */
-export function invalidateMarketplaceCache(scope: Scope, marketplace: string): void {
+function invalidateMarketplaceCacheWithMemory(
+  memPluginIndex: Map<string, PluginIndexMemoryEntry>,
+  scope: Scope,
+  marketplace: string,
+): void {
   memPluginIndex.delete(pluginIndexKey(scope, marketplace));
 }
 
@@ -406,7 +415,8 @@ export function invalidateMarketplaceCache(scope: Scope, marketplace: string): v
  * the underlying marketplace is removed (no recovery path -- cache file must
  * not linger). ENOENT on the file is silent (already absent is OK).
  */
-export async function dropMarketplaceCache(
+async function dropMarketplaceCacheWithMemory(
+  memPluginIndex: Map<string, PluginIndexMemoryEntry>,
   pluginCachePath: string,
   scope: Scope,
   marketplace: string,
@@ -423,17 +433,119 @@ export async function dropMarketplaceCache(
   }
 }
 
+interface CompletionCacheOwner {
+  readonly cache: CompletionCache;
+  resetPluginIndexMemory(): void;
+}
+
+/** Plugin-index cache operations shared by readers and targeted invalidators. */
+export interface CompletionCache {
+  /** Resolves one scoped marketplace's plugin-index rows. */
+  getPluginIndex(
+    pluginCachePath: string,
+    scope: Scope,
+    marketplace: string,
+    rebuild: () => Promise<readonly PluginIndexRow[]>,
+    options?: GetPluginIndexOptions,
+  ): Promise<readonly PluginIndexRow[]>;
+  /** Removes one scoped marketplace from memory while retaining its disk cache. */
+  invalidateMarketplaceCache(scope: Scope, marketplace: string): void;
+  /** Removes one scoped marketplace from memory and disk. */
+  dropMarketplaceCache(
+    pluginCachePath: string,
+    scope: Scope,
+    marketplace: string,
+  ): Promise<void>;
+  /** Removes one scope's marketplace-names entry from memory and disk. */
+  invalidateMarketplaceNames(marketplaceNamesCachePath: string, scope: Scope): Promise<void>;
+}
+
+function createCompletionCacheOwner(): CompletionCacheOwner {
+  const memPluginIndex = new Map<string, PluginIndexMemoryEntry>();
+  const cache: CompletionCache = {
+    getPluginIndex: (pluginCachePath, scope, marketplace, rebuild, options) =>
+      getPluginIndexWithMemory(
+        memPluginIndex,
+        pluginCachePath,
+        scope,
+        marketplace,
+        rebuild,
+        options,
+      ),
+    invalidateMarketplaceCache: (scope, marketplace) => {
+      invalidateMarketplaceCacheWithMemory(memPluginIndex, scope, marketplace);
+    },
+    dropMarketplaceCache: (pluginCachePath, scope, marketplace) =>
+      dropMarketplaceCacheWithMemory(memPluginIndex, pluginCachePath, scope, marketplace),
+    invalidateMarketplaceNames: (marketplaceNamesCachePath, scope) =>
+      invalidateMarketplaceNamesWithMemory(marketplaceNamesCachePath, scope),
+  };
+
+  return {
+    cache,
+    resetPluginIndexMemory(): void {
+      memPluginIndex.clear();
+    },
+  };
+}
+
+/** Creates one CompletionCache with private plugin-index memory. */
+export function createCompletionCache(): CompletionCache {
+  return createCompletionCacheOwner().cache;
+}
+
+const transitionCompletionCacheOwner = createCompletionCacheOwner();
+
 /**
- * Drop both in-memory maps.
- *
- * The narrower `invalidateMarketplaceCache` / `dropMarketplaceCache` entries
- * above evict ONE marketplace, which is what the mutating orchestrators want.
- * This clears the lot, for a caller that needs the whole process-global cache
- * back to its cold state. Its only caller today is test setup isolating cases
- * from each other, which is exactly that need; keeping it beside the two
- * narrower evictions is what stops a third map being added and missed here.
+ * Bounded production cache used until Plan 05-12 moves ownership to the
+ * extension root.
+ */
+export const transitionCompletionCache: CompletionCache = transitionCompletionCacheOwner.cache;
+
+/** Resolves plugin-index rows through the bounded production cache. */
+export async function getPluginIndex(
+  pluginCachePath: string,
+  scope: Scope,
+  marketplace: string,
+  rebuild: () => Promise<readonly PluginIndexRow[]>,
+  options?: GetPluginIndexOptions,
+): Promise<readonly PluginIndexRow[]> {
+  return transitionCompletionCache.getPluginIndex(
+    pluginCachePath,
+    scope,
+    marketplace,
+    rebuild,
+    options,
+  );
+}
+
+/** Removes one bounded-production plugin-index entry from memory. */
+export function invalidateMarketplaceCache(scope: Scope, marketplace: string): void {
+  transitionCompletionCache.invalidateMarketplaceCache(scope, marketplace);
+}
+
+/** Removes one bounded-production plugin-index entry from memory and disk. */
+export async function dropMarketplaceCache(
+  pluginCachePath: string,
+  scope: Scope,
+  marketplace: string,
+): Promise<void> {
+  await transitionCompletionCache.dropMarketplaceCache(pluginCachePath, scope, marketplace);
+}
+
+/** Removes marketplace-name memory and disk state through the bounded production cache. */
+export async function invalidateMarketplaceNames(
+  marketplaceNamesCachePath: string,
+  scope: Scope,
+): Promise<void> {
+  await transitionCompletionCache.invalidateMarketplaceNames(marketplaceNamesCachePath, scope);
+}
+
+/**
+ * Clears legacy transition memory for callers not migrated to cache ownership.
+ * Plan 05-31 removes this surface after its caller census reaches zero.
  */
 export function resetCompletionCache(): void {
   memMarketplaceNames.clear();
-  memPluginIndex.clear();
+  transitionCompletionCacheOwner.resetPluginIndexMemory();
 }
