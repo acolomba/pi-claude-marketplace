@@ -381,6 +381,31 @@ function emptyImportResult(): ClaudeImportExecutionResult {
   };
 }
 
+test("declares plural cardinality when import produces zero rows", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticScopes(t, "zero-row-tally");
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2);
+
+  // act
+  const importResult = await importClaudeSettings({
+    ctx,
+    cwd,
+    deps: collaborators({
+      loadSettings: () => Promise.resolve(claudeSettings({})),
+      loadState: () => Promise.resolve(recordedState([])),
+    }),
+    pi,
+    selectedScopes: ["user"],
+  });
+
+  // assert
+  assert.deepStrictEqual(importResult, emptyImportResult());
+  assert.deepStrictEqual(notifications, [
+    { message: "(no marketplaces)\n\nImport: 0 successes" },
+  ]);
+  verifyBoundary();
+});
+
 test("records a marketplace the state does not carry and installs its declared plugin", async (t) => {
   // arrange
   const { cwd } = await createHermeticScopes(t, "add-and-install");
@@ -977,7 +1002,9 @@ test("warns about a plugin whose marketplace declares no supported source and re
 
   // assert
   assert.deepStrictEqual(importResult, expectedResult);
-  assert.deepStrictEqual(notifications, [{ message: "(no marketplaces)" }]);
+  assert.deepStrictEqual(notifications, [
+    { message: "(no marketplaces)\n\nImport: 0 successes" },
+  ]);
   verifyBoundary();
 });
 
@@ -1011,7 +1038,9 @@ test("carries the settings loader's own diagnostics onto the result", async (t) 
 
   // assert
   assert.deepStrictEqual(importResult, expectedResult);
-  assert.deepStrictEqual(notifications, [{ message: "(no marketplaces)" }]);
+  assert.deepStrictEqual(notifications, [
+    { message: "(no marketplaces)\n\nImport: 0 successes" },
+  ]);
   verifyBoundary();
 });
 
