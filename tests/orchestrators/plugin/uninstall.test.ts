@@ -38,6 +38,8 @@ import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts"
 
 import { retryTree } from "./scope-tree-inventory.ts";
 
+import * as uninstallModule from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
+
 import type { UninstallPluginOutcome } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
 import type { AgentsIndex } from "../../../extensions/pi-claude-marketplace/persistence/agents-index-schema.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
@@ -77,6 +79,10 @@ interface NotifyRecord {
   message: string;
   severity?: string;
 }
+
+test("uninstall exposes its required transaction factory", () => {
+  assert.strictEqual(typeof Reflect.get(uninstallModule, "createUninstallPlugin"), "function");
+});
 
 function makeCtx(piOverrides?: { getAllTools?: () => unknown[] }): {
   ctx: ExtensionContext;

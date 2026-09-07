@@ -44,6 +44,8 @@ import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts"
 
 import { retryTree } from "./scope-tree-inventory.ts";
 
+import * as reinstallModule from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts";
+
 import type {
   GitAuthBundle,
   GitOps,
@@ -63,6 +65,10 @@ interface NotifyRecord {
   message: string;
   severity?: string;
 }
+
+test("reinstall exposes its required transaction factory", () => {
+  assert.strictEqual(typeof Reflect.get(reinstallModule, "createReinstallPlugin"), "function");
+});
 
 function toolInfo(name: string): ToolInventoryItem {
   return { name };
