@@ -14,11 +14,13 @@ import * as markers from "../../extensions/pi-claude-marketplace/shared/markers.
  * The AG-5 / PUP-6 / D-08 snapshot assertions below enforce drift on the
  * exported markers in shared/markers.ts.
  *
- * The 5 superseded ES-5 literals (D-13-12) have no dedicated gate. The suite
- * that pinned them in its own body was retired with the V1 wrappers and
- * nothing replaced it, so a re-introduction is caught only where
- * `tests/architecture/catalog-uat.test.ts` already records the row
- * byte-for-byte. The markers asserted below are a separate, still-live
+ * The 5 superseded ES-5 literals (D-13-12) are deliberately ungated. They were
+ * retired with the V1 wrappers, no renderer arm emits one, and the operator
+ * accepted them as retired rather than reinstating a guard: the suite that
+ * pinned the literals went out with the wrappers it existed to police, and a
+ * ban on strings nothing produces earns less than it costs to maintain. A
+ * re-introduction is caught only where `tests/architecture/catalog-uat.test.ts`
+ * already records the row byte-for-byte, and that residual is accepted. The markers asserted below are a separate, still-live
  * contract and are unaffected by that gap.
  */
 

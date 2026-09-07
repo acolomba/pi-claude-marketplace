@@ -171,7 +171,7 @@ This section formally supersedes PRD section 6.12 ES-5 ("stable user-contract st
 
 PRD section 6.13 IL-2 (single output channel via `ctx.ui.notify`) and IL-3 (single sanctioned `console.warn` at `persistence/migrate.ts:178`) are REAFFIRMED unchanged. The compact-line grammar of section 1 and the severity-wrapper rules of section 10 govern every emission via `ctx.ui.notify`; the legacy-migration `console.warn` retains sentence form per section 14. ES-1..ES-4 from PRD section 6.12 are also unchanged -- this supersession is scoped strictly to ES-5's five marker strings.
 
-> Note: The 5 ES-5 legacy markers are fully retired -- they went with the V1 wrappers, and no renderer arm emits one. No dedicated gate blocks their reintroduction: the suite that pinned the literals was retired at the same time, so only the byte-equality of `tests/architecture/catalog-uat.test.ts` would catch one, and only where the catalog records that row.
+> Note: The 5 ES-5 legacy markers are fully retired -- they went with the V1 wrappers, and no renderer arm emits one. They are also deliberately ungated, by decision rather than by omission: the suite that pinned the literals was retired alongside the wrappers it policed, and a ban on strings no producer emits was judged not worth reinstating. The residual is accepted -- only the byte-equality of `tests/architecture/catalog-uat.test.ts` would catch a reintroduction, and only where the catalog records that row.
 
 ## Cross-References
 
