@@ -7,7 +7,6 @@ import { describe, test } from "node:test";
 import {
   createCompletionCache,
   dropMarketplaceCache,
-  getMarketplaceNames,
   getPluginIndex,
   invalidateMarketplaceCache,
   invalidateMarketplaceNames,
@@ -86,6 +85,18 @@ describe("cache schemas", () => {
   });
 });
 
+test("omits the unused marketplace-name reader from the public module", async () => {
+  // arrange
+  const readerExportName = "getMarketplaceNames";
+
+  // act
+  const completionCache =
+    await import("../../extensions/pi-claude-marketplace/shared/completion-cache.ts");
+
+  // assert
+  assert.strictEqual(readerExportName in completionCache, false);
+});
+
 describe("ManifestSoftFailError", () => {
   test("retains the manifest failure as a structured cause", () => {
     // arrange
@@ -105,184 +116,6 @@ describe("ManifestSoftFailError", () => {
       },
     );
   });
-});
-
-describe("getMarketplaceNames", () => {
-  test("rebuilds a cold cache and persists exact marketplace bytes", async (t) => {
-    // arrange
-    const directory = await mkdtemp(path.join(os.tmpdir(), "completion-names-cold-"));
-    const cachePath = path.join(directory, "nested", "marketplace-names.json");
-    const scope = "user";
-    const expectedNames = ["alpha", "beta"];
-    const expectedBytes =
-      '{\n  "schemaVersion": 2,\n  "names": [\n    "alpha",\n    "beta"\n  ]\n}\n';
-    t.after(async () => {
-      await invalidateMarketplaceNames(cachePath, scope);
-      await rm(directory, { recursive: true, force: true });
-    });
-
-    // act
-    const names = await getMarketplaceNames(cachePath, scope, () => Promise.resolve(expectedNames));
-    const bytes = await readFile(cachePath, "utf8");
-
-    // assert
-    assert.deepStrictEqual(names, expectedNames);
-    assert.strictEqual(bytes, expectedBytes);
-  });
-
-  test("serves a warm marketplace cache without disk or rebuild access", async (t) => {
-    // arrange
-    const directory = await mkdtemp(path.join(os.tmpdir(), "completion-names-warm-"));
-    const cachePath = path.join(directory, "marketplace-names.json");
-    const scope = "project";
-    const expectedNames = ["memory-only"];
-    t.after(async () => {
-      await invalidateMarketplaceNames(cachePath, scope);
-      await rm(directory, { recursive: true, force: true });
-    });
-    await getMarketplaceNames(cachePath, scope, () => Promise.resolve(expectedNames));
-    await rm(cachePath);
-
-    // act
-    const names = await getMarketplaceNames(cachePath, scope, () =>
-      Promise.reject(new Error("warm cache rebuilt")),
-    );
-
-    // assert
-    assert.deepStrictEqual(names, expectedNames);
-  });
-
-  test("hydrates marketplace names from a valid disk cache", async (t) => {
-    // arrange
-    const directory = await mkdtemp(path.join(os.tmpdir(), "completion-names-disk-"));
-    const cachePath = path.join(directory, "marketplace-names.json");
-    const scope = "user";
-    const expectedNames = ["disk-marketplace"];
-    t.after(async () => {
-      await invalidateMarketplaceNames(cachePath, scope);
-      await rm(directory, { recursive: true, force: true });
-    });
-    await writeFile(cachePath, '{"schemaVersion":2,"names":["disk-marketplace"]}', "utf8");
-
-    // act
-    const names = await getMarketplaceNames(cachePath, scope, () =>
-      Promise.reject(new Error("valid disk cache rebuilt")),
-    );
-
-    // assert
-    assert.deepStrictEqual(names, expectedNames);
-  });
-
-  test("propagates an unexpected marketplace rebuild error by identity", async (t) => {
-    // arrange
-    const directory = await mkdtemp(path.join(os.tmpdir(), "completion-names-error-"));
-    const cachePath = path.join(directory, "marketplace-names.json");
-    const scope = "project";
-    const rebuildError = new Error("state ledger unavailable");
-    t.after(async () => {
-      await invalidateMarketplaceNames(cachePath, scope);
-      await rm(directory, { recursive: true, force: true });
-    });
-
-    // act & assert
-    await assert.rejects(
-      () => getMarketplaceNames(cachePath, scope, () => Promise.reject(rebuildError)),
-      (error: unknown) => error === rebuildError,
-    );
-  });
-
-  for (const { schemaVersion } of [{ schemaVersion: 1 }, { schemaVersion: 3 }]) {
-    test(`rejects adjacent marketplace schema version ${schemaVersion}`, async (t) => {
-      // arrange
-      const directory = await mkdtemp(path.join(os.tmpdir(), "completion-names-schema-"));
-      const cachePath = path.join(directory, "marketplace-names.json");
-      const scope = "user";
-      const expectedNames = ["rebuilt-name"];
-      const expectedBytes = '{\n  "schemaVersion": 2,\n  "names": [\n    "rebuilt-name"\n  ]\n}\n';
-      t.after(async () => {
-        await invalidateMarketplaceNames(cachePath, scope);
-        await rm(directory, { recursive: true, force: true });
-      });
-      await writeFile(
-        cachePath,
-        `{"schemaVersion":${schemaVersion},"names":["stale-name"]}`,
-        "utf8",
-      );
-
-      // act
-      const names = await getMarketplaceNames(cachePath, scope, () =>
-        Promise.resolve(expectedNames),
-      );
-      const bytes = await readFile(cachePath, "utf8");
-
-      // assert
-      assert.deepStrictEqual(names, expectedNames);
-      assert.strictEqual(bytes, expectedBytes);
-    });
-  }
-
-  for (const { name, bytes } of [
-    { name: "JSON-invalid marketplace cache", bytes: "{invalid" },
-    { name: "malformed marketplace cache", bytes: '{"schemaVersion":2,"names":[1]}' },
-  ]) {
-    test(`rebuilds a ${name}`, async (t) => {
-      // arrange
-      const directory = await mkdtemp(path.join(os.tmpdir(), "completion-names-malformed-"));
-      const cachePath = path.join(directory, "marketplace-names.json");
-      const scope = "project";
-      const expectedNames = ["valid-name"];
-      t.after(async () => {
-        await invalidateMarketplaceNames(cachePath, scope);
-        await rm(directory, { recursive: true, force: true });
-      });
-      await writeFile(cachePath, bytes, "utf8");
-
-      // act
-      const names = await getMarketplaceNames(cachePath, scope, () =>
-        Promise.resolve(expectedNames),
-      );
-
-      // assert
-      assert.deepStrictEqual(names, expectedNames);
-      assert.strictEqual(
-        await readFile(cachePath, "utf8"),
-        '{\n  "schemaVersion": 2,\n  "names": [\n    "valid-name"\n  ]\n}\n',
-      );
-    });
-  }
-
-  for (const { name, bytes, expectedNames } of [
-    {
-      name: "empty marketplace cache",
-      bytes: '{"schemaVersion":2,"names":[]}',
-      expectedNames: [] as string[],
-    },
-    {
-      name: "single-name marketplace cache",
-      bytes: '{"schemaVersion":2,"names":["only-name"]}',
-      expectedNames: ["only-name"],
-    },
-  ]) {
-    test(`accepts a ${name}`, async (t) => {
-      // arrange
-      const directory = await mkdtemp(path.join(os.tmpdir(), "completion-names-cardinality-"));
-      const cachePath = path.join(directory, "marketplace-names.json");
-      const scope = "user";
-      t.after(async () => {
-        await invalidateMarketplaceNames(cachePath, scope);
-        await rm(directory, { recursive: true, force: true });
-      });
-      await writeFile(cachePath, bytes, "utf8");
-
-      // act
-      const names = await getMarketplaceNames(cachePath, scope, () =>
-        Promise.reject(new Error("valid cardinality rebuilt")),
-      );
-
-      // assert
-      assert.deepStrictEqual(names, expectedNames);
-    });
-  }
 });
 
 describe("getPluginIndex", () => {
@@ -777,7 +610,7 @@ describe("getPluginIndex", () => {
 });
 
 describe("cache invalidation", () => {
-  test("invalidating marketplace names removes disk and memory state", async (t) => {
+  test("invalidating marketplace names removes the named cache file", async (t) => {
     // arrange
     const directory = await mkdtemp(path.join(os.tmpdir(), "completion-invalidate-names-"));
     const cachePath = path.join(directory, "marketplace-names.json");
@@ -786,18 +619,13 @@ describe("cache invalidation", () => {
       await invalidateMarketplaceNames(cachePath, scope);
       await rm(directory, { recursive: true, force: true });
     });
-    await getMarketplaceNames(cachePath, scope, () => Promise.resolve(["before"]));
+    await writeFile(cachePath, '{"schemaVersion":2,"names":["before"]}', "utf8");
 
     // act
     await invalidateMarketplaceNames(cachePath, scope);
-    const names = await getMarketplaceNames(cachePath, scope, () => Promise.resolve(["after"]));
 
     // assert
-    assert.deepStrictEqual(names, ["after"]);
-    assert.strictEqual(
-      await readFile(cachePath, "utf8"),
-      '{\n  "schemaVersion": 2,\n  "names": [\n    "after"\n  ]\n}\n',
-    );
+    await assert.rejects(() => readFile(cachePath, "utf8"), { code: "ENOENT" });
   });
 
   test("invalidating one plugin index keeps its disk cache", async (t) => {
@@ -923,36 +751,28 @@ describe("cache invalidation", () => {
     );
   });
 
-  test("resetting the completion cache clears both memory maps", async (t) => {
+  test("resetting the completion cache clears transition plugin memory", async (t) => {
     // arrange
     const directory = await mkdtemp(path.join(os.tmpdir(), "completion-reset-"));
-    const namesPath = path.join(directory, "marketplace-names.json");
     const pluginPath = path.join(directory, "plugin-index.json");
     const scope = "project";
     const marketplace = "reset-index";
     t.after(async () => {
-      await invalidateMarketplaceNames(namesPath, scope);
       invalidateMarketplaceCache(scope, marketplace);
       await rm(directory, { recursive: true, force: true });
     });
-    await getMarketplaceNames(namesPath, scope, () => Promise.resolve(["before-reset"]));
     await getPluginIndex(pluginPath, scope, marketplace, () =>
       Promise.resolve([{ name: "before-reset", status: "installed" }]),
     );
-    await rm(namesPath);
     await rm(pluginPath);
 
     // act
     resetCompletionCache();
-    const names = await getMarketplaceNames(namesPath, scope, () =>
-      Promise.resolve(["after-reset"]),
-    );
     const rows = await getPluginIndex(pluginPath, scope, marketplace, () =>
       Promise.resolve([{ name: "after-reset", status: "available" }]),
     );
 
     // assert
-    assert.deepStrictEqual(names, ["after-reset"]);
     assert.deepStrictEqual(rows, [{ name: "after-reset", status: "available" }]);
   });
 });
