@@ -5,13 +5,8 @@
 // Consumes Pi's `SessionBeforeCompactEvent` and emits the Claude
 // `PreCompact` stdin envelope. Claude's contract names the
 // event-specific field `trigger` (`"manual" | "auto"` per
-// claude-hook-config-syntax.md § 3); Pi's `SessionBeforeCompactEvent`
-// does not expose a trigger source, so the translator emits `"auto"` --
-// the documented Claude default for context-pressure-driven compaction,
-// which matches every Pi-initiated compaction path the bridge currently
-// observes (a manual `/compact` shell-out is not yet wired through this
-// seam; if it lands as a v1.14+ extension the value flips to `"manual"`
-// at a future amendment, requirements-tracked).
+// claude-hook-config-syntax.md § 3). Pi reports `manual`, `threshold`, or
+// `overflow`; the latter two are Claude automatic compaction triggers.
 
 import type { SessionBeforeCompactEvent } from "../../../platform/pi-api.ts";
 import type { TranslationContext } from "../translation-context.ts";
@@ -24,8 +19,14 @@ export interface PreCompactStdin {
   readonly trigger: "auto" | "manual";
 }
 
+function compactTrigger(
+  reason: SessionBeforeCompactEvent["reason"],
+): PreCompactStdin["trigger"] {
+  return reason === "manual" ? "manual" : "auto";
+}
+
 export function translate(
-  _event: SessionBeforeCompactEvent,
+  event: SessionBeforeCompactEvent,
   ctx: TranslationContext,
 ): PreCompactStdin {
   return {
@@ -33,6 +34,6 @@ export function translate(
     transcript_path: ctx.transcriptPath,
     cwd: ctx.cwd,
     hook_event_name: "PreCompact",
-    trigger: "auto",
+    trigger: compactTrigger(event.reason),
   };
 }
