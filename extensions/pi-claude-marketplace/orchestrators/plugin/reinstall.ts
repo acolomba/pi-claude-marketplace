@@ -304,6 +304,7 @@ interface LockedSuccess {
 
 /** Owns reinstall's semantic prepare, replace, compensation, and commit schedule. */
 export interface ReinstallTransaction {
+  readonly abortPrepared: typeof abortPartialHandles;
   readonly finalizeReplacements: typeof finalizeReplacements;
   readonly prepareAll: typeof prepareAllHandles;
   readonly replaceAll: typeof replaceAll;
@@ -313,6 +314,7 @@ export interface ReinstallTransaction {
 }
 
 const REAL_REINSTALL_TRANSACTION: ReinstallTransaction = {
+  abortPrepared: abortPartialHandles,
   finalizeReplacements,
   prepareAll: prepareAllHandles,
   replaceAll,
@@ -1012,22 +1014,30 @@ async function runLockedReinstall(
   );
 
   const pluginDataDir = await locations.pluginDataDir(marketplace, plugin);
-  const handles = await transaction.prepareAll({
-    locations,
-    cwd,
-    marketplace,
-    plugin,
-    installable,
-    pluginDataDir,
-    oldRecord: oldSnapshot,
-    agentsDirs: generated.agentsDirs,
-  });
-  const { replacements, hookEntries } = await transaction.replaceAll(handles, {
-    locations,
-    cwd,
-    plugin,
-    installable,
-  });
+  const handles = await transaction.prepareAll(
+    {
+      locations,
+      cwd,
+      marketplace,
+      plugin,
+      installable,
+      pluginDataDir,
+      oldRecord: oldSnapshot,
+      agentsDirs: generated.agentsDirs,
+    },
+    transaction.abortPrepared,
+  );
+  const { replacements, hookEntries } = await transaction.replaceAll(
+    handles,
+    {
+      locations,
+      cwd,
+      plugin,
+      installable,
+    },
+    transaction.rollbackReplacements,
+    transaction.abortPrepared,
+  );
 
   let invalidConfigWriteBack: boolean;
   try {
@@ -1262,16 +1272,19 @@ async function resolveInstallable(input: {
   return resolved;
 }
 
-async function prepareAllHandles(input: {
-  readonly locations: ScopedLocations;
-  readonly cwd: string;
-  readonly marketplace: string;
-  readonly plugin: string;
-  readonly installable: MaterializablePlugin;
-  readonly pluginDataDir: string;
-  readonly oldRecord: PluginInstallRecord;
-  readonly agentsDirs: readonly string[];
-}): Promise<PreparedHandles> {
+async function prepareAllHandles(
+  input: {
+    readonly locations: ScopedLocations;
+    readonly cwd: string;
+    readonly marketplace: string;
+    readonly plugin: string;
+    readonly installable: MaterializablePlugin;
+    readonly pluginDataDir: string;
+    readonly oldRecord: PluginInstallRecord;
+    readonly agentsDirs: readonly string[];
+  },
+  abortPrepared: typeof abortPartialHandles,
+): Promise<PreparedHandles> {
   const handles: PartialPreparedHandles = {};
   try {
     handles.skills = await prepareStageSkills({
@@ -1319,7 +1332,7 @@ async function prepareAllHandles(input: {
       sourcePath: `${input.installable.pluginRoot}#mcpServers`,
     });
   } catch (err) {
-    throw errorWithManualRecovery(err, await abortPartialHandles(handles));
+    throw errorWithManualRecovery(err, await abortPrepared(handles));
   }
 
   return handles as PreparedHandles;
@@ -1333,6 +1346,8 @@ async function prepareAllHandles(input: {
 async function replaceAll(
   handles: PreparedHandles,
   hooks: HooksReplaceArgs,
+  rollbackPrepared: typeof rollbackReplacements,
+  abortPrepared: typeof abortPartialHandles,
 ): Promise<{
   readonly replacements: readonly ReplacementEntry[];
   readonly hookEntries: readonly HookSummaryEntry[] | undefined;
@@ -1378,7 +1393,7 @@ async function replaceAll(
     const mcp = await replacePreparedMcp(handles.mcp);
     replacements.push({ phase: "mcp", handle: mcp });
   } catch (err) {
-    const leaks = [...(await rollbackReplacements(replacements)), ...(await abortHandles(handles))];
+    const leaks = [...(await rollbackPrepared(replacements)), ...(await abortPrepared(handles))];
     throw errorWithManualRecovery(err, leaks);
   }
 
@@ -1594,10 +1609,6 @@ async function abortPartialHandles(handles: PartialPreparedHandles): Promise<rea
   }
 
   return Object.freeze(leaks);
-}
-
-async function abortHandles(handles: PreparedHandles): Promise<readonly string[]> {
-  return abortPartialHandles(handles);
 }
 
 async function rollbackReplacements(
