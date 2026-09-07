@@ -101,10 +101,19 @@ async function withHermeticHome<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
+interface SeededReinstallAgent {
+  readonly directory?: string;
+  readonly sourceName: string;
+  readonly frontmatterName?: string;
+  readonly description?: string;
+  readonly body: string;
+}
+
 interface ResourceSet {
   readonly skill?: string;
   readonly command?: string;
   readonly agent?: string;
+  readonly agents?: readonly SeededReinstallAgent[];
   readonly mcp?: boolean;
   /**
    * WR-03: seed `<pluginRoot>/hooks/hooks.json` so reinstall's resolver
@@ -123,6 +132,8 @@ async function seedMarketplace(opts: {
   readonly resources?: ResourceSet;
   readonly install?: boolean;
   readonly scope?: "user" | "project";
+  /** Declared agent directories; the conventional agents/ directory remains additive. */
+  readonly agentDirectories?: readonly string[];
   /**
    * DFEN-01: stamp `defaultEnabled` on the MARKETPLACE ENTRY -- the side that
    * WINS the precedence rule. A knob on the plugin's own plugin.json would
@@ -151,6 +162,7 @@ async function seedMarketplace(opts: {
     pluginName,
     version,
     opts.entryDefaultEnabled,
+    opts.agentDirectories,
   );
 
   const locations = locationsFor(scope, opts.cwd);
@@ -226,6 +238,20 @@ async function writePluginTree(
     );
   }
 
+  for (const agent of resources.agents ?? []) {
+    const agentDir = path.join(pluginRoot, agent.directory ?? "agents");
+    await mkdir(agentDir, { recursive: true });
+    await writeFile(
+      path.join(agentDir, `${agent.sourceName}.md`),
+      "---\n" +
+        `name: ${agent.frontmatterName ?? agent.sourceName}\n` +
+        `description: ${agent.description ?? `${agent.sourceName} agent`}\n` +
+        "tools: Read,Grep\n" +
+        "---\n\n" +
+        agent.body,
+    );
+  }
+
   if (resources.mcp === true) {
     await writeFile(
       path.join(pluginRoot, ".mcp.json"),
@@ -249,16 +275,19 @@ async function mergeManifestEntry(
   version: string,
   /** DFEN-01: stamped on this plugin's entry; absent leaves the field off. */
   defaultEnabled?: boolean,
+  agentDirectories?: readonly string[],
 ): Promise<string> {
   const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
   const plugins: Record<string, string> = {};
   const declarations: Record<string, boolean> = {};
+  const agentsByPlugin: Record<string, readonly string[]> = {};
   try {
     const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
       readonly plugins?: readonly {
         readonly name?: unknown;
         readonly version?: unknown;
         readonly defaultEnabled?: unknown;
+        readonly agents?: unknown;
       }[];
     };
     for (const entry of manifest.plugins ?? []) {
@@ -266,6 +295,13 @@ async function mergeManifestEntry(
         plugins[entry.name] = entry.version;
         if (typeof entry.defaultEnabled === "boolean") {
           declarations[entry.name] = entry.defaultEnabled;
+        }
+
+        if (
+          Array.isArray(entry.agents) &&
+          entry.agents.every((agentsDir): agentsDir is string => typeof agentsDir === "string")
+        ) {
+          agentsByPlugin[entry.name] = entry.agents;
         }
       }
     }
@@ -280,7 +316,11 @@ async function mergeManifestEntry(
     declarations[pluginName] = defaultEnabled;
   }
 
-  return writeManifest(marketplaceRoot, marketplaceName, plugins, declarations);
+  if (agentDirectories !== undefined) {
+    agentsByPlugin[pluginName] = agentDirectories;
+  }
+
+  return writeManifest(marketplaceRoot, marketplaceName, plugins, declarations, agentsByPlugin);
 }
 
 async function writeManifest(
@@ -288,6 +328,7 @@ async function writeManifest(
   marketplaceName: string,
   plugins: Record<string, string>,
   declarations: Record<string, boolean> = {},
+  agentsByPlugin: Record<string, readonly string[]> = {},
 ): Promise<string> {
   const manifestDir = path.join(marketplaceRoot, ".claude-plugin");
   await mkdir(manifestDir, { recursive: true });
@@ -301,6 +342,7 @@ async function writeManifest(
         version,
         source: `./plugins/${name}`,
         ...(Object.hasOwn(declarations, name) && { defaultEnabled: declarations[name] }),
+        ...(Object.hasOwn(agentsByPlugin, name) && { agents: agentsByPlugin[name] }),
       })),
     }),
   );
@@ -599,6 +641,204 @@ test("PRL-08/11 happy: success preserves installed version, restages resources, 
       await assert.rejects(() => readFile(path.join(dataDir, "state.txt"), "utf8"), /ENOENT/);
       assert.equal(errorNotifications(notifications).length, 0);
       assert.match(notifications.at(-1)?.message ?? "", /\/reload to pick up changes$/);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("PDEF-01: reinstall preview detects an agent conflict from a later resolved directory", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-agent-dir-preview-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        agentDirectories: ["declared-agents"],
+        resources: {
+          agents: [
+            { directory: "declared-agents", sourceName: "first", body: "First agent.\n" },
+            { sourceName: "later", body: "Later agent.\n" },
+          ],
+        },
+        install: true,
+      });
+      const state = await loadState(locations.extensionRoot);
+      const installed = state.marketplaces.mp?.plugins.hello;
+      assert.ok(installed !== undefined);
+      state.marketplaces["other-mp"] = {
+        name: "other-mp",
+        scope: "project",
+        source: pathSource("./other-mp"),
+        addedFromCwd: cwd,
+        manifestPath: path.join(cwd, "other-mp", "marketplace.json"),
+        marketplaceRoot: path.join(cwd, "other-mp"),
+        plugins: {
+          world: {
+            ...installed,
+            resources: {
+              ...installed.resources,
+              agents: [`${GENERATED_AGENT_PREFIX}hello-later`],
+            },
+          },
+        },
+      };
+      await saveState(locations.extensionRoot, state);
+      const { ctx, pi, notifications } = makeCtx({ toolNames: ["subagent"] });
+
+      const outcome = await reinstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      assert.strictEqual(outcome.partition, "failed");
+      assert.strictEqual(notifications.length, 1);
+      assert.strictEqual(notifications[0]?.severity, "error");
+      assert.match(notifications[0]?.message ?? "", /Cross-plugin name conflict/);
+      assert.match(notifications[0]?.message ?? "", /pi-claude-marketplace-hello-later/);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("PDEF-01: reinstall stages every agent directory and warns on a later duplicate", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-agent-dirs-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        agentDirectories: ["declared-agents"],
+        resources: {
+          agents: [
+            {
+              directory: "declared-agents",
+              sourceName: "shared-first",
+              frontmatterName: "shared",
+              body: "First shared agent.\n",
+            },
+            { sourceName: "later", body: "Later agent.\n" },
+            {
+              sourceName: "shared-later",
+              frontmatterName: "shared",
+              body: "Later shared agent.\n",
+            },
+          ],
+        },
+        install: true,
+      });
+      const conventionalAgentsDir = path.join(seeded.pluginRoot, "agents");
+      const expectedWarning =
+        `agent source "shared" in "${conventionalAgentsDir}" elides to generated name ` +
+        `"${GENERATED_AGENT_PREFIX}hello-shared" already produced by an earlier ` +
+        "componentPaths.agents entry; ignoring duplicate.";
+      const { ctx, pi } = makeCtx({ toolNames: ["subagent"] });
+
+      const outcome = await reinstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        render: "none",
+      });
+
+      assert.strictEqual(outcome.partition, "reinstalled");
+      assert.deepStrictEqual(outcome.notes, [expectedWarning]);
+      const state = await loadState(locations.extensionRoot);
+      assert.deepStrictEqual(state.marketplaces.mp?.plugins.hello?.resources.agents, [
+        `${GENERATED_AGENT_PREFIX}hello-shared`,
+        `${GENERATED_AGENT_PREFIX}hello-later`,
+      ]);
+      assert.match(
+        await readFile(
+          path.join(locations.agentsDir, `${GENERATED_AGENT_PREFIX}hello-shared.md`),
+          "utf8",
+        ),
+        /First shared agent\./,
+      );
+      assert.match(
+        await readFile(
+          path.join(locations.agentsDir, `${GENERATED_AGENT_PREFIX}hello-later.md`),
+          "utf8",
+        ),
+        /Later agent\./,
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("PDEF-01: reinstall rolls back replacements sourced from every agent directory", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-agent-dirs-rollback-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        agentDirectories: ["declared-agents"],
+        resources: {
+          agents: [
+            {
+              directory: "declared-agents",
+              sourceName: "first",
+              body: "Old first agent.\n",
+            },
+            { sourceName: "later", body: "Old later agent.\n" },
+          ],
+        },
+        install: true,
+      });
+      await writePluginTree(seeded.pluginRoot, "hello", {
+        agents: [
+          {
+            directory: "declared-agents",
+            sourceName: "first",
+            body: "New first agent.\n",
+          },
+          { sourceName: "later", body: "New later agent.\n" },
+        ],
+      });
+      const firstTarget = path.join(locations.agentsDir, `${GENERATED_AGENT_PREFIX}hello-first.md`);
+      const laterTarget = path.join(locations.agentsDir, `${GENERATED_AGENT_PREFIX}hello-later.md`);
+      let observedAtSave: readonly string[] = [];
+      const { ctx, pi } = makeCtx({ toolNames: ["subagent"] });
+
+      const outcome = await reinstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        __deps: {
+          stateTransaction: {
+            saveState: async () => {
+              observedAtSave = await Promise.all([
+                readFile(firstTarget, "utf8"),
+                readFile(laterTarget, "utf8"),
+              ]);
+              throw new Error("save failure after multi-directory replacement");
+            },
+          },
+        },
+      });
+
+      assert.strictEqual(outcome.partition, "failed");
+      assert.match(observedAtSave[0] ?? "", /New first agent\./, JSON.stringify(outcome));
+      assert.match(observedAtSave[1] ?? "", /New later agent\./);
+      assert.match(await readFile(firstTarget, "utf8"), /Old first agent\./);
+      assert.match(await readFile(laterTarget, "utf8"), /Old later agent\./);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
