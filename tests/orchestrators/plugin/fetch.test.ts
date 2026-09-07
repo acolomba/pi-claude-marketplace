@@ -352,6 +352,19 @@ async function withWorkspace<T>(
   }
 }
 
+test("exposes a required fetch status factory", async () => {
+  // arrange
+  const fetchModule = await import(
+    "../../../extensions/pi-claude-marketplace/orchestrators/plugin/fetch.ts"
+  );
+
+  // act
+  const exportNames = Object.keys(fetchModule);
+
+  // assert
+  assert.strictEqual(exportNames.includes("createFetchPlugins"), true);
+});
+
 test("keeps a path source offline through the production defaults", async () => {
   await withWorkspace(async ({ cwd }) => {
     // arrange
