@@ -69,6 +69,14 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 
 type FaultableFsPromiseMethod = "readFile" | "readdir";
 
+test("exposes a required plugin info reader factory", async () => {
+  const infoModule: Record<string, unknown> = await import(
+    "../../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts"
+  );
+
+  assert.equal(Object.keys(infoModule).includes("createGetPluginInfo"), true);
+});
+
 async function withFsPromiseFault<T>(
   method: FaultableFsPromiseMethod,
   targetPath: string,
