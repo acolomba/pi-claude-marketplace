@@ -478,6 +478,25 @@ interface SeededUpdateAgent {
   readonly body?: string;
 }
 
+async function seedUpdateAgents(
+  pluginRoot: string,
+  agents: readonly SeededUpdateAgent[] = [],
+): Promise<void> {
+  for (const agent of agents) {
+    const agentDir = path.join(pluginRoot, agent.directory ?? "agents");
+    await mkdir(agentDir, { recursive: true });
+    await writeFile(
+      path.join(agentDir, `${agent.sourceName}.md`),
+      "---\n" +
+        `name: ${agent.frontmatterName ?? agent.sourceName}\n` +
+        `description: ${agent.description ?? `${agent.sourceName} agent`}\n` +
+        "tools: Read,Grep\n" +
+        "---\n\n" +
+        (agent.body ?? `${agent.sourceName} body.\n`),
+    );
+  }
+}
+
 /**
  * Build a marketplace tree on disk and seed a path-source state record.
  * The plugins map carries entries we control; tests then mutate the
@@ -566,19 +585,7 @@ async function seedPathMarketplace(opts: {
       );
     }
 
-    for (const agent of spec.agents ?? []) {
-      const agentDir = path.join(pluginRoot, agent.directory ?? "agents");
-      await mkdir(agentDir, { recursive: true });
-      await writeFile(
-        path.join(agentDir, `${agent.sourceName}.md`),
-        "---\n" +
-          `name: ${agent.frontmatterName ?? agent.sourceName}\n` +
-          `description: ${agent.description ?? `${agent.sourceName} agent`}\n` +
-          "tools: Read,Grep\n" +
-          "---\n\n" +
-          (agent.body ?? `${agent.sourceName} body.\n`),
-      );
-    }
+    await seedUpdateAgents(pluginRoot, spec.agents);
 
     if (spec.hasMcp === true) {
       await writeFile(

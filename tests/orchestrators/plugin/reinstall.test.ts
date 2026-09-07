@@ -123,6 +123,36 @@ interface ResourceSet {
   readonly hooksJson?: object;
 }
 
+interface ExistingManifestEntry {
+  readonly name?: unknown;
+  readonly version?: unknown;
+  readonly defaultEnabled?: unknown;
+  readonly agents?: unknown;
+}
+
+function rememberManifestEntry(
+  entry: ExistingManifestEntry,
+  plugins: Record<string, string>,
+  declarations: Record<string, boolean>,
+  agentsByPlugin: Record<string, readonly string[]>,
+): void {
+  if (typeof entry.name !== "string" || typeof entry.version !== "string") {
+    return;
+  }
+
+  plugins[entry.name] = entry.version;
+  if (typeof entry.defaultEnabled === "boolean") {
+    declarations[entry.name] = entry.defaultEnabled;
+  }
+
+  if (
+    Array.isArray(entry.agents) &&
+    entry.agents.every((agentsDir): agentsDir is string => typeof agentsDir === "string")
+  ) {
+    agentsByPlugin[entry.name] = entry.agents;
+  }
+}
+
 async function seedMarketplace(opts: {
   readonly cwd: string;
   readonly marketplaceRoot: string;
@@ -283,27 +313,10 @@ async function mergeManifestEntry(
   const agentsByPlugin: Record<string, readonly string[]> = {};
   try {
     const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
-      readonly plugins?: readonly {
-        readonly name?: unknown;
-        readonly version?: unknown;
-        readonly defaultEnabled?: unknown;
-        readonly agents?: unknown;
-      }[];
+      readonly plugins?: readonly ExistingManifestEntry[];
     };
     for (const entry of manifest.plugins ?? []) {
-      if (typeof entry.name === "string" && typeof entry.version === "string") {
-        plugins[entry.name] = entry.version;
-        if (typeof entry.defaultEnabled === "boolean") {
-          declarations[entry.name] = entry.defaultEnabled;
-        }
-
-        if (
-          Array.isArray(entry.agents) &&
-          entry.agents.every((agentsDir): agentsDir is string => typeof agentsDir === "string")
-        ) {
-          agentsByPlugin[entry.name] = entry.agents;
-        }
-      }
+      rememberManifestEntry(entry, plugins, declarations, agentsByPlugin);
     }
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
