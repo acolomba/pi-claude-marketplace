@@ -29,6 +29,8 @@ import { MarketplaceNotFoundError } from "../../../extensions/pi-claude-marketpl
 import { notify } from "../../../extensions/pi-claude-marketplace/shared/notify.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
+import * as enableDisableModule from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts";
+
 import type { CacheEntry } from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
 import type { EnableDisablePluginOutcome } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts";
 import type {
@@ -68,6 +70,13 @@ function toolInfo(name: string): ToolInventoryItem {
 function makePi(toolNames: readonly string[] = []): ToolInventory {
   return { getAllTools: () => toolNames.map(toolInfo) };
 }
+
+test("enable-disable exposes its required transaction factory", () => {
+  assert.strictEqual(
+    typeof Reflect.get(enableDisableModule, "createSetPluginEnabled"),
+    "function",
+  );
+});
 
 /**
  * WR-06 / SEV-01: a Pi whose tool list carries the `subagent` tool, which is
