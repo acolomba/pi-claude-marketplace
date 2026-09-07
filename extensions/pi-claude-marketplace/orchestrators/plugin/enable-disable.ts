@@ -643,7 +643,7 @@ async function emitUnresolvedTarget(args: {
   readonly enable: boolean;
   readonly orchestrated: boolean;
   readonly resolution: Exclude<CrossScopePluginResolution, { kind: "resolved" }>;
-}): Promise<EnableDisablePluginOutcome | undefined> {
+}): Promise<EnableDisablePluginOutcome> {
   const { ctx, pi, cwd, marketplace, plugin, enable, orchestrated, resolution } = args;
 
   const notInstalledAt = await missIsNotInstalled({ cwd, marketplace, resolution });
@@ -657,22 +657,21 @@ async function emitUnresolvedTarget(args: {
     });
   }
 
-  if (orchestrated) {
-    return { status: "skipped", name: plugin, reason: "not installed" };
+  if (!orchestrated) {
+    dispatchOutcome({
+      ctx,
+      pi,
+      marketplace,
+      scope: notInstalledAt,
+      plugin,
+      enable,
+      // Only the `invalid-config` arm reads this, and `not-recorded` is not it.
+      configBasename: "",
+      outcome: { kind: "not-recorded", notInstalledAt },
+    });
   }
 
-  dispatchOutcome({
-    ctx,
-    pi,
-    marketplace,
-    scope: notInstalledAt,
-    plugin,
-    enable,
-    // Only the `invalid-config` arm reads this, and `not-recorded` is not it.
-    configBasename: "",
-    outcome: { kind: "not-recorded", notInstalledAt },
-  });
-  return undefined;
+  return { status: "skipped", name: plugin, reason: "not installed" };
 }
 
 /**
@@ -690,18 +689,16 @@ async function emitUnresolvedTarget(args: {
  * compile error so the cascade always materialises a row (closes S6's fourth
  * loop).
  *
- * WR-01: what the overload proves and what it does not. It removes the
- * `undefined` arm AT THE CALL SITE, which is what makes a consumer's
- * absent-outcome guard a compile error. It does NOT prove the body honours it:
- * TypeScript checks an overload signature against the implementation only
- * loosely, and a narrower overload return is accepted with no diagnostic even
- * when the implementation demonstrably returns the excluded value on that path.
- * The narrowing is therefore an ASSERTION about this module, relocated from the
- * consumer to the producer's signature -- not a proof. Every orchestrated arm
- * below does return a defined outcome today, and the reconcile owner suite
- * drives this entrypoint in orchestrated mode across its whole outcome matrix
- * and asserts the complete cascade, so a regression on an exercised path fails
- * there. An arm the matrix does not reach is not covered by either.
+ * WR-01: the overload is backed by a compile-time check, not by an assertion.
+ * The body lives in `runSetEnabledOutcome`, whose DECLARED return type is
+ * `Promise<EnableDisablePluginOutcome>`, so TypeScript checks every return
+ * statement and the fall-off-the-end path in it: an arm that yielded `undefined`
+ * is a compile error there. A narrower overload return alone would not give that
+ * -- TypeScript checks an overload signature against the implementation only
+ * loosely, and accepts a narrowed return with no diagnostic even when the
+ * implementation demonstrably returns the excluded value. This entrypoint is the
+ * thin mode switch that reintroduces `undefined` for the standalone arm and for
+ * that arm only, so the narrow overload can never outrun the body.
  */
 export function setPluginEnabled(
   opts: EnableDisablePluginOptions & { notifications: { mode: "orchestrated" } },
@@ -713,8 +710,24 @@ export function setPluginEnabled(
 export async function setPluginEnabled(
   opts: EnableDisablePluginOptions,
 ): Promise<EnableDisablePluginOutcome | undefined> {
-  const { ctx, pi, cwd, marketplace, plugin, enable } = opts;
   const orchestrated = opts.notifications?.mode === "orchestrated";
+  const outcome = await runSetEnabledOutcome(opts, orchestrated);
+
+  return orchestrated ? outcome : undefined;
+}
+
+/**
+ * The whole enable/disable body, always answering with a typed
+ * `EnableDisablePluginOutcome`. Standalone mode emits its notify() rows on the
+ * way through and its outcome is discarded by the entrypoint above; the declared
+ * return type is what proves the orchestrated arms never yield `undefined`
+ * (WR-01).
+ */
+async function runSetEnabledOutcome(
+  opts: EnableDisablePluginOptions,
+  orchestrated: boolean,
+): Promise<EnableDisablePluginOutcome> {
+  const { ctx, pi, cwd, marketplace, plugin, enable } = opts;
 
   // C1: `resolveCrossScopePluginTarget` calls `loadState`, which throws on a
   // corrupt/unparseable state.json in either scope. The throw must NOT escape
@@ -881,43 +894,41 @@ export async function setPluginEnabled(
     );
   } catch (err) {
     const cause = err instanceof Error ? err : new Error(errorMessage(err));
-    if (orchestrated) {
-      return {
-        status: "failed",
-        reason: classifyTransactionThrow(cause),
-        error: cause,
-        cause: errorMessage(cause),
-      };
+    if (!orchestrated) {
+      // D-04: the `failed` row's bytes are identical across both verbs; emit it
+      // through the active verb's CommandContext for naming consistency.
+      emitEnableDisableFailedRow({
+        ctx,
+        pi,
+        enable,
+        marketplace,
+        scope,
+        row: {
+          status: "failed",
+          name: plugin,
+          reasons: [] as const,
+          cause,
+          // D-03/D-06: a transaction-throw enable/disable failure -> error, no
+          // reload.
+          severity: "error",
+          needsReload: false,
+        },
+      });
     }
 
-    // D-04: the `failed` row's bytes are identical across both verbs; emit it
-    // through the active verb's CommandContext for naming consistency.
-    emitEnableDisableFailedRow({
-      ctx,
-      pi,
-      enable,
-      marketplace,
-      scope,
-      row: {
-        status: "failed",
-        name: plugin,
-        reasons: [] as const,
-        cause,
-        // D-03/D-06: a transaction-throw enable/disable failure -> error, no
-        // reload.
-        severity: "error",
-        needsReload: false,
-      },
-    });
-    return undefined;
+    return {
+      status: "failed",
+      reason: classifyTransactionThrow(cause),
+      error: cause,
+      cause: errorMessage(cause),
+    };
   }
 
-  if (orchestrated) {
-    return outcomeToTypedResult({ plugin, enable, outcome, configBasename });
+  if (!orchestrated) {
+    dispatchOutcome({ ctx, pi, marketplace, scope, plugin, enable, configBasename, outcome });
   }
 
-  dispatchOutcome({ ctx, pi, marketplace, scope, plugin, enable, configBasename, outcome });
-  return undefined;
+  return outcomeToTypedResult({ plugin, enable, outcome, configBasename });
 }
 
 /**
@@ -954,17 +965,18 @@ function emitResolutionFailure(args: {
   cause: Error;
   enable: boolean;
   orchestrated: boolean;
-}): EnableDisablePluginOutcome | undefined {
+}): EnableDisablePluginOutcome {
   const { ctx, pi, marketplace, plugin, requestedScope, cause, enable, orchestrated } = args;
   const sanitized = sanitizeStateLoadError(cause);
   const reason = classifyTransactionThrow(sanitized);
+  const outcome: EnableDisablePluginOutcome = {
+    status: "failed",
+    reason,
+    error: sanitized,
+    cause: errorMessage(sanitized),
+  };
   if (orchestrated) {
-    return {
-      status: "failed",
-      reason,
-      error: sanitized,
-      cause: errorMessage(sanitized),
-    };
+    return outcome;
   }
 
   const scope: Scope = requestedScope ?? "user";
@@ -986,7 +998,8 @@ function emitResolutionFailure(args: {
       needsReload: false,
     },
   });
-  return undefined;
+
+  return outcome;
 }
 
 /**

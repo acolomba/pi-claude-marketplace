@@ -438,10 +438,12 @@ async function runAddInGuard(args: {
 }
 
 /**
- * RECON-03: route the catch arm of `addMarketplace` to either a typed
- * orchestrated outcome OR a standalone notify() row. Returns an
- * `AddMarketplaceOutcome` when orchestrated, otherwise `undefined` after
- * having fired the standalone notify().
+ * RECON-03: route the catch arm of `addMarketplace` to a typed
+ * `AddMarketplaceOutcome`, emitting the standalone notify() row first when the
+ * caller is not orchestrated. The outcome is returned on BOTH paths; the
+ * standalone entrypoint discards it, and returning it unconditionally is what
+ * lets `runAddOutcome` declare a `Promise<AddMarketplaceOutcome>` return the
+ * compiler can check (WR-01).
  *
  * The non-enumerated catastrophic branch in orchestrated mode collapses to
  * the closed-set `"unparseable"` reason because every recognised add
@@ -454,45 +456,43 @@ function handleAddFailure(
   opts: AddMarketplaceOptions,
   err: unknown,
   orchestrated: boolean,
-): AddMarketplaceOutcome | undefined {
+): AddMarketplaceOutcome {
   const reason = classifyAddError(err);
+  const wrapped = err instanceof Error ? err : new Error(errorMessage(err));
   if (reason === undefined) {
-    if (orchestrated) {
-      const wrapped = err instanceof Error ? err : new Error(errorMessage(err));
-      return {
-        status: "failed",
-        reason: "unparseable",
-        error: wrapped,
-        cause: errorMessage(err),
-      };
+    if (!orchestrated) {
+      // Not an enumerated add precondition (e.g. a StateLockHeldError or an
+      // unforeseen catastrophic error) -- never swallow it in standalone mode.
+      throw err;
     }
 
-    // Not an enumerated add precondition (e.g. a StateLockHeldError or an
-    // unforeseen catastrophic error) -- never swallow it in standalone mode.
-    throw err;
-  }
-
-  if (orchestrated) {
-    const wrapped = err instanceof Error ? err : new Error(errorMessage(err));
-    return { status: "failed", reason, error: wrapped, cause: errorMessage(err) };
-  }
-
-  // OUT-07 / D-12: `marketplace add` is a single-target op -> Single 1-tuple.
-  // The `(failed) {<reason>}` header renders via the central renderMpHeader seam
-  // the spine reuses; ADD_CONTEXT carries the localized add vocabulary.
-  const failedRows: Single<MarketplaceRows<never>> = [
-    {
-      name: addSubjectName(err, opts.rawSource),
-      scope: opts.scope,
+    return {
       status: "failed",
-      reasons: [reason],
-      // D-03: a failed marketplace add -> error.
-      severity: "error",
-      plugins: [],
-    },
-  ];
-  notifyWithContext(opts.ctx, opts.pi, ADD_CONTEXT, failedRows);
-  return undefined;
+      reason: "unparseable",
+      error: wrapped,
+      cause: errorMessage(err),
+    };
+  }
+
+  if (!orchestrated) {
+    // OUT-07 / D-12: `marketplace add` is a single-target op -> Single 1-tuple.
+    // The `(failed) {<reason>}` header renders via the central renderMpHeader seam
+    // the spine reuses; ADD_CONTEXT carries the localized add vocabulary.
+    const failedRows: Single<MarketplaceRows<never>> = [
+      {
+        name: addSubjectName(err, opts.rawSource),
+        scope: opts.scope,
+        status: "failed",
+        reasons: [reason],
+        // D-03: a failed marketplace add -> error.
+        severity: "error",
+        plugins: [],
+      },
+    ];
+    notifyWithContext(opts.ctx, opts.pi, ADD_CONTEXT, failedRows);
+  }
+
+  return { status: "failed", reason, error: wrapped, cause: errorMessage(err) };
 }
 
 /**
@@ -509,18 +509,16 @@ function handleAddFailure(
  * caller holding the entrypoint in a single-signature variable -- the import
  * cascade's collaborator resolver -- keeps its `undefined` arm.
  *
- * WR-01: what the overload proves and what it does not. It removes the
- * `undefined` arm AT THE CALL SITE, which is what makes a consumer's
- * absent-outcome guard a compile error. It does NOT prove the body honours it:
+ * WR-01: the overload is backed by a compile-time check, not by an assertion.
+ * The body lives in `runAddOutcome`, whose DECLARED return type is
+ * `Promise<AddMarketplaceOutcome>`, so TypeScript checks every return statement
+ * and the fall-off-the-end path in it: an arm that yielded `undefined` is a
+ * compile error there. A narrower overload return alone would not give that --
  * TypeScript checks an overload signature against the implementation only
- * loosely, and a narrower overload return is accepted with no diagnostic even
- * when the implementation demonstrably returns the excluded value on that path.
- * The narrowing is therefore an ASSERTION about this module, relocated from the
- * consumer to the producer's signature -- not a proof. Every orchestrated arm
- * below does return a defined outcome today, and the reconcile owner suite
- * drives this entrypoint in orchestrated mode across its whole outcome matrix
- * and asserts the complete cascade, so a regression on an exercised path fails
- * there. An arm the matrix does not reach is not covered by either.
+ * loosely, and accepts a narrowed return with no diagnostic even when the
+ * implementation demonstrably returns the excluded value. This entrypoint is
+ * the thin mode switch that reintroduces `undefined` for the standalone arm and
+ * for that arm only, so the narrow overload can never outrun the body.
  */
 export function addMarketplace(
   opts: AddMarketplaceOptions & { notifications: { mode: "orchestrated" } },
@@ -531,13 +529,28 @@ export function addMarketplace(
 export async function addMarketplace(
   opts: AddMarketplaceOptions,
 ): Promise<AddMarketplaceOutcome | undefined> {
+  // RECON-03: orchestrated mode suppresses every notify() call and returns the
+  // typed outcome instead. Standalone (default/omitted) preserves byte-identity.
+  const orchestrated = opts.notifications?.mode === "orchestrated";
+  const outcome = await runAddOutcome(opts, orchestrated);
+
+  return orchestrated ? outcome : undefined;
+}
+
+/**
+ * The whole add body, always answering with a typed `AddMarketplaceOutcome`.
+ * Standalone mode emits its notify() rows on the way through and its outcome is
+ * discarded by the entrypoint above; the declared return type is what proves
+ * the orchestrated arms never yield `undefined` (WR-01).
+ */
+async function runAddOutcome(
+  opts: AddMarketplaceOptions,
+  orchestrated: boolean,
+): Promise<AddMarketplaceOutcome> {
   const gitOps = opts.gitOps ?? DEFAULT_GIT_OPS;
   const credentialOps = opts.credentialOps ?? DEFAULT_CREDENTIAL_OPS;
   const locations = locationsFor(opts.scope, opts.cwd);
   const source = parsePluginSource(opts.rawSource);
-  // RECON-03: orchestrated mode suppresses every notify() call and returns the
-  // typed outcome instead. Standalone (default/omitted) preserves byte-identity.
-  const orchestrated = opts.notifications?.mode === "orchestrated";
 
   // ATTR-07: route every enumerated precondition failure through notify as a
   // structured `⊘ <subject> [<scope>] (failed) {<reason>}` row on the
@@ -601,25 +614,24 @@ export async function addMarketplace(
     // Seeding is best-effort; the add already committed.
   }
 
-  if (orchestrated) {
-    return { status: "added", name: recordedName };
+  if (!orchestrated) {
+    // Emit one MarketplaceNotificationMessage per outcome. Severity and
+    // reload-hint are computed by the shared seam; callers MUST NOT compose them.
+    // Catalog: `path-source` + `github-source` fixtures in catalog-uat.test.ts.
+    // OUT-07 / D-12: single-target op -> Single 1-tuple. The `(added)` header
+    // renders via the central renderMpHeader seam the spine reuses.
+    const addedRows: Single<MarketplaceRows<never>> = [
+      {
+        name: recordedName,
+        scope: opts.scope,
+        status: "added",
+        plugins: [],
+      },
+    ];
+    notifyWithContext(opts.ctx, opts.pi, ADD_CONTEXT, addedRows);
   }
 
-  // Emit one MarketplaceNotificationMessage per outcome. Severity and
-  // reload-hint are computed by the shared seam; callers MUST NOT compose them.
-  // Catalog: `path-source` + `github-source` fixtures in catalog-uat.test.ts.
-  // OUT-07 / D-12: single-target op -> Single 1-tuple. The `(added)` header
-  // renders via the central renderMpHeader seam the spine reuses.
-  const addedRows: Single<MarketplaceRows<never>> = [
-    {
-      name: recordedName,
-      scope: opts.scope,
-      status: "added",
-      plugins: [],
-    },
-  ];
-  notifyWithContext(opts.ctx, opts.pi, ADD_CONTEXT, addedRows);
-  return undefined;
+  return { status: "added", name: recordedName };
 }
 
 /**

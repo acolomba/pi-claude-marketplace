@@ -175,6 +175,23 @@ async function removePath(pathPromise: Promise<string>): Promise<void> {
 }
 
 /**
+ * The typed `{marketplace not added}` failure, in the one shape every arm of
+ * this module that reaches the miss reports it with. `scopes` names the scopes
+ * actually searched, so the bare form carries both and an explicit-scope form
+ * carries only the requested one.
+ */
+function notAddedOutcome(name: string, scopes: readonly Scope[]): RemoveMarketplaceOutcome {
+  const err = new MarketplaceNotFoundError(name, scopes);
+
+  return {
+    status: "failed",
+    reason: "marketplace not added",
+    error: err,
+    cause: errorMessage(err),
+  };
+}
+
+/**
  * RECON-03: orchestrated-mode mirror of `resolveScopeOrNotifyNotAdded` that
  * returns a typed `RemoveMarketplaceOutcome` for the not-added case instead
  * of firing the standalone notify() side effect. Same project-then-user
@@ -198,25 +215,13 @@ async function resolveScopeOrFailedOutcome(
       return { scope: "user", locations: userLocations };
     }
 
-    const err = new MarketplaceNotFoundError(opts.name, ["project", "user"]);
-    return {
-      status: "failed",
-      reason: "marketplace not added",
-      error: err,
-      cause: errorMessage(err),
-    };
+    return notAddedOutcome(opts.name, ["project", "user"]);
   }
 
   const candLocations = opts.scope === "user" ? userLocations : projectLocations;
   const preState = await loadState(candLocations.extensionRoot);
   if (preState.marketplaces[opts.name] === undefined) {
-    const err = new MarketplaceNotFoundError(opts.name, [opts.scope]);
-    return {
-      status: "failed",
-      reason: "marketplace not added",
-      error: err,
-      cause: errorMessage(err),
-    };
+    return notAddedOutcome(opts.name, [opts.scope]);
   }
 
   return { scope: opts.scope, locations: candLocations };
@@ -234,24 +239,25 @@ function emitPartialFailure(args: {
   resolvedScope: Scope;
   successfullyUnstaged: readonly string[];
   failedPlugins: readonly { name: string; cause: Error }[];
-}): RemoveMarketplaceOutcome | undefined {
+}): RemoveMarketplaceOutcome {
   const { opts, orchestrated, resolvedScope, successfullyUnstaged, failedPlugins } = args;
+  // I1 / PR #51: surface BOTH unstaged successes AND per-plugin failures
+  // through the typed outcome. The apply cascade caller composes one row
+  // per plugin (○ uninstalled for unstaged, ⊘ {reason} for failed) so the
+  // reconcile surface honours D-22-02 (no plugin ever disappears
+  // silently). A single `{status:"failed",reason}` would collapse N rows
+  // to 1.
+  const outcome: RemoveMarketplaceOutcome = {
+    status: "partial",
+    name: opts.name,
+    unstaged: successfullyUnstaged,
+    failed: failedPlugins.map((f) => ({
+      name: f.name,
+      reason: narrowCascadeFailure(f.cause),
+    })),
+  };
   if (orchestrated) {
-    // I1 / PR #51: surface BOTH unstaged successes AND per-plugin failures
-    // through the typed outcome. The apply cascade caller composes one row
-    // per plugin (○ uninstalled for unstaged, ⊘ {reason} for failed) so the
-    // reconcile surface honours D-22-02 (no plugin ever disappears
-    // silently). A single `{status:"failed",reason}` would collapse N rows
-    // to 1.
-    return {
-      status: "partial",
-      name: opts.name,
-      unstaged: successfullyUnstaged,
-      failed: failedPlugins.map((f) => ({
-        name: f.name,
-        reason: narrowCascadeFailure(f.cause),
-      })),
-    };
+    return outcome;
   }
 
   // CMC-31 PARTIAL: mp.status="failed"; plugins[] mixes uninstalled +
@@ -289,7 +295,8 @@ function emitPartialFailure(args: {
     },
   ];
   notifyWithContext(opts.ctx, opts.pi, REMOVE_CONTEXT, partialRows);
-  return undefined;
+
+  return outcome;
 }
 
 /**
@@ -512,22 +519,28 @@ interface ExtensionMarketplaceRow {
  * Resolve the target scope/locations or surface the missing-marketplace
  * precondition through the correct standalone/orchestrated arm. Returns:
  *   - `{ scope, locations }` on success
- *   - `RemoveMarketplaceOutcome` (status: "failed", reason: "marketplace not added") in
- *     orchestrated mode when the marketplace is missing
- *   - `undefined` in standalone mode when the helper already emitted the
- *     standalone `(failed) {marketplace not added}` variant
+ *   - `RemoveMarketplaceOutcome` (status: "failed", reason: "marketplace not added")
+ *     when the marketplace is missing -- in standalone mode the shared helper has
+ *     already emitted the `(failed) {marketplace not added}` row and answered
+ *     `undefined`, so the miss is re-expressed here as the same typed outcome
+ *     the orchestrated arm builds. The standalone entrypoint discards it.
  */
 async function resolveRemoveTargetOrSurface(
   opts: RemoveMarketplaceOptions,
   userLocations: ScopedLocations,
   projectLocations: ScopedLocations,
   orchestrated: boolean,
-): Promise<{ scope: Scope; locations: ScopedLocations } | RemoveMarketplaceOutcome | undefined> {
+): Promise<{ scope: Scope; locations: ScopedLocations } | RemoveMarketplaceOutcome> {
   if (orchestrated) {
     return resolveScopeOrFailedOutcome(opts, userLocations, projectLocations);
   }
 
-  return resolveScopeOrNotifyNotAdded(opts, userLocations, projectLocations);
+  const resolved = await resolveScopeOrNotifyNotAdded(opts, userLocations, projectLocations);
+
+  return (
+    resolved ??
+    notAddedOutcome(opts.name, opts.scope === undefined ? ["project", "user"] : [opts.scope])
+  );
 }
 
 /**
@@ -540,16 +553,17 @@ function surfaceCfgInvalid(args: {
   readonly orchestrated: boolean;
   readonly configBasename: string;
   readonly scope: Scope;
-}): RemoveMarketplaceOutcome | undefined {
+}): RemoveMarketplaceOutcome {
   const { opts, orchestrated, configBasename, scope } = args;
+  const synthetic = new Error(`Config file "${configBasename}" failed schema validation.`);
+  const outcome: RemoveMarketplaceOutcome = {
+    status: "failed",
+    reason: "invalid manifest",
+    error: synthetic,
+    cause: errorMessage(synthetic),
+  };
   if (orchestrated) {
-    const synthetic = new Error(`Config file "${configBasename}" failed schema validation.`);
-    return {
-      status: "failed",
-      reason: "invalid manifest",
-      error: synthetic,
-      cause: errorMessage(synthetic),
-    };
+    return outcome;
   }
 
   // OUT-07 / D-12: one marketplace block -> Single 1-tuple. No child rows; the
@@ -567,7 +581,8 @@ function surfaceCfgInvalid(args: {
     },
   ];
   notifyWithContext(opts.ctx, opts.pi, REMOVE_CONTEXT, invalidManifestRows);
-  return undefined;
+
+  return outcome;
 }
 
 /**
@@ -646,18 +661,16 @@ async function runPostRemoveCleanup(args: {
  * caller holding the entrypoint in a single-signature variable keeps its
  * `undefined` arm.
  *
- * WR-01: what the overload proves and what it does not. It removes the
- * `undefined` arm AT THE CALL SITE, which is what makes a consumer's
- * absent-outcome guard a compile error. It does NOT prove the body honours it:
- * TypeScript checks an overload signature against the implementation only
- * loosely, and a narrower overload return is accepted with no diagnostic even
- * when the implementation demonstrably returns the excluded value on that path.
- * The narrowing is therefore an ASSERTION about this module, relocated from the
- * consumer to the producer's signature -- not a proof. Every orchestrated arm
- * below does return a defined outcome today, and the reconcile owner suite
- * drives this entrypoint in orchestrated mode across its whole outcome matrix
- * and asserts the complete cascade, so a regression on an exercised path fails
- * there. An arm the matrix does not reach is not covered by either.
+ * WR-01: the overload is backed by a compile-time check, not by an assertion.
+ * The body lives in `runRemoveOutcome`, whose DECLARED return type is
+ * `Promise<RemoveMarketplaceOutcome>`, so TypeScript checks every return
+ * statement and the fall-off-the-end path in it: an arm that yielded `undefined`
+ * is a compile error there. A narrower overload return alone would not give that
+ * -- TypeScript checks an overload signature against the implementation only
+ * loosely, and accepts a narrowed return with no diagnostic even when the
+ * implementation demonstrably returns the excluded value. This entrypoint is the
+ * thin mode switch that reintroduces `undefined` for the standalone arm and for
+ * that arm only, so the narrow overload can never outrun the body.
  */
 export function removeMarketplace(
   opts: RemoveMarketplaceOptions & { notifications: { mode: "orchestrated" } },
@@ -668,10 +681,26 @@ export function removeMarketplace(
 export async function removeMarketplace(
   opts: RemoveMarketplaceOptions,
 ): Promise<RemoveMarketplaceOutcome | undefined> {
-  const cascade = opts.cascade ?? cascadeUnstagePlugin;
   // RECON-03: orchestrated mode suppresses every notify() call and returns the
   // typed outcome instead. Standalone (default/omitted) preserves byte-identity.
   const orchestrated = opts.notifications?.mode === "orchestrated";
+  const outcome = await runRemoveOutcome(opts, orchestrated);
+
+  return orchestrated ? outcome : undefined;
+}
+
+/**
+ * The whole remove body, always answering with a typed
+ * `RemoveMarketplaceOutcome`. Standalone mode emits its notify() rows on the way
+ * through and its outcome is discarded by the entrypoint above; the declared
+ * return type is what proves the orchestrated arms never yield `undefined`
+ * (WR-01).
+ */
+async function runRemoveOutcome(
+  opts: RemoveMarketplaceOptions,
+  orchestrated: boolean,
+): Promise<RemoveMarketplaceOutcome> {
+  const cascade = opts.cascade ?? cascadeUnstagePlugin;
 
   // MR-1 + ATTR-06: resolve scope and enforce the missing-marketplace
   // precondition. On a miss the helper has already emitted the standalone
@@ -685,7 +714,7 @@ export async function removeMarketplace(
     projectLocations,
     orchestrated,
   );
-  if (resolved === undefined || "status" in resolved) {
+  if ("status" in resolved) {
     return resolved;
   }
 
@@ -768,23 +797,35 @@ export async function removeMarketplace(
     });
   }
 
-  if (orchestrated) {
-    return { status: "removed", name: opts.name, unstaged: successfullyUnstaged };
+  if (!orchestrated) {
+    emitCleanRemoval(opts, resolved.scope, successfullyUnstaged);
   }
 
-  // CMC-31 CLEAN (D-22-02): mp.status="removed"; plugins[] carries one
-  // PluginUninstalledMessage per successfullyUnstaged plugin (○ icon). The
-  // `/reload to pick up changes` trailer is computed by notify() per
-  // D-22-01 and fires iff >=1 plugin was unstaged (an `uninstalled` row is
-  // a Pi-visible state change). An empty remove leaves successfullyUnstaged
-  // == [] -> plugins: [] -> header-only with no trailer (G-MIL-02).
-  // OUT-07 / D-12: one marketplace block -> Single 1-tuple. The `(removed)`
-  // header renders via the central renderMpHeader seam the spine reuses; the
-  // `uninstalled` child rows dispatch through REMOVE_CONTEXT.
+  return { status: "removed", name: opts.name, unstaged: successfullyUnstaged };
+}
+
+/**
+ * CMC-31 CLEAN (D-22-02): the standalone row for a removal whose whole plugin
+ * cascade succeeded. mp.status="removed"; plugins[] carries one
+ * PluginUninstalledMessage per successfullyUnstaged plugin (○ icon). The
+ * `/reload to pick up changes` trailer is computed by notify() per
+ * D-22-01 and fires iff >=1 plugin was unstaged (an `uninstalled` row is
+ * a Pi-visible state change). An empty remove leaves successfullyUnstaged
+ * == [] -> plugins: [] -> header-only with no trailer (G-MIL-02).
+ *
+ * OUT-07 / D-12: one marketplace block -> Single 1-tuple. The `(removed)`
+ * header renders via the central renderMpHeader seam the spine reuses; the
+ * `uninstalled` child rows dispatch through REMOVE_CONTEXT.
+ */
+function emitCleanRemoval(
+  opts: RemoveMarketplaceOptions,
+  scope: Scope,
+  successfullyUnstaged: readonly string[],
+): void {
   const removedRows: Single<MarketplaceRows<RemoveRowMsg>> = [
     {
       name: opts.name,
-      scope: resolved.scope,
+      scope,
       status: "removed",
       plugins: successfullyUnstaged.map((name): PluginUninstalledMessage => ({
         status: "uninstalled",
@@ -796,5 +837,4 @@ export async function removeMarketplace(
     },
   ];
   notifyWithContext(opts.ctx, opts.pi, REMOVE_CONTEXT, removedRows);
-  return undefined;
 }

@@ -1709,7 +1709,6 @@ describe("emitMarketplaceNotAdded", () => {
     });
 
     // assert
-    assert.ok(failure !== undefined);
     assert.equal(failure.status, "failed");
     assert.equal(failure.reason, "marketplace not added");
     assert.ok(failure.error instanceof MarketplaceNotFoundError);
@@ -1736,7 +1735,6 @@ describe("emitMarketplaceNotAdded", () => {
     });
 
     // assert
-    assert.ok(failure !== undefined);
     assert.equal(failure.status, "failed");
     assert.equal(failure.reason, "marketplace not added");
     assert.ok(failure.error instanceof MarketplaceNotFoundError);
@@ -1748,7 +1746,7 @@ describe("emitMarketplaceNotAdded", () => {
     verify(pi);
   });
 
-  test("emits the exact scoped standalone row and returns undefined", () => {
+  test("emits the exact scoped standalone row and still answers with the typed failure", () => {
     // arrange
     const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
     const ui = mock<ExtensionContext["ui"]>({ exactParams: true, name: "extension UI" });
@@ -1778,7 +1776,12 @@ describe("emitMarketplaceNotAdded", () => {
     });
 
     // assert
-    assert.equal(failure, undefined);
+    // WR-01: the standalone arm emits the row AND answers with the same typed
+    // failure the orchestrated arm builds; the standalone entrypoints discard it.
+    assert.equal(failure.status, "failed");
+    assert.equal(failure.reason, "marketplace not added");
+    assert.ok(failure.error instanceof MarketplaceNotFoundError);
+    assert.deepStrictEqual(failure.error.scopes, ["user"]);
     verify(ctx);
     verify(ui);
     verify(pi);
@@ -1814,7 +1817,10 @@ describe("emitMarketplaceNotAdded", () => {
     });
 
     // assert
-    assert.equal(failure, undefined);
+    assert.equal(failure.status, "failed");
+    assert.equal(failure.reason, "marketplace not added");
+    assert.ok(failure.error instanceof MarketplaceNotFoundError);
+    assert.deepStrictEqual(failure.error.scopes, ["project", "user"]);
     verify(ctx);
     verify(ui);
     verify(pi);

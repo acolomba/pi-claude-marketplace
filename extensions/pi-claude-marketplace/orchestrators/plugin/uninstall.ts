@@ -208,7 +208,7 @@ function emitCascadeFailure(args: {
   removedVersion: string | undefined;
   staleWorkflowCommand: boolean;
   orchestrated: boolean;
-}): UninstallPluginOutcome | undefined {
+}): UninstallPluginOutcome {
   const {
     ctx,
     pi,
@@ -220,13 +220,14 @@ function emitCascadeFailure(args: {
     staleWorkflowCommand,
     orchestrated,
   } = args;
+  const outcome: UninstallPluginOutcome = {
+    status: "failed",
+    reason: narrowCascadeFailure(cause),
+    error: cause,
+    cause: errorMessage(cause),
+  };
   if (orchestrated) {
-    return {
-      status: "failed",
-      reason: narrowCascadeFailure(cause),
-      error: cause,
-      cause: errorMessage(cause),
-    };
+    return outcome;
   }
 
   const failedRow: PluginFailedMessage = {
@@ -256,7 +257,8 @@ function emitCascadeFailure(args: {
       plugins: [failedRow],
     },
   ]);
-  return undefined;
+
+  return outcome;
 }
 
 /**
@@ -272,12 +274,18 @@ function emitConfigInvalid(args: {
   plugin: string;
   configBasename: string;
   orchestrated: boolean;
-}): UninstallPluginOutcome | undefined {
+}): UninstallPluginOutcome {
   const { ctx, pi, marketplace, scope, plugin, configBasename, orchestrated } = args;
   const cause = `Config file "${configBasename}" failed schema validation.`;
   const invalidErr = new Error(cause);
+  const outcome: UninstallPluginOutcome = {
+    status: "failed",
+    reason: "invalid manifest",
+    error: invalidErr,
+    cause,
+  };
   if (orchestrated) {
-    return { status: "failed", reason: "invalid manifest", error: invalidErr, cause };
+    return outcome;
   }
 
   notifyWithContext(ctx, pi, UNINSTALL_CONTEXT, [
@@ -297,7 +305,8 @@ function emitConfigInvalid(args: {
       ],
     },
   ]);
-  return undefined;
+
+  return outcome;
 }
 
 /**
@@ -499,7 +508,7 @@ function emitAlreadyGone(args: {
   readonly plugin: string;
   readonly orchestrated: boolean;
   readonly notInstalledAt?: Scope;
-}): UninstallPluginOutcome | undefined {
+}): UninstallPluginOutcome {
   const { ctx, pi, marketplace, scope, plugin, orchestrated } = args;
   if (orchestrated) {
     return { status: "converged", name: plugin };
@@ -515,7 +524,8 @@ function emitAlreadyGone(args: {
   notifyWithContext(ctx, pi, UNINSTALL_CONTEXT, [
     { name: marketplace, scope, plugins: [failedRow] },
   ]);
-  return undefined;
+
+  return { status: "converged", name: plugin };
 }
 
 /**
@@ -531,18 +541,16 @@ function emitAlreadyGone(args: {
  * overload stays last so a caller holding the entrypoint in a
  * single-signature variable keeps its `undefined` arm.
  *
- * WR-01: what the overload proves and what it does not. It removes the
- * `undefined` arm AT THE CALL SITE, which is what makes a consumer's
- * absent-outcome guard a compile error. It does NOT prove the body honours it:
+ * WR-01: the overload is backed by a compile-time check, not by an assertion.
+ * The body lives in `runUninstallOutcome`, whose DECLARED return type is
+ * `Promise<UninstallPluginOutcome>`, so TypeScript checks every return statement
+ * and the fall-off-the-end path in it: an arm that yielded `undefined` is a
+ * compile error there. A narrower overload return alone would not give that --
  * TypeScript checks an overload signature against the implementation only
- * loosely, and a narrower overload return is accepted with no diagnostic even
- * when the implementation demonstrably returns the excluded value on that path.
- * The narrowing is therefore an ASSERTION about this module, relocated from the
- * consumer to the producer's signature -- not a proof. Every orchestrated arm
- * below does return a defined outcome today, and the reconcile owner suite
- * drives this entrypoint in orchestrated mode across its whole outcome matrix
- * and asserts the complete cascade, so a regression on an exercised path fails
- * there. An arm the matrix does not reach is not covered by either.
+ * loosely, and accepts a narrowed return with no diagnostic even when the
+ * implementation demonstrably returns the excluded value. This entrypoint is the
+ * thin mode switch that reintroduces `undefined` for the standalone arm and for
+ * that arm only, so the narrow overload can never outrun the body.
  */
 export function uninstallPlugin(
   opts: UninstallPluginOptions & { notifications: { mode: "orchestrated" } },
@@ -553,9 +561,25 @@ export function uninstallPlugin(
 export async function uninstallPlugin(
   opts: UninstallPluginOptions,
 ): Promise<UninstallPluginOutcome | undefined> {
+  const orchestrated = opts.notifications?.mode === "orchestrated";
+  const outcome = await runUninstallOutcome(opts, orchestrated);
+
+  return orchestrated ? outcome : undefined;
+}
+
+/**
+ * The whole uninstall body, always answering with a typed
+ * `UninstallPluginOutcome`. Standalone mode emits its notify() rows on the way
+ * through and its outcome is discarded by the entrypoint above; the declared
+ * return type is what proves the orchestrated arms never yield `undefined`
+ * (WR-01).
+ */
+async function runUninstallOutcome(
+  opts: UninstallPluginOptions,
+  orchestrated: boolean,
+): Promise<UninstallPluginOutcome> {
   const { ctx, pi, cwd, marketplace, plugin } = opts;
   const cascade = opts.cascade ?? cascadeUnstagePlugin;
-  const orchestrated = opts.notifications?.mode === "orchestrated";
 
   // ATTR-04 / SCOPE-01 / M3 / M4: the discriminated cross-scope resolver
   // distinguishes "marketplace container absent" (loud `{marketplace not added}`) from
@@ -794,23 +818,22 @@ export async function uninstallPlugin(
   // closure ran). The renderer suppresses the `v<version>` token on
   // undefined or empty anyway, so the empty-version edge case is handled
   // structurally.
-  if (orchestrated) {
-    return {
-      status: "uninstalled",
-      name: plugin,
-      ...(removedVersion !== undefined && { version: removedVersion }),
-    };
+  if (!orchestrated) {
+    const uninstalledRow = composeUninstalledRow(plugin, removedVersion, retiredWorkflowCommand);
+    notifyWithContext(ctx, pi, UNINSTALL_CONTEXT, [
+      {
+        name: marketplace,
+        scope,
+        plugins: [uninstalledRow],
+      },
+    ]);
   }
 
-  const uninstalledRow = composeUninstalledRow(plugin, removedVersion, retiredWorkflowCommand);
-  notifyWithContext(ctx, pi, UNINSTALL_CONTEXT, [
-    {
-      name: marketplace,
-      scope,
-      plugins: [uninstalledRow],
-    },
-  ]);
-  return undefined;
+  return {
+    status: "uninstalled",
+    name: plugin,
+    ...(removedVersion !== undefined && { version: removedVersion }),
+  };
 }
 
 /**

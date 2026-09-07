@@ -1238,8 +1238,10 @@ export function applyPartialCascadeFold(
  *
  * RECON-03 / D-47-A: orchestrated callers get the typed failure carrying the
  * structural `marketplace not added` sentinel; standalone callers get the canonical
- * `MarketplaceNotAddedMessage` row and `undefined`, because the row IS the
- * outcome on that path.
+ * `MarketplaceNotAddedMessage` row emitted first, and then the SAME typed
+ * failure, which they discard -- the row is what the operator sees on that path.
+ * Returning it unconditionally is what lets both callers' bodies declare a
+ * narrow `Promise<TOutcome>` return the compiler can check (WR-01).
  *
  * `uninstall.ts` and `enable-disable.ts` both reach this state. The routing
  * policy is one decision, so it lives here once; the return shape is the
@@ -1258,25 +1260,24 @@ export function emitMarketplaceNotAdded(args: {
   readonly marketplace: string;
   readonly requestedScope: Scope | undefined;
   readonly orchestrated: boolean;
-}):
-  | {
-      readonly status: "failed";
-      readonly reason: "marketplace not added";
-      readonly error: Error;
-      readonly cause: string;
-    }
-  | undefined {
+}): {
+  readonly status: "failed";
+  readonly reason: "marketplace not added";
+  readonly error: Error;
+  readonly cause: string;
+} {
   const { ctx, pi, marketplace, requestedScope, orchestrated } = args;
+  const scopeList: readonly Scope[] =
+    requestedScope === undefined ? ["project", "user"] : [requestedScope];
+  const err = new MarketplaceNotFoundError(marketplace, scopeList);
+  const outcome = {
+    status: "failed",
+    reason: "marketplace not added",
+    error: err,
+    cause: errorMessage(err),
+  } as const;
   if (orchestrated) {
-    const scopeList: readonly Scope[] =
-      requestedScope === undefined ? ["project", "user"] : [requestedScope];
-    const err = new MarketplaceNotFoundError(marketplace, scopeList);
-    return {
-      status: "failed",
-      reason: "marketplace not added",
-      error: err,
-      cause: errorMessage(err),
-    };
+    return outcome;
   }
 
   notify(ctx, pi, {
@@ -1284,7 +1285,8 @@ export function emitMarketplaceNotAdded(args: {
     name: marketplace,
     ...(requestedScope !== undefined && { scope: requestedScope }),
   });
-  return undefined;
+
+  return outcome;
 }
 
 /**
