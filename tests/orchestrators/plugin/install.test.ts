@@ -9251,6 +9251,9 @@ test("retry proof: install: non-containment undo failure reports ordered rollbac
         retryStagingMkdirPrefix(locations.commandsStagingDir),
         RETRY_STAGING_UUID,
       );
+      assert.ok(first.error.cause instanceof Error);
+      assert.strictEqual(first.error.cause.message, expectedCause);
+      assert.strictEqual(first.error.cause.cause, undefined);
       assert.deepStrictEqual(second, {
         declaresAgents: false,
         declaresMcp: false,
@@ -9387,6 +9390,7 @@ test("retry proof: install: containment failure preserves the refused residue an
       assert.strictEqual(first.error.linkPath, skillTarget);
       assert.strictEqual(first.error.linkTarget, "/tmp/retry-proof-decoy");
       assert.strictEqual(first.error.message, expectedRefusal);
+      assert.strictEqual(first.error.cause, undefined);
       assert.strictEqual(first.cause, `${expectedRefusal}\n\ncause: ${expectedRefusal}`);
       assert.deepStrictEqual(second, {
         declaresAgents: false,
@@ -9518,6 +9522,7 @@ test("retry proof: install: state commit race after staged work retries from unc
         first.error.message,
         /^installPlugin: internal error -- the state phase left no record for plugin "retryable" to disable\.$/,
       );
+      assert.strictEqual(first.error.cause, undefined);
       assert.strictEqual(first.cause, first.error.message);
       assert.deepStrictEqual(second, {
         declaresAgents: false,
