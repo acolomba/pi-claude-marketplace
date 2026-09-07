@@ -308,7 +308,10 @@ test("CMC-10: empty state in both scopes renders V2 `(no marketplaces)` sentinel
     await listPlugins({ ctx, pi, cwd });
     // assert
     assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.message, "(no marketplaces)");
+    assert.equal(
+      notifications[0]!.message,
+      ["(no marketplaces)", "", "Plugin list: 0 successes"].join("\n"),
+    );
     assert.equal(notifications[0]!.severity, undefined);
 
     verify(ctx);
@@ -366,6 +369,8 @@ test("PL-1: no flags = every bucket (installed, available, unavailable)", async 
         "  ● alpha v1.0.0 (installed)",
         "  ○ beta v2.0.0 (available)",
         "  ⊘ gamma v3.0.0 (unavailable) {unsupported source}",
+        "",
+        "Plugin list: 3 successes",
       ].join("\n"),
     );
 
@@ -3386,7 +3391,12 @@ test("plugin list manifest absent: INV-01: an enabled, fully supported record ab
     assert.equal(notifications.length, 1);
     assert.equal(
       notifications[0]!.message,
-      ["● mp1 [user]", "  ● alpha v1.0.0 (installed) {not in manifest}"].join("\n"),
+      [
+        "● mp1 [user]",
+        "  ● alpha v1.0.0 (installed) {not in manifest}",
+        "",
+        "Plugin list: 1 success",
+      ].join("\n"),
     );
 
     verify(ctx);
