@@ -16,8 +16,12 @@
 //       * delegates to registerListMarketplacesTool + registerListPluginsTool.
 //
 // `process.cwd()` is acceptable here at the registration glue layer --
-// this is the one site where it is sanctioned. The cwd captured here is
-// per-command-registration.
+// this is the one site where it is sanctioned. It is read PER COMPLETION
+// INVOCATION, not once at registration: the call sits inside the
+// `getArgumentCompletions` arrow, so nothing is closed over and each keystroke
+// resolves against the process's current working directory. That is the
+// intended semantic -- a completion should offer the marketplaces and plugins
+// visible from where the operator IS, not from wherever the session started.
 //
 // BLOCK C: this file imports from edge/* (sibling), orchestrators/* (one
 // allowed up-import), shared/* (leaf), and the Pi peer dep. The
@@ -101,9 +105,12 @@ export function registerClaudePluginCommand(pi: ExtensionAPI, deps: EdgeDeps): v
   pi.registerCommand("claude:plugin", {
     description: COMMAND_DESCRIPTION,
     handler: (args, ctx) => routeClaudePlugin(args, handlers, ctx),
-    // This `process.cwd()` is the single sanctioned site.
-    // Captured at registration time; threads through every keystroke's
-    // completion lookup via the closed-over resolver.
+    // This `process.cwd()` is the single sanctioned site. It is evaluated
+    // inside this arrow, so every keystroke's completion lookup builds its
+    // resolver from the CURRENT working directory rather than from a value
+    // frozen at registration. Project-scope locations therefore follow the
+    // process, which is what makes the offered names match the operator's
+    // present location.
     getArgumentCompletions: (prefix) =>
       getArgumentCompletions(prefix, makeLocationsResolver(process.cwd())),
   });
