@@ -13,6 +13,7 @@ import {
   appendPendingSessionStartContext,
   bumpEpoch,
   clearPendingSessionStartContext,
+  createRoutingStateOperations,
   currentEpoch,
   deleteParsedConfig,
   getRoutingBucket,
@@ -24,6 +25,7 @@ import {
   setParsedConfig,
   setRoutingBucket,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
+import { createHooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 
 import type {
@@ -657,18 +659,121 @@ test("resets every routing state cell through the composite lifecycle", (t) => {
   });
 });
 
-test("binds routing operations to one required runtime instance", async () => {
+test("binds routing operations to one required runtime instance", (t) => {
   // arrange
-  const routingStateModule = await import(
-    "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts"
-  );
+  resetRoutingState();
+  t.after(() => {
+    resetRoutingState();
+  });
+  const runtime = createHooksRuntime();
+  const operations = createRoutingStateOperations(runtime);
+  const cacheKey = "project\u0000catalog-bound\u0000plugin-bound";
+  const cacheEntry = {
+    scope: "project",
+    marketplace: "catalog-bound",
+    pluginId: "plugin-bound",
+    resolvedSource: asAbsolutePluginRoot("/plugins/catalog-bound/plugin-bound"),
+    config: {
+      PreToolUse: [
+        {
+          hooks: [{ type: "command", command: "echo bound" }],
+        },
+      ],
+    },
+    ifPredicates: new Map([["PreToolUse|0|0", { kind: "match-all" }]]),
+  } satisfies CacheEntry;
+  const route = {
+    scope: "project",
+    marketplace: "catalog-bound",
+    pluginId: "plugin-bound",
+    resolvedSource: asAbsolutePluginRoot("/plugins/catalog-bound/plugin-bound"),
+    claudeEvent: "PreToolUse",
+    matcher: { kind: "match-all" },
+    rawMatcher: "",
+    handlerDecl: { type: "command", command: "echo bound" },
+    declarationIndex: 0,
+    ifPredicate: { kind: "match-all" },
+  } satisfies RoutingEntry;
+  const pendingEntry = {
+    context: "bound context",
+    pluginId: "plugin-bound",
+    marketplace: "catalog-bound",
+    scope: "project",
+  } satisfies PendingSessionStartContext;
 
   // act
-  const createRoutingStateOperations = Reflect.get(
-    routingStateModule,
-    "createRoutingStateOperations",
-  );
+  operations.setParsedConfig(cacheKey, cacheEntry);
+  operations.setRoutingBucket("PreToolUse", [route]);
+  operations.appendPendingSessionStartContext(pendingEntry);
+  const explicitEpoch = operations.bumpEpoch();
+  setParsedConfig(cacheKey, cacheEntry);
+  setRoutingBucket("PreToolUse", [route]);
+  appendPendingSessionStartContext(pendingEntry);
+  const transitionEpoch = bumpEpoch();
+  const explicitState = {
+    epoch: operations.currentEpoch(),
+    parsed: Array.from(operations.parsedConfigEntries()),
+    routes: Array.from(operations.routingTableEntries()),
+    pending: operations.pendingSessionStartContextEntries(),
+  };
+  const transitionState = {
+    epoch: currentEpoch(),
+    parsed: Array.from(parsedConfigEntries()),
+    routes: Array.from(routingTableEntries()),
+    pending: pendingSessionStartContextEntries(),
+  };
+  operations.deleteParsedConfig(cacheKey);
+  operations.setRoutingBucket("PreToolUse", []);
+  operations.clearPendingSessionStartContext();
+  operations.bumpEpoch();
 
   // assert
-  assert.strictEqual(typeof createRoutingStateOperations, "function");
+  assert.strictEqual(explicitEpoch, 1);
+  assert.strictEqual(transitionEpoch, 1);
+  assert.deepStrictEqual(explicitState, transitionState);
+  assert.deepStrictEqual(
+    {
+      epoch: currentEpoch(),
+      parsed: Array.from(parsedConfigEntries()),
+      routes: Array.from(routingTableEntries()),
+      pending: pendingSessionStartContextEntries(),
+    },
+    transitionState,
+  );
+});
+
+test("resetEpoch preserves the transition runtime's other routing state", (t) => {
+  // arrange
+  resetRoutingState();
+  t.after(() => {
+    resetRoutingState();
+  });
+  const cacheKey = "user\u0000catalog-preserved\u0000plugin-preserved";
+  const cacheEntry = {
+    scope: "user",
+    marketplace: "catalog-preserved",
+    pluginId: "plugin-preserved",
+    resolvedSource: asAbsolutePluginRoot("/plugins/catalog-preserved/plugin-preserved"),
+    config: {},
+    ifPredicates: new Map(),
+  } satisfies CacheEntry;
+  const pendingEntry = {
+    context: "preserved context",
+    pluginId: "plugin-preserved",
+    marketplace: "catalog-preserved",
+    scope: "user",
+  } satisfies PendingSessionStartContext;
+  setParsedConfig(cacheKey, cacheEntry);
+  setRoutingBucket("SessionEnd", []);
+  appendPendingSessionStartContext(pendingEntry);
+  bumpEpoch();
+
+  // act
+  resetEpoch();
+
+  // assert
+  assert.strictEqual(currentEpoch(), 0);
+  assert.deepStrictEqual(Array.from(parsedConfigEntries()), [[cacheKey, cacheEntry]]);
+  assert.deepStrictEqual(Array.from(routingTableEntries()), [["SessionEnd", []]]);
+  assert.deepStrictEqual(pendingSessionStartContextEntries(), [pendingEntry]);
 });

@@ -1,9 +1,7 @@
 // bridges/hooks/routing-state.ts
 //
-// Leaf-ward home for the hooks bridge's shared module state: the per-event
-// routing table, the parsed-config cache, the live epoch cell, and the
-// SessionStart additionalContext buffer (D-59-02 / D-59-03), plus the record
-// shapes those cells are keyed on.
+// Leaf-ward home for the hooks bridge's routing operations and the record
+// shapes those operations use (D-59-02 / D-59-03).
 //
 // The state lives here rather than in `event-router.ts` so the dispatch
 // chain can read it without importing the hub back. `dispatch.ts`,
@@ -14,17 +12,16 @@
 // remaining edge one-directional, and a one-directional edge cannot cycle.
 //
 // INVARIANT that keeps it that way: this module imports only `domain/`,
-// `shared/`, and the same-zone `if-field/` (itself leaf-ward relative to
-// dispatch). It must never import `event-router.ts`, `dispatch.ts`,
+// `shared/`, `runtime.ts`, and the same-zone `if-field/` (itself leaf-ward
+// relative to dispatch). It must never import `event-router.ts`, `dispatch.ts`,
 // `dispatch-exec.ts`, `event-adapters.ts`, `settle.ts`, or
 // `async-rewake/registry.ts` -- any one of those import edges restores the
 // cycle knot this module exists to remove. `npm run fallow` gates it.
 //
-// ESM imported bindings are read-only, so a reassigned cell can only live
-// here if its writes live here too. The two Maps are `const` and mutated in
-// place, so they are exported directly; `liveEpoch` and
-// `pendingSessionStartContext` are reassigned and stay module-private behind
-// named mutators.
+// Current production callers still use the no-runtime signatures below. They
+// all delegate to one private eager transition binding. Plans 05-09 through
+// 05-30 migrate those callers to explicit runtime ownership; Plan 05-31 owns
+// deletion of the compatibility resets after that census reaches zero.
 
 import { type BucketAEvent } from "../../domain/components/hook-events.ts";
 import {
@@ -36,6 +33,7 @@ import { type AbsolutePluginRoot } from "../../domain/plugin-root.ts";
 import { type Scope } from "../../shared/types.ts";
 
 import { type IfPredicate } from "./if-field/index.ts";
+import { createHooksRuntime, type HooksRuntime } from "./runtime.ts";
 
 /**
  * Flattened (event, group, handler) routing slot. The dispatch core walks
@@ -145,22 +143,49 @@ export interface PendingSessionStartContext {
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-// Module-state cells (D-59-02 / D-59-03)
-//
-// Every cell here is module-private and reached through the named accessors
-// below. `const` Maps have interior mutability, so exporting one would let
-// any importer write it without the declaring module having a say -- which
-// is how the read path for `routingTable` came to run through an accessor
-// in some call sites and the raw Map in others.
+// Runtime-bound operations and bounded production transition
 // ──────────────────────────────────────────────────────────────────────────
 
-const parsedConfigCache = new Map<string, CacheEntry>();
+/** Routing behavior bound to one required hooks runtime. */
+export interface RoutingStateOperations {
+  readonly currentEpoch: () => number;
+  readonly bumpEpoch: () => number;
+  readonly appendPendingSessionStartContext: (entry: PendingSessionStartContext) => void;
+  readonly pendingSessionStartContextEntries: () => readonly PendingSessionStartContext[];
+  readonly clearPendingSessionStartContext: () => void;
+  readonly setParsedConfig: (key: string, entry: CacheEntry) => void;
+  readonly deleteParsedConfig: (key: string) => void;
+  readonly parsedConfigEntries: () => ReadonlyMap<string, CacheEntry>;
+  readonly getRoutingBucket: (event: BucketAEvent) => readonly RoutingEntry[];
+  readonly setRoutingBucket: (
+    event: BucketAEvent,
+    entries: readonly RoutingEntry[],
+  ) => void;
+  readonly routingTableEntries: () => ReadonlyMap<BucketAEvent, readonly RoutingEntry[]>;
+}
 
-const routingTable = new Map<BucketAEvent, ReadonlyArray<RoutingEntry>>();
+/** Binds routing behavior to an explicitly supplied runtime lifetime. */
+export function createRoutingStateOperations(runtime: HooksRuntime): RoutingStateOperations {
+  return {
+    currentEpoch: runtime.currentGeneration,
+    bumpEpoch: runtime.advanceGeneration,
+    appendPendingSessionStartContext: runtime.appendPendingSessionStartContext,
+    pendingSessionStartContextEntries: runtime.pendingSessionStartContextEntries,
+    clearPendingSessionStartContext: runtime.preparePendingContextForRegistration,
+    setParsedConfig: runtime.setParsedConfig,
+    deleteParsedConfig: runtime.deleteParsedConfig,
+    parsedConfigEntries: runtime.parsedConfigEntries,
+    getRoutingBucket: runtime.getRoutingBucket,
+    setRoutingBucket: runtime.setRoutingBucket,
+    routingTableEntries: runtime.routingTableEntries,
+  };
+}
 
-let liveEpoch = 0;
+let transitionRoutingState = createRoutingStateOperations(createHooksRuntime());
 
-let pendingSessionStartContext: PendingSessionStartContext[] = [];
+function replaceTransitionRoutingState(): void {
+  transitionRoutingState = createRoutingStateOperations(createHooksRuntime());
+}
 
 /**
  * D-59-03: read-only accessor for the live epoch cell. Used by the
@@ -169,28 +194,39 @@ let pendingSessionStartContext: PendingSessionStartContext[] = [];
  * event) and by tests that pin the no-op-on-mismatch contract.
  */
 export function currentEpoch(): number {
-  return liveEpoch;
+  return transitionRoutingState.currentEpoch();
 }
 
 /**
- * Increment the epoch and return the new value. A mutator rather than an
- * exported `let`: ESM imported bindings are read-only, so the cell can only
- * live in this leaf if its writes live here too. Called on every
- * `registerHooksBridge` entry, which captures the returned value as the
- * epoch its handler closures compare against.
+ * Increment the transition runtime's epoch and return the new value. Called
+ * on every `registerHooksBridge` entry, which captures the returned value as
+ * the epoch its handler closures compare against.
  */
 export function bumpEpoch(): number {
-  liveEpoch += 1;
-  return liveEpoch;
+  return transitionRoutingState.bumpEpoch();
 }
 
 /**
- * Return the epoch to its initial value. Exists for the same read-only
- * imported-binding reason as `bumpEpoch`; the test reset seam is its only
- * caller.
+ * Return only the transition epoch to its initial value. This compatibility
+ * reset remains for unmigrated callers until Plan 05-31; other routing state
+ * survives the runtime replacement.
  */
 export function resetEpoch(): void {
-  liveEpoch = 0;
+  const parsedEntries = transitionRoutingState.parsedConfigEntries();
+  const routingEntries = transitionRoutingState.routingTableEntries();
+  const pendingEntries = transitionRoutingState.pendingSessionStartContextEntries();
+  replaceTransitionRoutingState();
+  for (const [key, entry] of parsedEntries) {
+    transitionRoutingState.setParsedConfig(key, entry);
+  }
+
+  for (const [event, entries] of routingEntries) {
+    transitionRoutingState.setRoutingBucket(event, entries);
+  }
+
+  for (const entry of pendingEntries) {
+    transitionRoutingState.appendPendingSessionStartContext(entry);
+  }
 }
 
 /**
@@ -208,29 +244,21 @@ export function resetEpoch(): void {
  * attribution -- the skipped-empty arm just discards both.
  */
 export function appendPendingSessionStartContext(entry: PendingSessionStartContext): void {
-  if (entry.context.length === 0) {
-    return;
-  }
-
-  pendingSessionStartContext.push(entry);
+  transitionRoutingState.appendPendingSessionStartContext(entry);
 }
 
 /**
- * Read-only view of the pending buffer. The buffer cell is reassigned on
- * clear, so importers cannot bind it directly and read it through this
- * accessor instead.
+ * Read-only snapshot of the pending buffer.
  */
 export function pendingSessionStartContextEntries(): ReadonlyArray<PendingSessionStartContext> {
-  return pendingSessionStartContext;
+  return transitionRoutingState.pendingSessionStartContextEntries();
 }
 
 /**
- * Empty the pending buffer. Reassignment rather than in-place truncation is
- * why this is a named mutator: an importing module cannot write an imported
- * binding, so the drain path and the `/reload` hygiene path both call here.
+ * Empty the transition runtime's pending buffer.
  */
 export function clearPendingSessionStartContext(): void {
-  pendingSessionStartContext = [];
+  transitionRoutingState.clearPendingSessionStartContext();
 }
 
 /**
@@ -238,7 +266,7 @@ export function clearPendingSessionStartContext(): void {
  * overwrites the existing entry rather than duplicating it.
  */
 export function setParsedConfig(key: string, entry: CacheEntry): void {
-  parsedConfigCache.set(key, entry);
+  transitionRoutingState.setParsedConfig(key, entry);
 }
 
 /**
@@ -247,15 +275,7 @@ export function setParsedConfig(key: string, entry: CacheEntry): void {
  * retry.
  */
 export function deleteParsedConfig(key: string): void {
-  parsedConfigCache.delete(key);
-}
-
-/**
- * Drop every parsed config. Paired with the two mutators above so the cache
- * has one write surface.
- */
-function clearParsedConfigCache(): void {
-  parsedConfigCache.clear();
+  transitionRoutingState.deleteParsedConfig(key);
 }
 
 /**
@@ -263,16 +283,15 @@ function clearParsedConfigCache(): void {
  * needs every value) and the phantom-entry sweep (which needs every key).
  */
 export function parsedConfigEntries(): ReadonlyMap<string, CacheEntry> {
-  return parsedConfigCache;
+  return transitionRoutingState.parsedConfigEntries();
 }
 
 /**
  * Read one per-event routing bucket. Returns the bucket or an empty array;
- * never undefined. The `routingTable` cell is module-private, so every
- * consumer reaches a bucket through here.
+ * never undefined.
  */
 export function getRoutingBucket(claudeEvent: BucketAEvent): ReadonlyArray<RoutingEntry> {
-  return routingTable.get(claudeEvent) ?? [];
+  return transitionRoutingState.getRoutingBucket(claudeEvent);
 }
 
 /**
@@ -286,15 +305,7 @@ export function setRoutingBucket(
   claudeEvent: BucketAEvent,
   entries: ReadonlyArray<RoutingEntry>,
 ): void {
-  routingTable.set(claudeEvent, entries);
-}
-
-/**
- * Drop every bucket. Paired with `setRoutingBucket` so the rebuild path and
- * the test-reset path share one write surface.
- */
-function clearRoutingTable(): void {
-  routingTable.clear();
+  transitionRoutingState.setRoutingBucket(claudeEvent, entries);
 }
 
 /**
@@ -303,23 +314,15 @@ function clearRoutingTable(): void {
  * collection cell in this module.
  */
 export function routingTableEntries(): ReadonlyMap<BucketAEvent, ReadonlyArray<RoutingEntry>> {
-  return routingTable;
+  return transitionRoutingState.routingTableEntries();
 }
 
 /**
- * Clear every cell this module owns: the epoch, the parsed-config cache, the
- * routing table and the pending SessionStart buffer.
+ * Replace the private transition runtime with a fresh runtime.
  *
- * A public lifecycle operation rather than a test hole. This module is the one
- * place that knows the full cell inventory, so a caller that wants a clean
- * baseline should say so once here instead of composing four clears and
- * silently missing the fifth when one is added. Its only caller today is test
- * setup, which is what a reset is for; the four clears it composes are each
- * already public.
+ * This compatibility reset remains only for unmigrated callers and is owned
+ * for deletion by Plan 05-31 after the caller census reaches zero.
  */
 export function resetRoutingState(): void {
-  resetEpoch();
-  clearParsedConfigCache();
-  clearRoutingTable();
-  clearPendingSessionStartContext();
+  replaceTransitionRoutingState();
 }
