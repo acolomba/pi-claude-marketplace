@@ -400,17 +400,17 @@ The marketplace-name file schema remains verbatim `schemaVersion: Type.Literal(2
 
 All implementation-relevant claims were verified against current source, CodeGraph call paths, the live revalidation ledger, or locked context. Exact type and file names in recommendations are intentionally discretionary design choices, not asserted current facts.
 
-## Open Questions
+## Resolved Implementation Conditions
 
-1. **Should the marketplace-name in-memory reader survive?**
-   - What we know: current production completion code directly rebuilds names; `getMarketplaceNames` and `memMarketplaceNames` have no production reader, while names-file invalidation remains live. [VERIFIED: current production `rg` census; data.ts:286-325]
-   - What's unclear: the locked wording says preserve disk schemas and invalidation, but does not require retaining a dead memory optimization.
-   - Recommendation: remove the dead memory/read surface after a task-local zero-consumer census; retain the schema and file invalidation. If another concurrent phase introduces a real reader, place it on the new instance instead.
+1. **Marketplace-name memory reader disposition**
+   - Current evidence: production completion code directly rebuilds names; `getMarketplaceNames` and `memMarketplaceNames` have no production reader, while names-file invalidation remains live. [VERIFIED: current production `rg` census; data.ts:286-325]
+   - Binding condition: repeat a production-only consumer census immediately before editing. Remove the memory reader, map, and their artificial cases only when that fresh census is empty. If a genuine production consumer exists, migrate that consumer to the owned completion-cache instance and preserve its complete public behavior. In both branches, retain schema version 2, its path, and real names-file invalidation.
 
-2. **How should old callbacks be disposed across an actual Pi reload?**
-   - What we know: current registration invalidates callbacks with generation checks and performs same-process child shutdown. [VERIFIED: event-router.ts:705-727]
-   - What's unclear: whether Pi disposes registrations between separate extension-factory invocations is an external loader behavior not proven in this session.
-   - Recommendation: preserve the current double-registration stale-callback regression on one runtime. Do not rely on an undocumented loader disposal guarantee; if factory invocations share a `pi` registration lifetime, store/replace the runtime through a production lifecycle owner exposed by that API, not a test reset.
+2. **Stale callback safety across reload**
+   - Current evidence: registration invalidates callbacks with generation checks and performs same-process child shutdown. [VERIFIED: event-router.ts:705-727]
+   - Binding condition: preserve and test same-runtime generation invalidation by registering twice against one `HooksRuntime` and invoking retained callbacks from the first registration. Their safety must not depend on Pi unregistering or disposing callbacks because no such loader contract is proven. Separate extension-factory invocations remain isolated through separate runtime construction; no test reset or speculative disposal API is introduced.
+
+No implementation-relevant research question remains unresolved. These conditions are mandatory inputs to plan decomposition and execution.
 
 ## Environment Availability
 
