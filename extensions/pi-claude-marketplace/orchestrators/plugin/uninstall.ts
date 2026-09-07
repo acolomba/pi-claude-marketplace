@@ -48,7 +48,7 @@ import { rebuildRoutingTables, removePluginConfigFromCache } from "../../bridges
 import { loadConfig } from "../../persistence/config-io.ts";
 import { deletePluginConfigEntry } from "../../persistence/config-write-back.ts";
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
-import { errorMessage, isErrnoException } from "../../shared/errors.ts";
+import { StateLockHeldError, errorMessage, isErrnoException } from "../../shared/errors.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 import { AgentsUnstageFailureError, cascadeUnstagePlugin } from "../marketplace/shared.ts";
@@ -166,6 +166,10 @@ export interface UninstallPluginOptions {
  * Reasons live in `shared/notify.ts::REASONS`.
  */
 function narrowCascadeFailure(cause: Error): ContentReason {
+  if (cause instanceof StateLockHeldError) {
+    return "lock held";
+  }
+
   if (cause instanceof AgentsUnstageFailureError) {
     // ATTR-09 / D-47-B: foreign content owned by another process is a
     // content/ownership mismatch, not a manifest absence, so the truthful
