@@ -288,7 +288,7 @@ function emitPartialFailure(args: {
       ],
     },
   ];
-  notifyWithContext(opts.ctx, opts.pi, REMOVE_CONTEXT, partialRows);
+  notifyWithContext(opts.ctx, opts.pi, REMOVE_CONTEXT, partialRows, undefined, "single");
   return undefined;
 }
 
@@ -560,7 +560,7 @@ function surfaceCfgInvalid(args: {
       plugins: [],
     },
   ];
-  notifyWithContext(opts.ctx, opts.pi, REMOVE_CONTEXT, invalidManifestRows);
+  notifyWithContext(opts.ctx, opts.pi, REMOVE_CONTEXT, invalidManifestRows, undefined, "single");
   return undefined;
 }
 
@@ -789,6 +789,6 @@ export async function removeMarketplace(
       })),
     },
   ];
-  notifyWithContext(opts.ctx, opts.pi, REMOVE_CONTEXT, removedRows);
+  notifyWithContext(opts.ctx, opts.pi, REMOVE_CONTEXT, removedRows, undefined, "single");
   return undefined;
 }
