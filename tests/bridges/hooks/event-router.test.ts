@@ -1447,10 +1447,7 @@ test("same-runtime registration invalidates an earlier callback before lazy hydr
     context,
   );
   const readsAfterStaleCallback = [...readRoots];
-  const liveUpdate = await liveSessionStart(
-    { type: "session_start", reason: "startup" },
-    context,
-  );
+  const liveUpdate = await liveSessionStart({ type: "session_start", reason: "startup" }, context);
 
   // assert
   assert.strictEqual(staleUpdate, undefined);

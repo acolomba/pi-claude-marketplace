@@ -95,9 +95,8 @@ describe("createHooksHydration", () => {
 describe("createHooksRuntime", () => {
   test("re-exports the lifecycle owner factory", async () => {
     // arrange
-    const hooksBarrel = await import(
-      "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts"
-    );
+    const hooksBarrel =
+      await import("../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts");
     const expectedCreateHooksRuntime = definingCreateHooksRuntime;
 
     // act

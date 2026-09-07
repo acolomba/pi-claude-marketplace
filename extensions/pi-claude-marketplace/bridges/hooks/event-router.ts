@@ -1021,22 +1021,13 @@ const NODE_HOOKS_HYDRATION_READER: HooksHydrationReader = {
 
 const NODE_HOOKS_HYDRATION: HooksHydration = {
   async hydrateProjectScopeForCwd(cwd: string): Promise<void> {
-    await hydrateProjectScopeForCwdWith(
-      NODE_HOOKS_HYDRATION_READER,
-      cwd,
-      TRANSITION_ROUTING_STATE,
-    );
+    await hydrateProjectScopeForCwdWith(NODE_HOOKS_HYDRATION_READER, cwd, TRANSITION_ROUTING_STATE);
   },
   async registerHooksBridge(
     pi: ExtensionAPI,
     opts: { ctx: ExtensionContext; cwd: string; executor?: HookExecutor },
   ): Promise<void> {
-    await registerHooksBridgeWith(
-      { kind: "transition" },
-      NODE_HOOKS_HYDRATION_READER,
-      pi,
-      opts,
-    );
+    await registerHooksBridgeWith({ kind: "transition" }, NODE_HOOKS_HYDRATION_READER, pi, opts);
   },
 };
 
