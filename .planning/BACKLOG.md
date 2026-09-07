@@ -888,7 +888,37 @@ Code seams: `shared/notify.ts` (message shapes), `platform/pi-api.ts`
 (re-exports `ExtensionContext`), `edge/router.ts` (the `/claude:plugin`
 command entry point every handler's `ctx` flows through).
 
-## WFLW-01: `workflows` component kind is unrecognized (silent gap)
+## ~~WFLW-01: `workflows` component kind is unrecognized (silent gap)~~ -- CLOSED
+
+**CLOSED 2026-08-29** by `872b2d34` ("feat: detect unsupported workflow
+components", #154). Found stale on 2026-09-07 during a backlog triage sweep.
+`.planning/BACKLOG.md` was edited after the fix landed -- `9abdf9e4` ("docs:
+file upstream review findings to backlog", #160, 2026-09-01) -- without closing
+this entry or [DFEN-01], so both read as open work and were sized for future
+milestones.
+
+The fix went past the mechanical one this entry proposed. Four parts, each
+verified by source read:
+
+- `workflows` joined `UNSUPPORTED_COMPONENT_KINDS` (`domain/resolver.ts:388`).
+  That is the half this entry asked for, and it restores the closed-set
+  guarantee the T-02-25 warning is about.
+- A conventional-path probe was added alongside it:
+  `workflows: [{ relativePath: "workflows", kind: "dir" }]`
+  (`domain/resolver.ts:403`). A bare `<pluginRoot>/workflows/` directory now
+  demotes the plugin even when the manifest never declares the field. This
+  entry did not ask for that half.
+- The reason is its own token rather than the generic
+  `{unsupported component}`. `"workflows"` sits in the closed `REASONS` set
+  (`shared/notify.ts:237`, D-106-04 / WDET-04) with a matching `kindToReason`
+  arm (`shared/probe-classifiers.ts:216`).
+- The schema field landed at `domain/components/plugin.ts:45`.
+
+Still out of scope, exactly as this entry scoped it: a real bridge that
+translates a Claude workflow script into a Pi-native equivalent. No known Pi
+analog exists.
+
+Original report follows.
 
 Surfaced 2026-08-13 auditing Claude Code's official plugin-marketplace and
 plugins-reference docs (`code.claude.com/docs/en/plugins-reference`) against
@@ -994,7 +1024,39 @@ Code seams: `transaction/phase-ledger.ts` (the 5-phase ledger pattern),
 `shared/notify.ts` (a new closed-set reason for a skipped/failed dependency
 install).
 
-## DFEN-01: `defaultEnabled` manifest field unsupported
+## ~~DFEN-01: `defaultEnabled` manifest field unsupported~~ -- CLOSED
+
+**CLOSED 2026-08-19** by `8992d850` ("feat: honor defaultEnabled so a plugin
+can install disabled", #130). Found stale on 2026-09-07 during the same backlog
+triage sweep that closed [WFLW-01], and missed by the same later edit
+(`9abdf9e4`, #160, 2026-09-01).
+
+`defaultEnabled` now threads through ten files: `domain/components/plugin.ts`,
+`domain/resolver.ts`, `orchestrators/plugin/install.ts`,
+`orchestrators/plugin/install.messaging.ts`, `orchestrators/types.ts`,
+`orchestrators/reconcile/apply.ts`,
+`orchestrators/reconcile/apply-outcomes.ts`,
+`edge/handlers/plugin/install.ts`, `shared/notify.ts` and
+`shared/notify-reasons.ts`.
+
+Two details are worth recording, because both go past what this entry asked
+for:
+
+- **The precedence rule shipped whole.** `resolveDefaultEnabled(entry,
+  manifest)` (`domain/resolver.ts:751`) lets the marketplace entry win when it
+  carries a boolean and falls back to the manifest otherwise, which is the rule
+  this entry named. Above both, an explicit user `enabled` declaration wins in
+  either direction and is never overwritten
+  (`install.ts::readDeclaredEnabled`) -- the equivalent of Claude Code's
+  `enabledPlugins` override.
+- **The resolved value is non-optional** on the materializable arms
+  (`domain/resolver.ts:201`, DFEN-02 / DFEN-03), so no consumer re-derives the
+  rule behind a `?? true` fallback. `list` and `info` also predict the outcome
+  through one shared `rowClaimsInstallDisabled` (DFEN-04 / DFEN-05, OUT-02 /
+  OUT-03), so the two surfaces cannot answer it differently. This entry asked
+  for neither.
+
+Original report follows.
 
 Surfaced 2026-08-13 auditing Claude Code's plugins-reference docs. A
 `plugin.json` (or marketplace entry, which takes precedence) can set
