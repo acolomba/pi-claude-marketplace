@@ -335,12 +335,21 @@ interface SeededPlugin {
  * resolver populates `installable.hooksConfigPath` and the install ledger's
  * cache-plus-rebuild path actually executes.
  */
+interface SeededAgentSource {
+  readonly sourceName: string;
+  readonly directory?: string;
+  readonly description?: string;
+  readonly frontmatterName?: string;
+  readonly tools?: string;
+  readonly body?: string;
+}
+
 async function writePluginComponents(
   pluginRoot: string,
   opts: {
     skills?: { sourceName: string; frontmatterName?: string; body?: string }[];
     commands?: { sourceName: string; body?: string }[];
-    agents?: { sourceName: string; frontmatterName?: string; tools?: string; body?: string }[];
+    agents?: readonly SeededAgentSource[];
     mcpServers?: Record<string, unknown>;
     hooksJson?: object;
   },
@@ -365,13 +374,13 @@ async function writePluginComponents(
   }
 
   for (const agent of opts.agents ?? []) {
-    const agentsDir = path.join(pluginRoot, "agents");
+    const agentsDir = path.join(pluginRoot, agent.directory ?? "agents");
     await mkdir(agentsDir, { recursive: true });
     const name = agent.frontmatterName ?? agent.sourceName;
     const tools = agent.tools ?? "Read,Grep";
     await writeFile(
       path.join(agentsDir, `${agent.sourceName}.md`),
-      `---\nname: ${name}\ntools: ${tools}\n---\n\n${agent.body ?? "Body.\n"}`,
+      `---\nname: ${name}\n${agent.description === undefined ? "" : `description: ${agent.description}\n`}tools: ${tools}\n---\n\n${agent.body ?? "Body.\n"}`,
     );
   }
 
@@ -471,6 +480,7 @@ function buildSeededPluginManifest(
 function buildSeededMarketplaceEntry(
   pluginName: string,
   opts: {
+    agentDirectories?: readonly string[];
     rawSourceOverride?: unknown;
     pluginVersion?: string;
     declareDependencies?: boolean;
@@ -480,6 +490,7 @@ function buildSeededMarketplaceEntry(
   return {
     name: pluginName,
     source: opts.rawSourceOverride ?? `./plugins/${pluginName}`,
+    ...(opts.agentDirectories !== undefined && { agents: [...opts.agentDirectories] }),
     ...(opts.pluginVersion !== undefined && { version: opts.pluginVersion }),
     // PI-13: the exact dependency shape is not validated; presence is.
     ...(opts.declareDependencies === true && { dependencies: { "some-other-plugin": "*" } }),
@@ -569,8 +580,10 @@ async function seedPathMarketplaceWithPlugin(opts: {
   skills?: { sourceName: string; frontmatterName?: string; body?: string }[];
   /** Commands -- each becomes <pluginRoot>/commands/<sourceName>.md. */
   commands?: { sourceName: string; body?: string }[];
-  /** Agents -- each becomes <pluginRoot>/agents/<sourceName>.md. */
-  agents?: { sourceName: string; frontmatterName?: string; tools?: string; body?: string }[];
+  /** Declared agent directories; the conventional agents/ directory remains additive. */
+  agentDirectories?: readonly string[];
+  /** Agents -- each defaults to <pluginRoot>/agents/<sourceName>.md. */
+  agents?: readonly SeededAgentSource[];
   /** mcp.json contents at <pluginRoot>/.mcp.json (raw object). */
   mcpServers?: Record<string, unknown>;
   /** PI-13: declares dependencies. The exact shape isn't validated; presence is. */
@@ -943,6 +956,135 @@ test("PI-6: generated skill name collides with another plugin's existing skill -
         notifications[0]?.message ?? "",
         /hello-shared-tool/,
         "must name the colliding skill",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("PDEF-01: install preview detects an agent conflict from a later resolved directory", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-agent-dir-preview-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        agentDirectories: ["declared-agents"],
+        agents: [
+          { directory: "declared-agents", sourceName: "first", description: "First agent" },
+          { sourceName: "later", description: "Later agent" },
+        ],
+        conflictingPriorPlugin: {
+          marketplace: "other-mp",
+          plugin: "world",
+          agentName: `${GENERATED_AGENT_PREFIX}hello-later`,
+        },
+      });
+
+      const { ctx, pi, notifications } = makeCtx({ toolNames: ["subagent"] });
+
+      // act
+      await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      // assert
+      assert.strictEqual(notifications.length, 1);
+      assert.strictEqual(notifications[0]?.severity, "error");
+      assert.match(notifications[0]?.message ?? "", /Cross-plugin name conflict/);
+      assert.match(notifications[0]?.message ?? "", /pi-claude-marketplace-hello-later/);
+      const state = await loadState(locations.extensionRoot);
+      assert.strictEqual(state.marketplaces.mp?.plugins.hello, undefined);
+      await assert.rejects(
+        () => readFile(path.join(locations.agentsDir, `${GENERATED_AGENT_PREFIX}hello-first.md`)),
+        { code: "ENOENT" },
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("PDEF-01: install stages every agent directory and warns on a later duplicate", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-agent-dirs-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      const { pluginRoot } = await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        agentDirectories: ["declared-agents"],
+        agents: [
+          {
+            directory: "declared-agents",
+            sourceName: "shared-first",
+            frontmatterName: "shared",
+            description: "First shared agent",
+            body: "First shared agent.\n",
+          },
+          { sourceName: "later", description: "Later agent", body: "Later agent.\n" },
+          {
+            sourceName: "shared-later",
+            frontmatterName: "shared",
+            description: "Later shared agent",
+            body: "Later shared agent.\n",
+          },
+        ],
+      });
+      const conventionalAgentsDir = path.join(pluginRoot, "agents");
+      const expectedWarning =
+        `agent source "shared" in "${conventionalAgentsDir}" elides to generated name ` +
+        `"${GENERATED_AGENT_PREFIX}hello-shared" already produced by an earlier ` +
+        "componentPaths.agents entry; ignoring duplicate.";
+      const { ctx, pi, notifications } = makeCtx({ toolNames: ["subagent"] });
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        notifications: { mode: "orchestrated" },
+      });
+
+      // assert
+      assert.strictEqual(outcome.status, "installed");
+      assert.deepStrictEqual(notifications, []);
+      assert.deepStrictEqual(
+        (outcome as { postCommitWarnings?: readonly string[] }).postCommitWarnings,
+        [expectedWarning],
+      );
+      const state = await loadState(locations.extensionRoot);
+      assert.deepStrictEqual(state.marketplaces.mp?.plugins.hello?.resources.agents, [
+        `${GENERATED_AGENT_PREFIX}hello-shared`,
+        `${GENERATED_AGENT_PREFIX}hello-later`,
+      ]);
+      assert.match(
+        await readFile(
+          path.join(locations.agentsDir, `${GENERATED_AGENT_PREFIX}hello-shared.md`),
+          "utf8",
+        ),
+        /First shared agent\./,
+      );
+      assert.match(
+        await readFile(
+          path.join(locations.agentsDir, `${GENERATED_AGENT_PREFIX}hello-later.md`),
+          "utf8",
+        ),
+        /Later agent\./,
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });
