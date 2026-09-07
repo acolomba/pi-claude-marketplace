@@ -8,22 +8,34 @@ import {
 import {
   compileBashGlob as definingCompileBashGlob,
   compilePathGlob as definingCompilePathGlob,
+  compilePowerShellGlob as definingCompilePowerShellGlob,
   type CompiledBashGlob as DefiningCompiledBashGlob,
   type CompiledPathGlob as DefiningCompiledPathGlob,
+  type CompiledPowerShellGlob as DefiningCompiledPowerShellGlob,
 } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/if-field/glob.ts";
 import {
   bashSubcommandFires as exportedBashSubcommandFires,
   compileBashGlob as exportedCompileBashGlob,
   compileIfPredicate,
   compilePathGlob as exportedCompilePathGlob,
+  compilePowerShellGlob as exportedCompilePowerShellGlob,
+  compilePowerShellRule as exportedCompilePowerShellRule,
   ifFires,
   MATCH_ALL_IF,
   parseBashSubcommands as exportedParseBashSubcommands,
+  parsePowerShellSubcommands as exportedParsePowerShellSubcommands,
+  powerShellSubcommandFires as exportedPowerShellSubcommandFires,
   type CompiledBashGlob as ExportedCompiledBashGlob,
   type CompiledPathGlob as ExportedCompiledPathGlob,
+  type CompiledPowerShellGlob as ExportedCompiledPowerShellGlob,
   type CompileIfPredicateContext,
   type IfPredicate,
 } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts";
+import {
+  compilePowerShellRule as definingCompilePowerShellRule,
+  parsePowerShellSubcommands as definingParsePowerShellSubcommands,
+  powerShellSubcommandFires as definingPowerShellSubcommandFires,
+} from "../../../../extensions/pi-claude-marketplace/bridges/hooks/if-field/powershell.ts";
 
 import type { BucketAEvent } from "../../../../extensions/pi-claude-marketplace/domain/components/hook-events.ts";
 import type { PiToolName } from "../../../../extensions/pi-claude-marketplace/domain/components/hook-tool-names.ts";
@@ -40,7 +52,16 @@ interface ExpectedCompileIfPredicateContext {
 }
 type ExpectedIfPredicate =
   | { readonly kind: "match-all"; readonly reason?: string }
-  | { readonly kind: "bash"; readonly bashGlob: DefiningCompiledBashGlob }
+  | {
+      readonly kind: "bash";
+      readonly piEvents: ReadonlySet<PiToolName>;
+      readonly bashGlob: DefiningCompiledBashGlob;
+    }
+  | {
+      readonly kind: "powershell";
+      readonly piEvents: ReadonlySet<PiToolName>;
+      readonly psGlob: DefiningCompiledPowerShellGlob;
+    }
   | {
       readonly kind: "path-tool";
       readonly piEvents: ReadonlySet<PiToolName>;
@@ -53,13 +74,30 @@ void (true satisfies Same<CompileIfPredicateContext, ExpectedCompileIfPredicateC
 void (true satisfies Same<IfPredicate, ExpectedIfPredicate>);
 void (true satisfies Same<ExportedCompiledBashGlob, DefiningCompiledBashGlob>);
 void (true satisfies Same<ExportedCompiledPathGlob, DefiningCompiledPathGlob>);
+void (true satisfies Same<ExportedCompiledPowerShellGlob, DefiningCompiledPowerShellGlob>);
 void (true satisfies Same<typeof exportedCompileBashGlob, typeof definingCompileBashGlob>);
 void (true satisfies Same<typeof exportedCompilePathGlob, typeof definingCompilePathGlob>);
+void (true satisfies Same<
+  typeof exportedCompilePowerShellGlob,
+  typeof definingCompilePowerShellGlob
+>);
+void (true satisfies Same<
+  typeof exportedCompilePowerShellRule,
+  typeof definingCompilePowerShellRule
+>);
 void (true satisfies Same<
   typeof exportedParseBashSubcommands,
   typeof definingParseBashSubcommands
 >);
+void (true satisfies Same<
+  typeof exportedParsePowerShellSubcommands,
+  typeof definingParsePowerShellSubcommands
+>);
 void (true satisfies Same<typeof exportedBashSubcommandFires, typeof definingBashSubcommandFires>);
+void (true satisfies Same<
+  typeof exportedPowerShellSubcommandFires,
+  typeof definingPowerShellSubcommandFires
+>);
 
 const typeEvidenceBashGlob = {
   raw: "git *",
@@ -68,6 +106,13 @@ const typeEvidenceBashGlob = {
   isCommandNameOnly: true,
   test: (_subcommand: string): boolean => true,
 } satisfies DefiningCompiledBashGlob;
+const typeEvidencePowerShellGlob = {
+  raw: "Get-ChildItem *",
+  tokens: [],
+  trailingWordBoundary: true,
+  isCommandNameOnly: true,
+  test: (_subcommand: string): boolean => true,
+} satisfies DefiningCompiledPowerShellGlob;
 const typeEvidencePathGlob = {
   raw: "src/**",
   anchor: { kind: "cwd" },
@@ -77,7 +122,16 @@ const typeEvidencePathGlob = {
 } satisfies DefiningCompiledPathGlob;
 
 void ({ kind: "match-all", reason: "fall open" } satisfies IfPredicate);
-void ({ kind: "bash", bashGlob: typeEvidenceBashGlob } satisfies IfPredicate);
+void ({
+  kind: "bash",
+  piEvents: new Set<PiToolName>(["bash"]),
+  bashGlob: typeEvidenceBashGlob,
+} satisfies IfPredicate);
+void ({
+  kind: "powershell",
+  piEvents: new Set<PiToolName>(["powershell"]),
+  psGlob: typeEvidencePowerShellGlob,
+} satisfies IfPredicate);
 void ({
   kind: "path-tool",
   piEvents: new Set<PiToolName>(["read"]),
@@ -89,7 +143,9 @@ void ({ kind: "mcp-server-prefix", serverPrefix: "mcp__files__" } satisfies IfPr
 // @ts-expect-error match-all predicates do not carry Bash metadata
 void ({ kind: "match-all", bashGlob: typeEvidenceBashGlob } satisfies IfPredicate);
 // @ts-expect-error Bash predicates require their compiled glob
-void ({ kind: "bash" } satisfies IfPredicate);
+void ({ kind: "bash", piEvents: new Set<PiToolName>(["bash"]) } satisfies IfPredicate);
+// @ts-expect-error PowerShell predicates require their compiled glob
+void ({ kind: "powershell", piEvents: new Set<PiToolName>(["powershell"]) } satisfies IfPredicate);
 void ({
   kind: "path-tool",
   // @ts-expect-error path-tool predicates reject names outside Pi's tool vocabulary
@@ -100,7 +156,7 @@ void ({
 void ({ kind: "mcp-literal", serverPrefix: "mcp__files__" } satisfies IfPredicate);
 // @ts-expect-error MCP server-prefix predicates require serverPrefix rather than toolName
 void ({ kind: "mcp-server-prefix", toolName: "mcp__files__read" } satisfies IfPredicate);
-// @ts-expect-error the predicate vocabulary has exactly five discriminants
+// @ts-expect-error the predicate vocabulary has exactly six discriminants
 void ({ kind: "unknown" } satisfies IfPredicate);
 
 test("compiles and evaluates a Read path declaration", () => {
@@ -159,7 +215,7 @@ test("compiles and evaluates a Read path declaration", () => {
   );
 });
 
-test("compiles known Bash and path-tool prefixes in stable row order", () => {
+test("compiles known command and path-tool prefixes in stable row order", () => {
   // arrange
   const compileContext = {
     homedir: "/home/plugin-user",
@@ -168,6 +224,7 @@ test("compiles known Bash and path-tool prefixes in stable row order", () => {
   } satisfies CompileIfPredicateContext;
   const rows = [
     { declaration: "Bash(git *)", event: "PreToolUse" },
+    { declaration: "PowerShell(Get-ChildItem *)", event: "PreToolUse" },
     { declaration: "Read(src/**)", event: "PreToolUse" },
     { declaration: "Edit(src/**)", event: "PostToolUse" },
     { declaration: "Write(src/**)", event: "PostToolUseFailure" },
@@ -179,8 +236,16 @@ test("compiles known Bash and path-tool prefixes in stable row order", () => {
     {
       declaration: "Bash(git *)",
       kind: "bash",
-      piEvents: undefined,
+      piEvents: ["bash"],
       raw: "git *",
+      trailingWordBoundary: true,
+      isCommandNameOnly: true,
+    },
+    {
+      declaration: "PowerShell(Get-ChildItem *)",
+      kind: "powershell",
+      piEvents: ["powershell"],
+      raw: "Get-ChildItem *",
       trailingWordBoundary: true,
       isCommandNameOnly: true,
     },
@@ -217,10 +282,21 @@ test("compiles known Bash and path-tool prefixes in stable row order", () => {
       return {
         declaration,
         kind: predicate.kind,
-        piEvents: undefined,
+        piEvents: [...predicate.piEvents],
         raw: predicate.bashGlob.raw,
         trailingWordBoundary: predicate.bashGlob.trailingWordBoundary,
         isCommandNameOnly: predicate.bashGlob.isCommandNameOnly,
+      };
+    }
+
+    if (predicate.kind === "powershell") {
+      return {
+        declaration,
+        kind: predicate.kind,
+        piEvents: [...predicate.piEvents],
+        raw: predicate.psGlob.raw,
+        trailingWordBoundary: predicate.psGlob.trailingWordBoundary,
+        isCommandNameOnly: predicate.psGlob.isCommandNameOnly,
       };
     }
 
@@ -478,6 +554,65 @@ test("evaluates Bash matches, misses, and missing commands independently", () =>
 
   // assert
   assert.deepStrictEqual(actual, expected);
+});
+
+test("keeps command-bearing rules on their own shell tool", () => {
+  // arrange
+  const compileContext = {
+    homedir: "/home/plugin-user",
+    cwd: "/workspace/plugin",
+    projectRoot: "/workspace/plugin",
+  } satisfies CompileIfPredicateContext;
+  const extensionContext = { cwd: compileContext.cwd } as ExtensionContext;
+  const powerShellPredicate = compileIfPredicate(
+    "PowerShell(Get-ChildItem *)",
+    "PreToolUse",
+    compileContext,
+  );
+  const bashPredicate = compileIfPredicate("Bash(git *)", "PreToolUse", compileContext);
+  const rows = [
+    {
+      name: "PowerShell rule on a matching powershell command",
+      predicate: powerShellPredicate,
+      event: { toolName: "powershell", input: { command: "Get-ChildItem -Path ." } },
+    },
+    {
+      name: "PowerShell rule on a different powershell command",
+      predicate: powerShellPredicate,
+      event: { toolName: "powershell", input: { command: "Remove-Item x" } },
+    },
+    {
+      name: "PowerShell rule on a bash event",
+      predicate: powerShellPredicate,
+      event: { toolName: "bash", input: { command: "Get-ChildItem -Path ." } },
+    },
+    {
+      name: "Bash rule on a powershell event",
+      predicate: bashPredicate,
+      event: { toolName: "powershell", input: { command: "git status" } },
+    },
+    {
+      name: "Bash rule on a bash event",
+      predicate: bashPredicate,
+      event: { toolName: "bash", input: { command: "git status" } },
+    },
+  ] as const;
+  const expected = [
+    { name: "PowerShell rule on a matching powershell command", fires: true },
+    { name: "PowerShell rule on a different powershell command", fires: false },
+    { name: "PowerShell rule on a bash event", fires: false },
+    { name: "Bash rule on a powershell event", fires: false },
+    { name: "Bash rule on a bash event", fires: true },
+  ];
+
+  // act
+  const decisions = rows.map(({ name, predicate, event }) => ({
+    name,
+    fires: ifFires(predicate, event, extensionContext, "PreToolUse"),
+  }));
+
+  // assert
+  assert.deepStrictEqual(decisions, expected);
 });
 
 test("fails open when Bash command parsing exceeds the recursion limit", () => {
