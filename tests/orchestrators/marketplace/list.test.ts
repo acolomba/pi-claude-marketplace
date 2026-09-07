@@ -180,7 +180,9 @@ test("bare list emits the exact empty notification without creating scope data",
     await listMarketplaces(options);
 
     // assert
-    assert.deepStrictEqual(boundary.notifications, [{ message: "(no marketplaces)" }]);
+    assert.deepStrictEqual(boundary.notifications, [
+      { message: "(no marketplaces)\n\nMarketplace list: 0 successes" },
+    ]);
     assert.deepStrictEqual(await snapshotWorkspace(home, cwd), before);
     verify(boundary.ctx);
     verify(boundary.pi);
@@ -216,7 +218,9 @@ test("explicit project list renders one path source as an exact statusless row",
     await listMarketplaces(options);
 
     // assert
-    assert.deepStrictEqual(boundary.notifications, [{ message: "● local [project]" }]);
+    assert.deepStrictEqual(boundary.notifications, [
+      { message: "● local [project]\n\nMarketplace list: 1 success" },
+    ]);
     assert.deepStrictEqual(await snapshotWorkspace(home, cwd), before);
     verify(boundary.ctx);
     verify(boundary.pi);
@@ -455,7 +459,7 @@ test("bare list preserves insertion order for every accepted source kind within 
     assert.deepStrictEqual(boundary.notifications, [
       {
         message:
-          "● zulu-path [project]\n\n● alpha-github [project]\n\n● mike-url [project]\n\n● charlie-unknown [project]\n\n● echo-user [user]\n\n● delta-user [user]",
+          "● zulu-path [project]\n\n● alpha-github [project]\n\n● mike-url [project]\n\n● charlie-unknown [project]\n\n● echo-user [user]\n\n● delta-user [user]\n\nMarketplace list: 6 successes",
       },
     ]);
     assert.deepStrictEqual(await snapshotWorkspace(home, cwd), before);
