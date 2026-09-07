@@ -207,7 +207,12 @@ function flipContextFor(enable: boolean): typeof AUTOUPDATE_CONTEXT | typeof NOA
  * renderer's depth-5 cause-chain trailer (the MarketplaceNotificationMessage
  * header carries no `cause` per SNM-10).
  */
-function notifyAutoupdateScopeFailure(opts: AutoupdateOptions, scope: Scope, err: Error): void {
+function notifyAutoupdateScopeFailure(
+  opts: AutoupdateOptions,
+  scope: Scope,
+  err: Error,
+  cardinality: "single" | "plural",
+): void {
   const failureName = opts.name ?? "(unknown)";
 
   // OUT-07 / D-12: one marketplace block carrying the synthetic failed child
@@ -224,7 +229,14 @@ function notifyAutoupdateScopeFailure(opts: AutoupdateOptions, scope: Scope, err
       plugins: [autoupdateFailedRow(failureName, err)],
     },
   ];
-  notifyWithContext(opts.ctx, opts.pi, flipContextFor(opts.enable), failedRows);
+  notifyWithContext(
+    opts.ctx,
+    opts.pi,
+    flipContextFor(opts.enable),
+    failedRows,
+    undefined,
+    cardinality,
+  );
 }
 
 /**
@@ -475,6 +487,7 @@ function collectFlipRows(
 }
 
 export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise<void> {
+  const cardinality = opts.name === undefined ? "plural" : "single";
   const scopes: readonly Scope[] = opts.scope === undefined ? ["project", "user"] : [opts.scope];
 
   // The autoupdate / noautoupdate commands share this orchestrator, selected by
@@ -498,7 +511,7 @@ export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise
         // `withLockedStateTransaction` normalizes every rejection through
         // `toError` before `flipOneScope` rejects, so this caught value is an
         // Error on every reachable path.
-        notifyAutoupdateScopeFailure(opts, scope, err as Error);
+        notifyAutoupdateScopeFailure(opts, scope, err as Error, cardinality);
         return;
       }
 
@@ -540,7 +553,7 @@ export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise
   // OUT-07 / D-12: empty inventory -> Plural (zero rows).
   if (rows.length === 0) {
     const emptyRows: Plural<MarketplaceRows<PluginFailedMessage>> = [];
-    notifyWithContext(opts.ctx, opts.pi, flipContext, emptyRows);
+    notifyWithContext(opts.ctx, opts.pi, flipContext, emptyRows, undefined, cardinality);
     return;
   }
 
@@ -606,5 +619,5 @@ export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise
   // OUT-07 / D-12: bulk multi-marketplace flip cascade -> Plural. The
   // autoupdate enabled/disabled/skipped/failed headers render via the central
   // seam; the command is selected by the boolean `opts.enable` flag.
-  notifyWithContext(opts.ctx, opts.pi, flipContext, marketplaces);
+  notifyWithContext(opts.ctx, opts.pi, flipContext, marketplaces, undefined, cardinality);
 }

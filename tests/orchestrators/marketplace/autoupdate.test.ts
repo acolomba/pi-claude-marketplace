@@ -894,6 +894,8 @@ test("reports a held unnamed scope lock against the unknown aggregate subject", 
         "⊘ (unknown) [project] (failed)",
         "  ⊘ (unknown) (failed) {lock held}",
         `    cause: Another pi-claude-marketplace operation is in progress for project scope (${locations.stateLockFile}). Retry after it completes. -> Lock file is already being held`,
+        "",
+        "Marketplace noautoupdate: 2 failures",
       ].join("\n"),
       severity: "error",
     });

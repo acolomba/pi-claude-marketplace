@@ -3175,7 +3175,10 @@ function composeTally(message: {
     ).length;
     const successes = successCount.plugins + successCount.marketplaces - bareHeaders;
 
-    if (successes > 0) {
+    // A structurally plural operation reports its zero outcome too. This branch
+    // is restricted to the default tally: an explicit owner tally with count 0
+    // retains its existing omission semantics.
+    if (successes > 0 || parts.length === 0) {
       parts.push(tallyCategory(successes, "success", "successes"));
     }
   } else if (message.tally.count > 0) {
