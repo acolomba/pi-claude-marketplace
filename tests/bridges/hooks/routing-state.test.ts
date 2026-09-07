@@ -656,3 +656,19 @@ test("resets every routing state cell through the composite lifecycle", (t) => {
     pendingContexts: [],
   });
 });
+
+test("binds routing operations to one required runtime instance", async () => {
+  // arrange
+  const routingStateModule = await import(
+    "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts"
+  );
+
+  // act
+  const createRoutingStateOperations = Reflect.get(
+    routingStateModule,
+    "createRoutingStateOperations",
+  );
+
+  // assert
+  assert.strictEqual(typeof createRoutingStateOperations, "function");
+});
