@@ -12,6 +12,8 @@ last_updated: 2026-09-07T12:05:27.307Z
 > Cross-phase defect register. With `workflow.windows_enforce` enabled, `/gsd-ship` blocks while `open_count > 0`.
 > Waive with `gsd-tools windows waive <id> "<reason>"` (reason required).
 > Mark fixed with `gsd-tools windows fixed <id>`.
+> Prefix every new description with its milestone in brackets -- `[workflows-replay] ...`.
+> Phase numbers are not unique across milestones; see CLAUDE.md "Broken Windows ledger".
 
 | id | phase | kind | file | line | description | status | reason | recorded_at | resolved_at |
 |----|-------|------|------|------|-------------|--------|--------|-------------|-------------|
