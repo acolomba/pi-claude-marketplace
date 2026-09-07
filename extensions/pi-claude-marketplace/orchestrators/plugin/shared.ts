@@ -1306,26 +1306,34 @@ export async function emitMarketplaceNotAddedSignal(args: {
   readonly pi: ExtensionAPI;
   readonly cwd: string;
   readonly context: CommandContext<"skipped", PluginSkippedMessage>;
+  readonly cardinality: "single" | "plural";
   readonly err: MarketplaceNotAddedSignal;
 }): Promise<void> {
-  const { ctx, pi, cwd, context, err } = args;
+  const { ctx, pi, cwd, context, cardinality, err } = args;
 
   if (err.notInstalledAt !== undefined && err.plugin !== undefined) {
-    notifyWithContext(ctx, pi, context, [
-      {
-        name: err.marketplace,
-        scope: err.notInstalledAt,
-        plugins: [
-          {
-            status: "skipped",
-            name: err.plugin,
-            reasons: absentTargetReasons(err.notInstalledAt),
-            severity: "error",
-            needsReload: false,
-          },
-        ],
-      },
-    ]);
+    notifyWithContext(
+      ctx,
+      pi,
+      context,
+      [
+        {
+          name: err.marketplace,
+          scope: err.notInstalledAt,
+          plugins: [
+            {
+              status: "skipped",
+              name: err.plugin,
+              reasons: absentTargetReasons(err.notInstalledAt),
+              severity: "error",
+              needsReload: false,
+            },
+          ],
+        },
+      ],
+      undefined,
+      cardinality,
+    );
     return;
   }
 

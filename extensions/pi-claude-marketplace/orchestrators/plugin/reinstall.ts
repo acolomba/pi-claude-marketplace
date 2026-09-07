@@ -517,12 +517,15 @@ export async function reinstallPlugins(
   opts: ReinstallPluginsOptions,
 ): Promise<readonly ReinstallPluginOutcome[]> {
   const { ctx, pi, cwd } = opts;
+  // OUT-04 / D-04: cardinality belongs to the parsed invocation, including
+  // enumeration failures that return before any result rows exist.
+  const cardinality: "single" | "plural" = opts.target.kind === "plugin" ? "single" : "plural";
 
   let targets: readonly ResolvedReinstallTarget[];
   try {
     targets = await enumerateReinstallTargets(opts);
   } catch (err) {
-    await handleEnumerationFailure(opts, err as Error);
+    await handleEnumerationFailure(opts, err as Error, cardinality);
     return [];
   }
 
@@ -540,7 +543,6 @@ export async function reinstallPlugins(
   // OUT-04 / D-04: the structural single-vs-plural cardinality is the invocation
   // FORM -- a `<plugin>@<mp>` target is single-target (omits the tally), while
   // the `@<marketplace>` and bare forms are bulk (emit the tally).
-  const cardinality: "single" | "plural" = opts.target.kind === "plugin" ? "single" : "plural";
   // D-79-02: ONE once-per-host memo spans the whole bulk loop so a cold-cache
   // sweep over several private plugins on the same host runs the device flow
   // at most once (the same bulk-storm guard install/update use).
@@ -621,11 +623,22 @@ function surfaceReinstallDiscoveryWarnings(
  *     trailer (marketplace-level rows carry no cause per SNM-10). Severity
  *     (`error`) + no reload-hint are computed by notify().
  */
-async function handleEnumerationFailure(opts: ReinstallPluginsOptions, err: Error): Promise<void> {
+async function handleEnumerationFailure(
+  opts: ReinstallPluginsOptions,
+  err: Error,
+  cardinality: "single" | "plural",
+): Promise<void> {
   const { ctx, pi, cwd } = opts;
 
   if (err instanceof MarketplaceNotAddedSignal) {
-    await emitMarketplaceNotAddedSignal({ ctx, pi, cwd, context: REINSTALL_CONTEXT, err });
+    await emitMarketplaceNotAddedSignal({
+      ctx,
+      pi,
+      cwd,
+      context: REINSTALL_CONTEXT,
+      cardinality,
+      err,
+    });
     return;
   }
 

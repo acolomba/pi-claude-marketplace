@@ -946,9 +946,23 @@ function emitEnableDisableFailedRow(args: {
 }): void {
   const { ctx, pi, enable, marketplace, scope, row } = args;
   if (enable) {
-    notifyWithContext(ctx, pi, ENABLE_CONTEXT, [{ name: marketplace, scope, plugins: [row] }]);
+    notifyWithContext(
+      ctx,
+      pi,
+      ENABLE_CONTEXT,
+      [{ name: marketplace, scope, plugins: [row] }],
+      undefined,
+      "single",
+    );
   } else {
-    notifyWithContext(ctx, pi, DISABLE_CONTEXT, [{ name: marketplace, scope, plugins: [row] }]);
+    notifyWithContext(
+      ctx,
+      pi,
+      DISABLE_CONTEXT,
+      [{ name: marketplace, scope, plugins: [row] }],
+      undefined,
+      "single",
+    );
   }
 }
 
@@ -1118,17 +1132,27 @@ function dispatchOutcome(args: {
     // or `partially-installed`, never `disabled`), so narrowing to the
     // ENABLE_CONTEXT row type is sound.
     const enableRow = row as EnableMsg;
-    notifyWithContext(ctx, pi, ENABLE_CONTEXT, [
-      { name: marketplace, scope, plugins: [enableRow] },
-    ]);
+    notifyWithContext(
+      ctx,
+      pi,
+      ENABLE_CONTEXT,
+      [{ name: marketplace, scope, plugins: [enableRow] }],
+      undefined,
+      "single",
+    );
   } else {
     // D-10: the `!enable` branch only ever yields a `DisableMsg` (its `fresh`
     // arm emits `disabled`, never `installed`), so narrowing to the
     // DISABLE_CONTEXT row type is sound.
     const disableRow = row as DisableMsg;
-    notifyWithContext(ctx, pi, DISABLE_CONTEXT, [
-      { name: marketplace, scope, plugins: [disableRow] },
-    ]);
+    notifyWithContext(
+      ctx,
+      pi,
+      DISABLE_CONTEXT,
+      [{ name: marketplace, scope, plugins: [disableRow] }],
+      undefined,
+      "single",
+    );
   }
 }
 

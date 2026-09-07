@@ -367,12 +367,15 @@ function buildDirectThreePhaseArgs(
  */
 export async function updatePlugins(opts: UpdatePluginsOptions): Promise<void> {
   const { ctx, pi } = opts;
+  // OUT-04 / D-04: cardinality belongs to the parsed invocation, including
+  // enumeration failures that return before any result rows exist.
+  const cardinality: "single" | "plural" = opts.target.kind === "plugin" ? "single" : "plural";
 
   let targets: readonly ResolvedTarget[];
   try {
     targets = await enumerateTargets(opts);
   } catch (err) {
-    await handleEnumerateFailure(opts, err);
+    await handleEnumerateFailure(opts, err, cardinality);
     return;
   }
 
@@ -393,7 +396,6 @@ export async function updatePlugins(opts: UpdatePluginsOptions): Promise<void> {
   // OUT-04 / D-04: the structural single-vs-plural cardinality is the invocation
   // FORM -- a `<plugin>@<mp>` target is single-target (omits the tally), while
   // the `@<marketplace>` and bare forms are bulk (emit the tally).
-  const cardinality: "single" | "plural" = opts.target.kind === "plugin" ? "single" : "plural";
   for (const t of targets) {
     try {
       await syncCloneOnce(t.scope, t.marketplace, t.locations);
@@ -527,11 +529,22 @@ function surfaceUpdateDiscoveryWarnings(
  *     the real marketplace name; the renderer composes the 4-space cause-chain
  *     trailer (WR-01 parens-wrapping for the bare-marketplace row name).
  */
-async function handleEnumerateFailure(opts: UpdatePluginsOptions, err: unknown): Promise<void> {
+async function handleEnumerateFailure(
+  opts: UpdatePluginsOptions,
+  err: unknown,
+  cardinality: "single" | "plural",
+): Promise<void> {
   const { ctx, pi, cwd, target, scope: explicitScope } = opts;
 
   if (err instanceof MarketplaceNotAddedSignal) {
-    await emitMarketplaceNotAddedSignal({ ctx, pi, cwd, context: UPDATE_CONTEXT, err });
+    await emitMarketplaceNotAddedSignal({
+      ctx,
+      pi,
+      cwd,
+      context: UPDATE_CONTEXT,
+      cardinality,
+      err,
+    });
     return;
   }
 

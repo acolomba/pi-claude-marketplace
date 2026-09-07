@@ -3470,7 +3470,7 @@ test("standalone enable exposes ordered rollback partials and retries without du
           "",
           "● mp [user]",
           "  ⊘ foo v1.2.3 (failed) {rollback partial}",
-          "    cause: mcp staging denied",
+          "    cause: mcp staging denied -> mcp staging denied",
           "    [hooks] (rollback failed)",
           "      cause: hook rollback denied",
           "    [skills] (rollback failed)",
