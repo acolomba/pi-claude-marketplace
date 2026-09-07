@@ -264,5 +264,5 @@ export async function pendingReconcile(opts: PendingReconcileOptions): Promise<v
     ...invalidBlocks,
   ].sort((a, b) => compareByNameThenScope(a, b));
 
-  notifyWithContext(opts.ctx, opts.pi, PENDING_CONTEXT, marketplaces);
+  notifyWithContext(opts.ctx, opts.pi, PENDING_CONTEXT, marketplaces, undefined, "plural");
 }
