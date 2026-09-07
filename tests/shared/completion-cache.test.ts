@@ -285,6 +285,61 @@ describe("getMarketplaceNames", () => {
 });
 
 describe("getPluginIndex", () => {
+  test("reuses fresh plugin-index memory inside one cache instance", async (t) => {
+    // arrange
+    const directory = await mkdtemp(path.join(os.tmpdir(), "completion-plugin-instance-reuse-"));
+    const cachePath = path.join(directory, "plugin-index.json");
+    const expectedRows = [{ name: "memory-row", status: "installed" }] satisfies PluginIndexRow[];
+    const rebuild = t.mock.fn(() => Promise.resolve(expectedRows));
+    const completionCacheModule: unknown = await import(
+      "../../extensions/pi-claude-marketplace/shared/completion-cache.ts"
+    );
+    const createCache = Reflect.get(completionCacheModule as object, "createCompletionCache");
+    assert.strictEqual(typeof createCache, "function");
+    const cache = createCache();
+    t.after(() => rm(directory, { recursive: true, force: true }));
+    await cache.getPluginIndex(cachePath, "user", "instance-reuse", rebuild);
+    await rm(cachePath);
+
+    // act
+    const rows = await cache.getPluginIndex(cachePath, "user", "instance-reuse", rebuild);
+
+    // assert
+    assert.deepStrictEqual(rows, expectedRows);
+    assert.strictEqual(rebuild.mock.callCount(), 1);
+  });
+
+  test("keeps plugin-index memory private to each cache instance", async (t) => {
+    // arrange
+    const directory = await mkdtemp(path.join(os.tmpdir(), "completion-plugin-instance-private-"));
+    const cachePath = path.join(directory, "plugin-index.json");
+    const firstRows = [{ name: "first-row", status: "installed" }] satisfies PluginIndexRow[];
+    const secondRows = [{ name: "second-row", status: "available" }] satisfies PluginIndexRow[];
+    const completionCacheModule: unknown = await import(
+      "../../extensions/pi-claude-marketplace/shared/completion-cache.ts"
+    );
+    const createCache = Reflect.get(completionCacheModule as object, "createCompletionCache");
+    assert.strictEqual(typeof createCache, "function");
+    const firstCache = createCache();
+    const secondCache = createCache();
+    t.after(() => rm(directory, { recursive: true, force: true }));
+    await firstCache.getPluginIndex(cachePath, "project", "instance-private", () =>
+      Promise.resolve(firstRows),
+    );
+    await rm(cachePath);
+
+    // act
+    const rows = await secondCache.getPluginIndex(
+      cachePath,
+      "project",
+      "instance-private",
+      () => Promise.resolve(secondRows),
+    );
+
+    // assert
+    assert.deepStrictEqual(rows, secondRows);
+  });
+
   test("rebuilds a cold plugin index and preserves returned row order", async (t) => {
     // arrange
     const directory = await mkdtemp(path.join(os.tmpdir(), "completion-plugin-cold-"));
