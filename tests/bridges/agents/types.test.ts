@@ -60,7 +60,7 @@ const stageAgentsInput: StageAgentsInput = {
   pluginRoot: "/plugin",
   pluginDataDir: "/data/official/acme",
   resolved: undefined!,
-  agentsSourceDir: "/plugin/agents",
+  agentsDirs: ["/plugin/agents"],
   knownSkills: ["pi-claude-marketplace-acme-testing"],
   mapModel: true,
   cwd: "/project",
@@ -148,7 +148,7 @@ const stageAgentsInputWithoutCwd: StageAgentsInput = {
   pluginRoot: "/plugin",
   pluginDataDir: "/data/official/acme",
   resolved: undefined!,
-  agentsSourceDir: null,
+  agentsDirs: [],
 };
 void stageAgentsInputWithoutCwd;
 // @ts-expect-error a staged record always identifies its target path
