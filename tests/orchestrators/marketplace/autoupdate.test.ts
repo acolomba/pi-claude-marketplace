@@ -354,6 +354,8 @@ test("enables all project marketplaces in changed-before-unchanged order with on
         "● to-flip [project] <autoupdate>",
         "",
         "● already [project] <autoupdate> {already autoupdate}",
+        "",
+        "Marketplace autoupdate: 2 successes",
       ].join("\n"),
     });
     const expectedConfigBytes = [
@@ -397,7 +399,9 @@ test("reports an empty implicit two-scope inventory without creating files", asy
     // arrange
     const projectLocations = locationsFor("project", cwd);
     const userLocations = locationsFor("user", cwd);
-    const boundary = notificationBoundary({ message: "(no marketplaces)" });
+    const boundary = notificationBoundary({
+      message: "(no marketplaces)\n\nMarketplace autoupdate: 0 successes",
+    });
 
     // act
     await setMarketplaceAutoupdate({
@@ -412,6 +416,31 @@ test("reports an empty implicit two-scope inventory without creating files", asy
     assert.equal(await readOptionalBytes(projectLocations.configJsonPath), undefined);
     assert.equal(await readOptionalBytes(userLocations.stateJsonPath), undefined);
     assert.equal(await readOptionalBytes(userLocations.configJsonPath), undefined);
+    verify(boundary.ctx);
+    verify(boundary.pi);
+    verify(boundary.ui);
+  });
+});
+
+test("bare autoupdate reports a tally for one marketplace", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    await saveMarketplaces(locations, [marketplaceRecord("only", "project", cwd)]);
+    const boundary = notificationBoundary({
+      message: "● only [project] <autoupdate>\n\nMarketplace autoupdate: 1 success",
+    });
+
+    // act
+    await setMarketplaceAutoupdate({
+      ctx: boundary.ctx,
+      pi: boundary.pi,
+      enable: true,
+      scope: "project",
+      cwd,
+    });
+
+    // assert
     verify(boundary.ctx);
     verify(boundary.pi);
     verify(boundary.ui);
