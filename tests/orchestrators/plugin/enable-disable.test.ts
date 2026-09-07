@@ -17,7 +17,10 @@ import { test } from "node:test";
 import lockfile from "proper-lockfile";
 
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
-import { setPluginEnabled } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts";
+import {
+  createSetPluginEnabled,
+  setPluginEnabled,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts";
 import { reinstallPlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts";
 import { updatePlugins } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update.ts";
 import { applyReconcile } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
@@ -28,8 +31,6 @@ import { loadState } from "../../../extensions/pi-claude-marketplace/persistence
 import { MarketplaceNotFoundError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { notify } from "../../../extensions/pi-claude-marketplace/shared/notify.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
-
-import * as enableDisableModule from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts";
 
 import type { CacheEntry } from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
 import type { EnableDisablePluginOutcome } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts";
@@ -72,7 +73,7 @@ function makePi(toolNames: readonly string[] = []): ToolInventory {
 }
 
 test("enable-disable exposes its required transaction factory", () => {
-  assert.strictEqual(typeof Reflect.get(enableDisableModule, "createSetPluginEnabled"), "function");
+  assert.strictEqual(typeof createSetPluginEnabled, "function");
 });
 
 /**

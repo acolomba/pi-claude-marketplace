@@ -898,7 +898,16 @@ async function setPluginEnabledWithTransaction(
 }
 
 /** Bind enable/disable orchestration to one required semantic transaction owner. */
-export function createSetPluginEnabled(transaction: EnableDisableTransaction) {
+export interface SetPluginEnabledOperation {
+  (
+    opts: EnableDisablePluginOptions & { notifications: { mode: "orchestrated" } },
+  ): Promise<EnableDisablePluginOutcome>;
+  (opts: EnableDisablePluginOptions): Promise<EnableDisablePluginOutcome | undefined>;
+}
+
+export function createSetPluginEnabled(
+  transaction: EnableDisableTransaction,
+): SetPluginEnabledOperation {
   function configuredSetPluginEnabled(
     opts: EnableDisablePluginOptions & { notifications: { mode: "orchestrated" } },
   ): Promise<EnableDisablePluginOutcome>;

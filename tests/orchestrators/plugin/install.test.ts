@@ -22,6 +22,7 @@ import {
   resolvePluginPin,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts";
 import {
+  createInstallPlugin,
   installPlugin,
   runInstallLedger,
   type InstallCloneCacheSeam,
@@ -45,8 +46,6 @@ import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts"
 
 import { retryTree } from "./scope-tree-inventory.ts";
 
-import * as installModule from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install.ts";
-
 import type { CacheEntry } from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
 import type {
   GitAuthBundle,
@@ -64,7 +63,7 @@ const require = createRequire(import.meta.url);
 const filesystemPromises = require("node:fs/promises") as typeof import("node:fs/promises");
 
 test("install exposes its required transaction factory", () => {
-  assert.strictEqual(typeof Reflect.get(installModule, "createInstallPlugin"), "function");
+  assert.strictEqual(typeof createInstallPlugin, "function");
 });
 
 function observeRetryBridgeSchedule(
