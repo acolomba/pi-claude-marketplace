@@ -1335,6 +1335,11 @@ for (const { title, cause, expected } of [
     expected: "source missing",
   },
   {
+    title: "ENOTDIR errno",
+    cause: Object.assign(new Error("opaque"), { code: "ENOTDIR" }),
+    expected: "source missing",
+  },
+  {
     title: "EPERM errno",
     cause: Object.assign(new Error("opaque"), { code: "EPERM" }),
     expected: "permission denied",
@@ -1342,6 +1347,16 @@ for (const { title, cause, expected } of [
   {
     title: "EIO errno with opaque text",
     cause: Object.assign(new Error("opaque filesystem failure"), { code: "EIO" }),
+    expected: "unreadable",
+  },
+  {
+    title: "EBADF errno",
+    cause: Object.assign(new Error("opaque filesystem failure"), { code: "EBADF" }),
+    expected: "unreadable",
+  },
+  {
+    title: "EISDIR errno",
+    cause: Object.assign(new Error("opaque filesystem failure"), { code: "EISDIR" }),
     expected: "unreadable",
   },
   {
@@ -1361,6 +1376,18 @@ for (const { title, cause, expected } of [
       }),
       { message: "opaque typed absence" },
     ),
+    expected: "not in manifest",
+  },
+  {
+    title: "typed marketplace absence with varied text",
+    cause: Object.assign(new MarketplaceNotFoundError("official", ["project"]), {
+      message: "opaque typed absence",
+    }),
+    expected: "not in manifest",
+  },
+  {
+    title: "unknown errno",
+    cause: Object.assign(new Error("opaque filesystem failure"), { code: "ECONNABORTED" }),
     expected: "not in manifest",
   },
   {

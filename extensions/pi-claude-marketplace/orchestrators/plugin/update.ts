@@ -110,7 +110,10 @@ import {
   appendLeaks,
   composeErrorWithCauseChain,
   errorMessage,
+  InvalidMarketplaceManifestError,
+  MarketplaceNotFoundError,
   PluginShapeError,
+  PluginUpdateConcurrencyError,
   PluginUpdatePhase3Error,
   type Phase3Failure,
 } from "../../shared/errors.ts";
@@ -289,7 +292,7 @@ function makeSyncCloneOnce(
     const state = await loadState(locations.extensionRoot);
     const mp = state.marketplaces[mpName];
     if (mp === undefined) {
-      throw new Error(`Marketplace "${mpName}" not found in ${scope} scope.`);
+      throw new MarketplaceNotFoundError(mpName, [scope]);
     }
 
     const source = mp.source as ParsedSource;
@@ -651,10 +654,16 @@ export const updateSinglePlugin: PluginUpdateFn = async (plugin, marketplace, sc
 
 /**
  * Map an exported-workflow error to a closed-set `Reason[]` for cascade-failure
- * outcomes. Errno codes win; concurrency/rollback messages retain the legacy
- * public classification; the permissive fallback is `not in manifest`.
+ * outcomes. Typed concurrency facts and errno codes win; the permissive
+ * fallback is `not in manifest`.
  */
 function reasonsFromTypedError(err: unknown): readonly ContentReason[] {
+  if (err instanceof PluginUpdateConcurrencyError) {
+    return [
+      err.kind === "plugin-updated" ? "concurrently updated" : "concurrently uninstalled",
+    ] as const;
+  }
+
   // errno-bearing FS errors map to the matching
   // closed Reason instead of falling through to the consumer's
   // legacy notes-substring parse (which would land on the permissive
@@ -669,19 +678,6 @@ function reasonsFromTypedError(err: unknown): readonly ContentReason[] {
     if (code === "ENOENT" || code === "ENOTDIR") {
       return ["source missing"] as const;
     }
-  }
-
-  const note = composeErrorWithCauseChain(err);
-  if (note.includes("rollback")) {
-    return ["rollback partial"] as const;
-  }
-
-  if (note.includes("concurrently uninstalled") || note.includes("concurrently removed")) {
-    return ["concurrently uninstalled"] as const;
-  }
-
-  if (note.includes("concurrently updated")) {
-    return ["concurrently updated"] as const;
   }
 
   return ["not in manifest"] as const;
@@ -1478,21 +1474,20 @@ async function markUpdateInProgress(
   await withStateGuard(locations, (s) => {
     const sMp = s.marketplaces[marketplace];
     if (sMp === undefined) {
-      throw new Error(
-        `Marketplace "${marketplace}" disappeared from state during update of "${plugin}".`,
-      );
+      throw new PluginUpdateConcurrencyError("marketplace-removed", plugin, marketplace);
     }
 
     const sRecord = sMp.plugins[plugin];
     if (sRecord === undefined) {
-      throw new Error(`Plugin "${plugin}" was concurrently uninstalled.`);
+      throw new PluginUpdateConcurrencyError("plugin-uninstalled", plugin, marketplace);
     }
 
     // ST-9: stale-version check.
     if (sRecord.version !== fromVersion) {
-      throw new Error(
-        `Plugin "${plugin}" was concurrently updated; expected version "${fromVersion}", found "${sRecord.version}".`,
-      );
+      throw new PluginUpdateConcurrencyError("plugin-updated", plugin, marketplace, {
+        expectedVersion: fromVersion,
+        actualVersion: sRecord.version,
+      });
     }
 
     sRecord.compatibility = {
@@ -1951,14 +1946,16 @@ async function finalizeUpdateRecord(
   await withStateGuard(locations, async (s) => {
     const sMp = s.marketplaces[marketplace];
     if (sMp === undefined) {
-      throw new Error(
-        `Marketplace "${marketplace}" disappeared from state during finalize of "${plugin}".`,
-      );
+      throw new PluginUpdateConcurrencyError("marketplace-removed", plugin, marketplace, {
+        lifecycle: "finalize",
+      });
     }
 
     const sRecord = sMp.plugins[plugin];
     if (sRecord === undefined) {
-      throw new Error(`Plugin "${plugin}" was concurrently uninstalled during finalize.`);
+      throw new PluginUpdateConcurrencyError("plugin-uninstalled", plugin, marketplace, {
+        lifecycle: "finalize",
+      });
     }
 
     // Anchor the per-bridge gating against the runtime tuple of known
@@ -2876,14 +2873,35 @@ function rollbackPartialCauseSlot(p: UpdatePhase3Failure): { readonly cause: Err
 
 /**
  * Narrow a direct-path failure's typed error to a closed-set `Reason` for
- * the synthetic `PluginFailedMessage`. Order: instanceof typed errors
- * first, errno-bearing FS errors second, message-substring fallback last.
+ * the synthetic `PluginFailedMessage`. Order: typed identities first,
+ * errno / stable transport fields second, honest generic fallback last.
  * The fallback `"unreadable manifest"` mirrors the marketplace/update.ts
  * narrowFailReason precedent for unknown error shapes.
  */
 function narrowDirectFailReason(err: Error): ContentReason {
   // Phase-3 aggregate failures are surfaced via reasonOverride; here we
   // handle the enumerate / syncClone / phase-2 paths only.
+  if (err instanceof MarketplaceNotFoundError) {
+    return "not found";
+  }
+
+  if (err instanceof PluginUpdatePhase3Error) {
+    return "rollback partial";
+  }
+
+  if (err instanceof PluginUpdateConcurrencyError) {
+    return err.kind === "plugin-updated" ? "concurrently updated" : "concurrently uninstalled";
+  }
+
+  if (err instanceof InvalidMarketplaceManifestError) {
+    return "invalid manifest";
+  }
+
+  const transportReason = classifyGitTransportFailure(err);
+  if (transportReason !== undefined) {
+    return transportReason;
+  }
+
   const code = (err as NodeJS.ErrnoException).code;
   if (code === "EACCES" || code === "EPERM") {
     return "permission denied";
@@ -2891,34 +2909,6 @@ function narrowDirectFailReason(err: Error): ContentReason {
 
   if (code === "ENOENT" || code === "ENOTDIR") {
     return "source missing";
-  }
-
-  // Message-substring fallback. Mirrors marketplace/update.ts:553-580
-  // narrowFailReason classification ladder, scoped to the direct-path
-  // failure modes (enumerate target / syncClone / phase-2 throw).
-  const text = err.message.toLowerCase();
-  if (text.includes("not found")) {
-    return "not found";
-  }
-
-  if (text.includes("rollback")) {
-    return "rollback partial";
-  }
-
-  if (text.includes("concurrently uninstalled") || text.includes("concurrently removed")) {
-    return "concurrently uninstalled";
-  }
-
-  if (text.includes("concurrently updated")) {
-    return "concurrently updated";
-  }
-
-  if (text.includes("network")) {
-    return "network unreachable";
-  }
-
-  if (text.includes("unparseable") || text.includes("invalid")) {
-    return "invalid manifest";
   }
 
   return "unreadable manifest";

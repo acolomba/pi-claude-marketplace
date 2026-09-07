@@ -36,7 +36,13 @@ import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import * as defaultGit from "../../platform/git.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
-import { errorMessage, isErrnoException, MarketplaceNotFoundError } from "../../shared/errors.ts";
+import {
+  errorMessage,
+  InvalidMarketplaceManifestError,
+  isErrnoException,
+  MarketplaceNotFoundError,
+  PluginShapeError,
+} from "../../shared/errors.ts";
 import { notify } from "../../shared/notify.ts";
 
 import type { UnstageAgentFailure } from "../../bridges/agents/types.ts";
@@ -606,9 +612,7 @@ export async function loadVisibleMarketplaces(opts: {
  * failed-plugin children block by dispatching on the typed cause
  * (`AgentsUnstageFailureError` or `NodeJS.ErrnoException.code`) rather than
  * substring-matching message text. Falls back to `"not in manifest"` as the
- * permissive default when no typed case matches; bare-Error substring branches
- * are a defensive last resort for cases where the error was already serialised
- * into a notes string.
+ * permissive default when no typed case matches.
  */
 export function narrowCascadeFailure(cause: Error): ContentReason {
   if (cause instanceof AgentsUnstageFailureError) {
@@ -619,39 +623,32 @@ export function narrowCascadeFailure(cause: Error): ContentReason {
     return "source mismatch";
   }
 
+  if (cause instanceof InvalidMarketplaceManifestError) {
+    return "unparseable";
+  }
+
+  if (
+    cause instanceof MarketplaceNotFoundError ||
+    (cause instanceof PluginShapeError && cause.kind === "not-in-manifest")
+  ) {
+    return "not in manifest";
+  }
+
   if (isErrnoException(cause)) {
     switch (cause.code) {
       case "EACCES":
       case "EPERM":
         return "permission denied";
       case "ENOENT":
+      case "ENOTDIR":
         return "source missing";
+      case "EBADF":
+      case "EIO":
+      case "EISDIR":
+        return "unreadable";
       default:
-        // Other errno codes fall through to the textual fallback so
-        // any future-classified error surface can still be picked up
-        // by the substring branches below before landing on the
-        // permissive default.
         break;
     }
-  }
-
-  // Defensive textual fallback: bridges may still throw bare `Error`
-  // with diagnostic messages for `unreadable` / `unparseable` /
-  // `not in manifest` conditions. These branches are retained as a
-  // defense-in-depth last resort -- never as the primary
-  // classification path. A future audit may show them dead and they
-  // can be deleted.
-  const text = `${cause.name} ${cause.message}`.toLowerCase();
-  if (text.includes("unreadable")) {
-    return "unreadable";
-  }
-
-  if (text.includes("unparseable")) {
-    return "unparseable";
-  }
-
-  if (text.includes("not in manifest")) {
-    return "not in manifest";
   }
 
   return "not in manifest";

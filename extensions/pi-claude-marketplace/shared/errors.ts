@@ -326,6 +326,87 @@ export class ConcurrentUninstallError extends Error {
 }
 
 /**
+ * Stable producer fact for state that changes between update preflight and
+ * its guarded intent/finalize writes. Consumers narrow on `kind`; the message
+ * remains diagnostic text only.
+ */
+export type PluginUpdateConcurrencyKind =
+  | "marketplace-removed"
+  | "plugin-uninstalled"
+  | "plugin-updated";
+
+export class PluginUpdateConcurrencyError extends Error {
+  readonly kind: PluginUpdateConcurrencyKind;
+  readonly plugin: string;
+  readonly marketplace: string;
+  readonly lifecycle: "intent" | "finalize";
+  readonly expectedVersion?: string;
+  readonly actualVersion?: string;
+
+  constructor(
+    kind: PluginUpdateConcurrencyKind,
+    plugin: string,
+    marketplace: string,
+    options: {
+      readonly lifecycle?: "intent" | "finalize";
+      readonly expectedVersion?: string;
+      readonly actualVersion?: string;
+    } = {},
+  ) {
+    const lifecycle = options.lifecycle ?? "intent";
+    super(
+      pluginUpdateConcurrencyMessage({
+        kind,
+        plugin,
+        marketplace,
+        lifecycle,
+        ...(options.expectedVersion !== undefined && {
+          expectedVersion: options.expectedVersion,
+        }),
+        ...(options.actualVersion !== undefined && { actualVersion: options.actualVersion }),
+      }),
+    );
+    this.name = "PluginUpdateConcurrencyError";
+    this.kind = kind;
+    this.plugin = plugin;
+    this.marketplace = marketplace;
+    this.lifecycle = lifecycle;
+    if (options.expectedVersion !== undefined) {
+      this.expectedVersion = options.expectedVersion;
+    }
+    if (options.actualVersion !== undefined) {
+      this.actualVersion = options.actualVersion;
+    }
+  }
+}
+
+function pluginUpdateConcurrencyMessage(args: {
+  readonly kind: PluginUpdateConcurrencyKind;
+  readonly plugin: string;
+  readonly marketplace: string;
+  readonly lifecycle: "intent" | "finalize";
+  readonly expectedVersion?: string;
+  readonly actualVersion?: string;
+}): string {
+  switch (args.kind) {
+    case "marketplace-removed":
+      return `Marketplace "${args.marketplace}" disappeared from state during ${
+        args.lifecycle === "finalize" ? "finalize" : "update"
+      } of "${args.plugin}".`;
+    case "plugin-uninstalled":
+      return `Plugin "${args.plugin}" was concurrently uninstalled${
+        args.lifecycle === "finalize" ? " during finalize" : ""
+      }.`;
+    case "plugin-updated":
+      return `Plugin "${args.plugin}" was concurrently updated; expected version "${
+        args.expectedVersion ?? "unknown"
+      }", found "${args.actualVersion ?? "unknown"}".`;
+    default:
+      return assertNever(args.kind);
+  }
+}
+
+/**
  * D-08 fail-fast cross-process state lock contention.
  *
  * Thrown by `transaction/with-state-guard.ts` before loading state when

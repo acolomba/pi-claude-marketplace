@@ -3164,6 +3164,11 @@ for (const { title, makeFailure, reason } of [
     reason: "source missing",
   },
   {
+    title: "classifies stable network errno marketplace refresh failures",
+    makeFailure: () => Object.assign(new Error("opaque transport failure"), { code: "ENETUNREACH" }),
+    reason: "network unreachable",
+  },
+  {
     title: "classifies missing marketplace refresh targets",
     makeFailure: () =>
       Object.assign(new MarketplaceNotFoundError("official", ["project"]), {
@@ -3312,7 +3317,7 @@ test("manifest-load-fail: manifest with invalid entry name type -> notifyError o
 
 // ─── prepareUpdateHandles catch + abortPartialHandles (lines 461-486) ─────────
 
-test("prepare-handles-fail: MCP collision in prepareStageMcpServers -> abortPartialHandles fires, outcome=failed", async () => {
+test("prepare-handles-fail: MCP collision aborts partial handles without keyword-spoofing rollback", async () => {
   // prepareStageMcpServers is the LAST bridge called inside prepareUpdateHandles.
   // When it throws (McpServerCollisionError from assertNoMcpCollisions), the
   // catch at lines 461-462 fires: abortPartialHandles is called with all
@@ -3371,7 +3376,7 @@ test("prepare-handles-fail: MCP collision in prepareStageMcpServers -> abortPart
         const outcome = await updateSinglePlugin("hello", "mp", "project");
         assert.equal(outcome.partition, "failed", `expected failed, got ${outcome.partition}`);
         assert.equal(outcome.name, "hello");
-        assert.deepEqual(outcome.reasons, ["rollback partial"]);
+        assert.deepEqual(outcome.reasons, ["not in manifest"]);
         assert.ok((outcome.notes ?? []).length > 0, "failed outcome must carry error notes");
       } finally {
         process.chdir(prevCwd);
@@ -8309,7 +8314,7 @@ test("a marketplace removed under an in-flight update is not resurrected", async
 
       // assert
       assert.equal(notifications.length, 1);
-      assert.match(notifications[0]?.message ?? "", /\{unreadable manifest\}/);
+      assert.match(notifications[0]?.message ?? "", /\{concurrently uninstalled\}/);
       assert.match(notifications[0]?.message ?? "", /disappeared from state during update/);
       assert.deepEqual((await loadState(locations.extensionRoot)).marketplaces, {});
     } finally {
