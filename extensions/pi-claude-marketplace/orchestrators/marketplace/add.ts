@@ -491,7 +491,7 @@ function handleAddFailure(
       plugins: [],
     },
   ];
-  notifyWithContext(opts.ctx, opts.pi, ADD_CONTEXT, failedRows);
+  notifyWithContext(opts.ctx, opts.pi, ADD_CONTEXT, failedRows, undefined, "single");
   return undefined;
 }
 
@@ -618,7 +618,7 @@ export async function addMarketplace(
       plugins: [],
     },
   ];
-  notifyWithContext(opts.ctx, opts.pi, ADD_CONTEXT, addedRows);
+  notifyWithContext(opts.ctx, opts.pi, ADD_CONTEXT, addedRows, undefined, "single");
   return undefined;
 }
 
