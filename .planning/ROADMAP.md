@@ -302,7 +302,7 @@ Plans:
 **Goal:** Make confirmed test infrastructure isolated, typed, and faithful to production collaborators.
 **Depends on:** Phase 3
 **Requirements:** AUTH-01, TREF-01, TREF-02, TREF-03
-**Plans:** TBD
+**Plans:** 0/7 plans complete
 
 **Success Criteria**:
 
@@ -316,6 +316,32 @@ Plans:
 4. Typed production-domain values and exact role-named doubles replace broad-
    cast laundering and test-helper terminology in production while preserving
    behavior and typings.
+
+Plans:
+**Wave 1**
+
+- [ ] 04-01-PLAN.md — Create the case-owned Pi environment boundary and migrate direct install/list owners.
+
+**Wave 2**
+
+- [ ] 04-02-PLAN.md — Isolate effective MCP staging and remaining terminal user-scope helpers.
+
+**Wave 3**
+
+- [ ] 04-03-PLAN.md — Preserve function-bearing Git auth and remove downstream workarounds.
+
+**Wave 4**
+
+- [ ] 04-04-PLAN.md — Add hostile-host, optional collaborator, and realistic auth-failure proofs.
+- [ ] 04-05-PLAN.md — Introduce exact Pi ports and remove marketplace/enable-disable broad casts.
+
+**Wave 5**
+
+- [ ] 04-06-PLAN.md — Carry exact typed Pi collaborators through plugin orchestration tests.
+
+**Wave 6**
+
+- [ ] 04-07-PLAN.md — Apply the exact 16-factory role-name decision and run complete verification.
 
 ### Phase 5: Injection and Ownership Design
 
