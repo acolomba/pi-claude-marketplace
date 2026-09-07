@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 03
 current_phase_name: Production Defect Corrections
 status: executing
-stopped_at: Phase 3 context gathered
-last_updated: "2026-09-07T05:28:32.047Z"
-last_activity: 2026-09-05
-last_activity_desc: Phase 01 execution resumed (wave continue)
-state_head: df0de270bb3cc9ff1b0f546b518a8b886a5e908c
+stopped_at: Completed 03-01-PLAN.md
+last_updated: "2026-09-07T08:45:23.630Z"
+last_activity: 2026-09-07
+last_activity_desc: Phase 03 execution started
+state_head: 51bdce901c0fa5e87012396bf27c30974eddb58a
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 87
-  completed_plans: 73
+  completed_plans: 74
   percent: 11
 ---
 
@@ -27,16 +27,16 @@ See: `.planning/PROJECT.md` (updated 2026-09-05 after refine-unit-tests Phase 2)
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 01 — Live Evidence Revalidation
+**Current focus:** Phase 03 — Production Defect Corrections
 terminal evidence ledger.
 
 ## Current Position
 
-Phase: 03 (Production Defect Corrections) — READY TO EXECUTE
+Phase: 03 (Production Defect Corrections) — EXECUTING
 Next: Discuss Phase 03
-Plan: 2 of 69
+Plan: 2 of 14
 Status: Ready to execute
-Last activity: 2026-09-05 — Phase 01 execution resumed (wave continue)
+Last activity: 2026-09-07 — Phase 03 execution started
 
 ## Performance Metrics
 
@@ -259,6 +259,7 @@ Last activity: 2026-09-05 — Phase 01 execution resumed (wave continue)
 | Phase 02 P02                            | 17min    | 2 tasks | 5 files  |
 | Phase 02 P03                            | 13min    | 2 tasks | 2 files  |
 | Phase 01 P70 | 19min | 2 tasks | 3 files |
+| Phase 03 P01 | 183min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -623,6 +624,9 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 02]: Retain the per-warning try/catch and prove both user and project warning attempts under a notifier that throws on every call.
 - [Phase 01]: Parse requirement definitions separately from traceability dispositions so moved evidence-only IDs remain stable without authorizing active work. — Preserves D-19 and D-21.
 - [Phase 01]: Validate Phase 2-9 membership against traceability and require qualified after anchors. — Enforces D-20 and D-23.
+- [Phase 03]: Resolve every marketplace source claim before building mutation buckets so declaration order cannot select a canonical identity. — A complete claim graph makes zero, unique, ambiguous, and multiply claimed cases explicit and deterministic.
+- [Phase 03]: Represent alias ambiguity with the existing source-mismatch plan result. — The existing result is structured and report-only, so no new public error surface is needed.
+- [Phase 03]: Retain conflicted canonical candidates and suppress dependent plugin actions. — Fail-closed reconciliation must report ambiguity without choosing, adding, removing, installing, or uninstalling involved state.
 
 ### Pending Todos
 
@@ -674,19 +678,19 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Phase 3 context gathered
+**Stopped at:** Completed 03-01-PLAN.md
 
 Phase 01 is sealed at 69/69 plans. Phase 02 Plans 01 through 03 completed
 PDEF-03, PDEF-02, and PDEF-04 with typed fail-closed input, path, and lifecycle
 boundaries. Independent verification passed 3/3 with no behavior, UAT, or
 security gaps. Phase 03 is ready for discussion and planning.
 
-**Resume file:** .planning/phases/03-production-defect-corrections/03-CONTEXT.md
+**Resume file:** .planning/phases/03-production-defect-corrections/03-02-PLAN.md
 
 **Read beside it:** `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`, and the
 Phase 01 terminal evidence ledger and scope-impact crosswalk routed to Phase 03.
 
-Last session: 2026-09-06T19:27:42.026Z
+Last session: 2026-09-07T08:45:23.338Z
 
 **Next:** Discuss Phase 03 Production Defect Corrections, then research and plan
 only the terminal findings that still reproduce.
