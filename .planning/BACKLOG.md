@@ -2646,3 +2646,31 @@ fixture, and a UAT case. The review itself hedged ("if a bound is wanted").
 **Not urgent.** The read is bounded by what the plugin author shipped, and a
 plugin that large is already pathological. It is filed so the uncapped read is
 a recorded decision rather than an oversight.
+
+## RCSEAM-01: `applyReconcile`'s three uncaught per-entry loops cannot be tested
+
+Residue of the WINDOWS id 9 waiver (decided 2026-09-02). The exposure itself was
+reviewed and accepted; this item records only the actionable half.
+
+`applyPlan` in `orchestrators/reconcile/apply.ts` drives three per-entry loops --
+marketplace add, plugin install, plugin toggle -- with no per-entry catch. The
+arms were removed under the unreachable-code rule, because `addMarketplace`,
+`installPlugin` and `setPluginEnabled` each answer with a typed outcome for every
+throw they can meet. That claim rests on an internal contract, and no test can
+check it: all three orchestrators are STATIC imports, and `ApplyReconcileOptions`
+exposes no injection seam, so `tests/orchestrators/reconcile/apply.test.ts`
+physically cannot plant a throwing collaborator. Contrast the two loops that kept
+their catch, which ARE covered, because `raceStateFromRead` gives the test a way
+to force the throw.
+
+**What a scoped item would decide.** Whether the three orchestrators become
+injected collaborators on `ApplyReconcileOptions`, and if so how that squares
+with D-115-03 and CONVENTIONS.md, which forbid a test-only DI seam. A seam that
+is genuinely part of the function's public interface (the pattern
+`makeMockGitOps` / `makeMockCredentialOps` already follow) satisfies both; a
+`_setXForTest`-style hole does not.
+
+**Not a live defect.** No input reaches the removed arms today, which is why
+restoring them is not the answer either -- they would be branches no test can
+enter, breaking the 100% direct-branch-coverage requirement that pairs
+`apply.ts` with its owner suite.
