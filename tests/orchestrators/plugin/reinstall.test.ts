@@ -24,6 +24,7 @@ import {
   type InstallCloneCacheSeam,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install.ts";
 import {
+  createReinstallPlugin,
   reinstallPlugin,
   reinstallPlugins,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts";
@@ -43,8 +44,6 @@ import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
 import { retryTree } from "./scope-tree-inventory.ts";
-
-import * as reinstallModule from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts";
 
 import type {
   GitAuthBundle,
@@ -67,7 +66,7 @@ interface NotifyRecord {
 }
 
 test("reinstall exposes its required transaction factory", () => {
-  assert.strictEqual(typeof Reflect.get(reinstallModule, "createReinstallPlugin"), "function");
+  assert.strictEqual(typeof createReinstallPlugin, "function");
 });
 
 function toolInfo(name: string): ToolInventoryItem {

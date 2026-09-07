@@ -157,6 +157,25 @@ export interface UninstallPluginOptions {
   readonly local?: boolean;
 }
 
+/** Owns uninstall's cohesive cascade, config, state, and post-commit schedule. */
+export interface UninstallTransaction {
+  readonly cascadeUnstagePlugin: typeof cascadeUnstagePlugin;
+  readonly commitPluginRemoval: typeof commitPluginRemoval;
+  readonly loadTargetConfig: typeof loadConfig;
+  readonly runPostCommitCleanup: typeof runPostUninstallCleanup;
+  readonly sweepConfigLayers: typeof sweepPluginFromConfigLayers;
+  readonly withLockedStateTransaction: typeof withLockedStateTransaction;
+}
+
+const REAL_UNINSTALL_TRANSACTION: UninstallTransaction = {
+  cascadeUnstagePlugin,
+  commitPluginRemoval,
+  loadTargetConfig: loadConfig,
+  runPostCommitCleanup: runPostUninstallCleanup,
+  sweepConfigLayers: sweepPluginFromConfigLayers,
+  withLockedStateTransaction,
+};
+
 /**
  * Narrow an Error thrown out of `cascadeUnstagePlugin` (PU-7 propagation
  * path) to a closed-set Reason for `PluginFailedMessage.reasons`. Mirrors
@@ -532,17 +551,12 @@ function emitAlreadyGone(args: {
  * and asserts the complete cascade, so a regression on an exercised path fails
  * there. An arm the matrix does not reach is not covered by either.
  */
-export function uninstallPlugin(
-  opts: UninstallPluginOptions & { notifications: { mode: "orchestrated" } },
-): Promise<UninstallPluginOutcome>;
-export function uninstallPlugin(
-  opts: UninstallPluginOptions,
-): Promise<UninstallPluginOutcome | undefined>;
-export async function uninstallPlugin(
+async function uninstallPluginWithTransaction(
+  transaction: UninstallTransaction,
   opts: UninstallPluginOptions,
 ): Promise<UninstallPluginOutcome | undefined> {
   const { ctx, pi, cwd, marketplace, plugin } = opts;
-  const cascade = opts.cascade ?? cascadeUnstagePlugin;
+  const cascade = opts.cascade ?? transaction.cascadeUnstagePlugin;
   const orchestrated = opts.notifications?.mode === "orchestrated";
 
   // ATTR-04 / SCOPE-01 / M3 / M4: the discriminated cross-scope resolver
@@ -615,12 +629,12 @@ export async function uninstallPlugin(
     // state.json -- `withStateGuard` saved unconditionally on closure
     // return, bumping state.json's mtime on every abort, diverging from the
     // documented no-save abort discipline the sibling commands follow.
-    await withLockedStateTransaction(locations, async (tx) => {
+    await transaction.withLockedStateTransaction(locations, async (tx) => {
       const state = tx.state;
       // CFG-03 / T-56-03-04: abort BEFORE any state mutation. The
       // basename-only message prevents an absolute-path information leak.
       // NO tx.save() -- state.json bytes and mtime are untouched.
-      const cfg = await loadConfig(targetConfigPath);
+      const cfg = await transaction.loadTargetConfig(targetConfigPath);
       if (cfg.status === "invalid") {
         configInvalid = true;
         return;
@@ -681,10 +695,10 @@ export async function uninstallPlugin(
         return;
       }
 
-      commitPluginRemoval(mp, { scope, marketplace, plugin });
+      transaction.commitPluginRemoval(mp, { scope, marketplace, plugin });
 
       if (!orchestrated) {
-        await sweepPluginFromConfigLayers(locations, plugin, marketplace);
+        await transaction.sweepConfigLayers(locations, plugin, marketplace);
       }
 
       // WR-04: explicit save on the mutating success arm. Ordering
@@ -743,7 +757,7 @@ export async function uninstallPlugin(
     });
   }
 
-  await runPostUninstallCleanup(locations, scope, marketplace, plugin);
+  await transaction.runPostCommitCleanup(locations, scope, marketplace, plugin);
 
   // PU-8 reload hint: computed by notify from the
   // PluginUninstalledMessage status (uninstalled is in the state-changing
@@ -801,3 +815,30 @@ export async function uninstallPlugin(
   );
   return undefined;
 }
+
+/** Bind uninstall orchestration to one required cohesive transaction owner. */
+export interface UninstallPluginOperation {
+  (
+    opts: UninstallPluginOptions & { notifications: { mode: "orchestrated" } },
+  ): Promise<UninstallPluginOutcome>;
+  (opts: UninstallPluginOptions): Promise<UninstallPluginOutcome | undefined>;
+}
+
+export function createUninstallPlugin(transaction: UninstallTransaction): UninstallPluginOperation {
+  function configuredUninstallPlugin(
+    opts: UninstallPluginOptions & { notifications: { mode: "orchestrated" } },
+  ): Promise<UninstallPluginOutcome>;
+  function configuredUninstallPlugin(
+    opts: UninstallPluginOptions,
+  ): Promise<UninstallPluginOutcome | undefined>;
+  function configuredUninstallPlugin(
+    opts: UninstallPluginOptions,
+  ): Promise<UninstallPluginOutcome | undefined> {
+    return uninstallPluginWithTransaction(transaction, opts);
+  }
+
+  return configuredUninstallPlugin;
+}
+
+/** Production uninstall operation composed through the real transaction adapter. */
+export const uninstallPlugin = createUninstallPlugin(REAL_UNINSTALL_TRANSACTION);

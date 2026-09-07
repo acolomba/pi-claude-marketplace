@@ -302,6 +302,25 @@ interface LockedSuccess {
   readonly invalidConfigWriteBack?: boolean;
 }
 
+/** Owns reinstall's semantic prepare, replace, compensation, and commit schedule. */
+export interface ReinstallTransaction {
+  readonly finalizeReplacements: typeof finalizeReplacements;
+  readonly prepareAll: typeof prepareAllHandles;
+  readonly replaceAll: typeof replaceAll;
+  readonly rollbackReplacements: typeof rollbackReplacements;
+  readonly runPostSuccessMaintenance: typeof runPostSuccessMaintenance;
+  readonly withLockedStateTransaction: typeof withLockedStateTransaction;
+}
+
+const REAL_REINSTALL_TRANSACTION: ReinstallTransaction = {
+  finalizeReplacements,
+  prepareAll: prepareAllHandles,
+  replaceAll,
+  rollbackReplacements,
+  runPostSuccessMaintenance,
+  withLockedStateTransaction,
+};
+
 interface ResolvedReinstallTarget {
   readonly plugin: string;
   readonly marketplace: string;
@@ -318,7 +337,8 @@ const defaultRemoveDataDir: RemoveDataDirFn = async (dataDir) => {
   await rm(dataDir, { recursive: true, force: true });
 };
 
-export async function reinstallPlugin(
+async function reinstallPluginWithTransaction(
+  transaction: ReinstallTransaction,
   opts: ReinstallPluginOptions,
 ): Promise<ReinstallPluginOutcome> {
   const { ctx, pi, scope, cwd, marketplace, plugin } = opts;
@@ -327,9 +347,9 @@ export async function reinstallPlugin(
 
   let locked: LockedSuccess;
   try {
-    locked = await withLockedStateTransaction(
+    locked = await transaction.withLockedStateTransaction(
       locations,
-      (tx) => runLockedReinstall(tx, locations, opts),
+      (tx) => runLockedReinstall(transaction, tx, locations, opts),
       opts.__deps?.stateTransaction,
     );
   } catch (err) {
@@ -363,7 +383,7 @@ export async function reinstallPlugin(
     return locked.outcome;
   }
 
-  const maintenanceWarnings = await runPostSuccessMaintenance(opts, locations);
+  const maintenanceWarnings = await transaction.runPostSuccessMaintenance(opts, locations);
   if (render === "none") {
     const notes = [
       ...locked.discoveryWarnings,
@@ -459,6 +479,16 @@ export async function reinstallPlugin(
 
   return locked.outcome;
 }
+
+/** Bind one reinstall operation to a required semantic transaction owner. */
+export function createReinstallPlugin(
+  transaction: ReinstallTransaction,
+): (opts: ReinstallPluginOptions) => Promise<ReinstallPluginOutcome> {
+  return (opts) => reinstallPluginWithTransaction(transaction, opts);
+}
+
+/** Production reinstall operation composed through the real transaction adapter. */
+export const reinstallPlugin = createReinstallPlugin(REAL_REINSTALL_TRANSACTION);
 
 /**
  * handle the single-plugin reinstall failure path. Extracted
@@ -917,6 +947,7 @@ function reasonsFromTypedError(err: unknown): readonly ContentReason[] | undefin
 }
 
 async function runLockedReinstall(
+  transaction: ReinstallTransaction,
   tx: LockedStateTransaction,
   locations: ScopedLocations,
   opts: ReinstallPluginOptions,
@@ -981,7 +1012,7 @@ async function runLockedReinstall(
   );
 
   const pluginDataDir = await locations.pluginDataDir(marketplace, plugin);
-  const handles = await prepareAllHandles({
+  const handles = await transaction.prepareAll({
     locations,
     cwd,
     marketplace,
@@ -991,7 +1022,7 @@ async function runLockedReinstall(
     oldRecord: oldSnapshot,
     agentsDirs: generated.agentsDirs,
   });
-  const { replacements, hookEntries } = await replaceAll(handles, {
+  const { replacements, hookEntries } = await transaction.replaceAll(handles, {
     locations,
     cwd,
     plugin,
@@ -1067,11 +1098,14 @@ async function runLockedReinstall(
 
     rebuildRoutingTables();
   } catch (err) {
-    throw errorWithManualRecovery(err, await rollbackReplacements(replacements));
+    throw errorWithManualRecovery(err, await transaction.rollbackReplacements(replacements));
   }
 
   const staging = splitHandleWarnings(handles);
-  const bridgeWarnings = [...staging.bridge, ...(await finalizeReplacements(replacements))];
+  const bridgeWarnings = [
+    ...staging.bridge,
+    ...(await transaction.finalizeReplacements(replacements)),
+  ];
   return {
     outcome: successOutcome(scope, marketplace, plugin, oldSnapshot, handles),
     discoveryWarnings: staging.discovery,

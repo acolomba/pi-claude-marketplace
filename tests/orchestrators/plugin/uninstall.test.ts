@@ -16,7 +16,10 @@ import {
   AgentsUnstageFailureError,
   cascadeUnstagePlugin,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
-import { uninstallPlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
+import {
+  createUninstallPlugin,
+  uninstallPlugin,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
 import { loadAgentsIndex } from "../../../extensions/pi-claude-marketplace/persistence/agents-index-io.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
@@ -37,8 +40,6 @@ import { SymlinkRefusedError } from "../../../extensions/pi-claude-marketplace/s
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
 import { retryTree } from "./scope-tree-inventory.ts";
-
-import * as uninstallModule from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
 
 import type { UninstallPluginOutcome } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
 import type { AgentsIndex } from "../../../extensions/pi-claude-marketplace/persistence/agents-index-schema.ts";
@@ -81,7 +82,7 @@ interface NotifyRecord {
 }
 
 test("uninstall exposes its required transaction factory", () => {
-  assert.strictEqual(typeof Reflect.get(uninstallModule, "createUninstallPlugin"), "function");
+  assert.strictEqual(typeof createUninstallPlugin, "function");
 });
 
 function makeCtx(piOverrides?: { getAllTools?: () => unknown[] }): {
