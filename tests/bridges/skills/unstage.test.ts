@@ -15,36 +15,19 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
 
-import * as skillsUnstageModule from "../../../extensions/pi-claude-marketplace/bridges/skills/unstage.ts";
+import {
+  createUnstagePluginSkills,
+  unstagePluginSkills,
+} from "../../../extensions/pi-claude-marketplace/bridges/skills/unstage.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { SymlinkRefusedError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
 
+import type { SkillsUnstageRemover } from "../../../extensions/pi-claude-marketplace/bridges/skills/unstage.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 
 interface SkillScope {
   readonly directory: string;
   readonly locations: ScopedLocations;
-}
-
-interface SkillsUnstageRemoverContract {
-  removeTree(target: string): Promise<void>;
-}
-
-type UnstagePluginSkillsContract = (input: {
-  readonly locations: ScopedLocations;
-  readonly previousSkillNames: readonly string[];
-}) => Promise<{ readonly removedNames: readonly string[]; readonly warnings: readonly string[] }>;
-
-type CreateUnstagePluginSkillsContract = (
-  remover: SkillsUnstageRemoverContract,
-) => UnstagePluginSkillsContract;
-
-const { unstagePluginSkills } = skillsUnstageModule;
-
-function requireCreateUnstagePluginSkills(): CreateUnstagePluginSkillsContract {
-  const createUnstagePluginSkills = Reflect.get(skillsUnstageModule, "createUnstagePluginSkills");
-  assert.strictEqual(typeof createUnstagePluginSkills, "function");
-  return createUnstagePluginSkills as CreateUnstagePluginSkillsContract;
 }
 
 async function createSkillScope(t: TestContext, prefix: string): Promise<SkillScope> {
@@ -332,7 +315,7 @@ test("continues after the required remover reports ENOENT after deletion", async
   const raceError = Object.assign(new Error("skill disappeared during removal"), {
     code: "ENOENT",
   });
-  const remover: SkillsUnstageRemoverContract = {
+  const remover: SkillsUnstageRemover = {
     async removeTree(target: string): Promise<void> {
       removalTargets.push(target);
       await rm(target, { recursive: true, force: true });
@@ -341,7 +324,7 @@ test("continues after the required remover reports ENOENT after deletion", async
       }
     },
   };
-  const unstageSkills = requireCreateUnstagePluginSkills()(remover);
+  const unstageSkills = createUnstagePluginSkills(remover);
 
   // act
   const unstagedSkills = await unstageSkills({
@@ -372,16 +355,17 @@ test("propagates the required remover failure after earlier effects", async (t) 
     code: "EACCES",
     path: blockedSkillDirectory,
   });
-  const remover: SkillsUnstageRemoverContract = {
+  const remover: SkillsUnstageRemover = {
     async removeTree(target: string): Promise<void> {
       removalTargets.push(target);
       if (target === blockedSkillDirectory) {
         throw removalError;
       }
+
       await rm(target, { recursive: true, force: true });
     },
   };
-  const unstageSkills = requireCreateUnstagePluginSkills()(remover);
+  const unstageSkills = createUnstagePluginSkills(remover);
 
   // act
   const unstageError = await unstageSkills({
