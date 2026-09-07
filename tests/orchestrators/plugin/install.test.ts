@@ -43,6 +43,7 @@ import { SymlinkRefusedError } from "../../../extensions/pi-claude-marketplace/s
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
+import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
 import { retryTree } from "./scope-tree-inventory.ts";
 
@@ -302,26 +303,8 @@ function makeCtx(piOverrides?: { readonly toolNames?: readonly string[] }): {
   return { ctx, pi, notifications };
 }
 
-/**
- * Hermetic home: override process.env.HOME for the duration of `fn`, then
- * restore. Lets us isolate user-scope state.json under a tmp root so the
- * test never reads or writes the developer's real ~/.pi/.
- */
 async function withHermeticHome<T>(fn: () => Promise<T>): Promise<T> {
-  const hermeticHome = await mkdtemp(path.join(tmpdir(), "install-home-"));
-  const prevHome = process.env.HOME;
-  process.env.HOME = hermeticHome;
-  try {
-    return await fn();
-  } finally {
-    if (prevHome === undefined) {
-      delete process.env.HOME;
-    } else {
-      process.env.HOME = prevHome;
-    }
-
-    await rm(hermeticHome, { recursive: true, force: true });
-  }
+  return withHermeticEnvironment("install-", fn);
 }
 
 interface SeededPlugin {

@@ -50,6 +50,7 @@ import {
   mergeMarketplaceIntoState,
   seedAutoupdateConfig,
 } from "../../edge/handlers/marketplace-seed.ts";
+import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
 import type { ListPluginsOptions } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/list.ts";
 import type {
@@ -109,31 +110,10 @@ function makeCtx(options: { readonly recordTally?: boolean } = {}): {
   return { ctx, pi, notifications, ui };
 }
 
-/**
- * Run a callback with HOME pointing at a tmp dir so user-scope state
- * is hermetic. Restores the original HOME afterward.
- */
 async function withHermeticHome<T>(
   fn: (env: { home: string; cwd: string }) => Promise<T>,
 ): Promise<T> {
-  const originalHome = process.env.HOME;
-  const home = await mkdtemp(path.join(tmpdir(), "plug-list-home-"));
-  const cwd = await mkdtemp(path.join(tmpdir(), "plug-list-cwd-"));
-  process.env.HOME = home;
-  try {
-    return await fn({ home, cwd });
-  } finally {
-    if (originalHome === undefined) {
-      delete process.env.HOME;
-    } else {
-      process.env.HOME = originalHome;
-    }
-
-    // Retry rmdir: a recursive rm can race a lingering async write (a probe
-    // or clone-cache op) and hit ENOTEMPTY on rmdir; retry until it settles.
-    await rm(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
-    await rm(cwd, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
-  }
+  return withHermeticEnvironment("plug-list-", ({ cwd, home }) => fn({ cwd, home }));
 }
 
 interface TreeEntry {
@@ -308,7 +288,36 @@ async function seedMarketplace(opts: SeedMarketplaceOpts): Promise<void> {
 // Empty state (CMC-10 / MSG-ER-1 sentinel)
 // ──────────────────────────────────────────────────────────────────────────
 
-test("CMC-10: empty state in both scopes renders V2 `(no marketplaces)` sentinel", async () => {
+test("CMC-10: empty state ignores an ambient Pi agent directory", async (t) => {
+  const ambientAgentDir = await mkdtemp(path.join(tmpdir(), "plug-list-ambient-"));
+  const hadAgentDir = Object.hasOwn(process.env, "PI_CODING_AGENT_DIR");
+  const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
+  process.env.PI_CODING_AGENT_DIR = ambientAgentDir;
+  t.after(async () => {
+    if (hadAgentDir && previousAgentDir !== undefined) {
+      process.env.PI_CODING_AGENT_DIR = previousAgentDir;
+    } else {
+      delete process.env.PI_CODING_AGENT_DIR;
+    }
+
+    await rm(ambientAgentDir, { recursive: true, force: true });
+  });
+  await saveState(locationsFor("user", "/ambient-cwd").extensionRoot, {
+    schemaVersion: 2,
+    marketplaces: {
+      ambient: {
+        name: "ambient",
+        scope: "user",
+        source: pathSource("/ambient-marketplace"),
+        addedFromCwd: "/ambient-cwd",
+        manifestPath: "/ambient-marketplace/.claude-plugin/marketplace.json",
+        marketplaceRoot: "/ambient-marketplace",
+        plugins: {},
+      },
+    },
+  });
+  const ambientBefore = await snapshotTree(ambientAgentDir);
+
   // Emits `(no marketplaces)` because the top-level
   // `marketplaces: []` array is the structural empty sentinel
   // (D-16-17). Catalog reference:
@@ -330,6 +339,8 @@ test("CMC-10: empty state in both scopes renders V2 `(no marketplaces)` sentinel
     verify(pi);
     verify(ui);
   });
+
+  assert.deepStrictEqual(await snapshotTree(ambientAgentDir), ambientBefore);
 });
 
 // ──────────────────────────────────────────────────────────────────────────
