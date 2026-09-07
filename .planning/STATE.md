@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 03
 current_phase_name: Production Defect Corrections
 status: executing
-stopped_at: Completed 03-01-PLAN.md
-last_updated: "2026-09-07T08:45:23.630Z"
+stopped_at: Completed 03-02-PLAN.md
+last_updated: "2026-09-07T09:03:11.976Z"
 last_activity: 2026-09-07
 last_activity_desc: Phase 03 execution started
-state_head: 51bdce901c0fa5e87012396bf27c30974eddb58a
+state_head: 27ef9cfd2212bf66c1f421e283f09dfc8a765acc
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 87
-  completed_plans: 74
+  completed_plans: 75
   percent: 11
 ---
 
@@ -34,7 +34,7 @@ terminal evidence ledger.
 
 Phase: 03 (Production Defect Corrections) — EXECUTING
 Next: Discuss Phase 03
-Plan: 2 of 14
+Plan: 3 of 14
 Status: Ready to execute
 Last activity: 2026-09-07 — Phase 03 execution started
 
@@ -260,6 +260,7 @@ Last activity: 2026-09-07 — Phase 03 execution started
 | Phase 02 P03                            | 13min    | 2 tasks | 2 files  |
 | Phase 01 P70 | 19min | 2 tasks | 3 files |
 | Phase 03 P01 | 183min | 2 tasks | 4 files |
+| Phase 03 P02 | 13min | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -627,6 +628,9 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 03]: Resolve every marketplace source claim before building mutation buckets so declaration order cannot select a canonical identity. — A complete claim graph makes zero, unique, ambiguous, and multiply claimed cases explicit and deterministic.
 - [Phase 03]: Represent alias ambiguity with the existing source-mismatch plan result. — The existing result is structured and report-only, so no new public error surface is needed.
 - [Phase 03]: Retain conflicted canonical candidates and suppress dependent plugin actions. — Fail-closed reconciliation must report ambiguity without choosing, adding, removing, installing, or uninstalling involved state.
+- [Phase 03]: Resolver order is authoritative for multi-directory agent discovery; later duplicate names warn and never replace the first artifact.
+- [Phase 03]: Install preview and live staging share the same ordered agentsDirs list so conflict detection and materialization cannot drift.
+- [Phase 03]: The singular agent source compatibility union is temporary and will be deleted after update/reinstall migrate in Plan 03-03.
 
 ### Pending Todos
 
@@ -678,19 +682,19 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 03-01-PLAN.md
+**Stopped at:** Completed 03-02-PLAN.md
 
 Phase 01 is sealed at 69/69 plans. Phase 02 Plans 01 through 03 completed
 PDEF-03, PDEF-02, and PDEF-04 with typed fail-closed input, path, and lifecycle
 boundaries. Independent verification passed 3/3 with no behavior, UAT, or
 security gaps. Phase 03 is ready for discussion and planning.
 
-**Resume file:** .planning/phases/03-production-defect-corrections/03-02-PLAN.md
+**Resume file:** .planning/phases/03-production-defect-corrections/03-04-PLAN.md
 
 **Read beside it:** `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`, and the
 Phase 01 terminal evidence ledger and scope-impact crosswalk routed to Phase 03.
 
-Last session: 2026-09-07T08:45:23.338Z
+Last session: 2026-09-07T09:03:11.667Z
 
 **Next:** Discuss Phase 03 Production Defect Corrections, then research and plan
 only the terminal findings that still reproduce.
