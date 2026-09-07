@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 05
 current_phase_name: Injection and Ownership Design
 status: executing
-stopped_at: Phase 05 planned; ready to execute
-last_updated: "2026-09-07T19:15:32.141Z"
+stopped_at: Completed 05-01-PLAN.md
+last_updated: "2026-09-07T19:47:19.673Z"
 last_activity: 2026-09-07
-last_activity_desc: Phase 05 execution started
-state_head: 2800f52fe9368bdff4bac52a1000ed046873aaab
+last_activity_desc: Phase 05 Plan 01 complete; ready for Plan 05-02
+state_head: 30a4abd6a42e6aaa775a8c7bdbc6055b04ca30f9
 progress:
   total_phases: 9
   completed_phases: 3
   total_plans: 127
-  completed_plans: 94
+  completed_plans: 95
   percent: 33
 ---
 
@@ -33,9 +33,9 @@ component as a working Pi artifact.
 
 Phase: 05 (Injection and Ownership Design) — EXECUTING
 Next: Execute Phase 5
-Plan: 1 of 33
-Status: Executing Phase 05
-Last activity: 2026-09-07 — Phase 05 execution started
+Plan: 2 of 33
+Status: Ready to execute
+Last activity: 2026-09-07 — Phase 05 Plan 01 complete; required filesystem ownership ports verified
 
 ## Performance Metrics
 
@@ -274,6 +274,7 @@ Last activity: 2026-09-07 — Phase 05 execution started
 | Phase 03 P10                            | 9min     | 2 tasks | 10 files |
 | Phase 03 P09                            | 12min    | 2 tasks | 11 files |
 | Phase 03 P11                            | 34min    | 2 tasks | 11 files |
+| Phase 05 P01                            | 28min    | 2 tasks | 4 files  |
 
 ## Accumulated Context
 
@@ -725,23 +726,23 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Phase 5 context gathered
+**Stopped at:** Completed 05-01-PLAN.md
 
 Phase 04 completed all seven plans and closed AUTH-01 and TREF-01 through
 TREF-03. Independent verification passed 4/4 with no behavioral or UAT gap;
 the complete quality gate passed 5,397 unit tests and 32 integration tests.
-Phase 5 context is gathered and ready for planning.
+Phase 5 planning passed independent review. Plan 05-01 completed the required
+skills-removal and path-safety port tracer; Wave 2 is ready.
 
-**Resume file:** .planning/phases/05-injection-and-ownership-design/05-CONTEXT.md
+**Resume file:** None
 
 **Read beside it:** `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`, the
 Phase 01 terminal evidence ledger, and Phase 5's roadmap criteria.
 
-Last session: 2026-09-07T14:22:34.458Z
+Last session: 2026-09-07T19:47:19.238Z
 
-**Next:** Plan Phase 5 Injection and Ownership Design from the locked context,
-covering only the terminal hidden-dependency, mutable-state, and public-contract
-findings routed to TREF-04 through TREF-06.
+**Next:** Execute Phase 5 Plans 05-02 through 05-07 in Wave 2 from the verified
+plans while preserving the TREF-04 through TREF-06 boundaries.
 
 ## Deferred Verification
 

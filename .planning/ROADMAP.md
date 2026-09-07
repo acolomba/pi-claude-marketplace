@@ -348,7 +348,7 @@ Plans:
 **Goal:** Expose legitimate test seams with correctly owned runtime state and public contracts.
 **Depends on:** Phase 4
 **Requirements:** TREF-04, TREF-05, TREF-06
-**Plans:** 0/33 plans complete
+**Plans:** 1/33 plans executed
 
 **Success Criteria**:
 
@@ -365,7 +365,7 @@ Plans:
 
 **Wave 1**
 
-- [ ] 05-01-PLAN.md — Prove required production ports through skills unstage and path safety.
+- [x] 05-01-PLAN.md — Prove required production ports through skills unstage and path safety.
 
 **Wave 2** _(blocked on Wave 1 completion)_
 
@@ -567,7 +567,7 @@ baseline, which still includes both pairs; neither is a terminal shortfall.
 | 2. Containment and Input Safety      | 3/3            | Complete    | 2026-09-05 |
 | 3. Production Defect Corrections     | 14/14          | Complete    | 2026-09-07 |
 | 4. Hermetic Test Infrastructure      | 7/7            | Complete    | 2026-09-07 |
-| 5. Injection and Ownership Design    | 0/0            | Not started | —          |
+| 5. Injection and Ownership Design    | 1/33           | In Progress | —          |
 | 6. Assertion and Module Refinement   | 0/0            | Not started | —          |
 | 7. Gate Integrity                    | 0/0            | Not started | —          |
 | 8. Direct Coverage                   | 0/0            | Not started | —          |
