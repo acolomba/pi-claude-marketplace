@@ -19,11 +19,11 @@ import {
   removePluginConfigFromCache,
   writeHookConfig,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
+import { createHooksRuntime as definingCreateHooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import {
   removeHookConfig as definingRemoveHookConfig,
   writeHookConfig as definingWriteHookConfig,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/stage.ts";
-import { createHooksRuntime as definingCreateHooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 
 import type * as HooksBarrel from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import type { HooksHydrationReader } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";

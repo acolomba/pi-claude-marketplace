@@ -588,7 +588,9 @@ test("constructs one hooks runtime for registration and project hydration", asyn
 
   // assert
   assert.deepStrictEqual(runtimeConstructions, ["createHooksRuntime()"]);
-  assert.deepStrictEqual(hydrationConstruction, ["createHooksHydration(hooksRuntime, { loadState })"]);
+  assert.deepStrictEqual(hydrationConstruction, [
+    "createHooksHydration(hooksRuntime, { loadState })",
+  ]);
 });
 
 test("discovers prompts under the working directory the event names, not the one the process runs in", async (t) => {

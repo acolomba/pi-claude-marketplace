@@ -33,19 +33,17 @@ import {
   removePluginConfigFromCache,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
 import { MATCH_ALL_IF } from "../../../extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts";
-import { createHooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import {
   bumpEpoch,
+  currentEpoch,
   getRoutingBucket,
   parsedConfigEntries,
   pendingSessionStartContextEntries,
   resetRoutingState,
+  type RoutingEntry,
   routingTableEntries,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
-import {
-  currentEpoch,
-  type RoutingEntry,
-} from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
+import { createHooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import {
   agentEndCacheHandler,
   resetSettleState,
@@ -1307,12 +1305,26 @@ test(
       config,
       ifPredicates: new Map(),
     });
+    addPluginConfigToCache(
+      "project",
+      "transition",
+      "stale",
+      asAbsolutePluginRoot(path.join(root, "transition", "stale")),
+      config,
+      new Map(),
+    );
 
     // act
     const hooksHydration = createHooksHydration(runtime, hydrationReader);
 
     await hooksHydration.hydrateProjectScopeForCwd(root);
     const cache = Array.from(runtime.parsedConfigEntries().values()).map((entry) => ({
+      scope: entry.scope,
+      marketplace: entry.marketplace,
+      pluginId: entry.pluginId,
+      resolvedSource: entry.resolvedSource,
+    }));
+    const transitionCache = Array.from(parsedConfigEntries().values()).map((entry) => ({
       scope: entry.scope,
       marketplace: entry.marketplace,
       pluginId: entry.pluginId,
@@ -1328,6 +1340,7 @@ test(
         resolvedSource: path.join(root, "user", "first"),
       },
     ]);
+    assert.deepStrictEqual(transitionCache, cache);
     assert.deepStrictEqual(readRoots, [locations.extensionRoot]);
   },
 );
@@ -1402,6 +1415,55 @@ test(
     ]);
   },
 );
+
+test("same-runtime registration invalidates an earlier callback before lazy hydration", async (t) => {
+  // arrange
+  ownRoutingState(t);
+  const root = await mkdtemp(path.join(tmpdir(), "hooks-router-runtime-generation-"));
+  t.after(() => rm(root, { recursive: true, force: true, maxRetries: 3 }));
+  ownAgentRoot(t, path.join(root, "agent"));
+  const factoryRoot = path.join(root, "factory");
+  const projectRoot = path.join(root, "project");
+  const readRoots: string[] = [];
+  const hydrationReader: HooksHydrationReader = {
+    loadState(extensionRoot: string): Promise<ExtensionState> {
+      readRoots.push(extensionRoot);
+      return Promise.resolve({ schemaVersion: 2, marketplaces: {} });
+    },
+  };
+  const runtime = createHooksRuntime();
+  const hooksHydration = createHooksHydration(runtime, hydrationReader);
+  const { pi, registrations, messages } = makeRecordingPi();
+  const context = makeContext(projectRoot, root);
+  await hooksHydration.registerHooksBridge(pi, { ctx: context, cwd: factoryRoot });
+  const staleSessionStart = registeredHandler(registrations, "session_start");
+  await hooksHydration.registerHooksBridge(pi, { ctx: context, cwd: factoryRoot });
+  const liveSessionStart = registeredHandler(registrations, "session_start", 1);
+  const readsAfterRegistration = [...readRoots];
+
+  // act
+  const staleUpdate = await staleSessionStart(
+    { type: "session_start", reason: "startup" },
+    context,
+  );
+  const readsAfterStaleCallback = [...readRoots];
+  const liveUpdate = await liveSessionStart(
+    { type: "session_start", reason: "startup" },
+    context,
+  );
+
+  // assert
+  assert.strictEqual(staleUpdate, undefined);
+  assert.strictEqual(liveUpdate, undefined);
+  assert.strictEqual(runtime.currentGeneration(), 2);
+  assert.deepStrictEqual(readsAfterStaleCallback, readsAfterRegistration);
+  assert.deepStrictEqual(readRoots, [
+    ...readsAfterRegistration,
+    locationsFor("project", projectRoot).extensionRoot,
+  ]);
+  assert.deepStrictEqual(messages, []);
+  assert.strictEqual(registrations.length, 22);
+});
 
 test(
   "registerHooksBridge degrades corrupt scope state and leaves unused shared directories absent",

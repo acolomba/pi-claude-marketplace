@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 
-import { createHooksHydration } from "./bridges/hooks/index.ts";
+import { createHooksHydration, createHooksRuntime } from "./bridges/hooks/index.ts";
 import { registerClaudeMarketplaceTools, registerClaudePluginCommand } from "./edge/register.ts";
 import { aggregateDiscoveredResources } from "./orchestrators/discover.ts";
 import { DEFAULT_GIT_OPS } from "./orchestrators/marketplace/shared.ts";
@@ -28,7 +28,8 @@ import type {
 // alternative would race against the first session_start because the loader
 // does not see the un-awaited inner Promise.
 export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Promise<void> {
-  const hooksHydration = createHooksHydration({ loadState });
+  const hooksRuntime = createHooksRuntime();
+  const hooksHydration = createHooksHydration(hooksRuntime, { loadState });
   const onResourcesDiscover = pi.on.bind(pi) as unknown as (
     event: "resources_discover",
     handler: (

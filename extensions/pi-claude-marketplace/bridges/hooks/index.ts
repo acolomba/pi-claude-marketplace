@@ -20,6 +20,8 @@ export {
 } from "./event-router.ts";
 
 export type { HooksHydration, HooksHydrationReader } from "./event-router.ts";
+export { createHooksRuntime } from "./runtime.ts";
+export type { HooksRuntime } from "./runtime.ts";
 
 // LIFE-03 / D-63-02: hooks bridge write/remove primitives. Private helpers
 // (`assertNoSymlinkEscapeInHooksSubtree`, `hookConfigPathFor`) are NOT
