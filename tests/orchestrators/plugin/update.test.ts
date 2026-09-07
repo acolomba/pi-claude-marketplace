@@ -62,7 +62,11 @@ import type {
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { UpdateCloneCacheSeam } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type {
+  NotificationContext,
+  ToolInventory,
+  ToolInventoryItem,
+} from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
 const UPDATE_REMOTE_URLS = [
   "https://github.com/anthropics/test.git",
@@ -228,9 +232,9 @@ interface NotifyRecord {
   severity?: string;
 }
 
-function makeCtx(piOverrides?: { getAllTools?: () => unknown[] }): {
-  ctx: ExtensionContext;
-  pi: ExtensionAPI;
+function makeCtx(piOverrides?: { getAllTools?: () => readonly ToolInventoryItem[] }): {
+  ctx: NotificationContext;
+  pi: ToolInventory;
   notifications: NotifyRecord[];
 } {
   const notifications: NotifyRecord[] = [];
@@ -240,10 +244,10 @@ function makeCtx(piOverrides?: { getAllTools?: () => unknown[] }): {
         notifications.push(s === undefined ? { message: m } : { message: m, severity: s });
       },
     },
-  } as ExtensionContext;
-  const pi = {
-    getAllTools: piOverrides?.getAllTools ?? ((): unknown[] => []),
-  } as ExtensionAPI;
+  };
+  const pi: ToolInventory = {
+    getAllTools: piOverrides?.getAllTools ?? (() => []),
+  };
   return { ctx, pi, notifications };
 }
 

@@ -53,7 +53,10 @@ import { updatePlugins } from "../../extensions/pi-claude-marketplace/orchestrat
 import { createGitOpsFake } from "../platform/git-ops-fake.ts";
 import { withHermeticEnvironment } from "../platform/hermetic-environment.ts";
 
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type {
+  NotificationContext,
+  ToolInventory,
+} from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
 // ---------------------------------------------------------------------------
 // Hermetic harness -- mirrors the per-op orchestrator test idiom
@@ -70,9 +73,13 @@ function makeMockGitOps() {
   return createGitOpsFake({ boundary: "memory" });
 }
 
-function makeCtx(): { ctx: ExtensionContext; pi: ExtensionAPI; notifications: NotifyRecord[] } {
+function makeCtx(): {
+  ctx: NotificationContext;
+  pi: ToolInventory;
+  notifications: NotifyRecord[];
+} {
   const notifications: NotifyRecord[] = [];
-  const pi = { getAllTools: (): unknown[] => [] } as unknown as ExtensionAPI;
+  const pi: ToolInventory = { getAllTools: () => [] };
   const ctx = {
     ui: {
       notify: (m: string, s?: string): void => {
@@ -80,7 +87,7 @@ function makeCtx(): { ctx: ExtensionContext; pi: ExtensionAPI; notifications: No
       },
     },
     pi,
-  } as unknown as ExtensionContext;
+  };
   return { ctx, pi, notifications };
 }
 
@@ -107,8 +114,8 @@ interface Emission {
  * invocation (install has no bare form).
  */
 type Invoker = (env: {
-  ctx: ExtensionContext;
-  pi: ExtensionAPI;
+  ctx: NotificationContext;
+  pi: ToolInventory;
   cwd: string;
   mode: "explicit" | "bare";
 }) => Promise<void>;

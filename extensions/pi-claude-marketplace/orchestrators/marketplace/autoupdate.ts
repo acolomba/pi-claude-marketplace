@@ -79,7 +79,7 @@ import { AUTOUPDATE_CONTEXT, NOAUTOUPDATE_CONTEXT } from "./autoupdate.messaging
 import { classifyAutoupdateFlip, crossScopeFlag } from "./shared.ts";
 
 import type { MarketplaceConfigEntry, ScopeConfig } from "../../persistence/config-io.ts";
-import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
+import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
 import type { ContentReason, PluginFailedMessage } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 
@@ -94,14 +94,14 @@ export type AutoupdateNotifications =
   { readonly mode: "standalone" } | { readonly mode: "orchestrated" };
 
 export interface AutoupdateOptions {
-  readonly ctx: ExtensionContext;
+  readonly ctx: NotificationContext;
   /**
    * Soft-dep probe target, consumed by the `notify(ctx, pi, message)` calls
    * below to drive the single per-invocation soft-dep probe -- even though
    * mp-level rows never inject soft-dep markers, the probe is threaded through
    * every notify entry for invariant symmetry.
    */
-  readonly pi: ExtensionAPI;
+  readonly pi: ToolInventory;
   /** When undefined, flip every marketplace in target scope(s). */
   readonly name?: string;
   /** true -> autoupdate; false -> noautoupdate. */

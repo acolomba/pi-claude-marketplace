@@ -5,8 +5,6 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { Type } from "typebox";
-
 import {
   GENERATED_AGENT_MARKER,
   GENERATED_AGENT_PREFIX,
@@ -53,7 +51,11 @@ import type {
   GitOps,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import type { ExtensionAPI, ExtensionContext, ToolInfo } from "@earendil-works/pi-coding-agent";
+import type {
+  NotificationContext,
+  ToolInventory,
+  ToolInventoryItem,
+} from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { TestContext } from "node:test";
 
 const require = createRequire(import.meta.url);
@@ -270,23 +272,16 @@ interface NotifyRecord {
   severity?: string;
 }
 
-function toolInfo(name: string): ToolInfo {
+function toolInfo(name: string): ToolInventoryItem {
   return {
     name,
-    description: `test tool ${name}`,
-    parameters: Type.Object({}),
-    sourceInfo: {
-      origin: "top-level",
-      path: `/test/tools/${name}.ts`,
-      scope: "temporary",
-      source: "test",
-    },
-  } satisfies ToolInfo;
+    sourceInfo: { source: "test" },
+  };
 }
 
 function makeCtx(piOverrides?: { readonly toolNames?: readonly string[] }): {
-  ctx: ExtensionContext;
-  pi: ExtensionAPI;
+  ctx: NotificationContext;
+  pi: ToolInventory;
   notifications: NotifyRecord[];
 } {
   const notifications: NotifyRecord[] = [];
@@ -296,10 +291,10 @@ function makeCtx(piOverrides?: { readonly toolNames?: readonly string[] }): {
         notifications.push(severity === undefined ? { message } : { message, severity });
       },
     },
-  } as ExtensionContext;
-  const pi = {
+  };
+  const pi: ToolInventory = {
     getAllTools: () => (piOverrides?.toolNames ?? []).map(toolInfo),
-  } as ExtensionAPI;
+  };
   return { ctx, pi, notifications };
 }
 

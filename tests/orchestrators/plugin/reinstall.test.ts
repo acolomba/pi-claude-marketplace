@@ -52,7 +52,11 @@ import type {
   ReinstallCloneCacheSeam,
   ReinstallPluginDeps,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts";
-import type { ExtensionAPI, ExtensionContext, ToolInfo } from "@earendil-works/pi-coding-agent";
+import type {
+  NotificationContext,
+  ToolInventory,
+  ToolInventoryItem,
+} from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { TestContext } from "node:test";
 
 interface NotifyRecord {
@@ -60,13 +64,13 @@ interface NotifyRecord {
   severity?: string;
 }
 
-function toolInfo(name: string): ToolInfo {
-  return { name } as ToolInfo;
+function toolInfo(name: string): ToolInventoryItem {
+  return { name };
 }
 
 function makeCtx(piOverrides?: { readonly toolNames?: readonly string[] }): {
-  ctx: ExtensionContext;
-  pi: ExtensionAPI;
+  ctx: NotificationContext;
+  pi: ToolInventory;
   notifications: NotifyRecord[];
 } {
   const notifications: NotifyRecord[] = [];
@@ -76,10 +80,10 @@ function makeCtx(piOverrides?: { readonly toolNames?: readonly string[] }): {
         notifications.push(severity === undefined ? { message } : { message, severity });
       },
     },
-  } as ExtensionContext;
-  const pi = {
+  };
+  const pi: ToolInventory = {
     getAllTools: () => (piOverrides?.toolNames ?? []).map(toolInfo),
-  } as ExtensionAPI;
+  };
   return { ctx, pi, notifications };
 }
 
@@ -355,7 +359,7 @@ async function writeManifest(
   return manifestPath;
 }
 
-async function reinstallDefault(cwd: string, ctx: ExtensionContext, pi: ExtensionAPI) {
+async function reinstallDefault(cwd: string, ctx: NotificationContext, pi: ToolInventory) {
   return reinstallPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
 }
 
