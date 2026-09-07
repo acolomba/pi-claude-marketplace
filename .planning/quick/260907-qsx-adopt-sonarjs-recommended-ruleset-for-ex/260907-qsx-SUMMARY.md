@@ -85,4 +85,6 @@ Covering `tests/` is a real option rather than a blocked one — the test block
 turns off only some rules, not a blanket exemption. Cost is measured: 1021
 violations, or roughly 224 once `void-use` is excluded, most of the remainder
 being fixture artifacts (`no-hardcoded-passwords`,
-`publicly-writable-directories` on tmp paths). Not filed as a backlog entry.
+`publicly-writable-directories` on tmp paths). Filed as SWTEST-01 in
+`.planning/BACKLOG.md` with the per-rule breakdown, and sequenced behind
+TESTQ-01 rather than beside it.

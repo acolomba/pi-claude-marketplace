@@ -2470,6 +2470,74 @@ matches every event rather than filtering on the command, the same state
 `IF_PREFIX_TARGETS` mapping to `{"powershell"}`, and test coverage mirroring
 the existing `Bash(...)` predicate suite.
 
+## SWTEST-01: the Sonar way ruleset stops at `extensions/`; `tests/` is unmeasured by it
+
+Filed 2026-09-07 alongside the change that adopted the ruleset (`fe1313c6`,
+quick task 260907-qsx). Deferred deliberately, with the cost measured rather
+than guessed, so the decision is a scoping call and not a discovery exercise.
+
+`eslint.config.js` runs `sonarjs.configs.recommended.rules` over
+`extensions/pi-claude-marketplace/**/*.ts` only. That scope mirrors
+`sonar.sources`. The test tree is outside it for two independent reasons:
+`sonar.test.exclusions=tests/**` means SonarCloud never reads it, so there is
+no upstream parity pressure; and the same ruleset reports 1021 problems there
+today.
+
+**There is no blanket exemption to lean on.** The `tests/**/*.ts` block turns
+off five sonarjs rules and a handful of typescript-eslint ones, nothing more.
+Every other active rule already runs on the test tree and passes. So this is
+an opt-in decision about 1021 specific findings, not a wall.
+
+**The measured breakdown**, from the full ruleset against `tests/`:
+
+| Count | Rule | Reading |
+|---|---|---|
+| 797 | `void-use` | The house `void (x satisfies T)` compile-time assertion idiom, plus `void symbol;` to mark an intentional reference. Not a defect. |
+| 48 | `no-alphabetical-sort` | Probably real. `.sort()` with no comparator. |
+| 46 | `publicly-writable-directories` | Fixture temp paths. |
+| 34 | `no-hardcoded-passwords` | Fixture credentials. |
+| 14 | `no-unused-vars` | Overlaps the typescript-eslint rule already configured with a `^_` ignore pattern. |
+| 13 | `super-linear-regex` | Probably real; worth reading. |
+| 12 | `assertions-in-tests` | See below. |
+| 10 | `different-types-comparison` | Probably real. |
+| 8 | `no-nested-conditional` | Currently `off` for tests by choice. |
+| 7 | `no-empty-test-file` | See below. |
+| 6 each | `regex-complexity`, `no-identical-functions`, `no-clear-text-protocols` | |
+| 4 | `no-misleading-array-reverse` | |
+| 2 each | `no-trivial-assertions`, `no-os-command-from-path`, `no-invariant-returns` | |
+| 1 each | `no-extra-arguments`, `use-type-alias`, `no-nested-template-literals`, `no-selector-parameter` | |
+
+Drop `void-use` and roughly 224 remain, most of them fixture artifacts.
+
+**The reason to pick this up is narrower than the total, and it is the
+interesting part.** Three of these rules measure assertion strength directly:
+`assertions-in-tests` (S2699, a test with no assertion at all, 12 hits),
+`no-empty-test-file` (S2187, 7 hits) and `no-trivial-assertions` (S5914, an
+assertion that cannot fail, 2 hits). That is 21 findings against exactly the
+gap [TESTQ-01] names in its own calibration warning -- "93% pair completeness
+coexists with ~231 surviving-mutation BLOCKERs; per-pair coverage is not
+evidence of assertion strength". These three rules are a cheap, automated
+probe for that class, and nothing in the repo currently runs them.
+
+Direction for later: do NOT enable the ruleset wholesale on `tests/`. Enable
+the three assertion-strength rules first and read their 21 findings, since
+they carry the value and are separable from the noise. Then decide the rest
+per cluster: `void-use` should almost certainly stay off for the test tree
+(the idiom is deliberate and documented), the fixture clusters
+(`publicly-writable-directories`, `no-hardcoded-passwords`) want a
+`tests/fixtures/**` carve-out rather than a rule-level disable, and
+`no-unused-vars` should be left to the typescript-eslint rule already
+configured for it rather than run twice under two ignore patterns.
+
+Sequence it against [TESTQ-01] rather than beside it. That item already owns a
+large test-quality corpus with 9 operator decisions pending, and its
+`test:coverage:direct` work would collide with a broad test-tree lint change.
+
+Code seams: `eslint.config.js` (the Sonar way block, currently scoped to
+`extensions/`; and the `tests/**/*.ts` block that disables five sonarjs
+rules), `.planning/codebase/CONVENTIONS.md` (the "Sonar way on `extensions/`
+only" bullet, which states the scope this item would change).
+
 <!--
 Pruned 2026-06-08: both prior items shipped in v1.10 Error Attribution.
 - "Install error misattribution when marketplace is missing" -> closed by ATTR-01..10
