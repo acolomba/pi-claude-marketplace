@@ -34,7 +34,8 @@ component as a working Pi artifact.
 Phase: Milestone v1.19 complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-09-03 — Milestone v1.19 completed and archived
+Last activity: 2026-09-07 — Completed quick task 260907-l4w: fix #155 agents
+block-scalar frontmatter mangling
 
 ## Performance Metrics
 
@@ -406,6 +407,12 @@ None for roadmap creation.
   hand. Phases 115 through 117 and milestone close will hit the same wall until the
   stale workstream directories are retired or v1.19 is given its own workstream.
 - RESOLVED by 117-12: D-117-20 in `117-CONTEXT.md` now reads 190 complete numeric records + 7 accepted D-116-01a shortfalls + 7 type-only, matching the operator decision taken in plan 117-11 and the retained all-pair artifact. The superseded 197 + 7 wording is gone.
+
+### Quick Tasks Completed
+
+| #          | Description                                                                                                 | Date       | Commit   | Directory                                                                                            |
+| ---------- | ----------------------------------------------------------------------------------------------------------- | ---------- | -------- | ---------------------------------------------------------------------------------------------------- |
+| 260907-l4w | Fix issue #155: agents bridge frontmatter parser mangles YAML multiline (block scalar) description values | 2026-09-07 | c82a731b | [260907-l4w-fix-issue-155-agents-bridge-frontmatter-](./quick/260907-l4w-fix-issue-155-agents-bridge-frontmatter-/) |
 
 ## Deferred Items
 
