@@ -251,7 +251,7 @@ Plans:
 **Goal:** Fix each remaining confirmed production defect with regression evidence.
 **Depends on:** Phase 2
 **Requirements:** PDEF-01, PDEF-05, PDEF-06, PDEF-07, PDEF-08
-**Plans:** 4/14 plans executed
+**Plans:** 5/14 plans executed
 
 **Success Criteria**:
 
@@ -275,7 +275,7 @@ Plans:
 - [x] 03-02-PLAN.md — Promote ordered multi-directory agent paths through staging and install.
 - [x] 03-04-PLAN.md — Correct manual/auto compact triggers at both hook payload owners.
 - [x] 03-05-PLAN.md — Harden hook lookups and remove the synchronous no-producer dispatch branch.
-- [ ] 03-08-PLAN.md — Declare autoupdate and list cardinality from invocation structure.
+- [x] 03-08-PLAN.md — Declare autoupdate and list cardinality from invocation structure.
 - [ ] 03-13-PLAN.md — Declare marketplace mutation cardinality from invocation structure.
 
 **Wave 2** *(blocked on Wave 1 completion)*
@@ -426,7 +426,7 @@ baseline, which still includes both pairs; neither is a terminal shortfall.
 | ----- | -------------- | ------ | --------- |
 | 1. Live Evidence Revalidation | 70/70 | In Progress|  |
 | 2. Containment and Input Safety | 3/3 | Complete    | 2026-09-05 |
-| 3. Production Defect Corrections | 4/14 | In Progress|  |
+| 3. Production Defect Corrections | 5/14 | In Progress|  |
 | 4. Hermetic Test Infrastructure | 0/0 | Not started | — |
 | 5. Injection and Ownership Design | 0/0 | Not started | — |
 | 6. Assertion and Module Refinement | 0/0 | Not started | — |
