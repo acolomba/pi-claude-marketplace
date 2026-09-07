@@ -26,7 +26,14 @@ import {
   materializePluginClone,
   resolvePluginPin,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts";
-import { fetchPlugins } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/fetch.ts";
+import {
+  createFetchPlugins,
+  fetchPlugins,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/fetch.ts";
+import {
+  makePresenceProbe,
+  probeManifestEntry,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/git-source-probe.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { buildAuthCallbacks } from "../../../extensions/pi-claude-marketplace/platform/git.ts";
@@ -40,7 +47,10 @@ import type {
   GitAuthBundle,
   GitOps,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
-import type { FetchCloneCacheSeam } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/fetch.ts";
+import type {
+  FetchCloneCacheSeam,
+  FetchStatus,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/fetch.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { GitCredentials } from "../../../extensions/pi-claude-marketplace/platform/git.ts";
@@ -354,9 +364,8 @@ async function withWorkspace<T>(
 
 test("exposes a required fetch status factory", async () => {
   // arrange
-  const fetchModule = await import(
-    "../../../extensions/pi-claude-marketplace/orchestrators/plugin/fetch.ts"
-  );
+  const fetchModule =
+    await import("../../../extensions/pi-claude-marketplace/orchestrators/plugin/fetch.ts");
 
   // act
   const exportNames = Object.keys(fetchModule);
@@ -1334,6 +1343,100 @@ test("reports available when the cache becomes visible between fresh probes", as
     ]);
     assert.deepStrictEqual(credentials.calls, { approve: [], fill: [], reject: [] });
     assert.deepStrictEqual(await stagingEntries(locations), []);
+    verifyNotifications(boundary);
+  });
+});
+
+test("renders fresh status after materialization through the required capability", async () => {
+  await withWorkspace(async ({ cwd }) => {
+    // arrange
+    const cloneUrl = "https://example.com/status-capability";
+    const networkUrl = "https://example.com/status-capability.git";
+    const pin = "acacacacacacacacacacacacacacacacacacacac";
+    const fixture = path.join(cwd, "fixture");
+    await writePluginTree(fixture, "fresh", "4.0.0");
+    const marketplace = await marketplaceRecord({
+      cwd,
+      entries: [
+        {
+          description: "Fresh plugin",
+          name: "fresh",
+          source: { source: "url", url: cloneUrl, sha: pin },
+          version: "4.0.0",
+        },
+      ],
+      name: "marketplace",
+      scope: "project",
+    });
+    const locations = await saveMarketplaces(cwd, "project", [marketplace]);
+    const stateBefore = await readFile(locations.stateJsonPath, "utf8");
+    const git = gitBoundary({ allowedRemoteUrls: [networkUrl], fixtureSourceDir: fixture });
+    const cache = cacheBoundary(git.gitOps);
+    const sequence: string[] = [];
+    const seam: FetchCloneCacheSeam = {
+      ...cache.seam,
+      async materializePluginClone(args) {
+        sequence.push("materialize");
+        return cache.seam.materializePluginClone(args);
+      },
+    };
+    const status: FetchStatus = {
+      makePresenceProbe(statusLocations) {
+        const probe = makePresenceProbe(statusLocations);
+        return async (source) => {
+          const presence = await probe(source);
+          sequence.push(`presence:${presence.kind}`);
+          return presence;
+        };
+      },
+      async probeManifestEntry(entry, marketplaceRoot, statusLocations) {
+        const classification = await probeManifestEntry(entry, marketplaceRoot, statusLocations);
+        sequence.push(`manifest:${classification}`);
+        return classification;
+      },
+    };
+    const controlledFetch = createFetchPlugins(status);
+    const credentials = createCredentialOpsFake({ boundary: "memory" });
+    const boundary = notificationBoundary("fresh status capability");
+    const cloneKey = pluginCloneKey(cloneUrl, pin);
+
+    // act
+    await controlledFetch({
+      cloneCacheSeam: seam,
+      credentialOps: credentials.credentialOps,
+      ctx: boundary.ctx,
+      cwd,
+      pi: boundary.pi,
+      scope: "project",
+      target: { kind: "plugin", marketplace: "marketplace", plugin: "fresh" },
+    });
+
+    // assert
+    assert.deepStrictEqual(boundary.notifications, [
+      {
+        message: "● marketplace [project]\n  ○ fresh v4.0.0 (available)\n    Fresh plugin",
+      },
+    ]);
+    assert.deepStrictEqual(await snapshotTree(locations.pluginClonesDir), [
+      { path: cloneKey, type: "directory" },
+      { path: path.join(cloneKey, ".claude-plugin"), type: "directory" },
+      {
+        contents: '{"name":"fresh","version":"4.0.0"}',
+        path: path.join(cloneKey, ".claude-plugin", "plugin.json"),
+        type: "file",
+      },
+      { path: path.join(cloneKey, "skills"), type: "directory" },
+      { path: path.join(cloneKey, "skills", "greet"), type: "directory" },
+      {
+        contents: "---\nname: greet\n---\n\nHello 4.0.0.\n",
+        path: path.join(cloneKey, "skills", "greet", "SKILL.md"),
+        type: "file",
+      },
+    ]);
+    assert.deepStrictEqual(credentials.calls, { approve: [], fill: [], reject: [] });
+    assert.deepStrictEqual(await stagingEntries(locations), []);
+    assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
+    assert.deepStrictEqual(sequence, ["presence:not-cached", "materialize", "manifest:available"]);
     verifyNotifications(boundary);
   });
 });

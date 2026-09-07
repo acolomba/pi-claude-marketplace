@@ -95,6 +95,12 @@ export interface FetchCloneCacheSeam {
   readonly materializeOrRefreshPluginMirror: typeof materializeOrRefreshPluginMirror;
 }
 
+/** Reads the two fetch-owned status boundaries without granting mutation authority. */
+export interface FetchStatus {
+  readonly makePresenceProbe: typeof makePresenceProbe;
+  readonly probeManifestEntry: typeof probeManifestEntry;
+}
+
 export interface FetchPluginsOptions {
   readonly ctx: ExtensionContext;
   /** Factory `pi` reference -- notify owns the single soft-dep probe. */
@@ -120,79 +126,89 @@ export interface FetchPluginsOptions {
  * `(failed)` row, and a manifest-load failure as a per-marketplace `(failed)`
  * block -- neither aborts the sweep.
  */
-export async function fetchPlugins(opts: FetchPluginsOptions): Promise<void> {
-  const { ctx, pi } = opts;
+export function createFetchPlugins(
+  status: FetchStatus,
+): (opts: FetchPluginsOptions) => Promise<void> {
+  return async function fetchPlugins(opts: FetchPluginsOptions): Promise<void> {
+    const { ctx, pi } = opts;
 
-  const { targets, manifestFailures } = await enumerateFetchTargets(opts);
+    const { targets, manifestFailures } = await enumerateFetchTargets(opts);
 
-  // FTCH-06 / D-81-05: ONE authMemo Map spans the whole sweep so a bulk sweep of
-  // N private-host plugins triggers each host's device flow at most once. A
-  // per-plugin memo would re-trigger the flow N times.
-  const authMemo = new Map<string, AuthAttemptResult>();
-  const seam = opts.cloneCacheSeam ?? {
-    resolvePluginPin,
-    materializePluginClone,
-    materializeOrRefreshPluginMirror,
-  };
-  const credentialOps = opts.credentialOps ?? DEFAULT_CREDENTIAL_OPS;
+    // FTCH-06 / D-81-05: ONE authMemo Map spans the whole sweep so a bulk sweep of
+    // N private-host plugins triggers each host's device flow at most once. A
+    // per-plugin memo would re-trigger the flow N times.
+    const authMemo = new Map<string, AuthAttemptResult>();
+    const seam = opts.cloneCacheSeam ?? {
+      resolvePluginPin,
+      materializePluginClone,
+      materializeOrRefreshPluginMirror,
+    };
+    const credentialOps = opts.credentialOps ?? DEFAULT_CREDENTIAL_OPS;
 
-  // Group rows by (scope, marketplace) so the cascade renders one block per pair
-  // (project-first via compareByNameThenScope at the emit seam).
-  const byMp = new Map<string, { name: string; scope: Scope; plugins: FetchMsg[] }>();
-  const pushRow = (scope: Scope, marketplace: string, row: FetchMsg): void => {
-    const key = `${scope}:${marketplace}`;
-    const existing = byMp.get(key);
-    if (existing === undefined) {
-      byMp.set(key, { name: marketplace, scope, plugins: [row] });
-    } else {
-      existing.plugins.push(row);
+    // Group rows by (scope, marketplace) so the cascade renders one block per pair
+    // (project-first via compareByNameThenScope at the emit seam).
+    const byMp = new Map<string, { name: string; scope: Scope; plugins: FetchMsg[] }>();
+    const pushRow = (scope: Scope, marketplace: string, row: FetchMsg): void => {
+      const key = `${scope}:${marketplace}`;
+      const existing = byMp.get(key);
+      if (existing === undefined) {
+        byMp.set(key, { name: marketplace, scope, plugins: [row] });
+      } else {
+        existing.plugins.push(row);
+      }
+    };
+
+    for (const target of targets) {
+      // NEVER-throws per-plugin (mirrors updateSinglePlugin): a thrown fetch is
+      // captured as a `(failed)` row and the sweep continues to the remaining
+      // plugins.
+      const row = await fetchOne(target, {
+        ctx,
+        seam,
+        status,
+        credentialOps,
+        authMemo,
+        ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
+      });
+      pushRow(target.scope, target.marketplace, row);
     }
+
+    // OUT-04 / D-04: the cardinality is the invocation FORM -- a `<plugin>@<mp>`
+    // target is single (no tally); `@<mp>` and bare forms are plural (tally).
+    const cardinality: "single" | "plural" = opts.target.kind === "plugin" ? "single" : "plural";
+
+    const blocks: MarketplaceRows<FetchMsg>[] = [...byMp.values()].map((g) => ({
+      name: g.name,
+      scope: g.scope,
+      plugins: g.plugins,
+    }));
+    // A marketplace whose manifest failed to load renders an mp-level `(failed)`
+    // block (list's unparseable-mp form) carrying the narrowed closed-set reason
+    // on the marketplace subject (D-48-A) at error severity, no plugin child rows.
+    for (const failure of manifestFailures) {
+      blocks.push({
+        name: failure.marketplace,
+        scope: failure.scope,
+        status: "failed",
+        severity: "error",
+        reasons: [failure.reason],
+        plugins: [],
+      });
+    }
+
+    blocks.sort((a, b) =>
+      compareByNameThenScope({ name: a.name, scope: a.scope }, { name: b.name, scope: b.scope }),
+    );
+    const marketplaces: Plural<MarketplaceRows<FetchMsg>> = blocks;
+
+    notifyWithContext(ctx, pi, FETCH_CONTEXT, marketplaces, "cascade", cardinality);
   };
-
-  for (const target of targets) {
-    // NEVER-throws per-plugin (mirrors updateSinglePlugin): a thrown fetch is
-    // captured as a `(failed)` row and the sweep continues to the remaining
-    // plugins.
-    const row = await fetchOne(target, {
-      ctx,
-      seam,
-      credentialOps,
-      authMemo,
-      ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
-    });
-    pushRow(target.scope, target.marketplace, row);
-  }
-
-  // OUT-04 / D-04: the cardinality is the invocation FORM -- a `<plugin>@<mp>`
-  // target is single (no tally); `@<mp>` and bare forms are plural (tally).
-  const cardinality: "single" | "plural" = opts.target.kind === "plugin" ? "single" : "plural";
-
-  const blocks: MarketplaceRows<FetchMsg>[] = [...byMp.values()].map((g) => ({
-    name: g.name,
-    scope: g.scope,
-    plugins: g.plugins,
-  }));
-  // A marketplace whose manifest failed to load renders an mp-level `(failed)`
-  // block (list's unparseable-mp form) carrying the narrowed closed-set reason
-  // on the marketplace subject (D-48-A) at error severity, no plugin child rows.
-  for (const failure of manifestFailures) {
-    blocks.push({
-      name: failure.marketplace,
-      scope: failure.scope,
-      status: "failed",
-      severity: "error",
-      reasons: [failure.reason],
-      plugins: [],
-    });
-  }
-
-  blocks.sort((a, b) =>
-    compareByNameThenScope({ name: a.name, scope: a.scope }, { name: b.name, scope: b.scope }),
-  );
-  const marketplaces: Plural<MarketplaceRows<FetchMsg>> = blocks;
-
-  notifyWithContext(ctx, pi, FETCH_CONTEXT, marketplaces, "cascade", cardinality);
 }
+
+const NODE_FETCH_STATUS: FetchStatus = { makePresenceProbe, probeManifestEntry };
+
+/** Fetches plugins through the Node-backed status capability. */
+export const fetchPlugins = createFetchPlugins(NODE_FETCH_STATUS);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Manifest-driven enumeration (fetchable set)
@@ -299,6 +315,7 @@ async function enumerateMarketplaceEntries(
 interface FetchOneDeps {
   readonly ctx: ExtensionContext;
   readonly seam: FetchCloneCacheSeam;
+  readonly status: FetchStatus;
   readonly credentialOps: CredentialOps;
   readonly authMemo: Map<string, AuthAttemptResult>;
   readonly deviceFlowHttp?: DeviceFlowHttp;
@@ -340,7 +357,7 @@ async function fetchOne(target: FetchTargetEntry, deps: FetchOneDeps): Promise<F
     // a no-op (network-free). An unpinned source ALWAYS refreshes (its warm
     // mirror is not a no-op), so only the pinned-warm case short-circuits here.
     if (gitSource.sha !== undefined) {
-      const presence = await makePresenceProbe(locations)(gitSource);
+      const presence = await deps.status.makePresenceProbe(locations)(gitSource);
       if (presence.kind === "materialized") {
         return skippedUpToDate(entry);
       }
@@ -350,7 +367,7 @@ async function fetchOne(target: FetchTargetEntry, deps: FetchOneDeps): Promise<F
     await materializeThroughSeam(gitSource, deps, locations);
 
     // Derive the post-fetch row FRESH against the now-warm tree.
-    return await freshRow(entry, marketplaceRoot, locations);
+    return await freshRow(entry, marketplaceRoot, locations, deps.status);
   } catch (err) {
     return failedRow(entry, err);
   }
@@ -429,9 +446,10 @@ async function freshRow(
   entry: ManifestEntry,
   marketplaceRoot: string,
   locations: ScopedLocations,
+  status: FetchStatus,
 ): Promise<FetchMsg> {
   const meta = entryMeta(entry);
-  const classification = await probeManifestEntry(entry, marketplaceRoot, locations);
+  const classification = await status.probeManifestEntry(entry, marketplaceRoot, locations);
   if (classification === "remote") {
     return { status: "remote", name: entry.name, ...meta };
   }
@@ -445,7 +463,7 @@ async function freshRow(
   // available) or the structural notes (unavailable), narrowed through the SAME
   // helpers `list` uses (byte-parity). A probe throw folds to `unavailable` with
   // the narrowed cause class.
-  return await reasonedRow(entry, marketplaceRoot, locations, meta);
+  return await reasonedRow(entry, marketplaceRoot, locations, meta, status);
 }
 
 /**
@@ -460,6 +478,7 @@ async function reasonedRow(
   marketplaceRoot: string,
   locations: ScopedLocations,
   meta: { version?: string; description?: string },
+  status: FetchStatus,
 ): Promise<FetchMsg> {
   const { resolveStrict } = await import("../../domain/resolver.ts");
 
@@ -470,7 +489,7 @@ async function reasonedRow(
     // probe is the only reachable resolver policy here.
     const resolved = await resolveStrict(entry, {
       marketplaceRoot,
-      resolveGitPluginRoot: makePresenceProbe(locations),
+      resolveGitPluginRoot: status.makePresenceProbe(locations),
     });
 
     // Discriminate on the resolver's own three-way state so the reasons source
