@@ -1,5 +1,9 @@
 # Changelog
 
+## [Unreleased]
+
+- Plugin commands now install on Windows. Their generated name used `:`, which Windows forbids in a filename, so any plugin with a `commands/` directory failed. The name uses `-` on Windows only. Thanks to @ricardofrantz (#143).
+
 ## [0.18.2] - 2026-09-07
 
 - An agent whose `description` uses a YAML block scalar now installs with its full text. It used to install with the bare `>` or `|` indicator, which broke auto-discovery. Thanks to @kevinkirkup (#155).
