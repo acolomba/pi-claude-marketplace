@@ -891,7 +891,7 @@ test("D-03-INV :: add invalidates marketplace-names cache for the new scope", as
         },
       },
     );
-    assert.strictEqual(Number.isFinite(Date.parse(lastUpdatedAt)), true);
+    assert.match(lastUpdatedAt ?? "", /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
     assert.deepStrictEqual(config, {
       status: "valid",
       filePath: locations.configJsonPath,
