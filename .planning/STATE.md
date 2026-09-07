@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 03
 current_phase_name: Production Defect Corrections
 status: executing
-stopped_at: Completed 03-14-PLAN.md
-last_updated: "2026-09-07T10:24:01.819Z"
+stopped_at: Completed 03-07-PLAN.md
+last_updated: "2026-09-07T11:01:56.623Z"
 last_activity: 2026-09-07
 last_activity_desc: Phase 03 execution started
-state_head: 52e4f345a3d915a68da9ab2a46d168e775f6450a
+state_head: c67b7a114f3dafd761ef931790a7f93e64a0dee9
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 87
-  completed_plans: 83
+  completed_plans: 84
   percent: 11
 ---
 
@@ -34,7 +34,7 @@ terminal evidence ledger.
 
 Phase: 03 (Production Defect Corrections) — EXECUTING
 Next: Discuss Phase 03
-Plan: 11 of 14
+Plan: 12 of 14
 Status: Ready to execute
 Last activity: 2026-09-07 — Phase 03 execution started
 
@@ -269,6 +269,7 @@ Last activity: 2026-09-07 — Phase 03 execution started
 | Phase 03 P06 | 6min | 2 tasks | 2 files |
 | Phase 03 P12 | 8min | 2 tasks | 4 files |
 | Phase 03 P14 | 9min | 2 tasks | 3 files |
+| Phase 03 P07 | 34min | 3 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -656,6 +657,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 03]: The existing transaction rollback matrix was retained without duplicate cases. — It already proves ordinary and containment identity plus one, multiple, and repeated partial-row behavior.
 - [Phase 03]: Remove the value-dead dispatchable tuple with its runtime guard; retain DispatchableEvent as an exact BucketAEvent compatibility alias. — Both producer unions are equal, exhaustive translator records enforce totality, and keeping duplicate metadata required an unused-value lint exemption.
 - [Phase 03]: Reconcile pending tallies count actionable plugin leaves or standalone failed marketplace blocks; neutral marketplace headers remain structural context. — This preserves the central cascade tally contract while making the producer-owned plural cardinality explicit.
+- [Phase 03]: Known uninstall, update, and marketplace reasons derive from typed identities and stable errno codes, never message keywords.
+- [Phase 03]: Update cleanup failures remain immutable secondary context; the original operational Error stays primary and successful cleanup stays silent.
 
 ### Pending Todos
 
@@ -707,19 +710,19 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 03-14-PLAN.md
+**Stopped at:** Completed 03-07-PLAN.md
 
 Phase 01 is sealed at 69/69 plans. Phase 02 Plans 01 through 03 completed
 PDEF-03, PDEF-02, and PDEF-04 with typed fail-closed input, path, and lifecycle
 boundaries. Independent verification passed 3/3 with no behavior, UAT, or
 security gaps. Phase 03 is ready for discussion and planning.
 
-**Resume file:** .planning/phases/03-production-defect-corrections/03-07-PLAN.md
+**Resume file:** .planning/phases/03-production-defect-corrections/03-10-PLAN.md
 
 **Read beside it:** `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`, and the
 Phase 01 terminal evidence ledger and scope-impact crosswalk routed to Phase 03.
 
-Last session: 2026-09-07T10:24:01.473Z
+Last session: 2026-09-07T11:01:56.290Z
 
 **Next:** Discuss Phase 03 Production Defect Corrections, then research and plan
 only the terminal findings that still reproduce.
