@@ -70,8 +70,8 @@ export interface StageAgentsInput {
   readonly pluginRoot: string;
   readonly pluginDataDir: string;
   readonly resolved: MaterializablePlugin;
-  /** Absolute path to plugin's agents/ dir, or null when the plugin has no agents component. */
-  readonly agentsSourceDir: string | null;
+  /** Absolute agent directories in resolver order; empty when no agents component exists. */
+  readonly agentsDirs: readonly string[];
   /** Generated skill names for this plugin (used to validate `skills:` refs). */
   readonly knownSkills?: readonly string[];
   /**

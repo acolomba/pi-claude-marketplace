@@ -183,26 +183,17 @@ describe("prepareStagePluginAgents", () => {
     // assert
     assert.strictEqual(prepared.kind, "staged");
     assert.deepStrictEqual(prepared.result, {
-      stagedNames: [
-        "pi-claude-marketplace-acme-shared",
-        "pi-claude-marketplace-acme-builder",
-      ],
+      stagedNames: ["pi-claude-marketplace-acme-shared", "pi-claude-marketplace-acme-builder"],
       recorded: [
         {
           generatedName: "pi-claude-marketplace-acme-shared",
           sourcePath: firstSharedPath,
-          targetPath: path.join(
-            locations.agentsDir,
-            "pi-claude-marketplace-acme-shared.md",
-          ),
+          targetPath: path.join(locations.agentsDir, "pi-claude-marketplace-acme-shared.md"),
         },
         {
           generatedName: "pi-claude-marketplace-acme-builder",
           sourcePath: builderPath,
-          targetPath: path.join(
-            locations.agentsDir,
-            "pi-claude-marketplace-acme-builder.md",
-          ),
+          targetPath: path.join(locations.agentsDir, "pi-claude-marketplace-acme-builder.md"),
         },
       ],
       warnings: [

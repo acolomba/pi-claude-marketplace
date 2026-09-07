@@ -63,6 +63,20 @@ import type {
 } from "./types.ts";
 import type { AgentsIndexEntry } from "../../persistence/agents-index-schema.ts";
 
+type LegacyStageAgentsInput = Omit<StageAgentsInput, "agentsDirs"> & {
+  readonly agentsSourceDir: string | null;
+};
+
+type PrepareStageAgentsInput = StageAgentsInput | LegacyStageAgentsInput;
+
+function agentsDirsFromInput(input: PrepareStageAgentsInput): readonly string[] {
+  if ("agentsDirs" in input) {
+    return input.agentsDirs;
+  }
+
+  return input.agentsSourceDir === null ? [] : [input.agentsSourceDir];
+}
+
 type AgentsReplacementInternals = Readonly<{
   backupRoot: string;
   oldIndexText: string | undefined;
@@ -95,7 +109,7 @@ const agentsReplacementInternals = new WeakMap<
  *  10. Aggregate warnings + index corruptions
  */
 export async function prepareStagePluginAgents(
-  input: StageAgentsInput,
+  input: PrepareStageAgentsInput,
 ): Promise<PreparedAgentsStaging> {
   const {
     locations,
@@ -103,7 +117,6 @@ export async function prepareStagePluginAgents(
     pluginName,
     pluginRoot,
     pluginDataDir,
-    agentsSourceDir,
     knownSkills,
     mapModel,
     cwd,
@@ -114,18 +127,13 @@ export async function prepareStagePluginAgents(
   // This is the sole point where scope and cwd meet before convertAgent runs.
   const projectDir = locations.scope === "project" ? cwd : undefined;
 
-  // Step 1: discover. D-07 signature: discoverPluginAgents takes
-  // `agentsDirs: readonly string[]`. A null agentsSourceDir means the
-  // plugin has no agents component; a non-null string maps to a
-  // single-element array. Callers building over the
-  // `componentPaths.agents: readonly string[]` shape pass the array
-  // directly (translation lives at the StageAgentsInput boundary).
-  // D-07 warnings (duplicate generated names across array elements)
-  // are folded into `aggregatedWarnings` below.
-  const discoverResult =
-    agentsSourceDir === null
-      ? { discovered: [] as readonly DiscoveredAgent[], warnings: [] as readonly string[] }
-      : await discoverPluginAgents({ pluginName, agentsDirs: [agentsSourceDir] });
+  // Step 1: discover every directory in resolver order. The singular input
+  // arm is a temporary compatibility seam for update/reinstall; downstream
+  // discovery receives only the canonical list representation.
+  const discoverResult = await discoverPluginAgents({
+    pluginName,
+    agentsDirs: agentsDirsFromInput(input),
+  });
   const discovered: readonly DiscoveredAgent[] = discoverResult.discovered;
   const discoverWarnings: readonly string[] = discoverResult.warnings;
 
