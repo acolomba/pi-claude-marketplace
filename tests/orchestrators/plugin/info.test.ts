@@ -48,8 +48,10 @@ import {
   resolvePluginPin,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts";
 import {
+  createGetPluginInfo,
   getPluginInfo,
   type InfoCloneCacheSeam,
+  type PluginInfoReader,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts";
 import { saveConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -70,9 +72,8 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 type FaultableFsPromiseMethod = "readFile" | "readdir";
 
 test("exposes a required plugin info reader factory", async () => {
-  const infoModule: Record<string, unknown> = await import(
-    "../../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts"
-  );
+  const infoModule: Record<string, unknown> =
+    await import("../../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts");
 
   assert.equal(Object.keys(infoModule).includes("createGetPluginInfo"), true);
 });
@@ -1509,6 +1510,67 @@ test("readdir EACCES on available plugin's skills dir surfaces `{permission deni
   });
 });
 
+test("OPIC-F27: required reader preserves an available-row directory failure and tree", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    const mpRoot = await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [{ name: "p", source: "./p", version: "1.0.0", skills: "skills" }],
+      },
+      installablePluginDirs: ["p"],
+      componentDirs: { p: ["skills/s1"] },
+    });
+    const skillsDir = path.join(mpRoot, "p", "skills");
+    const permissionError = Object.assign(new Error("case-owned reader failure"), {
+      code: "EACCES",
+    });
+    const calls: string[] = [];
+    let raised: unknown;
+    const reader: PluginInfoReader = {
+      readTextFile: (filePath) => readFile(filePath, "utf8"),
+      listDirectory: async (directoryPath) => {
+        calls.push(directoryPath);
+        if (directoryPath === skillsDir) {
+          raised = permissionError;
+          throw permissionError;
+        }
+
+        return readdir(directoryPath, { withFileTypes: true });
+      },
+    };
+    const before = await readdir(mpRoot, { recursive: true });
+    const { ctx, pi, notifications } = makeCtx();
+
+    await createGetPluginInfo(reader)({
+      ctx,
+      pi,
+      marketplace: "mp",
+      plugin: "p",
+      scope: "user",
+      cwd,
+    });
+
+    assert.equal(raised, permissionError);
+    assert.deepEqual(calls, [skillsDir]);
+    assert.deepEqual(await readdir(mpRoot, { recursive: true }), before);
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, undefined);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● mp [user] <no autoupdate>",
+        "  ○ p v1.0.0 (available) {permission denied}",
+        "    components: not resolved",
+      ].join("\n"),
+    );
+  });
+});
+
 // ---------------------------------------------------------------------------
 // (j-S-3) normalizeDependencies: non-array shapes (object, empty array)
 // return undefined -> renderer omits `dependencies:` line entirely.
@@ -2533,6 +2595,73 @@ test("plugin info manifest absent: D-96-03: an unreadable materialized hooks con
     });
 
     // assert
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, undefined);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● mp [user] <no autoupdate>",
+        "  ● alpha v1.0.0 (installed) {not in manifest, permission denied}",
+        "    skills: alpha-skill",
+      ].join("\n"),
+    );
+  });
+});
+
+test("OPIC-F27: required reader preserves a state-only file failure and reason order", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    const mpRoot = await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [] },
+      installed: { alpha: { version: "1.0.0", resources: { hooks: ["alpha"] } } },
+    });
+    const file = await seedMaterializedHooks(
+      "user",
+      cwd,
+      "alpha",
+      JSON.stringify({ Stop: [{ hooks: [{ type: "command", command: "echo hi" }] }] }),
+    );
+    const permissionError = Object.assign(new Error("case-owned reader failure"), {
+      code: "EACCES",
+    });
+    const reads: string[] = [];
+    const lists: string[] = [];
+    let raised: unknown;
+    const reader: PluginInfoReader = {
+      readTextFile: async (filePath) => {
+        reads.push(filePath);
+        if (filePath === file) {
+          raised = permissionError;
+          throw permissionError;
+        }
+
+        return readFile(filePath, "utf8");
+      },
+      listDirectory: async (directoryPath) => {
+        lists.push(directoryPath);
+        return readdir(directoryPath, { withFileTypes: true });
+      },
+    };
+    const before = await readdir(mpRoot, { recursive: true });
+    const { ctx, pi, notifications } = makeCtx();
+
+    await createGetPluginInfo(reader)({
+      ctx,
+      pi,
+      marketplace: "mp",
+      plugin: "alpha",
+      scope: "user",
+      cwd,
+    });
+
+    assert.equal(raised, permissionError);
+    assert.deepEqual(reads, [file]);
+    assert.deepEqual(lists, []);
+    assert.deepEqual(await readdir(mpRoot, { recursive: true }), before);
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, undefined);
     assert.equal(
