@@ -329,6 +329,7 @@ test("partitions empty, non-tool, unknown-prefix, and MCP boundary declarations"
     { declaration: "  \t ", event: "PreToolUse", reason: "empty" },
     { declaration: "Bash(git *)", event: "SessionStart", reason: "non-tool event" },
     { declaration: "Grep(src/**)", event: "PreToolUse", reason: "unknown prefix" },
+    { declaration: "Cd(/tmp)", event: "PreToolUse", reason: "unsupported tool prefix" },
     { declaration: "plain", event: "PreToolUse", reason: "unrecognized shape" },
     { declaration: "mcp____tool", event: "PreToolUse", reason: "underscore server prefix" },
     { declaration: "mcp__server__", event: "PreToolUse", reason: "trailing underscore prefix" },
@@ -353,6 +354,12 @@ test("partitions empty, non-tool, unknown-prefix, and MCP boundary declarations"
       declaration: "Grep(src/**)",
       event: "PreToolUse",
       reason: "unknown prefix",
+      predicate: MATCH_ALL_IF,
+    },
+    {
+      declaration: "Cd(/tmp)",
+      event: "PreToolUse",
+      reason: "unsupported tool prefix",
       predicate: MATCH_ALL_IF,
     },
     {
@@ -413,10 +420,11 @@ test("partitions empty, non-tool, unknown-prefix, and MCP boundary declarations"
   assert.strictEqual(actual[1]?.predicate, MATCH_ALL_IF);
   assert.strictEqual(actual[2]?.predicate, MATCH_ALL_IF);
   assert.strictEqual(actual[3]?.predicate, MATCH_ALL_IF);
-  assert.strictEqual(actual[6]?.predicate, MATCH_ALL_IF);
+  assert.strictEqual(actual[4]?.predicate, MATCH_ALL_IF);
   assert.strictEqual(actual[7]?.predicate, MATCH_ALL_IF);
   assert.strictEqual(actual[8]?.predicate, MATCH_ALL_IF);
   assert.strictEqual(actual[9]?.predicate, MATCH_ALL_IF);
+  assert.strictEqual(actual[10]?.predicate, MATCH_ALL_IF);
 });
 
 test("compiles MCP literals and both server-prefix forms exactly", () => {
@@ -468,6 +476,37 @@ test("falls open when Bash predicate compilation throws", (t) => {
 
   // act
   const predicate = compileIfPredicate("Bash(git *)", "PreToolUse", compileContext);
+
+  // assert
+  assert.strictEqual(predicate, MATCH_ALL_IF);
+});
+
+test("falls open when PowerShell predicate compilation throws", (t) => {
+  // arrange
+  const compileContext = {
+    homedir: "/home/plugin-user",
+    cwd: "/workspace/plugin",
+    projectRoot: "/workspace/plugin",
+  } satisfies CompileIfPredicateContext;
+  const originalEndsWith = Object.getOwnPropertyDescriptor(String.prototype, "endsWith")?.value as (
+    this: string,
+    searchString: string,
+    endPosition?: number,
+  ) => boolean;
+  t.mock.method(
+    String.prototype,
+    "endsWith",
+    function throwsForPowerShellPattern(this: string, searchString: string, endPosition?: number) {
+      if (this === "Get-ChildItem *") {
+        throw new Error("case-owned PowerShell compiler failure");
+      }
+
+      return Reflect.apply(originalEndsWith, this, [searchString, endPosition]);
+    },
+  );
+
+  // act
+  const predicate = compileIfPredicate("PowerShell(Get-ChildItem *)", "PreToolUse", compileContext);
 
   // assert
   assert.strictEqual(predicate, MATCH_ALL_IF);
@@ -638,6 +677,78 @@ test("fails open when Bash command parsing exceeds the recursion limit", () => {
   assert.equal(fires, true);
 });
 
+test("evaluates PowerShell matches, misses, and missing commands independently", () => {
+  // arrange
+  const compileContext = {
+    homedir: "/home/plugin-user",
+    cwd: "/workspace/plugin",
+    projectRoot: "/workspace/plugin",
+  } satisfies CompileIfPredicateContext;
+  const extensionContext = { cwd: compileContext.cwd } as ExtensionContext;
+  const predicate = compileIfPredicate("PowerShell(Get-ChildItem *)", "PreToolUse", compileContext);
+  const rows = [
+    {
+      name: "known command",
+      event: { toolName: "powershell", input: { command: "Get-ChildItem -Path ." } },
+    },
+    {
+      name: "alias command",
+      event: { toolName: "powershell", input: { command: "gci -Path ." } },
+    },
+    {
+      name: "non-matching command",
+      event: { toolName: "powershell", input: { command: "Remove-Item x" } },
+    },
+    { name: "empty command", event: { toolName: "powershell", input: { command: "" } } },
+    { name: "missing command", event: { toolName: "powershell", input: {} } },
+    { name: "non-string command", event: { toolName: "powershell", input: { command: 42 } } },
+  ] as const;
+  const expected = [
+    { name: "known command", fires: true },
+    { name: "alias command", fires: true },
+    { name: "non-matching command", fires: false },
+    { name: "empty command", fires: false },
+    { name: "missing command", fires: false },
+    { name: "non-string command", fires: false },
+  ];
+
+  // act
+  const decisions = rows.map(({ name, event }) => ({
+    name,
+    fires: ifFires(predicate, event, extensionContext, "PreToolUse"),
+  }));
+
+  // assert
+  assert.deepStrictEqual(decisions, expected);
+});
+
+test("fails open when PowerShell command parsing exceeds the recursion limit", () => {
+  // arrange
+  const compileContext = {
+    homedir: "/home/plugin-user",
+    cwd: "/workspace/plugin",
+    projectRoot: "/workspace/plugin",
+  } satisfies CompileIfPredicateContext;
+  const extensionContext = { cwd: compileContext.cwd } as ExtensionContext;
+  const predicate = compileIfPredicate(
+    "PowerShell(Get-ChildItem *)",
+    "PostToolUse",
+    compileContext,
+  );
+  let nestedCommand = "Get-Location";
+  for (let depth = 0; depth < 16; depth++) {
+    nestedCommand = `$(${nestedCommand})`;
+  }
+
+  const event = { toolName: "powershell", input: { command: nestedCommand } };
+
+  // act
+  const fires = ifFires(predicate, event, extensionContext, "PostToolUse");
+
+  // assert
+  assert.equal(fires, true);
+});
+
 test("evaluates path membership, non-membership, absolute paths, and cwd fallback", () => {
   // arrange
   const compileContext = {
@@ -750,7 +861,7 @@ test("evaluates MCP literal equality, server membership, and wrong servers", () 
   assert.deepStrictEqual(actual, expected);
 });
 
-test("dispatches all five predicate arms in stable row order", () => {
+test("dispatches all six predicate arms in stable row order", () => {
   // arrange
   const compileContext = {
     homedir: "/home/plugin-user",
@@ -769,6 +880,12 @@ test("dispatches all five predicate arms in stable row order", () => {
       name: "bash",
       predicate: compileIfPredicate("Bash(git *)", "PreToolUse", compileContext),
       event: { toolName: "bash", input: { command: "git status" } },
+      eventName: "PreToolUse",
+    },
+    {
+      name: "powershell",
+      predicate: compileIfPredicate("PowerShell(Get-ChildItem *)", "PreToolUse", compileContext),
+      event: { toolName: "powershell", input: { command: "Get-ChildItem -Path ." } },
       eventName: "PreToolUse",
     },
     {
@@ -798,6 +915,7 @@ test("dispatches all five predicate arms in stable row order", () => {
   const expected = [
     { name: "match-all", predicateKind: "match-all", fires: true },
     { name: "bash", predicateKind: "bash", fires: true },
+    { name: "powershell", predicateKind: "powershell", fires: true },
     { name: "path-tool", predicateKind: "path-tool", fires: true },
     { name: "mcp-literal", predicateKind: "mcp-literal", fires: true },
     { name: "mcp-server-prefix", predicateKind: "mcp-server-prefix", fires: true },
