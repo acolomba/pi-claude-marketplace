@@ -470,6 +470,14 @@ interface SeededPathMp {
   manifestPath: string;
 }
 
+interface SeededUpdateAgent {
+  readonly directory?: string;
+  readonly sourceName: string;
+  readonly frontmatterName?: string;
+  readonly description?: string;
+  readonly body?: string;
+}
+
 /**
  * Build a marketplace tree on disk and seed a path-source state record.
  * The plugins map carries entries we control; tests then mutate the
@@ -488,6 +496,10 @@ async function seedPathMarketplace(opts: {
       hasSkill?: boolean;
       hasCommand?: boolean;
       hasAgent?: boolean;
+      /** Declared agent directories; the conventional agents/ directory remains additive. */
+      agentDirectories?: readonly string[];
+      /** Agent files to distribute across declared and conventional directories. */
+      agents?: readonly SeededUpdateAgent[];
       hasMcp?: boolean;
       /** WR-03: seed `<pluginRoot>/hooks/hooks.json` with this payload. */
       hooksJson?: object;
@@ -554,6 +566,20 @@ async function seedPathMarketplace(opts: {
       );
     }
 
+    for (const agent of spec.agents ?? []) {
+      const agentDir = path.join(pluginRoot, agent.directory ?? "agents");
+      await mkdir(agentDir, { recursive: true });
+      await writeFile(
+        path.join(agentDir, `${agent.sourceName}.md`),
+        "---\n" +
+          `name: ${agent.frontmatterName ?? agent.sourceName}\n` +
+          `description: ${agent.description ?? `${agent.sourceName} agent`}\n` +
+          "tools: Read,Grep\n" +
+          "---\n\n" +
+          (agent.body ?? `${agent.sourceName} body.\n`),
+      );
+    }
+
     if (spec.hasMcp === true) {
       await writeFile(
         path.join(pluginRoot, ".mcp.json"),
@@ -574,6 +600,7 @@ async function seedPathMarketplace(opts: {
     name,
     source: spec.rawSourceOverride ?? `./plugins/${name}`,
     version: spec.version,
+    ...(spec.agentDirectories !== undefined && { agents: [...spec.agentDirectories] }),
     ...(spec.entryDefaultEnabled !== undefined && { defaultEnabled: spec.entryDefaultEnabled }),
   }));
   const manifest = { name: marketplaceName, plugins: entries };
@@ -1163,6 +1190,139 @@ test("updateSinglePlugin preserves a generated skill preload from its path sourc
     assert.equal(outcome.partition, "updated");
     assert.match(agent, /^skills: hello-tool$/m);
     assert.match(agent, /^- `hello:tool` → skill `hello-tool` \(available on demand\)$/m);
+  });
+});
+
+test("PDEF-01: update preview detects an agent conflict from a later resolved directory", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-agent-dir-preview-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: {
+          hello: {
+            version: "1.0.1",
+            hasSkill: false,
+            agentDirectories: ["declared-agents"],
+            agents: [
+              { directory: "declared-agents", sourceName: "first" },
+              { sourceName: "later" },
+            ],
+          },
+        },
+        installedVersions: { hello: "1.0.0" },
+      });
+      const state = await loadState(locations.extensionRoot);
+      state.marketplaces["other-mp"] = {
+        name: "other-mp",
+        scope: "project",
+        source: pathSource("./other-mp"),
+        addedFromCwd: cwd,
+        manifestPath: path.join(cwd, "other-mp", "marketplace.json"),
+        marketplaceRoot: path.join(cwd, "other-mp"),
+        plugins: {
+          world: makePluginRecord("1.0.0", {
+            skills: [],
+            agents: [`${GENERATED_AGENT_PREFIX}hello-later`],
+          }),
+        },
+      };
+      await saveState(locations.extensionRoot, state);
+      const { ctx, pi, notifications } = makeCtx({ getAllTools: () => [{ name: "subagent" }] });
+
+      await updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      assert.strictEqual(notifications.length, 1);
+      assert.strictEqual(notifications[0]?.severity, "error");
+      assert.match(notifications[0]?.message ?? "", /Cross-plugin name conflict/);
+      assert.match(notifications[0]?.message ?? "", /pi-claude-marketplace-hello-later/);
+      const after = await loadState(locations.extensionRoot);
+      assert.strictEqual(after.marketplaces.mp?.plugins.hello?.version, "1.0.0");
+      await assert.rejects(
+        () => readFile(path.join(locations.agentsDir, `${GENERATED_AGENT_PREFIX}hello-first.md`)),
+        { code: "ENOENT" },
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("PDEF-01: update stages every agent directory and warns on a later duplicate", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-agent-dirs-"));
+    const previousCwd = process.cwd();
+    t.after(async () => {
+      process.chdir(previousCwd);
+      await rm(cwd, { recursive: true, force: true });
+    });
+    const locations = locationsFor("project", cwd);
+    const seeded = await seedPathMarketplace({
+      cwd,
+      marketplaceRoot: path.join(cwd, "mp-src"),
+      marketplaceName: "mp",
+      manifestPlugins: {
+        hello: {
+          version: "1.0.1",
+          hasSkill: false,
+          agentDirectories: ["declared-agents"],
+          agents: [
+            {
+              directory: "declared-agents",
+              sourceName: "shared-first",
+              frontmatterName: "shared",
+              body: "First shared agent.\n",
+            },
+            { sourceName: "later", body: "Later agent.\n" },
+            {
+              sourceName: "shared-later",
+              frontmatterName: "shared",
+              body: "Later shared agent.\n",
+            },
+          ],
+        },
+      },
+      installedVersions: { hello: "1.0.0" },
+    });
+    const conventionalAgentsDir = path.join(seeded.marketplaceRoot, "plugins", "hello", "agents");
+    const expectedWarning =
+      `agent source "shared" in "${conventionalAgentsDir}" elides to generated name ` +
+      `"${GENERATED_AGENT_PREFIX}hello-shared" already produced by an earlier ` +
+      "componentPaths.agents entry; ignoring duplicate.";
+    process.chdir(cwd);
+
+    const outcome = await updateSinglePlugin("hello", "mp", "project");
+
+    assert.strictEqual(outcome.partition, "updated");
+    assert.deepStrictEqual(outcome.notes, [expectedWarning]);
+    const state = await loadState(locations.extensionRoot);
+    assert.deepStrictEqual(state.marketplaces.mp?.plugins.hello?.resources.agents, [
+      `${GENERATED_AGENT_PREFIX}hello-shared`,
+      `${GENERATED_AGENT_PREFIX}hello-later`,
+    ]);
+    assert.match(
+      await readFile(
+        path.join(locations.agentsDir, `${GENERATED_AGENT_PREFIX}hello-shared.md`),
+        "utf8",
+      ),
+      /First shared agent\./,
+    );
+    assert.match(
+      await readFile(
+        path.join(locations.agentsDir, `${GENERATED_AGENT_PREFIX}hello-later.md`),
+        "utf8",
+      ),
+      /Later agent\./,
+    );
   });
 });
 
