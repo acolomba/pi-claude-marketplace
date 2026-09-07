@@ -6,7 +6,10 @@ import { createHooksRuntime } from "../../../extensions/pi-claude-marketplace/br
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 
-import type { ChildLike, TimerLadder } from "../../../extensions/pi-claude-marketplace/bridges/hooks/exec-timer.ts";
+import type {
+  ChildLike,
+  TimerLadder,
+} from "../../../extensions/pi-claude-marketplace/bridges/hooks/exec-timer.ts";
 import type {
   CacheEntry,
   PendingSessionStartContext,
@@ -252,10 +255,13 @@ test("applies settle registration, input, and bounded reentry transitions", () =
   // assert
   assert.strictEqual(consumedMessage, replacementMessage);
   assert.strictEqual(consumedAgain, undefined);
-  assert.deepStrictEqual(allowedTransitions, Array.from({ length: 7 }, () => ({
-    reenter: true,
-    notifyCap: false,
-  })));
+  assert.deepStrictEqual(
+    allowedTransitions,
+    Array.from({ length: 7 }, () => ({
+      reenter: true,
+      notifyCap: false,
+    })),
+  );
   assert.deepStrictEqual(cappedTransition, { reenter: false, notifyCap: true });
   assert.deepStrictEqual(repeatedCap, { reenter: false, notifyCap: false });
   assert.strictEqual(activeAtCap, true);

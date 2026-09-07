@@ -157,10 +157,7 @@ export interface RoutingStateOperations {
   readonly deleteParsedConfig: (key: string) => void;
   readonly parsedConfigEntries: () => ReadonlyMap<string, CacheEntry>;
   readonly getRoutingBucket: (event: BucketAEvent) => readonly RoutingEntry[];
-  readonly setRoutingBucket: (
-    event: BucketAEvent,
-    entries: readonly RoutingEntry[],
-  ) => void;
+  readonly setRoutingBucket: (event: BucketAEvent, entries: readonly RoutingEntry[]) => void;
   readonly routingTableEntries: () => ReadonlyMap<BucketAEvent, readonly RoutingEntry[]>;
 }
 

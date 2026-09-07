@@ -1,10 +1,6 @@
 import type { RingBuffer } from "./async-rewake/ring-buffer.ts";
 import type { ChildLike, TimerLadder } from "./exec-timer.ts";
-import type {
-  CacheEntry,
-  PendingSessionStartContext,
-  RoutingEntry,
-} from "./routing-state.ts";
+import type { CacheEntry, PendingSessionStartContext, RoutingEntry } from "./routing-state.ts";
 import type { BucketAEvent } from "../../domain/components/hook-events.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { AssistantMessage } from "../../platform/pi-api.ts";
@@ -60,10 +56,7 @@ export interface HooksRuntime {
   readonly deleteParsedConfig: (key: string) => void;
   readonly parsedConfigEntries: () => ReadonlyMap<string, CacheEntry>;
   readonly getRoutingBucket: (event: BucketAEvent) => readonly RoutingEntry[];
-  readonly setRoutingBucket: (
-    event: BucketAEvent,
-    entries: readonly RoutingEntry[],
-  ) => void;
+  readonly setRoutingBucket: (event: BucketAEvent, entries: readonly RoutingEntry[]) => void;
   readonly routingTableEntries: () => ReadonlyMap<BucketAEvent, readonly RoutingEntry[]>;
   readonly appendPendingSessionStartContext: (entry: PendingSessionStartContext) => void;
   readonly pendingSessionStartContextEntries: () => readonly PendingSessionStartContext[];
@@ -80,10 +73,7 @@ export interface HooksRuntime {
   readonly takeChild: (dispatchId: string) => HooksRuntimeChildEntry | undefined;
   readonly pidTableEntries: (loc: ScopedLocations) => readonly HooksRuntimePidEntry[];
   readonly shutdownChildren: () => void;
-  readonly runPidTableOperation: (
-    key: string,
-    operation: () => Promise<void>,
-  ) => Promise<void>;
+  readonly runPidTableOperation: (key: string, operation: () => Promise<void>) => Promise<void>;
 }
 
 /** Creates one isolated owner for a hooks extension lifecycle. */
@@ -141,9 +131,7 @@ export function createHooksRuntime(): HooksRuntime {
     },
 
     routingTableEntries(): ReadonlyMap<BucketAEvent, readonly RoutingEntry[]> {
-      return new Map(
-        Array.from(routingTable, ([event, entries]) => [event, [...entries]]),
-      );
+      return new Map(Array.from(routingTable, ([event, entries]) => [event, [...entries]]));
     },
 
     appendPendingSessionStartContext(entry: PendingSessionStartContext): void {
