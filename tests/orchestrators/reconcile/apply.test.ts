@@ -2206,29 +2206,33 @@ describe("applyReconcile", () => {
     const { cwd, project, user } = await createHermeticScopes(t, "fan-out");
     const projectSource = await writeMarketplaceSource(cwd, "p-src", "p-mp", {});
     const userSource = await writeMarketplaceSource(cwd, "u-src", "u-mp", {});
-    await writeUnder(
-      project.configJsonPath,
-      configBytes({ marketplaces: { "p-mp": { source: projectSource.marketplaceRoot } } }),
-    );
+    const projectConfig = configBytes({
+      marketplaces: { "p-mp": { source: projectSource.marketplaceRoot } },
+    });
+    const userConfig = configBytes({
+      marketplaces: { "u-mp": { source: userSource.marketplaceRoot } },
+    });
+    await writeUnder(project.configJsonPath, projectConfig);
     await seedState(project, {
       schemaVersion: 2,
       lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {},
     });
-    await writeUnder(
-      user.configJsonPath,
-      configBytes({ marketplaces: { "u-mp": { source: userSource.marketplaceRoot } } }),
-    );
+    await writeUnder(user.configJsonPath, userConfig);
     await seedState(user, {
       schemaVersion: 2,
       lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {},
     });
+    await writeUnder(path.join(project.scopeRoot, "unrelated.txt"), "project bytes\n");
+    await writeUnder(path.join(user.scopeRoot, "unrelated.txt"), "user bytes\n");
     const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
     const { gitOps, clonedUrls } = createOfflineGitOps();
+    const startedAt = Date.now();
 
     // act
     await applyReconcile({ ctx, pi, cwd, gitOps });
+    const completedAt = Date.now();
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -2236,12 +2240,74 @@ describe("applyReconcile", () => {
         message: "● p-mp [project] (added)\n\n● u-mp [user] (added)\n\nReconcile: 2 successes",
       },
     ]);
-    assert.deepStrictEqual(Object.keys((await loadState(project.extensionRoot)).marketplaces), [
-      "p-mp",
+    const projectState = await loadState(project.extensionRoot);
+    const userState = await loadState(user.extensionRoot);
+    const projectRecord = projectState.marketplaces["p-mp"];
+    const userRecord = userState.marketplaces["u-mp"];
+    if (projectRecord === undefined || userRecord === undefined) {
+      assert.fail("Both scope records must be persisted before their full values are compared.");
+    }
+
+    const projectUpdatedAt = Date.parse(projectRecord.lastUpdatedAt ?? "");
+    const userUpdatedAt = Date.parse(userRecord.lastUpdatedAt ?? "");
+    assert.equal(projectUpdatedAt >= startedAt && projectUpdatedAt <= completedAt, true);
+    assert.equal(userUpdatedAt >= startedAt && userUpdatedAt <= completedAt, true);
+    assert.deepStrictEqual(projectState, {
+      schemaVersion: 2,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+      marketplaces: {
+        "p-mp": {
+          ...marketplaceRecord({
+            cwd,
+            scope: "project",
+            marketplace: "p-mp",
+            rawSource: projectSource.marketplaceRoot,
+            manifestPath: projectSource.manifestPath,
+            marketplaceRoot: projectSource.marketplaceRoot,
+          }),
+          lastUpdatedAt: projectRecord.lastUpdatedAt,
+        },
+      },
+    });
+    assert.deepStrictEqual(userState, {
+      schemaVersion: 2,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+      marketplaces: {
+        "u-mp": {
+          ...marketplaceRecord({
+            cwd,
+            scope: "user",
+            marketplace: "u-mp",
+            rawSource: userSource.marketplaceRoot,
+            manifestPath: userSource.manifestPath,
+            marketplaceRoot: userSource.marketplaceRoot,
+          }),
+          lastUpdatedAt: userRecord.lastUpdatedAt,
+        },
+      },
+    });
+    assert.equal(await readFile(project.configJsonPath, "utf8"), projectConfig);
+    assert.equal(await readFile(user.configJsonPath, "utf8"), userConfig);
+    assert.deepStrictEqual(await retryTree(project.scopeRoot), [
+      "claude-plugins.json",
+      "pi-claude-marketplace/",
+      "pi-claude-marketplace/state.json",
+      "unrelated.txt",
     ]);
-    assert.deepStrictEqual(Object.keys((await loadState(user.extensionRoot)).marketplaces), [
-      "u-mp",
+    assert.deepStrictEqual(await retryTree(user.scopeRoot), [
+      "claude-plugins.json",
+      "pi-claude-marketplace/",
+      "pi-claude-marketplace/state.json",
+      "unrelated.txt",
     ]);
+    assert.equal(
+      await readFile(path.join(project.scopeRoot, "unrelated.txt"), "utf8"),
+      "project bytes\n",
+    );
+    assert.equal(
+      await readFile(path.join(user.scopeRoot, "unrelated.txt"), "utf8"),
+      "user bytes\n",
+    );
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
   });
