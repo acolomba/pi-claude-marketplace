@@ -24,7 +24,15 @@ import {
 } from "../../shared/path-safety.ts";
 
 import type { ScopedLocations } from "../../persistence/locations.ts";
-import type { Dirent } from "node:fs";
+import type { Dirent, Stats } from "node:fs";
+
+/** Required read-only filesystem operations for inspecting a hooks tree. */
+export interface HooksTreeInspector {
+  readonly lstat: (target: string) => Promise<Stats>;
+  readonly readdir: (directory: string) => Promise<Dirent[]>;
+  readonly readlink: (target: string) => Promise<string>;
+  readonly realpath: (target: string) => Promise<string>;
+}
 
 /**
  * Single source of truth for the hooks bridge write path. Consumed by
@@ -64,7 +72,10 @@ export function hookConfigPathFor(locations: ScopedLocations, plugin: string): s
  * clean continue -- a plugin with no `hooks/` dir has nothing to check.
  * Any other I/O error propagates.
  */
-async function assertNoSymlinkEscapeInHooksSubtree(pluginRoot: string): Promise<void> {
+async function assertNoSymlinkEscapeInHooksSubtree(
+  inspector: HooksTreeInspector,
+  pluginRoot: string,
+): Promise<void> {
   const hooksRoot = path.join(pluginRoot, "hooks");
   const stack: string[] = [hooksRoot];
 
@@ -72,7 +83,7 @@ async function assertNoSymlinkEscapeInHooksSubtree(pluginRoot: string): Promise<
     const dir = stack.slice(-1).join("");
     stack.pop();
 
-    const entries = await readEntriesOrSkip(dir);
+    const entries = await readEntriesOrSkip(inspector, dir);
     if (entries === null) {
       continue;
     }
@@ -83,10 +94,10 @@ async function assertNoSymlinkEscapeInHooksSubtree(pluginRoot: string): Promise<
       // the core of the containment guarantee: we MUST be able to detect
       // "this entry is a symlink" without issuing any FS call against the
       // target it points to.
-      const stat = await lstat(linkPath);
+      const stat = await inspector.lstat(linkPath);
 
       if (stat.isSymbolicLink()) {
-        await assertSymlinkEntryContained(pluginRoot, linkPath);
+        await assertSymlinkEntryContained(inspector, pluginRoot, linkPath);
         // Even if the symlink resolves INSIDE pluginRoot, we do NOT push
         // it onto the walk stack. Every symbolic link is a boundary -- the
         // walker never descends through one.
@@ -106,9 +117,12 @@ async function assertNoSymlinkEscapeInHooksSubtree(pluginRoot: string): Promise<
  * One level of `readdir(dir, { withFileTypes: true })` with ENOENT/ENOTDIR
  * translated to a `null` skip signal. Any other I/O error propagates.
  */
-async function readEntriesOrSkip(dir: string): Promise<Dirent[] | null> {
+async function readEntriesOrSkip(
+  inspector: HooksTreeInspector,
+  dir: string,
+): Promise<Dirent[] | null> {
   try {
-    return await readdir(dir, { withFileTypes: true });
+    return await inspector.readdir(dir);
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code;
     if (code === "ENOENT" || code === "ENOTDIR") {
@@ -132,12 +146,19 @@ async function readEntriesOrSkip(dir: string): Promise<Dirent[] | null> {
  * `PathContainmentError` so PI-14 instance-check handling propagates
  * (D-17).
  */
-async function assertSymlinkEntryContained(pluginRoot: string, linkPath: string): Promise<void> {
+async function assertSymlinkEntryContained(
+  inspector: HooksTreeInspector,
+  pluginRoot: string,
+  linkPath: string,
+): Promise<void> {
   // Resolve both sides so the string-prefix check in assertPathInside
   // works on macOS where /var is a symlink to /private/var: realpath of
   // linkPath yields /private/var/... but pluginRoot is still /var/...
   // unless we also resolve it, causing a false containment failure.
-  const [resolved, resolvedRoot] = await Promise.all([realpath(linkPath), realpath(pluginRoot)]);
+  const [resolved, resolvedRoot] = await Promise.all([
+    inspector.realpath(linkPath),
+    inspector.realpath(pluginRoot),
+  ]);
   try {
     await assertPathInside(resolvedRoot, resolved, `hooks subtree symlink ${linkPath}`);
   } catch (err) {
@@ -146,7 +167,7 @@ async function assertSymlinkEntryContained(pluginRoot: string, linkPath: string)
     }
 
     if (err instanceof PathContainmentError) {
-      const linkTarget = await readSymlinkTargetSafe(linkPath);
+      const linkTarget = await readSymlinkTargetSafe(inspector, linkPath);
       throw new SymlinkRefusedError(
         pluginRoot,
         resolved,
@@ -160,9 +181,12 @@ async function assertSymlinkEntryContained(pluginRoot: string, linkPath: string)
   }
 }
 
-async function readSymlinkTargetSafe(linkPath: string): Promise<string> {
+async function readSymlinkTargetSafe(
+  inspector: HooksTreeInspector,
+  linkPath: string,
+): Promise<string> {
   try {
-    return await readlink(linkPath);
+    return await inspector.readlink(linkPath);
   } catch {
     return "<unreadable>";
   }
@@ -191,18 +215,35 @@ export interface WriteHookConfigResult {
  * Idempotent: a second call with the same input produces the same final
  * file content (NFR-3).
  */
-export async function writeHookConfig(input: WriteHookConfigInput): Promise<WriteHookConfigResult> {
-  const { locations, pluginName, pluginRoot, hooksValue } = input;
+export function createWriteHookConfig(
+  inspector: HooksTreeInspector,
+): (input: WriteHookConfigInput) => Promise<WriteHookConfigResult> {
+  return async function writeHookConfig(
+    input: WriteHookConfigInput,
+  ): Promise<WriteHookConfigResult> {
+    const { locations, pluginName, pluginRoot, hooksValue } = input;
 
-  assertSafeName(pluginName, "hooks bridge plugin name");
-  await assertNoSymlinkEscapeInHooksSubtree(pluginRoot);
+    assertSafeName(pluginName, "hooks bridge plugin name");
+    await assertNoSymlinkEscapeInHooksSubtree(inspector, pluginRoot);
 
-  const target = hookConfigPathFor(locations, pluginName);
-  await assertPathInside(locations.hooksDir, target, "hooks bridge write target");
-  await atomicWriteJson(target, hooksValue);
+    const target = hookConfigPathFor(locations, pluginName);
+    await assertPathInside(locations.hooksDir, target, "hooks bridge write target");
+    await atomicWriteJson(target, hooksValue);
 
-  return { written: true, path: target };
+    return { written: true, path: target };
+  };
 }
+
+const NODE_HOOKS_TREE_INSPECTOR: HooksTreeInspector = {
+  lstat: async (target: string): Promise<Stats> => lstat(target),
+  readdir: async (directory: string): Promise<Dirent[]> =>
+    readdir(directory, { withFileTypes: true }),
+  readlink: async (target: string): Promise<string> => readlink(target),
+  realpath: async (target: string): Promise<string> => realpath(target),
+};
+
+/** Writes a hooks config through the Node-backed tree inspector. */
+export const writeHookConfig = createWriteHookConfig(NODE_HOOKS_TREE_INSPECTOR);
 
 export interface RemoveHookConfigInput {
   readonly locations: ScopedLocations;
