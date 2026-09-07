@@ -536,7 +536,9 @@ test("CMC-10 + MU-1: bare form against empty scope succeeds with `(no marketplac
     await updateAllMarketplaces({ ctx, pi, scope: "project", cwd });
 
     // assert
-    assert.deepStrictEqual(notifications, [{ message: "(no marketplaces)" }]);
+    assert.deepStrictEqual(notifications, [
+      { message: "(no marketplaces)\n\nMarketplace update: 0 successes" },
+    ]);
   });
 });
 
@@ -2272,7 +2274,7 @@ test("SC-6 / MU-1: updateAllMarketplaces (no scope) with both scopes empty notif
     assert.equal(notifications.length, 1);
     const first = notifications[0];
     assert.ok(first !== undefined);
-    assert.equal(first.message, "(no marketplaces)");
+    assert.equal(first.message, "(no marketplaces)\n\nMarketplace update: 0 successes");
     assert.equal(first.message.includes("Run /reload to "), false);
   });
 });
@@ -2320,7 +2322,10 @@ test("updateAllMarketplaces forwards optional Device Flow and plugin cascade por
 
     // assert
     assert.deepStrictEqual(notifications, [
-      { message: "● batch-mp [project] (skipped) {up-to-date}" },
+      {
+        message:
+          "● batch-mp [project] (skipped) {up-to-date}\n\nMarketplace update: 1 success",
+      },
     ]);
     assert.deepStrictEqual(cascadeCalls, [
       { marketplace: "batch-mp", plugin: "alpha", scope: "project" },
@@ -2342,6 +2347,45 @@ test("updateAllMarketplaces forwards optional Device Flow and plugin cascade por
       },
     });
     assert.strictEqual(await readFile(locations.configJsonPath, "utf8"), configBytes);
+  });
+});
+
+test("D-28: all-marketplace update stays plural when it discovers many targets", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    const marketplaceRoot = fixtureMarketplaceDir("valid-marketplace");
+    await mkdir(locations.extensionRoot, { recursive: true });
+    const marketplaceRecord = (name: string): ExtensionState["marketplaces"][string] => ({
+      name,
+      scope: "project",
+      source: pathSource(marketplaceRoot),
+      addedFromCwd: cwd,
+      manifestPath: path.join(marketplaceRoot, ".claude-plugin", "marketplace.json"),
+      marketplaceRoot,
+      plugins: {},
+    });
+    await saveState(locations.extensionRoot, {
+      schemaVersion: 1,
+      marketplaces: {
+        alpha: marketplaceRecord("alpha"),
+        beta: marketplaceRecord("beta"),
+      },
+    });
+    const { ctx, pi, notifications } = makeCtx();
+
+    // act
+    await updateAllMarketplaces({ ctx, pi, scope: "project", cwd });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: "● alpha [project] (skipped) {up-to-date}\n\nMarketplace update: 1 success",
+      },
+      {
+        message: "● beta [project] (skipped) {up-to-date}\n\nMarketplace update: 1 success",
+      },
+    ]);
   });
 });
 
