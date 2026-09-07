@@ -5,35 +5,16 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 
-import * as pathSafetyModule from "../../extensions/pi-claude-marketplace/shared/path-safety.ts";
-
-import type { PathLike, Stats } from "node:fs";
-
-interface PathSafetyInspectorContract {
-  readonly lstat: (target: string) => Promise<Stats>;
-  readonly readlink: (target: string) => Promise<string>;
-}
-
-interface PathSafetyGuardContract {
-  readonly assertPathInside: (parent: string, child: string, label: string) => Promise<void>;
-}
-
-type CreatePathSafetyGuardContract = (
-  inspector: PathSafetyInspectorContract,
-) => PathSafetyGuardContract;
-
-const {
+import {
   LexicalTraversalError,
   PathContainmentError,
   SymlinkRefusedError,
   assertPathInside,
-} = pathSafetyModule;
+  createPathSafetyGuard,
+} from "../../extensions/pi-claude-marketplace/shared/path-safety.ts";
 
-function requireCreatePathSafetyGuard(): CreatePathSafetyGuardContract {
-  const createPathSafetyGuard = Reflect.get(pathSafetyModule, "createPathSafetyGuard");
-  assert.strictEqual(typeof createPathSafetyGuard, "function");
-  return createPathSafetyGuard as CreatePathSafetyGuardContract;
-}
+import type { PathSafetyInspector } from "../../extensions/pi-claude-marketplace/shared/path-safety.ts";
+import type { PathLike, Stats } from "node:fs";
 
 test("PathContainmentError exposes its complete containment failure", () => {
   // arrange
@@ -488,17 +469,17 @@ test("walks segments through the required inspector in order", async (t) => {
   const child = path.join(directory, "alpha", "beta", "component.md");
   const directoryStats = await fs.lstat(directory);
   const inspectionCalls: string[] = [];
-  const inspector: PathSafetyInspectorContract = {
-    async lstat(target: string): Promise<Stats> {
+  const inspector: PathSafetyInspector = {
+    lstat(target: string): Promise<Stats> {
       inspectionCalls.push(`lstat:${target}`);
-      return directoryStats;
+      return Promise.resolve(directoryStats);
     },
-    async readlink(target: string): Promise<string> {
+    readlink(target: string): Promise<string> {
       inspectionCalls.push(`readlink:${target}`);
-      throw new Error("readlink must not run for a directory");
+      return Promise.reject(new Error("readlink must not run for a directory"));
     },
   };
-  const pathSafetyGuard = requireCreatePathSafetyGuard()(inspector);
+  const pathSafetyGuard = createPathSafetyGuard(inspector);
 
   // act
   await pathSafetyGuard.assertPathInside(directory, child, "ordered component");
@@ -517,17 +498,17 @@ test("rejects lexical traversal before the required inspector runs", async (t) =
   t.after(() => fs.rm(directory, { recursive: true, force: true }));
   const rawChild = `${directory}${path.sep}nested${path.sep}..${path.sep}outside`;
   const inspectionCalls: string[] = [];
-  const inspector: PathSafetyInspectorContract = {
-    async lstat(target: string): Promise<Stats> {
+  const inspector: PathSafetyInspector = {
+    lstat(target: string): Promise<Stats> {
       inspectionCalls.push(`lstat:${target}`);
       return fs.lstat(target);
     },
-    async readlink(target: string): Promise<string> {
+    readlink(target: string): Promise<string> {
       inspectionCalls.push(`readlink:${target}`);
       return fs.readlink(target);
     },
   };
-  const pathSafetyGuard = requireCreatePathSafetyGuard()(inspector);
+  const pathSafetyGuard = createPathSafetyGuard(inspector);
   let traversalError: unknown;
 
   // act
@@ -563,17 +544,17 @@ test("reads a symlink only after lstat through the required inspector", async (t
   const linkStats = await fs.lstat(linkPath);
   const inspectionCalls: string[] = [];
   const readlinkError = Object.assign(new Error("readlink denied"), { code: "EACCES" });
-  const inspector: PathSafetyInspectorContract = {
-    async lstat(target: string): Promise<Stats> {
+  const inspector: PathSafetyInspector = {
+    lstat(target: string): Promise<Stats> {
       inspectionCalls.push(`lstat:${target}`);
-      return linkStats;
+      return Promise.resolve(linkStats);
     },
-    async readlink(target: string): Promise<string> {
+    readlink(target: string): Promise<string> {
       inspectionCalls.push(`readlink:${target}`);
-      throw readlinkError;
+      return Promise.reject(readlinkError);
     },
   };
-  const pathSafetyGuard = requireCreatePathSafetyGuard()(inspector);
+  const pathSafetyGuard = createPathSafetyGuard(inspector);
   let symlinkError: unknown;
 
   // act
@@ -609,17 +590,17 @@ test("propagates a required inspector lstat failure unchanged", async (t) => {
   const child = path.join(directory, "blocked");
   const lstatError = Object.assign(new Error("lstat denied"), { code: "EACCES" });
   const inspectionCalls: string[] = [];
-  const inspector: PathSafetyInspectorContract = {
-    async lstat(target: string): Promise<Stats> {
+  const inspector: PathSafetyInspector = {
+    lstat(target: string): Promise<Stats> {
       inspectionCalls.push(`lstat:${target}`);
-      throw lstatError;
+      return Promise.reject(lstatError);
     },
-    async readlink(target: string): Promise<string> {
+    readlink(target: string): Promise<string> {
       inspectionCalls.push(`readlink:${target}`);
       return fs.readlink(target);
     },
   };
-  const pathSafetyGuard = requireCreatePathSafetyGuard()(inspector);
+  const pathSafetyGuard = createPathSafetyGuard(inspector);
   let lstatFailure: unknown;
 
   // act
