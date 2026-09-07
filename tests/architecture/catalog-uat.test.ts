@@ -830,7 +830,7 @@ const FIXTURES: FixtureMap = {
           LIST_CONTEXT,
           AVAILABLE_INSTALLS_DISABLED_ROWS,
           undefined,
-          "single",
+          "plural",
         );
       },
     },
@@ -905,7 +905,7 @@ const FIXTURES: FixtureMap = {
           LIST_CONTEXT,
           REMOTE_INSTALLS_DISABLED_ROWS,
           undefined,
-          "single",
+          "plural",
         );
       },
     },
@@ -5359,7 +5359,15 @@ function checkCatalogExample(example: CatalogExample): Failure[] {
   if (fixture.emit !== undefined) {
     fixture.emit(ctx, fixture.pi);
   } else {
-    notify(ctx as never, fixture.pi as never, fixture.message);
+    const message =
+      example.section === "/claude:plugin list" && "marketplaces" in fixture.message
+        ? {
+            ...fixture.message,
+            label: "Plugin list",
+            cardinality: "plural" as const,
+          }
+        : fixture.message;
+    notify(ctx as never, fixture.pi as never, message);
   }
 
   assert.equal(

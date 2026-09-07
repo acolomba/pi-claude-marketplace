@@ -106,6 +106,11 @@ const PROJECT_ALPHA_ROW = "● alpha [project] (skipped) {up-to-date}";
 const PROJECT_BETA_ROW = "● beta [project] (skipped) {up-to-date}";
 const USER_ALPHA_ROW = "● alpha [user] (skipped) {up-to-date}";
 
+/** A fan-out update remains plural even when one marketplace occupies an emission. */
+function pluralUpdateMessage(row: string): string {
+  return `${row}\n\nMarketplace update: 1 success`;
+}
+
 /** The manifest both the pre- and post-refresh reads see, so every row is a no-op. */
 const MARKETPLACE_MANIFEST = `{
   "name": "seeded",
@@ -300,9 +305,9 @@ test("updates every recorded marketplace in both scopes when no name is supplied
 
   // assert
   assert.deepStrictEqual(notifications, [
-    { message: PROJECT_ALPHA_ROW },
-    { message: PROJECT_BETA_ROW },
-    { message: USER_ALPHA_ROW },
+    { message: pluralUpdateMessage(PROJECT_ALPHA_ROW) },
+    { message: pluralUpdateMessage(PROJECT_BETA_ROW) },
+    { message: pluralUpdateMessage(USER_ALPHA_ROW) },
   ]);
   assert.deepStrictEqual(git.state.calls.fetch, [
     fetchOf(clones.projectAlpha),
@@ -397,7 +402,7 @@ for (const { emissions, probes, rows, scope, touched } of [
     // assert
     assert.deepStrictEqual(
       notifications,
-      rows.map((message) => ({ message })),
+      rows.map((row) => ({ message: pluralUpdateMessage(row) })),
     );
     assert.deepStrictEqual(git.state.calls.fetch, touched(clones).map(fetchOf));
     assert.strictEqual(networkCallCount(), 0);

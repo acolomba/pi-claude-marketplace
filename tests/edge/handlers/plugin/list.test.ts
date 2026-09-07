@@ -353,7 +353,15 @@ function projectListing(notifications: readonly Notification[]): readonly Market
     );
   }
 
-  return listing.message.split("\n\n").map(projectBlock);
+  const sections = listing.message.split("\n\n");
+  const tally = sections.pop();
+  const blocks = sections.map(projectBlock);
+  const successes = blocks.reduce((count, block) => count + block.plugins.length, 0);
+  assert.strictEqual(
+    tally,
+    `Plugin list: ${successes} ${successes === 1 ? "success" : "successes"}`,
+  );
+  return blocks;
 }
 
 const MP_PROJECT = "mp [project]";

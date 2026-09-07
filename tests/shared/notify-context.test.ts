@@ -116,6 +116,7 @@ function omissionMustRemainATypeError(
   // @ts-expect-error -- cardinality is mandatory even when kind is explicitly undefined.
   notifyWithContext(ctx, pi, context, rows, undefined);
 }
+
 void omissionMustRemainATypeError;
 
 function createHarness(notification: NotificationRecord): Harness {

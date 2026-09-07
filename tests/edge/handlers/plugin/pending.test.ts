@@ -238,19 +238,19 @@ const USER_BLOCK = "● mp [user]\n  ● p-user (will install)";
 for (const { args, expectedMessage, label, summary } of [
   {
     args: "",
-    expectedMessage: `${PROJECT_BLOCK}\n\n${USER_BLOCK}`,
+    expectedMessage: `${PROJECT_BLOCK}\n\n${USER_BLOCK}\n\nReconcile pending: 2 successes`,
     label: "scope-omitted",
     summary: "for both scopes, project first, when no scope flag is supplied",
   },
   {
     args: "--scope user",
-    expectedMessage: USER_BLOCK,
+    expectedMessage: `${USER_BLOCK}\n\nReconcile pending: 1 success`,
     label: "scope-user",
     summary: "for the user scope alone when a user scope flag is supplied",
   },
   {
     args: "--scope project",
-    expectedMessage: PROJECT_BLOCK,
+    expectedMessage: `${PROJECT_BLOCK}\n\nReconcile pending: 1 success`,
     label: "scope-project",
     summary: "for the project scope alone when a project scope flag is supplied",
   },
@@ -342,7 +342,10 @@ test("previews a planned install of a cold git source without opening a connecti
 
   // assert
   assert.deepStrictEqual(notifications, [
-    { message: "● mp [project]\n  ● far (will install)\n  ● near (will install)" },
+    {
+      message:
+        "● mp [project]\n  ● far (will install)\n  ● near (will install)\n\nReconcile pending: 2 successes",
+    },
   ]);
   assert.deepStrictEqual(await bothTreeListings(workspace), expectedListings);
   assert.strictEqual(workspace.transportCalls(), 0);
