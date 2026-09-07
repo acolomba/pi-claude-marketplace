@@ -62,6 +62,43 @@ test("discovers flat markdown agents in source order with complete records", asy
   assert.strictEqual(Object.isFrozen(discovery.warnings), true);
 });
 
+test("returns a folded block scalar description without phantom frontmatter keys", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "agent-discover-block-scalar-"));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 3 }));
+  const sourcePath = path.join(directory, "reviewer.md");
+  await writeFile(
+    sourcePath,
+    "---\nname: reviewer\ndescription: >\n  Reviews files and reports: findings\n  across the whole change set.\ntools: Read\n---\n\nReview carefully.\n",
+  );
+  const expectedDiscovery = {
+    discovered: [
+      {
+        sourceName: "reviewer",
+        generatedName: "pi-claude-marketplace-acme-reviewer",
+        sourcePath,
+        sourceHash: "fca7cd3ceee8b02918d14b216520c9ad86c572d69e21068a1308c57e2e79edd1",
+        raw: {
+          name: "reviewer",
+          description: "Reviews files and reports: findings across the whole change set.",
+          tools: "Read",
+        },
+        body: "\nReview carefully.\n",
+      },
+    ],
+    warnings: [],
+  };
+
+  // act
+  const discovery = await discoverPluginAgents({
+    pluginName: "acme",
+    agentsDirs: [directory],
+  });
+
+  // assert
+  assert.deepStrictEqual(discovery, expectedDiscovery);
+});
+
 test("skips a missing agents directory", async (t) => {
   // arrange
   const directory = await mkdtemp(path.join(tmpdir(), "agent-discover-missing-"));
