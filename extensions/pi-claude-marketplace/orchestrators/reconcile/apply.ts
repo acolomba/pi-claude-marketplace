@@ -51,6 +51,7 @@ import { rebuildRoutingTables } from "../../bridges/hooks/index.ts";
 import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { migrateFirstRunConfig } from "../../persistence/migrate-config.ts";
+import { loadState } from "../../persistence/state-io.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { pathExists } from "../../shared/fs-utils.ts";
 import { notifyReconcileAppliedWithContext } from "../../shared/notify-context.ts";
@@ -82,6 +83,11 @@ import type {
   EnableDisablePluginOutcome,
 } from "../plugin/enable-disable.ts";
 
+/** Reads the one state snapshot selected by the reconcile read pass. */
+export interface ReconcileStateReader {
+  readonly loadState: typeof loadState;
+}
+
 /**
  * Per-scope read pass under the scope lock. Migrate-then-load-then-plan
  * inside ONE lock so the deferred ordering rail is wired.
@@ -102,7 +108,11 @@ import type {
  *     leaves state.json bytes AND mtime untouched (mirrors the RECON-05
  *     invariant the tests assert for the config file).
  */
-async function readPassForScope(scope: Scope, cwd: string): Promise<ScopeReadResult> {
+async function readPassForScope(
+  reader: ReconcileStateReader,
+  scope: Scope,
+  cwd: string,
+): Promise<ScopeReadResult> {
   const loc = locationsFor(scope, cwd);
 
   const stateExists = await pathExists(loc.stateJsonPath);
@@ -114,73 +124,77 @@ async function readPassForScope(scope: Scope, cwd: string): Promise<ScopeReadRes
     return { scope, plan: undefined, invalidOutcomes: [], stateExisted: false };
   }
 
-  return withLockedStateTransaction(loc, async (tx) => {
-    const state = tx.state;
-    // (1) Migrate FIRST -- generates a fresh `claude-plugins.json` from the
-    // current `state.json` on first run (MIG-01). Idempotent: short-circuits
-    // when config already exists (valid OR invalid). The surrounding lock
-    // covers the cross-process concurrent-first-load race; the D-13
-    // existsSync gate is observed at the transaction's internal loadState
-    // BEFORE this closure runs, preserving legacy-autoupdate capture (the
-    // field still lives on state at this point). WR-05: `tx.save()` is
-    // deliberately NEVER called -- the read pass mutates nothing on state,
-    // so state.json stays byte-untouched.
-    //
-    // S3 / PR #51: when saveConfig inside migrateFirstRunConfig throws
-    // (e.g. EACCES on the scope dir), the failing file is
-    // `claude-plugins.json`, NOT state.json. Wrap the call so the throw
-    // carries an attribution sentinel; the per-scope catch in
-    // applyReconcile reads it to name the row's subject correctly.
-    try {
-      await migrateFirstRunConfig(loc, state);
-    } catch (err) {
-      throw new MigrateConfigSaveError(loc.configJsonPath, err);
-    }
+  return withLockedStateTransaction(
+    loc,
+    async (tx) => {
+      const state = tx.state;
+      // (1) Migrate FIRST -- generates a fresh `claude-plugins.json` from the
+      // current `state.json` on first run (MIG-01). Idempotent: short-circuits
+      // when config already exists (valid OR invalid). The surrounding lock
+      // covers the cross-process concurrent-first-load race; the D-13
+      // existsSync gate is observed at the transaction's internal loadState
+      // BEFORE this closure runs, preserving legacy-autoupdate capture (the
+      // field still lives on state at this point). WR-05: `tx.save()` is
+      // deliberately NEVER called -- the read pass mutates nothing on state,
+      // so state.json stays byte-untouched.
+      //
+      // S3 / PR #51: when saveConfig inside migrateFirstRunConfig throws
+      // (e.g. EACCES on the scope dir), the failing file is
+      // `claude-plugins.json`, NOT state.json. Wrap the call so the throw
+      // carries an attribution sentinel; the per-scope catch in
+      // applyReconcile reads it to name the row's subject correctly.
+      try {
+        await migrateFirstRunConfig(loc, state);
+      } catch (err) {
+        throw new MigrateConfigSaveError(loc.configJsonPath, err);
+      }
 
-    // (2) Load the merged scope config (base + local).
-    const outcome = await loadMergedScopeConfig(loc);
+      // (2) Load the merged scope config (base + local).
+      const outcome = await loadMergedScopeConfig(loc);
 
-    // (3) CFG-03 abort: surface invalid arm(s) as structured (failed) rows
-    // with the file BASENAME (T-55-02-01 / T-53-02-02 information-disclosure
-    // mitigation). DO NOT call planReconcile -- coercing an invalid config
-    // to an empty desired state would emit a mass-uninstall plan.
-    const invalidOutcomes: PerEntryOutcome[] = [];
-    if (outcome.base.status === "invalid") {
-      // I5 / PR #51: thread loadConfig's diagnostic detail (EACCES vs
-      // JSON-parse vs schema key) into the rendered cause-chain trailer.
-      // Absolute paths are stripped at the boundary -- the projection
-      // walks Error.cause via causeChainTrailer, which does NOT strip
-      // paths on its own (NFR-9 surfaces message text verbatim).
-      invalidOutcomes.push({
-        kind: "invalid-block",
-        scope,
-        basename: path.basename(outcome.base.filePath),
-        reason: "invalid manifest",
-        cause: new Error(redactAbsolutePaths(outcome.base.error)),
-      });
-    }
+      // (3) CFG-03 abort: surface invalid arm(s) as structured (failed) rows
+      // with the file BASENAME (T-55-02-01 / T-53-02-02 information-disclosure
+      // mitigation). DO NOT call planReconcile -- coercing an invalid config
+      // to an empty desired state would emit a mass-uninstall plan.
+      const invalidOutcomes: PerEntryOutcome[] = [];
+      if (outcome.base.status === "invalid") {
+        // I5 / PR #51: thread loadConfig's diagnostic detail (EACCES vs
+        // JSON-parse vs schema key) into the rendered cause-chain trailer.
+        // Absolute paths are stripped at the boundary -- the projection
+        // walks Error.cause via causeChainTrailer, which does NOT strip
+        // paths on its own (NFR-9 surfaces message text verbatim).
+        invalidOutcomes.push({
+          kind: "invalid-block",
+          scope,
+          basename: path.basename(outcome.base.filePath),
+          reason: "invalid manifest",
+          cause: new Error(redactAbsolutePaths(outcome.base.error)),
+        });
+      }
 
-    if (outcome.local.status === "invalid") {
-      invalidOutcomes.push({
-        kind: "invalid-block",
-        scope,
-        basename: path.basename(outcome.local.filePath),
-        reason: "invalid manifest",
-        cause: new Error(redactAbsolutePaths(outcome.local.error)),
-      });
-    }
+      if (outcome.local.status === "invalid") {
+        invalidOutcomes.push({
+          kind: "invalid-block",
+          scope,
+          basename: path.basename(outcome.local.filePath),
+          reason: "invalid manifest",
+          cause: new Error(redactAbsolutePaths(outcome.local.error)),
+        });
+      }
 
-    if (invalidOutcomes.length > 0) {
-      return { scope, plan: undefined, invalidOutcomes, stateExisted: stateExists };
-    }
+      if (invalidOutcomes.length > 0) {
+        return { scope, plan: undefined, invalidOutcomes, stateExisted: stateExists };
+      }
 
-    // (4) Plan against the merged config + current state. Pure -- no I/O.
-    const plan = planReconcile(outcome.merged, state, scope);
-    // BFILL-02: carry the loaded state snapshot out so applyBackfillForScope can
-    // read its stamp + scan its partially-installed plugins. planReconcile is pure,
-    // so the snapshot is the unmutated read-pass state.
-    return { scope, plan, invalidOutcomes: [], state, stateExisted: stateExists };
-  });
+      // (4) Plan against the merged config + current state. Pure -- no I/O.
+      const plan = planReconcile(outcome.merged, state, scope);
+      // BFILL-02: carry the loaded state snapshot out so applyBackfillForScope can
+      // read its stamp + scan its partially-installed plugins. planReconcile is pure,
+      // so the snapshot is the unmutated read-pass state.
+      return { scope, plan, invalidOutcomes: [], state, stateExisted: stateExists };
+    },
+    { loadState: reader.loadState },
+  );
 }
 
 /**
@@ -728,7 +742,10 @@ async function applyPlan(
  * Returns `void`; the side effects are the orchestrator-driven state
  * mutations + the single notify() call (when non-empty).
  */
-export async function applyReconcile(opts: ApplyReconcileOptions): Promise<void> {
+async function applyReconcileWithReader(
+  reader: ReconcileStateReader,
+  opts: ApplyReconcileOptions,
+): Promise<void> {
   const scopes: readonly Scope[] = opts.scope === undefined ? ["project", "user"] : [opts.scope];
 
   // Accumulate outcomes across both scopes; the projection sorts by
@@ -747,7 +764,7 @@ export async function applyReconcile(opts: ApplyReconcileOptions): Promise<void>
     // the single cascade instead of aborting applyReconcile wholesale.
     let readResult: ScopeReadResult;
     try {
-      readResult = await readPassForScope(scope, opts.cwd);
+      readResult = await readPassForScope(reader, scope, opts.cwd);
     } catch (err) {
       // S3 / PR #51: when the throw came from migrateFirstRunConfig's
       // inner saveConfig (EACCES on the scope dir blocking the atomic
@@ -833,6 +850,20 @@ export async function applyReconcile(opts: ApplyReconcileOptions): Promise<void>
   // path that feeds it.
   surfacePostCommitWarnings(opts, outcomes);
 }
+
+/** Creates a reconcile apply operation with one required selected-state reader. */
+export function createApplyReconcile(
+  reader: ReconcileStateReader,
+): (opts: ApplyReconcileOptions) => Promise<void> {
+  return async function applyReconcile(opts: ApplyReconcileOptions): Promise<void> {
+    await applyReconcileWithReader(reader, opts);
+  };
+}
+
+const NODE_RECONCILE_STATE_READER: ReconcileStateReader = { loadState };
+
+/** Applies reconcile through the production state reader and real child orchestrators. */
+export const applyReconcile = createApplyReconcile(NODE_RECONCILE_STATE_READER);
 
 /**
  * DISP-02: rebuild the per-scope routing tables under a brief read-only

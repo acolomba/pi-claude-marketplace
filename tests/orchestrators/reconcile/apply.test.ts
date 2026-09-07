@@ -59,6 +59,7 @@ import lockfile from "proper-lockfile";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
   applyReconcile,
+  createApplyReconcile,
   surfacePostCommitWarnings,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -73,6 +74,7 @@ import { retryTree } from "../plugin/scope-tree-inventory.ts";
 
 import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { PerEntryOutcome } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts";
+import type { ReconcileStateReader } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type {
@@ -471,18 +473,6 @@ function raceStateFromRead(
 function withoutTempSuffix(message: string): string {
   return message.replaceAll(/claude-plugins\.json\.\d+/g, "claude-plugins.json.<tmp>");
 }
-
-test("exposes the required reconcile state-reader factory", async () => {
-  // act
-  const applyModule: object =
-    await import("../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts");
-
-  // assert
-  const createApplyReconcile = Object.hasOwn(applyModule, "createApplyReconcile")
-    ? (applyModule as Record<string, unknown>)["createApplyReconcile"]
-    : undefined;
-  assert.equal(typeof createApplyReconcile, "function");
-});
 
 describe("applyReconcile", () => {
   test("WR-05: leaves a scope with neither a state file nor a configuration file untouched and silent", async (t) => {
@@ -2788,10 +2778,7 @@ describe("applyReconcile", () => {
     await writeUnder(path.join(project.scopeRoot, "unrelated.txt"), "project bytes\n");
     await writeUnder(path.join(user.scopeRoot, "unrelated.txt"), "user bytes\n");
     const readerRoots: string[] = [];
-    interface ReconcileStateReaderForTest {
-      readonly loadState: typeof loadState;
-    }
-    const reader: ReconcileStateReaderForTest = {
+    const reader: ReconcileStateReader = {
       async loadState(extensionRoot) {
         const selected = await loadState(extensionRoot);
         readerRoots.push(extensionRoot);
@@ -2802,15 +2789,6 @@ describe("applyReconcile", () => {
         return selected;
       },
     };
-    const applyModule: object =
-      await import("../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts");
-    const createApplyReconcileCandidate = Object.hasOwn(applyModule, "createApplyReconcile")
-      ? (applyModule as Record<string, unknown>)["createApplyReconcile"]
-      : undefined;
-    assert.equal(typeof createApplyReconcileCandidate, "function");
-    const createApplyReconcile = createApplyReconcileCandidate as (
-      reader: ReconcileStateReaderForTest,
-    ) => typeof applyReconcile;
     const applyWithReader = createApplyReconcile(reader);
     const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
     const { gitOps, clonedUrls } = createOfflineGitOps();
