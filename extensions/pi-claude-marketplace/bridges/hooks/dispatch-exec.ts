@@ -52,7 +52,6 @@
 import { spawn } from "node:child_process";
 import { StringDecoder } from "node:string_decoder";
 
-import { isDispatchableEvent } from "../../domain/components/hook-events.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
@@ -183,18 +182,6 @@ export async function dispatchHookExec(
       );
     }
 
-    return { kind: "noop" };
-  }
-
-  // D-87-04: narrow the admitted `BucketAEvent` to the dispatchable subset
-  // before indexing the translator tables. Every admitted event now has a
-  // translator (`Stop` / `StopFailure` are dispatched here by the settle
-  // handler), so this arm is a defensive belt against a future admission that
-  // outruns its translator -- log + noop rather than a type error.
-  if (!isDispatchableEvent(entry.claudeEvent)) {
-    hookDebugLog(
-      `exec: ${entry.claudeEvent} is admitted but not dispatchable (${entry.pluginId}); noop`,
-    );
     return { kind: "noop" };
   }
 

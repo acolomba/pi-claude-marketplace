@@ -17,10 +17,7 @@ import type { HookExecResult } from "../../../extensions/pi-claude-marketplace/b
 import type { StopFailureEvent } from "../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/stop-failure.ts";
 import type { StopEvent } from "../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/stop.ts";
 import type { RoutingEntry } from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
-import type {
-  BucketAEvent,
-  DispatchableEvent,
-} from "../../../extensions/pi-claude-marketplace/domain/components/hook-events.ts";
+import type { DispatchableEvent } from "../../../extensions/pi-claude-marketplace/domain/components/hook-events.ts";
 import type {
   ExtensionAPI,
   ExtensionContext,
@@ -507,7 +504,7 @@ function observeSpawn(
 function makeEntry(
   cwd: string,
   input: {
-    readonly claudeEvent?: BucketAEvent;
+    readonly claudeEvent?: DispatchableEvent;
     readonly command?: string;
     readonly args?: readonly string[];
     readonly shell?: string;
@@ -971,41 +968,6 @@ test("contains a wrong-shape payload whose required property throws", async (t) 
   assert.strictEqual(
     lines.some((line) => line.includes("missing required field")),
     false,
-  );
-});
-
-test("noops an admitted event that has no dispatch translator", async (t) => {
-  // arrange
-  const caseRoot = await makeCaseRoot(t, "dispatch-unknown-event-");
-  const errorSpy = observeDebug(t);
-  const processChild = makeInjectedChild(t);
-  const processBoundary = observeSpawn(t, processChild);
-  const entry = {
-    ...makeEntry(caseRoot),
-    claudeEvent: "SubagentStop" as BucketAEvent,
-  };
-
-  // act
-  const hookOutcome = await dispatchHookExec(
-    entry,
-    { toolName: "bash", input: {} },
-    makeContext(caseRoot),
-    undefined,
-    { spawnImpl: processBoundary.spawnImpl },
-  );
-  const lines = debugLines(errorSpy);
-
-  // assert
-  assert.deepStrictEqual(hookOutcome, { kind: "noop" });
-  assert.deepStrictEqual(processBoundary.calls, []);
-  assert.strictEqual(
-    lines.some(
-      (line) =>
-        line.includes("SubagentStop") &&
-        line.includes("dispatch-plugin") &&
-        line.includes("not dispatchable"),
-    ),
-    true,
   );
 });
 
