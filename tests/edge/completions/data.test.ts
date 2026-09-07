@@ -65,7 +65,10 @@ import {
   getPluginToMarketplacesMap,
   splitCompletionInput,
 } from "../../../extensions/pi-claude-marketplace/edge/completions/data.ts";
-import { resetCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import {
+  createCompletionCache,
+  resetCompletionCache,
+} from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 
 import type {
   LocationsResolver,
@@ -464,6 +467,28 @@ describe("getMarketplaceNamesAcrossScopes", () => {
 });
 
 describe("getPluginToMarketplacesMap", () => {
+  test("reads plugin rows through the required completion cache", async (t) => {
+    // arrange
+    const { resolver } = await seedResolver(t, "map-required-cache", {
+      marketplaces: { user: { official: {} } },
+      manifests: { user: { official: [{ name: "resolver-row", status: "installed" }] } },
+    });
+    const cache = createCompletionCache();
+    const cachePath = await resolver.pluginCachePath("user", "official");
+    await cache.getPluginIndex(cachePath, "user", "official", () =>
+      Promise.resolve([{ name: "cache-row", status: "installed" }]),
+    );
+    await rm(cachePath);
+
+    // act
+    const candidatesByPlugin = await getPluginToMarketplacesMap("uninstall", resolver, cache, {
+      targetScope: "user",
+    });
+
+    // assert
+    assert.deepStrictEqual(Array.from(candidatesByPlugin), [["cache-row", ["official"]]]);
+  });
+
   test("install offers the not-yet-installed and not-yet-fetched rows of the default user scope", async (t) => {
     // arrange
     const { resolver } = await seedResolver(t, "map-install", {

@@ -78,7 +78,10 @@ import path from "node:path";
 import test, { type TestContext } from "node:test";
 
 import { getArgumentCompletions } from "../../../extensions/pi-claude-marketplace/edge/completions/provider.ts";
-import { resetCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import {
+  createCompletionCache,
+  resetCompletionCache,
+} from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 
 import type {
   LocationsResolver,
@@ -850,3 +853,25 @@ for (const prefix of ["pending ", "import ", "bootstrap ", "frobnicate ", "insta
     assert.strictEqual(suggestions, null);
   });
 }
+test("TC-6 routes plugin references through the required completion cache", async (t) => {
+  // arrange
+  const { resolver } = await seedResolver(t, "ref-required-cache");
+  const cache = createCompletionCache();
+  const cachePath = await resolver.pluginCachePath("user", "hub");
+  await cache.getPluginIndex(cachePath, "user", "hub", () =>
+    Promise.resolve([{ name: "cache-row", status: "installed" }]),
+  );
+  await rm(cachePath);
+
+  // act
+  const suggestions = await getArgumentCompletions(
+    "uninstall --scope user ",
+    resolver,
+    cache,
+  );
+
+  // assert
+  assert.deepStrictEqual(suggestions, [
+    { label: "cache-row@hub", value: "uninstall --scope user cache-row@hub " },
+  ]);
+});
