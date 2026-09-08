@@ -52,6 +52,11 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { test, type TestContext } from "node:test";
 
+import {
+  createHooksRouting,
+  createHooksRuntime,
+} from "../../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
+import { asAbsolutePluginRoot } from "../../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import { makeEnableDisableHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/enable-disable.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
 import {
@@ -62,6 +67,10 @@ import {
 
 import type { ExtensionCommandContext } from "../../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { Scope } from "../../../../extensions/pi-claude-marketplace/shared/types.ts";
+import type {
+  HooksRouting,
+  HooksRuntime,
+} from "../../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 
 /** The enabled flags one scope's `state.json` carries for the two seeded plugins. */
 interface EnabledFlags {
@@ -305,6 +314,36 @@ async function readFootprint(workspace: HermeticWorkspace): Promise<Footprint> {
     userBase: await readConfigFile(path.join(workspace.userRoot, "claude-plugins.json")),
     userLocal: await readConfigFile(path.join(workspace.userRoot, "claude-plugins.local.json")),
   };
+}
+
+/** Populate one runtime with a distinct hook route for the seeded plugin. */
+async function populateRuntimeRoute(
+  workspace: HermeticWorkspace,
+  runtime: HooksRuntime,
+  command: string,
+): Promise<HooksRouting> {
+  const pluginRoot = path.join(workspace.cwd, command.replaceAll(" ", "-"));
+  const hooksJsonPath = path.join(pluginRoot, "hooks.json");
+  await mkdir(pluginRoot, { recursive: true });
+  await writeFile(
+    hooksJsonPath,
+    JSON.stringify({
+      PreToolUse: [{ hooks: [{ command, type: "command" }], matcher: "" }],
+    }),
+    "utf8",
+  );
+  const hooksRouting = createHooksRouting(runtime);
+  await hooksRouting.readAndCachePluginHooks({
+    cwd: workspace.cwd,
+    hooksJsonPath,
+    logPrefix: "enable-disable-owner-test",
+    marketplace: "mp",
+    plugin: "alpha",
+    resolvedSource: asAbsolutePluginRoot(pluginRoot),
+    scope: "user",
+  });
+  hooksRouting.rebuildRoutingTables();
+  return hooksRouting;
 }
 
 for (const { enable, expectedMessage, subcommand } of [
@@ -623,3 +662,42 @@ for (const { args, enable, expectedMessage, failure, label, reported } of [
     verifyBoundary();
   });
 }
+
+test("removes only the owning runtime route after a successful disable", async (t) => {
+  // arrange
+  const workspace = await createHermeticWorkspace(t, "runtime-owner-disable");
+  await seedBothScopes(workspace, false);
+  const ownerRuntime = createHooksRuntime();
+  const peerRuntime = createHooksRuntime();
+  const ownerRouting = await populateRuntimeRoute(workspace, ownerRuntime, "echo owner");
+  await populateRuntimeRoute(workspace, peerRuntime, "echo peer");
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 4, {
+    value: workspace.cwd,
+    reads: 1,
+  });
+  const enableDisableHandler = makeEnableDisableHandler(pi, false, ownerRouting);
+
+  // act
+  await enableDisableHandler("alpha@mp --scope user", ctx);
+
+  // assert
+  assert.deepStrictEqual(await readFootprint(workspace), {
+    projectRecords: BOTH_ENABLED,
+    userRecords: ALPHA_OFF,
+    projectBase: undefined,
+    projectLocal: undefined,
+    userBase: ALPHA_DECLARED_DISABLED,
+    userLocal: undefined,
+  });
+  assert.deepStrictEqual(notifications, [
+    {
+      message: "● mp [user]\n  ◍ alpha v1.0.0 (disabled)\n\n/reload to pick up changes",
+    },
+  ]);
+  assert.deepStrictEqual(ownerRuntime.getRoutingBucket("PreToolUse"), []);
+  assert.deepStrictEqual(
+    peerRuntime.getRoutingBucket("PreToolUse").map((entry) => entry.handlerDecl.command),
+    ["echo peer"],
+  );
+  verifyBoundary();
+});
