@@ -51,10 +51,7 @@ import {
 import { TOP_LEVEL_USAGE } from "../../extensions/pi-claude-marketplace/edge/router.ts";
 import { makeLocationsResolver } from "../../extensions/pi-claude-marketplace/orchestrators/edge-deps.ts";
 import { saveState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import {
-  createCompletionCache,
-  transitionCompletionCache,
-} from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { createGitOpsFake } from "../platform/git-ops-fake.ts";
 
 import { createNotificationBoundary } from "./notification-boundary.ts";
@@ -74,6 +71,7 @@ import type {
   AutocompleteProvider,
   AutocompleteSuggestions,
 } from "@earendil-works/pi-tui";
+import type { CompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 
 type MarketplaceRecord = ExtensionState["marketplaces"][string];
 
@@ -220,10 +218,10 @@ async function seedProjectMarketplace(root: string, marketplaceName: string): Pr
  * the two orchestrator entrypoints refuse to run: no case here dispatches a
  * subcommand that reaches them, so a call is a defect rather than a fixture gap.
  */
-function createEdgeDeps(): EdgeDeps {
+function createEdgeDeps(completionCache: CompletionCache): EdgeDeps {
   const { gitOps } = createGitOpsFake({ boundary: "memory" });
   return {
-    completionCache: createCompletionCache(),
+    completionCache,
     gitOps,
     pluginUpdate: (): Promise<PluginUpdateOutcome> => {
       throw new Error("the registration glue must not run a plugin update");
@@ -239,7 +237,7 @@ function createEdgeDeps(): EdgeDeps {
  * callbacks. The command name and the event name are stated by hand; only the
  * two callbacks are captured, because a function has no structural comparison.
  */
-function registerCommandUnderTest(): CommandUnderTest {
+function registerCommandWithCache(completionCache: CompletionCache): CommandUnderTest {
   const pi = mock<PiRegistrar>({ exactParams: true, name: "extension API" });
   const commandOptions = It.willCapture<CommandRegistration>("claude:plugin registration");
   const sessionStartListener = It.willCapture<SessionStartListener>("session start listener");
@@ -254,7 +252,7 @@ function registerCommandUnderTest(): CommandUnderTest {
     .thenReturn()
     .times(1);
 
-  registerClaudePluginCommand(pi, createEdgeDeps());
+  registerClaudePluginCommand(pi, createEdgeDeps(completionCache));
 
   const registration = commandOptions.value;
   const sessionStart = sessionStartListener.value;
@@ -269,6 +267,10 @@ function registerCommandUnderTest(): CommandUnderTest {
       verify(pi);
     },
   };
+}
+
+function registerCommandUnderTest(): CommandUnderTest {
+  return registerCommandWithCache(createCompletionCache());
 }
 
 /**
@@ -359,35 +361,51 @@ describe("registerClaudePluginCommand", () => {
     verifyRegistrar();
   });
 
-  test("routes registered plugin completions through the transition cache", async (t) => {
+  test("keeps supplied lifecycle completion-cache hits isolated between registrations", async (t) => {
     // arrange
     const scope = await createHermeticScope(t, "completion-cache");
     const marketplace = "cache-mp";
     await seedProjectMarketplace(scope.cwd, marketplace);
     const resolver = makeLocationsResolver(scope.cwd);
     const cachePath = await resolver.pluginCachePath("project", marketplace);
-    transitionCompletionCache.invalidateMarketplaceCache("project", marketplace);
-    t.after(() => {
-      transitionCompletionCache.invalidateMarketplaceCache("project", marketplace);
-    });
-    await transitionCompletionCache.getPluginIndex(cachePath, "project", marketplace, () =>
-      Promise.resolve([{ name: "cache-row", status: "installed" }]),
+    const ownerCache = createCompletionCache();
+    const peerCache = createCompletionCache();
+    await ownerCache.getPluginIndex(cachePath, "project", marketplace, () =>
+      Promise.resolve([{ name: "owner-row", status: "installed" }]),
     );
     await rm(cachePath);
-    const { registration, verifyRegistrar } = registerCommandUnderTest();
-    const expectedCandidates = [
+    await peerCache.getPluginIndex(cachePath, "project", marketplace, () =>
+      Promise.resolve([{ name: "peer-row", status: "installed" }]),
+    );
+    await rm(cachePath);
+    const owner = registerCommandWithCache(ownerCache);
+    const peer = registerCommandWithCache(peerCache);
+    const expectedOwnerCandidates = [
       {
-        label: "cache-row@cache-mp",
-        value: "uninstall --scope project cache-row@cache-mp ",
+        label: "owner-row@cache-mp",
+        value: "uninstall --scope project owner-row@cache-mp ",
+      },
+    ];
+    const expectedPeerCandidates = [
+      {
+        label: "peer-row@cache-mp",
+        value: "uninstall --scope project peer-row@cache-mp ",
       },
     ];
 
     // act
-    const candidates = await registration.getArgumentCompletions?.("uninstall --scope project ");
+    const ownerCandidates = await owner.registration.getArgumentCompletions?.(
+      "uninstall --scope project ",
+    );
+    const peerCandidates = await peer.registration.getArgumentCompletions?.(
+      "uninstall --scope project ",
+    );
 
     // assert
-    assert.deepStrictEqual(candidates, expectedCandidates);
-    verifyRegistrar();
+    assert.deepStrictEqual(ownerCandidates, expectedOwnerCandidates);
+    assert.deepStrictEqual(peerCandidates, expectedPeerCandidates);
+    owner.verifyRegistrar();
+    peer.verifyRegistrar();
   });
 
   test("installs exactly one autocomplete provider when the session starts (TC-7)", async (t) => {
