@@ -64,9 +64,14 @@ interface NotificationApi {
   getAllTools: () => ToolDefinition[];
 }
 
-function piWithBothLoaded(): NotificationApi {
+/**
+ * Probe reports all three companions loaded -- pi-subagents, pi-mcp-adapter and
+ * the host workflow engine -- so no soft-dep marker fires on any row, whatever
+ * that row declares.
+ */
+function piWithAllLoaded(): NotificationApi {
   return {
-    getAllTools: () => [{ name: "subagent" }, { name: "mcp" }],
+    getAllTools: () => [{ name: "subagent" }, { name: "mcp" }, { name: "workflow_control" }],
   };
 }
 
@@ -209,7 +214,7 @@ test("notify renders updated plugin with version arrow + mcp dep marker", (t) =>
 test("notify renders reinstalled plugin with both deps loaded (no soft-dep marker, empty brace suppressed)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -470,7 +475,7 @@ test("XSURF-01: unsupported row WITHOUT partialHint stays byte-frozen (no traile
 test("XSURF-03: force-upgradable update-decline row with partialHint emits the --force update trailer", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -506,7 +511,7 @@ test("XSURF-03: force-upgradable update-decline row with partialHint emits the -
 test("XSURF-03: list-inventory force-upgradable row WITHOUT partialHint stays byte-frozen (no trailer)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -572,7 +577,7 @@ test("notify renders upgradable plugin with version and reasons brace", (t) => {
 test("FSTAT-02 / D-66-03: force-installed renders the ◉ glyph distinct from ● installed", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -676,7 +681,7 @@ test("WR-03: force-installed INVENTORY row (no dependencies) renders no soft-dep
 test("FSTAT-04 / D-66-03: force-upgradable reuses the ● glyph like the upgradable arm", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -710,7 +715,7 @@ test("FSTAT-04 / D-66-03: force-upgradable reuses the ● glyph like the upgrada
 test("FSTAT-06 / D-66-04: will-install force modifier renders (will partially install)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -734,7 +739,7 @@ test("FSTAT-06 / D-66-04: will-install force modifier renders (will partially in
 test("FSTAT-06 / D-66-04: will-install WITHOUT the force modifier renders (will install)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -902,7 +907,7 @@ test("notify renders failed marketplace header alone (empty plugins -> NO reload
 test("D-48-A: bare-(failed) add `failure-unreachable` form is byte-unchanged (reasons omitted -> brace collapses)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -933,7 +938,7 @@ test("D-48-A: bare-(failed) add `failure-unreachable` form is byte-unchanged (re
 test("D-48-A: bare-(failed) update `mp-failure-network` header is byte-unchanged (reasons omitted -> brace collapses)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -964,7 +969,7 @@ test("D-48-A: bare-(failed) update `mp-failure-network` header is byte-unchanged
 test("D-48-A: a reasons-omitted failed marketplace arm renders bare `(failed)` (the third bare form; arm byte-stable)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -1081,7 +1086,7 @@ test("notify severity tier mp-skipped: idempotent-disable marketplace renders <n
 test('UXG-05: marketplace update no-op (mp.skipped + reasons:["up-to-date"], plugins:[]) renders `● <mp> [<scope>] (skipped) {up-to-date}`, computes info (benign per UXG-02 / D-28-07), emits NO /reload trailer', (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -1114,7 +1119,7 @@ test('UXG-05: marketplace update no-op (mp.skipped + reasons:["up-to-date"], plu
 test('UXG-05 (UAT Test-3 gap): autoupdate-ON no-op payload (mp.skipped + reasons:["up-to-date"], plugins:[]) renders byte-identically to the OFF no-op `● <mp> [<scope>] (skipped) {up-to-date}`, computes info (benign per UXG-02 / D-28-07), emits NO /reload trailer', (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -1228,7 +1233,7 @@ test("notify renders header-only block on empty plugins under added marketplace 
 test("RLD-04: list-shaped message with an installed inventory row (needsReload:false) emits NO /reload trailer (RLD-02 OR-reduce)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -1267,7 +1272,7 @@ test("RLD-04: list-shaped message with an installed inventory row (needsReload:f
 test("RLD-02: cascade-shaped message with an installed transition row (needsReload:true) emits the /reload trailer", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -1302,7 +1307,7 @@ test("RLD-02: cascade-shaped message with an installed transition row (needsRelo
 test("PL-4: installed inventory row with description emits a 4-space-indented second line", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -1337,7 +1342,7 @@ test("PL-4: installed inventory row with description emits a 4-space-indented se
 test("PL-4: upgradable row with description emits description line", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -1370,7 +1375,7 @@ test("PL-4: upgradable row with description emits description line", (t) => {
 test("PL-4: available row with description emits description line", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -1402,7 +1407,7 @@ test("PL-4: available row with description emits description line", (t) => {
 test("PL-4: unavailable row with description emits description line", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -1434,7 +1439,7 @@ test("PL-4: unavailable row with description emits description line", (t) => {
 test("PL-4 / CR-01: unsupported row with description emits description line", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -1466,7 +1471,7 @@ test("PL-4 / CR-01: unsupported row with description emits description line", (t
 test("PL-4: disabled inventory row with description emits description line", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -1500,7 +1505,7 @@ test("PL-4: disabled inventory row with description emits description line", (t)
 test("PL-4: description absent -- no second line emitted", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -1522,7 +1527,7 @@ test("PL-4: description absent -- no second line emitted", (t) => {
 test("PL-4: description exactly 66 chars -- emitted verbatim (no truncation)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const exactly66 = "A".repeat(66);
   const msg: NotificationMessage = {
     marketplaces: [
@@ -1548,7 +1553,7 @@ test("PL-4: description exactly 66 chars -- emitted verbatim (no truncation)", (
 test("PL-4: description 67 chars -- truncated to 63 + '...' (column 66)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const over = "B".repeat(67);
   const msg: NotificationMessage = {
     marketplaces: [
@@ -1574,7 +1579,7 @@ test("PL-4: description 67 chars -- truncated to 63 + '...' (column 66)", (t) =>
 test("PL-4: empty string description -- no second line emitted", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -1596,7 +1601,7 @@ test("PL-4: empty string description -- no second line emitted", (t) => {
 test("D-22-04 NEGATIVE: empty `marketplace add` ({status:'added', plugins:[]}) emits NO /reload trailer (SNM-33 / G-MIL-01)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [{ name: "local-mp", scope: "user", status: "added", plugins: [] }],
   };
@@ -1616,7 +1621,7 @@ test("D-22-04 NEGATIVE: empty `marketplace add` ({status:'added', plugins:[]}) e
 test("D-22-04 NEGATIVE: empty `marketplace remove` ({status:'removed', plugins:[]}) emits NO /reload trailer (SNM-33 / G-MIL-02)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [{ name: "local-mp", scope: "user", status: "removed", plugins: [] }],
   };
@@ -1636,7 +1641,7 @@ test("D-22-04 NEGATIVE: empty `marketplace remove` ({status:'removed', plugins:[
 test("D-22-04 NEGATIVE: no-op `marketplace update` (all plugin rows skipped) emits NO /reload trailer (SNM-33 / G-MIL-06)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -1671,7 +1676,7 @@ test("D-22-04 NEGATIVE: no-op `marketplace update` (all plugin rows skipped) emi
 test("D-22-04 POSITIVE: `marketplace remove` that uninstalled >=1 plugin emits the /reload trailer (SC#4)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -1698,7 +1703,7 @@ test("D-22-04 POSITIVE: `marketplace remove` that uninstalled >=1 plugin emits t
 test("D-22-04 POSITIVE: `marketplace update` with >=1 changed plugin emits the /reload trailer (SC#4)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -2649,7 +2654,7 @@ test("D-77-01 / PURL-09 notify renders single-version sha row as v#<7hex> via re
 test("notify renders update arrow with hash on both sides as v#<7hex> → v#<7hex> via composeVersionArrow (SNM-35)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -3236,7 +3241,7 @@ test("UXG-07 (D-29-02): warning -- benign-only cascade routes to INFO so NO summ
 
 function pluginInfoDescriptionBlock(t: TestContext, description: string): string[] {
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     kind: "plugin-info",
     marketplaceName: "official",
@@ -3352,7 +3357,7 @@ test("WR-05 / wrapDescription: two words whose `current.length + 1 + word.length
 test("GRAM-01 / GRAM-02: standalone {marketplace not added} row renders the two-block summary + separate detail block (marketplace subject, error severity)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     kind: "marketplace-not-added",
     name: "my-mp",
@@ -3373,7 +3378,7 @@ test("GRAM-01 / GRAM-02: standalone {marketplace not added} row renders the two-
 test("GRAM-02: standalone failed plugin-info renders `A plugin operation has failed.` + separate multi-line detail block", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     kind: "plugin-info",
     marketplaceName: "bad-mp",
@@ -3408,7 +3413,7 @@ test("GRAM-02: standalone failed plugin-info renders `A plugin operation has fai
 test("INFO-04: {marketplace not added} row never carries a reload-hint (read-only surface)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     kind: "marketplace-not-added",
     name: "my-mp",
@@ -3429,7 +3434,7 @@ test("INFO-04: {marketplace not added} row never carries a reload-hint (read-onl
 test("INFO-01: renderMarketplaceInfo (github source + ref + lastUpdated + description)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     kind: "marketplace-info",
     name: "official",
@@ -3459,7 +3464,7 @@ test("INFO-01: renderMarketplaceInfo (github source + ref + lastUpdated + descri
 test("INFO-01: renderMarketplaceInfo (path source, no lastUpdated, no description)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     kind: "marketplace-info",
     name: "local-mp",
@@ -3483,7 +3488,7 @@ test("INFO-01: renderMarketplaceInfo (path source, no lastUpdated, no descriptio
 test("INFO-02 / INFO-05: renderPluginInfo (componentsResolved:true with sorted components + dependencies + wrapping description)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     kind: "plugin-info",
     marketplaceName: "official",
@@ -3527,7 +3532,7 @@ test("INFO-02 / INFO-05: renderPluginInfo (componentsResolved:true with sorted c
 test("INFO-05: renderPluginInfo (componentsResolved:false emits the `components: not resolved` marker)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     kind: "plugin-info",
     marketplaceName: "official",
@@ -3560,7 +3565,7 @@ test("INFO-05: renderPluginInfo (componentsResolved:false emits the `components:
 test("SURF-02 / D-63-04: renderer emits multi-line `hooks:` block at 4-space header + 6-space per-entry indent (mixed tool/non-tool entries)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     kind: "plugin-info",
     marketplaceName: "official",
@@ -3605,7 +3610,7 @@ test("SURF-02 / D-63-04: renderer emits multi-line `hooks:` block at 4-space hea
 test("SURF-02 / D-63-04: empty hooks ([]) emits NO `hooks:` header; non-hooks kinds still render their single-line comma-join", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     kind: "plugin-info",
     marketplaceName: "official",
@@ -3640,7 +3645,7 @@ test("SURF-02 / D-63-04: empty hooks ([]) emits NO `hooks:` header; non-hooks ki
 test("SURF-02 / D-63-04: undefined hooks (field omitted) emits NO `hooks:` header; legacy 4-kind comma-join output is byte-stable", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     kind: "plugin-info",
     marketplaceName: "official",
@@ -3682,7 +3687,7 @@ test("SURF-02 / D-63-04: undefined hooks (field omitted) emits NO `hooks:` heade
 test("SURF-02: lenient `HookSummaryEntry` arm renders `<event> (unsupported)` when supported=false, bare `<event>` when supported=true", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     kind: "plugin-info",
     marketplaceName: "official",
@@ -3723,7 +3728,7 @@ test("SURF-02: lenient `HookSummaryEntry` arm renders `<event> (unsupported)` wh
 test("INFO-03: marketplace-info-cascade with a single block byte-equals the bare marketplace-info render", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     kind: "marketplace-info-cascade",
     blocks: [
@@ -3764,7 +3769,7 @@ test("INFO-03: marketplace-info-cascade with a single block byte-equals the bare
 test("INFO-03: marketplace-info-cascade with two blocks renders project-first then user, joined by one blank line", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     kind: "marketplace-info-cascade",
     blocks: [
@@ -3806,7 +3811,7 @@ test("INFO-03: marketplace-info-cascade with two blocks renders project-first th
 test("INFO-03: marketplace-info-cascade severity is always info (no second arg) and no reload-hint", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     kind: "marketplace-info-cascade",
     blocks: [
@@ -3842,7 +3847,7 @@ test("INFO-03: marketplace-info-cascade severity is always info (no second arg) 
 test("INFO-03 + INFO-01: single-block fan-out (github source, all optional fields) byte form", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     kind: "marketplace-info-cascade",
     blocks: [
@@ -3882,7 +3887,7 @@ test("INFO-03 + INFO-01: single-block fan-out (github source, all optional field
 test("INFO-03 + INFO-01: single-block fan-out (path source, minimal) byte form omits last_updated and description", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     kind: "marketplace-info-cascade",
     blocks: [
@@ -3911,7 +3916,7 @@ test("INFO-03 + INFO-01: single-block fan-out (path source, minimal) byte form o
 test("INFO-02: plugin-info-cascade with a single block byte-equals the bare plugin-info render", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     kind: "plugin-info-cascade",
     blocks: [
@@ -3947,7 +3952,7 @@ test("INFO-02: plugin-info-cascade with a single block byte-equals the bare plug
 test("INFO-02 + INFO-03: plugin-info-cascade with two blocks renders project-first then user, joined by one blank line", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     kind: "plugin-info-cascade",
     blocks: [
@@ -4003,7 +4008,7 @@ test("INFO-02 + INFO-03: plugin-info-cascade with two blocks renders project-fir
 test("INFO-02: plugin-info-cascade severity is always info (no second arg) and no reload-hint", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     kind: "plugin-info-cascade",
     blocks: [
@@ -4051,7 +4056,7 @@ test("INFO-02: plugin-info-cascade severity is always info (no second arg) and n
 test("INFO-02: plugin-info-cascade single block installed with resolved components + dependencies renders full INFO-02 happy path", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     kind: "plugin-info-cascade",
     blocks: [
@@ -4100,7 +4105,7 @@ test("INFO-02: plugin-info-cascade single block installed with resolved componen
 test("INFO-05: plugin-info-cascade single block components-not-resolved emits the marker line at col 4", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     kind: "plugin-info-cascade",
     blocks: [
@@ -4141,7 +4146,7 @@ test("an omitted cascade kind renders byte-identically to an explicit cascade ki
   // arrange
   const ctxNoKind = createContext(t);
   const ctxWithKind = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const noKindMsg: NotificationMessage = {
     marketplaces: [
       {
@@ -4197,7 +4202,7 @@ test("an omitted cascade kind renders byte-identically to an explicit cascade ki
 test("WILL-01: marketplace add renders a bare header + will-install plugin child (orphan-fold suppresses [scope])", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -4221,7 +4226,7 @@ test("WILL-01: marketplace add renders a bare header + will-install plugin child
 test("DIFF-02: will-uninstall plugin under existing (no-status) marketplace block", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -4244,7 +4249,7 @@ test("DIFF-02: will-uninstall plugin under existing (no-status) marketplace bloc
 test("DIFF-02: will-enable + will-disable rows under same marketplace", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -4270,7 +4275,7 @@ test("DIFF-02: will-enable + will-disable rows under same marketplace", (t) => {
 test("DIFF-02: cross-scope orphan-fold -- plugin scope differs from marketplace scope -> [scope] bracket renders", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -4293,7 +4298,7 @@ test("DIFF-02: cross-scope orphan-fold -- plugin scope differs from marketplace 
 test("DIFF-02: will-* cascade emits NO /reload to pick up changes trailer (pending rows are pre-transition)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -4321,7 +4326,7 @@ test("DIFF-02: will-* cascade emits NO /reload to pick up changes trailer (pendi
 test("DIFF-02: will-* cascade computes info severity (no second arg to ctx.ui.notify)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -4343,7 +4348,7 @@ test("DIFF-02: will-* cascade computes info severity (no second arg to ctx.ui.no
 test("D-54-01: (disabled) inventory row renders subject-first with version under list-arm marketplace (info severity, no /reload)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -4375,7 +4380,7 @@ test("D-54-01: (disabled) inventory row renders subject-first with version under
 test("D-54-01: (disabled) inventory row without version omits the v<version> slot cleanly", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -4398,7 +4403,7 @@ test("D-54-01: (disabled) inventory row without version omits the v<version> slo
 test("D-54-01: (disabled) inventory row with orphan-fold scope bracket -- explicit p.scope differs from mp.scope", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -4430,7 +4435,7 @@ test("D-54-01: (disabled) inventory row with orphan-fold scope bracket -- explic
 test("D-54-01: (disabled) inventory row WITHOUT orphan-fold -- p.scope matches mp.scope -> no row bracket", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -4462,7 +4467,7 @@ test("D-54-01: (disabled) inventory row WITHOUT orphan-fold -- p.scope matches m
 test("UAT-03 / RLD-05: a fresh (disabled) row stamping needsReload:true DOES emit the /reload trailer (realized transition; byte-identical row form)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -4501,7 +4506,7 @@ test("UAT-03 / RLD-05: a fresh (disabled) row stamping needsReload:true DOES emi
 test("UAT-03 / RLD-05: a (disabled) inventory row stamping needsReload:false stays trailer-free (stamp drives the hint, not the row status)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -4532,7 +4537,7 @@ test("UAT-03 / RLD-05: a (disabled) inventory row stamping needsReload:false sta
 test("D-54-01 / ENBL idempotency: (skipped) {already enabled} row routes to info severity (benign reason)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -4566,7 +4571,7 @@ test("D-54-01 / ENBL idempotency: (skipped) {already enabled} row routes to info
 test("D-54-01 / ENBL idempotency: (skipped) {already disabled} row routes to info severity (benign reason)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -4600,7 +4605,7 @@ test("D-54-01 / ENBL idempotency: (skipped) {already disabled} row routes to inf
 test("D-54-01: enable cascade (installed plugin row under added mp header) emits /reload trailer", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -4636,7 +4641,7 @@ test("D-54-01: enable cascade (installed plugin row under added mp header) emits
 test("D-54-01: disable cascade (uninstalled plugin row under list-arm mp) emits /reload trailer", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -4670,7 +4675,7 @@ test("D-54-01: disable cascade (uninstalled plugin row under list-arm mp) emits 
 test("RECON-04: success cascade -- mixed marketplace add + plugin install across both scopes, project-first ordering", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     kind: "reconcile-applied-cascade",
     marketplaces: [
@@ -4721,7 +4726,7 @@ test("RECON-04: success cascade -- mixed marketplace add + plugin install across
 test("RECON-04: success cascade NEVER emits `/reload to pick up changes` trailer", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     kind: "reconcile-applied-cascade",
     marketplaces: [
@@ -4751,7 +4756,7 @@ test("RECON-04: success cascade NEVER emits `/reload to pick up changes` trailer
 test("RECON-04: soft-fail per-entry -- failed mp row mixed with successful install row routes to error + summary prepended", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     kind: "reconcile-applied-cascade",
     marketplaces: [
@@ -4797,7 +4802,7 @@ test("RECON-04: soft-fail per-entry -- failed mp row mixed with successful insta
 test("RECON-04: CFG-03 invalid-config row carries BASENAME only (T-55-02-01 information-disclosure mitigation)", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     kind: "reconcile-applied-cascade",
     marketplaces: [
@@ -4840,7 +4845,7 @@ test("REASONS includes the orphan-rewake public token", () => {
 test("SURF-05 / D-63-08: installed row renders `(installed) {orphan rewake}` via the existing reasons brace", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -4888,7 +4893,7 @@ test("REASONS keeps malformed component tokens in canonical order", () => {
 test("CLASS-01 / D-86-01: installed row renders `(installed) {malformed skill}` at warning severity", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const msg: NotificationMessage = {
     marketplaces: [
       {
@@ -5523,7 +5528,7 @@ for (const { name, severity, expected } of [
 test("emitContextCascade composes controlled rows, a plural tally, and a reload hint", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const renderCalls: Array<{ name: string; scope: string; probe: Probe }> = [];
   const renderRow = t.mock.fn<Parameters<typeof emitContextCascade>[3]>((row, probe, scope) => {
     renderCalls.push({ name: row.name, scope, probe: { ...probe } });
@@ -5563,7 +5568,7 @@ test("emitContextCascade composes controlled rows, a plural tally, and a reload 
       probe: {
         piSubagentsLoaded: true,
         piMcpAdapterLoaded: true,
-        workflowEngineLoaded: false,
+        workflowEngineLoaded: true,
       },
     },
   ]);
@@ -5572,7 +5577,7 @@ test("emitContextCascade composes controlled rows, a plural tally, and a reload 
 test("emitContextCascade renders an empty cascade sentinel", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const renderRow = t.mock.fn<Parameters<typeof emitContextCascade>[3]>(() => "unused");
   const message = { kind: "cascade", marketplaces: [] } satisfies Parameters<
     typeof emitContextCascade
@@ -5589,7 +5594,7 @@ test("emitContextCascade renders an empty cascade sentinel", (t) => {
 test("emitUpdateNoOpCascade emits only the fixed headline for an empty cascade", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const renderRow = t.mock.fn<Parameters<typeof emitUpdateNoOpCascade>[3]>(() => "unused");
   const message = { kind: "cascade", marketplaces: [] } satisfies Parameters<
     typeof emitUpdateNoOpCascade
@@ -5608,7 +5613,7 @@ test("emitUpdateNoOpCascade emits only the fixed headline for an empty cascade",
 test("emitUpdateNoOpCascade keeps a benign body above the fixed headline", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const renderRow = t.mock.fn<Parameters<typeof emitUpdateNoOpCascade>[3]>(
     () => "● alpha (partially-upgradable) {lsp}",
   );
@@ -5644,7 +5649,7 @@ test("emitUpdateNoOpCascade keeps a benign body above the fixed headline", (t) =
 test("emitReconcileAppliedContextCascade suppresses reload while preserving tally and severity", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const renderRow = t.mock.fn<Parameters<typeof emitReconcileAppliedContextCascade>[3]>(
     () => "⊘ alpha (failed) {not found}",
   );
@@ -5683,7 +5688,7 @@ test("emitReconcileAppliedContextCascade suppresses reload while preserving tall
 test("notify renders a central remote row without inferred reasons", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const message = {
     marketplaces: [
       {
@@ -5706,7 +5711,7 @@ test("notify renders a central remote row without inferred reasons", (t) => {
 test("notify counts a warning in a plural tally", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const message = {
     kind: "cascade",
     cardinality: "plural",
@@ -5753,7 +5758,7 @@ for (const { name, tally, expected } of [
   test(name, (t) => {
     // arrange
     const ctx = createContext(t);
-    const pi = piWithBothLoaded();
+    const pi = piWithAllLoaded();
     const message = {
       kind: "cascade",
       cardinality: "plural",
@@ -5773,7 +5778,7 @@ for (const { name, tally, expected } of [
 test("a marketplace-level reload stamp emits the trailer", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const message = {
     marketplaces: [
       {
@@ -5799,7 +5804,7 @@ test("a marketplace-level reload stamp emits the trailer", (t) => {
 test("marketplace info renders complete URL-source fields", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const message = {
     kind: "marketplace-info",
     name: "remote-mp",
@@ -5870,7 +5875,7 @@ for (const { name, plugin, expected } of [
   test(name, (t) => {
     // arrange
     const ctx = createContext(t);
-    const pi = piWithBothLoaded();
+    const pi = piWithAllLoaded();
     const message = {
       kind: "plugin-info",
       marketplaceName: "official",
@@ -5890,7 +5895,7 @@ for (const { name, plugin, expected } of [
 test("reconcile-pending-empty emits the exact zero-action advisory", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const message = { kind: "reconcile-pending-empty" } satisfies NotificationMessage;
 
   // act
@@ -5905,7 +5910,7 @@ test("reconcile-pending-empty emits the exact zero-action advisory", (t) => {
 test("context emission renders the disabled enable hint", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const renderRow = t.mock.fn<Parameters<typeof emitContextCascade>[3]>(
     () => "◍ alpha v1.0.0 (disabled)",
   );
@@ -5941,7 +5946,7 @@ test("context emission renders the disabled enable hint", (t) => {
 test("reconcile applied summarizes mixed failed subjects", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const message = {
     kind: "reconcile-applied-cascade",
     marketplaces: [
@@ -6019,7 +6024,7 @@ for (const { name, message, expected } of [
   test(name, (t) => {
     // arrange
     const ctx = createContext(t);
-    const pi = piWithBothLoaded();
+    const pi = piWithAllLoaded();
     const renderRow = t.mock.fn<Parameters<typeof emitContextCascade>[3]>(() => "unused");
 
     // act
@@ -6034,7 +6039,7 @@ for (const { name, message, expected } of [
 test("notify rejects an unknown marketplace status", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const message = {
     marketplaces: [{ name: "official", scope: "user", status: "corrupted", plugins: [] }],
   };
@@ -6054,7 +6059,7 @@ test("notify rejects an unknown marketplace status", (t) => {
 test("notify rejects an unknown plugin status", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const message = {
     marketplaces: [
       {
@@ -6080,7 +6085,7 @@ test("notify rejects an unknown plugin status", (t) => {
 test("notify rejects an unknown marketplace source kind", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const message = {
     kind: "marketplace-info",
     name: "official",
@@ -6104,7 +6109,7 @@ test("notify rejects an unknown marketplace source kind", (t) => {
 test("notify rejects an unknown plugin-info status", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const message = {
     kind: "plugin-info",
     marketplaceName: "official",
@@ -6128,7 +6133,7 @@ test("notify rejects an unknown plugin-info status", (t) => {
 test("notify rejects an unknown plugin-info component-resolution arm", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const message = {
     kind: "plugin-info",
     marketplaceName: "official",
@@ -6152,7 +6157,7 @@ test("notify rejects an unknown plugin-info component-resolution arm", (t) => {
 test("notify rejects an unknown top-level kind", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const message = { kind: "corrupted", marketplaces: [] };
 
   // act & assert
@@ -6170,7 +6175,7 @@ test("notify rejects an unknown top-level kind", (t) => {
 test("the standalone dispatcher rejects a discriminator changed after narrowing", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const message = messageWithKindSequence({}, ["marketplace-info", "corrupted"]);
 
   // act & assert
@@ -6188,7 +6193,7 @@ test("the standalone dispatcher rejects a discriminator changed after narrowing"
 test("severity computation rejects a discriminator changed after narrowing", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const message = messageWithKindSequence({ name: "official", scope: "user" }, [
     ...Array<string>(11).fill("marketplace-not-added"),
     "corrupted",
@@ -6209,7 +6214,7 @@ test("severity computation rejects a discriminator changed after narrowing", (t)
 test("summary computation preserves its read-only empty fallback after narrowing", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const message = messageWithKindSequence({ name: "official", scope: "user" }, [
     ...Array<string>(17).fill("marketplace-not-added"),
     "marketplace-info",
@@ -6228,7 +6233,7 @@ test("summary computation preserves its read-only empty fallback after narrowing
 test("summary computation rejects a discriminator changed after narrowing", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const message = messageWithKindSequence({ name: "official", scope: "user" }, [
     ...Array<string>(17).fill("marketplace-not-added"),
     "corrupted",
@@ -6249,7 +6254,7 @@ test("summary computation rejects a discriminator changed after narrowing", (t) 
 test("reload-hint computation rejects a discriminator changed after narrowing", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const message = messageWithKindSequence({ marketplaces: [] }, ["marketplace-info", "corrupted"]);
   const renderRow = t.mock.fn<Parameters<typeof emitContextCascade>[3]>(() => "unused");
 
@@ -6280,7 +6285,7 @@ test("path redaction preserves a matched token when no separator can be selected
 test("a list-surface marketplace with autoupdate disabled omits the marker", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const message = {
     marketplaces: [
       {
@@ -6302,7 +6307,7 @@ test("a list-surface marketplace with autoupdate disabled omits the marker", (t)
 test("a warning reconcile cascade summarizes a marketplace subject", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const message = {
     kind: "reconcile-applied-cascade",
     marketplaces: [
@@ -6331,7 +6336,7 @@ test("a warning reconcile cascade summarizes a marketplace subject", (t) => {
 test("a non-failed plugin fallback preserves the empty standalone summary", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   let statusIndex = 0;
   const statuses = ["available", "available", "failed", "available"] as const;
   const plugin = Object.defineProperty({ name: "alpha", componentsResolved: false }, "status", {
@@ -6363,7 +6368,7 @@ test("a non-failed plugin fallback preserves the empty standalone summary", (t) 
 test("a defined empty cause does not add an indented cause trailer", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const message = {
     marketplaces: [
       {
@@ -6396,7 +6401,7 @@ test("a defined empty cause does not add an indented cause trailer", (t) => {
 test("a URL marketplace without a ref omits the fragment suffix", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const message = {
     kind: "marketplace-info",
     name: "official",
@@ -6417,7 +6422,7 @@ test("a URL marketplace without a ref omits the fragment suffix", (t) => {
 test("an absent marketplace without a scope omits the scope bracket", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const message = {
     kind: "marketplace-not-added",
     name: "official",
@@ -6440,7 +6445,7 @@ for (const { scope, expectedReason } of [
   test(`an absent marketplace present in the other scope names the ${scope} scope that missed`, (t) => {
     // arrange
     const ctx = createContext(t);
-    const pi = piWithBothLoaded();
+    const pi = piWithAllLoaded();
     const message = {
       kind: "marketplace-not-added",
       name: "official",
@@ -6462,7 +6467,7 @@ for (const { scope, expectedReason } of [
 test("an absent marketplace claiming a sibling scope with no bracket keeps the plain token", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const message = {
     kind: "marketplace-not-added",
     name: "official",
@@ -6482,7 +6487,7 @@ test("an absent marketplace claiming a sibling scope with no bracket keeps the p
 test("an empty applied reconcile cascade renders the empty sentinel", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const message = {
     kind: "reconcile-applied-cascade",
     marketplaces: [],
@@ -6498,7 +6503,7 @@ test("an empty applied reconcile cascade renders the empty sentinel", (t) => {
 test("a failed stale-gate row emits its dedicated recovery trailer", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const message = {
     marketplaces: [
       {
@@ -6531,7 +6536,7 @@ test("a failed stale-gate row emits its dedicated recovery trailer", (t) => {
 test("the central disabled arm preserves a caller-stamped reason", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const message = {
     marketplaces: [
       {
@@ -6585,7 +6590,7 @@ for (const { name, plugin, expected } of [
   test(name, (t) => {
     // arrange
     const ctx = createContext(t);
-    const pi = piWithBothLoaded();
+    const pi = piWithAllLoaded();
     const message = {
       marketplaces: [{ name: "official", scope: "user", plugins: [plugin] }],
     } satisfies NotificationMessage;
@@ -6621,7 +6626,7 @@ for (const { name, reasons, expected } of [
   test(name, (t) => {
     // arrange
     const ctx = createContext(t);
-    const pi = piWithBothLoaded();
+    const pi = piWithAllLoaded();
     const plugin = {
       status: "available",
       name: "alpha",
@@ -6648,7 +6653,7 @@ for (const { name, reasons, expected } of [
 test("a single-target label remains inert without plural cardinality", (t) => {
   // arrange
   const ctx = createContext(t);
-  const pi = piWithBothLoaded();
+  const pi = piWithAllLoaded();
   const message = {
     label: "Plugin uninstall",
     marketplaces: [

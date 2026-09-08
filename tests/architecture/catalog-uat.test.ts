@@ -208,21 +208,29 @@ interface MockPi {
   getAllTools: () => MockTool[];
 }
 
-/** Probe reports both pi-subagents and pi-mcp-adapter loaded -- no soft-dep markers fire. */
-function piWithBothLoaded(): MockPi {
+/**
+ * Probe reports all three companions loaded -- pi-subagents, pi-mcp-adapter and
+ * the host workflow engine -- so no soft-dep marker fires on any row, whatever
+ * that row declares.
+ */
+function piWithAllLoaded(): MockPi {
   return {
-    getAllTools: () => [{ name: "subagent" }, { name: "mcp" }],
+    getAllTools: () => [{ name: "subagent" }, { name: "mcp" }, { name: "workflow_control" }],
   };
 }
 
-/** Probe reports pi-mcp-adapter loaded, pi-subagents NOT loaded -- {requires pi-subagents} fires on dep-bearing rows declaring agents. */
+/**
+ * Probe reports pi-mcp-adapter loaded, pi-subagents and the host workflow engine
+ * NOT loaded -- {requires pi-subagents} fires on dep-bearing rows declaring
+ * agents, and {requires pi-dynamic-workflows} on those declaring workflows.
+ */
 function piWithMcpLoaded(): MockPi {
   return {
     getAllTools: () => [{ name: "mcp" }],
   };
 }
 
-/** Probe reports nothing loaded -- both soft-dep markers fire when the row declares the dep. */
+/** Probe reports nothing loaded -- every soft-dep marker fires when the row declares the dep. */
 function piWithNothingLoaded(): MockPi {
   return {
     getAllTools: () => [],
@@ -267,7 +275,7 @@ type FixtureMap = Readonly<Record<string, Readonly<Record<string, CatalogFixture
 //
 // Per-fixture composition:
 //   - `pi` picks a MockPi factory consistent with the state's soft-dep
-//     markers (or piWithBothLoaded for states that emit no `{requires
+//     markers (or piWithAllLoaded for states that emit no `{requires
 //     pi-...}` markers).
 //   - `expectedSeverity` is set ONLY when the payload triggers
 //     computeSeverity() to return "warning" or "error" per the D-28-06
@@ -367,12 +375,12 @@ const FIXTURES: FixtureMap = {
   // -------------------------------------------------------------------------
   "/claude:plugin list": {
     empty: {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: { marketplaces: [] },
     },
 
     "single-mp-mixed": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         marketplaces: [
           {
@@ -408,7 +416,7 @@ const FIXTURES: FixtureMap = {
     },
 
     "same-plugin-both-scopes": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         marketplaces: [
           {
@@ -446,7 +454,7 @@ const FIXTURES: FixtureMap = {
     },
 
     "project-orphan-folded": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         marketplaces: [
           {
@@ -524,7 +532,7 @@ const FIXTURES: FixtureMap = {
     },
 
     "unparseable-mp": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "error",
       message: {
         marketplaces: [
@@ -561,7 +569,7 @@ const FIXTURES: FixtureMap = {
     },
 
     "zero-plugin-mp-block": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         marketplaces: [
           { name: "empty-mp", scope: "project", plugins: [] },
@@ -640,7 +648,7 @@ const FIXTURES: FixtureMap = {
     // SNM-35: persisted PI-7 hash renders as git-style short SHA on a
     // list-surface inventory row (`hash-2ea95f85703d` -> `v#2ea95f8`).
     "hash-version-list": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         marketplaces: [
           {
@@ -665,7 +673,7 @@ const FIXTURES: FixtureMap = {
     // the git-style short SHA on a list-surface inventory row
     // (`sha-a1b2c3d4e5f6` -> `v#a1b2c3d`).
     "sha-version-list": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         marketplaces: [
           {
@@ -689,7 +697,7 @@ const FIXTURES: FixtureMap = {
     // PL-4: description on all four list-surface variants. Beta's description
     // is 80 chars (> 66) so it truncates to 63 + "..." = 66 chars rendered.
     "description-lines": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         marketplaces: [
           {
@@ -737,7 +745,7 @@ const FIXTURES: FixtureMap = {
     // recorded-but-disabled plugin. The new `(disabled)` closed-set token
     // mirrors the catalog list section's `disabled-inventory` state.
     "disabled-inventory": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         marketplaces: [
           {
@@ -761,7 +769,7 @@ const FIXTURES: FixtureMap = {
     // PL-4: the disabled inventory row carries the manifest description on a
     // second 4-space-indented line, same as the other list-surface variants.
     "disabled-inventory-with-description": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         marketplaces: [
           {
@@ -786,11 +794,11 @@ const FIXTURES: FixtureMap = {
     // ENBL-16 / D-100-07: the disabled inventory row carries `not in manifest`
     // -- and no other reason. The stamp is an orchestrator decision made at the
     // inventory site, so the fresh-disable transition row (which stamps
-    // nothing) keeps rendering bare. `piWithBothLoaded` is not what suppresses
+    // nothing) keeps rendering bare. `piWithAllLoaded` is not what suppresses
     // the soft-dep markers here: the renderer passes both soft-dep flags as
     // `false` for this variant whatever the probe reports (ENBL-15).
     "disabled-inventory-not-in-manifest": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         marketplaces: [
           {
@@ -829,7 +837,7 @@ const FIXTURES: FixtureMap = {
     // itself
     // calls, so the block below is byte-paired with the real list surface.
     "available-installs-disabled": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: { marketplaces: AVAILABLE_INSTALLS_DISABLED_ROWS },
       emit: (ctx, pi) => {
         notifyWithContext(
@@ -847,7 +855,7 @@ const FIXTURES: FixtureMap = {
     // no scope bracket (SNM-11), no reasons brace (D-80-03). Severity `info`;
     // `needsReload: false`.
     "remote-inventory": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         marketplaces: [
           {
@@ -871,7 +879,7 @@ const FIXTURES: FixtureMap = {
     // PL-4: the remote inventory row carries the manifest description on a
     // second 4-space-indented line, same as the other list-surface variants.
     "remote-inventory-with-description": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         marketplaces: [
           {
@@ -902,7 +910,7 @@ const FIXTURES: FixtureMap = {
     // Driven through the list surface's `CommandContext` via `emit`, for the
     // reason recorded on the `(available)` state above.
     "remote-installs-disabled": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: { marketplaces: REMOTE_INSTALLS_DISABLED_ROWS },
       emit: (ctx, pi) => {
         notifyWithContext(ctx as never, pi as never, LIST_CONTEXT, REMOTE_INSTALLS_DISABLED_ROWS);
@@ -913,7 +921,7 @@ const FIXTURES: FixtureMap = {
     // inventory row -- `(available)` with no reason brace, info severity, and
     // no hint or reload trailer before installation.
     "workflow-available-inventory": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         marketplaces: [
           {
@@ -936,7 +944,7 @@ const FIXTURES: FixtureMap = {
     // token wears the dedicated `◉` glyph, distinct from the clean `●`
     // `(installed)` row. Severity `info` (the row omits `severity`).
     "partially-installed-inventory": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         marketplaces: [
           {
@@ -966,7 +974,7 @@ const FIXTURES: FixtureMap = {
     // the structural `narrowResolverNotes` path an `unavailable` malformed-hooks
     // row uses.
     "partially-installed-inventory-hooks": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         marketplaces: [
           {
@@ -991,7 +999,7 @@ const FIXTURES: FixtureMap = {
     // newly degrade it. The derived `partially-upgradable` token REUSES the `●`
     // glyph (the row is clean today), mirroring the `upgradable` precedent.
     "partially-upgradable-inventory": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         marketplaces: [
           {
@@ -1016,7 +1024,7 @@ const FIXTURES: FixtureMap = {
     // `(installed)` token and `●` glyph are unchanged -- manifest absence is a
     // reason, not a status. Severity stays `info` (no `expectedSeverity`).
     "manifest-absent-inventory": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         marketplaces: [
           {
@@ -1043,7 +1051,7 @@ const FIXTURES: FixtureMap = {
     // a degraded manifest-absent record carries BOTH -- absence first, then the
     // `narrowUnsupportedKinds` output. Severity stays `info`.
     "manifest-absent-partially-installed-inventory": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         marketplaces: [
           {
@@ -1069,7 +1077,7 @@ const FIXTURES: FixtureMap = {
   // -------------------------------------------------------------------------
   "/claude:plugin install <plugin>@<marketplace>": {
     success: {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         marketplaces: [
           {
@@ -1123,7 +1131,7 @@ const FIXTURES: FixtureMap = {
     // installed-row reasons brace. No soft-dep markers (both companion
     // extensions are loaded), so the brace contains exactly one reason.
     "success-with-orphan-rewake": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         marketplaces: [
           {
@@ -1217,7 +1225,7 @@ const FIXTURES: FixtureMap = {
     // materializes the supported components and reports them through the clean
     // `(installed)` success grammar.
     "workflow-install-success": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         marketplaces: [
           {
@@ -1243,7 +1251,7 @@ const FIXTURES: FixtureMap = {
     // author-declared cause and carries the frozen enable-hint trailer; no
     // reload hint, because nothing net entered or left Pi's resource view.
     "install-disabled": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         marketplaces: [
           {
@@ -1269,7 +1277,7 @@ const FIXTURES: FixtureMap = {
     // facts ride the same brace after the cause, and the frontmatter degrade
     // raises the row to warning (so the cascade carries its summary line).
     "install-disabled-degraded": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "warning",
       message: {
         marketplaces: [
@@ -1297,7 +1305,7 @@ const FIXTURES: FixtureMap = {
     // list / info), carries the `--partial` hint trailer, and renders at error
     // severity.
     "failure-unsupported-features": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "error",
       message: {
         marketplaces: [
@@ -1323,7 +1331,7 @@ const FIXTURES: FixtureMap = {
     // partially-available error row and partial-install hint. The brace names
     // the second kind alone.
     "workflow-plus-unsupported-rejection": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "error",
       message: {
         marketplaces: [
@@ -1349,7 +1357,7 @@ const FIXTURES: FixtureMap = {
     // `--partial` hint, but it still stamps error severity (the leading summary
     // line fires) because an install failure must read as an error.
     "failure-structural-unavailable": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "error",
       message: {
         marketplaces: [
@@ -1370,7 +1378,7 @@ const FIXTURES: FixtureMap = {
     },
 
     "failure-runtime-with-cause": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "error",
       message: {
         marketplaces: [
@@ -1396,7 +1404,7 @@ const FIXTURES: FixtureMap = {
     },
 
     "failure-rollback-partial": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "error",
       message: {
         marketplaces: [
@@ -1431,7 +1439,7 @@ const FIXTURES: FixtureMap = {
     // `{not in manifest}` on a plugin row). install always carries a
     // resolved scope, so the `[scope]` bracket is always present.
     "missing-marketplace-not-added": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "error",
       message: {
         kind: "marketplace-not-added",
@@ -1446,7 +1454,7 @@ const FIXTURES: FixtureMap = {
     // The bare-row state above is the SAME variant with the flag omitted, which
     // is what a miss in both scopes emits.
     "missing-marketplace-not-added-cross-scope": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "error",
       message: {
         kind: "marketplace-not-added",
@@ -1460,7 +1468,7 @@ const FIXTURES: FixtureMap = {
     // `install` (the CMP-3 fallback adopts a user-scope marketplace into
     // project scope) but reachable from every other verb that renders this row.
     "missing-marketplace-not-added-cross-scope-project": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "error",
       message: {
         kind: "marketplace-not-added",
@@ -1476,7 +1484,7 @@ const FIXTURES: FixtureMap = {
   // -------------------------------------------------------------------------
   "/claude:plugin uninstall <plugin>@<marketplace>": {
     success: {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         marketplaces: [
           {
@@ -1502,7 +1510,7 @@ const FIXTURES: FixtureMap = {
     // state different facts -- new things a reload picks up versus a removed
     // thing it drops.
     "uninstall-stale-workflow-command": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "warning",
       message: {
         marketplaces: [
@@ -1546,7 +1554,7 @@ const FIXTURES: FixtureMap = {
     },
 
     "failure-permission-denied": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "error",
       message: {
         marketplaces: [
@@ -1573,7 +1581,7 @@ const FIXTURES: FixtureMap = {
     // -- the uninstall was not carried out, which outranks the warning band the
     // token carries alone -- and the reload trailer stays structurally absent.
     "failure-stale-workflow-command": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "error",
       message: {
         marketplaces: [
@@ -1601,7 +1609,7 @@ const FIXTURES: FixtureMap = {
     // carrying the requested-scope bracket (distinct from the silent PU-5
     // already-gone-plugin converge).
     "missing-marketplace-not-added": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "error",
       message: {
         kind: "marketplace-not-added",
@@ -1615,7 +1623,7 @@ const FIXTURES: FixtureMap = {
     // target reports an `error` row (was literal silence). The orchestrated
     // reconcile converge stays silent (no row) per WR-06 / NFR-2.
     "already-gone-not-installed": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "error",
       message: {
         marketplaces: [
@@ -1640,7 +1648,7 @@ const FIXTURES: FixtureMap = {
     // target, so the brace names it beside `not installed` -- the scope word is
     // always the OPPOSITE of the row's bracket.
     "already-gone-cross-scope": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "error",
       message: {
         marketplaces: [
@@ -1667,7 +1675,7 @@ const FIXTURES: FixtureMap = {
   // -------------------------------------------------------------------------
   "/claude:plugin reinstall": {
     "single-mp-all-reinstalled": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         label: "Plugin reinstall",
         cardinality: "plural",
@@ -1726,7 +1734,7 @@ const FIXTURES: FixtureMap = {
     // its kind on the `(reinstalled)` row and takes the info -> warning raise,
     // matching the install / enable / backfill arms.
     "reinstall-degraded-component": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "warning",
       message: {
         label: "Plugin reinstall",
@@ -1756,7 +1764,7 @@ const FIXTURES: FixtureMap = {
     // live. Same token, same tail position and same info -> warning raise the
     // uninstall, disable and update rows take.
     "reinstall-stale-workflow-command": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "warning",
       message: {
         label: "Plugin reinstall",
@@ -1788,7 +1796,7 @@ const FIXTURES: FixtureMap = {
     // still fires off the sibling `(reinstalled)` row, and the plural tally
     // counts the informational skip as a success.
     "reinstall-disabled-record-cascade": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         label: "Plugin reinstall",
         cardinality: "plural",
@@ -1819,7 +1827,7 @@ const FIXTURES: FixtureMap = {
     },
 
     "single-mp-mixed-outcomes": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "error",
       message: {
         label: "Plugin reinstall",
@@ -1858,7 +1866,7 @@ const FIXTURES: FixtureMap = {
     },
 
     "single-mp-all-failed": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "error",
       message: {
         label: "Plugin reinstall",
@@ -1889,7 +1897,7 @@ const FIXTURES: FixtureMap = {
     },
 
     "plugin-became-unavailable": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         label: "Plugin reinstall",
         cardinality: "plural",
@@ -1914,7 +1922,7 @@ const FIXTURES: FixtureMap = {
     },
 
     "bare-multi-mp": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "error",
       message: {
         label: "Plugin reinstall",
@@ -1975,7 +1983,7 @@ const FIXTURES: FixtureMap = {
     },
 
     "same-mp-both-scopes": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         label: "Plugin reinstall",
         cardinality: "plural",
@@ -2017,7 +2025,7 @@ const FIXTURES: FixtureMap = {
     // (absent-target across the board), single cardinality so no tally. Mirrors
     // the byte form the `reinstallPlugin` standalone path now emits.
     "standalone-not-installed-error": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "error",
       message: {
         label: "Plugin reinstall",
@@ -2043,7 +2051,7 @@ const FIXTURES: FixtureMap = {
     // SCOPE-01: the container is registered in the scope the command did not
     // target, so the brace names it beside `not installed`.
     "reinstall-not-installed-cross-scope": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "error",
       message: {
         label: "Plugin reinstall",
@@ -2072,7 +2080,7 @@ const FIXTURES: FixtureMap = {
     // form-independent across the explicit-scope-plugin / explicit-scope-
     // marketplace forms.
     "missing-marketplace-not-added": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "error",
       message: {
         kind: "marketplace-not-added",
@@ -2085,7 +2093,7 @@ const FIXTURES: FixtureMap = {
     // standalone `marketplace-not-added` variant with NO bracket (the
     // absent-from-both form; no requested scope to report).
     "missing-marketplace-not-added-absent-from-both": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "error",
       message: {
         kind: "marketplace-not-added",
@@ -2102,7 +2110,7 @@ const FIXTURES: FixtureMap = {
     // one scope over. The plugin is the subject and the brace names where the
     // container really is -- the scope word is the OPPOSITE of the bracket.
     "update-not-installed-cross-scope": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "error",
       message: {
         label: "Plugin update",
@@ -2130,7 +2138,7 @@ const FIXTURES: FixtureMap = {
     // the success category (one realized `updated` row -> `1 updated`); the
     // failure category still folds in from the rows -> `1 failure, 1 updated`.
     "single-mp-mixed": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "error",
       message: {
         label: "Plugin update",
@@ -2168,7 +2176,7 @@ const FIXTURES: FixtureMap = {
     // unchanged -- the summary stays byte-identical at `Plugin update: 1
     // failure`. Proves the override does not perturb a failure-only cascade.
     "failed-with-rollback-partial": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "error",
       message: {
         label: "Plugin update",
@@ -2209,7 +2217,7 @@ const FIXTURES: FixtureMap = {
     // drives the orchestrator no-op seam via `emit`. Info severity, no
     // reload-hint.
     "all-up-to-date-noop": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         label: "Plugin update",
         cardinality: "plural",
@@ -2224,7 +2232,7 @@ const FIXTURES: FixtureMap = {
     // `updated` rows (`helper` + `alpha`) -> `tally` count 2; the one `failed`
     // row composes ahead -> `1 failure, 2 updated`.
     "bare-multi-mp": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "error",
       message: {
         label: "Plugin update",
@@ -2276,7 +2284,7 @@ const FIXTURES: FixtureMap = {
     // count 2 -> `Plugin update: 2 updated` (no suppression -- no up-to-date
     // rows here; only the verb/count grammar changes).
     "same-mp-both-scopes": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         label: "Plugin update",
         cardinality: "plural",
@@ -2320,7 +2328,7 @@ const FIXTURES: FixtureMap = {
     // git-style short SHAs `#2ea95f8 → v#1c3d9a0` (bare from, v-prefixed
     // to per composeVersionArrow's asymmetry; D-23-05).
     "hash-version-arrow": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       // UGRM-02: one realized `updated` row -> `tally` count 1 -> `Plugin
       // update: 1 updated`.
       message: {
@@ -2353,7 +2361,7 @@ const FIXTURES: FixtureMap = {
     // path the hash-version arrow uses (`sha-a1b2c3d4e5f6` -> `v#a1b2c3d`,
     // `sha-2222333344455` -> `v#2222333`). Verify-only: no render code changes.
     "sha-version-arrow": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         label: "Plugin update",
         cardinality: "plural",
@@ -2383,7 +2391,7 @@ const FIXTURES: FixtureMap = {
     // matching the install / enable / reinstall arms. Distinct from the
     // dropped-kind axis below, which renders `(partially-installed)`.
     "update-degraded-component": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "warning",
       message: {
         label: "Plugin update",
@@ -2415,7 +2423,7 @@ const FIXTURES: FixtureMap = {
     // different reason than the malformed axis: this is a shortfall in what the
     // update achieved, not a component it wrote in degraded form.
     "update-stale-workflow-command": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "warning",
       message: {
         label: "Plugin update",
@@ -2445,7 +2453,7 @@ const FIXTURES: FixtureMap = {
     // and same info severity as the install / enable / backfill rows -- the
     // config bug names itself in the brace and moves no severity channel.
     "update-orphan-rewake": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         label: "Plugin update",
         cardinality: "single",
@@ -2478,7 +2486,7 @@ const FIXTURES: FixtureMap = {
     // one `updatedRowFromOutcome` seam, so neither can name one axis and
     // swallow the other.
     "update-degraded-and-dropped": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "warning",
       message: {
         label: "Plugin update",
@@ -2512,7 +2520,7 @@ const FIXTURES: FixtureMap = {
     // cardinality, so no trailing tally; the cascade carries the `needs
     // attention` summary line.
     "decline-partially-upgradable-targeted": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "warning",
       message: {
         label: "Plugin update",
@@ -2552,7 +2560,7 @@ const FIXTURES: FixtureMap = {
     // the orchestrator no-op seam via `emit`, keeping the Phase-73 row as the
     // body. Info severity, no reload-hint.
     "skip-partially-upgradable-bulk": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         label: "Plugin update",
         cardinality: "plural",
@@ -2604,7 +2612,7 @@ const FIXTURES: FixtureMap = {
     // inherited closed-set members, and `already disabled` is idempotent, so the
     // row keeps its info severity. No trailer.
     "disabled-record-refresh": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         label: "Plugin update",
         cardinality: "single",
@@ -2632,7 +2640,7 @@ const FIXTURES: FixtureMap = {
     // form-independent across the `<plugin>@<mp>` / `@<mp>` forms. No raw
     // throw escapes the orchestrator.
     "missing-marketplace-not-added": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "error",
       message: {
         kind: "marketplace-not-added",
@@ -2645,7 +2653,7 @@ const FIXTURES: FixtureMap = {
     // standalone `marketplace-not-added` variant with NO bracket (the
     // absent-from-both form; no requested scope to report).
     "missing-marketplace-not-added-absent-from-both": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "error",
       message: {
         kind: "marketplace-not-added",
@@ -2666,7 +2674,7 @@ const FIXTURES: FixtureMap = {
     // `available`; the bare row omits the scope bracket (MSG-PL-6 / SNM-11).
     // Single cardinality -> no tally. Info; no reload-hint.
     "single-available": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         marketplaces: [
           {
@@ -2688,7 +2696,7 @@ const FIXTURES: FixtureMap = {
     // carries the `{lsp}` degrade reason via the same narrowUnsupportedKinds
     // seam `list` uses. Info; no reload-hint.
     "single-partially-available": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         marketplaces: [
           {
@@ -2711,7 +2719,7 @@ const FIXTURES: FixtureMap = {
     // no-op; the row is `⊘ (skipped) {up-to-date}` at info severity, carrying
     // the existing `up-to-date` reason (closed set does not grow).
     "single-noop-skipped": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         marketplaces: [
           {
@@ -2738,7 +2746,7 @@ const FIXTURES: FixtureMap = {
     // Severity `error` (first-match wins); no reload-hint (a fetch installs
     // nothing).
     "bulk-mixed": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "error",
       message: {
         label: "Plugin fetch",
@@ -2772,7 +2780,7 @@ const FIXTURES: FixtureMap = {
   // -------------------------------------------------------------------------
   "/claude:plugin import": {
     "fresh-mixed-both-scopes": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       // WR-02: the lone `unavailable` row now stamps `warning`, so the cascade
       // reduces to warning severity at the wire.
       expectedSeverity: "warning",
@@ -2880,7 +2888,7 @@ const FIXTURES: FixtureMap = {
     },
 
     "scope-project-narrow": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         label: "Import",
         cardinality: "plural",
@@ -2963,7 +2971,7 @@ const FIXTURES: FixtureMap = {
     },
 
     "same-mp-both-scopes": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         label: "Import",
         cardinality: "plural",
@@ -3006,7 +3014,7 @@ const FIXTURES: FixtureMap = {
   // -------------------------------------------------------------------------
   "/claude:plugin bootstrap": {
     fresh: {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         marketplaces: [
           {
@@ -3020,7 +3028,7 @@ const FIXTURES: FixtureMap = {
     },
 
     "already-bootstrapped": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         marketplaces: [
           {
@@ -3039,12 +3047,12 @@ const FIXTURES: FixtureMap = {
   // -------------------------------------------------------------------------
   "/claude:plugin marketplace list": {
     empty: {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: { marketplaces: [] },
     },
 
     "mixed-scopes": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         marketplaces: [
           {
@@ -3071,14 +3079,14 @@ const FIXTURES: FixtureMap = {
   // -------------------------------------------------------------------------
   "/claude:plugin marketplace add <source>": {
     "path-source": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         marketplaces: [{ name: "local-mp", scope: "user", status: "added", plugins: [] }],
       },
     },
 
     "github-source": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         marketplaces: [
           {
@@ -3092,7 +3100,7 @@ const FIXTURES: FixtureMap = {
     },
 
     "failure-unreachable": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "error",
       message: {
         marketplaces: [
@@ -3113,7 +3121,7 @@ const FIXTURES: FixtureMap = {
     // failures carry the derived name; pre-manifest failures carry the raw
     // source string (A2). All route to `error` severity (failed-bearing).
     "add-duplicate-name": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "error",
       message: {
         marketplaces: [
@@ -3131,7 +3139,7 @@ const FIXTURES: FixtureMap = {
     },
 
     "add-stale-clone": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "error",
       message: {
         marketplaces: [
@@ -3149,7 +3157,7 @@ const FIXTURES: FixtureMap = {
     },
 
     "add-unsupported-source": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "error",
       message: {
         marketplaces: [
@@ -3167,7 +3175,7 @@ const FIXTURES: FixtureMap = {
     },
 
     "add-source-missing": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "error",
       message: {
         marketplaces: [
@@ -3185,7 +3193,7 @@ const FIXTURES: FixtureMap = {
     },
 
     "add-invalid-manifest": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "error",
       message: {
         marketplaces: [
@@ -3209,7 +3217,7 @@ const FIXTURES: FixtureMap = {
     // mirroring the `update-path-invalid-manifest` recipe. The subject is the
     // user-typed URL (pre-name failure). Severity `error`; no reload-hint.
     "add-authentication-required": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "error",
       message: {
         marketplaces: [
@@ -3259,7 +3267,7 @@ const FIXTURES: FixtureMap = {
   "/claude:plugin marketplace info <name>": {
     // INFO-07: full catalog state coverage for marketplace info.
     "github-single-scope-full": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         kind: "marketplace-info",
         name: "claude-plugins-official",
@@ -3276,7 +3284,7 @@ const FIXTURES: FixtureMap = {
     },
 
     "github-single-scope-minimal": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         kind: "marketplace-info",
         name: "community-mp",
@@ -3290,7 +3298,7 @@ const FIXTURES: FixtureMap = {
     // description. The `url: <url>#<ref>` line replaces `github:`/`path:`, and
     // `last_updated:` renders because url is a git-backed kind. Non-github host.
     "url-single-scope-full": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         kind: "marketplace-info",
         name: "acme-mp",
@@ -3304,7 +3312,7 @@ const FIXTURES: FixtureMap = {
     // MURL-05 / D-76-09: url source with NO ref -> the `url:` line drops the
     // `#<ref>` suffix; no lastUpdatedAt so no `last_updated:` line.
     "url-single-scope-minimal": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         kind: "marketplace-info",
         name: "acme-mp",
@@ -3315,7 +3323,7 @@ const FIXTURES: FixtureMap = {
     },
 
     "path-single-scope": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         kind: "marketplace-info",
         name: "local-mp",
@@ -3326,7 +3334,7 @@ const FIXTURES: FixtureMap = {
     },
 
     "path-single-scope-with-description": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         kind: "marketplace-info",
         name: "dev-mp",
@@ -3338,7 +3346,7 @@ const FIXTURES: FixtureMap = {
     },
 
     "both-scopes-fan-out": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         kind: "marketplace-info-cascade",
         blocks: [
@@ -3361,7 +3369,7 @@ const FIXTURES: FixtureMap = {
     },
 
     "absent-from-both": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "error",
       // TYPE-01: the dedicated `marketplace-not-added` variant. `scope` is
       // OMITTED so the renderer emits no `[scope]` token -- absent-from-both
@@ -3377,7 +3385,7 @@ const FIXTURES: FixtureMap = {
     // The fixture shape is re-keyed to the TYPE-01 variant; the rendered BYTES
     // are unchanged.
     "scope-mismatch-not-added": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "error",
       message: {
         kind: "marketplace-not-added",
@@ -3396,7 +3404,7 @@ const FIXTURES: FixtureMap = {
     // bracket), status `failed`, reasons `["invalid manifest"]`,
     // componentsResolved false. Byte form: header + 2-space-indent failed row.
     "manifest-invalid": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "error",
       message: {
         kind: "plugin-info",
@@ -3449,7 +3457,7 @@ const FIXTURES: FixtureMap = {
   // -------------------------------------------------------------------------
   "/claude:plugin info <plugin>@<marketplace>": {
     "installed-single-scope": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         kind: "plugin-info",
         marketplaceName: "claude-plugins-official",
@@ -3471,7 +3479,7 @@ const FIXTURES: FixtureMap = {
     },
 
     "installed-single-scope-with-dependencies": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         kind: "plugin-info",
         marketplaceName: "claude-plugins-official",
@@ -3498,7 +3506,7 @@ const FIXTURES: FixtureMap = {
     // itself, `commit-commands:release` falls back to its file stem -- and the
     // renderer emits them in the order the composer supplied.
     "installed-with-workflows": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         kind: "plugin-info",
         marketplaceName: "claude-plugins-official",
@@ -3526,7 +3534,7 @@ const FIXTURES: FixtureMap = {
     // read. The composer reduces the walked directory to its name before the
     // string reaches the row, which is what makes these bytes pinnable.
     "installed-with-workflow-preview-note": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         kind: "plugin-info",
         marketplaceName: "claude-plugins-official",
@@ -3551,7 +3559,7 @@ const FIXTURES: FixtureMap = {
     },
 
     "state-only-installed-single-scope": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         kind: "plugin-info",
         marketplaceName: "mp",
@@ -3574,7 +3582,7 @@ const FIXTURES: FixtureMap = {
     // generated installed names the record holds, which is why they carry the
     // `<plugin>:` prefix the manifest-backed arm's source names do not.
     "state-only-installed-with-workflows": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         kind: "plugin-info",
         marketplaceName: "mp",
@@ -3595,7 +3603,7 @@ const FIXTURES: FixtureMap = {
     },
 
     "state-only-partially-installed-single-scope": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         kind: "plugin-info",
         marketplaceName: "mp",
@@ -3615,7 +3623,7 @@ const FIXTURES: FixtureMap = {
     },
 
     "state-only-installed-with-hooks": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         kind: "plugin-info",
         marketplaceName: "mp",
@@ -3636,7 +3644,7 @@ const FIXTURES: FixtureMap = {
     },
 
     "state-only-installed-hooks-degraded": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         kind: "plugin-info",
         marketplaceName: "mp",
@@ -3663,7 +3671,7 @@ const FIXTURES: FixtureMap = {
     // carries the absence token ALONE: a persisted unsupported kind would be
     // suppressed on this row (ENBL-16 / D-100-07), so no fixture can show one.
     "state-only-disabled-with-components": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         kind: "plugin-info",
         marketplaceName: "mp",
@@ -3688,7 +3696,7 @@ const FIXTURES: FixtureMap = {
     // admits no `skipped`. The `severity: "warning"` on the row is what selects
     // the `needs attention` summary and the second `notify` argument.
     "state-only-fetch-skipped": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "warning",
       message: {
         marketplaces: [
@@ -3714,7 +3722,7 @@ const FIXTURES: FixtureMap = {
     // OTHER cause of a skipped fetch -- a disabled record has no materialized
     // artifacts to refresh (ENBL-02).
     "disabled-fetch-skipped": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "warning",
       message: {
         marketplaces: [
@@ -3741,7 +3749,7 @@ const FIXTURES: FixtureMap = {
     // project-first by SCOPE rather than grouped by the arm that produced the
     // row. It composes the two states above; it is not a third cause.
     "mixed-fetch-skipped": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "warning",
       message: {
         marketplaces: [
@@ -3776,7 +3784,7 @@ const FIXTURES: FixtureMap = {
     },
 
     "available-single-scope": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         kind: "plugin-info",
         marketplaceName: "community-mp",
@@ -3803,7 +3811,7 @@ const FIXTURES: FixtureMap = {
     // component lines untouched. The claim is entry-derived, so nothing on disk
     // is read to answer it. Severity `info`; no reload-hint (read-only surface).
     "available-installs-disabled": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         kind: "plugin-info",
         marketplaceName: "community-mp",
@@ -3825,7 +3833,7 @@ const FIXTURES: FixtureMap = {
     },
 
     "unavailable-single-scope": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         kind: "plugin-info",
         marketplaceName: "community-mp",
@@ -3843,7 +3851,7 @@ const FIXTURES: FixtureMap = {
     },
 
     "installed-both-scopes-fan-out": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         kind: "plugin-info-cascade",
         blocks: [
@@ -3882,7 +3890,7 @@ const FIXTURES: FixtureMap = {
     // `(failed)`, so they join one `info` cascade instead of being separated
     // into two `error` notifications by the GRAM-04 failure split.
     "state-only-installed-both-scopes-fan-out": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         kind: "plugin-info-cascade",
         blocks: [
@@ -3919,7 +3927,7 @@ const FIXTURES: FixtureMap = {
     },
 
     "components-not-resolved": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         kind: "plugin-info",
         marketplaceName: "remote-mp",
@@ -3942,7 +3950,7 @@ const FIXTURES: FixtureMap = {
     // marker (existing wording preserved) -- an unfetched source has no warm
     // tree to resolve. Severity `info`.
     "remote-single-scope": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         kind: "plugin-info",
         marketplaceName: "community-mp",
@@ -3959,7 +3967,7 @@ const FIXTURES: FixtureMap = {
     },
 
     "missing-plugin-not-in-manifest": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "error",
       message: {
         kind: "plugin-info",
@@ -3982,7 +3990,7 @@ const FIXTURES: FixtureMap = {
     },
 
     "missing-marketplace-not-added-absent-from-both": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "error",
       // TYPE-01 variant. `name` carries the MARKETPLACE name (the user-facing
       // failure is "the marketplace is not added"). `scope` OMITTED -> no
@@ -3994,7 +4002,7 @@ const FIXTURES: FixtureMap = {
     },
 
     "missing-marketplace-not-added-scope-mismatch": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "error",
       // TYPE-01 variant. `--scope user` requested explicitly -> renderer emits
       // the `[user]` bracket. Byte form unchanged
@@ -4012,7 +4020,7 @@ const FIXTURES: FixtureMap = {
   // -------------------------------------------------------------------------
   "/claude:plugin marketplace remove <name>": {
     clean: {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         marketplaces: [
           {
@@ -4028,7 +4036,7 @@ const FIXTURES: FixtureMap = {
     },
 
     partial: {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "error",
       message: {
         marketplaces: [
@@ -4058,7 +4066,7 @@ const FIXTURES: FixtureMap = {
     // variant carrying the requested scope bracket (pre-guard miss; no raw
     // MarketplaceNotFoundError escapes the orchestrator).
     "remove-missing-not-added": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "error",
       message: {
         kind: "marketplace-not-added",
@@ -4071,7 +4079,7 @@ const FIXTURES: FixtureMap = {
     // SAME standalone variant with NO bracket (resolveScopeFromState's
     // MarketplaceNotFoundError caught at the entrypoint, absent-from-both form).
     "remove-missing-not-added-bare": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "error",
       message: {
         kind: "marketplace-not-added",
@@ -4089,7 +4097,7 @@ const FIXTURES: FixtureMap = {
     // D-28-07 the benign `up-to-date` no-op computes INFO (no
     // `expectedSeverity`).
     "update-no-op-skipped": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         marketplaces: [
           {
@@ -4110,7 +4118,7 @@ const FIXTURES: FixtureMap = {
     // OFF no-op (plugins:[], dropped all-`unchanged` cascade rows). Distinct
     // mp name (`official`) so the two fixtures are not confusable.
     "update-autoupdate-noop-skipped": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       // Benign `up-to-date` no-op -> INFO per UXG-02 / D-28-07 (no
       // `expectedSeverity`); byte form unchanged.
       message: {
@@ -4133,7 +4141,7 @@ const FIXTURES: FixtureMap = {
     // leaves the no-op gate and the cascade rows render. Benign idempotent
     // reason -> INFO (no `expectedSeverity`).
     "update-autoupdate-disabled-repin": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         marketplaces: [
           {
@@ -4162,7 +4170,7 @@ const FIXTURES: FixtureMap = {
     // the same skip. That asymmetry is the byte contract, not a bug.
     // `not in manifest` is non-idempotent, so `skipSeverity` stamps `warning`.
     "update-autoupdate-cascade-not-in-manifest": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "warning",
       message: {
         marketplaces: [
@@ -4186,14 +4194,14 @@ const FIXTURES: FixtureMap = {
     },
 
     "manifest-refresh-changed": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         marketplaces: [{ name: "local-mp", scope: "user", status: "updated", plugins: [] }],
       },
     },
 
     "mixed-outcomes": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "error",
       message: {
         marketplaces: [
@@ -4239,7 +4247,7 @@ const FIXTURES: FixtureMap = {
     // auto-update, so re-degrading is benign -> INFO (no `expectedSeverity`).
     // partially-installed is a realized transition -> reload-hint fires.
     "autoupdate-partially-installed-already-degraded": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         marketplaces: [
           {
@@ -4270,7 +4278,7 @@ const FIXTURES: FixtureMap = {
     // summary line. The per-row bytes are identical to the already-degraded
     // info fixture above; only the stamped severity moves.
     "autoupdate-partially-installed-newly-degraded": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "warning",
       message: {
         marketplaces: [
@@ -4296,7 +4304,7 @@ const FIXTURES: FixtureMap = {
     },
 
     "mp-failure-network": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "error",
       message: {
         marketplaces: [
@@ -4321,7 +4329,7 @@ const FIXTURES: FixtureMap = {
     // deterministic (the live cause-chain trailer carries data-dependent JSON
     // parser text). Summary counts the synthetic child as one plugin operation.
     "update-path-invalid-manifest": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "error",
       message: {
         marketplaces: [
@@ -4351,7 +4359,7 @@ const FIXTURES: FixtureMap = {
     // carries the requested `[scope]` bracket (SCOPE-01); the bare absent-from-both
     // form carries NO bracket. Both severity `error` via computeSeverity.
     "update-missing-not-added": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "error",
       message: {
         kind: "marketplace-not-added",
@@ -4361,7 +4369,7 @@ const FIXTURES: FixtureMap = {
     },
 
     "update-missing-not-added-absent-from-both": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "error",
       message: {
         kind: "marketplace-not-added",
@@ -4375,21 +4383,21 @@ const FIXTURES: FixtureMap = {
   // -------------------------------------------------------------------------
   "/claude:plugin marketplace autoupdate|noautoupdate <name>": {
     "enable-fresh": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         marketplaces: [{ name: "foo", scope: "user", status: "autoupdate enabled", plugins: [] }],
       },
     },
 
     "disable-fresh": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         marketplaces: [{ name: "foo", scope: "user", status: "autoupdate disabled", plugins: [] }],
       },
     },
 
     "enable-idempotent": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       // Benign idempotent flip (`already autoupdate` in BENIGN_REASONS) ->
       // INFO per UXG-02 / D-28-07 (no `expectedSeverity`); byte form unchanged.
       message: {
@@ -4408,7 +4416,7 @@ const FIXTURES: FixtureMap = {
     },
 
     "disable-idempotent": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       // Benign idempotent flip (`already no autoupdate` in BENIGN_REASONS) ->
       // INFO per UXG-02 / D-28-07 (no `expectedSeverity`); byte form unchanged.
       message: {
@@ -4431,7 +4439,7 @@ const FIXTURES: FixtureMap = {
     // `marketplace-not-added` `{marketplace not added}` variant carrying the
     // requested scope bracket.
     "autoupdate-missing-not-added": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "error",
       message: {
         kind: "marketplace-not-added",
@@ -4444,7 +4452,7 @@ const FIXTURES: FixtureMap = {
     // the SAME standalone variant carrying `first.scope` (project-before-user
     // SC-6 order -> `[project]`).
     "autoupdate-missing-not-added-bare": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "error",
       message: {
         kind: "marketplace-not-added",
@@ -4459,7 +4467,7 @@ const FIXTURES: FixtureMap = {
   // -------------------------------------------------------------------------
   "/claude:plugin enable <plugin>@<marketplace>": {
     "enable-fresh": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       // Re-materialization through the install ledger -- UAT-04 (decision
       // 2026-06-11): BARE always-marketplace-header
       // form (no `(added)` token; that header belongs to `marketplace add`)
@@ -4491,7 +4499,7 @@ const FIXTURES: FixtureMap = {
     // degradation predates the enable, so the row stays `info` (no summary
     // line) -- parity with install --partial and the backfill partial arm.
     "enable-partial": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         marketplaces: [
           {
@@ -4519,7 +4527,7 @@ const FIXTURES: FixtureMap = {
     // from `enable-partial`: a DEGRADED component installed short, a DROPPED
     // one is absent.
     "enable-degraded": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "warning",
       message: {
         marketplaces: [
@@ -4546,7 +4554,7 @@ const FIXTURES: FixtureMap = {
     // reports; it names itself in the brace without moving the severity
     // channel, exactly as on the install row.
     "enable-orphan-rewake": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         marketplaces: [
           {
@@ -4597,7 +4605,7 @@ const FIXTURES: FixtureMap = {
     },
 
     "enable-idempotent": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       // Idempotent no-op -- benign reason routes to info per UXG-02 / D-28-06.
       message: {
         marketplaces: [
@@ -4619,7 +4627,7 @@ const FIXTURES: FixtureMap = {
     },
 
     "enable-not-installed": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       // WR-03 / D-01: marketplace present, plugin row absent. Nothing was
       // enabled or disabled, so the operation was NOT carried out -> `error`,
       // the same stamp every sibling verb applies to `["not installed"]`.
@@ -4648,7 +4656,7 @@ const FIXTURES: FixtureMap = {
     // rendering byte-identically to `enable-not-installed` above -- the two take
     // different remedies. The scope word is the OPPOSITE of the row's bracket.
     "enable-not-installed-cross-scope": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "error",
       message: {
         marketplaces: [
@@ -4670,7 +4678,7 @@ const FIXTURES: FixtureMap = {
     },
 
     "enable-source-missing": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "error",
       message: {
         marketplaces: [
@@ -4699,7 +4707,7 @@ const FIXTURES: FixtureMap = {
     // same `narrowUnsupportedKinds` seam the list `(partially-upgradable)` row
     // uses.
     "enable-failed-stale-gate": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "error",
       message: {
         marketplaces: [
@@ -4724,7 +4732,7 @@ const FIXTURES: FixtureMap = {
     },
 
     "enable-marketplace-not-added": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "error",
       message: {
         kind: "marketplace-not-added",
@@ -4739,7 +4747,7 @@ const FIXTURES: FixtureMap = {
       // `{invalid manifest}` reason -- the orchestrator aborts BEFORE entering
       // the cascade, so the body is the bare cascade with the failed plugin
       // row.
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "error",
       message: {
         marketplaces: [
@@ -4766,7 +4774,7 @@ const FIXTURES: FixtureMap = {
   // -------------------------------------------------------------------------
   "/claude:plugin disable <plugin>@<marketplace>": {
     "disable-fresh": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       // UAT-03: the fresh-disable
       // row carries the closed-set `(disabled)` token -- same glyph + token
       // as the disabled-inventory row, version slot kept. RLD-05 / D-07: the
@@ -4797,7 +4805,7 @@ const FIXTURES: FixtureMap = {
     // `cascade.dropped.workflows` and never from the record's retained
     // inventory, which ENBL-18 deliberately keeps populated across a disable.
     "disable-stale-workflow-command": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "warning",
       message: {
         marketplaces: [
@@ -4820,7 +4828,7 @@ const FIXTURES: FixtureMap = {
     },
 
     "disable-idempotent": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       // Benign reason -> info severity.
       message: {
         marketplaces: [
@@ -4842,7 +4850,7 @@ const FIXTURES: FixtureMap = {
     },
 
     "disable-marketplace-not-added": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "error",
       message: {
         kind: "marketplace-not-added",
@@ -4852,7 +4860,7 @@ const FIXTURES: FixtureMap = {
     },
 
     "disable-invalid-config": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "error",
       message: {
         marketplaces: [
@@ -4879,7 +4887,7 @@ const FIXTURES: FixtureMap = {
   // -------------------------------------------------------------------------
   "manual-recovery-anchors": {
     "per-plugin-manual-recovery": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "warning",
       message: {
         marketplaces: [
@@ -4908,7 +4916,7 @@ const FIXTURES: FixtureMap = {
   // -------------------------------------------------------------------------
   "/claude:plugin pending": {
     "empty-steady-state": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       // Dedicated standalone variant; the renderer hard-codes the advisory
       // body line so the byte form cannot drift from the catalog state.
       message: { kind: "reconcile-pending-empty" },
@@ -4918,7 +4926,7 @@ const FIXTURES: FixtureMap = {
     // interpolates no absolute path (T-53-02-02), which is also what makes it
     // pinnable by byte equality at all.
     "empty-steady-state-retained-workflow-staging": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         kind: "reconcile-pending-empty",
         advisories: [RETAINED_WORKFLOW_STAGING_ADVISORY],
@@ -4928,7 +4936,7 @@ const FIXTURES: FixtureMap = {
     // the child install is the reload-deferred work, rendered under a bare
     // list-arm header (no marketplace status).
     "mp-add-plugin-install": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         marketplaces: [
           {
@@ -4944,7 +4952,7 @@ const FIXTURES: FixtureMap = {
     // `(will partially install)` in place of `(will install)`. A render modifier,
     // not a new token; no `will partially update` analog exists (D-66-05).
     "mp-add-plugin-partial-install": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         marketplaces: [
           {
@@ -4956,7 +4964,7 @@ const FIXTURES: FixtureMap = {
       },
     },
     "plugin-pending-uninstall": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         marketplaces: [
           {
@@ -4971,7 +4979,7 @@ const FIXTURES: FixtureMap = {
     // one constant, so a catalog block that drifted from its sibling would fail
     // byte equality here rather than shipping two spellings of one fact.
     "plugin-pending-uninstall-retained-workflow-staging": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         marketplaces: [
           {
@@ -4990,7 +4998,7 @@ const FIXTURES: FixtureMap = {
     // status) plus one `(will uninstall)` row per recorded plugin, byte-identical
     // to the surviving `plugin-pending-uninstall` form above.
     "marketplace-remove-with-installed-plugins": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         marketplaces: [
           {
@@ -5009,7 +5017,7 @@ const FIXTURES: FixtureMap = {
       // recorded-but-disabled marker; the catalog fixture is hand-constructed
       // (not routed through planReconcile) so the enable-bucket wiring can
       // land against an exercised path.
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         marketplaces: [
           {
@@ -5024,7 +5032,7 @@ const FIXTURES: FixtureMap = {
       },
     },
     "source-mismatch": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "error",
       message: {
         marketplaces: [
@@ -5044,7 +5052,7 @@ const FIXTURES: FixtureMap = {
       // CFG-03: the marketplace `name` is the file BASENAME
       // (never the absolute path -- T-53-02-02 information-disclosure
       // mitigation). The orchestrator passes path.basename(filePath).
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "error",
       message: {
         marketplaces: [
@@ -5070,7 +5078,7 @@ const FIXTURES: FixtureMap = {
   // -------------------------------------------------------------------------
   "reconcile-applied-cascade": {
     "success-cascade-mixed": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         kind: "reconcile-applied-cascade",
         label: "Reconcile",
@@ -5108,7 +5116,7 @@ const FIXTURES: FixtureMap = {
       },
     },
     "soft-fail-mixed": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "error",
       message: {
         kind: "reconcile-applied-cascade",
@@ -5143,7 +5151,7 @@ const FIXTURES: FixtureMap = {
     },
     "invalid-config-row": {
       // T-55-02-01 / T-53-02-02: BASENAME only -- never the absolute path.
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "error",
       message: {
         kind: "reconcile-applied-cascade",
@@ -5169,7 +5177,7 @@ const FIXTURES: FixtureMap = {
     // are stripped at the apply boundary via `redactAbsolutePaths`; the
     // parse / permission detail survives so the operator can debug.
     "invalid-config-row-with-cause": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "error",
       message: {
         kind: "reconcile-applied-cascade",
@@ -5204,7 +5212,7 @@ const FIXTURES: FixtureMap = {
     // `partial` byte form: collapsing to ONE mp-failed row would silently
     // drop the N-1 other rows.
     "partial-marketplace-remove": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       expectedSeverity: "error",
       message: {
         kind: "reconcile-applied-cascade",
@@ -5245,7 +5253,7 @@ const FIXTURES: FixtureMap = {
     // marketplace was already added, so its header is bare (no status token).
     // SEV-03 / A3: a benign promotion stays info -- no expectedSeverity.
     "backfill-partially-installed": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         kind: "reconcile-applied-cascade",
         label: "Reconcile",
@@ -5274,7 +5282,7 @@ const FIXTURES: FixtureMap = {
     // empty renders brace-less -- byte-identical to the pre-SEV-05 form (the
     // change is additive; rows without reasons do not gain a brace).
     "backfill-partially-installed-no-reasons": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         kind: "reconcile-applied-cascade",
         label: "Reconcile",
@@ -5334,7 +5342,7 @@ const FIXTURES: FixtureMap = {
     // reload stamp differs (`true` here) because this row shares the arm every
     // other reconcile disable uses.
     "reconcile-install-disabled": {
-      pi: piWithBothLoaded(),
+      pi: piWithAllLoaded(),
       message: {
         kind: "reconcile-applied-cascade",
         label: "Reconcile",
@@ -5526,7 +5534,7 @@ test("XSURF-03: update-decline partially-upgradable reason brace === list partia
 
   // The list-inventory row (no partialHint -> no trailer).
   const listCtx = makeCtx();
-  notify(listCtx as never, piWithBothLoaded() as never, {
+  notify(listCtx as never, piWithAllLoaded() as never, {
     marketplaces: [
       {
         name: "mp",
@@ -5538,7 +5546,7 @@ test("XSURF-03: update-decline partially-upgradable reason brace === list partia
 
   // The update-decline row (partialHint -> update trailer + warning severity).
   const declineCtx = makeCtx();
-  notify(declineCtx as never, piWithBothLoaded() as never, {
+  notify(declineCtx as never, piWithAllLoaded() as never, {
     label: "Plugin update",
     cardinality: "single",
     marketplaces: [
@@ -5583,7 +5591,7 @@ test("UGRM-02 scope discipline: a non-update bulk cascade keeps `N successes` (n
   // update-scoped UGRM-02 override must NOT leak into other ops -- this proves
   // install / reinstall / marketplace / import keep `N success(es)`.
   const ctx = makeCtx();
-  notify(ctx as never, piWithBothLoaded() as never, {
+  notify(ctx as never, piWithAllLoaded() as never, {
     label: "Plugin reinstall",
     cardinality: "plural",
     marketplaces: [

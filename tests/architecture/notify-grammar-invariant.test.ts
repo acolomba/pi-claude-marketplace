@@ -53,10 +53,13 @@ interface MockPi {
   getAllTools: () => MockTool[];
 }
 
-/** Probe reports both pi-subagents and pi-mcp-adapter loaded -- no soft-dep markers. */
-function piWithBothLoaded(): MockPi {
+/**
+ * Probe reports all three companions loaded -- pi-subagents, pi-mcp-adapter and
+ * the host workflow engine -- so no soft-dep marker fires on any row.
+ */
+function piWithAllLoaded(): MockPi {
   return {
-    getAllTools: () => [{ name: "subagent" }, { name: "mcp" }],
+    getAllTools: () => [{ name: "subagent" }, { name: "mcp" }, { name: "workflow_control" }],
   };
 }
 
@@ -92,7 +95,7 @@ const CROSS_SCOPE_FIXTURES: readonly GrammarFixture[] = [
     // summary must still be the first line and still be distinct from the
     // detail block.
     label: "standalone marketplace-not-added carrying the cross-scope reason token",
-    pi: piWithBothLoaded(),
+    pi: piWithAllLoaded(),
     message: {
       kind: "marketplace-not-added",
       name: "mp",
@@ -104,7 +107,7 @@ const CROSS_SCOPE_FIXTURES: readonly GrammarFixture[] = [
     // The project-target direction: the baked-in scope word must track the
     // bracket, never contradict it.
     label: "standalone marketplace-not-added carrying the project-direction token",
-    pi: piWithBothLoaded(),
+    pi: piWithAllLoaded(),
     message: {
       kind: "marketplace-not-added",
       name: "mp",
@@ -121,7 +124,7 @@ const CROSS_SCOPE_FIXTURES: readonly GrammarFixture[] = [
 const CROSS_SCOPE_ROW_FIXTURES: readonly GrammarFixture[] = [
   {
     label: "absent-target plugin row carrying the user-scope cross-scope token",
-    pi: piWithBothLoaded(),
+    pi: piWithAllLoaded(),
     message: {
       marketplaces: [
         {
@@ -143,7 +146,7 @@ const CROSS_SCOPE_ROW_FIXTURES: readonly GrammarFixture[] = [
   {
     // The other direction: a user-scope target whose container sits in project.
     label: "absent-target plugin row carrying the project-scope cross-scope token",
-    pi: piWithBothLoaded(),
+    pi: piWithAllLoaded(),
     message: {
       marketplaces: [
         {
@@ -167,7 +170,7 @@ const CROSS_SCOPE_ROW_FIXTURES: readonly GrammarFixture[] = [
 const FIXTURES: readonly GrammarFixture[] = [
   {
     label: "standalone marketplace-not-added (marketplace subject)",
-    pi: piWithBothLoaded(),
+    pi: piWithAllLoaded(),
     message: {
       kind: "marketplace-not-added",
       name: "ghost-mp",
@@ -178,7 +181,7 @@ const FIXTURES: readonly GrammarFixture[] = [
   ...CROSS_SCOPE_ROW_FIXTURES,
   {
     label: "standalone failed plugin-info (plugin subject, multi-line body)",
-    pi: piWithBothLoaded(),
+    pi: piWithAllLoaded(),
     message: {
       kind: "plugin-info",
       marketplaceName: "bad-mp",
@@ -195,7 +198,7 @@ const FIXTURES: readonly GrammarFixture[] = [
   },
   {
     label: "cascade with a failed plugin row (error severity)",
-    pi: piWithBothLoaded(),
+    pi: piWithAllLoaded(),
     message: {
       marketplaces: [
         {
@@ -219,7 +222,7 @@ const FIXTURES: readonly GrammarFixture[] = [
   },
   {
     label: "cascade with an actionable skipped plugin row (warning severity)",
-    pi: piWithBothLoaded(),
+    pi: piWithAllLoaded(),
     message: {
       marketplaces: [
         {
@@ -257,7 +260,7 @@ const FIXTURES: readonly GrammarFixture[] = [
 const WILL_VARIANT_FIXTURES: readonly GrammarFixture[] = [
   {
     label: "DIFF-02 / will install plugin row under list-arm marketplace",
-    pi: piWithBothLoaded(),
+    pi: piWithAllLoaded(),
     message: {
       marketplaces: [
         { name: "mp", scope: "user", plugins: [{ status: "will install", name: "p" }] },
@@ -266,7 +269,7 @@ const WILL_VARIANT_FIXTURES: readonly GrammarFixture[] = [
   },
   {
     label: "FSTAT-06 / will partially install plugin row (partial modifier set)",
-    pi: piWithBothLoaded(),
+    pi: piWithAllLoaded(),
     message: {
       marketplaces: [
         {
@@ -279,7 +282,7 @@ const WILL_VARIANT_FIXTURES: readonly GrammarFixture[] = [
   },
   {
     label: "DIFF-02 / will uninstall plugin row",
-    pi: piWithBothLoaded(),
+    pi: piWithAllLoaded(),
     message: {
       marketplaces: [
         { name: "mp", scope: "user", plugins: [{ status: "will uninstall", name: "p" }] },
@@ -288,7 +291,7 @@ const WILL_VARIANT_FIXTURES: readonly GrammarFixture[] = [
   },
   {
     label: "DIFF-02 / will enable plugin row",
-    pi: piWithBothLoaded(),
+    pi: piWithAllLoaded(),
     message: {
       marketplaces: [
         { name: "mp", scope: "user", plugins: [{ status: "will enable", name: "p" }] },
@@ -297,7 +300,7 @@ const WILL_VARIANT_FIXTURES: readonly GrammarFixture[] = [
   },
   {
     label: "DIFF-02 / will disable plugin row",
-    pi: piWithBothLoaded(),
+    pi: piWithAllLoaded(),
     message: {
       marketplaces: [
         { name: "mp", scope: "user", plugins: [{ status: "will disable", name: "p" }] },
@@ -334,7 +337,7 @@ const DISABLED_TOKEN_RE =
 const DISABLED_VARIANT_FIXTURES: readonly GrammarFixture[] = [
   {
     label: "D-54-01 / disabled plugin row with version under list-arm marketplace",
-    pi: piWithBothLoaded(),
+    pi: piWithAllLoaded(),
     message: {
       marketplaces: [
         {
@@ -355,7 +358,7 @@ const DISABLED_VARIANT_FIXTURES: readonly GrammarFixture[] = [
   },
   {
     label: "D-54-01 / disabled plugin row without version",
-    pi: piWithBothLoaded(),
+    pi: piWithAllLoaded(),
     message: {
       marketplaces: [
         {
@@ -370,7 +373,7 @@ const DISABLED_VARIANT_FIXTURES: readonly GrammarFixture[] = [
   },
   {
     label: "D-54-01 / disabled plugin row with orphan-fold scope bracket",
-    pi: piWithBothLoaded(),
+    pi: piWithAllLoaded(),
     message: {
       marketplaces: [
         {
@@ -492,7 +495,7 @@ test("D-54-01 / ENBL-04: every (disabled) row renders subject-first `◍ <name> 
 const RECONCILE_APPLIED_FIXTURES: readonly GrammarFixture[] = [
   {
     label: "RECON-04 / success cascade with realized installed plugin row (transition token)",
-    pi: piWithBothLoaded(),
+    pi: piWithAllLoaded(),
     message: {
       kind: "reconcile-applied-cascade",
       marketplaces: [
@@ -515,7 +518,7 @@ const RECONCILE_APPLIED_FIXTURES: readonly GrammarFixture[] = [
   },
   {
     label: "RECON-04 / soft-fail cascade mixing failed mp row + installed plugin row",
-    pi: piWithBothLoaded(),
+    pi: piWithAllLoaded(),
     message: {
       kind: "reconcile-applied-cascade",
       marketplaces: [

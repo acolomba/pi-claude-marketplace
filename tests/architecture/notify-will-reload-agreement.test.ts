@@ -53,10 +53,13 @@ interface MockPi {
   getAllTools: () => MockTool[];
 }
 
-/** Probe reports both companion extensions loaded -- no soft-dep markers. */
-function piWithBothLoaded(): MockPi {
+/**
+ * Probe reports all three companions loaded -- pi-subagents, pi-mcp-adapter and
+ * the host workflow engine -- so no soft-dep marker fires on any row.
+ */
+function piWithAllLoaded(): MockPi {
   return {
-    getAllTools: () => [{ name: "subagent" }, { name: "mcp" }],
+    getAllTools: () => [{ name: "subagent" }, { name: "mcp" }, { name: "workflow_control" }],
   };
 }
 
@@ -86,7 +89,7 @@ const RELOAD_DEFERRED_FIXTURES: readonly AgreementFixture[] = [
   {
     label: "plugin install -- realized (installed) row",
     pendingToken: "will install",
-    pi: piWithBothLoaded(),
+    pi: piWithAllLoaded(),
     message: {
       marketplaces: [
         {
@@ -109,7 +112,7 @@ const RELOAD_DEFERRED_FIXTURES: readonly AgreementFixture[] = [
   {
     label: "plugin uninstall -- realized (uninstalled) row",
     pendingToken: "will uninstall",
-    pi: piWithBothLoaded(),
+    pi: piWithAllLoaded(),
     message: {
       marketplaces: [
         {
@@ -131,7 +134,7 @@ const RELOAD_DEFERRED_FIXTURES: readonly AgreementFixture[] = [
   {
     label: "plugin enable -- re-materialized (installed) row",
     pendingToken: "will enable",
-    pi: piWithBothLoaded(),
+    pi: piWithAllLoaded(),
     message: {
       marketplaces: [
         {
@@ -154,7 +157,7 @@ const RELOAD_DEFERRED_FIXTURES: readonly AgreementFixture[] = [
   {
     label: "plugin disable -- realized fresh (disabled) transition row",
     pendingToken: "will disable",
-    pi: piWithBothLoaded(),
+    pi: piWithAllLoaded(),
     message: {
       marketplaces: [
         {
@@ -176,7 +179,7 @@ const RELOAD_DEFERRED_FIXTURES: readonly AgreementFixture[] = [
   {
     label: "marketplace remove with installed plugins -- realized (uninstalled) child cascade",
     pendingToken: "will uninstall (per recorded plugin under a bare header)",
-    pi: piWithBothLoaded(),
+    pi: piWithAllLoaded(),
     message: {
       marketplaces: [
         {
@@ -198,7 +201,7 @@ const RELOAD_DEFERRED_FIXTURES: readonly AgreementFixture[] = [
     // correctly keeps its `will` token.
     label: "plugin partial install -- realized (partially-installed) row",
     pendingToken: "will partially install",
-    pi: piWithBothLoaded(),
+    pi: piWithAllLoaded(),
     message: {
       marketplaces: [
         {
@@ -228,7 +231,7 @@ const IMMEDIATE_FIXTURES: readonly AgreementFixture[] = [
   {
     label: "marketplace add -- realized (added) header, no installed plugins",
     pendingToken: "(retired) will add",
-    pi: piWithBothLoaded(),
+    pi: piWithAllLoaded(),
     message: {
       marketplaces: [{ name: "new-mp", scope: "user", status: "added", plugins: [] }],
     },
@@ -236,7 +239,7 @@ const IMMEDIATE_FIXTURES: readonly AgreementFixture[] = [
   {
     label: "marketplace remove with no installed plugins -- realized header-only (removed)",
     pendingToken: "(retired) will remove",
-    pi: piWithBothLoaded(),
+    pi: piWithAllLoaded(),
     message: {
       marketplaces: [{ name: "old-mp", scope: "user", status: "removed", plugins: [] }],
     },
