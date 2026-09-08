@@ -235,6 +235,88 @@ things changed under it and both alter the work:
   than resolving `unavailable` — and turn the pinned test rather than deleting
   it, the same red-then-green discipline WINV-04 required.
 
+### Settled after research (orchestrator decisions, do not re-open)
+
+Research re-derived every inherited number against the current tree and against
+the 3.10.1 engine. Several moved. These decisions dispose of what it escalated.
+
+- **R1 — criterion 6 is CONFIRMED; the behavior does not change.** Upstream's
+  plugin manifest declares `workflows` as `string | array`, described in Claude
+  Code 2.1.251's own schema as "Path to a workflows directory or .js file,
+  relative to the plugin root", in a body shaped identically to `themes` and
+  `outputStyles`, with the loader normalizing it through the same
+  `Array.isArray(...) ? ... : [...]` idiom it uses for `agents`. The published
+  reference at `code.claude.com/docs/en/plugins-reference` agrees.
+  `SUPPORTED_COMPONENT_PATH_KINDS` keeps `workflows`. What changes is prose only:
+  the "premise has lineage but no upstream citation" paragraph in
+  `tests/domain/resolver.test.ts` is replaced by the citation, and
+  `docs/workflows-compatibility.md` carries it too. Grade the binary read HIGH
+  and the published page MEDIUM, and say which is which.
+
+- **R2 — two upstream divergences fall out of that confirmation and belong in
+  the doc, not in the code.** Upstream *replaces* the convention directory when
+  the field is declared; this project *unions* declared-with-implicit (D-07).
+  And upstream admits a `.js` FILE path where this project's discovery walk
+  expects a directory. Neither is this phase's behavior to change. Read
+  `bridges/workflows/discover.ts` at plan time: if a file target is silently
+  dropped, document it as an install-time disposition; if it throws, that is a
+  bug and earns a `[workflows-replay]` Broken Windows entry rather than a
+  same-phase fix.
+
+- **R3 — the refusal count: nine checks, six shapes, no total.** State that
+  `parseWorkflowScript` refuses at NINE checks at 3.10.1 and that this bridge
+  replicates TWO of them (determinism and parse), with determinism running
+  first. Enumerate the six distinct `validateMeta` message shapes. Do NOT state
+  a single refusal-message total — check 2's message is acorn's and is not
+  enumerable, so any total would be a number with no honest counting rule.
+  **Spike 027's "validateMeta carries four messages / twelve in all" does not
+  reconcile with the 3.10.1 source and must not be repeated.** Correct Spike
+  027's record in the same change that publishes the doc; a spike left saying
+  something the source contradicts is how a wrong figure gets cited again.
+  Every "seven gates / we replicate one" figure inherited from the archived
+  phase is stale — do not ship it anywhere.
+
+- **R4 — `piWithBothLoaded()` is renamed to `piWithAllLoaded()` across all 302
+  call sites**, with `{ name: "workflow_control" }` added to its body. Its
+  current name and its "no soft-dep markers fire" comment both become false the
+  moment the third probe field lands, and leaving a lying name in 302 places is
+  worse than the sweep. Two constraints on how: do the rename with an
+  editor-scoped symbol rename, **not** a `sed` sweep — a text substitution
+  across two large fixture files is exactly the change that silently rewrites a
+  string inside a fixture. And verify the zero-byte claim empirically: run
+  `tests/architecture/catalog-uat.test.ts` immediately after the probe field
+  lands and BEFORE any fixture edit. No existing fixture declares `workflows`,
+  so the added tool should change zero catalog bytes; if it does not, the byte
+  gate is reporting a state this phase did not intend to touch.
+
+- **R5 — the criterion-3 gate asserts on the RENDERED ROW at every site.** The
+  seven derivation sites sit in three reachability tiers: two are already
+  exported functions with their own tests, two sit one hop behind exported
+  outcome-to-row composers, and three are reachable only by driving a full
+  `installPlugin` / `loadPluginListPayload` / `importClaudeSettings`. Asserting
+  on the rendered row makes all seven cases prove the same end-to-end claim —
+  "this surface renders the marker" — rather than seven different intermediate
+  ones. **Target the negative control at one of the three hard-to-reach sites**,
+  not at an easy one: those are the cases a gate can most easily satisfy
+  vacuously.
+
+- **R6 — the eighth closed-set site is `docs/output-catalog.md`'s prose member
+  count**, which reads "43-member" against a tuple that has been 44 since Phase
+  113 and becomes 45 here. It sits outside the byte gate, which is why it went
+  stale. Fix it, and treat the trail as eight sites rather than the seven the
+  prior phase recorded.
+
+- **R7 — `WDOC-03` is already satisfied.** `acorn` is declared at `^8.16.0` in
+  `package.json` `dependencies`. This phase VERIFIES that and changes nothing.
+  No `package.json`, `package-lock.json`, `sonar-project.properties`,
+  `CHANGELOG.md` or version-constant edit is in scope; any such change is a
+  review finding.
+
+- **R8 — do not plan against `tests/live-uat/workflow-storage-canary.mjs`.** It
+  does not exist on this tree. Cite Spike 027 for engine behavior instead, and
+  do not let the compatibility doc name a `tests/...` path that does not
+  resolve — `tests/architecture/no-stale-test-citations.test.ts` gates that.
+
 ### Claude's Discretion
 
 - Plan and task decomposition; the compatibility doc's precise table columns and
