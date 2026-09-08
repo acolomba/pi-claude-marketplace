@@ -49,7 +49,7 @@ test — against the owner-test convention rather than the deleted helpers.
 - [x] **Phase 111: Workflows bridge** — `bridges/workflows/` discover / stage / unstage / types and the `locations.ts` additions land with owner tests (WBRG-01..04, WPTH-01, WPTH-03..05) (completed 2026-09-05)
 - [x] **Phase 112: Install and removal lifecycle** — the sixth ledger phase, cascade unstage, and reinstall re-materialization, wired against the rewritten `install.ts` / `uninstall.ts` / `reinstall.ts` (WLIF-01..03)
 - [x] **Phase 113: Update, enable/disable, reconcile** — the remaining lifecycle verbs plus the `info` and `list` read surfaces, wired against the rewritten orchestrators (WLIF-04..06, WFLW-04) (completed 2026-09-06)
-- [ ] **Phase 114: Degradation and documentation** — the third soft-dependency marker, the notify closed-set amendments, and `docs/workflows-compatibility.md` (WDEP-01..04, WDOC-01..03)
+- [x] **Phase 114: Degradation and documentation** — the third soft-dependency marker, the notify closed-set amendments, and `docs/workflows-compatibility.md` (WDEP-01..04, WDOC-01..03) (completed 2026-09-08)
 
 ### Planned workflow-hardening
 
@@ -547,18 +547,18 @@ to end.
 
 Plans:
 
-- [ ] 114-01-PLAN.md — Tracer: the probe, the third `Dependency` member, the 45th reason token and the
+- [x] 114-01-PLAN.md — Tracer: the probe, the third `Dependency` member, the 45th reason token and the
   install row's derivation and severity, wired end to end and verified against zero moved catalog
   bytes (wave 1)
-- [ ] 114-02-PLAN.md — The six remaining `Dependency[]` derivation sites, the one architecture suite
+- [x] 114-02-PLAN.md — The six remaining `Dependency[]` derivation sites, the one architecture suite
   that owns the cross-site coverage claim, and the mandatory negative control at a full-orchestrator
   site (wave 2)
-- [ ] 114-03-PLAN.md — Engine-independent bytes: the probe-independence install pair with its
+- [x] 114-03-PLAN.md — Engine-independent bytes: the probe-independence install pair with its
   non-vacuity assertions, and the forbidden-surface gate that stops the bridge reading the probe
   (wave 2)
-- [ ] 114-04-PLAN.md — The catalog: the probe-helper rename in both of its independent definitions,
+- [x] 114-04-PLAN.md — The catalog: the probe-helper rename in both of its independent definitions,
   the two byte-pinned rendered states, and the prose counts that sit outside the gate (wave 2)
-- [ ] 114-05-PLAN.md — The executable-code contract: `docs/workflows-compatibility.md`, both READMEs,
+- [x] 114-05-PLAN.md — The executable-code contract: `docs/workflows-compatibility.md`, both READMEs,
   the upstream citation replacing the open-premise paragraph, and the corrected spike record (wave 3)
 
 ### Phase 115: Install-time admission-gate warnings
@@ -574,6 +574,11 @@ Plans:
    initializer, or a `meta` the engine's literal validation would reject —
    emits a per-script warning naming that file and that gate, and the script's
    envelope is still written.
+   *(Corrected by research and superseded by CONTEXT D-115-01: the warnable set
+   is SIX gates — the engine's checks 3, 4, 5, 6, 8 and 9. The list above names
+   check 3 twice, names check 7 (unreachable dead code in the engine, D-115-02),
+   and omits check 6. Grade this criterion against D-115-01, not against the
+   list above.)*
 2. A gate reading never refuses a script and never fails a plugin: a warned
    plugin still resolves and renders as `(installed)`, its sibling scripts
    install with no warning of their own, and no plugin-level status, glyph, or
@@ -589,7 +594,22 @@ Plans:
    existing pruned-footer convention naming the `workflows` milestone that
    closed it, so the backlog stops advertising completed work as open.
 
-**Plans**: TBD
+**Plans**: 6 plans in 3 waves
+
+**Wave 1**
+
+- [ ] 115-01-PLAN.md — Read the six engine gates off the parse already in hand, carry one per-script warning out, and make a standalone install show it
+- [ ] 115-06-PLAN.md — Prune the stale `WFLW-01` entry under the backlog's own pruned-footer convention
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 115-02-PLAN.md — One warning line per file in both tenses, the WGATE-02 single-parse source gate, and the four falsified comments retired
+- [ ] 115-03-PLAN.md — Reinstall surfaces the discovery channel standalone, and criterion 2 lands as a byte assertion
+- [ ] 115-04-PLAN.md — `info` shows the gate warning in preview tense, with its rendered bytes published as a catalog state
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 115-05-PLAN.md — Restate the published contract as replicate / warn / neither, bind it to the source union, and run the four-direction negative control
 
 ### Phase 116: Load-time workflow convergence
 
@@ -653,7 +673,7 @@ Plans:
 | 111. Workflows bridge | 4/4 | Complete    | 2026-09-05 |
 | 112. Install and removal lifecycle | 4/4 | Complete    | 2026-09-05 |
 | 113. Update, enable/disable, reconcile | 5/5 | Complete    | 2026-09-06 |
-| 114. Degradation and documentation | 0/5 | Planned     | - |
+| 114. Degradation and documentation | 5/5 | Complete    | 2026-09-08 |
 | 115. Install-time admission-gate warnings | 0/? | Not started | - |
 | 116. Load-time workflow convergence | 0/? | Not started | - |
 | 117. Measured `agent()` failure evidence | 0/? | Not started | - |
