@@ -12,6 +12,10 @@
 // visibility only -- the integration assertions are state-consistency
 // oriented, NOT byte-equality on notify output).
 
+import {
+  createHooksRouting,
+  createHooksRuntime,
+} from "../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { applyReconcile } from "../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
 
 import { makeNotifyCollectingCtx, makeStubPi, type NotificationRecord } from "./ipc-child.ts";
@@ -57,6 +61,7 @@ async function handleMessage(message: unknown): Promise<void> {
       pi: makeStubPi(),
       cwd: message.cwd,
       scope: "project",
+      hooksRouting: createHooksRouting(createHooksRuntime()),
     });
     sendResult({ ok: true, notifyArgs });
   } catch (err) {

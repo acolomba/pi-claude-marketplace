@@ -4,6 +4,10 @@ import { describe, test } from "node:test";
 import { mock } from "strong-mock";
 
 import {
+  createHooksRouting,
+  createHooksRuntime,
+} from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
+import {
   emptyReconcilePlan,
   plannedSourceMismatchSubject,
   type ApplyReconcileOptions,
@@ -37,6 +41,7 @@ const extensionApi = mock<ExtensionAPI>({
   exactParams: true,
   name: "extension API type evidence",
 });
+const hooksRouting = createHooksRouting(createHooksRuntime());
 const gitOps = mock<GitOps>({ exactParams: true, name: "Git operations type evidence" });
 
 const plannedMarketplaceAdd = {
@@ -117,6 +122,7 @@ void ({
   ctx: extensionContext,
   pi: extensionApi,
   cwd: "/work/project",
+  hooksRouting,
 } satisfies ApplyReconcileOptions);
 void ({
   ctx: extensionContext,
@@ -124,6 +130,7 @@ void ({
   cwd: "/work/project",
   scope: "project",
   gitOps,
+  hooksRouting,
 } satisfies ApplyReconcileOptions);
 
 const extensionState = {

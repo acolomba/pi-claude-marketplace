@@ -16,6 +16,10 @@ import { test } from "node:test";
 
 import lockfile from "proper-lockfile";
 
+import {
+  createHooksRouting,
+  createHooksRuntime,
+} from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import {
   createSetPluginEnabled,
@@ -3545,7 +3549,13 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable of a BASE-declared plugi
     });
     const afterEnable = await observe();
     const declaringConfig = await readConfig(configPath);
-    await applyReconcile({ ctx: firstReload.ctx, cwd, pi, scope: "user" });
+    await applyReconcile({
+      ctx: firstReload.ctx,
+      cwd,
+      pi,
+      scope: "user",
+      hooksRouting: createHooksRouting(createHooksRuntime()),
+    });
     const afterFirstReload = await observe();
     await writeFile(
       manifestPath,
@@ -3577,7 +3587,13 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable of a BASE-declared plugi
       scope: "user",
     });
     const afterReinstall = await observe();
-    await applyReconcile({ ctx: secondReload.ctx, cwd, pi, scope: "user" });
+    await applyReconcile({
+      ctx: secondReload.ctx,
+      cwd,
+      pi,
+      scope: "user",
+      hooksRouting: createHooksRouting(createHooksRuntime()),
+    });
     const afterSecondReload = await observe();
 
     // assert
@@ -3668,7 +3684,13 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable of a LOCALLY-declared pl
     const afterEnable = await observe();
     const declaringConfig = await readConfig(configLocalPath);
     const baseExistsAfterEnable = await fileExists(configPath);
-    await applyReconcile({ ctx: firstReload.ctx, cwd, pi, scope: "user" });
+    await applyReconcile({
+      ctx: firstReload.ctx,
+      cwd,
+      pi,
+      scope: "user",
+      hooksRouting: createHooksRouting(createHooksRuntime()),
+    });
     const afterFirstReload = await observe();
     const baseAfterReload = await readConfig(configPath);
     await writeFile(
@@ -3702,7 +3724,13 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable of a LOCALLY-declared pl
       scope: "user",
     });
     const afterReinstall = await observe();
-    await applyReconcile({ ctx: secondReload.ctx, cwd, pi, scope: "user" });
+    await applyReconcile({
+      ctx: secondReload.ctx,
+      cwd,
+      pi,
+      scope: "user",
+      hooksRouting: createHooksRouting(createHooksRuntime()),
+    });
     const afterSecondReload = await observe();
 
     // assert

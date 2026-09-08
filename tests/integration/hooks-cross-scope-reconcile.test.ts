@@ -18,7 +18,11 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { registerHooksBridge } from "../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
+import {
+  createHooksRouting,
+  createHooksRuntime,
+  registerHooksBridge,
+} from "../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import {
   resetRoutingState,
   routingTableEntries,
@@ -185,6 +189,7 @@ test("RECON / cross-scope: applyReconcile's per-scope rebuild loop preserves hoo
       ctx: placeholderCtx,
       pi: makeMockPi(),
       cwd: projectCwd,
+      hooksRouting: createHooksRouting(createHooksRuntime()),
     });
 
     // Post-condition: BOTH scopes' PreToolUse entries must still surface.

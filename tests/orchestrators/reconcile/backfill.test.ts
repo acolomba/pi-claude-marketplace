@@ -20,6 +20,10 @@ import { describe, test } from "node:test";
 import lockfile from "proper-lockfile";
 import { mock, verify } from "strong-mock";
 
+import {
+  createHooksRouting,
+  createHooksRuntime,
+} from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
   applyBackfillForScopeIsolated,
@@ -284,7 +288,14 @@ function backfillOptions(
   cwd: string,
   gitOps: GitOps,
 ): ApplyReconcileOptions {
-  return { ctx, pi, cwd, scope: "project", gitOps };
+  return {
+    ctx,
+    pi,
+    cwd,
+    scope: "project",
+    gitOps,
+    hooksRouting: createHooksRouting(createHooksRuntime()),
+  };
 }
 
 function readResultFor(state: ExtensionState, stateExisted: boolean): ScopeReadResult {

@@ -1875,7 +1875,13 @@ for (const precedence of DFEN_PRECEDENCE_CASES) {
           ]);
 
           const reload = makeCtx();
-          await applyReconcile({ ctx: reload.ctx, pi: reload.pi, cwd, scope: "project" });
+          await applyReconcile({
+            ctx: reload.ctx,
+            pi: reload.pi,
+            cwd,
+            scope: "project",
+            hooksRouting: createHooksRouting(createHooksRuntime()),
+          });
           assert.deepEqual(
             reload.notifications.filter((n) => n.severity === "error"),
             [],
@@ -2200,7 +2206,13 @@ test("D-103-16 / DFEN-06 / CFG-02: the reload after a locally-declared install p
       // planner is the only witness that settles it -- so run a real reload and
       // then read the plan directly.
       const reload = makeCtx();
-      await applyReconcile({ ctx: reload.ctx, pi: reload.pi, cwd, scope: "project" });
+      await applyReconcile({
+        ctx: reload.ctx,
+        pi: reload.pi,
+        cwd,
+        scope: "project",
+        hooksRouting: createHooksRouting(createHooksRuntime()),
+      });
       assert.deepEqual(reload.notifications, [], "a converged pass says nothing");
 
       const after = await loadState(locations.extensionRoot);

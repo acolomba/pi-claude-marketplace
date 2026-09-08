@@ -62,7 +62,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
-  applyReconcile,
+  applyReconcile as applyReconcileWithRouting,
   createApplyReconcile,
   surfacePostCommitWarnings,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
@@ -79,6 +79,7 @@ import { retryTree } from "../plugin/scope-tree-inventory.ts";
 import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { PerEntryOutcome } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts";
 import type { ReconcileStateReader } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
+import type { ApplyReconcileOptions } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type {
@@ -91,6 +92,16 @@ type MarketplaceRecord = ExtensionState["marketplaces"][string];
 type PluginRecord = MarketplaceRecord["plugins"][string];
 
 const RECORDED_AT = "2026-01-01T00:00:00.000Z";
+
+/** Run one isolated reconcile lifecycle with a fresh production routing owner. */
+function applyReconcile(
+  opts: Omit<ApplyReconcileOptions, "hooksRouting">,
+): Promise<void> {
+  return applyReconcileWithRouting({
+    ...opts,
+    hooksRouting: createHooksRouting(createHooksRuntime()),
+  });
+}
 
 /**
  * The single network edge. `allowedRemoteUrls` is empty, so the fake refuses
@@ -1499,7 +1510,7 @@ describe("applyReconcile", () => {
     const hooksRouting = createHooksRouting(ownerRuntime);
 
     // act
-    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps, hooksRouting });
+    await applyReconcileWithRouting({ ctx, pi, cwd, scope: "project", gitOps, hooksRouting });
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -2870,10 +2881,11 @@ describe("applyReconcile", () => {
     const applyWithReader = createApplyReconcile(reader);
     const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
     const { gitOps, clonedUrls } = createOfflineGitOps();
+    const hooksRouting = createHooksRouting(createHooksRuntime());
 
     // act
-    await applyWithReader({ ctx, pi, cwd, gitOps });
-    await applyWithReader({ ctx, pi, cwd, gitOps });
+    await applyWithReader({ ctx, pi, cwd, gitOps, hooksRouting });
+    await applyWithReader({ ctx, pi, cwd, gitOps, hooksRouting });
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -2933,7 +2945,14 @@ describe("applyReconcile", () => {
 describe("surfacePostCommitWarnings", () => {
   /** The options bundle the cascade hands the diagnostic channel. */
   function diagnosticOptions(ctx: ExtensionContext, pi: ExtensionAPI, gitOps: GitOps) {
-    return { ctx, cwd: "/work/project", gitOps, pi, scope: "project" as const };
+    return {
+      ctx,
+      cwd: "/work/project",
+      gitOps,
+      hooksRouting: createHooksRouting(createHooksRuntime()),
+      pi,
+      scope: "project" as const,
+    };
   }
 
   test("IL-2: says nothing when no outcome carries a post-commit warning", () => {

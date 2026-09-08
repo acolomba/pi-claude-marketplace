@@ -60,7 +60,7 @@ import { withLockedStateTransaction } from "../../transaction/with-state-guard.t
 import { addMarketplace } from "../marketplace/add.ts";
 import { removeMarketplace } from "../marketplace/remove.ts";
 import { setPluginEnabled } from "../plugin/enable-disable.ts";
-import { installPlugin } from "../plugin/install.ts";
+import { createNodeInstallPlugin } from "../plugin/install.ts";
 import { uninstallPlugin } from "../plugin/uninstall.ts";
 
 import {
@@ -402,6 +402,7 @@ async function applyPluginInstalls(
   plan: ReconcilePlan,
   outcomes: PerEntryOutcome[],
 ): Promise<void> {
+  const installPlugin = createNodeInstallPlugin(opts.hooksRouting);
   for (const op of plan.pluginsToInstall) {
     const result = await installPlugin({
       ctx: opts.ctx,
