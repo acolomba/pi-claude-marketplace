@@ -417,7 +417,9 @@ test("invalidates a partial removal while retaining failed plugin data", async (
     },
   ]);
   assert.deepStrictEqual(
-    Object.keys((await loadState(locations.extensionRoot)).marketplaces[marketplace]?.plugins ?? {}),
+    Object.keys(
+      (await loadState(locations.extensionRoot)).marketplaces[marketplace]?.plugins ?? {},
+    ),
     ["beta"],
   );
   assert.strictEqual(await pathExists(alphaData), false);
