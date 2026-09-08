@@ -97,7 +97,10 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { test, type TestContext } from "node:test";
 
-import { createHooksRouting, createHooksRuntime } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
+import {
+  createHooksRouting,
+  createHooksRuntime,
+} from "../../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { SCOPE_TARGET_FLAG } from "../../../../extensions/pi-claude-marketplace/edge/flag-catalog.ts";
 import { makeInstallHandler as makeRuntimeInstallHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/install.ts";
 import { loadConfig } from "../../../../extensions/pi-claude-marketplace/persistence/config-io.ts";

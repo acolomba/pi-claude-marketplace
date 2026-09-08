@@ -220,9 +220,7 @@ async function readAndCachePluginHooksWith(
   });
 }
 
-export async function readAndCachePluginHooks(
-  opts: ReadAndCachePluginHooksOptions,
-): Promise<void> {
+export async function readAndCachePluginHooks(opts: ReadAndCachePluginHooksOptions): Promise<void> {
   await readAndCachePluginHooksWith(TRANSITION_ROUTING_STATE, opts);
 }
 
@@ -335,9 +333,7 @@ export function rebuildRoutingTables(): void {
 
 /** Route mutation operations bound to one extension-lifecycle runtime. */
 export interface HooksRouting {
-  readonly readAndCachePluginHooks: (
-    opts: ReadAndCachePluginHooksOptions,
-  ) => Promise<void>;
+  readonly readAndCachePluginHooks: (opts: ReadAndCachePluginHooksOptions) => Promise<void>;
   readonly removePluginConfigFromCache: (
     scope: Scope,
     marketplace: string,

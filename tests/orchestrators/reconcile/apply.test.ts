@@ -94,9 +94,7 @@ type PluginRecord = MarketplaceRecord["plugins"][string];
 const RECORDED_AT = "2026-01-01T00:00:00.000Z";
 
 /** Run one isolated reconcile lifecycle with a fresh production routing owner. */
-function applyReconcile(
-  opts: Omit<ApplyReconcileOptions, "hooksRouting">,
-): Promise<void> {
+function applyReconcile(opts: Omit<ApplyReconcileOptions, "hooksRouting">): Promise<void> {
   return applyReconcileWithRouting({
     ...opts,
     hooksRouting: createHooksRouting(createHooksRuntime()),

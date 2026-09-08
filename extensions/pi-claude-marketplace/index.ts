@@ -168,10 +168,14 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
     }
   });
 
-  registerClaudePluginCommand(pi, {
-    completionCache,
-    gitOps: DEFAULT_GIT_OPS,
-    pluginUpdate: updateSinglePlugin,
-  }, hooksRouting);
+  registerClaudePluginCommand(
+    pi,
+    {
+      completionCache,
+      gitOps: DEFAULT_GIT_OPS,
+      pluginUpdate: updateSinglePlugin,
+    },
+    hooksRouting,
+  );
   registerClaudeMarketplaceTools(pi);
 }
