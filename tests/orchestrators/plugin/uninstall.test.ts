@@ -10,6 +10,10 @@ import {
   GENERATED_AGENT_MARKER,
   GENERATED_AGENT_PREFIX,
 } from "../../../extensions/pi-claude-marketplace/bridges/agents/marker.ts";
+import {
+  createHooksRouting,
+  createHooksRuntime,
+} from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
@@ -42,6 +46,10 @@ import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts"
 import { retryTree } from "./scope-tree-inventory.ts";
 
 import type { UninstallPluginOutcome } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
+import type {
+  HooksRouting,
+  HooksRuntime,
+} from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import type { AgentsIndex } from "../../../extensions/pi-claude-marketplace/persistence/agents-index-schema.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
@@ -79,6 +87,36 @@ import type { TestContext } from "node:test";
 interface NotifyRecord {
   message: string;
   severity?: string;
+}
+
+/** Populate one lifecycle runtime with a distinct hook route. */
+async function populateRuntimeRoute(
+  cwd: string,
+  runtime: HooksRuntime,
+  opts: { readonly command: string; readonly marketplace: string; readonly plugin: string },
+): Promise<HooksRouting> {
+  const pluginRoot = path.join(cwd, "runtime-routes", `${opts.marketplace}-${opts.plugin}`);
+  const hooksJsonPath = path.join(pluginRoot, "hooks.json");
+  await mkdir(pluginRoot, { recursive: true });
+  await writeFile(
+    hooksJsonPath,
+    JSON.stringify({
+      PreToolUse: [{ hooks: [{ command: opts.command, type: "command" }], matcher: "" }],
+    }),
+    "utf8",
+  );
+  const hooksRouting = createHooksRouting(runtime);
+  await hooksRouting.readAndCachePluginHooks({
+    cwd,
+    hooksJsonPath,
+    logPrefix: "uninstall-owner-test",
+    marketplace: opts.marketplace,
+    plugin: opts.plugin,
+    resolvedSource: asAbsolutePluginRoot(pluginRoot),
+    scope: "project",
+  });
+  hooksRouting.rebuildRoutingTables();
+  return hooksRouting;
 }
 
 test("uninstall exposes its required transaction factory", () => {
@@ -2111,21 +2149,9 @@ test("CFG-03 orchestrated invalid config returns a typed result without notifica
 // ─────────────────────────────────────────────────────────────────────────────
 
 test("WR-03: uninstallPlugin clears the plugin's routing-table entries without /reload", async () => {
-  const { addPluginConfigToCache } =
-    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts");
-  const { resetRoutingState, setRoutingBucket } =
-    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
-  const { getRoutingBucket } =
-    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
-  const { compileIfPredicate, MATCH_ALL_IF } =
-    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts");
-  const { parseHooksConfig, parseMatcher } =
-    await import("../../../extensions/pi-claude-marketplace/domain/components/hooks.ts");
-
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-wr03-"));
     try {
-      resetRoutingState();
       const locations = locationsFor("project", cwd);
 
       // Pre-seed state with a hooks-bearing plugin so the rebuild walk sees
@@ -2148,44 +2174,33 @@ test("WR-03: uninstallPlugin clears the plugin's routing-table entries without /
         },
       });
 
-      // Pre-seed the parsed-config cache + routing table for the plugin so
-      // the uninstall has something visible to remove. Two parallel seeds:
-      // (a) cache so rebuild walks pick it up, (b) explicit routing-table
-      // injection so the test's pre-condition assertion is unambiguous.
-      const TEST_IF_CTX = { homedir: "/home/u", cwd, projectRoot: cwd } as const;
-      const parsed = parseHooksConfig(
-        JSON.stringify({
-          PreToolUse: [{ matcher: "", hooks: [{ type: "command", command: "echo hi" }] }],
-        }),
-        TEST_IF_CTX,
-        compileIfPredicate,
-      );
-      assert.ok(parsed.ok);
-      addPluginConfigToCache(
-        "project",
-        "mp",
-        "p1",
-        asAbsolutePluginRoot("/test/project/mp/p1"),
-        parsed.value,
-        parsed.ifPredicates,
-      );
-      setRoutingBucket("PreToolUse", [
-        {
-          scope: "project",
-          marketplace: "mp",
-          pluginId: "p1",
-          resolvedSource: asAbsolutePluginRoot("/test/plugin-root"),
-          claudeEvent: "PreToolUse",
-          matcher: parseMatcher(""),
-          rawMatcher: "",
-          handlerDecl: { type: "command", command: "echo hi" },
-          declarationIndex: 0,
-          ifPredicate: MATCH_ALL_IF,
-        },
-      ]);
+      const ownerRuntime = createHooksRuntime();
+      const peerRuntime = createHooksRuntime();
+      const hooksRouting = await populateRuntimeRoute(cwd, ownerRuntime, {
+        command: "echo target",
+        marketplace: "mp",
+        plugin: "p1",
+      });
+      await populateRuntimeRoute(cwd, ownerRuntime, {
+        command: "echo unrelated",
+        marketplace: "mp",
+        plugin: "p2",
+      });
+      await populateRuntimeRoute(cwd, peerRuntime, {
+        command: "echo peer",
+        marketplace: "mp",
+        plugin: "p1",
+      });
 
       // Pre-condition: routing table holds the entry.
-      assert.equal(getRoutingBucket("PreToolUse").length, 1);
+      assert.deepEqual(
+        ownerRuntime.getRoutingBucket("PreToolUse").map((entry) => entry.pluginId),
+        ["p1", "p2"],
+      );
+      assert.deepEqual(
+        peerRuntime.getRoutingBucket("PreToolUse").map((entry) => entry.pluginId),
+        ["p1"],
+      );
 
       const { ctx, pi, notifications } = makeCtx();
       await uninstallPlugin({
@@ -2213,7 +2228,14 @@ test("WR-03: uninstallPlugin clears the plugin's routing-table entries without /
       // is gone. This proves WR-03's `rebuildRoutingTables(state, locations)`
       // ran inside `withLockedStateTransaction` right after
       // `removePluginConfigFromCache`.
-      assert.equal(getRoutingBucket("PreToolUse").length, 0);
+      assert.deepEqual(
+        ownerRuntime.getRoutingBucket("PreToolUse").map((entry) => entry.pluginId),
+        ["p2"],
+      );
+      assert.deepEqual(
+        peerRuntime.getRoutingBucket("PreToolUse").map((entry) => entry.pluginId),
+        ["p1"],
+      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
