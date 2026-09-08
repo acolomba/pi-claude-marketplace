@@ -7,7 +7,7 @@ import { syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { PassThrough } from "node:stream";
-import { test, beforeEach, type TestContext } from "node:test";
+import { test, type TestContext } from "node:test";
 
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 
@@ -23,27 +23,14 @@ import {
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts";
 import { adaptObservationResultForEvent } from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts";
 import {
-  addPluginConfigToCache,
-  beforeAgentStartHandlerFor,
   createBeforeAgentStartHandler,
   createHooksHydration,
   createHooksRouting,
-  hydrateProjectScopeForCwd,
-  readAndCachePluginHooks,
-  rebuildRoutingTables,
-  registerHooksBridge,
-  removePluginConfigFromCache,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
 import { MATCH_ALL_IF } from "../../../extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts";
 import {
-  bumpEpoch,
-  currentEpoch,
-  getRoutingBucket,
-  parsedConfigEntries,
-  pendingSessionStartContextEntries,
-  resetRoutingState,
+  createRoutingStateOperations,
   type RoutingEntry,
-  routingTableEntries,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
 import { createHooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import {
@@ -61,6 +48,7 @@ import {
 import type { SpawnDeps } from "../../../extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts";
 import type { HookExecutor } from "../../../extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts";
 import type { HooksHydrationReader } from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
+import type { HooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import type { HooksConfig } from "../../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type {
@@ -145,10 +133,6 @@ function createRuntimeChild(pid: number): RuntimeChildHarness {
   };
 }
 
-beforeEach(() => {
-  resetRoutingState();
-});
-
 test(
   "reload resets lifecycle state before hydrating routes, reaping orphans, and registering handlers",
   { concurrency: false },
@@ -191,7 +175,6 @@ test(
       shutdownInMemoryChildren(runtime);
       shutdownInMemoryChildren(peerRuntime);
       peerChild.destroy();
-      resetRoutingState();
       if (originalHome === undefined) {
         delete process.env.HOME;
       } else {
@@ -611,21 +594,6 @@ test(
       context,
     );
     assert.strictEqual(staleBeforeAgentResult, undefined);
-    const previousTransitionEpoch = currentEpoch();
-    bumpEpoch();
-    const staleTransitionBeforeAgentResult = await beforeAgentStartHandlerFor(
-      previousTransitionEpoch,
-    )(
-      {
-        type: "before_agent_start",
-        prompt: "",
-        systemPrompt: "stale transition",
-        systemPromptOptions: {},
-      } as unknown as BeforeAgentStartEvent,
-      context,
-    );
-    assert.strictEqual(staleTransitionBeforeAgentResult, undefined);
-
     const cacheAfterReload = Array.from(runtime.parsedConfigEntries().values()).map((entry) => ({
       scope: entry.scope,
       marketplace: entry.marketplace,
@@ -650,13 +618,6 @@ test(
     const peerEntriesAfterReload = peerRuntime.pidTableEntries(userLocations);
     const peerSignalsAfterReload = [...peerChild.signals];
     shutdownInMemoryChildren(runtime);
-    resetRoutingState();
-    const stateAfterCleanup = {
-      epoch: currentEpoch(),
-      cache: Array.from(parsedConfigEntries()),
-      routes: Array.from(routingTableEntries()),
-      pending: [...pendingSessionStartContextEntries()],
-    };
 
     // assert
     assert.deepStrictEqual(peerEntriesAfterReload, [
@@ -738,19 +699,10 @@ test(
       preToolUse: [{ scope: "project", pluginId: "project-plugin", command: "PreToolUse-0" }],
       sessionStart: [{ scope: "user", pluginId: "user-plugin", command: "SessionStart-0" }],
     });
-    assert.deepStrictEqual(
-      getRoutingBucket("SessionStart").map((entry) => ({
-        scope: entry.scope,
-        pluginId: entry.pluginId,
-        command: entry.handlerDecl.command,
-      })),
-      [],
-    );
     assert.deepStrictEqual(settleResetCalls, []);
     assert.deepStrictEqual(dispatched, []);
     assert.deepStrictEqual(sentMessages, []);
     assert.deepStrictEqual(notifications, []);
-    assert.deepStrictEqual(stateAfterCleanup, { epoch: 0, cache: [], routes: [], pending: [] });
   },
 );
 
@@ -959,13 +911,6 @@ function registeredHandler(
   return handler as (...args: unknown[]) => unknown;
 }
 
-function ownRoutingState(t: TestContext): void {
-  resetRoutingState();
-  t.after(() => {
-    resetRoutingState();
-  });
-}
-
 function ownAgentRoot(t: TestContext, agentRoot: string): void {
   const previousAgentRoot = process.env.PI_CODING_AGENT_DIR;
   process.env.PI_CODING_AGENT_DIR = agentRoot;
@@ -978,16 +923,37 @@ function ownAgentRoot(t: TestContext, agentRoot: string): void {
   });
 }
 
-test("cache keys separate scope, marketplace, and plugin while mutations stay idempotent", (t) => {
+function seedPluginConfig(
+  runtime: HooksRuntime,
+  scope: "project" | "user",
+  marketplace: string,
+  pluginId: string,
+  resolvedSource: ReturnType<typeof asAbsolutePluginRoot>,
+  config: HooksConfig,
+  ifPredicates: ReadonlyMap<string, RoutingEntry["ifPredicate"]>,
+): void {
+  const routingState = createRoutingStateOperations(runtime);
+  routingState.setParsedConfig(`${scope}\u0000${marketplace}\u0000${pluginId}`, {
+    scope,
+    marketplace,
+    pluginId,
+    resolvedSource,
+    config,
+    ifPredicates,
+  });
+}
+
+test("cache keys separate scope, marketplace, and plugin while mutations stay idempotent", () => {
   // arrange
-  ownRoutingState(t);
+  const runtime = createHooksRuntime();
   const firstConfig = makeConfig([{ event: "PreToolUse", handlers: 1, prefix: "first" }]);
   const replacementConfig = makeConfig([
     { event: "PreToolUse", handlers: 1, prefix: "replacement" },
   ]);
 
   // act
-  addPluginConfigToCache(
+  seedPluginConfig(
+    runtime,
     "user",
     "alpha",
     "shared",
@@ -995,7 +961,8 @@ test("cache keys separate scope, marketplace, and plugin while mutations stay id
     firstConfig,
     new Map(),
   );
-  addPluginConfigToCache(
+  seedPluginConfig(
+    runtime,
     "user",
     "alpha",
     "shared",
@@ -1003,7 +970,8 @@ test("cache keys separate scope, marketplace, and plugin while mutations stay id
     replacementConfig,
     new Map(),
   );
-  addPluginConfigToCache(
+  seedPluginConfig(
+    runtime,
     "user",
     "beta",
     "shared",
@@ -1011,7 +979,8 @@ test("cache keys separate scope, marketplace, and plugin while mutations stay id
     firstConfig,
     new Map(),
   );
-  addPluginConfigToCache(
+  seedPluginConfig(
+    runtime,
     "project",
     "alpha",
     "shared",
@@ -1019,9 +988,9 @@ test("cache keys separate scope, marketplace, and plugin while mutations stay id
     firstConfig,
     new Map(),
   );
-  removePluginConfigFromCache("user", "beta", "shared");
-  removePluginConfigFromCache("user", "beta", "shared");
-  const cache = Array.from(parsedConfigEntries().values()).map((entry) => ({
+  runtime.deleteParsedConfig("user\u0000beta\u0000shared");
+  runtime.deleteParsedConfig("user\u0000beta\u0000shared");
+  const cache = Array.from(runtime.parsedConfigEntries().values()).map((entry) => ({
     scope: entry.scope,
     marketplace: entry.marketplace,
     pluginId: entry.pluginId,
@@ -1037,7 +1006,7 @@ test("cache keys separate scope, marketplace, and plugin while mutations stay id
 
 test("readAndCachePluginHooks reads and parses one case-owned config", async (t) => {
   // arrange
-  ownRoutingState(t);
+  const runtime = createHooksRuntime();
   const root = await mkdtemp(path.join(tmpdir(), "hooks-router-read-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const hooksJsonPath = path.join(root, "hooks.json");
@@ -1050,7 +1019,7 @@ test("readAndCachePluginHooks reads and parses one case-owned config", async (t)
   );
 
   // act
-  await readAndCachePluginHooks({
+  await createHooksRouting(runtime).readAndCachePluginHooks({
     scope: "project",
     marketplace: "catalog",
     plugin: "reader",
@@ -1059,7 +1028,7 @@ test("readAndCachePluginHooks reads and parses one case-owned config", async (t)
     cwd: root,
     logPrefix: "install",
   });
-  const cache = Array.from(parsedConfigEntries().values()).map((entry) => ({
+  const cache = Array.from(runtime.parsedConfigEntries().values()).map((entry) => ({
     scope: entry.scope,
     marketplace: entry.marketplace,
     pluginId: entry.pluginId,
@@ -1129,12 +1098,12 @@ test("runtime-bound routing mutations update only their supplied lifecycle owner
 
 test("readAndCachePluginHooks leaves the cache unchanged after a read failure", async (t) => {
   // arrange
-  ownRoutingState(t);
+  const runtime = createHooksRuntime();
   const root = await mkdtemp(path.join(tmpdir(), "hooks-router-read-missing-"));
   t.after(() => rm(root, { recursive: true, force: true }));
 
   // act
-  await readAndCachePluginHooks({
+  await createHooksRouting(runtime).readAndCachePluginHooks({
     scope: "project",
     marketplace: "catalog",
     plugin: "missing",
@@ -1145,19 +1114,19 @@ test("readAndCachePluginHooks leaves the cache unchanged after a read failure", 
   });
 
   // assert
-  assert.deepStrictEqual(Array.from(parsedConfigEntries()), []);
+  assert.deepStrictEqual(Array.from(runtime.parsedConfigEntries()), []);
 });
 
 test("readAndCachePluginHooks leaves the cache unchanged after a parse failure", async (t) => {
   // arrange
-  ownRoutingState(t);
+  const runtime = createHooksRuntime();
   const root = await mkdtemp(path.join(tmpdir(), "hooks-router-read-invalid-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const hooksJsonPath = path.join(root, "hooks.json");
   await writeFile(hooksJsonPath, "{", "utf8");
 
   // act
-  await readAndCachePluginHooks({
+  await createHooksRouting(runtime).readAndCachePluginHooks({
     scope: "project",
     marketplace: "catalog",
     plugin: "invalid",
@@ -1168,12 +1137,11 @@ test("readAndCachePluginHooks leaves the cache unchanged after a parse failure",
   });
 
   // assert
-  assert.deepStrictEqual(Array.from(parsedConfigEntries()), []);
+  assert.deepStrictEqual(Array.from(runtime.parsedConfigEntries()), []);
 });
 
-test("beforeAgentStartHandlerFor drains ordered context once and leaves an empty turn unchanged", async (t) => {
+test("beforeAgentStartHandlerFor drains ordered context once and leaves an empty turn unchanged", async () => {
   // arrange
-  ownRoutingState(t);
   const runtime = createHooksRuntime();
   const capturedGeneration = runtime.advanceGeneration();
   adaptObservationResultForEvent(
@@ -1208,9 +1176,8 @@ test("beforeAgentStartHandlerFor drains ordered context once and leaves an empty
   assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), []);
 });
 
-test("beforeAgentStartHandlerFor rejects a stale epoch without draining live context", async (t) => {
+test("beforeAgentStartHandlerFor rejects a stale epoch without draining live context", async () => {
   // arrange
-  ownRoutingState(t);
   const runtime = createHooksRuntime();
   const staleGeneration = runtime.advanceGeneration();
   runtime.advanceGeneration();
@@ -1243,9 +1210,9 @@ test("beforeAgentStartHandlerFor rejects a stale epoch without draining live con
   ]);
 });
 
-test("rebuildRoutingTables preserves stable plugin and declaration order in all ten buckets", (t) => {
+test("rebuildRoutingTables preserves stable plugin and declaration order in all ten buckets", () => {
   // arrange
-  ownRoutingState(t);
+  const runtime = createHooksRuntime();
   const eventInventory = [
     "PostCompact",
     "PostToolUse",
@@ -1273,7 +1240,8 @@ test("rebuildRoutingTables preserves stable plugin and declaration order in all 
         ],
       ]),
     );
-  addPluginConfigToCache(
+  seedPluginConfig(
+    runtime,
     "user",
     "catalog",
     "shared",
@@ -1281,7 +1249,8 @@ test("rebuildRoutingTables preserves stable plugin and declaration order in all 
     configFor("user-shared"),
     new Map([["PreToolUse|0|0", MATCH_ALL_IF]]),
   );
-  addPluginConfigToCache(
+  seedPluginConfig(
+    runtime,
     "user",
     "catalog",
     "zulu",
@@ -1289,7 +1258,8 @@ test("rebuildRoutingTables preserves stable plugin and declaration order in all 
     configFor("user-zulu"),
     new Map(),
   );
-  addPluginConfigToCache(
+  seedPluginConfig(
+    runtime,
     "project",
     "catalog",
     "shared",
@@ -1299,8 +1269,8 @@ test("rebuildRoutingTables preserves stable plugin and declaration order in all 
   );
 
   // act
-  rebuildRoutingTables();
-  const table = Array.from(routingTableEntries(), ([event, entries]) => ({
+  createHooksRouting(runtime).rebuildRoutingTables();
+  const table = Array.from(runtime.routingTableEntries(), ([event, entries]) => ({
     event,
     entries: entries.map((entry) => ({
       scope: entry.scope,
@@ -1365,9 +1335,9 @@ test("rebuildRoutingTables preserves stable plugin and declaration order in all 
   }
 });
 
-test("rebuildRoutingTables tolerates valid record keys and sparse arrays defensively", (t) => {
+test("rebuildRoutingTables tolerates valid record keys and sparse arrays defensively", () => {
   // arrange
-  ownRoutingState(t);
+  const runtime = createHooksRuntime();
   const sparseHooks: Array<{ type: string; command: string }> = [];
   sparseHooks.length = 2;
   sparseHooks[1] = { type: "command", command: "kept-handler" };
@@ -1378,7 +1348,8 @@ test("rebuildRoutingTables tolerates valid record keys and sparse arrays defensi
     FutureEvent: [{ hooks: [{ type: "command", command: "future-handler" }] }],
     PreToolUse: sparseGroups,
   };
-  addPluginConfigToCache(
+  seedPluginConfig(
+    runtime,
     "project",
     "catalog",
     "defensive",
@@ -1388,8 +1359,8 @@ test("rebuildRoutingTables tolerates valid record keys and sparse arrays defensi
   );
 
   // act
-  rebuildRoutingTables();
-  const table = Array.from(routingTableEntries(), ([event, entries]) => ({
+  createHooksRouting(runtime).rebuildRoutingTables();
+  const table = Array.from(runtime.routingTableEntries(), ([event, entries]) => ({
     event,
     commands: entries.map((entry) => entry.handlerDecl.command),
   })).sort((left, right) => left.event.localeCompare(right.event));
@@ -1414,7 +1385,7 @@ test(
   { concurrency: false },
   async (t) => {
     // arrange
-    ownRoutingState(t);
+    const runtime = createHooksRuntime();
     const root = await mkdtemp(path.join(tmpdir(), "hooks-router-hydrate-matrix-"));
     t.after(() => rm(root, { recursive: true, force: true, maxRetries: 3 }));
     const locations = locationsFor("project", root);
@@ -1504,16 +1475,16 @@ test(
     await saveState(locations.extensionRoot, state);
 
     // act
-    await hydrateProjectScopeForCwd(root);
-    rebuildRoutingTables();
-    const cache = Array.from(parsedConfigEntries().values()).map((entry) => ({
+    await createHooksHydration(runtime, { loadState }).hydrateProjectScopeForCwd(root);
+    createHooksRouting(runtime).rebuildRoutingTables();
+    const cache = Array.from(runtime.parsedConfigEntries().values()).map((entry) => ({
       scope: entry.scope,
       marketplace: entry.marketplace,
       pluginId: entry.pluginId,
       resolvedSource: entry.resolvedSource,
       config: entry.config,
     }));
-    const routes = Array.from(routingTableEntries(), ([event, entries]) => ({
+    const routes = Array.from(runtime.routingTableEntries(), ([event, entries]) => ({
       event,
       plugins: entries.map((entry) => entry.pluginId),
       commands: entries.map((entry) => entry.handlerDecl.command),
@@ -1547,7 +1518,6 @@ test(
   { concurrency: false },
   async (t) => {
     // arrange
-    ownRoutingState(t);
     const root = await mkdtemp(path.join(tmpdir(), "hooks-router-project-replace-"));
     t.after(() => rm(root, { recursive: true, force: true, maxRetries: 3 }));
     const locations = locationsFor("project", root);
@@ -1585,7 +1555,8 @@ test(
       config,
       ifPredicates: new Map(),
     });
-    addPluginConfigToCache(
+    seedPluginConfig(
+      runtime,
       "project",
       "transition",
       "stale",
@@ -1604,13 +1575,6 @@ test(
       pluginId: entry.pluginId,
       resolvedSource: entry.resolvedSource,
     }));
-    const transitionCache = Array.from(parsedConfigEntries().values()).map((entry) => ({
-      scope: entry.scope,
-      marketplace: entry.marketplace,
-      pluginId: entry.pluginId,
-      resolvedSource: entry.resolvedSource,
-    }));
-
     // assert
     assert.deepStrictEqual(cache, [
       {
@@ -1620,7 +1584,6 @@ test(
         resolvedSource: path.join(root, "user", "first"),
       },
     ]);
-    assert.deepStrictEqual(transitionCache, cache);
     assert.deepStrictEqual(readRoots, [locations.extensionRoot]);
   },
 );
@@ -1630,7 +1593,6 @@ test(
   { concurrency: false },
   async (t) => {
     // arrange
-    ownRoutingState(t);
     const root = await mkdtemp(path.join(tmpdir(), "hooks-router-reader-order-"));
     t.after(() => rm(root, { recursive: true, force: true, maxRetries: 3 }));
     const factoryRoot = path.join(root, "factory");
@@ -1698,7 +1660,6 @@ test(
 
 test("same-runtime registration invalidates an earlier callback before lazy hydration", async (t) => {
   // arrange
-  ownRoutingState(t);
   const root = await mkdtemp(path.join(tmpdir(), "hooks-router-runtime-generation-"));
   t.after(() => rm(root, { recursive: true, force: true, maxRetries: 3 }));
   ownAgentRoot(t, path.join(root, "agent"));
@@ -1747,7 +1708,6 @@ test(
   { concurrency: false },
   async (t) => {
     // arrange
-    ownRoutingState(t);
     const root = await mkdtemp(path.join(tmpdir(), "hooks-router-stale-hydration-"));
     t.after(() => rm(root, { recursive: true, force: true, maxRetries: 3 }));
     ownAgentRoot(t, path.join(root, "agent"));
@@ -1859,7 +1819,6 @@ test(
   { concurrency: false },
   async (t) => {
     // arrange
-    ownRoutingState(t);
     const fixture = await makeProjectHookFixture(t, "stale-containment", "PreToolUse");
     ownAgentRoot(t, path.join(fixture.root, "agent"));
     const reader: HooksHydrationReader = {
@@ -1941,7 +1900,6 @@ test(
   { concurrency: false },
   async (t) => {
     // arrange
-    ownRoutingState(t);
     const fixture = await makeProjectHookFixture(t, "stale-hook-read", "PreToolUse");
     ownAgentRoot(t, path.join(fixture.root, "agent"));
     const reader: HooksHydrationReader = {
@@ -2007,7 +1965,6 @@ test(
   { concurrency: false },
   async (t) => {
     // arrange
-    ownRoutingState(t);
     const fixture = await makeProjectHookFixture(t, "stale-session-effects", "SessionStart");
     ownAgentRoot(t, path.join(fixture.root, "agent"));
     const reader: HooksHydrationReader = {
@@ -2090,7 +2047,6 @@ test(
 
 test("runtime hydration stops before mirroring when registration advances its generation", async (t) => {
   // arrange
-  ownRoutingState(t);
   const fixture = await makeProjectHookFixture(t, "stale-public-hydration", "PreToolUse");
   ownAgentRoot(t, path.join(fixture.root, "agent"));
   const readStarted = createDeferred<undefined>();
@@ -2129,7 +2085,6 @@ test("runtime hydration stops before mirroring when registration advances its ge
 
 test("separate runtimes keep their current callbacks live and route through their own buckets", async (t) => {
   // arrange
-  ownRoutingState(t);
   const root = await mkdtemp(path.join(tmpdir(), "hooks-router-runtime-isolation-"));
   t.after(() => rm(root, { recursive: true, force: true, maxRetries: 3 }));
   ownAgentRoot(t, path.join(root, "agent"));
@@ -2211,7 +2166,7 @@ test(
   { concurrency: false },
   async (t) => {
     // arrange
-    ownRoutingState(t);
+    const runtime = createHooksRuntime();
     const root = await mkdtemp(path.join(tmpdir(), "hooks-router-corrupt-state-"));
     t.after(() => rm(root, { recursive: true, force: true, maxRetries: 3 }));
     const projectRoot = path.join(root, "project");
@@ -2227,7 +2182,10 @@ test(
     const context = makeContext(projectRoot, root);
 
     // act
-    await registerHooksBridge(pi, { ctx: context, cwd: projectRoot });
+    await createHooksHydration(runtime, { loadState }).registerHooksBridge(pi, {
+      ctx: context,
+      cwd: projectRoot,
+    });
     const sharedState = {
       user: fs.existsSync(path.join(userLocations.dataRoot, "_shared")),
       project: fs.existsSync(path.join(projectLocations.dataRoot, "_shared")),
@@ -2250,7 +2208,7 @@ test(
         { event: "input", handlerType: "function" },
       ],
     );
-    assert.deepStrictEqual(Array.from(parsedConfigEntries()), []);
+    assert.deepStrictEqual(Array.from(runtime.parsedConfigEntries()), []);
     assert.deepStrictEqual(sharedState, { user: false, project: false });
     assert.deepStrictEqual(messages, []);
   },
@@ -2261,7 +2219,7 @@ test(
   { concurrency: false },
   async (t) => {
     // arrange
-    ownRoutingState(t);
+    const runtime = createHooksRuntime();
     const root = await mkdtemp(path.join(tmpdir(), "hooks-router-shared-dir-"));
     t.after(() => rm(root, { recursive: true, force: true, maxRetries: 3 }));
     const projectRoot = path.join(root, "project");
@@ -2273,7 +2231,8 @@ test(
     const userSharedPath = path.join(userLocations.dataRoot, "_shared");
     const projectSharedPath = path.join(projectLocations.dataRoot, "_shared");
     await writeFile(userSharedPath, "regular-file-boundary", "utf8");
-    addPluginConfigToCache(
+    seedPluginConfig(
+      runtime,
       "user",
       "catalog",
       "session",
@@ -2285,7 +2244,10 @@ test(
     const context = makeContext(projectRoot, root);
 
     // act
-    await registerHooksBridge(pi, { ctx: context, cwd: projectRoot });
+    await createHooksHydration(runtime, { loadState }).registerHooksBridge(pi, {
+      ctx: context,
+      cwd: projectRoot,
+    });
     const userSharedBytes = await fs.promises.readFile(userSharedPath, "utf8");
     const projectSharedStat = await fs.promises.stat(projectSharedPath);
 
@@ -2301,7 +2263,7 @@ test(
   { concurrency: false },
   async (t) => {
     // arrange
-    ownRoutingState(t);
+    const runtime = createHooksRuntime();
     const root = await mkdtemp(path.join(tmpdir(), "hooks-router-lazy-project-"));
     t.after(() => rm(root, { recursive: true, force: true, maxRetries: 3 }));
     const factoryRoot = path.join(root, "factory-cwd");
@@ -2345,7 +2307,11 @@ test(
       });
     };
 
-    await registerHooksBridge(pi, { ctx: context, cwd: factoryRoot, executor });
+    await createHooksHydration(runtime, { loadState }).registerHooksBridge(pi, {
+      ctx: context,
+      cwd: factoryRoot,
+      executor,
+    });
     const sessionStart = registeredHandler(registrations, "session_start");
     const beforeAgentStart = registeredHandler(registrations, "before_agent_start");
     const beforeAgentEvent = {
@@ -2362,12 +2328,12 @@ test(
     );
     const firstTurn = await beforeAgentStart(beforeAgentEvent, context);
     const secondTurn = await beforeAgentStart(beforeAgentEvent, context);
-    const routes = getRoutingBucket("SessionStart").map((entry) => ({
+    const routes = runtime.getRoutingBucket("SessionStart").map((entry) => ({
       scope: entry.scope,
       pluginId: entry.pluginId,
       command: entry.handlerDecl.command,
     }));
-    const cache = Array.from(parsedConfigEntries().values()).map((entry) => ({
+    const cache = Array.from(runtime.parsedConfigEntries().values()).map((entry) => ({
       scope: entry.scope,
       marketplace: entry.marketplace,
       pluginId: entry.pluginId,
@@ -2395,14 +2361,14 @@ test(
       { scope: "project", marketplace: "catalog", pluginId: "alpha" },
     ]);
     assert.strictEqual(projectSharedStat.isDirectory(), true);
-    assert.deepStrictEqual(pendingSessionStartContextEntries(), []);
+    assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), []);
     assert.deepStrictEqual(messages, []);
   },
 );
 
 test("session_start contains a lazy project cwd failure and still delegates safely", async (t) => {
   // arrange
-  ownRoutingState(t);
+  const runtime = createHooksRuntime();
   const root = await mkdtemp(path.join(tmpdir(), "hooks-router-lazy-failure-"));
   t.after(() => rm(root, { recursive: true, force: true, maxRetries: 3 }));
   const projectRoot = path.join(root, "project");
@@ -2415,7 +2381,11 @@ test("session_start contains a lazy project cwd failure and still delegates safe
     return Promise.resolve({ kind: "noop" });
   };
 
-  await registerHooksBridge(pi, { ctx: context, cwd: projectRoot, executor });
+  await createHooksHydration(runtime, { loadState }).registerHooksBridge(pi, {
+    ctx: context,
+    cwd: projectRoot,
+    executor,
+  });
   const sessionStart = registeredHandler(registrations, "session_start");
   Object.defineProperty(context, "cwd", {
     configurable: true,

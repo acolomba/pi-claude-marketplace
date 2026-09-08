@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test, { beforeEach } from "node:test";
+import test from "node:test";
 
 import { MATCH_ALL_IF } from "../../../extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts";
 import { type RoutingEntry } from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
@@ -37,13 +37,6 @@ interface NotifyCall {
   readonly text: string;
   readonly severity: "info" | "warning" | "error" | undefined;
 }
-
-let runtime: HooksRuntime;
-
-beforeEach(() => {
-  runtime = createHooksRuntime();
-  runtime.advanceGeneration();
-});
 
 function makePi(sendError?: Error): { pi: ExtensionAPI; sent: SendCall[] } {
   const sent: SendCall[] = [];
@@ -138,6 +131,7 @@ function failureEnd(
 }
 
 async function runStop(
+  runtime: HooksRuntime,
   pi: ExtensionAPI,
   ctx: ExtensionContext,
   executor: HookExecutor,
@@ -194,6 +188,8 @@ test("uses only the supplied runtime for Stop re-entry", async () => {
 
 test("cache miss, one-shot hit, and stale epoch are visible at public boundaries", async () => {
   // arrange
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
   const events: unknown[] = [];
   const executor: HookExecutor = (_entry, event): Promise<HookExecResult> => {
     events.push(event);
@@ -248,6 +244,8 @@ test("cache miss, one-shot hit, and stale epoch are visible at public boundaries
 
 test("the last agent ending wins before settle", async () => {
   // arrange
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
   const events: unknown[] = [];
   const executor: HookExecutor = (_entry, event): Promise<HookExecResult> => {
     events.push(event);
@@ -270,6 +268,8 @@ test("the last agent ending wins before settle", async () => {
 
 test("an ending without an assistant has no public effect", async () => {
   // arrange
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
   const fired: string[] = [];
   const executor: HookExecutor = (entry): Promise<HookExecResult> => {
     fired.push(entry.pluginId);
@@ -298,6 +298,8 @@ test("an ending without an assistant has no public effect", async () => {
 
 test("trailing non-assistant messages do not replace the assistant", async () => {
   // arrange
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
   const events: unknown[] = [];
   const executor: HookExecutor = (_entry, event): Promise<HookExecResult> => {
     events.push(event);
@@ -330,6 +332,8 @@ test("trailing non-assistant messages do not replace the assistant", async () =>
 
 test("assistant text joins in order and excludes non-text content", async () => {
   // arrange
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
   const events: unknown[] = [];
   const executor: HookExecutor = (_entry, event): Promise<HookExecResult> => {
     events.push(event);
@@ -368,6 +372,8 @@ test("assistant text joins in order and excludes non-text content", async () => 
 for (const stopReason of ["pending", "aborted", "toolUse", "deferred"] as const) {
   test(`${stopReason} endings do not dispatch a settle bucket`, async () => {
     // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
     const fired: string[] = [];
     const executor: HookExecutor = (entry): Promise<HookExecResult> => {
       fired.push(entry.pluginId);
@@ -391,6 +397,8 @@ for (const stopReason of ["pending", "aborted", "toolUse", "deferred"] as const)
 
 test("an unknown ending is dropped without throwing", async () => {
   // arrange
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
   const fired: string[] = [];
   const executor: HookExecutor = (entry): Promise<HookExecResult> => {
     fired.push(entry.pluginId);
@@ -418,6 +426,8 @@ test("an unknown ending is dropped without throwing", async () => {
 
 test("an empty Stop bucket has no public effect", async () => {
   // arrange
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
   const fired: string[] = [];
   const executor: HookExecutor = (entry): Promise<HookExecResult> => {
     fired.push(entry.pluginId);
@@ -428,7 +438,7 @@ test("an empty Stop bucket has no public effect", async () => {
   const { pi, sent } = makePi();
 
   // act
-  await runStop(pi, emptyContext, executor);
+  await runStop(runtime, pi, emptyContext, executor);
 
   // assert
   assert.deepStrictEqual(fired, []);
@@ -437,13 +447,15 @@ test("an empty Stop bucket has no public effect", async () => {
 
 test("a block re-enters with the complete follow-up message", async () => {
   // arrange
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
   const executor: HookExecutor = (): Promise<HookExecResult> =>
     Promise.resolve({ kind: "block", reason: "continue" });
   runtime.setRoutingBucket("Stop", [stopEntry("alpha")]);
   const { pi, sent } = makePi();
 
   // act
-  await runStop(pi, emptyContext, executor);
+  await runStop(runtime, pi, emptyContext, executor);
 
   // assert
   assert.deepStrictEqual(sent, [
@@ -461,12 +473,14 @@ test("a block re-enters with the complete follow-up message", async () => {
 
 test("a reasonless block re-enters with empty content", async () => {
   // arrange
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
   const executor: HookExecutor = (): Promise<HookExecResult> => Promise.resolve({ kind: "block" });
   runtime.setRoutingBucket("Stop", [stopEntry("alpha")]);
   const { pi, sent } = makePi();
 
   // act
-  await runStop(pi, emptyContext, executor);
+  await runStop(runtime, pi, emptyContext, executor);
 
   // assert
   assert.strictEqual(sent[0]?.message["content"], "");
@@ -475,13 +489,15 @@ test("a reasonless block re-enters with empty content", async () => {
 
 test("additional context re-enters through the block lane", async () => {
   // arrange
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
   const executor: HookExecutor = (): Promise<HookExecResult> =>
     Promise.resolve({ kind: "mutate", additionalContext: "more context" });
   runtime.setRoutingBucket("Stop", [stopEntry("alpha")]);
   const { pi, sent } = makePi();
 
   // act
-  await runStop(pi, emptyContext, executor);
+  await runStop(runtime, pi, emptyContext, executor);
 
   // assert
   assert.deepStrictEqual(sent, [
@@ -499,13 +515,15 @@ test("additional context re-enters through the block lane", async () => {
 
 test("a noop Stop outcome emits no message or notification", async () => {
   // arrange
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
   const executor: HookExecutor = (): Promise<HookExecResult> => Promise.resolve({ kind: "noop" });
   runtime.setRoutingBucket("Stop", [stopEntry("alpha")]);
   const { pi, sent } = makePi();
   const { ctx, notified } = makeContext();
 
   // act
-  await runStop(pi, ctx, executor);
+  await runStop(runtime, pi, ctx, executor);
 
   // assert
   assert.deepStrictEqual(sent, []);
@@ -514,6 +532,8 @@ test("a noop Stop outcome emits no message or notification", async () => {
 
 test("a stop outcome suppresses a preceding block", async () => {
   // arrange
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
   const fired: string[] = [];
   const executor: HookExecutor = (entry): Promise<HookExecResult> => {
     fired.push(entry.pluginId);
@@ -528,7 +548,7 @@ test("a stop outcome suppresses a preceding block", async () => {
   const { pi, sent } = makePi();
 
   // act
-  await runStop(pi, emptyContext, executor);
+  await runStop(runtime, pi, emptyContext, executor);
 
   // assert
   assert.deepStrictEqual(fired, ["blocker", "stopper"]);
@@ -537,6 +557,8 @@ test("a stop outcome suppresses a preceding block", async () => {
 
 test("a stop outcome suppresses a following block", async () => {
   // arrange
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
   const fired: string[] = [];
   const executor: HookExecutor = (entry): Promise<HookExecResult> => {
     fired.push(entry.pluginId);
@@ -549,7 +571,7 @@ test("a stop outcome suppresses a following block", async () => {
   const { pi, sent } = makePi();
 
   // act
-  await runStop(pi, emptyContext, executor);
+  await runStop(runtime, pi, emptyContext, executor);
 
   // assert
   assert.deepStrictEqual(fired, ["stopper", "blocker"]);
@@ -558,6 +580,8 @@ test("a stop outcome suppresses a following block", async () => {
 
 test("an asynchronous Stop declaration degrades to noop", async () => {
   // arrange
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
   const fired: string[] = [];
   const executor: HookExecutor = (entry): Promise<HookExecResult> => {
     fired.push(entry.pluginId);
@@ -568,7 +592,7 @@ test("an asynchronous Stop declaration degrades to noop", async () => {
   const { pi, sent } = makePi();
 
   // act
-  await runStop(pi, emptyContext, executor);
+  await runStop(runtime, pi, emptyContext, executor);
 
   // assert
   assert.deepStrictEqual(fired, []);
@@ -577,6 +601,8 @@ test("an asynchronous Stop declaration degrades to noop", async () => {
 
 test("a false if predicate skips a Stop declaration", async () => {
   // arrange
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
   const fired: string[] = [];
   const executor: HookExecutor = (entry): Promise<HookExecResult> => {
     fired.push(entry.pluginId);
@@ -591,7 +617,7 @@ test("a false if predicate skips a Stop declaration", async () => {
   const { pi, sent } = makePi();
 
   // act
-  await runStop(pi, emptyContext, executor);
+  await runStop(runtime, pi, emptyContext, executor);
 
   // assert
   assert.deepStrictEqual(fired, []);
@@ -600,6 +626,8 @@ test("a false if predicate skips a Stop declaration", async () => {
 
 test("a reload during awaited Stop work discards every stale effect", async () => {
   // arrange
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
   let resolveStaleOutcome: ((result: HookExecResult) => void) | undefined;
   const staleExecutor: HookExecutor = () => {
     return new Promise((resolve) => {
@@ -632,7 +660,7 @@ test("a reload during awaited Stop work discards every stale effect", async () =
   assert.strictEqual(runtime.isStopHookActive(), false);
 
   // act
-  await runStop(pi, ctx, liveExecutor);
+  await runStop(runtime, pi, ctx, liveExecutor);
 
   // assert
   assert.deepStrictEqual(liveEvents, [{ last_assistant_message: "done", stop_hook_active: false }]);
@@ -644,6 +672,8 @@ test("a reload during awaited Stop work discards every stale effect", async () =
 
 test("the eighth consecutive block is suppressed and warns only once", async () => {
   // arrange
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
   const flags: boolean[] = [];
   const executor: HookExecutor = (_entry, event): Promise<HookExecResult> => {
     flags.push((event as { stop_hook_active: boolean }).stop_hook_active);
@@ -656,7 +686,7 @@ test("the eighth consecutive block is suppressed and warns only once", async () 
 
   // act
   for (let index = 0; index < 9; index += 1) {
-    await runStop(pi, ctx, executor);
+    await runStop(runtime, pi, ctx, executor);
   }
 
   // assert
@@ -672,6 +702,8 @@ test("the eighth consecutive block is suppressed and warns only once", async () 
 
 test("block and additional-context re-entries share one cap", async () => {
   // arrange
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
   let invocation = 0;
   const executor: HookExecutor = (): Promise<HookExecResult> => {
     const outcome: HookExecResult =
@@ -688,7 +720,7 @@ test("block and additional-context re-entries share one cap", async () => {
 
   // act
   for (let index = 0; index < 8; index += 1) {
-    await runStop(pi, ctx, executor);
+    await runStop(runtime, pi, ctx, executor);
   }
 
   // assert
@@ -709,6 +741,8 @@ test("block and additional-context re-entries share one cap", async () => {
 
 test("a noop resets the cap and rearms its notification", async () => {
   // arrange
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
   let mode: "block" | "noop" = "block";
   const executor: HookExecutor = (): Promise<HookExecResult> =>
     Promise.resolve(mode === "block" ? { kind: "block", reason: "continue" } : { kind: "noop" });
@@ -718,14 +752,14 @@ test("a noop resets the cap and rearms its notification", async () => {
 
   // act
   for (let index = 0; index < 7; index += 1) {
-    await runStop(pi, ctx, executor);
+    await runStop(runtime, pi, ctx, executor);
   }
 
   mode = "noop";
-  await runStop(pi, ctx, executor);
+  await runStop(runtime, pi, ctx, executor);
   mode = "block";
   for (let index = 0; index < 8; index += 1) {
-    await runStop(pi, ctx, executor);
+    await runStop(runtime, pi, ctx, executor);
   }
 
   // assert
@@ -735,6 +769,8 @@ test("a noop resets the cap and rearms its notification", async () => {
 
 test("a stop resets the cap but leaves the next payload active", async () => {
   // arrange
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
   let mode: "block" | "stop" = "block";
   const flags: boolean[] = [];
   const executor: HookExecutor = (_entry, event): Promise<HookExecResult> => {
@@ -749,12 +785,12 @@ test("a stop resets the cap but leaves the next payload active", async () => {
   const { ctx, notified } = makeContext();
 
   // act
-  await runStop(pi, ctx, executor);
+  await runStop(runtime, pi, ctx, executor);
   mode = "stop";
-  await runStop(pi, ctx, executor);
+  await runStop(runtime, pi, ctx, executor);
   mode = "block";
   for (let index = 0; index < 8; index += 1) {
-    await runStop(pi, ctx, executor);
+    await runStop(runtime, pi, ctx, executor);
   }
 
   // assert
@@ -765,6 +801,8 @@ test("a stop resets the cap but leaves the next payload active", async () => {
 
 test("a live input clears active state and resets the cap", async () => {
   // arrange
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
   const flags: boolean[] = [];
   const executor: HookExecutor = (_entry, event): Promise<HookExecResult> => {
     flags.push((event as { stop_hook_active: boolean }).stop_hook_active);
@@ -777,11 +815,11 @@ test("a live input clears active state and resets the cap", async () => {
   const epoch = runtime.currentGeneration();
 
   // act
-  await runStop(pi, ctx, executor);
-  await runStop(pi, ctx, executor);
+  await runStop(runtime, pi, ctx, executor);
+  await runStop(runtime, pi, ctx, executor);
   inputResetHandlerFor(runtime, epoch)();
   for (let index = 0; index < 8; index += 1) {
-    await runStop(pi, ctx, executor);
+    await runStop(runtime, pi, ctx, executor);
   }
 
   // assert
@@ -792,6 +830,8 @@ test("a live input clears active state and resets the cap", async () => {
 
 test("a stale input handler cannot clear live active state", async () => {
   // arrange
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
   const flags: boolean[] = [];
   const executor: HookExecutor = (_entry, event): Promise<HookExecResult> => {
     flags.push((event as { stop_hook_active: boolean }).stop_hook_active);
@@ -803,10 +843,10 @@ test("a stale input handler cannot clear live active state", async () => {
   const staleHandler = inputResetHandlerFor(runtime, runtime.currentGeneration());
 
   // act
-  await runStop(pi, emptyContext, executor);
+  await runStop(runtime, pi, emptyContext, executor);
   runtime.advanceGeneration();
   staleHandler();
-  await runStop(pi, emptyContext, executor);
+  await runStop(runtime, pi, emptyContext, executor);
 
   // assert
   assert.deepStrictEqual(flags, [false, true]);
@@ -815,6 +855,8 @@ test("a stale input handler cannot clear live active state", async () => {
 
 test("resetting settle state clears cached and active session data", async () => {
   // arrange
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
   const flags: boolean[] = [];
   const executor: HookExecutor = (_entry, event): Promise<HookExecResult> => {
     flags.push((event as { stop_hook_active: boolean }).stop_hook_active);
@@ -826,11 +868,11 @@ test("resetting settle state clears cached and active session data", async () =>
   const epoch = runtime.currentGeneration();
 
   // act
-  await runStop(pi, emptyContext, executor);
+  await runStop(runtime, pi, emptyContext, executor);
   agentEndCacheHandler(runtime, epoch)(agentEnd("stop"));
   resetSettleState(runtime);
   await settleHandlerFor(runtime, epoch, pi, executor)(settledEvent, emptyContext);
-  await runStop(pi, emptyContext, executor);
+  await runStop(runtime, pi, emptyContext, executor);
 
   // assert
   assert.deepStrictEqual(flags, [false, false]);
@@ -839,6 +881,8 @@ test("resetting settle state clears cached and active session data", async () =>
 
 test("a send failure is contained and a later input starts a clean run", async () => {
   // arrange
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
   const executor: HookExecutor = (): Promise<HookExecResult> =>
     Promise.resolve({ kind: "block", reason: "continue" });
   runtime.setRoutingBucket("Stop", [stopEntry("alpha")]);
@@ -849,14 +893,14 @@ test("a send failure is contained and a later input starts a clean run", async (
 
   // act
   try {
-    await runStop(failingPi, emptyContext, executor);
+    await runStop(runtime, failingPi, emptyContext, executor);
   } catch (error) {
     settleError = error;
   }
 
   await settleHandlerFor(runtime, epoch, healthy.pi, executor)(settledEvent, emptyContext);
   inputResetHandlerFor(runtime, epoch)();
-  await runStop(healthy.pi, emptyContext, executor);
+  await runStop(runtime, healthy.pi, emptyContext, executor);
 
   // assert
   assert.strictEqual(settleError, undefined);
@@ -868,6 +912,8 @@ test("a send failure is contained and a later input starts a clean run", async (
 
 test("an executor rejection consumes its ending and permits a fresh ending", async () => {
   // arrange
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
   const executorError = new Error("executor failed");
   const rejecting: HookExecutor = (): Promise<HookExecResult> => Promise.reject(executorError);
   const events: unknown[] = [];
@@ -901,6 +947,8 @@ test("an executor rejection consumes its ending and permits a fresh ending", asy
 
 test("an error ending reaches matching failure observers with its payload", async () => {
   // arrange
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
   const observed: Array<{ pluginId: string; event: unknown }> = [];
   const executor: HookExecutor = (entry, event): Promise<HookExecResult> => {
     observed.push({ pluginId: entry.pluginId, event });
@@ -940,6 +988,8 @@ test("an error ending reaches matching failure observers with its payload", asyn
 
 test("a reload during awaited StopFailure work discards the stale continuation", async () => {
   // arrange
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
   let release: (result: HookExecResult) => void = () => {
     assert.fail("StopFailure executor was not started");
   };
@@ -975,6 +1025,8 @@ test("a reload during awaited StopFailure work discards the stale continuation",
 
 test("a length ending reports max-output classification without re-entry", async () => {
   // arrange
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
   const events: unknown[] = [];
   const executor: HookExecutor = (_entry, event): Promise<HookExecResult> => {
     events.push(event);
@@ -998,6 +1050,8 @@ test("a length ending reports max-output classification without re-entry", async
 
 test("a failure without text reports unknown with an empty message", async () => {
   // arrange
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
   const events: unknown[] = [];
   const executor: HookExecutor = (_entry, event): Promise<HookExecResult> => {
     events.push(event);
@@ -1018,6 +1072,8 @@ test("a failure without text reports unknown with an empty message", async () =>
 
 test("all failure outcomes run in order and are then discarded", async () => {
   // arrange
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
   const observed: Array<{ pluginId: string; event: unknown }> = [];
   const outcomes: Record<string, HookExecResult> = {
     noop: { kind: "noop" },
@@ -1049,7 +1105,7 @@ test("all failure outcomes run in order and are then discarded", async () => {
   agentEndCacheHandler(runtime, epoch)(failureEnd("error", "provider failed"));
   await settleHandlerFor(runtime, epoch, pi, failureExecutor)(settledEvent, emptyContext);
   runtime.setRoutingBucket("Stop", [stopEntry("fresh")]);
-  await runStop(pi, emptyContext, stopExecutor);
+  await runStop(runtime, pi, emptyContext, stopExecutor);
 
   // assert
   assert.deepStrictEqual(
@@ -1072,6 +1128,8 @@ test("all failure outcomes run in order and are then discarded", async () => {
 
 test("an empty failure bucket has no public effect", async () => {
   // arrange
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
   const fired: string[] = [];
   const executor: HookExecutor = (entry): Promise<HookExecResult> => {
     fired.push(entry.pluginId);

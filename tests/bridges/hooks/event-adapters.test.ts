@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { beforeEach, describe, test } from "node:test";
+import { describe, test } from "node:test";
 
 import {
   adaptInputResult,
@@ -11,18 +11,11 @@ import {
 import { createHooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 
 import type { HookExecResult } from "../../../extensions/pi-claude-marketplace/bridges/hooks/exec-result.ts";
-import type { HooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import type {
   InputEvent,
   ToolCallEvent,
   ToolResultEvent,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
-
-let runtime: HooksRuntime;
-
-beforeEach(() => {
-  runtime = createHooksRuntime();
-});
 
 describe("applyMutationInPlace", () => {
   for (const { name, event } of [
@@ -905,6 +898,7 @@ describe("adaptInputResult", () => {
 describe("adaptObservationResultForEvent", () => {
   test("captures ordered SessionStart context with exact plugin provenance", () => {
     // arrange
+    const runtime = createHooksRuntime();
     const firstProvenance = {
       scope: "user",
       marketplace: "user-marketplace",
@@ -949,6 +943,7 @@ describe("adaptObservationResultForEvent", () => {
 
   test("does not capture SessionStart context when it is truly absent", () => {
     // arrange
+    const runtime = createHooksRuntime();
     const provenance = {
       scope: "user",
       marketplace: "owner-marketplace",
@@ -969,6 +964,7 @@ describe("adaptObservationResultForEvent", () => {
 
   test("does not capture an empty SessionStart context", () => {
     // arrange
+    const runtime = createHooksRuntime();
     const provenance = {
       scope: "project",
       marketplace: "owner-marketplace",
@@ -994,6 +990,7 @@ describe("adaptObservationResultForEvent", () => {
   ] as const) {
     test(`drops ${eventName} additional context`, () => {
       // arrange
+      const runtime = createHooksRuntime();
       const provenance = {
         scope,
         marketplace: `${eventName}-marketplace`,
@@ -1015,6 +1012,7 @@ describe("adaptObservationResultForEvent", () => {
 
   test("returns from noop without changing pending state", () => {
     // arrange
+    const runtime = createHooksRuntime();
     const provenance = {
       scope: "user",
       marketplace: "noop-marketplace",
@@ -1060,6 +1058,7 @@ describe("adaptObservationResultForEvent", () => {
   ]) {
     test(`reports a ${name}`, (t) => {
       // arrange
+      const runtime = createHooksRuntime();
       const debugKey = "PI_CLAUDE_MARKETPLACE_DEBUG";
       const hadDebug = Object.hasOwn(process.env, debugKey);
       const previousDebug = process.env[debugKey];
@@ -1092,6 +1091,7 @@ describe("adaptObservationResultForEvent", () => {
 
   test("rejects a result outside the exhaustive observation vocabulary", () => {
     // arrange
+    const runtime = createHooksRuntime();
     const provenance = {
       scope: "user",
       marketplace: "future-marketplace",
