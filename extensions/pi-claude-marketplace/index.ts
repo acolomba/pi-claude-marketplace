@@ -8,7 +8,7 @@ import {
 import { registerClaudeMarketplaceTools, registerClaudePluginCommand } from "./edge/register.ts";
 import { aggregateDiscoveredResources } from "./orchestrators/discover.ts";
 import { DEFAULT_GIT_OPS } from "./orchestrators/marketplace/shared.ts";
-import { updateSinglePlugin } from "./orchestrators/plugin/update.ts";
+import { createPluginUpdateOperations } from "./orchestrators/plugin/update.ts";
 import { recomputePluginPath } from "./orchestrators/plugin-path.ts";
 import { applyReconcile } from "./orchestrators/reconcile/apply.ts";
 import { locationsFor } from "./persistence/locations.ts";
@@ -35,6 +35,7 @@ import type {
 export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Promise<void> {
   const hooksRuntime = createHooksRuntime();
   const hooksRouting = createHooksRouting(hooksRuntime);
+  const pluginUpdateOperations = createPluginUpdateOperations(hooksRouting);
   const completionCache = createCompletionCache();
   const hooksHydration = createHooksHydration(hooksRuntime, { loadState });
   const onResourcesDiscover = pi.on.bind(pi) as unknown as (
@@ -173,9 +174,10 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
     {
       completionCache,
       gitOps: DEFAULT_GIT_OPS,
-      pluginUpdate: updateSinglePlugin,
+      pluginUpdate: pluginUpdateOperations.pluginUpdate,
     },
     hooksRouting,
+    pluginUpdateOperations.updatePlugins,
   );
   registerClaudeMarketplaceTools(pi);
 }

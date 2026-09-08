@@ -4,11 +4,15 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
+import {
+  createHooksRouting,
+  createHooksRuntime,
+} from "../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { pathSource } from "../../extensions/pi-claude-marketplace/domain/source.ts";
 import { installPlugin } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/install.ts";
 import { reinstallPlugin } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts";
 import { uninstallPlugin } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
-import { updatePlugins } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/update.ts";
+import { createPluginUpdateOperations } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/update.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
@@ -21,6 +25,10 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 interface NotifyRecord {
   message: string;
   severity?: string;
+}
+
+function createUpdatePlugins() {
+  return createPluginUpdateOperations(createHooksRouting(createHooksRuntime())).updatePlugins;
 }
 
 function makeCtx(): {
@@ -214,7 +222,7 @@ test("LIFE-01 / LIFE-02 integration: install -> update -> reinstall -> uninstall
         const { ctx, pi, notifications } = makeCtx();
 
         // act
-        await updatePlugins({
+        await createUpdatePlugins()({
           ctx,
           pi,
           scope: "project",

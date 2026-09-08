@@ -75,10 +75,7 @@ import {
 } from "../../bridges/commands/index.ts";
 import { compileIfPredicate } from "../../bridges/hooks/if-field/index.ts";
 import {
-  readAndCachePluginHooks,
-  rebuildRoutingTables,
   removeHookConfig,
-  removePluginConfigFromCache,
   writeHookConfig,
 } from "../../bridges/hooks/index.ts";
 import {
@@ -165,6 +162,7 @@ import { UPDATE_CONTEXT, type UpdateMsg } from "./update.messaging.ts";
 
 import type { PreparedAgentsStaging } from "../../bridges/agents/index.ts";
 import type { PreparedCommandsStaging } from "../../bridges/commands/index.ts";
+import type { HooksRouting } from "../../bridges/hooks/index.ts";
 import type { PreparedMcpStaging } from "../../bridges/mcp/index.ts";
 import type { PreparedSkillsStaging } from "../../bridges/skills/index.ts";
 import type { PluginEntry } from "../../domain/components/plugin.ts";
@@ -276,6 +274,21 @@ export interface UpdatePluginsOptions {
   /** D-79-02 once-per-host memo shared across a bulk update. */
   readonly authMemo?: Map<string, AuthAttemptResult>;
 }
+
+/** Direct/bulk update operation with the full command-owned option contract. */
+export type UpdatePluginsFn = (opts: UpdatePluginsOptions) => Promise<void>;
+
+/** Hook routing capabilities consumed by successful update finalization. */
+export type UpdateHooksRouting = Pick<
+  HooksRouting,
+  "readAndCachePluginHooks" | "rebuildRoutingTables" | "removePluginConfigFromCache"
+>;
+
+/** The two update operations owned by one extension lifecycle. */
+export interface PluginUpdateOperations {
+  readonly updatePlugins: UpdatePluginsFn;
+  readonly pluginUpdate: PluginUpdateFn;
+}
 /**
  * PUP-2 syncCloneOnce memoization -- one refresh per (scope, marketplace)
  * pair. Path-source marketplaces are noops (NFR-5: no network for path
@@ -319,6 +332,7 @@ function buildDirectThreePhaseArgs(
   opts: UpdatePluginsOptions,
   target: ResolvedTarget,
   cardinality: "single" | "plural",
+  hooksRouting: UpdateHooksRouting,
 ): DirectThreePhaseArgs {
   return {
     plugin: target.plugin,
@@ -326,6 +340,7 @@ function buildDirectThreePhaseArgs(
     scope: target.scope,
     cwd: opts.cwd,
     locations: target.locations,
+    hooksRouting,
     cascade: false,
     ctx: opts.ctx,
     // `pi` threads the phase-3a aggregate direct-path notify inside
@@ -367,7 +382,10 @@ function buildDirectThreePhaseArgs(
  * BEFORE the cascade is built (the cascade body still names them via the
  * `PluginUpdatedMessage`/`PluginSkippedMessage`/`PluginFailedMessage` rows).
  */
-export async function updatePlugins(opts: UpdatePluginsOptions): Promise<void> {
+async function updatePluginsWith(
+  opts: UpdatePluginsOptions,
+  hooksRouting: UpdateHooksRouting,
+): Promise<void> {
   const { ctx, pi } = opts;
   // OUT-04 / D-04: cardinality belongs to the parsed invocation, including
   // enumeration failures that return before any result rows exist.
@@ -424,7 +442,9 @@ export async function updatePlugins(opts: UpdatePluginsOptions): Promise<void> {
 
     let outcome: UpdateRunOutcome;
     try {
-      outcome = await runThreePhaseUpdate(buildDirectThreePhaseArgs(opts, t, cardinality));
+      outcome = await runThreePhaseUpdate(
+        buildDirectThreePhaseArgs(opts, t, cardinality, hooksRouting),
+      );
     } catch (err) {
       // PUP-9 direct path: phase-2-or-earlier throws (including PI-14
       // PathContainmentError, ST-9 stale-version, prep-phase errors) surface
@@ -630,7 +650,12 @@ function renderUpdateCascadeIfAny(
  * PathContainmentError, ST-9 stale-version, prep failures, phase-3a aggregate
  * failures) are captured into `partition='failed'` outcomes. PUP-9.
  */
-export const updateSinglePlugin: PluginUpdateFn = async (plugin, marketplace, scope) => {
+async function updateSinglePluginWith(
+  hooksRouting: UpdateHooksRouting,
+  plugin: string,
+  marketplace: string,
+  scope: Scope,
+): Promise<PluginUpdateOutcome> {
   // The cascade signature does not carry `cwd`; we default to process.cwd
   // because the cascade is invoked from a marketplace orchestrator that
   // already operates in the user's session cwd. Future wiring may add a
@@ -645,6 +670,7 @@ export const updateSinglePlugin: PluginUpdateFn = async (plugin, marketplace, sc
       scope,
       cwd,
       locations,
+      hooksRouting,
       cascade: true,
       // SEV-03 / D-69-01: the autoupdate cascade TAKES the partial path
       // automatically. A partially-upgradable candidate (re-resolves `partially-available`)
@@ -682,7 +708,17 @@ export const updateSinglePlugin: PluginUpdateFn = async (plugin, marketplace, sc
     };
     return { ...base, reasons: reasonsFromTypedError(err) };
   }
-};
+}
+
+/** Bind direct and cascade update operations to one lifecycle routing owner. */
+export function createPluginUpdateOperations(
+  hooksRouting: UpdateHooksRouting,
+): PluginUpdateOperations {
+  const updatePlugins: UpdatePluginsFn = (opts) => updatePluginsWith(opts, hooksRouting);
+  const pluginUpdate: PluginUpdateFn = (plugin, marketplace, scope) =>
+    updateSinglePluginWith(hooksRouting, plugin, marketplace, scope);
+  return { updatePlugins, pluginUpdate };
+}
 
 /**
  * Map an exported-workflow error to a closed-set `Reason[]` for cascade-failure
@@ -726,6 +762,7 @@ interface ThreePhaseArgsBase {
   readonly scope: Scope;
   readonly cwd: string;
   readonly locations: ScopedLocations;
+  readonly hooksRouting: UpdateHooksRouting;
   /**
    * AG-7 opt-in. Set by `updatePlugins` from `UpdatePluginsOptions.mapModel`
    * (which the edge handler populates from `--map-model`). The cascade
@@ -1993,9 +2030,9 @@ async function refreshHooksCacheAfterUpdate(
   installable: MaterializablePlugin,
 ): Promise<void> {
   const { plugin, marketplace } = args;
-  removePluginConfigFromCache(args.scope, marketplace, plugin);
+  args.hooksRouting.removePluginConfigFromCache(args.scope, marketplace, plugin);
   if (installable.hooksConfigPath !== undefined) {
-    await readAndCachePluginHooks({
+    await args.hooksRouting.readAndCachePluginHooks({
       scope: args.scope,
       marketplace,
       plugin,
@@ -2006,7 +2043,7 @@ async function refreshHooksCacheAfterUpdate(
     });
   }
 
-  rebuildRoutingTables();
+  args.hooksRouting.rebuildRoutingTables();
 }
 
 /**
@@ -2106,14 +2143,14 @@ async function finalizeUpdateRecord(
       }
     }
 
-    // Ordered AFTER `maybeWritePluginConfigBack` so a write-back throw
-    // aborts BEFORE the cache mutates, tightening the WR-06 strand window to
-    // just the `withStateGuard` auto-save tail. A full close would require
-    // exposing `tx.save()` from `withStateGuard`.
-    if (allSucceeded) {
-      await refreshHooksCacheAfterUpdate(args, installable);
-    }
   });
+
+  // Route visibility follows the state guard's durable auto-save. A failed
+  // state/config write therefore leaves the lifecycle runtime untouched.
+  if (allSucceeded) {
+    await refreshHooksCacheAfterUpdate(args, installable);
+  }
+
   return { invalidConfigWriteBack };
 }
 

@@ -9,6 +9,7 @@ import {
   createHooksRuntime,
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { registerClaudePluginCommand } from "../../extensions/pi-claude-marketplace/edge/register.ts";
+import { createPluginUpdateOperations } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/update.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { loadState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
@@ -118,6 +119,7 @@ function registerImportCommand(cwd: string, gitOps: GitOps) {
     { name: "subagent" },
     { name: "mcp", sourceInfo: { source: "pi-mcp-adapter" } },
   ]);
+  const hooksRouting = createHooksRouting(createHooksRuntime());
   registerClaudePluginCommand(
     mock.pi,
     {
@@ -133,7 +135,8 @@ function registerImportCommand(cwd: string, gitOps: GitOps) {
           declaresMcp: false,
         }),
     },
-    createHooksRouting(createHooksRuntime()),
+    hooksRouting,
+    createPluginUpdateOperations(hooksRouting).updatePlugins,
   );
   const command = mock.commands.get("claude:plugin");
   assert.ok(command, "claude:plugin command should be registered");

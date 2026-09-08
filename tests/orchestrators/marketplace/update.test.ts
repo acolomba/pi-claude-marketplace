@@ -6,6 +6,10 @@ import path from "node:path";
 import test from "node:test";
 
 import {
+  createHooksRouting,
+  createHooksRuntime,
+} from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
+import {
   githubSource,
   parsePluginSource,
   pathSource,
@@ -15,7 +19,7 @@ import {
   updateAllMarketplaces,
   updateMarketplace,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts";
-import { updateSinglePlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update.ts";
+import { createPluginUpdateOperations } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update.ts";
 import { saveConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
@@ -47,6 +51,13 @@ import type {
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { Severity } from "../../../extensions/pi-claude-marketplace/shared/notify.ts";
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
+
+const updateSinglePlugin: PluginUpdateFn = (plugin, marketplace, scope) =>
+  createPluginUpdateOperations(createHooksRouting(createHooksRuntime())).pluginUpdate(
+    plugin,
+    marketplace,
+    scope,
+  );
 
 interface MarketplaceGitOpsSeed {
   readonly checkoutThrows?: Error;

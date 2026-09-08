@@ -19,6 +19,10 @@ import lockfile from "proper-lockfile";
 
 import { GENERATED_AGENT_PREFIX } from "../../../extensions/pi-claude-marketplace/bridges/agents/marker.ts";
 import {
+  createHooksRouting,
+  createHooksRuntime,
+} from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
+import {
   pluginCloneKey,
   pluginMirrorKey,
 } from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
@@ -33,10 +37,7 @@ import {
   resolvePluginPin,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts";
 import { installPlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install.ts";
-import {
-  updatePlugins,
-  updateSinglePlugin,
-} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update.ts";
+import { createPluginUpdateOperations } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   loadState,
@@ -60,13 +61,28 @@ import type {
   GitAuthBundle,
   GitOps,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
-import type { UpdateCloneCacheSeam } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update.ts";
+import type {
+  UpdateCloneCacheSeam,
+  UpdatePluginsOptions,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update.ts";
+import type { PluginUpdateFn } from "../../../extensions/pi-claude-marketplace/orchestrators/types.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type {
   NotificationContext,
   ToolInventory,
   ToolInventoryItem,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+
+function createUpdateOperations() {
+  return createPluginUpdateOperations(createHooksRouting(createHooksRuntime()));
+}
+
+function updatePlugins(options: UpdatePluginsOptions): Promise<void> {
+  return createUpdateOperations().updatePlugins(options);
+}
+
+const updateSinglePlugin: PluginUpdateFn = (plugin, marketplace, scope) =>
+  createUpdateOperations().pluginUpdate(plugin, marketplace, scope);
 
 const UPDATE_REMOTE_URLS = [
   "https://github.com/anthropics/test.git",

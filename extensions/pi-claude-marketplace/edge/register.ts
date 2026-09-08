@@ -61,6 +61,7 @@ import { routeClaudePlugin } from "./router.ts";
 import type { SubcommandHandlers } from "./router.ts";
 import type { EdgeDeps } from "./types.ts";
 import type { InstallHooksRouting } from "../orchestrators/plugin/install.ts";
+import type { UpdatePluginsFn } from "../orchestrators/plugin/update.ts";
 import type { ExtensionAPI } from "../platform/pi-api.ts";
 
 const COMMAND_DESCRIPTION =
@@ -80,12 +81,13 @@ export function registerClaudePluginCommand(
   pi: ExtensionAPI,
   deps: EdgeDeps,
   hooksRouting: InstallHooksRouting,
+  updatePlugins: UpdatePluginsFn,
 ): void {
   const handlers: SubcommandHandlers = {
     bootstrap: makeBootstrapHandler(pi, deps),
     install: makeInstallHandler(pi, hooksRouting),
     uninstall: makeUninstallHandler(pi, hooksRouting),
-    update: makeUpdateHandler(pi),
+    update: makeUpdateHandler(pi, updatePlugins),
     fetch: makeFetchHandler(pi),
     reinstall: makeReinstallHandler(pi),
     list: makeListHandler(pi),

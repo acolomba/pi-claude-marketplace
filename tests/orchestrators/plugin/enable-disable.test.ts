@@ -27,7 +27,7 @@ import {
   setPluginEnabled,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts";
 import { reinstallPlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts";
-import { updatePlugins } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update.ts";
+import { createPluginUpdateOperations } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update.ts";
 import { applyReconcile } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
 import { isDeclaredEnabled } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { loadMergedScopeConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-merge.ts";
@@ -78,6 +78,10 @@ function toolInfo(name: string): ToolInventoryItem {
 
 function makePi(toolNames: readonly string[] = []): ToolInventory {
   return { getAllTools: () => toolNames.map(toolInfo) };
+}
+
+function createUpdatePlugins() {
+  return createPluginUpdateOperations(createHooksRouting(createHooksRuntime())).updatePlugins;
 }
 
 async function populateRuntimeRoute(
@@ -3834,7 +3838,7 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable of a BASE-declared plugi
       path.join(mpRoot, "plugins", "foo", ".claude-plugin", "plugin.json"),
       JSON.stringify({ name: "foo", version: "2.0.0" }),
     );
-    await updatePlugins({
+    await createUpdatePlugins()({
       ctx: updateContext.ctx,
       cwd,
       pi,
@@ -3970,7 +3974,7 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable of a LOCALLY-declared pl
       path.join(mpRoot, "plugins", "foo", ".claude-plugin", "plugin.json"),
       JSON.stringify({ name: "foo", version: "2.0.0" }),
     );
-    await updatePlugins({
+    await createUpdatePlugins()({
       ctx: updateContext.ctx,
       cwd,
       pi,

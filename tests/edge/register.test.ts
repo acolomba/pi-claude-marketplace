@@ -54,6 +54,7 @@ import {
 } from "../../extensions/pi-claude-marketplace/edge/register.ts";
 import { TOP_LEVEL_USAGE } from "../../extensions/pi-claude-marketplace/edge/router.ts";
 import { makeLocationsResolver } from "../../extensions/pi-claude-marketplace/orchestrators/edge-deps.ts";
+import { createPluginUpdateOperations } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/update.ts";
 import { saveState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { createGitOpsFake } from "../platform/git-ops-fake.ts";
@@ -270,6 +271,7 @@ function registerCommandWithCache(
     pi,
     createEdgeDeps(completionCache, importClaudeSettings),
     hooksRouting,
+    createPluginUpdateOperations(hooksRouting).updatePlugins,
   );
 
   const registration = commandOptions.value;

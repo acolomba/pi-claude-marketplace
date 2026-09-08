@@ -42,6 +42,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import {
+  createHooksRouting,
+  createHooksRuntime,
+} from "../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { setMarketplaceAutoupdate } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/autoupdate.ts";
 import { removeMarketplace } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts";
 import { updateMarketplace } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts";
@@ -49,7 +53,7 @@ import { getPluginInfo } from "../../extensions/pi-claude-marketplace/orchestrat
 import { installPlugin } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/install.ts";
 import { reinstallPlugins } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts";
 import { uninstallPlugin } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
-import { updatePlugins } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/update.ts";
+import { createPluginUpdateOperations } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/update.ts";
 import { createGitOpsFake } from "../platform/git-ops-fake.ts";
 import { withHermeticEnvironment } from "../platform/hermetic-environment.ts";
 
@@ -71,6 +75,10 @@ interface NotifyRecord {
 
 function createGitOps() {
   return createGitOpsFake({ boundary: "memory" });
+}
+
+function createUpdatePlugins() {
+  return createPluginUpdateOperations(createHooksRouting(createHooksRuntime())).updatePlugins;
 }
 
 function makeCtx(): {
@@ -159,7 +167,7 @@ const INVOKERS: Record<string, Invoker> = {
   },
   // plugin update (marketplace target). update.test.ts ATTR-02.
   "update (plugin)": async ({ ctx, pi, cwd, mode }) => {
-    await updatePlugins({
+    await createUpdatePlugins()({
       ctx,
       pi,
       cwd,

@@ -109,8 +109,13 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { test, type TestContext } from "node:test";
 
+import {
+  createHooksRouting,
+  createHooksRuntime,
+} from "../../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { SCOPE_TARGET_FLAG } from "../../../../extensions/pi-claude-marketplace/edge/flag-catalog.ts";
 import { makeUpdateHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/update.ts";
+import { createPluginUpdateOperations } from "../../../../extensions/pi-claude-marketplace/orchestrators/plugin/update.ts";
 import { loadConfig } from "../../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { loadState } from "../../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
@@ -142,6 +147,13 @@ const USAGE =
   "[--scope user|project] [--map-model] [--partial] [--local]";
 
 const SKILL_SOURCE = "---\nname: tool\ndescription: A tool skill.\n---\n\nBody.\n";
+
+/** Give each handler case its own production update owner. */
+function createUpdateHandler(pi: Parameters<typeof makeUpdateHandler>[0]) {
+  const hooksRouting = createHooksRouting(createHooksRuntime());
+  const { updatePlugins } = createPluginUpdateOperations(hooksRouting);
+  return makeUpdateHandler(pi, updatePlugins);
+}
 
 /**
  * One agent per agent-bearing plugin, declaring a source model the AG-7 table
@@ -606,9 +618,11 @@ test("forwards the exact direct update request through the required update opera
     reads: 1,
   });
   const calls: unknown[] = [];
-  const updateOperation = async (options: unknown): Promise<void> => {
+  const updateOperation = (options: unknown): Promise<void> => {
     calls.push(options);
+    return Promise.resolve();
   };
+
   const updateHandler = makeUpdateHandler(pi, updateOperation);
 
   await updateHandler("one@alpha --scope project --map-model --partial --local", ctx);
@@ -679,7 +693,7 @@ for (const { args, expectedFootprint, label, summary } of [
       value: workspace.cwd,
       reads: 1,
     });
-    const updateHandler = makeUpdateHandler(pi);
+    const updateHandler = createUpdateHandler(pi);
 
     // act
     await updateHandler(args, ctx);
@@ -731,7 +745,7 @@ for (const { args, expectedFootprint, label, summary } of [
       value: workspace.cwd,
       reads: 1,
     });
-    const updateHandler = makeUpdateHandler(pi);
+    const updateHandler = createUpdateHandler(pi);
 
     // act
     await updateHandler(args, ctx);
@@ -826,7 +840,7 @@ for (const { args, expectedFootprint, label, summary } of [
       value: workspace.cwd,
       reads: 1,
     });
-    const updateHandler = makeUpdateHandler(pi);
+    const updateHandler = createUpdateHandler(pi);
 
     // act
     await updateHandler(args, ctx);
@@ -879,7 +893,7 @@ for (const { args, expectedAgents, label, position } of [
       value: workspace.cwd,
       reads: 1,
     });
-    const updateHandler = makeUpdateHandler(pi);
+    const updateHandler = createUpdateHandler(pi);
 
     // act
     await updateHandler(args, ctx);
@@ -907,7 +921,7 @@ test("honors a scope flag and the scope-target flag supplied together, narrowing
     value: workspace.cwd,
     reads: 1,
   });
-  const updateHandler = makeUpdateHandler(pi);
+  const updateHandler = createUpdateHandler(pi);
 
   // act
   await updateHandler(`--scope user one@alpha ${SCOPE_TARGET_FLAG}`, ctx);
@@ -944,7 +958,7 @@ for (const { args, label, summary } of [
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
     const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-    const updateHandler = makeUpdateHandler(pi);
+    const updateHandler = createUpdateHandler(pi);
 
     // act
     await updateHandler(args, ctx);
@@ -983,7 +997,7 @@ for (const { args, expectedMessage, label, summary } of [
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
     const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-    const updateHandler = makeUpdateHandler(pi);
+    const updateHandler = createUpdateHandler(pi);
 
     // act
     await updateHandler(args, ctx);
@@ -1012,7 +1026,7 @@ for (const { args, label, summary } of [
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
     const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-    const updateHandler = makeUpdateHandler(pi);
+    const updateHandler = createUpdateHandler(pi);
 
     // act
     await updateHandler(args, ctx);
@@ -1045,7 +1059,7 @@ for (const { args, label, offending, summary } of [
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
     const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-    const updateHandler = makeUpdateHandler(pi);
+    const updateHandler = createUpdateHandler(pi);
 
     // act
     await updateHandler(args, ctx);
