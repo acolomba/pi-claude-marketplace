@@ -670,6 +670,106 @@ test("rebuilds completion rows through the cache that owns a successful register
   peer.verifyRegistrar();
 });
 
+test("rebuilds completion rows through the cache that owns a successful registered update", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticScope(t, "update-completion-owner");
+  const marketplace = "registered-update";
+  const unrelated = "unrelated-marketplace";
+  const sourceRoot = path.join(cwd, "marketplaces", marketplace);
+  await mkdir(path.join(sourceRoot, ".claude-plugin"), { recursive: true });
+  await mkdir(path.join(sourceRoot, "plugins", "fresh"), { recursive: true });
+  await writeFile(
+    path.join(sourceRoot, ".claude-plugin", "marketplace.json"),
+    JSON.stringify({
+      name: marketplace,
+      owner: { name: "registration owner" },
+      plugins: [{ name: "fresh", source: "./plugins/fresh", version: "2.0.0" }],
+    }),
+    "utf8",
+  );
+  await seedProjectMarketplaces(cwd, [marketplace, unrelated]);
+  const resolver = makeLocationsResolver(cwd);
+  const cachePath = await resolver.pluginCachePath("project", marketplace);
+  const unrelatedCachePath = await resolver.pluginCachePath("project", unrelated);
+  const ownerCache = createCompletionCache();
+  const peerCache = createCompletionCache();
+  await ownerCache.getPluginIndex(cachePath, "project", marketplace, () =>
+    Promise.resolve([{ name: "owner-stale", status: "available" }]),
+  );
+  await rm(cachePath, { force: true });
+  await peerCache.getPluginIndex(cachePath, "project", marketplace, () =>
+    Promise.resolve([{ name: "peer-stale", status: "available" }]),
+  );
+  await rm(cachePath, { force: true });
+  await ownerCache.getPluginIndex(unrelatedCachePath, "project", unrelated, () =>
+    Promise.resolve([{ name: "owner-unrelated", status: "available" }]),
+  );
+  await rm(unrelatedCachePath, { force: true });
+  await peerCache.getPluginIndex(unrelatedCachePath, "project", unrelated, () =>
+    Promise.resolve([{ name: "peer-unrelated", status: "available" }]),
+  );
+  await rm(unrelatedCachePath, { force: true });
+  const owner = registerCommandWithCache(
+    ownerCache,
+    createHooksRouting(createHooksRuntime()),
+    undefined,
+    1,
+  );
+  const peer = registerCommandWithCache(peerCache);
+  const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
+  const ui = mock<NotificationUi>({ exactParams: true, name: "command UI" });
+  const notifications: Notification[] = [];
+  when(() => ctx.cwd)
+    .thenReturn(cwd)
+    .times(1);
+  when(() => ctx.ui)
+    .thenReturn(ui)
+    .times(1);
+  when(() => ui.notify)
+    .thenReturn((message, severity) => {
+      notifications.push(severity === undefined ? { message } : { message, severity });
+    })
+    .times(1);
+
+  // act
+  await owner.registration.handler(`marketplace update ${marketplace} --scope project`, ctx);
+  const ownerCandidates = await owner.registration.getArgumentCompletions?.(
+    "install --scope project ",
+  );
+  const peerCandidates = await peer.registration.getArgumentCompletions?.(
+    "install --scope project ",
+  );
+
+  // assert
+  assert.deepStrictEqual(notifications, [
+    { message: "● registered-update [project] (skipped) {up-to-date}" },
+  ]);
+  assert.deepStrictEqual(ownerCandidates, [
+    {
+      label: "fresh@registered-update",
+      value: "install --scope project fresh@registered-update ",
+    },
+    {
+      label: "owner-unrelated@unrelated-marketplace",
+      value: "install --scope project owner-unrelated@unrelated-marketplace ",
+    },
+  ]);
+  assert.deepStrictEqual(peerCandidates, [
+    {
+      label: "peer-stale@registered-update",
+      value: "install --scope project peer-stale@registered-update ",
+    },
+    {
+      label: "peer-unrelated@unrelated-marketplace",
+      value: "install --scope project peer-unrelated@unrelated-marketplace ",
+    },
+  ]);
+  verify(ctx);
+  verify(ui);
+  owner.verifyRegistrar();
+  peer.verifyRegistrar();
+});
+
 describe("registerClaudePluginCommand autocomplete wrapper", () => {
   test("installs exactly one autocomplete provider when the session starts (TC-7)", async (t) => {
     // arrange
