@@ -5,8 +5,8 @@ status: Awaiting next milestone
 stopped_at: Milestone v1.19 closed and archived; awaiting the next milestone
 last_updated: "2026-09-08T03:04:31.784Z"
 last_activity: 2026-09-07
-last_activity_desc: Completed quick task 260907-m38 (SKFM-01 scalar repair)
-state_head: fb54c5d7979b1cd79fb57a5db60b4454ec469ced
+last_activity_desc: Completed quick task 260907-uzb (FMBOM-01 leading-BOM strip)
+state_head: 183de9c9e752cc3037409350b714c4bf78ad5135
 milestone_name: Unit Test Refactor
 current_phase: 117
 current_phase_name: Extension Entry and Final Gate
@@ -416,6 +416,7 @@ None for roadmap creation.
 | 260907-l4w | Fix issue #155: agents bridge frontmatter parser mangles YAML multiline (block scalar) description values | 2026-09-07 | c82a731b | [260907-l4w-fix-issue-155-agents-bridge-frontmatter-](./quick/260907-l4w-fix-issue-155-agents-bridge-frontmatter-/) |
 | 260907-m38 | Implement SKFM-01: repair a single-line frontmatter scalar whose only defect is an unquoted colon | 2026-09-07 | 66be4e43 | [260907-m38-implement-skfm-01-repair-single-line-fro](./quick/260907-m38-implement-skfm-01-repair-single-line-fro/) |
 | 260907-qar | mark backlog entries WFLW-01 and DFEN-01 closed | 2026-09-07 | 32396cff | [260907-qar-mark-backlog-entries-wflw-01-and-dfen-01](./quick/260907-qar-mark-backlog-entries-wflw-01-and-dfen-01/) |
+| 260907-qqo | HKPS-01: if-field PowerShell(...) rule prefix support in the hooks bridge | 2026-09-07 | ae06d27f | [260907-qqo-hkps-01-if-field-powershell-rule-prefix-](./quick/260907-qqo-hkps-01-if-field-powershell-rule-prefix-/) |
 | 260907-qsx | adopt SonarJS recommended ruleset for extensions | 2026-09-07 | fe1313c6 | [260907-qsx-adopt-sonarjs-recommended-ruleset-for-ex](./quick/260907-qsx-adopt-sonarjs-recommended-ruleset-for-ex/) |
 | 260907-q0h | Fix issue #143: make generated command name separator platform-dependent so Windows installs stop failing with EINVAL | 2026-09-07 | bf53dec0 | [260907-q0h-fix-issue-143-make-generated-command-nam](./quick/260907-q0h-fix-issue-143-make-generated-command-nam/) |
 | 6 | Switch the Windows command name separator from dash to dot (follow-up to 260907-q0h, #143) | 2026-09-08 | 7ce485b1 | — |
