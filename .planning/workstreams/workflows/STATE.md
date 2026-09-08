@@ -4,11 +4,11 @@ milestone: workflows-replay
 milestone_name: Workflow Bridge Replay onto main
 current_phase: 114
 current_phase_name: Degradation and documentation
-current_plan: none started — 114-01 is next (wave 1)
-status: ready_to_execute
+current_plan: 1
+status: executing
 stopped_at: Phase 114 planned — 5 plans in 3 waves, ready to execute
-last_updated: "2026-09-08T03:59:52.528Z"
-state_head: c7fdd4eb3a84f91b1edc387f1e8ed064d33be9a9
+last_updated: "2026-09-08T04:02:38.692Z"
+state_head: 56ac5e7cf04fc4a10b0a32f7e284b92da7a76548
 progress:
   total_phases: 9
   completed_phases: 5
@@ -28,16 +28,17 @@ and, after `/reload`, have every supported Claude plugin component appear as a
 working Pi-native artifact — atomically, recoverably, and with soft-dependency
 degradation that never blocks the install.
 
-**Current focus:** Re-land the `workflows` bridge on a main that has moved under
-it. Phases 101-105 shipped on `features/workflows-spike` and that branch was
-never merged. Since then #154 declared `workflows` an *unsupported* kind, and
-#167 replaced the test architecture the bridge was written against.
+**Current focus:** Phase 114 — Degradation and documentation. Re-land the
+`workflows` bridge on a main that has moved under it. Phases 101-105 shipped on
+`features/workflows-spike` and that branch was never merged. Since then #154
+declared `workflows` an *unsupported* kind, and #167 replaced the test
+architecture the bridge was written against.
 
 ## Current Position
 
-Phase: 114 (Degradation and documentation) — READY TO EXECUTE
-Plan: none started — 114-01 is next (wave 1 of 3)
-Status: Planned. 5 plans in 3 waves, 0 blockers from the plan checker,
+Phase: 114 (Degradation and documentation) — EXECUTING
+Plan: 1 of 5
+Status: Executing. 5 plans in 3 waves, 0 blockers from the plan checker,
 requirements 7/7 and decisions 8/8 covered.
 
 Phase 114 makes the host engine the third soft dependency and writes down the
@@ -111,21 +112,21 @@ scripts. Logged in `.planning/BACKLOG.md` as a scoped item.
 
 ## Progress
 
-**Phases Complete:** 4/9 verified (Phases 109-114 replay, 115-117 hardening)
-**Current Plan:** Not started
+**Phases Complete:** 5/9 verified (Phases 109-114 replay, 115-117 hardening)
+**Current Plan:** 1
 
 ```text
-[====------] 44%
+[=====-----] 56%
 ```
 
 | Phase | Name | Status |
 |-------|------|--------|
 | 109 | Kind inversion | Complete (5/5 plans, verified 12/12) |
-| 110 | Domain and platform modules | In progress (3/3 plans executed, verification pending) |
-| 111 | Workflows bridge | In progress (4/4 plans executed, verification pending) |
-| 112 | Install and removal lifecycle | In progress (4/4 plans executed, verification pending) |
-| 113 | Update, enable/disable, reconcile | Not started |
-| 114 | Degradation and documentation | Not started |
+| 110 | Domain and platform modules | Complete (3/3 plans, verified) |
+| 111 | Workflows bridge | Complete (4/4 plans, verified) |
+| 112 | Install and removal lifecycle | Complete (4/4 plans, verified) |
+| 113 | Update, enable/disable, reconcile | Complete (5/5 plans, verified 9/9) |
+| 114 | Degradation and documentation | In progress (5 plans in 3 waves, executing) |
 | 115 | Install-time admission-gate warnings | Not started (hardening) |
 | 116 | Load-time workflow convergence | Not started (hardening) |
 | 117 | Measured `agent()` failure evidence | Not started (hardening) |
