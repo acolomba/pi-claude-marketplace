@@ -573,13 +573,14 @@ test("registers the slash command and the two read-only tools alongside the brid
   verifyBoundary();
 });
 
-test("constructs one hooks runtime for registration and project hydration", async () => {
+test("constructs one runtime and completion cache for edge registration and hook hydration", async () => {
   // arrange
   const source = await readFile(
     path.join(import.meta.dirname, "../extensions/pi-claude-marketplace/index.ts"),
     "utf8",
   );
   const runtimeConstructions = source.match(/createHooksRuntime\(\)/g) ?? [];
+  const cacheConstructions = source.match(/createCompletionCache\(\)/g) ?? [];
 
   // act
   const hydrationConstruction = source.match(
@@ -588,6 +589,7 @@ test("constructs one hooks runtime for registration and project hydration", asyn
 
   // assert
   assert.deepStrictEqual(runtimeConstructions, ["createHooksRuntime()"]);
+  assert.deepStrictEqual(cacheConstructions, ["createCompletionCache()"]);
   assert.deepStrictEqual(hydrationConstruction, [
     "createHooksHydration(hooksRuntime, { loadState })",
   ]);
