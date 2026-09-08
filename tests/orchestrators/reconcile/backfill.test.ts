@@ -39,6 +39,7 @@ import { EXTENSION_VERSION } from "../../../extensions/pi-claude-marketplace/sha
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { retryTree } from "../plugin/scope-tree-inventory.ts";
 
+import type { HooksRouting } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { PerEntryOutcome } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts";
 import type {
@@ -288,13 +289,23 @@ function backfillOptions(
   cwd: string,
   gitOps: GitOps,
 ): ApplyReconcileOptions {
+  return backfillOptionsWithRouting(ctx, pi, cwd, gitOps, createHooksRouting(createHooksRuntime()));
+}
+
+function backfillOptionsWithRouting(
+  ctx: ExtensionContext,
+  pi: ExtensionAPI,
+  cwd: string,
+  gitOps: GitOps,
+  hooksRouting: HooksRouting,
+): ApplyReconcileOptions {
   return {
     ctx,
     pi,
     cwd,
     scope: "project",
     gitOps,
-    hooksRouting: createHooksRouting(createHooksRuntime()),
+    hooksRouting,
   };
 }
 
@@ -946,11 +957,14 @@ describe("scanForceInstalledBackfills", () => {
     await seedState(locations, seeded);
     const { ctx, pi, verifyBoundary } = createSilentBoundary();
     const { gitOps, clonedUrls } = createOfflineGitOps();
+    const ownerRuntime = createHooksRuntime();
+    const peerRuntime = createHooksRuntime();
+    const hooksRouting = createHooksRouting(ownerRuntime);
     const outcomes: PerEntryOutcome[] = [];
 
     // act
     const anyFailure = await scanForceInstalledBackfills(
-      backfillOptions(ctx, pi, cwd, gitOps),
+      backfillOptionsWithRouting(ctx, pi, cwd, gitOps, hooksRouting),
       "project",
       seeded,
       outcomes,
@@ -1016,6 +1030,16 @@ describe("scanForceInstalledBackfills", () => {
       "pi-claude-marketplace/skills-staging/",
       "pi-claude-marketplace/state.json",
     ]);
+    assert.deepStrictEqual(
+      ownerRuntime.getRoutingBucket("PreToolUse").map((entry) => ({
+        command: entry.handlerDecl["command"],
+        marketplace: entry.marketplace,
+        plugin: entry.pluginId,
+        scope: entry.scope,
+      })),
+      [{ command: "echo orphan", marketplace: "mp", plugin: "hello", scope: "project" }],
+    );
+    assert.deepStrictEqual(peerRuntime.getRoutingBucket("PreToolUse"), []);
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
   });

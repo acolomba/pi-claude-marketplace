@@ -17,6 +17,7 @@ import {
   pluginMirrorKey,
 } from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
 import { loadMarketplaceManifest } from "../../../extensions/pi-claude-marketplace/domain/manifest.ts";
+import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
   materializeOrRefreshPluginMirror,
@@ -2723,16 +2724,13 @@ test("WB-01: --local reinstall targets the local file; base file untouched", asy
 // ─────────────────────────────────────────────────────────────────────────────
 
 test("WR-03: reinstallPlugin round-trips the plugin's routing-table entries without /reload", async () => {
-  const { resetRoutingState } =
-    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
-  const { getRoutingBucket } =
-    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
-
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-wr03-"));
     try {
-      resetRoutingState();
-      await seedMarketplace({
+      const ownerRuntime = createHooksRuntime();
+      const peerRuntime = createHooksRuntime();
+      const hooksRouting = createHooksRouting(ownerRuntime);
+      const { pluginRoot } = await seedMarketplace({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
         install: true,
@@ -2744,14 +2742,29 @@ test("WR-03: reinstallPlugin round-trips the plugin's routing-table entries with
         },
       });
 
-      // After the seed install, the routing table contains the plugin's
-      // PreToolUse entry (install-arm WR-03 wiring confirmed elsewhere).
-      const preBucket = getRoutingBucket("PreToolUse");
+      await hooksRouting.readAndCachePluginHooks({
+        scope: "project",
+        marketplace: "mp",
+        plugin: "hello",
+        resolvedSource: asAbsolutePluginRoot(pluginRoot),
+        hooksJsonPath: path.join(pluginRoot, "hooks", "hooks.json"),
+        cwd,
+        logPrefix: "reinstall-test",
+      });
+      hooksRouting.rebuildRoutingTables();
+      const preBucket = ownerRuntime.getRoutingBucket("PreToolUse");
       assert.equal(preBucket.length, 1);
       assert.equal(preBucket[0]?.pluginId, "hello");
+      assert.equal(preBucket[0]?.handlerDecl["command"], "echo hi");
+      await writeFile(
+        path.join(pluginRoot, "hooks", "hooks.json"),
+        JSON.stringify({
+          PreToolUse: [{ matcher: "", hooks: [{ type: "command", command: "echo new" }] }],
+        }),
+      );
 
       const { ctx, pi, notifications } = makeCtx();
-      const outcome = await reinstallPlugin({
+      const outcome = await createNodeReinstallPlugin(hooksRouting)({
         ctx,
         pi,
         scope: "project",
@@ -2771,10 +2784,10 @@ test("WR-03: reinstallPlugin round-trips the plugin's routing-table entries with
       // proves both `removePluginConfigFromCache` and
       // `addPluginConfigToCache` plus the trailing `rebuildRoutingTables`
       // call landed in the right order.
-      const postBucket = getRoutingBucket("PreToolUse");
+      const postBucket = ownerRuntime.getRoutingBucket("PreToolUse");
       assert.equal(postBucket.length, 1);
       assert.equal(postBucket[0]?.pluginId, "hello");
-      assert.equal(postBucket[0]?.handlerDecl["command"], "echo hi");
+      assert.equal(postBucket[0]?.handlerDecl["command"], "echo new");
       // resolvedSource must propagate from the resolver -> cache -> routing
       // table. CLAUDE_PLUGIN_ROOT export at dispatch depends on it.
       const reinstallLoc = locationsFor("project", cwd);
@@ -2784,6 +2797,7 @@ test("WR-03: reinstallPlugin round-trips the plugin's routing-table entries with
         postState.marketplaces["mp"]?.plugins["hello"]?.resolvedSource,
         "RoutingEntry.resolvedSource must mirror state.json's resolvedSource after reinstall",
       );
+      assert.deepStrictEqual(peerRuntime.getRoutingBucket("PreToolUse"), []);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -2798,12 +2812,9 @@ test("WR-03: reinstallPlugin round-trips the plugin's routing-table entries with
 // ─────────────────────────────────────────────────────────────────────────────
 
 test("LIFE-01 (reinstall): a plugin with hooks rewrites <hooksDir>/<plugin>/hooks.json from the resolved manifest", async () => {
-  const { resetRoutingState } =
-    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-life01-rewrite-"));
     try {
-      resetRoutingState();
       const locations = locationsFor("project", cwd);
 
       const hooksJson = {
@@ -2855,12 +2866,9 @@ test("LIFE-01 (reinstall): a plugin with hooks rewrites <hooksDir>/<plugin>/hook
 });
 
 test("LIFE-01 (reinstall): a plugin without hooks removes any stale <hooksDir>/<plugin>/ subtree", async () => {
-  const { resetRoutingState } =
-    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-life01-drop-"));
     try {
-      resetRoutingState();
       const locations = locationsFor("project", cwd);
 
       // Seed a plugin WITHOUT hooks.
