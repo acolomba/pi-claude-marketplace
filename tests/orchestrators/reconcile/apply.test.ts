@@ -1174,6 +1174,25 @@ describe("applyReconcile", () => {
       plugin: "hello",
     });
     const completionCache = createCompletionCache();
+    const peerCompletionCache = createCompletionCache();
+    const pluginCachePath = await project.pluginCacheFile("mp");
+    const unrelatedCachePath = await project.pluginCacheFile("unrelated");
+    await completionCache.getPluginIndex(pluginCachePath, "project", "mp", () =>
+      Promise.resolve([{ name: "hello", status: "installed" }]),
+    );
+    await rm(pluginCachePath, { force: true });
+    await peerCompletionCache.getPluginIndex(pluginCachePath, "project", "mp", () =>
+      Promise.resolve([{ name: "peer-hello", status: "installed" }]),
+    );
+    await rm(pluginCachePath, { force: true });
+    await completionCache.getPluginIndex(unrelatedCachePath, "project", "unrelated", () =>
+      Promise.resolve([{ name: "owner-unrelated", status: "available" }]),
+    );
+    await rm(unrelatedCachePath, { force: true });
+    await peerCompletionCache.getPluginIndex(unrelatedCachePath, "project", "unrelated", () =>
+      Promise.resolve([{ name: "peer-unrelated", status: "available" }]),
+    );
+    await rm(path.dirname(path.dirname(unrelatedCachePath)), { force: true, recursive: true });
 
     // act
     await applyReconcileWithRouting({
@@ -1195,6 +1214,30 @@ describe("applyReconcile", () => {
       gitOps,
       hooksRouting,
     });
+    const afterSecondTree = await retryTree(project.scopeRoot);
+    let ownerRebuilds = 0;
+    const ownerRows = await completionCache.getPluginIndex(pluginCachePath, "project", "mp", () => {
+      ownerRebuilds += 1;
+      return Promise.resolve([{ name: "hello", status: "available" }]);
+    });
+    const peerRows = await peerCompletionCache.getPluginIndex(
+      pluginCachePath,
+      "project",
+      "mp",
+      () => Promise.reject(new Error("peer cache must stay warm")),
+    );
+    const ownerUnrelatedRows = await completionCache.getPluginIndex(
+      unrelatedCachePath,
+      "project",
+      "unrelated",
+      () => Promise.reject(new Error("owner unrelated cache must stay warm")),
+    );
+    const peerUnrelatedRows = await peerCompletionCache.getPluginIndex(
+      unrelatedCachePath,
+      "project",
+      "unrelated",
+      () => Promise.reject(new Error("peer unrelated cache must stay warm")),
+    );
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -1205,7 +1248,7 @@ describe("applyReconcile", () => {
     assert.deepStrictEqual(Object.keys(afterFirst.marketplaces["mp"]?.plugins ?? {}), []);
     assert.deepStrictEqual(await loadState(project.extensionRoot), afterFirst);
     assert.equal(await readFile(project.configJsonPath, "utf8"), declaration);
-    assert.deepStrictEqual(await retryTree(project.scopeRoot), [
+    assert.deepStrictEqual(afterSecondTree, [
       "claude-plugins.json",
       "pi-claude-marketplace/",
       "pi-claude-marketplace/resources/",
@@ -1221,6 +1264,116 @@ describe("applyReconcile", () => {
       peerRuntime.getRoutingBucket("PreToolUse").map((entry) => entry.pluginId),
       ["hello"],
     );
+    assert.equal(ownerRebuilds, 1);
+    assert.deepStrictEqual(ownerRows, [{ name: "hello", status: "available" }]);
+    assert.deepStrictEqual(peerRows, [{ name: "peer-hello", status: "installed" }]);
+    assert.deepStrictEqual(ownerUnrelatedRows, [{ name: "owner-unrelated", status: "available" }]);
+    assert.deepStrictEqual(peerUnrelatedRows, [{ name: "peer-unrelated", status: "available" }]);
+    verifyBoundary();
+  });
+
+  test("WR-06: a cache-file cleanup failure stays silent while apply removes the target and preserves its sibling", async (t) => {
+    // arrange
+    const { cwd, project } = await createHermeticScopes(t, "uninstall-cache-failure");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      hello: { skill: "clean" },
+      kept: { skill: "clean" },
+    });
+    const declaration = configBytes({
+      marketplaces: { mp: { source: marketplaceRoot } },
+      plugins: { "kept@mp": {} },
+    });
+    await writeUnder(project.configJsonPath, declaration);
+    const kept = pluginRecord({
+      pluginRoot: path.join(marketplaceRoot, "plugins", "kept"),
+      skills: ["kept-tool"],
+    });
+    await seedState(project, {
+      schemaVersion: 2,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+          plugins: {
+            hello: pluginRecord({
+              pluginRoot: path.join(marketplaceRoot, "plugins", "hello"),
+              skills: ["hello-tool"],
+            }),
+            kept,
+          },
+        }),
+      },
+    });
+    await writeUnder(
+      path.join(project.skillsTargetDir, "hello-tool", "SKILL.md"),
+      "---\nname: hello-tool\n---\n\nbody\n",
+    );
+    await writeUnder(
+      path.join(project.skillsTargetDir, "kept-tool", "SKILL.md"),
+      "---\nname: kept-tool\n---\n\nbody\n",
+    );
+    const ownerRuntime = createHooksRuntime();
+    await populateRuntimeRoute(cwd, ownerRuntime, {
+      command: "echo removed",
+      marketplace: "mp",
+      plugin: "hello",
+    });
+    const hooksRouting = await populateRuntimeRoute(cwd, ownerRuntime, {
+      command: "echo kept",
+      marketplace: "mp",
+      plugin: "kept",
+    });
+    const completionCache = createCompletionCache();
+    const pluginCachePath = await project.pluginCacheFile("mp");
+    await mkdir(pluginCachePath, { recursive: true });
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcileWithRouting({
+      ctx,
+      pi,
+      cwd,
+      scope: "project",
+      completionCache,
+      gitOps,
+      hooksRouting,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: "● mp [project]\n  ○ hello v1.0.0 (uninstalled)\n\nReconcile: 1 success",
+      },
+    ]);
+    assert.deepStrictEqual(
+      Object.keys((await loadState(project.extensionRoot)).marketplaces["mp"]?.plugins ?? {}),
+      ["kept"],
+    );
+    assert.equal(await readFile(project.configJsonPath, "utf8"), declaration);
+    assert.deepStrictEqual(await retryTree(project.scopeRoot), [
+      "claude-plugins.json",
+      "pi-claude-marketplace/",
+      "pi-claude-marketplace/cache/",
+      "pi-claude-marketplace/cache/plugins/",
+      "pi-claude-marketplace/cache/plugins/mp.json/",
+      "pi-claude-marketplace/resources/",
+      "pi-claude-marketplace/resources/skills/",
+      "pi-claude-marketplace/resources/skills/kept-tool/",
+      "pi-claude-marketplace/resources/skills/kept-tool/SKILL.md",
+      "pi-claude-marketplace/state.json",
+    ]);
+    assert.equal((await stat(pluginCachePath)).isDirectory(), true);
+    assert.deepStrictEqual(
+      ownerRuntime.getRoutingBucket("PreToolUse").map((entry) => entry.pluginId),
+      ["kept"],
+    );
+    assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
   });
 
@@ -2837,9 +2990,30 @@ describe("applyReconcile", () => {
     raceStateFromRead(t, project, 2, "{ half written");
     const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
     const { gitOps, clonedUrls } = createOfflineGitOps();
+    const completionCache = createCompletionCache();
+    const pluginCachePath = await project.pluginCacheFile("mp");
+    await completionCache.getPluginIndex(pluginCachePath, "project", "mp", () =>
+      Promise.resolve([{ name: "hello", status: "installed" }]),
+    );
+    await rm(path.dirname(path.dirname(pluginCachePath)), { force: true, recursive: true });
+    const beforeTree = await retryTree(project.scopeRoot);
 
     // act
-    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps });
+    await applyReconcileWithRouting({
+      ctx,
+      pi,
+      cwd,
+      scope: "project",
+      completionCache,
+      gitOps,
+      hooksRouting: createHooksRouting(createHooksRuntime()),
+    });
+    const retainedRows = await completionCache.getPluginIndex(
+      pluginCachePath,
+      "project",
+      "mp",
+      () => Promise.reject(new Error("failed uninstall must preserve its completion rows")),
+    );
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -2858,6 +3032,9 @@ describe("applyReconcile", () => {
         severity: "error",
       },
     ]);
+    assert.equal(await readFile(project.stateJsonPath, "utf8"), "{ half written");
+    assert.deepStrictEqual(await retryTree(project.scopeRoot), beforeTree);
+    assert.deepStrictEqual(retainedRows, [{ name: "hello", status: "installed" }]);
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
   });
