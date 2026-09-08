@@ -47,6 +47,7 @@ import type {
   ExtensionAPI,
   ExtensionContext,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { CompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 
 function fixtureMarketplaceDir(
   name: "valid-marketplace" | "invalid-manifest" | "empty-marketplace",
@@ -183,6 +184,64 @@ type NotificationUi = Omit<ExtensionContext["ui"], "notify"> & {
 type TestAddMarketplaceOptions = Omit<AddMarketplaceOptions, "completionCache">;
 
 const completionCachesByGitOps = new WeakMap<GitOps, ReturnType<typeof createCompletionCache>>();
+
+type CompletionInvalidationCall =
+  | {
+      readonly kind: "names";
+      readonly cachePath: string;
+      readonly scope: "project" | "user";
+    }
+  | {
+      readonly kind: "plugins";
+      readonly cachePath: string;
+      readonly scope: "project" | "user";
+      readonly marketplace: string;
+    };
+
+interface CompletionCacheRecorderOptions {
+  readonly failAt?: CompletionInvalidationCall["kind"];
+  readonly onCall?: (call: CompletionInvalidationCall) => Promise<void>;
+}
+
+function createCompletionCacheRecorder(options: CompletionCacheRecorderOptions = {}): {
+  readonly cache: CompletionCache;
+  readonly calls: readonly CompletionInvalidationCall[];
+  clearCalls(): void;
+} {
+  const delegate = createCompletionCache();
+  const calls: CompletionInvalidationCall[] = [];
+  const record = async (call: CompletionInvalidationCall): Promise<void> => {
+    calls.push(call);
+    await options.onCall?.(call);
+    if (options.failAt === call.kind) {
+      throw new Error(`${call.kind} cache hygiene failed`);
+    }
+  };
+
+  const cache: CompletionCache = {
+    getPluginIndex: (cachePath, scope, marketplace, rebuild, getOptions) =>
+      delegate.getPluginIndex(cachePath, scope, marketplace, rebuild, getOptions),
+    invalidateMarketplaceCache: (scope, marketplace) => {
+      delegate.invalidateMarketplaceCache(scope, marketplace);
+    },
+    async invalidateMarketplaceNames(cachePath, scope) {
+      await record({ kind: "names", cachePath, scope });
+      await delegate.invalidateMarketplaceNames(cachePath, scope);
+    },
+    async dropMarketplaceCache(cachePath, scope, marketplace) {
+      await record({ kind: "plugins", cachePath, scope, marketplace });
+      await delegate.dropMarketplaceCache(cachePath, scope, marketplace);
+    },
+  };
+
+  return {
+    cache,
+    calls,
+    clearCalls(): void {
+      calls.length = 0;
+    },
+  };
+}
 
 function completionCacheFor(
   opts: TestAddMarketplaceOptions,
@@ -961,6 +1020,222 @@ test("D-03-INV :: add invalidates marketplace-names cache for the new scope", as
     await assert.rejects(() => readFile(cachePath, "utf8"), { code: "ENOENT" });
     assert.strictEqual(await readFile(unrelatedPath, "utf8"), unrelatedBytes);
   });
+});
+
+test("invalidates names before the plugin index only after the add is durable", async () => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    const { ctx, pi, notifications } = makeCtx();
+    const { gitOps } = createGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+    });
+    let durableAtFirstInvalidation = false;
+    const recorder = createCompletionCacheRecorder({
+      onCall: async (call) => {
+        if (call.kind !== "names") {
+          return;
+        }
+
+        const persisted = await loadState(locations.extensionRoot);
+        const config = await loadConfig(locations.configJsonPath);
+        durableAtFirstInvalidation =
+          persisted.marketplaces["valid-marketplace"] !== undefined &&
+          config.status === "valid" &&
+          config.config.marketplaces["valid-marketplace"]?.source ===
+            "anthropics/claude-plugins-official" &&
+          (await pathExists(await locations.sourceCloneDir("valid-marketplace")));
+      },
+    });
+
+    // act
+    const outcome = await addMarketplaceWithCache({
+      ctx,
+      pi,
+      scope: "project",
+      cwd,
+      rawSource: "anthropics/claude-plugins-official",
+      gitOps,
+      completionCache: recorder.cache,
+    });
+
+    // assert
+    assert.strictEqual(outcome, undefined);
+    assert.strictEqual(durableAtFirstInvalidation, true);
+    assert.deepStrictEqual(recorder.calls, [
+      {
+        kind: "names",
+        cachePath: locations.marketplaceNamesCacheFile,
+        scope: "project",
+      },
+      {
+        kind: "plugins",
+        cachePath: await locations.pluginCacheFile("valid-marketplace"),
+        scope: "project",
+        marketplace: "valid-marketplace",
+      },
+    ]);
+    assert.deepStrictEqual(notifications, [{ message: "● valid-marketplace [project] (added)" }]);
+  });
+});
+
+test("does not invalidate a duplicate no-effect add through the same cache owner", async () => {
+  const localMarketplace = await mkdtemp(path.join(tmpdir(), "mp-add-duplicate-"));
+  try {
+    await cp(fixtureMarketplaceDir("valid-marketplace"), localMarketplace, { recursive: true });
+    await withTmpScope(async ({ cwd, locations }) => {
+      // arrange
+      const firstBoundary = makeCtx(0);
+      const secondBoundary = makeCtx(0);
+      const { gitOps } = createGitOps();
+      const recorder = createCompletionCacheRecorder();
+      const firstOutcome = await addMarketplaceWithCache({
+        ctx: firstBoundary.ctx,
+        pi: firstBoundary.pi,
+        scope: "project",
+        cwd,
+        rawSource: localMarketplace,
+        gitOps,
+        completionCache: recorder.cache,
+        notifications: { mode: "orchestrated" },
+      });
+      recorder.clearCalls();
+      const stateBeforeDuplicate = await readFile(locations.stateJsonPath, "utf8");
+      const configBeforeDuplicate = await loadConfig(locations.configJsonPath);
+      const treeBeforeDuplicate = (await readdir(locations.scopeRoot, { recursive: true })).sort();
+
+      // act
+      const duplicateOutcome = await addMarketplaceWithCache({
+        ctx: secondBoundary.ctx,
+        pi: secondBoundary.pi,
+        scope: "project",
+        cwd,
+        rawSource: localMarketplace,
+        gitOps,
+        completionCache: recorder.cache,
+        notifications: { mode: "orchestrated" },
+      });
+
+      // assert
+      assert.deepStrictEqual(firstOutcome, { status: "added", name: "valid-marketplace" });
+      assert.strictEqual(duplicateOutcome.status, "failed");
+      if (duplicateOutcome.status === "failed") {
+        assert.strictEqual(duplicateOutcome.reason, "duplicate name");
+      }
+
+      assert.deepStrictEqual(recorder.calls, []);
+      assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBeforeDuplicate);
+      assert.deepStrictEqual(await loadConfig(locations.configJsonPath), configBeforeDuplicate);
+      assert.deepStrictEqual(
+        (await readdir(locations.scopeRoot, { recursive: true })).sort(),
+        treeBeforeDuplicate,
+      );
+      assert.deepStrictEqual(firstBoundary.notifications, []);
+      assert.deepStrictEqual(secondBoundary.notifications, []);
+    });
+  } finally {
+    await rm(localMarketplace, { recursive: true, force: true });
+  }
+});
+
+test("does not invalidate when source validation fails before commit", async () => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    const { ctx, pi, notifications } = makeCtx(0);
+    const { gitOps } = createGitOps();
+    const recorder = createCompletionCacheRecorder();
+    const missingSource = path.join(cwd, "missing-marketplace");
+
+    // act
+    const outcome = await addMarketplaceWithCache({
+      ctx,
+      pi,
+      scope: "project",
+      cwd,
+      rawSource: missingSource,
+      gitOps,
+      completionCache: recorder.cache,
+      notifications: { mode: "orchestrated" },
+    });
+
+    // assert
+    assert.strictEqual(outcome.status, "failed");
+    if (outcome.status === "failed") {
+      assert.strictEqual(outcome.reason, "source missing");
+    }
+
+    assert.deepStrictEqual(recorder.calls, []);
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), {
+      schemaVersion: 2,
+      marketplaces: {},
+    });
+    assert.deepStrictEqual(await loadConfig(locations.configJsonPath), {
+      status: "absent",
+    });
+    assert.deepStrictEqual(notifications, []);
+  });
+});
+
+test("swallows each cache hygiene failure without rewriting the durable add", async (t) => {
+  for (const failAt of ["names", "plugins"] as const) {
+    await t.test(failAt, async () => {
+      await withTmpScope(async ({ cwd, locations }) => {
+        // arrange
+        const { ctx, pi, notifications } = makeCtx();
+        const { gitOps } = createGitOps({
+          fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+        });
+        let committedStateBytes: string | undefined;
+        let committedConfigBytes: string | undefined;
+        let committedTree: string[] | undefined;
+        const recorder = createCompletionCacheRecorder({
+          failAt,
+          onCall: async (call) => {
+            if (call.kind !== "names") {
+              return;
+            }
+
+            committedStateBytes = await readFile(locations.stateJsonPath, "utf8");
+            committedConfigBytes = await readFile(locations.configJsonPath, "utf8");
+            committedTree = (await readdir(locations.scopeRoot, { recursive: true })).sort();
+          },
+        });
+
+        // act
+        const outcome = await addMarketplaceWithCache({
+          ctx,
+          pi,
+          scope: "project",
+          cwd,
+          rawSource: "anthropics/claude-plugins-official",
+          gitOps,
+          completionCache: recorder.cache,
+        });
+
+        // assert
+        assert.strictEqual(outcome, undefined);
+        assert.notStrictEqual(committedStateBytes, undefined);
+        assert.notStrictEqual(committedConfigBytes, undefined);
+        assert.notStrictEqual(committedTree, undefined);
+        assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), committedStateBytes);
+        assert.strictEqual(await readFile(locations.configJsonPath, "utf8"), committedConfigBytes);
+        assert.deepStrictEqual(
+          (await readdir(locations.scopeRoot, { recursive: true })).sort(),
+          committedTree,
+        );
+        assert.deepStrictEqual(
+          recorder.calls.map((call) => call.kind),
+          failAt === "names" ? ["names"] : ["names", "plugins"],
+        );
+        assert.strictEqual(
+          await pathExists(await locations.sourceCloneDir("valid-marketplace")),
+          true,
+        );
+        assert.deepStrictEqual(notifications, [
+          { message: "● valid-marketplace [project] (added)" },
+        ]);
+      });
+    });
+  }
 });
 
 test("keeps a committed path add successful when marketplace-name cache cleanup fails", async () => {
@@ -2002,17 +2277,19 @@ test("cleans a URL clone after state-save failure and a second invocation conver
         await mkdir(locations.stateJsonPath, { recursive: true });
       },
     });
+    const firstCache = createCompletionCacheRecorder();
     let firstError: unknown;
 
     // act
     try {
-      await addMarketplace({
+      await addMarketplaceWithCache({
         ctx: firstBoundary.ctx,
         pi: firstBoundary.pi,
         scope: "project",
         cwd,
         rawSource: "https://gitlab.example.com/team/mp",
         gitOps: firstGit.gitOps,
+        completionCache: firstCache.cache,
       });
     } catch (error) {
       firstError = error;
@@ -2038,6 +2315,7 @@ test("cleans a URL clone after state-save failure and a second invocation conver
     // assert
     assert.ok(firstError instanceof Error);
     assert.strictEqual((firstError as NodeJS.ErrnoException).code, "EISDIR");
+    assert.deepStrictEqual(firstCache.calls, []);
     assert.strictEqual(finalCloneAfterFailure, false);
     assert.strictEqual(
       configAfterFailure,
