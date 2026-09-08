@@ -184,8 +184,17 @@ const FORBIDDEN_TARGETS: ReadonlyArray<string> = [
 
 For this phase the targets are every `extensions/pi-claude-marketplace/bridges/workflows/*.ts`
 file **enumerated explicitly** (WR-06 makes a missing target FAIL, which is the point — a
-glob would silently cover nothing) plus
-`extensions/pi-claude-marketplace/orchestrators/plugin/install.ts` for the ledger phase.
+glob would silently cover nothing).
+
+> **Correction (recorded during execution).** An earlier draft of this section also named
+> `extensions/pi-claude-marketplace/orchestrators/plugin/install.ts` as a sixth target "for
+> the ledger phase". That is wrong, and a gate carrying it would have been red on its first
+> run: `install.ts` calls `companionSeverity({...}, softDepStatus(pi))` legitimately, to
+> compute the row's severity. The plan's own prohibitions block and CONTEXT both say the
+> opposite of the draft, and the tree agrees. The gate is scoped to the five bridge files;
+> the ledger half of criterion 2's claim rides on the byte-equality install pair instead.
+> `tests/architecture/no-probe-in-workflows-bridge.test.ts` states the exclusion in its own
+> header.
 
 **Pattern-list pattern** (`:114-119`) — `{ name, pattern }` records, `\b`-anchored:
 
