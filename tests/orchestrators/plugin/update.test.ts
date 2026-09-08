@@ -36,13 +36,14 @@ import {
   materializePluginClone,
   resolvePluginPin,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts";
-import { installPlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install.ts";
+import { createNodeInstallPlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install.ts";
 import { createPluginUpdateOperations } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   loadState,
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import {
   CleanupContextError,
   InvalidMarketplaceManifestError,
@@ -4871,6 +4872,10 @@ test("DFEN-07 / D-103-10: update against a flipped defaultEnabled moves the vers
       // record keeps the inventory ENBL-18 preserves, which a hand-seeded
       // disabled record leaves empty.
       const seed = makeCtx();
+      const installPlugin = createNodeInstallPlugin(
+        createHooksRouting(createHooksRuntime()),
+        createCompletionCache(),
+      );
       await installPlugin({
         ctx: seed.ctx,
         pi: seed.pi,
@@ -4989,6 +4994,10 @@ test("DFEN-08: a declared-true entry and a silent entry render identical update 
       // install-time opt-in that the real install handler and the reconcile
       // apply pass both set. The whole point is that it changes nothing for two
       // of the three.
+      const installPlugin = createNodeInstallPlugin(
+        createHooksRouting(createHooksRuntime()),
+        createCompletionCache(),
+      );
       const install = async (plugin: string): Promise<void> => {
         const seed = makeCtx();
         await installPlugin({

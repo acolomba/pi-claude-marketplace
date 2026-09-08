@@ -105,6 +105,7 @@ import { SCOPE_TARGET_FLAG } from "../../../../extensions/pi-claude-marketplace/
 import { makeInstallHandler as makeRuntimeInstallHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/install.ts";
 import { loadConfig } from "../../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { loadState } from "../../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { createCompletionCache } from "../../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
 import { mergeMarketplaceIntoState } from "../marketplace-seed.ts";
 
@@ -126,7 +127,11 @@ const PARTIAL_FLAG = "--partial";
 function makeInstallHandler(
   pi: Parameters<typeof makeRuntimeInstallHandler>[0],
 ): ReturnType<typeof makeRuntimeInstallHandler> {
-  return makeRuntimeInstallHandler(pi, createHooksRouting(createHooksRuntime()));
+  return makeRuntimeInstallHandler(
+    pi,
+    createHooksRouting(createHooksRuntime()),
+    createCompletionCache(),
+  );
 }
 
 /** The frontmatter field the AG-7 mapping emits, and the prefix that finds it. */

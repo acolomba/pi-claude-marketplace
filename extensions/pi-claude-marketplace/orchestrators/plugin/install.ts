@@ -81,13 +81,7 @@ import {
   unstagePluginCommands,
 } from "../../bridges/commands/index.ts";
 import { compileIfPredicate } from "../../bridges/hooks/if-field/index.ts";
-import {
-  readAndCachePluginHooks,
-  rebuildRoutingTables,
-  removeHookConfig,
-  removePluginConfigFromCache,
-  writeHookConfig,
-} from "../../bridges/hooks/index.ts";
+import { removeHookConfig, writeHookConfig } from "../../bridges/hooks/index.ts";
 import {
   commitPreparedMcp,
   prepareStageMcpServers,
@@ -113,7 +107,6 @@ import { writePluginConfigEntry } from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { toDisabledRecord } from "../../persistence/state-io.ts";
 import { softDepStatus } from "../../platform/pi-api.ts";
-import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { ConcurrentInstallError, errorMessage, PluginShapeError } from "../../shared/errors.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
@@ -175,6 +168,7 @@ import type { ScopeConfig } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
+import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { HookSummaryEntry } from "../../shared/concerns/hooks.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type { ContentReason } from "../../shared/notify.ts";
@@ -1564,6 +1558,7 @@ function readDeclaredEnabled(args: {
  */
 async function collectPostCommitWarnings(
   installCtx: InstallCtx,
+  completionCache: CompletionCache,
   scope: Scope,
   orchestrated: boolean,
 ): Promise<string[]> {
@@ -1594,7 +1589,11 @@ async function collectPostCommitWarnings(
   // cached plugin index for this marketplace and let the next completion
   // read rebuild it with the new status.
   try {
-    await dropMarketplaceCache(await locations.pluginCacheFile(marketplace), scope, marketplace);
+    await completionCache.dropMarketplaceCache(
+      await locations.pluginCacheFile(marketplace),
+      scope,
+      marketplace,
+    );
   } catch (err) {
     push(`Plugin "${plugin}" installed; completion cache refresh deferred: ${errorMessage(err)}`);
   }
@@ -1958,6 +1957,7 @@ function handleInstallThrow(args: {
 async function installPluginWithTransaction(
   transaction: InstallTransaction,
   hooksRouting: InstallHooksRouting,
+  completionCache: CompletionCache,
   opts: InstallPluginOptions,
 ): Promise<InstallPluginOutcome> {
   const { ctx, pi, scope, cwd, marketplace, plugin } = opts;
@@ -2431,7 +2431,12 @@ async function installPluginWithTransaction(
     return { status: "failed", error: cascadeError, cause };
   }
 
-  const postCommitWarnings = await collectPostCommitWarnings(installCtx, scope, orchestrated);
+  const postCommitWarnings = await collectPostCommitWarnings(
+    installCtx,
+    completionCache,
+    scope,
+    orchestrated,
+  );
 
   if (!orchestrated) {
     // Success: one notify(ctx, pi, ...) call with a PluginInstalledMessage.
@@ -2480,25 +2485,18 @@ async function installPluginWithTransaction(
 export function createInstallPlugin(
   transaction: InstallTransaction,
   hooksRouting: InstallHooksRouting,
+  completionCache: CompletionCache,
 ): (opts: InstallPluginOptions) => Promise<InstallPluginOutcome> {
-  return (opts) => installPluginWithTransaction(transaction, hooksRouting, opts);
+  return (opts) => installPluginWithTransaction(transaction, hooksRouting, completionCache, opts);
 }
 
-/** Bind production install behavior to one required hooks-routing owner. */
+/** Bind production install behavior to required routing and completion-cache owners. */
 export function createNodeInstallPlugin(
   hooksRouting: InstallHooksRouting,
+  completionCache: CompletionCache,
 ): (opts: InstallPluginOptions) => Promise<InstallPluginOutcome> {
-  return createInstallPlugin(REAL_INSTALL_TRANSACTION, hooksRouting);
+  return createInstallPlugin(REAL_INSTALL_TRANSACTION, hooksRouting, completionCache);
 }
-
-const TRANSITION_INSTALL_HOOKS_ROUTING: InstallHooksRouting = {
-  readAndCachePluginHooks,
-  rebuildRoutingTables,
-  removePluginConfigFromCache,
-};
-
-/** Bounded compatibility operation for callers not yet migrated to runtime ownership. */
-export const installPlugin = createNodeInstallPlugin(TRANSITION_INSTALL_HOOKS_ROUTING);
 
 // D-19-03 / CMC-17 / MSG-RP-1: the PluginFailedMessage.rollbackPartial
 // field (SNM-09 + SNM-10) is the structural rollback-partial channel; the

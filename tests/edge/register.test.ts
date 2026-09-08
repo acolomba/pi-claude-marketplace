@@ -829,7 +829,7 @@ test("rebuilds completion rows through the cache that owns a successful register
     ownerCache,
     createHooksRouting(createHooksRuntime()),
     undefined,
-    1,
+    2,
   );
   const peer = registerCommandWithCache(peerCache);
   const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
@@ -858,6 +858,9 @@ test("rebuilds completion rows through the cache that owns a successful register
   const peerInstallCandidates = await peer.registration.getArgumentCompletions?.(
     "install --scope project ",
   );
+  const peerRows = await peerCache.getPluginIndex(cachePath, "project", marketplace, () =>
+    Promise.reject(new Error("the peer cache must retain its warmed target row")),
+  );
 
   // assert
   assert.deepStrictEqual(notifications, [
@@ -880,14 +883,11 @@ test("rebuilds completion rows through the cache that owns a successful register
   ]);
   assert.deepStrictEqual(peerInstallCandidates, [
     {
-      label: "hello@registered-install",
-      value: "install --scope project hello@registered-install ",
-    },
-    {
       label: "peer-unrelated@unrelated-marketplace",
       value: "install --scope project peer-unrelated@unrelated-marketplace ",
     },
   ]);
+  assert.deepStrictEqual(peerRows, [{ name: "hello", status: "available" }]);
   verify(ctx);
   verify(ui);
   owner.verifyRegistrar();

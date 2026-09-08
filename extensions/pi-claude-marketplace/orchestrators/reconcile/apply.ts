@@ -405,7 +405,7 @@ async function applyPluginInstalls(
   plan: ReconcilePlan,
   outcomes: PerEntryOutcome[],
 ): Promise<void> {
-  const installPlugin = createNodeInstallPlugin(opts.hooksRouting);
+  const installPlugin = createNodeInstallPlugin(opts.hooksRouting, opts.completionCache);
   for (const op of plan.pluginsToInstall) {
     const result = await installPlugin({
       ctx: opts.ctx,

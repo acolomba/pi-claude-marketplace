@@ -9,11 +9,12 @@ import {
   createHooksRuntime,
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { pathSource } from "../../extensions/pi-claude-marketplace/domain/source.ts";
-import { installPlugin } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/install.ts";
+import { createNodeInstallPlugin } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/install.ts";
 import { createNodeReinstallPlugin } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts";
 import { uninstallPlugin } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
 import { createPluginUpdateOperations } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/update.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
@@ -144,6 +145,7 @@ test("LIFE-01 / LIFE-02 integration: install -> update -> reinstall -> uninstall
     try {
       const hooksRuntime = createHooksRuntime();
       const hooksRouting = createHooksRouting(hooksRuntime);
+      const installPlugin = createNodeInstallPlugin(hooksRouting, createCompletionCache());
       const reinstallPlugin = createNodeReinstallPlugin(hooksRouting);
       const updatePlugins = createPluginUpdateOperations(hooksRouting).updatePlugins;
       const locations = locationsFor("project", cwd);

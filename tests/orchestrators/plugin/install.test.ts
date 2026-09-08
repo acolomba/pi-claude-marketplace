@@ -28,7 +28,6 @@ import {
 import {
   createInstallPlugin,
   createNodeInstallPlugin,
-  installPlugin,
   runInstallLedger,
   type InstallCloneCacheSeam,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install.ts";
@@ -41,7 +40,6 @@ import {
 import {
   createCompletionCache,
   resetCompletionCache,
-  getPluginIndex,
 } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { SymlinkRefusedError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
@@ -53,6 +51,7 @@ import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts"
 import { retryTree } from "./scope-tree-inventory.ts";
 
 import type { CacheEntry } from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
+import type { HooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import type {
   GitAuthBundle,
   GitOps,
@@ -63,10 +62,18 @@ import type {
   ToolInventory,
   ToolInventoryItem,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { CompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import type { TestContext } from "node:test";
 
 const require = createRequire(import.meta.url);
 const filesystemPromises = require("node:fs/promises") as typeof import("node:fs/promises");
+type InstallOperation = ReturnType<typeof createNodeInstallPlugin>;
+
+interface InstallTestOwner {
+  readonly completionCache: CompletionCache;
+  readonly hooksRuntime: HooksRuntime;
+  readonly installPlugin: InstallOperation;
+}
 
 test("install exposes its required transaction factory", () => {
   assert.strictEqual(typeof createInstallPlugin, "function");
@@ -204,7 +211,7 @@ function retryCauseChain(message: string): string {
 }
 
 function assertRetryFailure(
-  outcome: Awaited<ReturnType<typeof installPlugin>>,
+  outcome: Awaited<ReturnType<InstallOperation>>,
   expectedMessage: string,
 ): void {
   assert.deepStrictEqual(Object.keys(outcome).sort(), ["cause", "error", "status"]);
@@ -224,7 +231,7 @@ function assertRetryFailure(
  * actual message.
  */
 function assertRetryPartialFailure(
-  outcome: Awaited<ReturnType<typeof installPlugin>>,
+  outcome: Awaited<ReturnType<InstallOperation>>,
   expectedPrefix: string,
   expectedTail: RegExp,
   wrapped = false,
@@ -309,8 +316,16 @@ function makeCtx(piOverrides?: { readonly toolNames?: readonly string[] }): {
   return { ctx, pi, notifications };
 }
 
-async function withHermeticHome<T>(fn: () => Promise<T>): Promise<T> {
-  return withHermeticEnvironment("install-", fn);
+async function withHermeticHome<T>(fn: (owner: InstallTestOwner) => Promise<T>): Promise<T> {
+  return withHermeticEnvironment("install-", () => {
+    const hooksRuntime = createHooksRuntime();
+    const completionCache = createCompletionCache();
+    return fn({
+      completionCache,
+      hooksRuntime,
+      installPlugin: createNodeInstallPlugin(createHooksRouting(hooksRuntime), completionCache),
+    });
+  });
 }
 
 interface SeededPlugin {
@@ -693,7 +708,7 @@ async function seedPathMarketplaceWithPlugin(opts: {
 // ───────────────────────────────────────────────────────────────────────────
 
 test("PI-3: plugin name not in marketplace plugins[] -> V2 failed/{not in manifest}", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-pi3-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -743,7 +758,7 @@ test("PI-3: plugin name not in marketplace plugins[] -> V2 failed/{not in manife
 });
 
 test("ATTR-01 / M1: marketplace itself absent -> standalone {marketplace not added} on the marketplace subject", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-pi3b-"));
     try {
       // No state seeded -- the marketplace record is absent. After the CMP-3
@@ -782,7 +797,7 @@ test("ATTR-01 / M1: marketplace itself absent -> standalone {marketplace not add
 });
 
 test("Orchestrated ATTR-01 / M1: marketplace absent in orchestrated mode -> failed outcome, no notification", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-orch-m1-"));
     try {
       const { ctx, pi, notifications } = makeCtx();
@@ -814,7 +829,7 @@ test("Orchestrated ATTR-01 / M1: marketplace absent in orchestrated mode -> fail
 // ───────────────────────────────────────────────────────────────────────────
 
 test("PI-4: unsupported source (npm) -> V2 unavailable/{unsupported source}", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-pi4-"));
     try {
       await seedPathMarketplaceWithPlugin({
@@ -867,7 +882,7 @@ test("PI-4: unsupported source (npm) -> V2 unavailable/{unsupported source}", as
 // ───────────────────────────────────────────────────────────────────────────
 
 test("PI-5: state already has plugin record -> V2 failed/{already installed}", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-pi5-"));
     try {
       await seedPathMarketplaceWithPlugin({
@@ -917,7 +932,7 @@ test("PI-5: state already has plugin record -> V2 failed/{already installed}", a
 // ───────────────────────────────────────────────────────────────────────────
 
 test("PI-6: generated skill name collides with another plugin's existing skill -> CrossPluginConflictError", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-pi6-"));
     try {
       // The plugin we're installing is "hello"; its skill is "shared-tool"
@@ -962,7 +977,7 @@ test("PI-6: generated skill name collides with another plugin's existing skill -
 });
 
 test("PDEF-01: install preview detects an agent conflict from a later resolved directory", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-agent-dir-preview-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -1013,7 +1028,7 @@ test("PDEF-01: install preview detects an agent conflict from a later resolved d
 });
 
 test("PDEF-01: install stages every agent directory and warns on a later duplicate", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-agent-dirs-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -1095,7 +1110,7 @@ test("PDEF-01: install stages every agent directory and warns on a later duplica
 // ───────────────────────────────────────────────────────────────────────────
 
 test("PI-7 (a): entry.version present, plugin.json version absent -> recorded state.version matches entry.version verbatim", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-pi7a-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -1136,7 +1151,7 @@ test("PI-7 (a): entry.version present, plugin.json version absent -> recorded st
 });
 
 test("PI-7 (b): entry.version absent, plugin.json version absent -> recorded state.version is hash-<12hex>", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-pi7b-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -1179,7 +1194,7 @@ test("PI-7 (b): entry.version absent, plugin.json version absent -> recorded sta
 });
 
 test("SNM-34: plugin.json version present, entry.version absent -> recorded state.version equals the plugin.json version verbatim (not a hash)", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-snm34-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -1252,7 +1267,7 @@ const DFEN_DECLARATION_SITES = [
 
 for (const site of DFEN_DECLARATION_SITES) {
   test(`DFEN-04 / OUT-04: ${site.label} -> records disabled, drops the artifacts, writes through, and says so`, async () => {
-    await withHermeticHome(async () => {
+    await withHermeticHome(async ({ installPlugin }) => {
       const cwd = await mkdtemp(path.join(tmpdir(), site.tmpPrefix));
       try {
         const locations = locationsFor("project", cwd);
@@ -1351,7 +1366,7 @@ for (const site of DFEN_DECLARATION_SITES) {
 const ENABLE_HINT_TRAILER_BYTES = "Run enable on this plugin to use its components.";
 
 test("OUT-04 / D-102-07 / ENBL-15: the install-disabled row is ONE info emission in subject-first order with no soft-dep marker", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-out04-row-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -1424,7 +1439,7 @@ test("OUT-04 / D-102-07 / ENBL-15: the install-disabled row is ONE info emission
 });
 
 test("OUT-04 / D-102-10: the enable hint is a frozen, non-interpolating trailer under the row", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-out04-hint-"));
     try {
       // Deliberately distinctive names: a two-letter marketplace such as `mp`
@@ -1475,7 +1490,7 @@ test("OUT-04 / D-102-10: the enable hint is a frozen, non-interpolating trailer 
 });
 
 test("OUT-04 / D-102-10: an ordinary successful install carries no enable-hint trailer", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-out04-nohint-"));
     try {
       await seedPathMarketplaceWithPlugin({
@@ -1510,7 +1525,7 @@ test("OUT-04 / D-102-10: an ordinary successful install carries no enable-hint t
 });
 
 test("OUT-04 / WARN-01 / FSTAT-07: the install-disabled row names the degradations the enable it advertises would inherit", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-out04-degraded-"));
     try {
       await seedPathMarketplaceWithPlugin({
@@ -1761,7 +1776,7 @@ const DFEN_PRECEDENCE_CASES: readonly DfenPrecedenceCase[] = [
 
 for (const precedence of DFEN_PRECEDENCE_CASES) {
   test(`DFEN-05: ${precedence.label}`, async () => {
-    await withHermeticHome(async () => {
+    await withHermeticHome(async ({ installPlugin }) => {
       const cwd = await mkdtemp(path.join(tmpdir(), precedence.tmpPrefix));
       try {
         const locations = locationsFor("project", cwd);
@@ -1939,7 +1954,7 @@ for (const precedence of DFEN_PRECEDENCE_CASES) {
  * a parity claim has to catch.
  */
 test("DFEN-08: a declared-true entry and a silent entry render identical install rows", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-dfen08-parity-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -2085,7 +2100,7 @@ test("DFEN-08: a declared-true entry and a silent entry render identical install
 // ───────────────────────────────────────────────────────────────────────────
 
 test("D-103-16 / DFEN-06 / CFG-02: a locally-declared install stamps the LOCAL file and moves the merged view", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-dfen06-local-stamp-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -2160,7 +2175,7 @@ test("D-103-16 / DFEN-06 / CFG-02: a locally-declared install stamps the LOCAL f
 });
 
 test("D-103-16 / DFEN-06 / CFG-02: the reload after a locally-declared install plans nothing", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-dfen06-local-reload-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -2258,7 +2273,7 @@ test("D-103-16 / DFEN-06 / CFG-02: the reload after a locally-declared install p
 // ───────────────────────────────────────────────────────────────────────────
 
 test("D-102-03: an install that does not opt in ignores defaultEnabled and lands enabled", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-d10203-optout-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -2330,15 +2345,9 @@ test("D-102-03: an install that does not opt in ignores defaultEnabled and lands
 // ───────────────────────────────────────────────────────────────────────────
 
 test("T-102-01: an install-disabled plugin gets no hooks routing entry and no on-disk hooks config", async () => {
-  const { resetRoutingState } =
-    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
-  const { getRoutingBucket } =
-    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
-
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ hooksRuntime, installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-t10201-disabled-"));
     try {
-      resetRoutingState();
       const locations = locationsFor("project", cwd);
       await mkdir(locations.extensionRoot, { recursive: true });
 
@@ -2353,7 +2362,7 @@ test("T-102-01: an install-disabled plugin gets no hooks routing entry and no on
         },
       });
 
-      assert.equal(getRoutingBucket("PreToolUse").length, 0);
+      assert.equal(hooksRuntime.getRoutingBucket("PreToolUse").length, 0);
 
       const { ctx, pi, notifications } = makeCtx();
       await installPlugin({
@@ -2370,7 +2379,7 @@ test("T-102-01: an install-disabled plugin gets no hooks routing entry and no on
       assert.ok(summary.includes("(disabled)"), `expected a disabled row; got: ${summary}`);
 
       // No routing entry: dispatch cannot reach this plugin.
-      assert.deepEqual([...getRoutingBucket("PreToolUse")], []);
+      assert.deepEqual([...hooksRuntime.getRoutingBucket("PreToolUse")], []);
       // ...and the staged config the routing table is rebuilt from is gone too,
       // so even a rebuild from disk could not resurrect it.
       await assert.rejects(
@@ -2384,15 +2393,9 @@ test("T-102-01: an install-disabled plugin gets no hooks routing entry and no on
 });
 
 test("T-102-01: the same hooks fixture installed ENABLED does get its routing entry", async () => {
-  const { resetRoutingState } =
-    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
-  const { getRoutingBucket } =
-    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
-
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ hooksRuntime, installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-t10201-enabled-"));
     try {
-      resetRoutingState();
       const locations = locationsFor("project", cwd);
       await mkdir(locations.extensionRoot, { recursive: true });
 
@@ -2420,7 +2423,7 @@ test("T-102-01: the same hooks fixture installed ENABLED does get its routing en
         applyDefaultEnabled: true,
       });
 
-      const bucket = getRoutingBucket("PreToolUse");
+      const bucket = hooksRuntime.getRoutingBucket("PreToolUse");
       assert.equal(bucket.length, 1);
       assert.equal(bucket[0]?.pluginId, "hooky");
       assert.ok((await stat(path.join(locations.hooksDir, "hooky", "hooks.json"))).isFile());
@@ -2450,7 +2453,7 @@ test("T-102-01: the same hooks fixture installed ENABLED does get its routing en
 // ───────────────────────────────────────────────────────────────────────────
 
 test("D-102-02 / NFR-3: a disable cascade that throws reports failure and leaves the record shrunk to what survived", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-d10202-cascade-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -2590,7 +2593,7 @@ test("D-102-02 / NFR-3: a disable cascade that throws reports failure and leaves
 // ───────────────────────────────────────────────────────────────────────────
 
 test("PI-9: happy-path install lands skills + commands + agents + mcp + state in order", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-pi9-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -2676,7 +2679,7 @@ test("PI-9: happy-path install lands skills + commands + agents + mcp + state in
 // ───────────────────────────────────────────────────────────────────────────
 
 test("PI-10: staged skill body has ${CLAUDE_PLUGIN_ROOT} replaced with absolute pluginRoot", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-pi10-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -2746,7 +2749,7 @@ test("PI-10: staged skill body has ${CLAUDE_PLUGIN_ROOT} replaced with absolute 
 // ───────────────────────────────────────────────────────────────────────────
 
 test("PI-11 / RH-3: staged agents + pi.getAllTools has no 'subagent' -> success message includes 'pi-subagents is not loaded'", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-pi11-"));
     try {
       await seedPathMarketplaceWithPlugin({
@@ -2791,7 +2794,7 @@ test("PI-11 / RH-3: staged agents + pi.getAllTools has no 'subagent' -> success 
 // ───────────────────────────────────────────────────────────────────────────
 
 test("PI-12 / RH-4: staged mcp + pi.getAllTools has no 'mcp' -> success message includes 'pi-mcp-adapter is not loaded'", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-pi12-"));
     try {
       await seedPathMarketplaceWithPlugin({
@@ -2834,7 +2837,7 @@ test("PI-12 / RH-4: staged mcp + pi.getAllTools has no 'mcp' -> success message 
 // ───────────────────────────────────────────────────────────────────────────
 
 test("SKILL-01 / WARN-01: standalone install of a plugin with one unparseable skill -> (installed) {malformed skill} at warning severity, no hard-fail", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-malformed-skill-"));
     try {
       // `name: [unterminated` is a closed `---` block whose inner YAML is
@@ -2879,7 +2882,7 @@ test("SKILL-01 / WARN-01: standalone install of a plugin with one unparseable sk
 });
 
 test("CMD-01 / WARN-01: standalone install of a plugin with one unparseable command -> (installed) {malformed command} at warning severity, no hard-fail", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-malformed-command-"));
     try {
       // A closed `---` block whose inner YAML is malformed (`title: A: B` -> a
@@ -2926,7 +2929,7 @@ test("CMD-01 / WARN-01: standalone install of a plugin with one unparseable comm
 // ───────────────────────────────────────────────────────────────────────────
 
 test("PI-13: entry declares dependencies -> V2 dropped per D-19-01 (no PR-5 trailer)", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-pi13-"));
     try {
       await seedPathMarketplaceWithPlugin({
@@ -2979,7 +2982,7 @@ test("PI-13: entry declares dependencies -> V2 dropped per D-19-01 (no PR-5 trai
 // ───────────────────────────────────────────────────────────────────────────
 
 test("PI-14: PathContainmentError from a bridge prepare propagates verbatim with NO '(rollback partial:' marker", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-pi14-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -3040,7 +3043,7 @@ test("PI-14: PathContainmentError from a bridge prepare propagates verbatim with
 // ───────────────────────────────────────────────────────────────────────────
 
 test("PI-15 layer (a): record already exists -> caught by early-sanity check (collapses with PI-5 surface)", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-pi15-"));
     try {
       // Pre-seed the record (PI-15 layer (a) sees this BEFORE the ledger runs).
@@ -3077,7 +3080,7 @@ test("PI-15 layer (a): record already exists -> caught by early-sanity check (co
 // ───────────────────────────────────────────────────────────────────────────
 
 test("AS-6: pluginDataDir mkdir failure post-state-commit -> V2 drops warning per D-19-01, state record IS persisted", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-as6-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -3146,7 +3149,7 @@ test("AS-6: pluginDataDir mkdir failure post-state-commit -> V2 drops warning pe
 // ───────────────────────────────────────────────────────────────────────────
 
 test("AS-7: pre-existing foreign agent file under target name -> V2 drops warning per D-19-01, state record IS persisted", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-as7-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -3232,7 +3235,7 @@ test("AS-7: pre-existing foreign agent file under target name -> V2 drops warnin
 // ───────────────────────────────────────────────────────────────────────────
 
 test("CMP-3 / PI-16: project-target install falls back to user-scope marketplace source", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-cmp3-"));
     try {
       const userLocations = locationsFor("user", cwd);
@@ -3277,7 +3280,7 @@ test("CMP-3 / PI-16: project-target install falls back to user-scope marketplace
 });
 
 test("CMP-4 / PI-16: user-target install cannot source a project-only marketplace", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-cmp4-"));
     try {
       const userLocations = locationsFor("user", cwd);
@@ -3324,7 +3327,7 @@ test("CMP-4 / PI-16: user-target install cannot source a project-only marketplac
 });
 
 test("PI-17: same plugin may be installed in both user and project target scopes", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-pi17-"));
     try {
       const userLocations = locationsFor("user", cwd);
@@ -3389,7 +3392,7 @@ test("PI-2 / NFR-5: install.ts has zero git surface (no platform-git import, no 
 // ───────────────────────────────────────────────────────────────────────────
 
 test("PI-9 corollary: empty plugin (no skills/commands/agents/mcp) -> V2 emits reload-hint structurally on installed status", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-pi9b-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -3448,7 +3451,7 @@ test("PI-9 corollary: empty plugin (no skills/commands/agents/mcp) -> V2 emits r
 // ───────────────────────────────────────────────────────────────────────────
 
 test("Sanity: staged agent target carries the AG-5 owned-agent marker", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-marker-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -3490,7 +3493,7 @@ test("Sanity: staged agent target carries the AG-5 owned-agent marker", async ()
 test("Rollback-skills-undo: skills committed then commands phase fails -> skill target removed", async () => {
   // Gap: skillsPhase.undo body -- unstagePluginSkills called when skills
   // committed but a later phase (commands) fails with a non-containment error.
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-undo-skills-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -3548,7 +3551,7 @@ test("Rollback-skills-undo: skills committed then commands phase fails -> skill 
 test("Rollback-commands-undo: commands committed then agents phase fails -> command target removed", async () => {
   // Gap: commandsPhase.undo body -- unstagePluginCommands called when
   // commands committed but a later phase (agents) fails.
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-undo-cmds-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -3606,7 +3609,7 @@ test("Rollback-agents-undo: agents committed then mcp phase fails -> agent targe
   // committed but the mcp phase fails (mcp.json is a directory, so
   // readFile on it gets EISDIR -- a non-PathContainmentError that causes
   // the mcp phase to throw and triggers rollback of agents).
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-undo-agents-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -3667,7 +3670,7 @@ test("Rollback-agents-undo: agents committed then mcp phase fails -> agent targe
 test("Orchestrated-PI-3: plugin not found -> outcome.status 'failed' with not-found cause, no notification fired", async () => {
   // Gap: classifyInstallFailure path when mode='orchestrated' and the plugin
   // is not in the manifest -> returns { status: 'failed', cause: '...' }.
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-orch-pi3-"));
     try {
       await seedPathMarketplaceWithPlugin({
@@ -3703,7 +3706,7 @@ test("Orchestrated-PI-3: plugin not found -> outcome.status 'failed' with not-fo
 
 test("Orchestrated-PI-4: non-installable plugin -> outcome.status 'uninstallable', no notification", async () => {
   // Gap: classifyInstallFailure path for 'is not installable' branch.
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-orch-pi4-"));
     try {
       await seedPathMarketplaceWithPlugin({
@@ -3735,7 +3738,7 @@ test("Orchestrated-PI-4: non-installable plugin -> outcome.status 'uninstallable
 
 test("Orchestrated-PI-5: already installed -> outcome.status 'already-installed', no notification", async () => {
   // Gap: classifyInstallFailure path for 'already installed' branch.
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-orch-pi5-"));
     try {
       await seedPathMarketplaceWithPlugin({
@@ -3768,7 +3771,7 @@ test("Orchestrated-PI-5: already installed -> outcome.status 'already-installed'
 test("Orchestrated-success: success path returns typed outcome, fires no notifications", async () => {
   // Gap: orchestrated success path -- no notifySuccess call; outcome has
   // status='installed' and resourcesChanged=true when resources were staged.
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-orch-ok-"));
     try {
       await seedPathMarketplaceWithPlugin({
@@ -3809,7 +3812,7 @@ test("retry proof: install: completion-cache maintenance failure stays installed
   // re-throws and the orchestrator appends the deferral to postCommitWarnings
   // instead of firing notifyWarning. Cache eviction is optimization-only, so
   // the install stays committed and the retry is the already-installed arm.
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-retry-cache-"));
     const originalUnlink = filesystemPromises.unlink.bind(filesystemPromises);
     let unlinkMock: ReturnType<typeof t.mock.method> | undefined;
@@ -3922,7 +3925,7 @@ test("retry proof: install: plugin-data-dir maintenance failure stays installed 
   // Gap: orchestrated variant of AS-6 -- pluginDataDir mkdir failure appends
   // 'data dir creation deferred' to postCommitWarnings instead of calling
   // notifyWarning directly.
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-retry-data-"));
     const originalMkdir = filesystemPromises.mkdir.bind(filesystemPromises);
     let mkdirMock: ReturnType<typeof t.mock.method> | undefined;
@@ -4022,7 +4025,7 @@ test("Orchestrated-agent-foreign: agentForeignFailures -> postCommitWarnings has
   // Gap: agentForeignFailures loop in orchestrated mode -- the AS-7
   // foreign-content message is appended to postCommitWarnings instead of
   // firing notifyWarning directly.
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-orch-foreign-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -4097,10 +4100,9 @@ test("D-03-INV :: install invalidates plugin cache for the target marketplace", 
   // the file is left intact as a rebuild source. Test pattern: pre-warm
   // memory + delete the on-disk file -> run install -> next read MUST
   // re-invoke rebuild (proves memory cleared).
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ completionCache, installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-d03inv-"));
     try {
-      resetCompletionCache();
       const locations = locationsFor("project", cwd);
       await seedPathMarketplaceWithPlugin({
         cwd,
@@ -4114,7 +4116,7 @@ test("D-03-INV :: install invalidates plugin cache for the target marketplace", 
       // Pre-warm the plugin index memory entry.
       const pluginCachePath = await locations.pluginCacheFile("mp");
       let rebuildCount = 0;
-      await getPluginIndex(pluginCachePath, "project", "mp", () => {
+      await completionCache.getPluginIndex(pluginCachePath, "project", "mp", () => {
         rebuildCount += 1;
         return Promise.resolve([{ name: "hello", status: "available" }]);
       });
@@ -4134,7 +4136,7 @@ test("D-03-INV :: install invalidates plugin cache for the target marketplace", 
       });
 
       // Memory must be cleared; with file absent, next read invokes rebuild.
-      await getPluginIndex(pluginCachePath, "project", "mp", () => {
+      await completionCache.getPluginIndex(pluginCachePath, "project", "mp", () => {
         rebuildCount += 1;
         return Promise.resolve([{ name: "hello", status: "installed" }]);
       });
@@ -4155,7 +4157,7 @@ test("D-03-INV :: install invalidates plugin cache for the target marketplace", 
 // ───────────────────────────────────────────────────────────────────────────
 
 test("PHOOK-04: install --force stages a strict-subset hooks.json -- dropped Notification event absent, supported PostToolUse group present", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-phook04-event-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -4209,7 +4211,7 @@ test("PHOOK-04: install --force stages a strict-subset hooks.json -- dropped Not
 });
 
 test("PHOOK-04 / D-71-02: install --force drops only the unsupportable matcher group within a supported event", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-phook04-matcher-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -4266,7 +4268,7 @@ test("PHOOK-04 / D-71-02: install --force drops only the unsupportable matcher g
 // ───────────────────────────────────────────────────────────────────────────
 
 test("SEV-01 / SEV-02 / FSTAT-07 / D-71-06: partial-hook install blocks without --force (error + hint), degrades to info force-installed with --force", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-phook-sev-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -4368,7 +4370,7 @@ test("SEV-01 / SEV-02 / FSTAT-07 / D-71-06: partial-hook install blocks without 
 // ──────────────────────────────────────────────────────────────────────────
 
 test("WB-01: standalone install writes the plugin entry to claude-plugins.json", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-wb01-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -4407,7 +4409,7 @@ test("WB-01: standalone install writes the plugin entry to claude-plugins.json",
 });
 
 test("WB-01: --local routes the write to claude-plugins.local.json; base file untouched", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-wb01-local-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -4446,7 +4448,7 @@ test("WB-01: --local routes the write to claude-plugins.local.json; base file un
 });
 
 test("WR-09 / T-56-03-01: orchestrated-mode install SKIPS write-back (neither file created)", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-wb01-orch-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -4493,7 +4495,7 @@ test("WB-01 / UAT-05 / D-103-16: a plugin declared in NEITHER file stamps the ba
   // Contrast with the locally-declared stamp regression above: the fixture is
   // identical apart from the seeded local declaration, and only that
   // declaration moves the target. Do not reconcile the two toward each other.
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-wb01-undeclared-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -4541,7 +4543,7 @@ test("WB-01 / UAT-05 / D-103-16: a typed --local still targets the local file ov
   // Contrast with the control above: there the flag is absent AND no
   // declaration exists, so both roads lead to the base file. Here they
   // disagree, and the flag wins.
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-wb01-flag-wins-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -4608,7 +4610,7 @@ for (const arm of [
     // locally-declared stamp cases. This asserts the narrower orchestrator
     // fact: given the flag the apply path derives, the stamp lands in the file
     // it lands in today. The two are not duplicates.
-    await withHermeticHome(async () => {
+    await withHermeticHome(async ({ installPlugin }) => {
       const cwd = await mkdtemp(path.join(tmpdir(), arm.tmpPrefix));
       try {
         const locations = locationsFor("project", cwd);
@@ -4665,7 +4667,7 @@ for (const arm of [
 }
 
 test("WB-01: marketplace-not-added FAILED arm does NOT write back; config untouched", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-wb01-fail-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -4690,7 +4692,7 @@ test("WB-01: marketplace-not-added FAILED arm does NOT write back; config untouc
 });
 
 test("CFG-03 / T-56-03-04: invalid config aborts install; basename-only cause; state untouched", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-wb01-cfg03-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -4744,7 +4746,7 @@ test("CFG-03 / T-56-03-04: invalid config aborts install; basename-only cause; s
 });
 
 test("CFG-03 / D-103-16: an UNREADABLE local config aborts a flagless install rather than aiming the stamp at the shadowed base file", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-cfg03-local-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -4818,7 +4820,7 @@ test("CFG-03 / D-103-16: an UNREADABLE local config aborts a flagless install ra
 });
 
 test("UAT-05 / CR-02: an UNREADABLE sibling config skips the marketplace adoption write instead of counting as a file that declares nothing", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-uat05-unreadable-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -4891,7 +4893,7 @@ test("UAT-05 / CR-02: an UNREADABLE sibling config skips the marketplace adoptio
 // ──────────────────────────────────────────────────────────────────────────
 
 test("UAT-05: --local install with marketplace declared in BASE writes ONLY the plugin entry to local; merged autoupdate from base survives", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-uat05-local-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -4967,7 +4969,7 @@ test("UAT-05: --local install with marketplace declared in BASE writes ONLY the 
 });
 
 test("UAT-05 / CR-02: --local install with marketplace declared NOWHERE declares it in the SAME local file; reconcile stays convergent", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-uat05-nowhere-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -5029,7 +5031,7 @@ test("UAT-05 / CR-02: --local install with marketplace declared NOWHERE declares
 });
 
 test("UAT-05: base-targeted install with marketplace already in base leaves the marketplace entry unchanged (entry-level no-op)", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-uat05-base-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -5099,7 +5101,10 @@ test("WR-03: installPlugin of a hooks-declaring plugin rebuilds the routing tabl
     try {
       const ownerRuntime = createHooksRuntime();
       const peerRuntime = createHooksRuntime();
-      const runtimeInstallPlugin = createNodeInstallPlugin(createHooksRouting(ownerRuntime));
+      const runtimeInstallPlugin = createNodeInstallPlugin(
+        createHooksRouting(ownerRuntime),
+        createCompletionCache(),
+      );
       const locations = locationsFor("project", cwd);
       await mkdir(locations.extensionRoot, { recursive: true });
 
@@ -5191,7 +5196,7 @@ test("WR-03: installPlugin of a hooks-declaring plugin rebuilds the routing tabl
 test("LIFE-01: installPlugin with hooks writes <hooksDir>/<plugin>/hooks.json via the hooks bridge slot", async () => {
   const { resetRoutingState } =
     await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-life01-"));
     try {
       resetRoutingState();
@@ -5237,7 +5242,7 @@ test("LIFE-01: installPlugin with hooks writes <hooksDir>/<plugin>/hooks.json vi
 test("SURF-05: installPlugin of a hooks-declaring plugin with rewakeMessage but no asyncRewake surfaces `(installed) {orphan rewake}`", async () => {
   const { resetRoutingState } =
     await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-surf05-"));
     try {
       resetRoutingState();
@@ -5294,7 +5299,7 @@ test("SURF-05: installPlugin of a hooks-declaring plugin with rewakeMessage but 
 test("SURF-05: installPlugin of a hooks-declaring plugin with rewakeMessage AND asyncRewake: true does NOT surface `{orphan rewake}`", async () => {
   const { resetRoutingState } =
     await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-surf05neg-"));
     try {
       resetRoutingState();
@@ -5353,7 +5358,7 @@ test("SURF-05: installPlugin of a hooks-declaring plugin with rewakeMessage AND 
 // ───────────────────────────────────────────────────────────────────────────
 
 test("FORCE-01: force on an unsupported plugin installs the supported components and skips the unsupported ones", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-force01-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -5411,7 +5416,7 @@ test("FORCE-01: force on an unsupported plugin installs the supported components
 });
 
 test("FORCE-01: force on a fully-supported plugin is inert and installs as (installed)", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-force01noop-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -5454,7 +5459,7 @@ test("FORCE-01: force on a fully-supported plugin is inert and installs as (inst
 });
 
 test("FSTAT-07 / D-66-04: force install of an unsupported plugin emits a (partially-installed) success row", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-force-installed-"));
     try {
       await seedPathMarketplaceWithPlugin({
@@ -5501,7 +5506,7 @@ test("FSTAT-07 / D-66-04: force install of an unsupported plugin emits a (partia
 });
 
 test("WR-03: the installed outcome of a partial install carries the dropped kinds, and a clean install carries none", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-wr03-unsupported-"));
     const cleanCwd = await mkdtemp(path.join(tmpdir(), "install-wr03-clean-"));
     try {
@@ -5567,7 +5572,7 @@ test("WR-03: the installed outcome of a partial install carries the dropped kind
 });
 
 test("WR-03: a (partially-installed) success row renders soft-dep markers when a staged companion is unloaded", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-force-softdep-"));
     try {
       await seedPathMarketplaceWithPlugin({
@@ -5625,7 +5630,7 @@ test("WR-03: a (partially-installed) success row renders soft-dep markers when a
 // SEV-01 regression guard: the missing-companion warning is conditioned on the
 // probe -- when the declared companion IS loaded, the success row stays info.
 test("SEV-01: install staging agents with pi-subagents loaded stays info (companion present)", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-sev01-loaded-"));
     try {
       await seedPathMarketplaceWithPlugin({
@@ -5663,7 +5668,7 @@ test("SEV-01: install staging agents with pi-subagents loaded stays info (compan
 });
 
 test("FORCE-03: without force an unsupported plugin still blocks and writes no state record", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-force03-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -5701,7 +5706,7 @@ test("FORCE-03: without force an unsupported plugin still blocks and writes no s
 });
 
 test("FORCE-04: the force-degrade path emits no warning-severity notification and no Warning: summary", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-force04-"));
     try {
       await seedPathMarketplaceWithPlugin({
@@ -5741,7 +5746,7 @@ test("FORCE-04: the force-degrade path emits no warning-severity notification an
 });
 
 test("FORCE-05: force cannot bypass an unavailable (structural) plugin", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-force05a-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -5783,7 +5788,7 @@ test("FORCE-05: force cannot bypass an unavailable (structural) plugin", async (
 });
 
 test("FORCE-05: force cannot bypass a missing marketplace", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-force05b-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -6005,7 +6010,7 @@ async function seedGitSourceMarketplace(opts: {
 }
 
 test("PURL-01/02/09: url-source install materializes a clone, records sha-<12hex> + resolvedSha", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-purl-url-"));
     try {
       const fixtureRepoDir = path.join(cwd, "repo-fixture");
@@ -6056,7 +6061,7 @@ test("PURL-01/02/09: url-source install materializes a clone, records sha-<12hex
 });
 
 test("PURL-04: a second install of the same url+sha does NOT clone again (dedup)", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-purl-dedup-"));
     try {
       const fixtureRepoDir = path.join(cwd, "repo-fixture");
@@ -6129,7 +6134,7 @@ test("PURL-04: a second install of the same url+sha does NOT clone again (dedup)
 });
 
 test("PURL-03: git-subdir install resolves pluginRoot = cloneRoot + subdir", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-purl-subdir-"));
     try {
       const fixtureRepoDir = path.join(cwd, "repo-fixture");
@@ -6178,7 +6183,7 @@ test("PURL-03: git-subdir install resolves pluginRoot = cloneRoot + subdir", asy
 });
 
 test("PURL-03: a git-subdir path escaping the clone root fails the install", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-purl-escape-"));
     try {
       const fixtureRepoDir = path.join(cwd, "repo-fixture");
@@ -6219,7 +6224,7 @@ test("PURL-03: a git-subdir path escaping the clone root fails the install", asy
 });
 
 test("PURL-03: a missing git-subdir path fails the install", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-purl-missing-"));
     try {
       const fixtureRepoDir = path.join(cwd, "repo-fixture");
@@ -6266,7 +6271,7 @@ test("PURL-03: a missing git-subdir path fails the install", async () => {
 });
 
 test("D-77-06: a github-object source dedups to the same clone as a url naming the same repo", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-purl-github-"));
     try {
       const fixtureRepoDir = path.join(cwd, "repo-fixture");
@@ -6338,7 +6343,7 @@ test("D-77-06: a github-object source dedups to the same clone as a url naming t
 });
 
 test("MIRR-01/MIRR-03: an unpinned url source materializes the mirror and records the HEAD sha", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-purl-unpinned-"));
     try {
       const fixtureRepoDir = path.join(cwd, "repo-fixture");
@@ -6403,7 +6408,7 @@ test("MIRR-01/MIRR-03: an unpinned url source materializes the mirror and record
 });
 
 test("MIRR-01/MIRR-03: an unpinned git-subdir source materializes the mirror under the bare key", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-purl-unpinned-subdir-"));
     try {
       const fixtureRepoDir = path.join(cwd, "repo-fixture");
@@ -6467,7 +6472,7 @@ test("MIRR-01/MIRR-03: an unpinned git-subdir source materializes the mirror und
 });
 
 test("MIRR-01 regression: a PINNED install still records a per-sha <12hex>-<12hex> path", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-purl-pinned-key-"));
     try {
       const fixtureRepoDir = path.join(cwd, "repo-fixture");
@@ -6511,7 +6516,7 @@ test("MIRR-01 regression: a PINNED install still records a per-sha <12hex>-<12he
 });
 
 test("PURL-09 / sha over ref: a source with both ref and sha records the sha's version", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-purl-shaoverref-"));
     try {
       const fixtureRepoDir = path.join(cwd, "repo-fixture");
@@ -6564,7 +6569,7 @@ test("PURL-09 / sha over ref: a source with both ref and sha records the sha's v
 });
 
 test("PURL-09 regression: a path-source install keeps its 3-tier ladder version (not sha)", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-purl-pathreg-"));
     try {
       await seedPathMarketplaceWithPlugin({
@@ -6603,7 +6608,7 @@ test("PURL-09 regression: a path-source install keeps its 3-tier ladder version 
 // ───────────────────────────────────────────────────────────────────────────
 
 test("SUB-02: project-scope install substitutes ${CLAUDE_PROJECT_DIR} to the install cwd in skill, command, and agent files; keeps ${CLAUDE_SKILL_DIR} literal in command and agent", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-sub02-proj-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -6692,7 +6697,7 @@ test("SUB-02: project-scope install substitutes ${CLAUDE_PROJECT_DIR} to the ins
 });
 
 test("SUB-02: user-scope install keeps ${CLAUDE_PROJECT_DIR} literal in skill, command, and agent files", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-sub02-user-"));
     try {
       const locations = locationsFor("user", cwd);
@@ -6756,7 +6761,7 @@ test("PI-15: an mcp phase that cannot run unwinds the hooks bridge and leaves no
   // do. Failing the mcp phase (the slot after hooks) is what makes that
   // removal run; occupying <scopeRoot>/mcp.json with a directory fails the
   // phase without touching any earlier one.
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-hooks-unwind-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -6826,7 +6831,7 @@ async function seedCollidingNestedCommands(pluginRoot: string): Promise<void> {
 }
 
 test("D-141-03: a standalone install surfaces a command discovery warning as a second notification", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-discwarn-"));
     try {
       const marketplaceRoot = path.join(cwd, "mp-src");
@@ -6866,7 +6871,7 @@ test("D-141-03: a standalone install surfaces a command discovery warning as a s
 });
 
 test("D-141-03: an orchestrated install carries the same warning on postCommitWarnings", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-discwarn-orch-"));
     try {
       const marketplaceRoot = path.join(cwd, "mp-src");
@@ -6904,7 +6909,7 @@ test("D-141-03: an orchestrated install carries the same warning on postCommitWa
 });
 
 test("plugin install authentication: threads a GitHub provider bundle to the pinned clone", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-auth-github-"));
     try {
       // arrange
@@ -6973,7 +6978,7 @@ test("plugin install authentication: threads a GitHub provider bundle to the pin
 });
 
 test("plugin install authentication: leaves a providerless clone authless", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-auth-providerless-"));
     try {
       // arrange
@@ -7032,7 +7037,7 @@ test("plugin install authentication: leaves a providerless clone authless", asyn
 });
 
 test("plugin install authentication: threads the GitLab provider bundle onto the canonical clone", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-auth-gitlab-"));
     try {
       // arrange
@@ -7096,7 +7101,7 @@ test("plugin install authentication: threads the GitLab provider bundle onto the
 });
 
 test("plugin install authentication: memoizes one Device Flow result across same-host installs", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-auth-memo-"));
     try {
       // arrange
@@ -7229,7 +7234,7 @@ test("plugin install authentication: memoizes one Device Flow result across same
 });
 
 test("plugin install authentication: classifies a providerless 401 without a cause line", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-auth-401-"));
     try {
       // arrange
@@ -7287,7 +7292,7 @@ test("plugin install authentication: classifies a providerless 401 without a cau
 });
 
 test("plugin install authentication: preserves a network failure outside authentication narrowing", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-auth-network-"));
     try {
       // arrange
@@ -7340,7 +7345,7 @@ test("plugin install authentication: preserves a network failure outside authent
 });
 
 test("plugin install authentication: contains a non-Error clone failure without synthesizing a row cause", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-auth-non-error-"));
     try {
       // arrange
@@ -7399,7 +7404,7 @@ test("plugin install authentication: contains a non-Error clone failure without 
 });
 
 test("plugin install authentication: classifies a cancelled Device Flow clone without a cause line", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-auth-cancelled-"));
     try {
       // arrange
@@ -7645,7 +7650,7 @@ test("runInstallLedger unwinds when its marketplace disappears before state comm
 });
 
 test("retry proof: install: ordered bridge cleanup leaks remain explicit and retry is idempotent", async (t) => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-bridge-leaks-"));
     const originalRm = filesystemPromises.rm.bind(filesystemPromises);
     let removal: ReturnType<typeof t.mock.method> | undefined;
@@ -7785,7 +7790,7 @@ test("retry proof: install: ordered bridge cleanup leaks remain explicit and ret
 });
 
 test("install rejects the selected entry when its defense-in-depth validator fails", async (t) => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-entry-revalidation-"));
     try {
       // arrange
@@ -7892,7 +7897,7 @@ test("retry proof: install: post-save hook-cache failure stays installed and ret
   const { resetRoutingState, setParsedConfig } =
     await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
 
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-hooks-post-save-race-"));
     const originalReadFile = filesystemPromises.readFile.bind(filesystemPromises);
     let read: ReturnType<typeof t.mock.method> | undefined;
@@ -8024,7 +8029,7 @@ test("retry proof: install: disabled cascade failure preserves shrunken record a
   const { resetRoutingState, setParsedConfig } =
     await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
 
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-disable-hooks-mcp-failure-"));
     const originalReadFile = filesystemPromises.readFile.bind(filesystemPromises);
     let read: ReturnType<typeof t.mock.method> | undefined;
@@ -8155,7 +8160,7 @@ test("retry proof: install: disabled cascade failure preserves shrunken record a
 });
 
 test("orchestrated install returns the invalid-config outcome without emitting", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-orchestrated-invalid-config-"));
     try {
       // arrange
@@ -8202,7 +8207,7 @@ test("orchestrated install returns the invalid-config outcome without emitting",
 });
 
 test("orchestrated install reports when the state write does not retain its fresh record", async (t) => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-fresh-record-race-"));
     const originalParse: (text: string) => unknown = JSON.parse;
     try {
@@ -8316,7 +8321,7 @@ test("runInstallLedger preserves installedAt while replacing an existing disable
 });
 
 test("install forwards explicit map-model and version-pin entrypoint options", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-explicit-options-"));
     try {
       // arrange
@@ -8373,7 +8378,7 @@ test("install forwards explicit map-model and version-pin entrypoint options", a
 });
 
 test("an unpinned ref-only source forwards the moving ref to its cold mirror clone", async () => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-unpinned-ref-"));
     try {
       // arrange
@@ -8432,7 +8437,7 @@ test("an unpinned ref-only source forwards the moving ref to its cold mirror clo
 });
 
 test("standalone install normalizes a non-Error lock-directory failure", async (t) => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-lock-non-error-"));
     const originalMkdir = filesystemPromises.mkdir.bind(filesystemPromises);
     let mkdirMock: ReturnType<typeof t.mock.method> | undefined;
@@ -8492,7 +8497,7 @@ test("standalone install normalizes a non-Error lock-directory failure", async (
 });
 
 test("retry proof: install: commands prepare failure after a committed skill converges on the same root", async (t) => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-retry-commands-"));
     let restoreSchedule: (() => void) | undefined;
     try {
@@ -8627,7 +8632,7 @@ test("retry proof: install: commands prepare failure after a committed skill con
 });
 
 test("retry proof: install: skills prepare failure with no committed phases converges on the same root", async (t) => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-retry-skills-"));
     let restoreSchedule: (() => void) | undefined;
     try {
@@ -8730,7 +8735,7 @@ test("retry proof: install: skills prepare failure with no committed phases conv
 });
 
 test("retry proof: install: agents prepare failure after committed commands unwinds newest first", async (t) => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-retry-agents-"));
     let restoreSchedule: (() => void) | undefined;
     try {
@@ -8871,7 +8876,7 @@ test("retry proof: install: agents prepare failure after committed commands unwi
 test("retry proof: install: hooks reparse failure after three bridges retries without reseeding", async (t) => {
   const { resetRoutingState } =
     await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-retry-hooks-"));
     const originalReadFile = filesystemPromises.readFile.bind(filesystemPromises);
     let readMock: ReturnType<typeof t.mock.method> | undefined;
@@ -9040,7 +9045,7 @@ test("retry proof: install: hooks reparse failure after three bridges retries wi
 test("retry proof: install: MCP prepare failure after hooks compensates every completed bridge", async (t) => {
   const { resetRoutingState } =
     await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-retry-mcp-"));
     let restoreSchedule: (() => void) | undefined;
     try {
@@ -9189,7 +9194,7 @@ test("retry proof: install: MCP prepare failure after hooks compensates every co
 });
 
 test("retry proof: install: non-containment undo failure reports ordered rollback partials then recovers", async (t) => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-retry-rollback-partial-"));
     let restoreSchedule: (() => void) | undefined;
     try {
@@ -9327,7 +9332,7 @@ test("retry proof: install: non-containment undo failure reports ordered rollbac
 });
 
 test("retry proof: install: containment failure preserves the refused residue and succeeds after unlink", async (t) => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-retry-containment-"));
     let restoreSchedule: (() => void) | undefined;
     try {
@@ -9439,7 +9444,7 @@ test("retry proof: install: containment failure preserves the refused residue an
 });
 
 test("retry proof: install: state commit race after staged work retries from unchanged state bytes", async (t) => {
-  await withHermeticHome(async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-retry-state-race-"));
     const originalParse: (text: string) => unknown = JSON.parse;
     let parseMock: ReturnType<typeof t.mock.method> | undefined;

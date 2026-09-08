@@ -23,9 +23,14 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
+import {
+  createHooksRouting,
+  createHooksRuntime,
+} from "../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { addMarketplace } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts";
 import { setMarketplaceAutoupdate } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/autoupdate.ts";
 import { removeMarketplace } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts";
+import { createNodeInstallPlugin } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/install.ts";
 import { planReconcile } from "../../extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts";
 import { emptyReconcilePlan } from "../../extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts";
 import {
@@ -483,8 +488,6 @@ test("WB-01 SC#4 (cross-scope CMP-3 install): project-scope install via user-sco
   // a dangling declaration the planner converts into a marketplace removal
   // plus a perpetual `<marketplace not declared>` failed row.
   const { pathSource } = await import("../../extensions/pi-claude-marketplace/domain/source.ts");
-  const { installPlugin } =
-    await import("../../extensions/pi-claude-marketplace/orchestrators/plugin/install.ts");
   const { locationsFor } =
     await import("../../extensions/pi-claude-marketplace/persistence/locations.ts");
   const { loadState, saveState } =
@@ -539,6 +542,10 @@ test("WB-01 SC#4 (cross-scope CMP-3 install): project-scope install via user-sco
 
     const ctx = { ui: { notify: (): void => undefined } } as never;
     const pi = { getAllTools: (): unknown[] => [] } as never;
+    const installPlugin = createNodeInstallPlugin(
+      createHooksRouting(createHooksRuntime()),
+      createCompletionCache(),
+    );
 
     // Project-scope install: marketplace "mp" is NOT in project state, so
     // resolveInstallMarketplaceSource falls back to the user-scope record

@@ -228,8 +228,9 @@ function addMarketplaceFn(
 function installPluginFn(
   deps: ImportDeps | undefined,
   hooksRouting: InstallHooksRouting,
+  completionCache: CompletionCache,
 ): (opts: InstallPluginOptions) => Promise<InstallPluginOutcome> {
-  return deps?.installPlugin ?? createNodeInstallPlugin(hooksRouting);
+  return deps?.installPlugin ?? createNodeInstallPlugin(hooksRouting, completionCache);
 }
 
 function pluginsForMarketplace(
@@ -690,7 +691,7 @@ async function installOnePlannedPlugin(
   result: MutableImportResult,
   plugin: PlannedPlugin,
 ): Promise<PlannedPluginBucket> {
-  const installPlugin = installPluginFn(opts.deps, opts.hooksRouting);
+  const installPlugin = installPluginFn(opts.deps, opts.hooksRouting, opts.completionCache);
   let outcome: InstallPluginOutcome;
   try {
     outcome = await installPlugin({

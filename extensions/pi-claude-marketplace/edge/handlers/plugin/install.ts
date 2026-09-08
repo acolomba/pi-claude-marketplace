@@ -29,6 +29,7 @@ import { parseMapModelArgs, splitPluginMarketplaceRef } from "./shared.ts";
 
 import type { InstallHooksRouting } from "../../../orchestrators/plugin/install.ts";
 import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
+import type { CompletionCache } from "../../../shared/completion-cache.ts";
 
 const USAGE =
   "Usage: /claude:plugin install <plugin>@<marketplace> [--scope user|project] [--map-model] [--partial] [--local]";
@@ -46,8 +47,9 @@ const PASS_THROUGH_FLAGS = passThroughFlagNames("install");
 export function makeInstallHandler(
   pi: ExtensionAPI,
   hooksRouting: InstallHooksRouting,
+  completionCache: CompletionCache,
 ): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
-  const installPlugin = createNodeInstallPlugin(hooksRouting);
+  const installPlugin = createNodeInstallPlugin(hooksRouting, completionCache);
   return async (args, ctx): Promise<void> => {
     // Shared scanner; see edge/handlers/shared.ts. The catalog-derived
     // pass-through flags are downstream-consumed; pass through verbatim.

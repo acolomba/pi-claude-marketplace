@@ -46,8 +46,12 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
+import {
+  createHooksRouting,
+  createHooksRuntime,
+} from "../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { addMarketplace } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts";
-import { installPlugin } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/install.ts";
+import { createNodeInstallPlugin } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/install.ts";
 import { listPlugins } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/list.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 
@@ -184,6 +188,10 @@ test("CMC-21 / D-13-17 step 1: project-scope plugin installed from user-scope ma
     const installCtx = makeCtx(env.cwd);
     const listCtx = makeCtx(env.cwd);
     const completionCache = createCompletionCache();
+    const installPlugin = createNodeInstallPlugin(
+      createHooksRouting(createHooksRuntime()),
+      completionCache,
+    );
 
     // act
     await addMarketplace({
@@ -269,6 +277,10 @@ test("CMC-21 / D-13-17 step 2: when an INDEPENDENT project-scope marketplace is 
     const projectAdd = makeCtx(env.cwd);
     const afterListCtx = makeCtx(env.cwd);
     const completionCache = createCompletionCache();
+    const installPlugin = createNodeInstallPlugin(
+      createHooksRouting(createHooksRuntime()),
+      completionCache,
+    );
 
     // act
     await addMarketplace({
