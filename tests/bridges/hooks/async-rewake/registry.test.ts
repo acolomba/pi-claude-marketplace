@@ -25,6 +25,7 @@ import {
   bumpEpoch,
   resetRoutingState,
 } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
+import { createHooksRuntime } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import { asAbsolutePluginRoot } from "../../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import { locationsFor } from "../../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 
@@ -428,6 +429,129 @@ function filesystemErrorCode(error: unknown): string | undefined {
 
   return undefined;
 }
+
+test(
+  "keeps same-shaped child persistence and stale completion isolated by runtime",
+  { concurrency: false },
+  async (t) => {
+    const root = await mkdtemp(path.join(tmpdir(), "async-registry-runtime-isolation-"));
+    const timers = observeTimers(t, Date.parse("2026-08-31T11:10:00.000Z"));
+    const locations = locationsFor("project", root);
+    const firstRuntime = createHooksRuntime();
+    const secondRuntime = createHooksRuntime();
+    firstRuntime.advanceGeneration();
+    secondRuntime.advanceGeneration();
+    const firstContext = createContext(root, "session-runtime-first", true);
+    const secondContext = createContext(root, "session-runtime-second", true);
+    const firstPi = createPi();
+    const secondPi = createPi();
+    const firstChild = createChild(24_678);
+    const secondChild = createChild(24_679);
+    const firstWrites: Array<readonly PidTableEntry[]> = [];
+    const secondWrites: Array<readonly PidTableEntry[]> = [];
+
+    try {
+      await spawnAndRegister(
+        createEntry(root, {
+          pluginId: "plugin-runtime-first",
+          handlerDecl: {
+            type: "command",
+            command: "/opt/hooks/runtime-first",
+            timeout: 600,
+            rewakeSummary: "first summary",
+          },
+        }),
+        {},
+        firstContext.context,
+        firstPi.pi,
+        locations,
+        {
+          spawnImpl: createSpawn(firstChild.child, []),
+          dispatchId: () => "dispatch-runtime-first",
+          pidTableWriter: (_loc, entries) => {
+            firstWrites.push(entries);
+            return Promise.resolve();
+          },
+        },
+        firstRuntime,
+      );
+      await spawnAndRegister(
+        createEntry(root, {
+          pluginId: "plugin-runtime-second",
+          handlerDecl: {
+            type: "command",
+            command: "/opt/hooks/runtime-second",
+            timeout: 600,
+            rewakeMessage: "Second finding:",
+            rewakeSummary: "second summary",
+          },
+        }),
+        {},
+        secondContext.context,
+        secondPi.pi,
+        locations,
+        {
+          spawnImpl: createSpawn(secondChild.child, []),
+          dispatchId: () => "dispatch-runtime-second",
+          pidTableWriter: (_loc, entries) => {
+            secondWrites.push(entries);
+            return Promise.resolve();
+          },
+        },
+        secondRuntime,
+      );
+      firstRuntime.advanceGeneration();
+      firstChild.stderr.end("stale first body");
+      secondChild.stderr.end("live second body");
+      await Promise.all([once(firstChild.stderr, "end"), once(secondChild.stderr, "end")]);
+
+      firstChild.emitExit(2);
+      firstChild.emitClose();
+      secondChild.emitExit(2);
+      secondChild.emitClose();
+      await new Promise<void>((resolve) => {
+        setImmediate(resolve);
+      });
+
+      assert.deepStrictEqual(firstPi.messages, []);
+      assert.deepStrictEqual(firstContext.notifications, []);
+      assert.deepStrictEqual(secondPi.messages, [
+        {
+          message: {
+            customType: "claude-hook-rewake",
+            content: "Second finding:\n\nlive second body",
+            display: false,
+            details: {
+              pluginId: "plugin-runtime-second",
+              dispatchId: "dispatch-runtime-second",
+            },
+          },
+          options: { deliverAs: "nextTurn" },
+        },
+      ]);
+      assert.deepStrictEqual(secondContext.notifications, [
+        { text: "second summary", severity: "info" },
+      ]);
+      assert.deepStrictEqual(firstWrites.map((entries) => entries.map((entry) => entry.dispatchId)), [
+        ["dispatch-runtime-first"],
+        [],
+      ]);
+      assert.deepStrictEqual(
+        secondWrites.map((entries) => entries.map((entry) => entry.dispatchId)),
+        [["dispatch-runtime-second"], []],
+      );
+      assert.deepStrictEqual(firstRuntime.pidTableEntries(locations), []);
+      assert.deepStrictEqual(secondRuntime.pidTableEntries(locations), []);
+      assert.deepStrictEqual(timers.clearHandles, timers.handles);
+    } finally {
+      firstRuntime.shutdownChildren();
+      secondRuntime.shutdownChildren();
+      destroyChild(firstChild);
+      destroyChild(secondChild);
+      await rm(root, { recursive: true, force: true, maxRetries: 3 });
+    }
+  },
+);
 
 test(
   "registers one child and rewakes the idle session through complete public cleanup",
