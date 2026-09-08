@@ -982,6 +982,85 @@ describe("buildReconcileAppliedCascade", () => {
     });
   });
 
+  test("WDEP-02: declares the workflows dependency LAST on a re-enable that staged all three kinds", () => {
+    // arrange
+    const outcomes: readonly PerEntryOutcome[] = [
+      {
+        kind: "plugin-enabled",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "cr",
+        version: "1.0.0",
+        stagedAgents: true,
+        stagedMcpServers: true,
+        stagedWorkflows: true,
+      },
+    ];
+
+    // act
+    const cascade = buildReconcileAppliedCascade(outcomes);
+
+    // assert
+    assert.deepStrictEqual(cascade, {
+      kind: "reconcile-applied-cascade",
+      marketplaces: [
+        {
+          name: "mp",
+          scope: "project",
+          plugins: [
+            {
+              status: "installed",
+              name: "cr",
+              version: "1.0.0",
+              dependencies: ["agents", "mcp", "workflows"],
+              severity: "info",
+              needsReload: true,
+            },
+          ],
+        },
+      ],
+    });
+  });
+
+  test("WDEP-02: a re-enable that staged no workflow declares no host-engine dependency", () => {
+    // arrange
+    const outcomes: readonly PerEntryOutcome[] = [
+      {
+        kind: "plugin-enabled",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "cr",
+        version: "1.0.0",
+        stagedAgents: true,
+        stagedWorkflows: false,
+      },
+    ];
+
+    // act
+    const cascade = buildReconcileAppliedCascade(outcomes);
+
+    // assert
+    assert.deepStrictEqual(cascade, {
+      kind: "reconcile-applied-cascade",
+      marketplaces: [
+        {
+          name: "mp",
+          scope: "project",
+          plugins: [
+            {
+              status: "installed",
+              name: "cr",
+              version: "1.0.0",
+              dependencies: ["agents"],
+              severity: "info",
+              needsReload: true,
+            },
+          ],
+        },
+      ],
+    });
+  });
+
   test("carries every re-enable degradation signal and dependency on one partially-installed row", () => {
     // arrange
     const outcomes: readonly PerEntryOutcome[] = [

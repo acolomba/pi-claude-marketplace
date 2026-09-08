@@ -8971,10 +8971,15 @@ test("WLIF-06: an update that withdrew a workflow names the reload remedy", asyn
       // assert -- `hello:wave` is in the pre-update record and not in what this
       // re-stage placed, so its command is registered over nothing until the
       // reload the trailer names. Severity `warning`: the update WAS applied.
+      // WDEP-02: the update also declares workflows into a session with no host
+      // engine, so the marker composes after the content token.
       const row = notifications.at(-1);
       assert.ok(row !== undefined);
       assert.equal(row.severity, "warning");
-      assert.match(row.message, /\(updated\) \{stale workflow command\}/u);
+      assert.match(
+        row.message,
+        /\(updated\) \{stale workflow command, requires pi-dynamic-workflows\}/u,
+      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

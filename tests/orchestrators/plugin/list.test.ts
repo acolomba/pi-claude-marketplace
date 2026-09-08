@@ -33,6 +33,7 @@ import test from "node:test";
 
 import * as git from "isomorphic-git";
 import { mock, verify, when } from "strong-mock";
+import { Type } from "typebox";
 
 import { pluginMirrorKey } from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
@@ -56,6 +57,7 @@ import type {
   ExtensionAPI,
   ExtensionContext,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { ToolInfo } from "@earendil-works/pi-coding-agent";
 
 type ListPluginsWithoutConnections = Omit<ListPluginsOptions, "ctx" | "pi">;
 void ({ cwd: "/workspace", scope: "user" } satisfies ListPluginsWithoutConnections);
@@ -72,7 +74,21 @@ type NotificationUi = Omit<ExtensionContext["ui"], "notify"> & {
   readonly notify: (message: string, severity?: NotificationSeverity) => void;
 };
 
-function makeCtx(): {
+function toolInfo(name: string): ToolInfo {
+  return {
+    name,
+    description: `test tool ${name}`,
+    parameters: Type.Object({}),
+    sourceInfo: {
+      origin: "top-level",
+      path: `/test/tools/${name}.ts`,
+      scope: "temporary",
+      source: "test",
+    },
+  } satisfies ToolInfo;
+}
+
+function makeCtx(piOverrides?: { readonly toolNames?: readonly string[] }): {
   ctx: ExtensionContext;
   pi: ExtensionAPI;
   notifications: NotifyRecord[];
@@ -86,7 +102,7 @@ function makeCtx(): {
     .thenReturn(ui)
     .once();
   when(() => pi.getAllTools())
-    .thenReturn([])
+    .thenReturn((piOverrides?.toolNames ?? []).map(toolInfo))
     .times(3);
   when(() => ui.notify)
     .thenReturn((message, severity) => {
@@ -4492,7 +4508,7 @@ test("WFLW-04: a workflow-bearing available plugin renders the generic available
   });
 });
 
-test("WFLW-04: a non-empty persisted workflow inventory leaves the installed row unchanged", async () => {
+test("WFLW-04: a non-empty persisted workflow inventory leaves the installed row unchanged when the host engine is loaded", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange
     const userRoot = path.join(home, ".pi", "agent");
@@ -4510,12 +4526,83 @@ test("WFLW-04: a non-empty persisted workflow inventory leaves the installed row
         alpha: { version: "1.0.0", resources: { workflows: ["alpha:greet", "alpha:shout"] } },
       },
     });
-    const { ctx, pi, notifications, ui } = makeCtx();
+    const { ctx, pi, notifications, ui } = makeCtx({ toolNames: ["workflow_control"] });
 
     // act
     await listPlugins({ ctx, pi, cwd });
 
     // assert -- byte-identical to the same record with an empty inventory.
+    assert.deepStrictEqual(notifications, [
+      { message: ["● mp1 [user]", "  ● alpha v1.0.0 (installed)"].join("\n") },
+    ]);
+    verify(ctx);
+    verify(pi);
+    verify(ui);
+  });
+});
+
+test("WDEP-02: a persisted workflow inventory stamps the host-engine marker when the engine is absent", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange -- the decoy tool name re-proves the WDEP-01 discriminator through
+    // the list surface: `workflow` alone must read as engine-absent.
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: {
+        name: "mp1",
+        plugins: [{ name: "alpha", source: "./alpha", version: "1.0.0" }],
+      },
+      installablePluginDirs: ["alpha"],
+      installed: {
+        alpha: { version: "1.0.0", resources: { workflows: ["alpha:greet"] } },
+      },
+    });
+    const { ctx, pi, notifications, ui } = makeCtx({ toolNames: ["workflow"] });
+
+    // act
+    await listPlugins({ ctx, pi, cwd });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp1 [user]",
+          "  ● alpha v1.0.0 (installed) {requires pi-dynamic-workflows}",
+        ].join("\n"),
+      },
+    ]);
+    verify(ctx);
+    verify(pi);
+    verify(ui);
+  });
+});
+
+test("WDEP-02: an empty persisted workflow inventory stamps no host-engine marker", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange -- a plugin shipping an EMPTY `workflows/` directory discovers zero
+    // scripts, so the record's `resources.workflows` array stays empty.
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp1",
+      manifest: {
+        name: "mp1",
+        plugins: [{ name: "alpha", source: "./alpha", version: "1.0.0" }],
+      },
+      installablePluginDirs: ["alpha"],
+      installed: { alpha: { version: "1.0.0", resources: { workflows: [] } } },
+    });
+    const { ctx, pi, notifications, ui } = makeCtx({ toolNames: ["workflow"] });
+
+    // act
+    await listPlugins({ ctx, pi, cwd });
+
+    // assert
     assert.deepStrictEqual(notifications, [
       { message: ["● mp1 [user]", "  ● alpha v1.0.0 (installed)"].join("\n") },
     ]);

@@ -432,10 +432,17 @@ export function classifyReadPassThrow(
   return narrowProbeError(err);
 }
 
-/** Derive the closed-set Dependency[] from InstallPluginOutcome flags. */
+/**
+ * Derive the closed-set Dependency[] from InstallPluginOutcome flags.
+ *
+ * WDEP-02: `workflows` pushes LAST, so a projection that declares agents and
+ * mcp renders the same two-marker brace whether or not it also declares
+ * workflows.
+ */
 export function dependenciesFromInstall(outcome: {
   readonly declaresAgents: boolean;
   readonly declaresMcp: boolean;
+  readonly declaresWorkflows: boolean;
 }): readonly Dependency[] {
   const deps: Dependency[] = [];
   if (outcome.declaresAgents) {
@@ -444,6 +451,10 @@ export function dependenciesFromInstall(outcome: {
 
   if (outcome.declaresMcp) {
     deps.push("mcp");
+  }
+
+  if (outcome.declaresWorkflows) {
+    deps.push("workflows");
   }
 
   return deps;

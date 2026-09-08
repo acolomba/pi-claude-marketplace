@@ -128,6 +128,50 @@ test("composes no dependencies and truly omits clean optional reasons", () => {
   assert.strictEqual(Object.hasOwn(result, "reasons"), false);
 });
 
+test("WDEP-02: composes the workflows dependency LAST behind agents and MCP", () => {
+  // arrange
+  const outcome = {
+    declaresAgents: true,
+    declaresMcp: true,
+    declaresWorkflows: true,
+    fromVersion: "1.0.0",
+    name: "epsilon",
+    partition: "updated" as const,
+    stagedAgentNames: ["pi-claude-marketplace-epsilon-review"],
+    stagedMcpServerNames: ["epsilon-server"],
+    toVersion: "1.1.0",
+  };
+  const severity = { partiallyInstalled: "info" as const, updated: "info" as const };
+
+  // act
+  const result = updatedRowFromOutcome(outcome, "user", severity);
+
+  // assert
+  assert.deepStrictEqual(result.dependencies, ["agents", "mcp", "workflows"]);
+});
+
+test("WDEP-02: an update that declares no workflow carries no host-engine dependency", () => {
+  // arrange
+  const outcome = {
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+    fromVersion: "1.0.0",
+    name: "zeta",
+    partition: "updated" as const,
+    stagedAgentNames: [],
+    stagedMcpServerNames: [],
+    toVersion: "1.1.0",
+  };
+  const severity = { partiallyInstalled: "info" as const, updated: "info" as const };
+
+  // act
+  const result = updatedRowFromOutcome(outcome, "user", severity);
+
+  // assert
+  assert.deepStrictEqual(result.dependencies, []);
+});
+
 test("keeps an empty partial degradation on the updated row", () => {
   // arrange
   const outcome = {

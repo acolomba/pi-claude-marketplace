@@ -667,9 +667,9 @@ describe("classifyReadPassThrow", () => {
 });
 
 describe("dependenciesFromInstall", () => {
-  test("returns no dependencies when neither dependency is declared", () => {
+  test("returns no dependencies when no dependency is declared", () => {
     // arrange
-    const outcome = { declaresAgents: false, declaresMcp: false };
+    const outcome = { declaresAgents: false, declaresMcp: false, declaresWorkflows: false };
 
     // act
     const dependencies = dependenciesFromInstall(outcome);
@@ -680,7 +680,7 @@ describe("dependenciesFromInstall", () => {
 
   test("returns agents when only agents are declared", () => {
     // arrange
-    const outcome = { declaresAgents: true, declaresMcp: false };
+    const outcome = { declaresAgents: true, declaresMcp: false, declaresWorkflows: false };
 
     // act
     const dependencies = dependenciesFromInstall(outcome);
@@ -691,7 +691,7 @@ describe("dependenciesFromInstall", () => {
 
   test("returns mcp when only mcp is declared", () => {
     // arrange
-    const outcome = { declaresAgents: false, declaresMcp: true };
+    const outcome = { declaresAgents: false, declaresMcp: true, declaresWorkflows: false };
 
     // act
     const dependencies = dependenciesFromInstall(outcome);
@@ -700,14 +700,36 @@ describe("dependenciesFromInstall", () => {
     assert.deepStrictEqual(dependencies, ["mcp"]);
   });
 
+  test("WDEP-02: returns workflows when only workflows are declared", () => {
+    // arrange
+    const outcome = { declaresAgents: false, declaresMcp: false, declaresWorkflows: true };
+
+    // act
+    const dependencies = dependenciesFromInstall(outcome);
+
+    // assert
+    assert.deepStrictEqual(dependencies, ["workflows"]);
+  });
+
   test("returns agents before mcp when both are declared", () => {
     // arrange
-    const outcome = { declaresAgents: true, declaresMcp: true };
+    const outcome = { declaresAgents: true, declaresMcp: true, declaresWorkflows: false };
 
     // act
     const dependencies = dependenciesFromInstall(outcome);
 
     // assert
     assert.deepStrictEqual(dependencies, ["agents", "mcp"]);
+  });
+
+  test("WDEP-02: returns workflows last when all three are declared", () => {
+    // arrange
+    const outcome = { declaresAgents: true, declaresMcp: true, declaresWorkflows: true };
+
+    // act
+    const dependencies = dependenciesFromInstall(outcome);
+
+    // assert
+    assert.deepStrictEqual(dependencies, ["agents", "mcp", "workflows"]);
   });
 });

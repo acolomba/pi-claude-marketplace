@@ -91,8 +91,9 @@ export interface UpdatedRowSeverity {
  * before (NREG-01).
  *
  * CMC-13 / MSG-SD-3: `dependencies` carries the declared kinds that drive the
- * renderer-time `{requires pi-subagents}` / `{requires pi-mcp}` markers on BOTH
- * forms (WR-03); the renderer narrows on membership plus the notify-time probe.
+ * renderer-time `{requires pi-subagents}` / `{requires pi-mcp}` /
+ * `{requires pi-dynamic-workflows}` markers on BOTH forms (WR-03); the renderer
+ * narrows on membership plus the notify-time probe.
  *
  * D-03/D-06: a realized update transition always reloads Pi resources, and
  * `partially-installed` is a realized transition too.
@@ -115,7 +116,11 @@ export function updatedRowFromOutcome(
   const stale: readonly ContentReason[] =
     outcome.staleWorkflowCommand === true ? (["stale workflow command"] as const) : [];
   const raised = malformed.length > 0 || stale.length > 0;
-  const dependencies = outcomeDependencies(outcome.declaresAgents, outcome.declaresMcp);
+  const dependencies = outcomeDependencies(
+    outcome.declaresAgents,
+    outcome.declaresMcp,
+    outcome.declaresWorkflows,
+  );
   const dropped = outcome.partialDegrade;
   if (dropped !== undefined && dropped.kinds.length > 0) {
     return {
@@ -156,10 +161,18 @@ export function updatedRowFromOutcome(
  * Derive the v2 Dependency[] tuple from the outcome's declared kinds. File-
  * private: both row forms take it from the one composer above, so no caller can
  * hand-derive a third spelling of the same tuple (IN-05).
+ *
+ * WDEP-02: `workflows` spreads LAST, so an update that declares agents and mcp
+ * renders the same two-marker brace whether or not it also declares workflows.
  */
-function outcomeDependencies(declaresAgents: boolean, declaresMcp: boolean): readonly Dependency[] {
+function outcomeDependencies(
+  declaresAgents: boolean,
+  declaresMcp: boolean,
+  declaresWorkflows: boolean,
+): readonly Dependency[] {
   return [
     ...(declaresAgents ? (["agents"] as const) : []),
     ...(declaresMcp ? (["mcp"] as const) : []),
+    ...(declaresWorkflows ? (["workflows"] as const) : []),
   ];
 }

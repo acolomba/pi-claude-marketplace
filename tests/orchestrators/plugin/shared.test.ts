@@ -270,6 +270,15 @@ function assertLocationsEquivalent(
   );
 }
 
+// WR-01: the `partition?: never` refusal keeps the update / reinstall outcome
+// shapes out of `enableRowDependencies`. Those shapes spell the same facts as
+// `declaresAgents` / `declaresMcp` / `declaresWorkflows`, so without the refusal
+// they match the all-optional signal shape structurally and silently return an
+// empty array for every update. This pin fails to compile the day the refusal is
+// dropped.
+// @ts-expect-error a partition-discriminated outcome is refused by the signal shape
+void enableRowDependencies({ partition: "updated", stagedWorkflows: true });
+
 describe("enableRowDependencies", () => {
   test("returns no dependencies when the ledger staged neither companion kind", () => {
     // arrange
@@ -291,6 +300,39 @@ describe("enableRowDependencies", () => {
 
     // assert
     assert.deepStrictEqual(dependencies, ["agents", "mcp"]);
+  });
+
+  test("WDEP-02: returns the workflows dependency when the ledger staged a workflow", () => {
+    // arrange
+    const signals = { stagedWorkflows: true } as const;
+
+    // act
+    const dependencies = enableRowDependencies(signals);
+
+    // assert
+    assert.deepStrictEqual(dependencies, ["workflows"]);
+  });
+
+  test("WDEP-02: returns workflows LAST when all three companion kinds were staged", () => {
+    // arrange
+    const signals = { stagedAgents: true, stagedMcpServers: true, stagedWorkflows: true } as const;
+
+    // act
+    const dependencies = enableRowDependencies(signals);
+
+    // assert
+    assert.deepStrictEqual(dependencies, ["agents", "mcp", "workflows"]);
+  });
+
+  test("WDEP-02: a ledger that staged no workflow declares no host-engine dependency", () => {
+    // arrange
+    const signals = { stagedAgents: true, stagedWorkflows: false } as const;
+
+    // act
+    const dependencies = enableRowDependencies(signals);
+
+    // assert
+    assert.deepStrictEqual(dependencies, ["agents"]);
   });
 });
 

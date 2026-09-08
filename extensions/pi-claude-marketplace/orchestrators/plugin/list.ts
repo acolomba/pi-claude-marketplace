@@ -300,10 +300,17 @@ type ListReason =
 /**
  * Compute `dependencies: readonly Dependency[]` from boolean declares flags.
  * The renderer probes once and emits `{requires pi-subagents}` / `{requires
- * pi-mcp}` when (declares AND companion unloaded). Empty array elides both
- * markers structurally (D-15-02).
+ * pi-mcp}` / `{requires pi-dynamic-workflows}` when (declares AND companion
+ * unloaded). Empty array elides all three markers structurally (D-15-02).
+ *
+ * WDEP-02: `workflows` pushes LAST, so a row that declares agents and mcp
+ * renders the same two-marker brace whether or not it also declares workflows.
  */
-function dependenciesFromDeclares(declaresAgents: boolean, declaresMcp: boolean): Dependency[] {
+function dependenciesFromDeclares(
+  declaresAgents: boolean,
+  declaresMcp: boolean,
+  declaresWorkflows: boolean,
+): Dependency[] {
   const deps: Dependency[] = [];
   if (declaresAgents) {
     deps.push("agents");
@@ -311,6 +318,10 @@ function dependenciesFromDeclares(declaresAgents: boolean, declaresMcp: boolean)
 
   if (declaresMcp) {
     deps.push("mcp");
+  }
+
+  if (declaresWorkflows) {
+    deps.push("workflows");
   }
 
   return deps;
@@ -497,6 +508,11 @@ async function installedRowMessage(
   // that is suspended while the plugin is disabled.
   const declaresAgents = record.resources.agents.length > 0;
   const declaresMcp = record.resources.mcpServers.length > 0;
+  // WDEP-02: the persisted `resources.workflows` array is the inventory row's
+  // only source of truth for the host-engine declaration -- the same
+  // `record.resources` read its two siblings take, not a manifest read or a
+  // filesystem probe.
+  const declaresWorkflows = record.resources.workflows.length > 0;
 
   // D-67-02 / LIST-02: the finer installed-inventory state is derived by the
   // SHARED `classifyInstalledRecord` (the same classifier the completion
@@ -607,7 +623,7 @@ async function installedRowMessage(
     // steady-state inventory.
     status: "installed",
     name: pluginName,
-    dependencies: dependenciesFromDeclares(declaresAgents, declaresMcp),
+    dependencies: dependenciesFromDeclares(declaresAgents, declaresMcp, declaresWorkflows),
     version: record.version,
     ...scopeField,
     ...descriptionField,

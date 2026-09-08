@@ -535,12 +535,14 @@ function installedRowFromOutcome(outcome: PluginInstalledOutcome): PluginInstall
  * through the shared `narrowUnsupportedKinds` seam, exactly as on the
  * `plugin-installed` / `plugin-backfilled` arms.
  *
- * SEV-01 / WR-06: `dependencies` is DERIVED on both arms from the ledger's
- * staged-agent / staged-MCP verdicts through the same `enableRowDependencies`
- * seam the standalone enable row uses, so the `{requires pi-subagents}` /
- * `{requires pi-mcp}` markers fire on a projected re-enable exactly as they do
- * on the sibling install arm. A re-enable that staged neither renders
- * byte-identically to before (NREG-01).
+ * SEV-01 / WDEP-02 / WR-06: `dependencies` is DERIVED on both arms from the
+ * ledger's staged-agent / staged-MCP / staged-workflow verdicts through the
+ * same `enableRowDependencies` seam the standalone enable row uses, so the
+ * `{requires pi-subagents}` / `{requires pi-mcp}` /
+ * `{requires pi-dynamic-workflows}` markers fire on a projected re-enable
+ * exactly as they do on the sibling install arm. A re-enable that staged none
+ * of the three composes an empty array, which elides the brace entirely
+ * (NREG-01).
  *
  * SURF-05 / WARN-01: the row also carries the ledger's other two degradation
  * signals in `install.ts`'s emit order -- `{orphan rewake}`, then the per-kind

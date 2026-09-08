@@ -1374,11 +1374,14 @@ test("WLIF-06: an enable whose source dropped a workflow names the retired comma
 
     // assert -- `foo-plugin:wave` was in the pre-enable record and is not in
     // what the ledger re-placed, so its command is registered over nothing.
+    // WDEP-02: this enable also staged a workflow into a session with no host
+    // engine, so the marker composes after the content token.
     assert.deepStrictEqual(soleRow(notifications), {
       message:
         "A plugin operation needs attention.\n\n" +
         "● claude-plugins-official [user]\n" +
-        "  ● foo-plugin v1.2.3 (installed) {stale workflow command}\n\n" +
+        "  ● foo-plugin v1.2.3 (installed) " +
+        "{stale workflow command, requires pi-dynamic-workflows}\n\n" +
         "/reload to pick up changes",
       severity: "warning",
     });
@@ -1401,7 +1404,10 @@ test("WLIF-06: a renamed workflow retires a command exactly as a deletion does",
     // assert -- one name left, one name arrived, and the LEFT one is what the
     // token is about. Set difference is what makes the two cases identical.
     assert.equal(soleRow(notifications).severity, "warning");
-    assert.match(soleRow(notifications).message, /\{stale workflow command\}/u);
+    assert.match(
+      soleRow(notifications).message,
+      /\{stale workflow command, requires pi-dynamic-workflows\}/u,
+    );
   });
 });
 
@@ -1421,14 +1427,15 @@ test("WLIF-06: a name in both the recorded and the staged set retires nothing", 
     // act
     await setPluginEnabled({ ...args, ctx, enable: true });
 
-    // assert -- SEV-01: this enable staged workflows into a session with no
-    // host workflow engine, so the desired state is not reached and the row is
-    // stamped `warning`.
+    // assert -- SEV-01 / WDEP-02: this enable staged workflows into a session
+    // with no host workflow engine, so the desired state is not reached, the row
+    // is stamped `warning`, and the brace names WHY. The `stale workflow
+    // command` token is absent because the difference is empty.
     assert.deepStrictEqual(soleRow(notifications), {
       message:
         "A plugin operation needs attention.\n\n" +
         "● claude-plugins-official [user]\n" +
-        "  ● foo-plugin v1.2.3 (installed)\n\n" +
+        "  ● foo-plugin v1.2.3 (installed) {requires pi-dynamic-workflows}\n\n" +
         "/reload to pick up changes",
       severity: "warning",
     });
@@ -1457,7 +1464,10 @@ test("WLIF-06: three retired names stamp exactly one token", async () => {
     // or three commands linger, so repeating the token would add no fact.
     const message = soleRow(notifications).message;
     assert.equal(message.split("stale workflow command").length - 1, 1);
-    assert.match(message, /\(installed\) \{stale workflow command\}/u);
+    assert.match(
+      message,
+      /\(installed\) \{stale workflow command, requires pi-dynamic-workflows\}/u,
+    );
   });
 });
 

@@ -222,6 +222,60 @@ test("reinstalledRowFromOutcome preserves agents before MCP when both dependenci
   });
 });
 
+test("WDEP-02: reinstalledRowFromOutcome places the workflows dependency LAST", () => {
+  // arrange
+  const outcome: ReinstallReinstalledOutcome = {
+    partition: "reinstalled",
+    name: "all-three",
+    marketplace: "official",
+    scope: "user",
+    version: "1.0.0",
+    resourcesChanged: true,
+    stagedAgentNames: ["reviewer"],
+    stagedMcpServerNames: ["docs"],
+    declaresAgents: true,
+    declaresMcp: true,
+    declaresWorkflows: true,
+  };
+
+  // act
+  const row = reinstalledRowFromOutcome(outcome, undefined);
+
+  // assert -- SEV-01: the reinstall row stamps the marker and stays `info`; the
+  // no-raise asymmetry against install / update / enable is deliberate.
+  assert.deepStrictEqual(row, {
+    status: "reinstalled",
+    name: "all-three",
+    dependencies: ["agents", "mcp", "workflows"],
+    version: "1.0.0",
+    severity: "info",
+    needsReload: true,
+  });
+});
+
+test("WDEP-02: a reinstall declaring no workflow carries no host-engine dependency", () => {
+  // arrange
+  const outcome: ReinstallReinstalledOutcome = {
+    partition: "reinstalled",
+    name: "none",
+    marketplace: "official",
+    scope: "user",
+    version: "1.0.0",
+    resourcesChanged: true,
+    stagedAgentNames: [],
+    stagedMcpServerNames: [],
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+  };
+
+  // act
+  const row = reinstalledRowFromOutcome(outcome, undefined);
+
+  // assert
+  assert.deepStrictEqual(row.dependencies, []);
+});
+
 test("outcomeToPluginMessage projects a clean reinstalled outcome without row scope", () => {
   // arrange
   const outcome: ReinstallPluginOutcome = {

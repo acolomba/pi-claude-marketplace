@@ -117,20 +117,28 @@ export interface LedgerDegradationSignals {
 /**
  * SEV-01 / D-98-02: derive the closed-set `Dependency[]` an enable row declares
  * from the ledger's staged-count signals -- the same derivation `install.ts`
- * runs off `installCtx.stagedAgentNames` / `stagedMcpServerNames` for the same
- * ledger run. Shared by the standalone enable row and the reconcile enable
- * projection so the two row composers cannot drift.
+ * runs off `installCtx.stagedAgentNames` / `stagedMcpServerNames` /
+ * `stagedWorkflowNames` for the same ledger run. Shared by the standalone
+ * enable row and the reconcile enable projection so the two row composers
+ * cannot drift.
  *
- * WR-01: both picked members are OPTIONAL, so every shape that inherits
+ * WR-01: all three picked members are OPTIONAL, so every shape that inherits
  * `LedgerDegradationSignals` matched this parameter structurally -- including
  * `PluginUpdateUpdatedOutcome`, which spells the same facts as `declaresAgents`
- * / `declaresMcp` and would therefore have compiled here and returned `[]` for
- * every update. The `partition?: never` refusal excludes the outcome shapes
- * discriminated by that field (the update / reinstall partitions) while leaving
- * the two `kind`-discriminated enable outcomes this function serves untouched.
+ * / `declaresMcp` / `declaresWorkflows` and would therefore have compiled here
+ * and returned `[]` for every update. The `partition?: never` refusal excludes
+ * the outcome shapes discriminated by that field (the update / reinstall
+ * partitions) while leaving the two `kind`-discriminated enable outcomes this
+ * function serves untouched.
+ *
+ * WDEP-02: `workflows` pushes LAST, so an enable that staged agents and MCP
+ * servers renders the same two-marker brace whether or not it staged workflows.
  */
 export function enableRowDependencies(
-  signals: Pick<LedgerDegradationSignals, "stagedAgents" | "stagedMcpServers"> & {
+  signals: Pick<
+    LedgerDegradationSignals,
+    "stagedAgents" | "stagedMcpServers" | "stagedWorkflows"
+  > & {
     readonly partition?: never;
   },
 ): readonly Dependency[] {
@@ -141,6 +149,10 @@ export function enableRowDependencies(
 
   if (signals.stagedMcpServers === true) {
     dependencies.push("mcp");
+  }
+
+  if (signals.stagedWorkflows === true) {
+    dependencies.push("workflows");
   }
 
   return dependencies;

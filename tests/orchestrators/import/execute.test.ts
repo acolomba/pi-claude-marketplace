@@ -275,12 +275,17 @@ function installed(
   plugin: string,
   marketplace: string,
   scope: Scope,
-  declares: { readonly agents: boolean; readonly mcp: boolean } = { agents: false, mcp: false },
+  declares: {
+    readonly agents: boolean;
+    readonly mcp: boolean;
+    readonly workflows?: boolean;
+  } = { agents: false, mcp: false },
   resourcesChanged = true,
 ): Installed {
   return {
     declaresAgents: declares.agents,
     declaresMcp: declares.mcp,
+    declaresWorkflows: declares.workflows ?? false,
     kind: "plugin-installed",
     marketplace,
     plugin,
@@ -414,6 +419,7 @@ test("records a marketplace the state does not carry and installs its declared p
       {
         declaresAgents: false,
         declaresMcp: false,
+        declaresWorkflows: false,
         kind: "plugin-installed",
         marketplace: "mp",
         plugin: "plugin",
@@ -1295,24 +1301,50 @@ for (const { cause, installPlugin, order, title } of [
   });
 }
 
-// The installed outcome's two soft-dependency predicates ride onto the public
+// The installed outcome's three soft-dependency predicates ride onto the public
 // outcome and onto the cascade row's marker brace. The boundary reports no
 // companion extension loaded, so a declared dependency always surfaces.
-for (const { declaresAgents, declaresMcp, marker } of [
-  { declaresAgents: false, declaresMcp: false, marker: "" },
-  { declaresAgents: true, declaresMcp: false, marker: " {requires pi-subagents}" },
-  { declaresAgents: false, declaresMcp: true, marker: " {requires pi-mcp}" },
+// WDEP-02: `workflows` composes LAST, so the agents/mcp brace forms are the same
+// bytes whether or not the row also declares workflows.
+for (const { declaresAgents, declaresMcp, declaresWorkflows, marker } of [
+  { declaresAgents: false, declaresMcp: false, declaresWorkflows: false, marker: "" },
+  {
+    declaresAgents: true,
+    declaresMcp: false,
+    declaresWorkflows: false,
+    marker: " {requires pi-subagents}",
+  },
+  {
+    declaresAgents: false,
+    declaresMcp: true,
+    declaresWorkflows: false,
+    marker: " {requires pi-mcp}",
+  },
+  {
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: true,
+    marker: " {requires pi-dynamic-workflows}",
+  },
   {
     declaresAgents: true,
     declaresMcp: true,
+    declaresWorkflows: false,
     marker: " {requires pi-subagents, requires pi-mcp}",
+  },
+  {
+    declaresAgents: true,
+    declaresMcp: true,
+    declaresWorkflows: true,
+    marker: " {requires pi-subagents, requires pi-mcp, requires pi-dynamic-workflows}",
   },
 ] satisfies readonly {
   readonly declaresAgents: boolean;
   readonly declaresMcp: boolean;
+  readonly declaresWorkflows: boolean;
   readonly marker: string;
 }[]) {
-  test(`propagates declaresAgents ${declaresAgents} and declaresMcp ${declaresMcp} onto the outcome and the cascade row`, async (t) => {
+  test(`propagates declaresAgents ${declaresAgents}, declaresMcp ${declaresMcp} and declaresWorkflows ${declaresWorkflows} onto the outcome and the cascade row`, async (t) => {
     // arrange
     const { cwd } = await createHermeticScopes(t, "declares");
     const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3);
@@ -1321,7 +1353,11 @@ for (const { declaresAgents, declaresMcp, marker } of [
       addedMarketplaces: [added("mp", "user")],
       changedResources: true,
       installedPlugins: [
-        installed("plugin", "mp", "user", { agents: declaresAgents, mcp: declaresMcp }),
+        installed("plugin", "mp", "user", {
+          agents: declaresAgents,
+          mcp: declaresMcp,
+          workflows: declaresWorkflows,
+        }),
       ],
     };
 
@@ -1332,7 +1368,12 @@ for (const { declaresAgents, declaresMcp, marker } of [
       deps: collaborators({
         addMarketplace: () => Promise.resolve(addedOutcome("mp")),
         installPlugin: () =>
-          Promise.resolve({ ...installedOutcome(), declaresAgents, declaresMcp }),
+          Promise.resolve({
+            ...installedOutcome(),
+            declaresAgents,
+            declaresMcp,
+            declaresWorkflows,
+          }),
         loadSettings: () =>
           Promise.resolve(
             claudeSettings({
