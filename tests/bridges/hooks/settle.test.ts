@@ -1,21 +1,15 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import test, { beforeEach } from "node:test";
 
 import { MATCH_ALL_IF } from "../../../extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts";
-import {
-  bumpEpoch,
-  currentEpoch,
-  resetRoutingState,
-  setRoutingBucket,
-  type RoutingEntry,
-} from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
+import { type RoutingEntry } from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
+import { createHooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import {
   agentEndCacheHandler,
   inputResetHandlerFor,
   resetSettleState,
   settleHandlerFor,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/settle.ts";
-import { createHooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import { parseMatcher } from "../../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 
@@ -30,7 +24,6 @@ import type {
   ExtensionAPI,
   ExtensionContext,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
-import type { TestContext } from "node:test";
 
 const settledEvent = { type: "agent_settled" } as unknown as AgentSettledEvent;
 const emptyContext = {} as unknown as ExtensionContext;
@@ -45,14 +38,12 @@ interface NotifyCall {
   readonly severity: "info" | "warning" | "error" | undefined;
 }
 
-function isolateCase(t: TestContext): void {
-  resetRoutingState();
-  resetSettleState();
-  t.after(() => {
-    resetSettleState();
-    resetRoutingState();
-  });
-}
+let runtime: HooksRuntime;
+
+beforeEach(() => {
+  runtime = createHooksRuntime();
+  runtime.advanceGeneration();
+});
 
 function makePi(sendError?: Error): { pi: ExtensionAPI; sent: SendCall[] } {
   const sent: SendCall[] = [];
@@ -151,9 +142,9 @@ async function runStop(
   ctx: ExtensionContext,
   executor: HookExecutor,
 ): Promise<void> {
-  const epoch = currentEpoch();
-  agentEndCacheHandler(epoch)(agentEnd("stop"));
-  await settleHandlerFor(epoch, pi, executor)(settledEvent, ctx);
+  const generation = runtime.currentGeneration();
+  agentEndCacheHandler(runtime, generation)(agentEnd("stop"));
+  await settleHandlerFor(runtime, generation, pi, executor)(settledEvent, ctx);
 }
 
 test("uses only the supplied runtime for Stop re-entry", async () => {
@@ -173,30 +164,14 @@ test("uses only the supplied runtime for Stop re-entry", async () => {
     events.push({ pluginId: entry.pluginId, event });
     return Promise.resolve({ kind: "block", reason: "continue" });
   };
+
   const { pi, sent } = makePi();
-  type RuntimeSettleFactory = (
-    runtime: HooksRuntime,
-    capturedGeneration: number,
-    pi: ExtensionAPI,
-    executor?: HookExecutor,
-  ) => (event: AgentSettledEvent, ctx: ExtensionContext) => Promise<void>;
 
   // act
-  const handler = (settleHandlerFor as unknown as RuntimeSettleFactory)(
-    owningRuntime,
-    generation,
-    pi,
-    executor,
-  );
+  const handler = settleHandlerFor(owningRuntime, generation, pi, executor);
   await handler(settledEvent, emptyContext);
 
   // assert
-  assert.deepStrictEqual(events, [
-    {
-      pluginId: "owner",
-      event: { last_assistant_message: "done", stop_hook_active: false },
-    },
-  ]);
   assert.deepStrictEqual(
     sent.map((call) => call.message),
     [
@@ -209,33 +184,43 @@ test("uses only the supplied runtime for Stop re-entry", async () => {
     ],
   );
   assert.strictEqual(peerRuntime.takeLastAssistant(), peerMessage);
+  assert.deepStrictEqual(events, [
+    {
+      pluginId: "owner",
+      event: { last_assistant_message: "done", stop_hook_active: false },
+    },
+  ]);
 });
 
-test("cache miss, one-shot hit, and stale epoch are visible at public boundaries", async (t) => {
+test("cache miss, one-shot hit, and stale epoch are visible at public boundaries", async () => {
   // arrange
-  isolateCase(t);
   const events: unknown[] = [];
   const executor: HookExecutor = (_entry, event): Promise<HookExecResult> => {
     events.push(event);
     return Promise.resolve({ kind: "block", reason: "continue" });
   };
 
-  setRoutingBucket("Stop", [stopEntry("alpha")]);
+  runtime.setRoutingBucket("Stop", [stopEntry("alpha")]);
   const { pi, sent } = makePi();
-  const epoch = currentEpoch();
+  const epoch = runtime.currentGeneration();
 
   // act
-  await settleHandlerFor(epoch, pi, executor)(settledEvent, emptyContext);
-  agentEndCacheHandler(epoch)(agentEnd("stop"));
-  await settleHandlerFor(epoch, pi, executor)(settledEvent, emptyContext);
-  await settleHandlerFor(epoch, pi, executor)(settledEvent, emptyContext);
-  agentEndCacheHandler(epoch)(agentEnd("stop"));
-  await settleHandlerFor(epoch, pi, executor)(settledEvent, emptyContext);
-  const staleEpoch = currentEpoch();
-  bumpEpoch();
-  agentEndCacheHandler(staleEpoch)(agentEnd("stop"));
-  await settleHandlerFor(staleEpoch, pi, executor)(settledEvent, emptyContext);
-  await settleHandlerFor(currentEpoch(), pi, executor)(settledEvent, emptyContext);
+  await settleHandlerFor(runtime, epoch, pi, executor)(settledEvent, emptyContext);
+  agentEndCacheHandler(runtime, epoch)(agentEnd("stop"));
+  await settleHandlerFor(runtime, epoch, pi, executor)(settledEvent, emptyContext);
+  await settleHandlerFor(runtime, epoch, pi, executor)(settledEvent, emptyContext);
+  agentEndCacheHandler(runtime, epoch)(agentEnd("stop"));
+  await settleHandlerFor(runtime, epoch, pi, executor)(settledEvent, emptyContext);
+  const staleEpoch = runtime.currentGeneration();
+  runtime.advanceGeneration();
+  agentEndCacheHandler(runtime, staleEpoch)(agentEnd("stop"));
+  await settleHandlerFor(runtime, staleEpoch, pi, executor)(settledEvent, emptyContext);
+  await settleHandlerFor(
+    runtime,
+    runtime.currentGeneration(),
+    pi,
+    executor,
+  )(settledEvent, emptyContext);
 
   // assert
   assert.deepStrictEqual(events, [
@@ -261,39 +246,37 @@ test("cache miss, one-shot hit, and stale epoch are visible at public boundaries
   );
 });
 
-test("the last agent ending wins before settle", async (t) => {
+test("the last agent ending wins before settle", async () => {
   // arrange
-  isolateCase(t);
   const events: unknown[] = [];
   const executor: HookExecutor = (_entry, event): Promise<HookExecResult> => {
     events.push(event);
     return Promise.resolve({ kind: "noop" });
   };
 
-  setRoutingBucket("Stop", [stopEntry("alpha")]);
+  runtime.setRoutingBucket("Stop", [stopEntry("alpha")]);
   const { pi } = makePi();
-  const epoch = currentEpoch();
-  const cache = agentEndCacheHandler(epoch);
+  const epoch = runtime.currentGeneration();
+  const cache = agentEndCacheHandler(runtime, epoch);
 
   // act
   cache(agentEnd("aborted"));
   cache(agentEnd("stop"));
-  await settleHandlerFor(epoch, pi, executor)(settledEvent, emptyContext);
+  await settleHandlerFor(runtime, epoch, pi, executor)(settledEvent, emptyContext);
 
   // assert
   assert.deepStrictEqual(events, [{ last_assistant_message: "done", stop_hook_active: false }]);
 });
 
-test("an ending without an assistant has no public effect", async (t) => {
+test("an ending without an assistant has no public effect", async () => {
   // arrange
-  isolateCase(t);
   const fired: string[] = [];
   const executor: HookExecutor = (entry): Promise<HookExecResult> => {
     fired.push(entry.pluginId);
     return Promise.resolve({ kind: "block", reason: "continue" });
   };
 
-  setRoutingBucket("Stop", [stopEntry("alpha")]);
+  runtime.setRoutingBucket("Stop", [stopEntry("alpha")]);
   const ending = {
     type: "agent_end",
     messages: [
@@ -302,27 +285,26 @@ test("an ending without an assistant has no public effect", async (t) => {
     ],
   } as unknown as AgentEndEvent;
   const { pi, sent } = makePi();
-  const epoch = currentEpoch();
+  const epoch = runtime.currentGeneration();
 
   // act
-  agentEndCacheHandler(epoch)(ending);
-  await settleHandlerFor(epoch, pi, executor)(settledEvent, emptyContext);
+  agentEndCacheHandler(runtime, epoch)(ending);
+  await settleHandlerFor(runtime, epoch, pi, executor)(settledEvent, emptyContext);
 
   // assert
   assert.deepStrictEqual(fired, []);
-  assert.deepStrictEqual(sent, []);
+  assert.strictEqual(sent.length, 0);
 });
 
-test("trailing non-assistant messages do not replace the assistant", async (t) => {
+test("trailing non-assistant messages do not replace the assistant", async () => {
   // arrange
-  isolateCase(t);
   const events: unknown[] = [];
   const executor: HookExecutor = (_entry, event): Promise<HookExecResult> => {
     events.push(event);
     return Promise.resolve({ kind: "noop" });
   };
 
-  setRoutingBucket("Stop", [stopEntry("alpha")]);
+  runtime.setRoutingBucket("Stop", [stopEntry("alpha")]);
   const ending = {
     type: "agent_end",
     messages: [
@@ -336,26 +318,25 @@ test("trailing non-assistant messages do not replace the assistant", async (t) =
     ],
   } as unknown as AgentEndEvent;
   const { pi } = makePi();
-  const epoch = currentEpoch();
+  const epoch = runtime.currentGeneration();
 
   // act
-  agentEndCacheHandler(epoch)(ending);
-  await settleHandlerFor(epoch, pi, executor)(settledEvent, emptyContext);
+  agentEndCacheHandler(runtime, epoch)(ending);
+  await settleHandlerFor(runtime, epoch, pi, executor)(settledEvent, emptyContext);
 
   // assert
   assert.deepStrictEqual(events, [{ last_assistant_message: "answer", stop_hook_active: false }]);
 });
 
-test("assistant text joins in order and excludes non-text content", async (t) => {
+test("assistant text joins in order and excludes non-text content", async () => {
   // arrange
-  isolateCase(t);
   const events: unknown[] = [];
   const executor: HookExecutor = (_entry, event): Promise<HookExecResult> => {
     events.push(event);
     return Promise.resolve({ kind: "noop" });
   };
 
-  setRoutingBucket("Stop", [stopEntry("alpha")]);
+  runtime.setRoutingBucket("Stop", [stopEntry("alpha")]);
   const ending = {
     type: "agent_end",
     messages: [
@@ -372,11 +353,11 @@ test("assistant text joins in order and excludes non-text content", async (t) =>
     ],
   } as unknown as AgentEndEvent;
   const { pi } = makePi();
-  const epoch = currentEpoch();
+  const epoch = runtime.currentGeneration();
 
   // act
-  agentEndCacheHandler(epoch)(ending);
-  await settleHandlerFor(epoch, pi, executor)(settledEvent, emptyContext);
+  agentEndCacheHandler(runtime, epoch)(ending);
+  await settleHandlerFor(runtime, epoch, pi, executor)(settledEvent, emptyContext);
 
   // assert
   assert.deepStrictEqual(events, [
@@ -385,23 +366,22 @@ test("assistant text joins in order and excludes non-text content", async (t) =>
 });
 
 for (const stopReason of ["pending", "aborted", "toolUse", "deferred"] as const) {
-  test(`${stopReason} endings do not dispatch a settle bucket`, async (t) => {
+  test(`${stopReason} endings do not dispatch a settle bucket`, async () => {
     // arrange
-    isolateCase(t);
     const fired: string[] = [];
     const executor: HookExecutor = (entry): Promise<HookExecResult> => {
       fired.push(entry.pluginId);
       return Promise.resolve({ kind: "block", reason: "continue" });
     };
 
-    setRoutingBucket("Stop", [stopEntry("stop")]);
-    setRoutingBucket("StopFailure", [failureEntry("failure")]);
+    runtime.setRoutingBucket("Stop", [stopEntry("stop")]);
+    runtime.setRoutingBucket("StopFailure", [failureEntry("failure")]);
     const { pi, sent } = makePi();
-    const epoch = currentEpoch();
+    const epoch = runtime.currentGeneration();
 
     // act
-    agentEndCacheHandler(epoch)(agentEnd(stopReason));
-    await settleHandlerFor(epoch, pi, executor)(settledEvent, emptyContext);
+    agentEndCacheHandler(runtime, epoch)(agentEnd(stopReason));
+    await settleHandlerFor(runtime, epoch, pi, executor)(settledEvent, emptyContext);
 
     // assert
     assert.deepStrictEqual(fired, []);
@@ -409,24 +389,23 @@ for (const stopReason of ["pending", "aborted", "toolUse", "deferred"] as const)
   });
 }
 
-test("an unknown ending is dropped without throwing", async (t) => {
+test("an unknown ending is dropped without throwing", async () => {
   // arrange
-  isolateCase(t);
   const fired: string[] = [];
   const executor: HookExecutor = (entry): Promise<HookExecResult> => {
     fired.push(entry.pluginId);
     return Promise.resolve({ kind: "block", reason: "continue" });
   };
 
-  setRoutingBucket("Stop", [stopEntry("alpha")]);
+  runtime.setRoutingBucket("Stop", [stopEntry("alpha")]);
   const { pi, sent } = makePi();
-  const epoch = currentEpoch();
-  agentEndCacheHandler(epoch)(agentEnd("future" as never));
+  const epoch = runtime.currentGeneration();
+  agentEndCacheHandler(runtime, epoch)(agentEnd("future" as never));
   let settleError: unknown;
 
   // act
   try {
-    await settleHandlerFor(epoch, pi, executor)(settledEvent, emptyContext);
+    await settleHandlerFor(runtime, epoch, pi, executor)(settledEvent, emptyContext);
   } catch (error) {
     settleError = error;
   }
@@ -437,16 +416,15 @@ test("an unknown ending is dropped without throwing", async (t) => {
   assert.deepStrictEqual(sent, []);
 });
 
-test("an empty Stop bucket has no public effect", async (t) => {
+test("an empty Stop bucket has no public effect", async () => {
   // arrange
-  isolateCase(t);
   const fired: string[] = [];
   const executor: HookExecutor = (entry): Promise<HookExecResult> => {
     fired.push(entry.pluginId);
     return Promise.resolve({ kind: "block", reason: "continue" });
   };
 
-  setRoutingBucket("Stop", []);
+  runtime.setRoutingBucket("Stop", []);
   const { pi, sent } = makePi();
 
   // act
@@ -457,12 +435,11 @@ test("an empty Stop bucket has no public effect", async (t) => {
   assert.deepStrictEqual(sent, []);
 });
 
-test("a block re-enters with the complete follow-up message", async (t) => {
+test("a block re-enters with the complete follow-up message", async () => {
   // arrange
-  isolateCase(t);
   const executor: HookExecutor = (): Promise<HookExecResult> =>
     Promise.resolve({ kind: "block", reason: "continue" });
-  setRoutingBucket("Stop", [stopEntry("alpha")]);
+  runtime.setRoutingBucket("Stop", [stopEntry("alpha")]);
   const { pi, sent } = makePi();
 
   // act
@@ -482,11 +459,10 @@ test("a block re-enters with the complete follow-up message", async (t) => {
   ]);
 });
 
-test("a reasonless block re-enters with empty content", async (t) => {
+test("a reasonless block re-enters with empty content", async () => {
   // arrange
-  isolateCase(t);
   const executor: HookExecutor = (): Promise<HookExecResult> => Promise.resolve({ kind: "block" });
-  setRoutingBucket("Stop", [stopEntry("alpha")]);
+  runtime.setRoutingBucket("Stop", [stopEntry("alpha")]);
   const { pi, sent } = makePi();
 
   // act
@@ -497,12 +473,11 @@ test("a reasonless block re-enters with empty content", async (t) => {
   assert.strictEqual(sent.length, 1);
 });
 
-test("additional context re-enters through the block lane", async (t) => {
+test("additional context re-enters through the block lane", async () => {
   // arrange
-  isolateCase(t);
   const executor: HookExecutor = (): Promise<HookExecResult> =>
     Promise.resolve({ kind: "mutate", additionalContext: "more context" });
-  setRoutingBucket("Stop", [stopEntry("alpha")]);
+  runtime.setRoutingBucket("Stop", [stopEntry("alpha")]);
   const { pi, sent } = makePi();
 
   // act
@@ -522,11 +497,10 @@ test("additional context re-enters through the block lane", async (t) => {
   ]);
 });
 
-test("a noop Stop outcome emits no message or notification", async (t) => {
+test("a noop Stop outcome emits no message or notification", async () => {
   // arrange
-  isolateCase(t);
   const executor: HookExecutor = (): Promise<HookExecResult> => Promise.resolve({ kind: "noop" });
-  setRoutingBucket("Stop", [stopEntry("alpha")]);
+  runtime.setRoutingBucket("Stop", [stopEntry("alpha")]);
   const { pi, sent } = makePi();
   const { ctx, notified } = makeContext();
 
@@ -538,9 +512,8 @@ test("a noop Stop outcome emits no message or notification", async (t) => {
   assert.deepStrictEqual(notified, []);
 });
 
-test("a stop outcome suppresses a preceding block", async (t) => {
+test("a stop outcome suppresses a preceding block", async () => {
   // arrange
-  isolateCase(t);
   const fired: string[] = [];
   const executor: HookExecutor = (entry): Promise<HookExecResult> => {
     fired.push(entry.pluginId);
@@ -551,7 +524,7 @@ test("a stop outcome suppresses a preceding block", async (t) => {
     );
   };
 
-  setRoutingBucket("Stop", [stopEntry("blocker"), stopEntry("stopper")]);
+  runtime.setRoutingBucket("Stop", [stopEntry("blocker"), stopEntry("stopper")]);
   const { pi, sent } = makePi();
 
   // act
@@ -562,9 +535,8 @@ test("a stop outcome suppresses a preceding block", async (t) => {
   assert.deepStrictEqual(sent, []);
 });
 
-test("a stop outcome suppresses a following block", async (t) => {
+test("a stop outcome suppresses a following block", async () => {
   // arrange
-  isolateCase(t);
   const fired: string[] = [];
   const executor: HookExecutor = (entry): Promise<HookExecResult> => {
     fired.push(entry.pluginId);
@@ -573,7 +545,7 @@ test("a stop outcome suppresses a following block", async (t) => {
     );
   };
 
-  setRoutingBucket("Stop", [stopEntry("stopper"), stopEntry("blocker")]);
+  runtime.setRoutingBucket("Stop", [stopEntry("stopper"), stopEntry("blocker")]);
   const { pi, sent } = makePi();
 
   // act
@@ -584,16 +556,15 @@ test("a stop outcome suppresses a following block", async (t) => {
   assert.deepStrictEqual(sent, []);
 });
 
-test("an asynchronous Stop declaration degrades to noop", async (t) => {
+test("an asynchronous Stop declaration degrades to noop", async () => {
   // arrange
-  isolateCase(t);
   const fired: string[] = [];
   const executor: HookExecutor = (entry): Promise<HookExecResult> => {
     fired.push(entry.pluginId);
     return Promise.resolve({ kind: "block", reason: "continue" });
   };
 
-  setRoutingBucket("Stop", [stopEntry("alpha", true)]);
+  runtime.setRoutingBucket("Stop", [stopEntry("alpha", true)]);
   const { pi, sent } = makePi();
 
   // act
@@ -604,9 +575,8 @@ test("an asynchronous Stop declaration degrades to noop", async (t) => {
   assert.deepStrictEqual(sent, []);
 });
 
-test("a false if predicate skips a Stop declaration", async (t) => {
+test("a false if predicate skips a Stop declaration", async () => {
   // arrange
-  isolateCase(t);
   const fired: string[] = [];
   const executor: HookExecutor = (entry): Promise<HookExecResult> => {
     fired.push(entry.pluginId);
@@ -617,7 +587,7 @@ test("a false if predicate skips a Stop declaration", async (t) => {
     ...stopEntry("alpha"),
     ifPredicate: { kind: "mcp-literal", toolName: "mcp__server__tool" },
   };
-  setRoutingBucket("Stop", [entry]);
+  runtime.setRoutingBucket("Stop", [entry]);
   const { pi, sent } = makePi();
 
   // act
@@ -628,13 +598,13 @@ test("a false if predicate skips a Stop declaration", async (t) => {
   assert.deepStrictEqual(sent, []);
 });
 
-test("an epoch change during Stop execution discards the stale result", async (t) => {
+test("a reload during awaited Stop work discards every stale effect", async () => {
   // arrange
-  isolateCase(t);
-  const staleExecutor: HookExecutor = (): Promise<HookExecResult> => {
-    bumpEpoch();
-    resetSettleState();
-    return Promise.resolve({ kind: "block", reason: "stale" });
+  let resolveStaleOutcome: ((result: HookExecResult) => void) | undefined;
+  const staleExecutor: HookExecutor = () => {
+    return new Promise((resolve) => {
+      resolveStaleOutcome = resolve;
+    });
   };
 
   const liveEvents: unknown[] = [];
@@ -643,33 +613,44 @@ test("an epoch change during Stop execution discards the stale result", async (t
     return Promise.resolve({ kind: "block", reason: "fresh" });
   };
 
-  setRoutingBucket("Stop", [stopEntry("alpha")]);
+  runtime.setRoutingBucket("Stop", [stopEntry("alpha")]);
   const { pi, sent } = makePi();
-  const epoch = currentEpoch();
+  const { ctx, notified } = makeContext();
+  const generation = runtime.currentGeneration();
 
   // act
-  agentEndCacheHandler(epoch)(agentEnd("stop"));
-  await settleHandlerFor(epoch, pi, staleExecutor)(settledEvent, emptyContext);
-  await runStop(pi, emptyContext, liveExecutor);
+  agentEndCacheHandler(runtime, generation)(agentEnd("stop"));
+  const staleSettle = settleHandlerFor(runtime, generation, pi, staleExecutor)(settledEvent, ctx);
+  runtime.advanceGeneration();
+  resetSettleState(runtime);
+  resolveStaleOutcome?.({ kind: "block", reason: "stale" });
+  await staleSettle;
+
+  // assert
+  assert.strictEqual(sent.length, 0);
+  assert.deepStrictEqual(notified, []);
+  assert.strictEqual(runtime.isStopHookActive(), false);
+
+  // act
+  await runStop(pi, ctx, liveExecutor);
 
   // assert
   assert.deepStrictEqual(liveEvents, [{ last_assistant_message: "done", stop_hook_active: false }]);
   assert.deepStrictEqual(
-    sent.map((call) => call.message["content"]),
+    sent.map((call) => call.message.content),
     ["fresh"],
   );
 });
 
-test("the eighth consecutive block is suppressed and warns only once", async (t) => {
+test("the eighth consecutive block is suppressed and warns only once", async () => {
   // arrange
-  isolateCase(t);
   const flags: boolean[] = [];
   const executor: HookExecutor = (_entry, event): Promise<HookExecResult> => {
     flags.push((event as { stop_hook_active: boolean }).stop_hook_active);
     return Promise.resolve({ kind: "block", reason: "continue" });
   };
 
-  setRoutingBucket("Stop", [stopEntry("alpha")]);
+  runtime.setRoutingBucket("Stop", [stopEntry("alpha")]);
   const { pi, sent } = makePi();
   const { ctx, notified } = makeContext();
 
@@ -689,9 +670,8 @@ test("the eighth consecutive block is suppressed and warns only once", async (t)
   ]);
 });
 
-test("block and additional-context re-entries share one cap", async (t) => {
+test("block and additional-context re-entries share one cap", async () => {
   // arrange
-  isolateCase(t);
   let invocation = 0;
   const executor: HookExecutor = (): Promise<HookExecResult> => {
     const outcome: HookExecResult =
@@ -702,7 +682,7 @@ test("block and additional-context re-entries share one cap", async (t) => {
     return Promise.resolve(outcome);
   };
 
-  setRoutingBucket("Stop", [stopEntry("alpha")]);
+  runtime.setRoutingBucket("Stop", [stopEntry("alpha")]);
   const { pi, sent } = makePi();
   const { ctx, notified } = makeContext();
 
@@ -727,13 +707,12 @@ test("block and additional-context re-entries share one cap", async (t) => {
   assert.strictEqual(notified.length, 1);
 });
 
-test("a noop resets the cap and rearms its notification", async (t) => {
+test("a noop resets the cap and rearms its notification", async () => {
   // arrange
-  isolateCase(t);
   let mode: "block" | "noop" = "block";
   const executor: HookExecutor = (): Promise<HookExecResult> =>
     Promise.resolve(mode === "block" ? { kind: "block", reason: "continue" } : { kind: "noop" });
-  setRoutingBucket("Stop", [stopEntry("alpha")]);
+  runtime.setRoutingBucket("Stop", [stopEntry("alpha")]);
   const { pi, sent } = makePi();
   const { ctx, notified } = makeContext();
 
@@ -754,9 +733,8 @@ test("a noop resets the cap and rearms its notification", async (t) => {
   assert.strictEqual(notified.length, 1);
 });
 
-test("a stop resets the cap but leaves the next payload active", async (t) => {
+test("a stop resets the cap but leaves the next payload active", async () => {
   // arrange
-  isolateCase(t);
   let mode: "block" | "stop" = "block";
   const flags: boolean[] = [];
   const executor: HookExecutor = (_entry, event): Promise<HookExecResult> => {
@@ -766,7 +744,7 @@ test("a stop resets the cap but leaves the next payload active", async (t) => {
     );
   };
 
-  setRoutingBucket("Stop", [stopEntry("alpha")]);
+  runtime.setRoutingBucket("Stop", [stopEntry("alpha")]);
   const { pi, sent } = makePi();
   const { ctx, notified } = makeContext();
 
@@ -785,24 +763,23 @@ test("a stop resets the cap but leaves the next payload active", async (t) => {
   assert.strictEqual(notified.length, 1);
 });
 
-test("a live input clears active state and resets the cap", async (t) => {
+test("a live input clears active state and resets the cap", async () => {
   // arrange
-  isolateCase(t);
   const flags: boolean[] = [];
   const executor: HookExecutor = (_entry, event): Promise<HookExecResult> => {
     flags.push((event as { stop_hook_active: boolean }).stop_hook_active);
     return Promise.resolve({ kind: "block", reason: "continue" });
   };
 
-  setRoutingBucket("Stop", [stopEntry("alpha")]);
+  runtime.setRoutingBucket("Stop", [stopEntry("alpha")]);
   const { pi, sent } = makePi();
   const { ctx, notified } = makeContext();
-  const epoch = currentEpoch();
+  const epoch = runtime.currentGeneration();
 
   // act
   await runStop(pi, ctx, executor);
   await runStop(pi, ctx, executor);
-  inputResetHandlerFor(epoch)();
+  inputResetHandlerFor(runtime, epoch)();
   for (let index = 0; index < 8; index += 1) {
     await runStop(pi, ctx, executor);
   }
@@ -813,22 +790,21 @@ test("a live input clears active state and resets the cap", async (t) => {
   assert.strictEqual(notified.length, 1);
 });
 
-test("a stale input handler cannot clear live active state", async (t) => {
+test("a stale input handler cannot clear live active state", async () => {
   // arrange
-  isolateCase(t);
   const flags: boolean[] = [];
   const executor: HookExecutor = (_entry, event): Promise<HookExecResult> => {
     flags.push((event as { stop_hook_active: boolean }).stop_hook_active);
     return Promise.resolve({ kind: "block", reason: "continue" });
   };
 
-  setRoutingBucket("Stop", [stopEntry("alpha")]);
+  runtime.setRoutingBucket("Stop", [stopEntry("alpha")]);
   const { pi, sent } = makePi();
-  const staleHandler = inputResetHandlerFor(currentEpoch());
+  const staleHandler = inputResetHandlerFor(runtime, runtime.currentGeneration());
 
   // act
   await runStop(pi, emptyContext, executor);
-  bumpEpoch();
+  runtime.advanceGeneration();
   staleHandler();
   await runStop(pi, emptyContext, executor);
 
@@ -837,24 +813,23 @@ test("a stale input handler cannot clear live active state", async (t) => {
   assert.strictEqual(sent.length, 2);
 });
 
-test("resetting settle state clears cached and active session data", async (t) => {
+test("resetting settle state clears cached and active session data", async () => {
   // arrange
-  isolateCase(t);
   const flags: boolean[] = [];
   const executor: HookExecutor = (_entry, event): Promise<HookExecResult> => {
     flags.push((event as { stop_hook_active: boolean }).stop_hook_active);
     return Promise.resolve({ kind: "block", reason: "continue" });
   };
 
-  setRoutingBucket("Stop", [stopEntry("alpha")]);
+  runtime.setRoutingBucket("Stop", [stopEntry("alpha")]);
   const { pi, sent } = makePi();
-  const epoch = currentEpoch();
+  const epoch = runtime.currentGeneration();
 
   // act
   await runStop(pi, emptyContext, executor);
-  agentEndCacheHandler(epoch)(agentEnd("stop"));
-  resetSettleState();
-  await settleHandlerFor(epoch, pi, executor)(settledEvent, emptyContext);
+  agentEndCacheHandler(runtime, epoch)(agentEnd("stop"));
+  resetSettleState(runtime);
+  await settleHandlerFor(runtime, epoch, pi, executor)(settledEvent, emptyContext);
   await runStop(pi, emptyContext, executor);
 
   // assert
@@ -862,15 +837,14 @@ test("resetting settle state clears cached and active session data", async (t) =
   assert.strictEqual(sent.length, 2);
 });
 
-test("a send failure is contained and a later input starts a clean run", async (t) => {
+test("a send failure is contained and a later input starts a clean run", async () => {
   // arrange
-  isolateCase(t);
   const executor: HookExecutor = (): Promise<HookExecResult> =>
     Promise.resolve({ kind: "block", reason: "continue" });
-  setRoutingBucket("Stop", [stopEntry("alpha")]);
+  runtime.setRoutingBucket("Stop", [stopEntry("alpha")]);
   const failingPi = makePi(new Error("host refused")).pi;
   const healthy = makePi();
-  const epoch = currentEpoch();
+  const epoch = runtime.currentGeneration();
   let settleError: unknown;
 
   // act
@@ -880,8 +854,8 @@ test("a send failure is contained and a later input starts a clean run", async (
     settleError = error;
   }
 
-  await settleHandlerFor(epoch, healthy.pi, executor)(settledEvent, emptyContext);
-  inputResetHandlerFor(epoch)();
+  await settleHandlerFor(runtime, epoch, healthy.pi, executor)(settledEvent, emptyContext);
+  inputResetHandlerFor(runtime, epoch)();
   await runStop(healthy.pi, emptyContext, executor);
 
   // assert
@@ -892,9 +866,8 @@ test("a send failure is contained and a later input starts a clean run", async (
   );
 });
 
-test("an executor rejection consumes its ending and permits a fresh ending", async (t) => {
+test("an executor rejection consumes its ending and permits a fresh ending", async () => {
   // arrange
-  isolateCase(t);
   const executorError = new Error("executor failed");
   const rejecting: HookExecutor = (): Promise<HookExecResult> => Promise.reject(executorError);
   const events: unknown[] = [];
@@ -903,22 +876,22 @@ test("an executor rejection consumes its ending and permits a fresh ending", asy
     return Promise.resolve({ kind: "noop" });
   };
 
-  setRoutingBucket("Stop", [stopEntry("alpha")]);
+  runtime.setRoutingBucket("Stop", [stopEntry("alpha")]);
   const { pi, sent } = makePi();
-  const epoch = currentEpoch();
-  agentEndCacheHandler(epoch)(agentEnd("stop"));
+  const epoch = runtime.currentGeneration();
+  agentEndCacheHandler(runtime, epoch)(agentEnd("stop"));
   let rejectedWith: unknown;
 
   // act
   try {
-    await settleHandlerFor(epoch, pi, rejecting)(settledEvent, emptyContext);
+    await settleHandlerFor(runtime, epoch, pi, rejecting)(settledEvent, emptyContext);
   } catch (error) {
     rejectedWith = error;
   }
 
-  await settleHandlerFor(epoch, pi, healthy)(settledEvent, emptyContext);
-  agentEndCacheHandler(epoch)(agentEnd("stop"));
-  await settleHandlerFor(epoch, pi, healthy)(settledEvent, emptyContext);
+  await settleHandlerFor(runtime, epoch, pi, healthy)(settledEvent, emptyContext);
+  agentEndCacheHandler(runtime, epoch)(agentEnd("stop"));
+  await settleHandlerFor(runtime, epoch, pi, healthy)(settledEvent, emptyContext);
 
   // assert
   assert.strictEqual(rejectedWith, executorError);
@@ -926,27 +899,26 @@ test("an executor rejection consumes its ending and permits a fresh ending", asy
   assert.deepStrictEqual(sent, []);
 });
 
-test("an error ending reaches matching failure observers with its payload", async (t) => {
+test("an error ending reaches matching failure observers with its payload", async () => {
   // arrange
-  isolateCase(t);
   const observed: Array<{ pluginId: string; event: unknown }> = [];
   const executor: HookExecutor = (entry, event): Promise<HookExecResult> => {
     observed.push({ pluginId: entry.pluginId, event });
     return Promise.resolve({ kind: "noop" });
   };
 
-  setRoutingBucket("StopFailure", [
+  runtime.setRoutingBucket("StopFailure", [
     failureEntry("all"),
     failureEntry("star", "*"),
     failureEntry("exact", "rate_limit"),
     failureEntry("other", "billing_error"),
   ]);
   const { pi, sent } = makePi();
-  const epoch = currentEpoch();
+  const epoch = runtime.currentGeneration();
 
   // act
-  agentEndCacheHandler(epoch)(failureEnd("error", "Rate limit exceeded (429)"));
-  await settleHandlerFor(epoch, pi, executor)(settledEvent, emptyContext);
+  agentEndCacheHandler(runtime, epoch)(failureEnd("error", "Rate limit exceeded (429)"));
+  await settleHandlerFor(runtime, epoch, pi, executor)(settledEvent, emptyContext);
 
   // assert
   assert.deepStrictEqual(observed, [
@@ -966,22 +938,56 @@ test("an error ending reaches matching failure observers with its payload", asyn
   assert.deepStrictEqual(sent, []);
 });
 
-test("a length ending reports max-output classification without re-entry", async (t) => {
+test("a reload during awaited StopFailure work discards the stale continuation", async () => {
   // arrange
-  isolateCase(t);
+  let release: (result: HookExecResult) => void = () => {
+    assert.fail("StopFailure executor was not started");
+  };
+
+  const outcome = new Promise<HookExecResult>((resolve) => {
+    release = resolve;
+  });
+  const events: unknown[] = [];
+  const executor: HookExecutor = (_entry, event) => {
+    events.push(event);
+    return outcome;
+  };
+
+  runtime.setRoutingBucket("StopFailure", [failureEntry("observer")]);
+  const { pi, sent } = makePi();
+  const { ctx, notified } = makeContext();
+  const generation = runtime.currentGeneration();
+  agentEndCacheHandler(runtime, generation)(failureEnd("error", "provider failed"));
+
+  // act
+  const staleSettle = settleHandlerFor(runtime, generation, pi, executor)(settledEvent, ctx);
+  runtime.advanceGeneration();
+  resetSettleState(runtime);
+  release({ kind: "noop" });
+  await staleSettle;
+
+  // assert
+  assert.deepStrictEqual(sent, []);
+  assert.deepStrictEqual(notified, []);
+  assert.strictEqual(runtime.isStopHookActive(), false);
+  assert.deepStrictEqual(events, [{ error: "unknown", last_assistant_message: "provider failed" }]);
+});
+
+test("a length ending reports max-output classification without re-entry", async () => {
+  // arrange
   const events: unknown[] = [];
   const executor: HookExecutor = (_entry, event): Promise<HookExecResult> => {
     events.push(event);
     return Promise.resolve({ kind: "block", reason: "ignored" });
   };
 
-  setRoutingBucket("StopFailure", [failureEntry("observer")]);
+  runtime.setRoutingBucket("StopFailure", [failureEntry("observer")]);
   const { pi, sent } = makePi();
-  const epoch = currentEpoch();
+  const epoch = runtime.currentGeneration();
 
   // act
-  agentEndCacheHandler(epoch)(failureEnd("length", "provider text"));
-  await settleHandlerFor(epoch, pi, executor)(settledEvent, emptyContext);
+  agentEndCacheHandler(runtime, epoch)(failureEnd("length", "provider text"));
+  await settleHandlerFor(runtime, epoch, pi, executor)(settledEvent, emptyContext);
 
   // assert
   assert.deepStrictEqual(events, [
@@ -990,30 +996,28 @@ test("a length ending reports max-output classification without re-entry", async
   assert.deepStrictEqual(sent, []);
 });
 
-test("a failure without text reports unknown with an empty message", async (t) => {
+test("a failure without text reports unknown with an empty message", async () => {
   // arrange
-  isolateCase(t);
   const events: unknown[] = [];
   const executor: HookExecutor = (_entry, event): Promise<HookExecResult> => {
     events.push(event);
     return Promise.resolve({ kind: "noop" });
   };
 
-  setRoutingBucket("StopFailure", [failureEntry("observer")]);
+  runtime.setRoutingBucket("StopFailure", [failureEntry("observer")]);
   const { pi } = makePi();
-  const epoch = currentEpoch();
+  const epoch = runtime.currentGeneration();
 
   // act
-  agentEndCacheHandler(epoch)(failureEnd("error"));
-  await settleHandlerFor(epoch, pi, executor)(settledEvent, emptyContext);
+  agentEndCacheHandler(runtime, epoch)(failureEnd("error"));
+  await settleHandlerFor(runtime, epoch, pi, executor)(settledEvent, emptyContext);
 
   // assert
   assert.deepStrictEqual(events, [{ error: "unknown", last_assistant_message: "" }]);
 });
 
-test("all failure outcomes run in order and are then discarded", async (t) => {
+test("all failure outcomes run in order and are then discarded", async () => {
   // arrange
-  isolateCase(t);
   const observed: Array<{ pluginId: string; event: unknown }> = [];
   const outcomes: Record<string, HookExecResult> = {
     noop: { kind: "noop" },
@@ -1032,19 +1036,19 @@ test("all failure outcomes run in order and are then discarded", async (t) => {
     return Promise.resolve({ kind: "block", reason: "fresh" });
   };
 
-  setRoutingBucket("StopFailure", [
+  runtime.setRoutingBucket("StopFailure", [
     failureEntry("noop"),
     failureEntry("block"),
     failureEntry("mutate"),
     failureEntry("stop"),
   ]);
   const { pi, sent } = makePi();
-  const epoch = currentEpoch();
+  const epoch = runtime.currentGeneration();
 
   // act
-  agentEndCacheHandler(epoch)(failureEnd("error", "provider failed"));
-  await settleHandlerFor(epoch, pi, failureExecutor)(settledEvent, emptyContext);
-  setRoutingBucket("Stop", [stopEntry("fresh")]);
+  agentEndCacheHandler(runtime, epoch)(failureEnd("error", "provider failed"));
+  await settleHandlerFor(runtime, epoch, pi, failureExecutor)(settledEvent, emptyContext);
+  runtime.setRoutingBucket("Stop", [stopEntry("fresh")]);
   await runStop(pi, emptyContext, stopExecutor);
 
   // assert
@@ -1066,22 +1070,21 @@ test("all failure outcomes run in order and are then discarded", async (t) => {
   );
 });
 
-test("an empty failure bucket has no public effect", async (t) => {
+test("an empty failure bucket has no public effect", async () => {
   // arrange
-  isolateCase(t);
   const fired: string[] = [];
   const executor: HookExecutor = (entry): Promise<HookExecResult> => {
     fired.push(entry.pluginId);
     return Promise.resolve({ kind: "block", reason: "ignored" });
   };
 
-  setRoutingBucket("StopFailure", []);
+  runtime.setRoutingBucket("StopFailure", []);
   const { pi, sent } = makePi();
-  const epoch = currentEpoch();
+  const epoch = runtime.currentGeneration();
 
   // act
-  agentEndCacheHandler(epoch)(failureEnd("error", "provider failed"));
-  await settleHandlerFor(epoch, pi, executor)(settledEvent, emptyContext);
+  agentEndCacheHandler(runtime, epoch)(failureEnd("error", "provider failed"));
+  await settleHandlerFor(runtime, epoch, pi, executor)(settledEvent, emptyContext);
 
   // assert
   assert.deepStrictEqual(fired, []);

@@ -24,6 +24,7 @@ import {
 import { adaptObservationResultForEvent } from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts";
 import {
   addPluginConfigToCache,
+  beforeAgentStartHandlerFor,
   createBeforeAgentStartHandler,
   createHooksHydration,
   hydrateProjectScopeForCwd,
@@ -44,11 +45,6 @@ import {
   routingTableEntries,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
 import { createHooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
-import {
-  agentEndCacheHandler,
-  resetSettleState,
-  settleHandlerFor,
-} from "../../../extensions/pi-claude-marketplace/bridges/hooks/settle.ts";
 import { type BucketAEvent } from "../../../extensions/pi-claude-marketplace/domain/components/hook-events.ts";
 import { parseMatcher } from "../../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
@@ -103,7 +99,6 @@ test(
     process.env.PI_CODING_AGENT_DIR = userAgentRoot;
     t.after(async () => {
       shutdownInMemoryChildren();
-      resetSettleState();
       resetRoutingState();
       if (originalHome === undefined) {
         delete process.env.HOME;
@@ -119,7 +114,6 @@ test(
 
       await rm(root, { recursive: true, force: true, maxRetries: 3 });
     });
-    resetSettleState();
     shutdownInMemoryChildren();
     const userLocations = locationsFor("user", projectRoot);
     const projectLocations = locationsFor("project", projectRoot);
@@ -273,6 +267,10 @@ test(
     await registerHooksBridge(pi, { ctx: context, cwd: projectRoot, executor });
     const previousEpoch = currentEpoch();
     const staleToolCallHandler = registrations.find(({ event }) => event === "tool_call")?.handler;
+    const staleAgentEndHandler = registrations.find(({ event }) => event === "agent_end")?.handler;
+    const staleAgentSettledHandler = registrations.find(
+      ({ event }) => event === "agent_settled",
+    )?.handler;
     registrations.length = 0;
     appendPendingSessionStartContext({
       context: "stale context",
@@ -291,13 +289,12 @@ test(
         },
       ],
     } as AgentEndEvent;
-    agentEndCacheHandler(previousEpoch)(previousEnding);
+    if (typeof staleAgentEndHandler === "function") {
+      await Reflect.apply(staleAgentEndHandler, undefined, [previousEnding, context]);
+    }
+
     const settleResetCalls: string[] = [];
     const settleResetPromises: Promise<void>[] = [];
-    const settleResetExecutor: HookExecutor = (entry) => {
-      settleResetCalls.push(entry.pluginId);
-      return Promise.resolve({ kind: "noop" });
-    };
 
     const childEvents = new EventEmitter();
     const childStdin = new PassThrough();
@@ -323,11 +320,14 @@ test(
         operationLog.push("epoch:bumped");
         assert.deepStrictEqual(pendingSessionStartContextEntries(), []);
         operationLog.push("pending:reset");
-        const settleReset = settleHandlerFor(
-          currentEpoch(),
-          pi,
-          settleResetExecutor,
-        )({ type: "agent_settled" }, context);
+        const settleResult =
+          typeof staleAgentSettledHandler === "function"
+            ? (Reflect.apply(staleAgentSettledHandler, undefined, [
+                { type: "agent_settled" },
+                context,
+              ]) as Promise<void> | undefined)
+            : undefined;
+        const settleReset = Promise.resolve(settleResult);
         settleResetPromises.push(settleReset);
         assert.deepStrictEqual(settleResetCalls, []);
         operationLog.push("settle:reset");
@@ -481,6 +481,17 @@ test(
       await Reflect.apply(staleToolCallHandler, undefined, [toolCall, context]);
     }
 
+    const staleBeforeAgentResult = await beforeAgentStartHandlerFor(previousEpoch)(
+      {
+        type: "before_agent_start",
+        prompt: "",
+        systemPrompt: "stale",
+        systemPromptOptions: {},
+      } as unknown as BeforeAgentStartEvent,
+      context,
+    );
+    assert.strictEqual(staleBeforeAgentResult, undefined);
+
     const cacheAfterReload = Array.from(parsedConfigEntries().values()).map((entry) => ({
       scope: entry.scope,
       marketplace: entry.marketplace,
@@ -503,7 +514,6 @@ test(
       })),
     };
     shutdownInMemoryChildren();
-    resetSettleState();
     resetRoutingState();
     const stateAfterCleanup = {
       epoch: currentEpoch(),
@@ -734,7 +744,6 @@ function ownRoutingState(t: TestContext): void {
   resetRoutingState();
   t.after(() => {
     shutdownInMemoryChildren();
-    resetSettleState();
     resetRoutingState();
   });
 }

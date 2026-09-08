@@ -2,14 +2,14 @@
 //
 // Settle-time dispatcher for the turn-boundary hook events. Pi emits
 // `agent_settled` once per logical completion carrying no payload, so this
-// module caches the last assistant message from the preceding
+// runtime caches the last assistant message from the preceding
 // `agent_end.messages` and gates dispatch on its `stopReason` (STOP-01):
 // `stop` runs the Stop bucket with full decision control (STOP-03 block
 // re-entry); `error` / `length` route to StopFailure (observation-only --
 // the bucket runs but its result is discarded, SFAIL-01); `pending`,
 // `aborted`, `toolUse` and `deferred` dispatch nothing.
 //
-// Both handlers carry the `capturedEpoch` guard so a stale closure from a
+// Both handlers carry the captured-generation guard so a stale closure from a
 // prior `/reload` cannot fire against rebuilt routing tables;
 // `resetSettleState` clears the cache cell in `registerHooksBridge` for the
 // same reason.
@@ -20,11 +20,11 @@ import { notifyStopHookOverrideCap } from "../../shared/notify.ts";
 
 import { collectBucketOutcomes, matcherFiresOnClosedSetValue } from "./dispatch.ts";
 import { classifyStopFailure } from "./payloads/stop-failure.ts";
-import { currentEpoch, getRoutingBucket } from "./routing-state.ts";
 
 import type { HookExecutor } from "./dispatch.ts";
 import type { StopFailureEvent } from "./payloads/stop-failure.ts";
 import type { StopEvent } from "./payloads/stop.ts";
+import type { HooksRuntime } from "./runtime.ts";
 import type { StopFailureErrorType } from "../../domain/components/hook-events.ts";
 import type {
   AgentEndEvent,
@@ -43,78 +43,34 @@ import type {
 const STOP_BLOCK_CUSTOM_TYPE = "claude-hook-stop-block" as const;
 
 /**
- * STOP-07 loop-protection cap: the Nth consecutive bridge re-entry that
- * suppresses re-entry and trips the one-shot warning. The counter spans BOTH
- * re-entry lanes -- block AND additionalContext (D-88-08); the 8th consecutive
- * re-entry is the one that does NOT re-enter.
- */
-const STOP_OVERRIDE_CAP = 8;
-
-// The last assistant message observed on the most recent `agent_end`, read at
-// settle time for its `stopReason`. Last-write-wins across auto-retry /
-// compaction chains; reset on every bridge load for `/reload` hygiene.
-let cachedLastAssistant: AssistantMessage | undefined;
-
-// STOP-07 loop-protection state, all per-session and reset on every bridge
-// load (`/reload` hygiene) via `resetSettleState`:
-//   - `stopHookActive`: threaded into the NEXT Stop payload's
-//     `stop_hook_active` field. Set true when ANY bridge re-entry fires -- a
-//     block OR an additionalContext continuation (D-88-08); cleared ONLY by a
-//     genuine `input` event (bridge-injected re-entry does NOT pass through
-//     `input`, so it never self-clears).
-//   - `consecutiveBlockCount`: incremented on EVERY bridge re-entry -- block
-//     AND additionalContext share one counter (D-88-08); reset to 0 by a
-//     non-re-entry outcome (`continue:false` or a plain allow).
-//   - `capNotifiedThisSession`: one-shot latch guarding the cap warning so a
-//     re-entry past the cap does not re-notify; re-armed when the counter
-//     resets.
-let stopHookActive = false;
-let consecutiveBlockCount = 0;
-let capNotifiedThisSession = false;
-
-/**
- * Reset the settle module-state cells. Called from `registerHooksBridge` so a
+ * Reset the runtime's settle state. Called from `registerHooksBridge` so a
  * `/reload` cannot leak a stale cached message or loop-protection state into
  * the new session.
  */
-export function resetSettleState(): void {
-  cachedLastAssistant = undefined;
-  stopHookActive = false;
-  consecutiveBlockCount = 0;
-  capNotifiedThisSession = false;
-}
-
-/**
- * Reset the consecutive re-entry counter and re-arm the one-shot cap latch.
- * Called on a NON-re-entry Stop outcome (`continue:false` or a plain allow) so
- * the cap requires a fresh run of 8 consecutive re-entries afterward (D-88-08).
- * An additionalContext continuation does NOT reset -- it re-enters and counts
- * toward the cap like a block. Does NOT touch `stopHookActive` -- that flag is
- * cleared only by a genuine `input` event (STOP-07).
- */
-function resetConsecutiveBlockState(): void {
-  consecutiveBlockCount = 0;
-  capNotifiedThisSession = false;
+export function resetSettleState(runtime: HooksRuntime): void {
+  runtime.prepareSettleForRegistration();
 }
 
 /**
  * `input`-event reset closure (STOP-07). A genuine user `input` event clears
  * `stop_hook_active` and resets the consecutive-block counter + one-shot latch;
  * bridge-injected `sendMessage` re-entries do NOT pass through `input`, so the
- * flag survives a re-entry and clears only when the user actually types. Epoch-
+ * flag survives a re-entry and clears only when the user actually types. Generation-
  * guarded like the other settle handlers so a stale closure from a prior
  * `/reload` cannot reset the live session's state. Registered as a dedicated
  * `pi.on("input", ...)` subscription in `registerHooksBridge` (Pi supports
  * multiple handlers per event).
  */
-export function inputResetHandlerFor(capturedEpoch: number): () => void {
+export function inputResetHandlerFor(
+  runtime: HooksRuntime,
+  capturedGeneration: number,
+): () => void {
   return () => {
-    if (capturedEpoch !== currentEpoch()) {
+    if (capturedGeneration !== runtime.currentGeneration()) {
       return;
     }
 
-    stopHookActive = false;
-    resetConsecutiveBlockState();
+    runtime.recordUserInput();
   };
 }
 
@@ -136,15 +92,18 @@ function findLastAssistant(messages: readonly AgentMessage[]): AssistantMessage 
 /**
  * `agent_end` cache handler: records the run's last assistant message so the
  * subsequent `agent_settled` (which carries no payload) can read its
- * `stopReason`. Last-write-wins; no-ops on a stale epoch (STOP-01).
+ * `stopReason`. Last-write-wins; no-ops on a stale generation (STOP-01).
  */
-export function agentEndCacheHandler(capturedEpoch: number): (event: AgentEndEvent) => void {
+export function agentEndCacheHandler(
+  runtime: HooksRuntime,
+  capturedGeneration: number,
+): (event: AgentEndEvent) => void {
   return (event) => {
-    if (capturedEpoch !== currentEpoch()) {
+    if (capturedGeneration !== runtime.currentGeneration()) {
       return;
     }
 
-    cachedLastAssistant = findLastAssistant(event.messages);
+    runtime.recordLastAssistant(findLastAssistant(event.messages));
   };
 }
 
@@ -164,12 +123,13 @@ export function agentEndCacheHandler(capturedEpoch: number): (event: AgentEndEve
  * of a real child process (see `HookExecutor` in `dispatch.ts`).
  */
 export function settleHandlerFor(
-  capturedEpoch: number,
+  runtime: HooksRuntime,
+  capturedGeneration: number,
   pi: ExtensionAPI,
   executor?: HookExecutor,
 ): (event: AgentSettledEvent, ctx: ExtensionContext) => Promise<void> {
   return async (_event, ctx) => {
-    if (capturedEpoch !== currentEpoch()) {
+    if (capturedGeneration !== runtime.currentGeneration()) {
       return;
     }
 
@@ -177,21 +137,22 @@ export function settleHandlerFor(
     // without an intervening `agent_end` no-ops instead of reprocessing the same
     // (stale) message. Each legitimate re-entry produces a fresh `agent_end`
     // that repopulates the cache, so this does not break the block loop.
-    const last = cachedLastAssistant;
-    cachedLastAssistant = undefined;
+    const last = runtime.takeLastAssistant();
     if (last === undefined) {
       return;
     }
 
     switch (last.stopReason) {
       case "stop":
-        await runStopBucket(last, capturedEpoch, ctx, pi, executor);
+        await runStopBucket(runtime, last, capturedGeneration, ctx, pi, executor);
         return;
       case "error":
       case "length":
         await runStopFailure(
           last,
           classifyStopFailure(last.errorMessage ?? "", last.stopReason),
+          runtime,
+          capturedGeneration,
           ctx,
           pi,
           executor,
@@ -256,20 +217,21 @@ function renderAssistantText(message: AssistantMessage): string {
  * synchronous decision and is degraded to `noop` inside `collectBucketOutcomes`
  * with a `hookDebugLog` -- no silent block loss.
  *
- * The epoch is re-checked AFTER the bucket's hooks finish: hook subprocesses
+ * The generation is re-checked AFTER the bucket's hooks finish: hook subprocesses
  * can outlive a `/reload`, and the entry-time guard in `settleHandlerFor` only
  * covers the pre-await window. Without the re-check, the stale continuation
  * would mutate the freshly reset loop state and inject a re-entry turn into
  * the new session.
  */
 async function runStopBucket(
+  runtime: HooksRuntime,
   last: AssistantMessage,
-  capturedEpoch: number,
+  capturedGeneration: number,
   ctx: ExtensionContext,
   pi: ExtensionAPI,
   executor?: HookExecutor,
 ): Promise<void> {
-  const bucket = getRoutingBucket("Stop");
+  const bucket = runtime.getRoutingBucket("Stop");
   if (bucket.length === 0) {
     return;
   }
@@ -279,13 +241,13 @@ async function runStopBucket(
     // STOP-07: the NEXT Stop payload after a bridge re-entry carries
     // `stop_hook_active: true` so the hook can see it is running inside a
     // bridge-driven continuation loop.
-    stop_hook_active: stopHookActive,
+    stop_hook_active: runtime.isStopHookActive(),
   };
   const outcomes = await collectBucketOutcomes(bucket, event, ctx, pi, () => true, executor);
 
-  // A /reload while the bucket's hooks were running bumped the epoch and reset
+  // A /reload while the bucket's hooks were running advanced the generation and reset
   // the settle state; bail before any loop-state mutation or re-entry.
-  if (capturedEpoch !== currentEpoch()) {
+  if (capturedGeneration !== runtime.currentGeneration()) {
     return;
   }
 
@@ -298,7 +260,7 @@ async function runStopBucket(
       `settle: continue:false from ${stop.entry.pluginId} suppresses Stop re-entry; ` +
         `stopReason=${stop.result.stopReason ?? "<none>"}`,
     );
-    resetConsecutiveBlockState();
+    runtime.recordStopNonReentry();
     return;
   }
 
@@ -306,7 +268,7 @@ async function runStopBucket(
   // bounded lane so it counts toward the STOP-07 cap (D-88-08).
   const block = outcomes.find((o) => o.result.kind === "block");
   if (block?.result.kind === "block") {
-    reenterBounded(pi, ctx, block.result.reason ?? "", block.entry.pluginId);
+    reenterBounded(runtime, pi, ctx, block.result.reason ?? "", block.entry.pluginId);
     return;
   }
 
@@ -317,13 +279,13 @@ async function runStopBucket(
     (o) => o.result.kind === "mutate" && typeof o.result.additionalContext === "string",
   );
   if (mutate?.result.kind === "mutate" && mutate.result.additionalContext !== undefined) {
-    reenterBounded(pi, ctx, mutate.result.additionalContext, mutate.entry.pluginId);
+    reenterBounded(runtime, pi, ctx, mutate.result.additionalContext, mutate.entry.pluginId);
     return;
   }
 
   // noop: the agent genuinely settled with no continuing hook -- a non-re-entry
   // outcome that resets the counter (D-88-08).
-  resetConsecutiveBlockState();
+  runtime.recordStopNonReentry();
 }
 
 /**
@@ -341,11 +303,13 @@ async function runStopBucket(
 async function runStopFailure(
   last: AssistantMessage,
   classifiedError: StopFailureErrorType,
+  runtime: HooksRuntime,
+  capturedGeneration: number,
   ctx: ExtensionContext,
   pi: ExtensionAPI,
   executor?: HookExecutor,
 ): Promise<void> {
-  const bucket = getRoutingBucket("StopFailure");
+  const bucket = runtime.getRoutingBucket("StopFailure");
   if (bucket.length === 0) {
     return;
   }
@@ -373,6 +337,10 @@ async function runStopFailure(
     (entry) => matcherFiresOnClosedSetValue(entry, classifiedError),
     executor,
   );
+
+  if (capturedGeneration !== runtime.currentGeneration()) {
+    return;
+  }
 }
 
 /**
@@ -391,23 +359,21 @@ async function runStopFailure(
  * (transparency, D-88-01).
  */
 function reenterBounded(
+  runtime: HooksRuntime,
   pi: ExtensionAPI,
   ctx: ExtensionContext,
   content: string,
   pluginId: string,
 ): void {
-  consecutiveBlockCount += 1;
+  const transition = runtime.recordStopReentry();
+  if (transition.notifyCap) {
+    notifyStopHookOverrideCap(ctx, pluginId);
+  }
 
-  if (consecutiveBlockCount >= STOP_OVERRIDE_CAP) {
-    if (!capNotifiedThisSession) {
-      notifyStopHookOverrideCap(ctx, pluginId);
-      capNotifiedThisSession = true;
-    }
-
+  if (!transition.reenter) {
     return;
   }
 
-  stopHookActive = true;
   reenter(pi, content, pluginId);
 }
 

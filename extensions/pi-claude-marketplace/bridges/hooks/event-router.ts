@@ -62,6 +62,7 @@ import { reapOrphans, shutdownInMemoryChildren } from "./async-rewake/registry.t
 import { compositeHandlerFor, toolResultCompositeHandler } from "./dispatch.ts";
 import { compileIfPredicate, MATCH_ALL_IF, type IfPredicate } from "./if-field/index.ts";
 import {
+  appendPendingSessionStartContext,
   bumpEpoch,
   clearPendingSessionStartContext,
   deleteParsedConfig,
@@ -526,6 +527,13 @@ function mirrorRuntimeRoutingState(routingState: EventRouterRoutingState): void 
   }
 }
 
+function mirrorRuntimePendingContext(runtime: HooksRuntime): void {
+  clearPendingSessionStartContext();
+  for (const entry of runtime.pendingSessionStartContextEntries()) {
+    appendPendingSessionStartContext(entry);
+  }
+}
+
 /**
  * D-59-02 factory-time hydrate. Walks both scopes (user via
  * `getAgentDir()` indirection through `locationsFor`, project via
@@ -855,9 +863,7 @@ async function registerHooksBridgeWith(
   // Same epoch hygiene for the settle dispatcher's cached last-assistant
   // message: clear it so a `/reload` cannot leak the prior session's message
   // into the new one's `stopReason` gate.
-  owner.runtime.prepareSettleForRegistration();
-
-  resetSettleState();
+  resetSettleState(owner.runtime);
 
   // HOOK-06 / D-62-05: SIGKILL every in-memory async-rewake child from
   // the prior factory invocation BEFORE the persisted-orphan reap reads
@@ -952,7 +958,11 @@ async function registerHooksBridgeWith(
           hookDebugLog(`session_start lazy project hydrate skipped: ${errorMessage(err)}`);
         }
 
-        return sessionStartHandler(event, ctx);
+        await sessionStartHandler(event, ctx);
+
+        if (owner.kind === "transition" && owner.runtime.currentGeneration() === generation) {
+          mirrorRuntimePendingContext(owner.runtime);
+        }
       };
     }),
   );
@@ -1007,11 +1017,11 @@ async function registerHooksBridgeWith(
   // to run the Stop / StopFailure buckets (STOP-01).
   pi.on(
     "agent_end",
-    bind((epoch) => agentEndCacheHandler(epoch)),
+    bind((generation) => agentEndCacheHandler(owner.runtime, generation)),
   );
   pi.on(
     "agent_settled",
-    bind((epoch) => settleHandlerFor(epoch, pi, opts.executor)),
+    bind((generation) => settleHandlerFor(owner.runtime, generation, pi, opts.executor)),
   );
   // STOP-07 loop-protection reset: a dedicated second `input` subscription
   // (distinct from the UserPromptSubmit dispatch handler above) clears
@@ -1020,7 +1030,7 @@ async function registerHooksBridgeWith(
   // NOT pass through `input`, so the flag never self-clears.
   pi.on(
     "input",
-    bind((epoch) => inputResetHandlerFor(epoch)),
+    bind((generation) => inputResetHandlerFor(owner.runtime, generation)),
   );
 }
 
@@ -1058,7 +1068,16 @@ export function beforeAgentStartHandlerFor(
   event: BeforeAgentStartEvent,
   ctx: ExtensionContext,
 ) => Promise<BeforeAgentStartEventResult | undefined> {
-  return createBeforeAgentStartHandler(NODE_TRANSITION_RUNTIME, capturedGeneration);
+  const handler = createBeforeAgentStartHandler(NODE_TRANSITION_RUNTIME, capturedGeneration);
+  return async (event, ctx) => {
+    if (capturedGeneration !== NODE_TRANSITION_RUNTIME.currentGeneration()) {
+      return undefined;
+    }
+
+    const result = await handler(event, ctx);
+    clearPendingSessionStartContext();
+    return result;
+  };
 }
 
 const NODE_HOOKS_HYDRATION: HooksHydration = {
