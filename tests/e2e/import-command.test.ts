@@ -120,10 +120,11 @@ function registerImportCommand(cwd: string, gitOps: GitOps) {
     { name: "mcp", sourceInfo: { source: "pi-mcp-adapter" } },
   ]);
   const hooksRouting = createHooksRouting(createHooksRuntime());
+  const completionCache = createCompletionCache();
   registerClaudePluginCommand(
     mock.pi,
     {
-      completionCache: createCompletionCache(),
+      completionCache,
       gitOps,
       pluginUpdate: () =>
         Promise.resolve({
@@ -136,7 +137,7 @@ function registerImportCommand(cwd: string, gitOps: GitOps) {
         }),
     },
     hooksRouting,
-    createPluginUpdateOperations(hooksRouting).updatePlugins,
+    createPluginUpdateOperations(hooksRouting, completionCache).updatePlugins,
   );
   const command = mock.commands.get("claude:plugin");
   assert.ok(command, "claude:plugin command should be registered");

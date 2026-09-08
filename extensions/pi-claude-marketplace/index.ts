@@ -35,8 +35,8 @@ import type {
 export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Promise<void> {
   const hooksRuntime = createHooksRuntime();
   const hooksRouting = createHooksRouting(hooksRuntime);
-  const pluginUpdateOperations = createPluginUpdateOperations(hooksRouting);
   const completionCache = createCompletionCache();
+  const pluginUpdateOperations = createPluginUpdateOperations(hooksRouting, completionCache);
   const hooksHydration = createHooksHydration(hooksRuntime, { loadState });
   const onResourcesDiscover = pi.on.bind(pi) as unknown as (
     event: "resources_discover",

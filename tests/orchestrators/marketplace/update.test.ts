@@ -50,11 +50,10 @@ import type { Severity } from "../../../extensions/pi-claude-marketplace/shared/
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 
 const updateSinglePlugin: PluginUpdateFn = (plugin, marketplace, scope) =>
-  createPluginUpdateOperations(createHooksRouting(createHooksRuntime())).pluginUpdate(
-    plugin,
-    marketplace,
-    scope,
-  );
+  createPluginUpdateOperations(
+    createHooksRouting(createHooksRuntime()),
+    createCompletionCache(),
+  ).pluginUpdate(plugin, marketplace, scope);
 
 interface MarketplaceGitOpsSeed {
   readonly checkoutThrows?: Error;

@@ -79,7 +79,10 @@ function createGitOps() {
 }
 
 function createUpdatePlugins() {
-  return createPluginUpdateOperations(createHooksRouting(createHooksRuntime())).updatePlugins;
+  return createPluginUpdateOperations(
+    createHooksRouting(createHooksRuntime()),
+    createCompletionCache(),
+  ).updatePlugins;
 }
 
 function createReinstallPlugins() {

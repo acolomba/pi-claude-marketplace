@@ -75,7 +75,10 @@ import type {
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
 function createUpdateOperations() {
-  return createPluginUpdateOperations(createHooksRouting(createHooksRuntime()));
+  return createPluginUpdateOperations(
+    createHooksRouting(createHooksRuntime()),
+    createCompletionCache(),
+  );
 }
 
 function updatePlugins(options: UpdatePluginsOptions): Promise<void> {
@@ -5854,7 +5857,7 @@ test("WR-03: one update owner refreshes direct and cascade routes without leakin
     try {
       const runtime = createHooksRuntime();
       const hooksRouting = createHooksRouting(runtime);
-      const operations = createPluginUpdateOperations(hooksRouting);
+      const operations = createPluginUpdateOperations(hooksRouting, createCompletionCache());
       const peerRuntime = createHooksRuntime();
       const locations = locationsFor("user", cwd);
 

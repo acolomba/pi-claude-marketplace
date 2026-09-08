@@ -296,7 +296,7 @@ function registerCommandWithCache(
     pi,
     createEdgeDeps(completionCache, importClaudeSettings),
     hooksRouting,
-    createPluginUpdateOperations(hooksRouting).updatePlugins,
+    createPluginUpdateOperations(hooksRouting, completionCache).updatePlugins,
   );
 
   const registration = commandOptions.value;

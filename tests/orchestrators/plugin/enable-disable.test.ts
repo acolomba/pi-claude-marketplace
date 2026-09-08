@@ -82,7 +82,10 @@ function makePi(toolNames: readonly string[] = []): ToolInventory {
 }
 
 function createUpdatePlugins() {
-  return createPluginUpdateOperations(createHooksRouting(createHooksRuntime())).updatePlugins;
+  return createPluginUpdateOperations(
+    createHooksRouting(createHooksRuntime()),
+    createCompletionCache(),
+  ).updatePlugins;
 }
 
 function createReinstallPlugin() {

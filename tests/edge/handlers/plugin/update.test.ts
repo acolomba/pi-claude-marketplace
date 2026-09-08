@@ -118,6 +118,7 @@ import { makeUpdateHandler } from "../../../../extensions/pi-claude-marketplace/
 import { createPluginUpdateOperations } from "../../../../extensions/pi-claude-marketplace/orchestrators/plugin/update.ts";
 import { loadConfig } from "../../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { loadState } from "../../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { createCompletionCache } from "../../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
 import { mergeMarketplaceIntoState } from "../marketplace-seed.ts";
 
@@ -151,7 +152,7 @@ const SKILL_SOURCE = "---\nname: tool\ndescription: A tool skill.\n---\n\nBody.\
 /** Give each handler case its own production update owner. */
 function createUpdateHandler(pi: Parameters<typeof makeUpdateHandler>[0]) {
   const hooksRouting = createHooksRouting(createHooksRuntime());
-  const { updatePlugins } = createPluginUpdateOperations(hooksRouting);
+  const { updatePlugins } = createPluginUpdateOperations(hooksRouting, createCompletionCache());
   return makeUpdateHandler(pi, updatePlugins);
 }
 

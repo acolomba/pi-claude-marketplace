@@ -145,9 +145,13 @@ test("LIFE-01 / LIFE-02 integration: install -> update -> reinstall -> uninstall
     try {
       const hooksRuntime = createHooksRuntime();
       const hooksRouting = createHooksRouting(hooksRuntime);
-      const installPlugin = createNodeInstallPlugin(hooksRouting, createCompletionCache());
+      const completionCache = createCompletionCache();
+      const installPlugin = createNodeInstallPlugin(hooksRouting, completionCache);
       const reinstallPlugin = createNodeReinstallPlugin(hooksRouting);
-      const updatePlugins = createPluginUpdateOperations(hooksRouting).updatePlugins;
+      const updatePlugins = createPluginUpdateOperations(
+        hooksRouting,
+        completionCache,
+      ).updatePlugins;
       const locations = locationsFor("project", cwd);
       const hooksPath = path.join(locations.hooksDir, "hello", "hooks.json");
 

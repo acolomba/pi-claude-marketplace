@@ -99,7 +99,6 @@ import { shaVersion } from "../../domain/version.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { isRecordedButDisabled, loadState } from "../../persistence/state-io.ts";
 import { softDepStatus } from "../../platform/pi-api.ts";
-import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
 import {
   CleanupContextError,
   cleanupFailuresFromError,
@@ -163,6 +162,7 @@ import type { HooksRouting } from "../../bridges/hooks/index.ts";
 import type { PreparedMcpStaging } from "../../bridges/mcp/index.ts";
 import type { PreparedSkillsStaging } from "../../bridges/skills/index.ts";
 import type { PluginEntry } from "../../domain/components/plugin.ts";
+import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { GitPluginRootResult, MaterializablePlugin } from "../../domain/resolver.ts";
 import type { GitBackedSource, ParsedSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
@@ -330,6 +330,7 @@ function buildDirectThreePhaseArgs(
   target: ResolvedTarget,
   cardinality: "single" | "plural",
   hooksRouting: UpdateHooksRouting,
+  completionCache: CompletionCache,
 ): DirectThreePhaseArgs {
   return {
     plugin: target.plugin,
@@ -338,6 +339,7 @@ function buildDirectThreePhaseArgs(
     cwd: opts.cwd,
     locations: target.locations,
     hooksRouting,
+    completionCache,
     cascade: false,
     ctx: opts.ctx,
     // `pi` threads the phase-3a aggregate direct-path notify inside
@@ -382,6 +384,7 @@ function buildDirectThreePhaseArgs(
 async function updatePluginsWith(
   opts: UpdatePluginsOptions,
   hooksRouting: UpdateHooksRouting,
+  completionCache: CompletionCache,
 ): Promise<void> {
   const { ctx, pi } = opts;
   // OUT-04 / D-04: cardinality belongs to the parsed invocation, including
@@ -440,7 +443,7 @@ async function updatePluginsWith(
     let outcome: UpdateRunOutcome;
     try {
       outcome = await runThreePhaseUpdate(
-        buildDirectThreePhaseArgs(opts, t, cardinality, hooksRouting),
+        buildDirectThreePhaseArgs(opts, t, cardinality, hooksRouting, completionCache),
       );
     } catch (err) {
       // PUP-9 direct path: phase-2-or-earlier throws (including PI-14
@@ -649,6 +652,7 @@ function renderUpdateCascadeIfAny(
  */
 async function updateSinglePluginWith(
   hooksRouting: UpdateHooksRouting,
+  completionCache: CompletionCache,
   plugin: string,
   marketplace: string,
   scope: Scope,
@@ -668,6 +672,7 @@ async function updateSinglePluginWith(
       cwd,
       locations,
       hooksRouting,
+      completionCache,
       cascade: true,
       // SEV-03 / D-69-01: the autoupdate cascade TAKES the partial path
       // automatically. A partially-upgradable candidate (re-resolves `partially-available`)
@@ -710,10 +715,12 @@ async function updateSinglePluginWith(
 /** Bind direct and cascade update operations to one lifecycle routing owner. */
 export function createPluginUpdateOperations(
   hooksRouting: UpdateHooksRouting,
+  completionCache: CompletionCache,
 ): PluginUpdateOperations {
-  const updatePlugins: UpdatePluginsFn = (opts) => updatePluginsWith(opts, hooksRouting);
+  const updatePlugins: UpdatePluginsFn = (opts) =>
+    updatePluginsWith(opts, hooksRouting, completionCache);
   const pluginUpdate: PluginUpdateFn = (plugin, marketplace, scope) =>
-    updateSinglePluginWith(hooksRouting, plugin, marketplace, scope);
+    updateSinglePluginWith(hooksRouting, completionCache, plugin, marketplace, scope);
   return { updatePlugins, pluginUpdate };
 }
 
@@ -760,6 +767,7 @@ interface ThreePhaseArgsBase {
   readonly cwd: string;
   readonly locations: ScopedLocations;
   readonly hooksRouting: UpdateHooksRouting;
+  readonly completionCache: CompletionCache;
   /**
    * AG-7 opt-in. Set by `updatePlugins` from `UpdatePluginsOptions.mapModel`
    * (which the edge handler populates from `--map-model`). The cascade
@@ -2638,7 +2646,7 @@ function collectDegradedKinds(handles: PrepHandles): readonly DegradeKind[] {
 
 async function dropPluginCompletionCache(args: ThreePhaseArgs): Promise<void> {
   try {
-    await dropMarketplaceCache(
+    await args.completionCache.dropMarketplaceCache(
       await args.locations.pluginCacheFile(args.marketplace),
       args.scope,
       args.marketplace,
