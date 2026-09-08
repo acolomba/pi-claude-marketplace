@@ -348,7 +348,7 @@ Plans:
 **Goal:** Expose legitimate test seams with correctly owned runtime state and public contracts.
 **Depends on:** Phase 4
 **Requirements:** TREF-04, TREF-05, TREF-06
-**Plans:** 31/33 plans executed
+**Plans:** 32/33 plans executed
 
 **Success Criteria**:
 
@@ -462,7 +462,7 @@ Plans:
 **Wave 23** _(blocked on Wave 22 completion)_
 
 - [x] 05-31-PLAN.md — Delete terminal reset surfaces after a fresh zero-caller census.
-- [ ] 05-32-PLAN.md — Remove the BOOLEAN_FLAGS test surface while retaining public proofs.
+- [x] 05-32-PLAN.md — Remove the BOOLEAN_FLAGS test surface while retaining public proofs.
 
 **Wave 24** _(blocked on Wave 23 completion)_
 
@@ -567,7 +567,7 @@ baseline, which still includes both pairs; neither is a terminal shortfall.
 | 2. Containment and Input Safety      | 3/3            | Complete    | 2026-09-05 |
 | 3. Production Defect Corrections     | 14/14          | Complete    | 2026-09-07 |
 | 4. Hermetic Test Infrastructure      | 7/7            | Complete    | 2026-09-07 |
-| 5. Injection and Ownership Design    | 31/33          | In Progress | —          |
+| 5. Injection and Ownership Design    | 32/33          | In Progress | —          |
 | 6. Assertion and Module Refinement   | 0/0            | Not started | —          |
 | 7. Gate Integrity                    | 0/0            | Not started | —          |
 | 8. Direct Coverage                   | 0/0            | Not started | —          |
