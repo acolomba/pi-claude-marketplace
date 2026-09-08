@@ -556,8 +556,11 @@ async function seedPathMarketplace(opts: {
   >;
   /** Map of plugin name -> existing state record version. Absent -> no prior install. */
   installedVersions?: Record<string, string>;
+  /** Scope seeded for owner-bound direct/cascade lifecycle cases. */
+  scope?: "project" | "user";
 }): Promise<SeededPathMp> {
   const { cwd, marketplaceRoot, marketplaceName, manifestPlugins } = opts;
+  const scope = opts.scope ?? "project";
 
   await mkdir(marketplaceRoot, { recursive: true });
   await mkdir(path.join(marketplaceRoot, ".claude-plugin"), { recursive: true });
@@ -627,7 +630,7 @@ async function seedPathMarketplace(opts: {
   const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
   await writeFile(manifestPath, JSON.stringify(manifest));
 
-  const locations = locationsFor("project", cwd);
+  const locations = locationsFor(scope, cwd);
   await mkdir(locations.extensionRoot, { recursive: true });
 
   const installedPlugins: Record<string, PluginRecord> = {};
@@ -640,7 +643,7 @@ async function seedPathMarketplace(opts: {
     marketplaces: {
       [marketplaceName]: {
         name: marketplaceName,
-        scope: "project",
+        scope,
         source: pathSource(`./${path.basename(marketplaceRoot)}`),
         addedFromCwd: cwd,
         manifestPath,
@@ -5836,23 +5839,15 @@ for (const { title, local } of [
 // inside the per-plugin lock and verified end-to-end.
 // ─────────────────────────────────────────────────────────────────────────────
 
-test("WR-03: updatePlugins refreshes the plugin's routing-table entries to the new hooks config without /reload", async () => {
-  const { addPluginConfigToCache } =
-    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts");
-  const { resetRoutingState } =
-    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
-  const { getRoutingBucket } =
-    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
-  const { compileIfPredicate } =
-    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts");
-  const { parseHooksConfig } =
-    await import("../../../extensions/pi-claude-marketplace/domain/components/hooks.ts");
-
+test("WR-03: one update owner refreshes direct and cascade routes without leaking to a peer runtime", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "update-wr03-"));
     try {
-      resetRoutingState();
-      const locations = locationsFor("project", cwd);
+      const runtime = createHooksRuntime();
+      const hooksRouting = createHooksRouting(runtime);
+      const operations = createPluginUpdateOperations(hooksRouting);
+      const peerRuntime = createHooksRuntime();
+      const locations = locationsFor("user", cwd);
 
       const oldHooksJson = {
         PreToolUse: [{ matcher: "", hooks: [{ type: "command", command: "echo OLD" }] }],
@@ -5872,6 +5867,7 @@ test("WR-03: updatePlugins refreshes the plugin's routing-table entries to the n
           hello: { version: "1.0.0", hasSkill: true, hooksJson: oldHooksJson },
         },
         installedVersions: { hello: "1.0.0" },
+        scope: "user",
       });
 
       // Patch the seeded plugin record's `resources.hooks` so the
@@ -5885,25 +5881,21 @@ test("WR-03: updatePlugins refreshes the plugin's routing-table entries to the n
       helloRecord.resources.hooks = ["hello"];
       await saveState(locations.extensionRoot, seededState);
 
-      const TEST_IF_CTX = { homedir: "/home/u", cwd, projectRoot: cwd } as const;
-      const parsedOld = parseHooksConfig(
-        JSON.stringify(oldHooksJson),
-        TEST_IF_CTX,
-        compileIfPredicate,
-      );
-      assert.ok(parsedOld.ok);
-      addPluginConfigToCache(
-        "project",
-        "mp",
-        "hello",
-        asAbsolutePluginRoot("/test/project/mp/hello"),
-        parsedOld.value,
-        parsedOld.ifPredicates,
-      );
+      const pluginRoot = path.join(seeded.marketplaceRoot, "plugins", "hello");
+      await hooksRouting.readAndCachePluginHooks({
+        scope: "user",
+        marketplace: "mp",
+        plugin: "hello",
+        resolvedSource: asAbsolutePluginRoot(pluginRoot),
+        hooksJsonPath: path.join(pluginRoot, "hooks", "hooks.json"),
+        cwd,
+        logPrefix: "update-test",
+      });
+      hooksRouting.rebuildRoutingTables();
+      assert.equal(runtime.getRoutingBucket("PreToolUse")[0]?.handlerDecl["command"], "echo OLD");
 
       // Rewrite the on-disk plugin tree to v2.0.0 with NEW hooks config.
       await rewriteManifest(seeded.manifestPath, "mp", { hello: { version: "2.0.0" } });
-      const pluginRoot = path.join(seeded.marketplaceRoot, "plugins", "hello");
       await writeFile(
         path.join(pluginRoot, ".claude-plugin", "plugin.json"),
         JSON.stringify({ name: "hello", version: "2.0.0" }),
@@ -5911,10 +5903,10 @@ test("WR-03: updatePlugins refreshes the plugin's routing-table entries to the n
       await writeFile(path.join(pluginRoot, "hooks", "hooks.json"), JSON.stringify(newHooksJson));
 
       const { ctx, pi, notifications } = makeCtx();
-      await updatePlugins({
+      await operations.updatePlugins({
         ctx,
         pi,
-        scope: "project",
+        scope: "user",
         cwd,
         target: { kind: "marketplace", marketplace: "mp" },
       });
@@ -5927,22 +5919,44 @@ test("WR-03: updatePlugins refreshes the plugin's routing-table entries to the n
 
       // Post-condition: the routing-table entry reflects the NEW hooks
       // config (command `echo NEW`), not the old one. This proves WR-03's
-      // remove+add+rebuild fired inside `finalizeUpdateRecord`'s
-      // withStateGuard closure on the all-success arm.
-      const postBucket = getRoutingBucket("PreToolUse");
+      // remove+add+rebuild fired after `finalizeUpdateRecord` durably saved
+      // the all-success record.
+      const postBucket = runtime.getRoutingBucket("PreToolUse");
       assert.equal(postBucket.length, 1);
       assert.equal(postBucket[0]?.pluginId, "hello");
       assert.equal(postBucket[0]?.handlerDecl["command"], "echo NEW");
       // resolvedSource must propagate from the resolver -> cache -> routing
       // table after update. CLAUDE_PLUGIN_ROOT export at dispatch depends
       // on it.
-      const updateLoc = locationsFor("project", cwd);
+      const updateLoc = locationsFor("user", cwd);
       const postState = await loadState(updateLoc.extensionRoot);
       assert.equal(
         postBucket[0]?.resolvedSource,
         postState.marketplaces["mp"]?.plugins["hello"]?.resolvedSource,
         "RoutingEntry.resolvedSource must mirror state.json's resolvedSource after update",
       );
+
+      const cascadeHooksJson = {
+        PreToolUse: [{ matcher: "", hooks: [{ type: "command", command: "echo CASCADE" }] }],
+      };
+      await rewriteManifest(seeded.manifestPath, "mp", { hello: { version: "3.0.0" } });
+      await writeFile(
+        path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+        JSON.stringify({ name: "hello", version: "3.0.0" }),
+      );
+      await writeFile(
+        path.join(pluginRoot, "hooks", "hooks.json"),
+        JSON.stringify(cascadeHooksJson),
+      );
+
+      const cascadeOutcome = await operations.pluginUpdate("hello", "mp", "user");
+
+      assert.equal(cascadeOutcome.partition, "updated");
+      assert.equal(
+        runtime.getRoutingBucket("PreToolUse")[0]?.handlerDecl["command"],
+        "echo CASCADE",
+      );
+      assert.deepStrictEqual(peerRuntime.getRoutingBucket("PreToolUse"), []);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
