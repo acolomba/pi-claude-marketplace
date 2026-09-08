@@ -382,6 +382,7 @@ describe("registerClaudePluginCommand", () => {
         warnings: [],
       });
     };
+
     const { registration, verifyRegistrar } = registerCommandWithCache(
       createCompletionCache(),
       hooksRouting,

@@ -3,24 +3,29 @@ import {
   type ClaudeImportExecutionResult,
   type ImportClaudeSettingsOptions,
 } from "../../../orchestrators/import/index.ts";
+import { errorMessage } from "../../../shared/errors.ts";
 import { notifyUsageError } from "../../../shared/notify.ts";
 import { parseArgs } from "../../args.ts";
 
 import type { GitOps } from "../../../orchestrators/marketplace/shared.ts";
+import type { InstallHooksRouting } from "../../../orchestrators/plugin/install.ts";
 import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
 
 const USAGE = "Usage: /claude:plugin import [--scope user|project]";
 
+interface ImportExecutionOptions extends ImportClaudeSettingsOptions {
+  readonly hooksRouting: InstallHooksRouting;
+}
+
 export interface ImportHandlerDeps {
   readonly gitOps: GitOps;
-  readonly importClaudeSettings?: (
-    opts: ImportClaudeSettingsOptions,
-  ) => Promise<ClaudeImportExecutionResult>;
+  readonly importClaudeSettings?: (opts: ImportExecutionOptions) => Promise<ClaudeImportExecutionResult>;
 }
 
 export function makeImportHandler(
   pi: ExtensionAPI,
   deps: ImportHandlerDeps,
+  hooksRouting: InstallHooksRouting,
 ): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
   return async (args, ctx): Promise<void> => {
     let parsed: ReturnType<typeof parseArgs>;
@@ -28,7 +33,7 @@ export function makeImportHandler(
       parsed = parseArgs(args);
     } catch (err) {
       notifyUsageError(ctx, {
-        message: err instanceof Error ? err.message : String(err),
+        message: errorMessage(err),
         usage: USAGE,
       });
       return;
@@ -42,13 +47,16 @@ export function makeImportHandler(
       return;
     }
 
-    await (deps.importClaudeSettings ?? importClaudeSettings)({
+    const options: ImportExecutionOptions = {
       ctx,
       pi,
       cwd: ctx.cwd,
       selectedScopes: parsed.scope === undefined ? ["project", "user"] : [parsed.scope],
       gitOps: deps.gitOps,
-    });
+      hooksRouting,
+    };
+
+    await (deps.importClaudeSettings ?? importClaudeSettings)(options);
     // No try/catch: importClaudeSettings wraps loadState (in executeScopedPlan's
     // state-load try block), addMarketplace (in executeScopedPlan's
     // marketplacesToEnsure loop), and installPlugin (in executeScopedPlan's

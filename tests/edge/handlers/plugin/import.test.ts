@@ -184,6 +184,7 @@ test("imports the project scope before the user scope when no scope flag narrows
     reads: 1,
   });
   const git = createGitOpsFake({ boundary: "memory" });
+  const hooksRouting = createHooksRouting(createHooksRuntime());
   const importClaudeSettings = mock<ImportDelegate>({
     exactParams: true,
     name: "import claude settings",
@@ -195,9 +196,14 @@ test("imports the project scope before the user scope when no scope flag narrows
       cwd,
       selectedScopes: ["project", "user"],
       gitOps: git.gitOps,
+      hooksRouting,
     }),
   ).thenResolve(nothingImported());
-  const importHandler = makeImportHandler(pi, { gitOps: git.gitOps, importClaudeSettings });
+  const importHandler = makeImportHandler(
+    pi,
+    { gitOps: git.gitOps, importClaudeSettings },
+    hooksRouting,
+  );
 
   // act
   await importHandler("", ctx);
@@ -221,13 +227,15 @@ test("forwards the supplied lifecycle routing owner into import execution", asyn
   let forwardedHooksRouting: unknown;
   const importClaudeSettings: ImportDelegate = (options) => {
     forwardedHooksRouting = Reflect.get(options, "hooksRouting");
+
     return Promise.resolve(nothingImported());
   };
-  const importHandler = Reflect.apply(makeImportHandler, undefined, [
+
+  const importHandler = makeImportHandler(
     pi,
     { gitOps: git.gitOps, importClaudeSettings },
     hooksRouting,
-  ]) as ReturnType<typeof makeImportHandler>;
+  );
 
   // act
   await importHandler("--scope project", ctx);
@@ -248,6 +256,7 @@ for (const scope of ["project", "user"] satisfies readonly Scope[]) {
       reads: 1,
     });
     const git = createGitOpsFake({ boundary: "memory" });
+    const hooksRouting = createHooksRouting(createHooksRuntime());
     const importClaudeSettings = mock<ImportDelegate>({
       exactParams: true,
       name: "import claude settings",
@@ -259,9 +268,14 @@ for (const scope of ["project", "user"] satisfies readonly Scope[]) {
         cwd,
         selectedScopes: [scope],
         gitOps: git.gitOps,
+        hooksRouting,
       }),
     ).thenResolve(nothingImported());
-    const importHandler = makeImportHandler(pi, { gitOps: git.gitOps, importClaudeSettings });
+    const importHandler = makeImportHandler(
+      pi,
+      { gitOps: git.gitOps, importClaudeSettings },
+      hooksRouting,
+    );
 
     // act
     await importHandler(`--scope ${scope}`, ctx);
@@ -282,7 +296,11 @@ test("runs the real import workflow when the dependency object declares no deleg
     reads: 1,
   });
   const git = createGitOpsFake({ boundary: "memory" });
-  const importHandler = makeImportHandler(pi, { gitOps: git.gitOps });
+  const importHandler = makeImportHandler(
+    pi,
+    { gitOps: git.gitOps },
+    createHooksRouting(createHooksRuntime()),
+  );
 
   // act
   await importHandler("", ctx);
@@ -306,7 +324,11 @@ for (const { args, label, tokens } of [
       exactParams: true,
       name: "import claude settings",
     });
-    const importHandler = makeImportHandler(pi, { gitOps: git.gitOps, importClaudeSettings });
+    const importHandler = makeImportHandler(
+      pi,
+      { gitOps: git.gitOps, importClaudeSettings },
+      createHooksRouting(createHooksRuntime()),
+    );
 
     // act
     await importHandler(args, ctx);
@@ -328,7 +350,11 @@ test("reports an unrecognised scope value with the import usage block and never 
     exactParams: true,
     name: "import claude settings",
   });
-  const importHandler = makeImportHandler(pi, { gitOps: git.gitOps, importClaudeSettings });
+  const importHandler = makeImportHandler(
+    pi,
+    { gitOps: git.gitOps, importClaudeSettings },
+    createHooksRouting(createHooksRuntime()),
+  );
 
   // act
   await importHandler("--scope bad", ctx);
@@ -349,7 +375,11 @@ test("takes the scope-target flag as a positional and rejects it alongside a sco
     exactParams: true,
     name: "import claude settings",
   });
-  const importHandler = makeImportHandler(pi, { gitOps: git.gitOps, importClaudeSettings });
+  const importHandler = makeImportHandler(
+    pi,
+    { gitOps: git.gitOps, importClaudeSettings },
+    createHooksRouting(createHooksRuntime()),
+  );
 
   // act
   await importHandler("--scope user --local", ctx);
