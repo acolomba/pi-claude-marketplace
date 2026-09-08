@@ -62,6 +62,7 @@ import {
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { createGitOpsFake } from "../platform/git-ops-fake.ts";
 
+import { buildInstalledPluginRecord } from "./handlers/marketplace-seed.ts";
 import { createNotificationBoundary } from "./notification-boundary.ts";
 
 import type { Notification } from "./notification-boundary.ts";
@@ -888,6 +889,104 @@ test("rebuilds completion rows through the cache that owns a successful register
     },
   ]);
   assert.deepStrictEqual(peerRows, [{ name: "hello", status: "available" }]);
+  verify(ctx);
+  verify(ui);
+  owner.verifyRegistrar();
+  peer.verifyRegistrar();
+});
+
+test("rebuilds completion rows through the cache that owns a successful registered reinstall", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticScope(t, "reinstall-completion-owner");
+  const marketplace = "registered-reinstall";
+  const sourceRoot = path.join(cwd, "marketplaces", marketplace);
+  const pluginRoot = path.join(sourceRoot, "plugins", "hello");
+  await mkdir(path.join(sourceRoot, ".claude-plugin"), { recursive: true });
+  await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
+  await writeFile(
+    path.join(sourceRoot, ".claude-plugin", "marketplace.json"),
+    JSON.stringify({
+      name: marketplace,
+      owner: { name: "registration owner" },
+      plugins: [{ name: "hello", source: "./plugins/hello", version: "1.0.0" }],
+    }),
+    "utf8",
+  );
+  await writeFile(
+    path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "hello", version: "1.0.0" }),
+    "utf8",
+  );
+  await seedProjectMarketplace(cwd, marketplace);
+  const extensionRoot = path.join(cwd, ".pi", "pi-claude-marketplace");
+  const state = await loadState(extensionRoot);
+  const record = state.marketplaces[marketplace];
+  if (record === undefined) {
+    throw new Error("the registered reinstall fixture has no target marketplace");
+  }
+
+  record.plugins["hello"] = buildInstalledPluginRecord(
+    { version: "1.0.0", resolvedSource: pluginRoot },
+    { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+  ) as ExtensionState["marketplaces"][string]["plugins"][string];
+  await saveState(extensionRoot, state);
+  const resolver = makeLocationsResolver(cwd);
+  const cachePath = await resolver.pluginCachePath("project", marketplace);
+  const ownerCache = createCompletionCache();
+  const peerCache = createCompletionCache();
+  await ownerCache.getPluginIndex(cachePath, "project", marketplace, () =>
+    Promise.resolve([{ name: "owner-stale", status: "available" }]),
+  );
+  await rm(cachePath, { force: true });
+  await peerCache.getPluginIndex(cachePath, "project", marketplace, () =>
+    Promise.resolve([{ name: "peer-stale", status: "available" }]),
+  );
+  await rm(cachePath, { force: true });
+  const owner = registerCommandWithCache(
+    ownerCache,
+    createHooksRouting(createHooksRuntime()),
+    undefined,
+    1,
+  );
+  const peer = registerCommandWithCache(peerCache);
+  const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
+  const ui = mock<NotificationUi>({ exactParams: true, name: "command UI" });
+  const notifications: Notification[] = [];
+  when(() => ctx.cwd)
+    .thenReturn(cwd)
+    .times(1);
+  when(() => ctx.ui)
+    .thenReturn(ui)
+    .times(1);
+  when(() => ui.notify)
+    .thenReturn((message, severity) => {
+      notifications.push(severity === undefined ? { message } : { message, severity });
+    })
+    .times(1);
+
+  // act
+  await owner.registration.handler(`reinstall hello@${marketplace} --scope project`, ctx);
+  const ownerCandidates = await owner.registration.getArgumentCompletions?.(
+    "install --scope project ",
+  );
+  const peerCandidates = await peer.registration.getArgumentCompletions?.(
+    "install --scope project ",
+  );
+
+  // assert
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "● registered-reinstall [project]\n  ● hello v1.0.0 (reinstalled)\n\n/reload to pick up changes",
+    },
+  ]);
+  assert.deepStrictEqual(ownerCandidates, []);
+  assert.deepStrictEqual(peerCandidates, [
+    {
+      label: "peer-stale@registered-reinstall",
+      value: "install --scope project peer-stale@registered-reinstall ",
+    },
+  ]);
   verify(ctx);
   verify(ui);
   owner.verifyRegistrar();
