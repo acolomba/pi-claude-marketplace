@@ -55,13 +55,13 @@ component as a working Pi artifact.
 - [x] **TREF-03**: Tests use typed production-domain values and exact role-named
       doubles without broad-cast laundering or test-helper terminology in
       production.
-- [ ] **TREF-04**: Each terminal hidden dependency is classified: use real
+- [x] **TREF-04**: Each terminal hidden dependency is classified: use real
       temporary filesystem state by default and a narrow production-owned port only
       for irreproducible faults or timing; preserve the two selected behavioral
       composition exceptions without test-only seams.
-- [ ] **TREF-05**: Terminal mutable module state moves to legitimate lifecycle or
+- [x] **TREF-05**: Terminal mutable module state moves to legitimate lifecycle or
       factory ownership without reset exports created only for tests.
-- [ ] **TREF-06**: Tests exercise public contracts, and terminal test-only
+- [x] **TREF-06**: Tests exercise public contracts, and terminal test-only
       exports, reset hooks, and test-shaped branches follow the trace-preserving
       removal disposition.
 - [ ] **TREF-07**: Observable assertions use complete exact outcomes, including
@@ -167,9 +167,9 @@ Roadmap creation assigns each requirement to exactly one phase.
 | TREF-01     | Phase 4                             | Complete      |
 | TREF-02     | Phase 4                             | Complete      |
 | TREF-03     | Phase 4                             | Complete      |
-| TREF-04     | Phase 5                             | Pending       |
-| TREF-05     | Phase 5                             | Pending       |
-| TREF-06     | Phase 5                             | Pending       |
+| TREF-04     | Phase 5                             | Complete      |
+| TREF-05     | Phase 5                             | Complete      |
+| TREF-06     | Phase 5                             | Complete      |
 | TREF-07     | Phase 6                             | Pending       |
 | TREF-08     | Phase 6                             | Pending       |
 | TREF-09     | Phase 6                             | Pending       |

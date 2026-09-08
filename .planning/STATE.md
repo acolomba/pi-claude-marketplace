@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 05
 current_phase_name: Injection and Ownership Design
 status: executing
-stopped_at: Completed 05-08-PLAN.md
-last_updated: "2026-09-07T23:29:53.292Z"
-last_activity: 2026-09-07
-last_activity_desc: Phase 05 Plan 08 complete; ready for Plan 05-09
-state_head: 07bdc4c5c570474cfc12b85b17f254b0f2beb8d1
+stopped_at: Completed 05-09-PLAN.md
+last_updated: "2026-09-08T00:05:56.656Z"
+last_activity: 2026-09-08
+last_activity_desc: Phase 05 Plan 09 complete; one runtime now owns hook hydration and registration generations
+state_head: 1f38276917e128b8449bd61c2ee10993bc573250
 progress:
   total_phases: 9
   completed_phases: 3
   total_plans: 127
-  completed_plans: 102
+  completed_plans: 103
   percent: 33
 ---
 
@@ -33,9 +33,9 @@ component as a working Pi artifact.
 
 Phase: 05 (Injection and Ownership Design) — EXECUTING
 Next: Execute Phase 5
-Plan: 9 of 33
+Plan: 10 of 33
 Status: Ready to execute
-Last activity: 2026-09-07 — Phase 05 Plan 08 complete; unused marketplace-name memory removed after census
+Last activity: 2026-09-08 — Phase 05 Plan 09 complete; one runtime now owns hook hydration and registration generations
 
 ## Performance Metrics
 
@@ -282,6 +282,7 @@ Last activity: 2026-09-07 — Phase 05 Plan 08 complete; unused marketplace-name
 | Phase 05 P06                            | 31min    | 2 tasks | 4 files  |
 | Phase 05 P07                            | 33min    | 2 tasks | 9 files  |
 | Phase 05 P08                            | 25min    | 2 tasks | 7 files  |
+| Phase 05 P09 | 33min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -681,6 +682,9 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 04]: Hermetic user-scope fixtures control `HOME` and `PI_CODING_AGENT_DIR` beneath one case-owned root and restore both variables by original property presence.
 - [Phase 04]: Shared Git fake snapshots preserve function-bearing authentication bundles and callback identity while copying only mutable data fields.
 - [Phase 04]: Production consumers declare narrow Pi ports; local configurable doubles use role-only names while reusable concern-owned abstractions retain `create*Fake` names.
+- [Phase 05]: Create exactly one HooksRuntime in the extension root and require it together with the state reader for hook hydration.
+- [Phase 05]: Guard all retained Pi callbacks by runtime generation before any callback argument or mutable state is touched.
+- [Phase 05]: Keep Node-backed compatibility exports while live runtime callbacks bridge owned routes into the legacy dispatch boundary.
 
 ### Pending Todos
 
@@ -733,23 +737,24 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 05-08-PLAN.md
+**Stopped at:** Completed 05-09-PLAN.md
 
 Phase 04 completed all seven plans and closed AUTH-01 and TREF-01 through
 TREF-03. Independent verification passed 4/4 with no behavioral or UAT gap;
 the complete quality gate passed 5,397 unit tests and 32 integration tests.
-Phase 5 planning passed independent review. Plans 05-01 through 05-07 completed
-the hidden-dependency ports plus the HooksRuntime and CompletionCache cores.
+Phase 5 planning passed independent review. Plans 05-01 through 05-09 completed
+the hidden-dependency ports, runtime and cache cores, and hook registration
+composition with generation invalidation.
 
 **Resume file:** None
 
 **Read beside it:** `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`, the
 Phase 01 terminal evidence ledger, and Phase 5's roadmap criteria.
 
-Last session: 2026-09-07T23:29:52.851Z
+Last session: 2026-09-08T00:05:56.240Z
 
-**Next:** Execute Phase 5 Plan 05-08 while preserving the TREF-04 through
-TREF-06 boundaries.
+**Next:** Execute Phase 5 Plan 05-10 while preserving the runtime ownership
+and generation boundaries established by Plan 05-09.
 
 ## Deferred Verification
 
