@@ -721,7 +721,7 @@ test("PUP-1: a bare update against empty state reports its no-op headline", asyn
 
 // ─── PUP-3: unchanged path -- string version equality, no I/O ──────────────────
 
-test("PUP-3: version equality -> outcome.partition='unchanged'; no bridge state mutation", async () => {
+test("PUP-3: version equality -> outcome.partition='unchanged'; no bridge state mutation", async (testContext) => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "update-pup3-"));
     try {
@@ -737,9 +737,15 @@ test("PUP-3: version equality -> outcome.partition='unchanged'; no bridge state 
       // Capture state mtime before; assert state.json is NOT rewritten.
       const stateJsonPath = path.join(locations.extensionRoot, "state.json");
       const before = await readFile(stateJsonPath, "utf8");
+      const completionCache = createCompletionCache();
+      const drop = testContext.mock.method(completionCache, "dropMarketplaceCache");
+      const operations = createPluginUpdateOperations(
+        createHooksRouting(createHooksRuntime()),
+        completionCache,
+      );
 
       const { ctx, pi, notifications } = makeCtx();
-      await updatePlugins({
+      await operations.updatePlugins({
         ctx,
         pi,
         scope: "project",
@@ -768,6 +774,7 @@ test("PUP-3: version equality -> outcome.partition='unchanged'; no bridge state 
         false,
         "no reload hint when 0 updated",
       );
+      assert.strictEqual(drop.mock.callCount(), 0);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -776,7 +783,7 @@ test("PUP-3: version equality -> outcome.partition='unchanged'; no bridge state 
 
 // ─── PUP-4: skipped, no longer installable ─────────────────────────────────────
 
-test("PUP-4: source overridden to unsupported npm -> outcome.partition='skipped' with 'is no longer installable'", async () => {
+test("PUP-4: source overridden to unsupported npm -> outcome.partition='skipped' with 'is no longer installable'", async (testContext) => {
   await withHermeticHome(async () => {
     // arrange
     const cwd = await mkdtemp(path.join(tmpdir(), "update-pup4-"));
@@ -797,9 +804,15 @@ test("PUP-4: source overridden to unsupported npm -> outcome.partition='skipped'
       });
 
       const { ctx, pi, notifications } = makeCtx();
+      const completionCache = createCompletionCache();
+      const drop = testContext.mock.method(completionCache, "dropMarketplaceCache");
+      const operations = createPluginUpdateOperations(
+        createHooksRouting(createHooksRuntime()),
+        completionCache,
+      );
 
       // act
-      await updatePlugins({
+      await operations.updatePlugins({
         ctx,
         pi,
         scope: "project",
@@ -820,6 +833,7 @@ test("PUP-4: source overridden to unsupported npm -> outcome.partition='skipped'
         "A plugin operation needs attention.\n\n● mp [project]\n  ⊘ hello v1.0.0 (skipped) {no longer installable}",
       );
       assert.equal(notifications[0]?.severity, "warning");
+      assert.strictEqual(drop.mock.callCount(), 0);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -2356,7 +2370,7 @@ test("an MCP commit permission failure becomes a rollback partial and retry conv
   });
 });
 
-test("PUP-6 phase-3 failure: bridge commit throws -> aggregate error carries 'plugin-uninstall + plugin-install for \"<plugin>\".'", async () => {
+test("PUP-6 phase-3 failure: bridge commit throws -> aggregate error carries 'plugin-uninstall + plugin-install for \"<plugin>\".'", async (testContext) => {
   // The cleanest way to force a phase-3a failure deterministically is to
   // pre-create an UNWRITEABLE file at the target path where the skills
   // bridge would `rename(staging -> target)`. On most filesystems that
@@ -2391,7 +2405,13 @@ test("PUP-6 phase-3 failure: bridge commit throws -> aggregate error carries 'pl
       await writeFile(path.join(locations.skillsTargetDir, "hello-tool"), "obstacle");
 
       const { ctx, pi, notifications } = makeCtx();
-      await updatePlugins({
+      const completionCache = createCompletionCache();
+      const drop = testContext.mock.method(completionCache, "dropMarketplaceCache");
+      const operations = createPluginUpdateOperations(
+        createHooksRouting(createHooksRuntime()),
+        completionCache,
+      );
+      await operations.updatePlugins({
         ctx,
         pi,
         scope: "project",
@@ -2461,6 +2481,7 @@ test("PUP-6 phase-3 failure: bridge commit throws -> aggregate error carries 'pl
         [],
         "mcp had no manifest entry -> empty array",
       );
+      assert.strictEqual(drop.mock.callCount(), 0);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -3617,15 +3638,111 @@ test("bare-form both-scopes: changed plugins render marketplace groups in presen
   });
 });
 
-// ─── dropPluginCompletionCache catch -> notifyWarning (lines 690-696) ─────────
+// ─── Captured completion-cache ownership and hygiene failure ─────────────────
 
-test("dropCache-fail: cache path is a directory -> notifyWarning emitted after successful update", async () => {
+test("successful update finalizes routes before dropping only its captured cache target", async (testContext) => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-captured-cache-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.0.1", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+
+      const completionCache = createCompletionCache();
+      const peerCache = createCompletionCache();
+      const hooksRouting = createHooksRouting(createHooksRuntime());
+      const events: string[] = [];
+      const rebuildRoutingTables = hooksRouting.rebuildRoutingTables.bind(hooksRouting);
+      testContext.mock.method(hooksRouting, "rebuildRoutingTables", () => {
+        events.push("routes-finalized");
+        rebuildRoutingTables();
+      });
+      const dropMarketplaceCache = completionCache.dropMarketplaceCache.bind(completionCache);
+      const drop = testContext.mock.method(
+        completionCache,
+        "dropMarketplaceCache",
+        async (...args: Parameters<typeof dropMarketplaceCache>) => {
+          const [, , marketplace] = args;
+          const state = await loadState(locations.extensionRoot);
+          events.push(
+            `cache-dropped:${state.marketplaces.mp?.plugins.hello?.version ?? "missing"}`,
+          );
+          assert.strictEqual(marketplace, "mp");
+          await dropMarketplaceCache(...args);
+        },
+      );
+      const operations = createPluginUpdateOperations(hooksRouting, completionCache);
+      const targetPath = await locations.pluginCacheFile("mp");
+      const unrelatedPath = await locations.pluginCacheFile("other");
+      const staleTarget = [{ name: "stale-target", status: "available" }] as const;
+      const staleUnrelated = [{ name: "stale-unrelated", status: "available" }] as const;
+      const stalePeer = [{ name: "stale-peer", status: "available" }] as const;
+      await completionCache.getPluginIndex(targetPath, "project", "mp", () =>
+        Promise.resolve(staleTarget),
+      );
+      await rm(targetPath, { force: true });
+      await completionCache.getPluginIndex(unrelatedPath, "project", "other", () =>
+        Promise.resolve(staleUnrelated),
+      );
+      await rm(unrelatedPath, { force: true });
+      await peerCache.getPluginIndex(targetPath, "project", "mp", () => Promise.resolve(stalePeer));
+      await rm(targetPath, { force: true });
+      const { ctx, pi, notifications } = makeCtx();
+
+      await operations.updatePlugins({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+      const freshTarget = [{ name: "fresh-target", status: "available" }] as const;
+      const targetRows = await completionCache.getPluginIndex(targetPath, "project", "mp", () =>
+        Promise.resolve(freshTarget),
+      );
+      const unrelatedRows = await completionCache.getPluginIndex(
+        unrelatedPath,
+        "project",
+        "other",
+        () => Promise.resolve([{ name: "unexpected-unrelated-rebuild", status: "available" }]),
+      );
+      const peerRows = await peerCache.getPluginIndex(targetPath, "project", "mp", () =>
+        Promise.resolve([{ name: "unexpected-peer-rebuild", status: "available" }]),
+      );
+
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "● mp [project]\n  ● hello v1.0.0 → v1.0.1 (updated)\n\n/reload to pick up changes",
+        },
+      ]);
+      assert.strictEqual(
+        (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.hello?.version,
+        "1.0.1",
+      );
+      assert.deepStrictEqual(targetRows, freshTarget);
+      assert.deepStrictEqual(unrelatedRows, staleUnrelated);
+      assert.deepStrictEqual(peerRows, stalePeer);
+      assert.deepStrictEqual(events, ["routes-finalized", "cache-dropped:1.0.1"]);
+      assert.strictEqual(drop.mock.callCount(), 1);
+      assert.deepStrictEqual(drop.mock.calls[0]?.arguments, [targetPath, "project", "mp"]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("dropCache-fail: captured cache failure stays silent after successful update", async () => {
   // After a successful 3-phase update, dropPluginCompletionCache calls
   // dropMarketplaceCache which calls unlink(pluginCachePath). If the path is
   // a DIRECTORY, unlink throws EISDIR (not ENOENT), which is re-thrown by
-  // dropMarketplaceCache. The catch block in dropPluginCompletionCache fires
-  // and calls notifyWarning (lines 690-696), only for the direct path
-  // (isDirectUpdate === true, args.ctx !== undefined).
+  // dropMarketplaceCache. The catch block in dropPluginCompletionCache keeps
+  // this post-commit hygiene failure silent without changing the outcome.
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "update-dropcache-"));
     try {
@@ -3644,7 +3761,12 @@ test("dropCache-fail: cache path is a directory -> notifyWarning emitted after s
       await mkdir(cacheFile, { recursive: true });
 
       const { ctx, pi, notifications } = makeCtx();
-      await updatePlugins({
+      const completionCache = createCompletionCache();
+      const operations = createPluginUpdateOperations(
+        createHooksRouting(createHooksRuntime()),
+        completionCache,
+      );
+      await operations.updatePlugins({
         ctx,
         pi,
         scope: "project",
@@ -3652,15 +3774,16 @@ test("dropCache-fail: cache path is a directory -> notifyWarning emitted after s
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
       });
 
-      // The update itself should succeed (partition='updated' -> reload hint)
-      // AND a warning notification for the cache drop failure should appear.
-      const errs = notifications.filter((n) => n.severity === "error");
-      assert.equal(errs.length, 0, `unexpected errors: ${JSON.stringify(errs)}`);
-
-      // Cache drop errors are swallowed; update still succeeds.
-      const successes = notifications.filter((n) => n.severity === undefined);
-      assert.ok(successes.length >= 1, "expected success notification for the update");
-      assert.match(successes[0]?.message ?? "", /updated/);
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "● mp [project]\n  ● hello v1.0.0 → v1.0.1 (updated)\n\n/reload to pick up changes",
+        },
+      ]);
+      assert.strictEqual(
+        (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.hello?.version,
+        "1.0.1",
+      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
