@@ -7,6 +7,7 @@ import { test } from "node:test";
 import { registerClaudePluginCommand } from "../../extensions/pi-claude-marketplace/edge/register.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { loadState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 
 import { makeCtx, makeMockPi } from "./_helpers.ts";
 
@@ -114,6 +115,7 @@ function registerImportCommand(cwd: string, gitOps: GitOps) {
     { name: "mcp", sourceInfo: { source: "pi-mcp-adapter" } },
   ]);
   registerClaudePluginCommand(mock.pi, {
+    completionCache: createCompletionCache(),
     gitOps,
     pluginUpdate: () =>
       Promise.resolve({

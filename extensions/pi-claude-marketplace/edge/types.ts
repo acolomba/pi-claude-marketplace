@@ -19,8 +19,10 @@ import type {
 } from "../orchestrators/import/index.ts";
 import type { GitOps } from "../orchestrators/marketplace/shared.ts";
 import type { PluginUpdateFn } from "../orchestrators/types.ts";
+import type { CompletionCache } from "../shared/completion-cache.ts";
 
 export interface EdgeDeps {
+  readonly completionCache: CompletionCache;
   readonly gitOps: GitOps;
   readonly pluginUpdate: PluginUpdateFn;
   readonly importClaudeSettings?: (

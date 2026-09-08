@@ -51,7 +51,10 @@ import {
 import { TOP_LEVEL_USAGE } from "../../extensions/pi-claude-marketplace/edge/router.ts";
 import { makeLocationsResolver } from "../../extensions/pi-claude-marketplace/orchestrators/edge-deps.ts";
 import { saveState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import { transitionCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import {
+  createCompletionCache,
+  transitionCompletionCache,
+} from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { createGitOpsFake } from "../platform/git-ops-fake.ts";
 
 import { createNotificationBoundary } from "./notification-boundary.ts";
@@ -220,6 +223,7 @@ async function seedProjectMarketplace(root: string, marketplaceName: string): Pr
 function createEdgeDeps(): EdgeDeps {
   const { gitOps } = createGitOpsFake({ boundary: "memory" });
   return {
+    completionCache: createCompletionCache(),
     gitOps,
     pluginUpdate: (): Promise<PluginUpdateOutcome> => {
       throw new Error("the registration glue must not run a plugin update");

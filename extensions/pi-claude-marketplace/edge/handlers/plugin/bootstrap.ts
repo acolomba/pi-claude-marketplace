@@ -34,7 +34,7 @@ const USAGE = "Usage: /claude:plugin bootstrap";
 
 export function makeBootstrapHandler(
   pi: ExtensionAPI,
-  deps: EdgeDeps,
+  deps: Pick<EdgeDeps, "gitOps">,
 ): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
   return async (args, ctx): Promise<void> => {
     let parsed;

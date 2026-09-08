@@ -9,6 +9,7 @@ import { recomputePluginPath } from "./orchestrators/plugin-path.ts";
 import { applyReconcile } from "./orchestrators/reconcile/apply.ts";
 import { locationsFor } from "./persistence/locations.ts";
 import { loadState } from "./persistence/state-io.ts";
+import { createCompletionCache } from "./shared/completion-cache.ts";
 import { hookDebugLog } from "./shared/debug-log.ts";
 import { errorMessage } from "./shared/errors.ts";
 import { makeRawNotifyFn } from "./shared/notify.ts";
@@ -29,6 +30,7 @@ import type {
 // does not see the un-awaited inner Promise.
 export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Promise<void> {
   const hooksRuntime = createHooksRuntime();
+  const completionCache = createCompletionCache();
   const hooksHydration = createHooksHydration(hooksRuntime, { loadState });
   const onResourcesDiscover = pi.on.bind(pi) as unknown as (
     event: "resources_discover",
@@ -162,6 +164,7 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
   });
 
   registerClaudePluginCommand(pi, {
+    completionCache,
     gitOps: DEFAULT_GIT_OPS,
     pluginUpdate: updateSinglePlugin,
   });

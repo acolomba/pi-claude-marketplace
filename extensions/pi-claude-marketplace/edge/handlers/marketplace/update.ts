@@ -25,7 +25,7 @@ const USAGE = "Usage: /claude:plugin marketplace update [<name>] [--scope user|p
 
 export function makeMarketplaceUpdateHandler(
   pi: ExtensionAPI,
-  deps: EdgeDeps,
+  deps: Pick<EdgeDeps, "gitOps" | "pluginUpdate">,
 ): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
   return async (args, ctx): Promise<void> => {
     const parsed = parseCommandArgs(
