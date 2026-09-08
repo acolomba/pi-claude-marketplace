@@ -23,6 +23,7 @@ import path from "node:path";
 
 import { assertSafeName } from "../../domain/name.ts";
 import { parseFrontmatter } from "../../platform/pi-api.ts";
+import { stripBom } from "../../shared/bom.ts";
 import { appendLeakToError, errorMessage, ManualRecoveryError } from "../../shared/errors.ts";
 import {
   cleanupStaging,
@@ -259,7 +260,14 @@ export async function prepareStageSkills(input: StageSkillsInput): Promise<Prepa
       });
 
       const skillMdPath = path.join(stagedDir, "SKILL.md");
-      let content = await readFile(skillMdPath, "utf8");
+      // FMBOM-01: strip a leading U+FEFF before anything reads these bytes. It
+      // has to precede the PARSE-01 gate-1 parse AND the SK-3 name rewrite,
+      // because `rewriteFrontmatterName` anchors on `startsWith("---")` and a
+      // marker sends it down the freshBlock path, which buries the source
+      // block in the body and drops its `description`. This same `content` is
+      // what `writeFile` emits below, so one strip keeps the parse, the
+      // rewrite, the augment and the staged bytes in agreement.
+      let content = stripBom(await readFile(skillMdPath, "utf8"));
 
       // PARSE-01: parse the SOURCE frontmatter BEFORE any rewrite/substitution
       // to establish attribution ground truth and the degrade trigger. A THROW
