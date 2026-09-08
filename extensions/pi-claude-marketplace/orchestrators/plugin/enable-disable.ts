@@ -61,7 +61,12 @@
 
 import path from "node:path";
 
-import { rebuildRoutingTables, removePluginConfigFromCache } from "../../bridges/hooks/index.ts";
+import {
+  readAndCachePluginHooks,
+  rebuildRoutingTables,
+  removePluginConfigFromCache,
+} from "../../bridges/hooks/index.ts";
+import { asAbsolutePluginRoot } from "../../domain/plugin-root.ts";
 import { isRecordedButDisabled, toDisabledRecord } from "../../persistence/state-io.ts";
 import { softDepStatus } from "../../platform/pi-api.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
@@ -225,14 +230,20 @@ const REAL_ENABLE_DISABLE_TRANSACTION: EnableDisableTransaction = {
 /** Hook route effects required by enable and disable after durable state changes. */
 export type EnableDisableHooksRouting = Pick<
   HooksRouting,
-  "rebuildRoutingTables" | "removePluginConfigFromCache"
+  "readAndCachePluginHooks" | "rebuildRoutingTables" | "removePluginConfigFromCache"
 >;
+
+interface EnableRouteEffect {
+  readonly hooksJsonPath: string;
+  readonly resolvedSource: ReturnType<typeof asAbsolutePluginRoot>;
+}
 
 /** Outcome sentinel populated by the withStateGuard closure. */
 type SetEnabledOutcome =
   | { kind: "idempotent" }
   | ({
       kind: "fresh";
+      addRoutesAfterSave?: EnableRouteEffect;
       version?: string;
     } & EnableDegradationSignals)
   | { kind: "invalid-config" }
@@ -338,6 +349,12 @@ async function runEnableBranch(
     const degradedKinds = Array.from(new Set(summary.frontmatterDegradations.map((d) => d.kind)));
     return {
       kind: "fresh",
+      ...(resolved.hooksConfigPath !== undefined && {
+        addRoutesAfterSave: {
+          hooksJsonPath: path.join(resolved.pluginRoot, resolved.hooksConfigPath),
+          resolvedSource: asAbsolutePluginRoot(resolved.pluginRoot),
+        },
+      }),
       version: recordedVersion,
       ...(resolved.state === "partially-available" && {
         unsupported: [...resolved.unsupported],
@@ -503,6 +520,59 @@ function dropCachedHooks(
       `disable: ${logPrefix}cache/routing mutation failed for ${plugin}@${marketplace}: ${errorMessage(cacheErr)}${consequence}`,
     );
   }
+}
+
+function dropCachedHooksAfterSave(
+  hooksRouting: EnableDisableHooksRouting,
+  opts: EnableDisablePluginOptions,
+  scope: Scope,
+  shouldRemove: boolean,
+  logPrefix: string,
+  unexpected: boolean,
+): void {
+  if (!shouldRemove) {
+    return;
+  }
+
+  dropCachedHooks(hooksRouting, scope, opts.marketplace, opts.plugin, logPrefix, unexpected);
+}
+
+/** Publish one freshly enabled hooks config after state and config are durable. */
+async function addCachedHooks(
+  hooksRouting: EnableDisableHooksRouting,
+  opts: EnableDisablePluginOptions,
+  scope: Scope,
+  effect: EnableRouteEffect,
+): Promise<void> {
+  try {
+    await hooksRouting.readAndCachePluginHooks({
+      cwd: opts.cwd,
+      hooksJsonPath: effect.hooksJsonPath,
+      logPrefix: "enable",
+      marketplace: opts.marketplace,
+      plugin: opts.plugin,
+      resolvedSource: effect.resolvedSource,
+      scope,
+    });
+    hooksRouting.rebuildRoutingTables();
+  } catch (cacheErr) {
+    hookDebugLog(
+      `enable: post-save cache/routing mutation failed for ${opts.plugin}@${opts.marketplace}: ${errorMessage(cacheErr)}`,
+    );
+  }
+}
+
+async function addCachedHooksAfterSave(
+  hooksRouting: EnableDisableHooksRouting,
+  opts: EnableDisablePluginOptions,
+  scope: Scope,
+  outcome: Extract<SetEnabledOutcome, { kind: "fresh" }>,
+): Promise<void> {
+  if (outcome.addRoutesAfterSave === undefined) {
+    return;
+  }
+
+  await addCachedHooks(hooksRouting, opts, scope, outcome.addRoutesAfterSave);
 }
 
 /**
@@ -836,17 +906,14 @@ async function setPluginEnabledWithTransaction(
           // post-guard branch that surfaces the failed row.
           if (disableResult.saveShrunken) {
             await tx.save();
-
-            if (disableResult.removeRoutesAfterSave) {
-              dropCachedHooks(
-                hooksRouting,
-                scope,
-                opts.marketplace,
-                opts.plugin,
-                "partial-cascade ",
-                false,
-              );
-            }
+            dropCachedHooksAfterSave(
+              hooksRouting,
+              opts,
+              scope,
+              disableResult.removeRoutesAfterSave,
+              "partial-cascade ",
+              false,
+            );
 
             return branchOutcome;
           }
@@ -869,10 +936,8 @@ async function setPluginEnabledWithTransaction(
         }
 
         await tx.save();
-
-        if (removeRoutesAfterSave) {
-          dropCachedHooks(hooksRouting, scope, opts.marketplace, opts.plugin, "", true);
-        }
+        await addCachedHooksAfterSave(hooksRouting, opts, scope, branchOutcome);
+        dropCachedHooksAfterSave(hooksRouting, opts, scope, removeRoutesAfterSave, "", true);
 
         return branchOutcome;
       },
@@ -953,6 +1018,7 @@ export function createNodeSetPluginEnabled(
 }
 
 const TRANSITION_ENABLE_DISABLE_HOOKS_ROUTING: EnableDisableHooksRouting = {
+  readAndCachePluginHooks,
   rebuildRoutingTables,
   removePluginConfigFromCache,
 };

@@ -37,7 +37,10 @@ import { MarketplaceNotFoundError } from "../../../extensions/pi-claude-marketpl
 import { notify } from "../../../extensions/pi-claude-marketplace/shared/notify.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
-import type { CacheEntry } from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
+import type {
+  HooksRouting,
+  HooksRuntime,
+} from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import type { EnableDisablePluginOutcome } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts";
 import type {
   NotificationContext,
@@ -75,6 +78,38 @@ function toolInfo(name: string): ToolInventoryItem {
 
 function makePi(toolNames: readonly string[] = []): ToolInventory {
   return { getAllTools: () => toolNames.map(toolInfo) };
+}
+
+async function populateRuntimeRoute(
+  cwd: string,
+  runtime: HooksRuntime,
+  opts: { command: string; marketplace?: string; plugin?: string; scope?: "project" | "user" },
+): Promise<HooksRouting> {
+  const marketplace = opts.marketplace ?? "mp";
+  const plugin = opts.plugin ?? "foo";
+  const scope = opts.scope ?? "user";
+  const pluginRoot = path.join(cwd, "runtime-routes", `${scope}-${marketplace}-${plugin}`);
+  const hooksJsonPath = path.join(pluginRoot, "hooks.json");
+  await mkdir(pluginRoot, { recursive: true });
+  await writeFile(
+    hooksJsonPath,
+    JSON.stringify({
+      PreToolUse: [{ hooks: [{ command: opts.command, type: "command" }], matcher: "" }],
+    }),
+    "utf8",
+  );
+  const hooksRouting = createHooksRouting(runtime);
+  await hooksRouting.readAndCachePluginHooks({
+    cwd,
+    hooksJsonPath,
+    logPrefix: "enable-disable-owner-test",
+    marketplace,
+    plugin,
+    resolvedSource: asAbsolutePluginRoot(pluginRoot),
+    scope,
+  });
+  hooksRouting.rebuildRoutingTables();
+  return hooksRouting;
 }
 
 test("enable-disable exposes its required transaction factory", () => {
@@ -1006,6 +1041,7 @@ test("publishes a freshly enabled hook only to the supplied runtime after durabl
     const ownerRuntime = createHooksRuntime();
     const peerRuntime = createHooksRuntime();
     const setPluginEnabledForOwner = createNodeSetPluginEnabled(createHooksRouting(ownerRuntime));
+    const configBefore = await readFile(configPath, "utf8");
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
@@ -1029,10 +1065,10 @@ test("publishes a freshly enabled hook only to the supplied runtime after durabl
       true,
     );
     assert.notEqual(await readFile(statePath, "utf8"), "");
-    assert.equal(isDeclaredEnabled((await readConfig(configPath)).plugins?.["foo@mp"]), false);
+    assert.strictEqual(await readFile(configPath, "utf8"), configBefore);
     assert.deepStrictEqual(
       ownerRuntime.getRoutingBucket("PreToolUse").map((entry) => ({
-        command: entry.config.PreToolUse?.[0]?.hooks[0]?.command,
+        command: entry.handlerDecl.command,
         marketplace: entry.marketplace,
         pluginId: entry.pluginId,
         scope: entry.scope,
@@ -1042,6 +1078,60 @@ test("publishes a freshly enabled hook only to the supplied runtime after durabl
     assert.deepStrictEqual(peerRuntime.getRoutingBucket("PreToolUse"), []);
   });
 });
+
+for (const { failure, label } of [
+  { failure: new Error("route publication denied"), label: "Error" },
+  { failure: "route publication denied", label: "non-Error" },
+] as const) {
+  test(`keeps a committed enable successful when post-save route publication fails (${label})`, async () => {
+    await withHermeticHome(async ({ cwd, home }) => {
+      // arrange
+      const { configPath, statePath } = await seedRealDisabledMarketplace(home, {
+        configSeed: { file: "base", entry: { enabled: false } },
+        hooksJson: {
+          PreToolUse: [{ hooks: [{ command: "echo enabled", type: "command" }], matcher: "" }],
+        },
+        marketplaceName: "mp",
+        pluginName: "foo",
+        version: "1.2.3",
+      });
+      const runtime = createHooksRuntime();
+      const hooksRouting = createHooksRouting(runtime);
+      const failingRouting: HooksRouting = {
+        ...hooksRouting,
+        async readAndCachePluginHooks(): Promise<void> {
+          await rejectUnknown(failure);
+        },
+      };
+      const configBefore = await readFile(configPath, "utf8");
+      const { ctx, notifications } = makeCtx(cwd);
+
+      // act
+      const outcome = await createNodeSetPluginEnabled(failingRouting)({
+        ctx,
+        cwd,
+        enable: true,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi: makePi(),
+        plugin: "foo",
+        scope: "user",
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, { name: "foo", status: "enabled", version: "1.2.3" });
+      assert.deepStrictEqual(notifications, []);
+      assert.equal(
+        (await loadState(locationsFor("user", cwd).extensionRoot)).marketplaces.mp?.plugins.foo
+          ?.enabled,
+        true,
+      );
+      assert.notEqual(await readFile(statePath, "utf8"), "");
+      assert.strictEqual(await readFile(configPath, "utf8"), configBefore);
+      assert.deepStrictEqual(runtime.getRoutingBucket("PreToolUse"), []);
+    });
+  });
+}
 
 // ──────────────────────────────────────────────────────────────────────────
 // ENBL-19: enable does not self-conflict against the retained inventory
@@ -2127,9 +2217,12 @@ test("RECON-03 enable-disable orchestrated mode -- idempotent enable-already-ena
       disabled: false, // populated resources = enabled
       version: "1.2.3",
     });
+    const runtime = createHooksRuntime();
+    const hooksRouting = await populateRuntimeRoute(cwd, runtime, { command: "echo existing" });
+    const routesBefore = runtime.getRoutingBucket("PreToolUse");
     const { ctx, notifications } = makeCtx(cwd);
     // act
-    const outcome = await setPluginEnabled({
+    const outcome = await createNodeSetPluginEnabled(hooksRouting)({
       ctx,
       pi: makePi(),
       cwd,
@@ -2142,11 +2235,8 @@ test("RECON-03 enable-disable orchestrated mode -- idempotent enable-already-ena
 
     // assert
     assert.equal(notifications.length, 0, "orchestrated mode must not fire notifications");
-    assert.ok(outcome);
-    assert.equal(outcome.status, "skipped");
-    if (outcome.status === "skipped") {
-      assert.equal(outcome.reason, "already enabled");
-    }
+    assert.deepStrictEqual(outcome, { name: "foo", reason: "already enabled", status: "skipped" });
+    assert.deepStrictEqual(runtime.getRoutingBucket("PreToolUse"), routesBefore);
   });
 });
 
@@ -3188,12 +3278,19 @@ test("orchestrated enable normalizes a non-Error manifest read rejection and ret
     try {
       // arrange
       const { manifestPath, statePath } = await seedRealDisabledMarketplace(home, {
+        hooksJson: {
+          PreToolUse: [{ hooks: [{ command: "echo retry", type: "command" }], matcher: "" }],
+        },
         marketplaceName: "mp",
         pluginName: "foo",
         version: "1.2.3",
       });
       const manifestBytes = await readFile(manifestPath, "utf8");
       const beforeState = await readFile(statePath, "utf8");
+      const runtime = createHooksRuntime();
+      const hooksRouting = await populateRuntimeRoute(cwd, runtime, { command: "echo before" });
+      const routesBefore = runtime.getRoutingBucket("PreToolUse");
+      const setPluginEnabledForOwner = createNodeSetPluginEnabled(hooksRouting);
       readMock = t.mock.method(
         filesystemPromises,
         "readFile",
@@ -3209,7 +3306,7 @@ test("orchestrated enable normalizes a non-Error manifest read rejection and ret
       const { ctx, notifications } = makeCtx(cwd);
 
       // act
-      const failure = await setPluginEnabled({
+      const failure = await setPluginEnabledForOwner({
         ctx,
         cwd,
         enable: true,
@@ -3220,11 +3317,12 @@ test("orchestrated enable normalizes a non-Error manifest read rejection and ret
         scope: "user",
       });
       const afterFailure = await originalReadFile(statePath, "utf8");
+      const routesAfterFailure = runtime.getRoutingBucket("PreToolUse");
       readMock.mock.restore();
       readMock = undefined;
       syncBuiltinESMExports();
       await writeFile(manifestPath, `${manifestBytes}\n`, "utf8");
-      const retry = await setPluginEnabled({
+      const retry = await setPluginEnabledForOwner({
         ctx,
         cwd,
         enable: true,
@@ -3243,8 +3341,13 @@ test("orchestrated enable normalizes a non-Error manifest read rejection and ret
         status: "failed",
       });
       assert.strictEqual(afterFailure, beforeState);
+      assert.deepStrictEqual(routesAfterFailure, routesBefore);
       assert.deepStrictEqual(retry, { name: "foo", status: "enabled", version: "1.2.3" });
       assert.deepStrictEqual(notifications, []);
+      assert.deepStrictEqual(
+        runtime.getRoutingBucket("PreToolUse").map((entry) => entry.handlerDecl.command),
+        ["echo retry"],
+      );
     } finally {
       readMock?.mock.restore();
       syncBuiltinESMExports();
@@ -3253,14 +3356,11 @@ test("orchestrated enable normalizes a non-Error manifest read rejection and ret
 });
 
 test("orchestrated partial disable folds a removed hook after MCP cleanup fails", async (t) => {
-  const { resetRoutingState, setParsedConfig } =
-    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
   await withHermeticHome(async ({ cwd, home }) => {
     const originalReadFile = filesystemPromises.readFile.bind(filesystemPromises);
     let readMock: ReturnType<typeof t.mock.method> | undefined;
     try {
       // arrange
-      resetRoutingState();
       const { statePath } = await writeUserState(home, {
         disabled: false,
         hooksOnly: true,
@@ -3278,23 +3378,31 @@ test("orchestrated partial disable folds a removed hook after MCP cleanup fails"
       await mkdir(path.join(locations.hooksDir, "foo"), { recursive: true });
       await writeFile(
         path.join(locations.hooksDir, "foo", "hooks.json"),
-        JSON.stringify({ PreToolUse: [] }),
+        JSON.stringify({
+          PreToolUse: [{ hooks: [{ command: "echo partial", type: "command" }], matcher: "" }],
+        }),
       );
       await writeFile(
         locations.mcpJsonPath,
         JSON.stringify({ mcpServers: { server: { command: "node" } } }),
       );
-      const poison: CacheEntry = {
-        get config(): CacheEntry["config"] {
-          throw new Error("routing rebuild denied");
-        },
-        ifPredicates: new Map(),
-        marketplace: "poison-marketplace",
-        pluginId: "poison-plugin",
+      const runtime = createHooksRuntime();
+      const hooksRouting = createHooksRouting(runtime);
+      await hooksRouting.readAndCachePluginHooks({
+        cwd,
+        hooksJsonPath: path.join(locations.hooksDir, "foo", "hooks.json"),
+        logPrefix: "partial-disable-owner-test",
+        marketplace: "mp",
+        plugin: "foo",
         resolvedSource: asAbsolutePluginRoot(cwd),
-        scope: "project",
-      };
-      setParsedConfig("project:poison-marketplace:poison-plugin", poison);
+        scope: "user",
+      });
+      hooksRouting.rebuildRoutingTables();
+      assert.deepStrictEqual(
+        runtime.getRoutingBucket("PreToolUse").map((entry) => entry.handlerDecl.command),
+        ["echo partial"],
+      );
+      const setPluginEnabledForOwner = createNodeSetPluginEnabled(hooksRouting);
       const mcpError = new Error("mcp cleanup denied");
       readMock = t.mock.method(
         filesystemPromises,
@@ -3311,7 +3419,7 @@ test("orchestrated partial disable folds a removed hook after MCP cleanup fails"
       const { ctx, notifications } = makeCtx(cwd);
 
       // act
-      const fallbackOutcome = await setPluginEnabled({
+      const fallbackOutcome = await setPluginEnabledForOwner({
         ctx,
         cwd,
         enable: false,
@@ -3322,7 +3430,7 @@ test("orchestrated partial disable folds a removed hook after MCP cleanup fails"
         scope: "user",
       });
       Object.assign(mcpError, { code: "EACCES" });
-      const classifiedOutcome = await setPluginEnabled({
+      const classifiedOutcome = await setPluginEnabledForOwner({
         ctx,
         cwd,
         enable: false,
@@ -3351,42 +3459,82 @@ test("orchestrated partial disable folds a removed hook after MCP cleanup fails"
         (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.foo?.resources,
         { agents: [], hooks: [], mcpServers: ["server"], prompts: [], skills: [] },
       );
+      assert.deepStrictEqual(runtime.getRoutingBucket("PreToolUse"), []);
       await assert.rejects(stat(path.join(locations.hooksDir, "foo", "hooks.json")), /ENOENT/);
     } finally {
       readMock?.mock.restore();
       syncBuiltinESMExports();
-      resetRoutingState();
     }
   });
 });
 
-test("a clean disable remains successful when the hooks cache rebuild throws", async () => {
-  const { resetRoutingState, setParsedConfig } =
-    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
+test("a partial disable preserves its committed fold when route publication fails", async (t) => {
   await withHermeticHome(async ({ cwd, home }) => {
+    const originalReadFile = filesystemPromises.readFile.bind(filesystemPromises);
+    let readMock: ReturnType<typeof t.mock.method> | undefined;
     try {
       // arrange
-      resetRoutingState();
       const { statePath } = await writeUserState(home, {
         disabled: false,
+        hooksOnly: true,
         marketplaceName: "mp",
         pluginName: "foo",
       });
-      const poison: CacheEntry = {
-        get config(): CacheEntry["config"] {
+      const locations = locationsFor("user", cwd);
+      const state = JSON.parse(await readFile(statePath, "utf8")) as {
+        marketplaces: {
+          mp: { plugins: { foo: { resources: { hooks: string[]; mcpServers: string[] } } } };
+        };
+      };
+      state.marketplaces.mp.plugins.foo.resources.mcpServers = ["server"];
+      await writeFile(statePath, JSON.stringify(state, null, 2), "utf8");
+      await mkdir(path.join(locations.hooksDir, "foo"), { recursive: true });
+      const hooksJsonPath = path.join(locations.hooksDir, "foo", "hooks.json");
+      await writeFile(
+        hooksJsonPath,
+        JSON.stringify({
+          PreToolUse: [{ hooks: [{ command: "echo partial", type: "command" }], matcher: "" }],
+        }),
+      );
+      await writeFile(
+        locations.mcpJsonPath,
+        JSON.stringify({ mcpServers: { server: { command: "node" } } }),
+      );
+      const runtime = createHooksRuntime();
+      const hooksRouting = createHooksRouting(runtime);
+      await hooksRouting.readAndCachePluginHooks({
+        cwd,
+        hooksJsonPath,
+        logPrefix: "partial-disable-routing-failure-test",
+        marketplace: "mp",
+        plugin: "foo",
+        resolvedSource: asAbsolutePluginRoot(cwd),
+        scope: "user",
+      });
+      hooksRouting.rebuildRoutingTables();
+      const failingRouting: HooksRouting = {
+        ...hooksRouting,
+        rebuildRoutingTables(): void {
           throw new Error("routing rebuild denied");
         },
-        ifPredicates: new Map(),
-        marketplace: "poison-marketplace",
-        pluginId: "poison-plugin",
-        resolvedSource: asAbsolutePluginRoot(cwd),
-        scope: "project",
       };
-      setParsedConfig("project:poison-marketplace:poison-plugin", poison);
+      const mcpError = new Error("mcp cleanup denied");
+      readMock = t.mock.method(
+        filesystemPromises,
+        "readFile",
+        async (...args: Parameters<typeof filesystemPromises.readFile>) => {
+          if (args[0] === locations.mcpJsonPath) {
+            throw mcpError;
+          }
+
+          return originalReadFile(...args);
+        },
+      );
+      syncBuiltinESMExports();
       const { ctx, notifications } = makeCtx(cwd);
 
       // act
-      const outcome = await setPluginEnabled({
+      const outcome = await createNodeSetPluginEnabled(failingRouting)({
         ctx,
         cwd,
         enable: false,
@@ -3398,17 +3546,72 @@ test("a clean disable remains successful when the hooks cache rebuild throws", a
       });
 
       // assert
-      assert.deepStrictEqual(outcome, { name: "foo", status: "disabled", version: "1.2.3" });
+      assert.deepStrictEqual(outcome, {
+        cause: mcpError.message,
+        error: mcpError,
+        reason: "unreadable",
+        status: "failed",
+      });
       assert.deepStrictEqual(notifications, []);
-      assert.equal(
-        (await loadState(locationsFor("user", cwd).extensionRoot)).marketplaces.mp?.plugins.foo
-          ?.enabled,
-        false,
+      assert.deepStrictEqual(
+        (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.foo?.resources,
+        { agents: [], hooks: [], mcpServers: ["server"], prompts: [], skills: [] },
       );
-      assert.notEqual(await readFile(statePath, "utf8"), "");
+      await assert.rejects(stat(hooksJsonPath), /ENOENT/);
+      assert.deepStrictEqual(
+        runtime.getRoutingBucket("PreToolUse").map((entry) => entry.handlerDecl.command),
+        ["echo partial"],
+      );
     } finally {
-      resetRoutingState();
+      readMock?.mock.restore();
+      syncBuiltinESMExports();
     }
+  });
+});
+
+test("a clean disable remains successful when the hooks cache rebuild throws", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { statePath } = await writeUserState(home, {
+      disabled: false,
+      marketplaceName: "mp",
+      pluginName: "foo",
+    });
+    const runtime = createHooksRuntime();
+    const hooksRouting = await populateRuntimeRoute(cwd, runtime, { command: "echo active" });
+    const failingRouting: HooksRouting = {
+      ...hooksRouting,
+      rebuildRoutingTables(): void {
+        throw new Error("routing rebuild denied");
+      },
+    };
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    const outcome = await createNodeSetPluginEnabled(failingRouting)({
+      ctx,
+      cwd,
+      enable: false,
+      marketplace: "mp",
+      notifications: { mode: "orchestrated" },
+      pi: makePi(),
+      plugin: "foo",
+      scope: "user",
+    });
+
+    // assert
+    assert.deepStrictEqual(outcome, { name: "foo", status: "disabled", version: "1.2.3" });
+    assert.deepStrictEqual(notifications, []);
+    assert.equal(
+      (await loadState(locationsFor("user", cwd).extensionRoot)).marketplaces.mp?.plugins.foo
+        ?.enabled,
+      false,
+    );
+    assert.notEqual(await readFile(statePath, "utf8"), "");
+    assert.deepStrictEqual(
+      runtime.getRoutingBucket("PreToolUse").map((entry) => entry.handlerDecl.command),
+      ["echo active"],
+    );
   });
 });
 
@@ -3432,6 +3635,8 @@ test("standalone enable exposes ordered rollback partials and retries without du
       const locations = locationsFor("user", cwd);
       const hookTarget = path.join(locations.hooksDir, "foo");
       const beforeState = await readFile(statePath, "utf8");
+      const runtime = createHooksRuntime();
+      const setPluginEnabledForOwner = createNodeSetPluginEnabled(createHooksRouting(runtime));
       const mcpFailure = new Error("mcp staging denied");
       const hookRollbackFailure = new Error("hook rollback denied");
       readMock = t.mock.method(
@@ -3465,7 +3670,7 @@ test("standalone enable exposes ordered rollback partials and retries without du
       const first = makeCtx(cwd);
 
       // act
-      const failure = await setPluginEnabled({
+      const failure = await setPluginEnabledForOwner({
         ctx: first.ctx,
         cwd,
         enable: true,
@@ -3475,7 +3680,8 @@ test("standalone enable exposes ordered rollback partials and retries without du
         scope: "user",
       });
       const afterFailure = await readFile(statePath, "utf8");
-      const typedFailure = await setPluginEnabled({
+      const routesAfterFailure = runtime.getRoutingBucket("PreToolUse");
+      const typedFailure = await setPluginEnabledForOwner({
         ctx: first.ctx,
         cwd,
         enable: true,
@@ -3491,7 +3697,7 @@ test("standalone enable exposes ordered rollback partials and retries without du
       rmMock = undefined;
       syncBuiltinESMExports();
       const second = makeCtx(cwd);
-      const retry = await setPluginEnabled({
+      const retry = await setPluginEnabledForOwner({
         ctx: second.ctx,
         cwd,
         enable: true,
@@ -3504,6 +3710,7 @@ test("standalone enable exposes ordered rollback partials and retries without du
       // assert
       assert.equal(failure, undefined);
       assert.strictEqual(afterFailure, beforeState);
+      assert.deepStrictEqual(routesAfterFailure, []);
       assert.equal(first.notifications.length, 1);
       assert.equal(first.notifications[0]?.severity, "error");
       assert.equal(
@@ -3542,6 +3749,10 @@ test("standalone enable exposes ordered rollback partials and retries without du
         skills: ["foo-s1"],
       });
       assert.deepStrictEqual(await readdir(locations.skillsTargetDir), ["foo-s1"]);
+      assert.deepStrictEqual(
+        runtime.getRoutingBucket("PreToolUse").map((entry) => entry.handlerDecl.command),
+        ["echo hook"],
+      );
     } finally {
       readMock?.mock.restore();
       rmMock?.mock.restore();
