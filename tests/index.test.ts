@@ -45,6 +45,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
 
+import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { It, when } from "strong-mock";
 
 import claudeMarketplaceExtension from "../extensions/pi-claude-marketplace/index.ts";
@@ -67,6 +68,7 @@ import type {
   SessionShutdownEvent,
   SessionStartEvent,
   ToolCallEvent,
+  ToolCallEventResult,
   ToolResultEvent,
 } from "../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
@@ -77,6 +79,18 @@ import type {
  * has to be named per registration.
  */
 type EventListener<TEvent> = (event: TEvent, ctx: ExtensionContext) => void;
+
+/** The bridge's project-hydrating session-start listener is asynchronous. */
+type BridgeSessionStartListener = (
+  event: SessionStartEvent,
+  ctx: ExtensionContext,
+) => Promise<void>;
+
+/** The hook-bridge listener whose return value can deny a tool call. */
+type ToolCallListener = (
+  event: ToolCallEvent,
+  ctx: ExtensionContext,
+) => Promise<ToolCallEventResult | undefined>;
 
 /** The discover listener, which answers with the discovered resource set. */
 type DiscoverListener = (
@@ -96,8 +110,10 @@ interface HermeticScope {
 }
 
 interface LoadedExtension {
+  readonly bridgeSessionStart: BridgeSessionStartListener;
   readonly discover: DiscoverListener;
   readonly sessionEnv: EventListener<SessionStartEvent>;
+  readonly toolCall: ToolCallListener;
   readonly command: CommandRegistration;
   readonly tools: readonly (ToolRegistration | undefined)[];
   readonly ctx: ExtensionCommandContext;
@@ -244,16 +260,21 @@ async function createHermeticScope(t: TestContext, label: string): Promise<Herme
  * and captures only the callback, so `verifyBoundary()` fails a registration
  * under any other name, an extra registration, and a missing one alike.
  */
-async function loadExtension(emissions: number, toolProbes: number): Promise<LoadedExtension> {
+async function loadExtension(
+  emissions: number,
+  toolProbes: number,
+  cwd?: { readonly value: string; readonly reads: number },
+): Promise<LoadedExtension> {
   const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(
     emissions,
     toolProbes,
+    cwd,
+  );
+  const bridgeSessionStartListener = It.willCapture<BridgeSessionStartListener>(
+    "bridge session start",
   );
   when(() => {
-    pi.on(
-      "session_start",
-      It.willCapture<EventListener<SessionStartEvent>>("bridge session start"),
-    );
+    pi.on("session_start", bridgeSessionStartListener);
   })
     .thenReturn()
     .times(1);
@@ -283,8 +304,9 @@ async function loadExtension(emissions: number, toolProbes: number): Promise<Loa
   })
     .thenReturn()
     .times(1);
+  const toolCallListener = It.willCapture<ToolCallListener>("tool call");
   when(() => {
-    pi.on("tool_call", It.willCapture<EventListener<ToolCallEvent>>("tool call"));
+    pi.on("tool_call", toolCallListener);
   })
     .thenReturn()
     .times(1);
@@ -358,15 +380,25 @@ async function loadExtension(emissions: number, toolProbes: number): Promise<Loa
   await claudeMarketplaceExtension(pi);
 
   const discover = discoverListener.value;
+  const bridgeSessionStart = bridgeSessionStartListener.value;
   const sessionEnv = sessionEnvListener.value;
+  const toolCall = toolCallListener.value;
   const command = commandRegistration.value;
-  if (discover === undefined || sessionEnv === undefined || command === undefined) {
-    throw new Error("the extension factory installed no discover, session or command callback");
+  if (
+    bridgeSessionStart === undefined ||
+    discover === undefined ||
+    sessionEnv === undefined ||
+    toolCall === undefined ||
+    command === undefined
+  ) {
+    throw new Error("the extension factory installed an incomplete callback surface");
   }
 
   return {
+    bridgeSessionStart,
     discover,
     sessionEnv,
+    toolCall,
     command,
     tools: [firstTool.value, secondTool.value],
     ctx,
@@ -476,6 +508,128 @@ function contextWithSessionId(
 
 function discoverEvent(cwd: string): ResourcesDiscoverEvent {
   return { type: "resources_discover", cwd, reason: "startup" };
+}
+
+/** A complete context for exercising a production hook callback. */
+function hookContext(cwd: string, sessionId: string): ExtensionContext {
+  return {
+    get ui(): ExtensionContext["ui"] {
+      throw new Error("the synchronous hook path must not read ui");
+    },
+    mode: "print",
+    hasUI: false,
+    cwd,
+    sessionManager: SessionManager.inMemory(cwd, { id: sessionId }),
+    get modelRegistry(): ExtensionContext["modelRegistry"] {
+      throw new Error("the synchronous hook path must not read modelRegistry");
+    },
+    model: undefined,
+    scopedModels: [],
+    isIdle(): never {
+      throw new Error("the synchronous hook path must not inspect idle state");
+    },
+    isProjectTrusted(): never {
+      throw new Error("the synchronous hook path must not inspect trust");
+    },
+    signal: undefined,
+    abort(): never {
+      throw new Error("the synchronous hook path must not abort Pi");
+    },
+    hasPendingMessages(): never {
+      throw new Error("the synchronous hook path must not inspect pending messages");
+    },
+    shutdown(): never {
+      throw new Error("the synchronous hook path must not shut down Pi");
+    },
+    getContextUsage(): never {
+      throw new Error("the synchronous hook path must not inspect context usage");
+    },
+    compact(): never {
+      throw new Error("the synchronous hook path must not compact the session");
+    },
+    getSystemPrompt(): never {
+      throw new Error("the synchronous hook path must not read the system prompt");
+    },
+  };
+}
+
+/** Seed one enabled project plugin whose PreToolUse hook denies Bash. */
+async function seedBlockingHookPlugin(cwd: string): Promise<void> {
+  const extensionRoot = path.join(cwd, ".pi", "pi-claude-marketplace");
+  const marketplaceRoot = path.join(cwd, "hook-marketplace");
+  const pluginRoot = path.join(marketplaceRoot, "plugins", "hook-owner");
+  const hookRoot = path.join(extensionRoot, "hooks", "hook-owner");
+  await mkdir(hookRoot, { recursive: true });
+  await writeFile(
+    path.join(hookRoot, "hooks.json"),
+    JSON.stringify({
+      hooks: {
+        PreToolUse: [
+          {
+            matcher: "Bash",
+            hooks: [
+              {
+                type: "command",
+                command: `printf '%s' '{"decision":"block","reason":"owned hook"}'`,
+              },
+            ],
+          },
+        ],
+      },
+    }),
+    "utf8",
+  );
+  await writeFile(
+    path.join(extensionRoot, "state.json"),
+    JSON.stringify({
+      schemaVersion: 2,
+      marketplaces: {
+        hooks: {
+          name: "hooks",
+          scope: "project",
+          source: { kind: "path", raw: marketplaceRoot },
+          addedFromCwd: cwd,
+          manifestPath: path.join(marketplaceRoot, ".claude-plugin", "marketplace.json"),
+          marketplaceRoot,
+          plugins: {
+            "hook-owner": {
+              version: "1.0.0",
+              resolvedSource: pluginRoot,
+              compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+              resources: {
+                skills: [],
+                prompts: [],
+                agents: [],
+                mcpServers: [],
+                hooks: ["hook-owner"],
+              },
+              enabled: true,
+              installedAt: "2026-09-08T00:00:00.000Z",
+              updatedAt: "2026-09-08T00:00:00.000Z",
+            },
+          },
+        },
+      },
+    }),
+    "utf8",
+  );
+}
+
+/** Seed a path marketplace accepted by the public `marketplace add` command. */
+async function seedMarketplaceSource(cwd: string, name: string, pluginName: string): Promise<string> {
+  const sourceRoot = path.join(cwd, `${name}-source`);
+  await mkdir(path.join(sourceRoot, ".claude-plugin"), { recursive: true });
+  await mkdir(path.join(sourceRoot, "plugins", pluginName), { recursive: true });
+  await writeFile(
+    path.join(sourceRoot, ".claude-plugin", "marketplace.json"),
+    JSON.stringify({
+      name,
+      owner: { name: `${name} owner` },
+      plugins: [{ name: pluginName, source: `./plugins/${pluginName}`, version: "1.0.0" }],
+    }),
+    "utf8",
+  );
+  return sourceRoot;
 }
 
 /** Write one prompt file into a scope root's discovered prompt directory. */
@@ -600,6 +754,60 @@ test("constructs one runtime and completion cache for edge registration, hook hy
   assert.deepStrictEqual(hydrationConstruction, [
     "createHooksHydration(hooksRuntime, { loadState })",
   ]);
+});
+
+test("keeps hook routing and command completion state inside each extension-load owner graph", async (t) => {
+  // arrange
+  const scope = await createHermeticScope(t, "owner-graph");
+  const ownerCwd = scope.cwd;
+  const peerCwd = path.join(scope.cwd, "peer-project");
+  await mkdir(peerCwd, { recursive: true });
+  await seedBlockingHookPlugin(ownerCwd);
+  const ownerMarketplace = await seedMarketplaceSource(ownerCwd, "owned-rows", "hello");
+  process.chdir(ownerCwd);
+  const owner = await loadExtension(1, 2, { value: ownerCwd, reads: 1 });
+  const ownerHookContext = hookContext(ownerCwd, "owner-graph-session");
+  await owner.bridgeSessionStart(
+    { type: "session_start", reason: "startup" },
+    ownerHookContext,
+  );
+  const toolEvent: ToolCallEvent = {
+    type: "tool_call",
+    toolCallId: "owner-graph-call",
+    toolName: "bash",
+    input: { command: "git status" },
+  };
+
+  // act
+  const ownerHookBeforeMutation = await owner.toolCall(structuredClone(toolEvent), ownerHookContext);
+  await owner.command.handler(
+    `marketplace add ${ownerMarketplace} --scope project`,
+    owner.ctx,
+  );
+  const ownerCandidates = await owner.command.getArgumentCompletions?.("install --scope project ");
+  process.chdir(peerCwd);
+  const peer = await loadExtension(0, 0);
+  const peerHookContext = hookContext(peerCwd, "peer-graph-session");
+  await peer.bridgeSessionStart({ type: "session_start", reason: "startup" }, peerHookContext);
+  const peerHookResult = await peer.toolCall(structuredClone(toolEvent), peerHookContext);
+  const peerCandidates = await peer.command.getArgumentCompletions?.("install --scope project ");
+  process.chdir(ownerCwd);
+  const ownerHookAfterPeerLoad = await owner.toolCall(structuredClone(toolEvent), ownerHookContext);
+
+  // assert
+  assert.deepStrictEqual(ownerHookBeforeMutation, { block: true, reason: "owned hook" });
+  assert.strictEqual(peerHookResult, undefined);
+  assert.deepStrictEqual(ownerCandidates, [
+    {
+      label: "hello@owned-rows",
+      value: "install --scope project hello@owned-rows ",
+    },
+  ]);
+  assert.deepStrictEqual(peerCandidates, []);
+  assert.deepStrictEqual(ownerHookAfterPeerLoad, { block: true, reason: "owned hook" });
+  assert.deepStrictEqual(owner.notifications, [{ message: "● owned-rows [project] (added)" }]);
+  owner.verifyBoundary();
+  peer.verifyBoundary();
 });
 
 test("discovers prompts under the working directory the event names, not the one the process runs in", async (t) => {
