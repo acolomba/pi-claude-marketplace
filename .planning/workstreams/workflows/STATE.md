@@ -2,21 +2,21 @@
 gsd_state_version: "1.0"
 milestone: workflows-replay
 milestone_name: Workflow Bridge Replay onto main
-current_phase: 114
-current_phase_name: Degradation and documentation
-current_plan: 1
-status: executing
-stopped_at: Phase 114 planned — 5 plans in 3 waves, ready to execute
-last_updated: "2026-09-08T04:02:38.692Z"
-state_head: 56ac5e7cf04fc4a10b0a32f7e284b92da7a76548
+current_phase: 115
+current_phase_name: Install-time admission-gate warnings
+current_plan: Not started
+status: planning
+stopped_at: Phase 114 complete, ready to plan Phase 115
+last_updated: "2026-09-08T08:48:06.344Z"
+state_head: 99582e0040765fd20e8eec84aa1ab31bf0068456
 progress:
   total_phases: 9
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 26
-  completed_plans: 21
-  percent: 56
+  completed_plans: 26
+  percent: 67
 last_activity: 2026-09-08
-last_activity_desc: Phase 114 planned — 5 plans in 3 waves
+last_activity_desc: Phase 114 complete — verified 7/7, secured, validated
 ---
 
 # Project State
@@ -28,95 +28,68 @@ and, after `/reload`, have every supported Claude plugin component appear as a
 working Pi-native artifact — atomically, recoverably, and with soft-dependency
 degradation that never blocks the install.
 
-**Current focus:** Phase 114 — Degradation and documentation. Re-land the
-`workflows` bridge on a main that has moved under it. Phases 101-105 shipped on
-`features/workflows-spike` and that branch was never merged. Since then #154
-declared `workflows` an *unsupported* kind, and #167 replaced the test
-architecture the bridge was written against.
+**Current focus:** Phase 115 — Install-time admission-gate warnings. The replay
+is done: phases 109-114 re-landed the `workflows` bridge on a main that had
+moved under it. What remains is the three-phase hardening milestone that closes
+the gaps the bridge originally shipped with.
 
 ## Current Position
 
-Phase: 114 (Degradation and documentation) — EXECUTING
-Plan: 1 of 5
-Status: Executing. 5 plans in 3 waves, 0 blockers from the plan checker,
-requirements 7/7 and decisions 8/8 covered.
+Phase: 115 — Install-time admission-gate warnings
+Plan: none started — Phase 115 is not planned
+Status: Ready to plan. The replay milestone (109-114) is complete; 115-117 are
+the hardening phases.
 
-Phase 114 makes the host engine the third soft dependency and writes down the
-contract of the one bridge that installs executable code. Research settled the
-criterion-6 premise the ROADMAP left open and invalidated several inherited
-numbers, so the shape of the phase moved before a line was planned:
+Phase 114 closed the replay. It made the host workflow engine the third soft
+dependency and published `docs/workflows-compatibility.md`, the contract of the
+one bridge that installs executable code rather than data. Verified 7/7,
+security SECURED (22/22 threats closed), nyquist validated, `npm run check`
+green at 5564 unit + 34 integration tests.
 
-- **Criterion 6 is CONFIRMED and no behavior changes.** Upstream's plugin
-  manifest does declare `workflows` as `string | array`, described by Claude
-  Code 2.1.251's own schema as "Path to a workflows directory or .js file,
-  relative to the plugin root", in a body shaped like `themes` and
-  `outputStyles`, normalized by the same `Array.isArray(...)` idiom the loader
-  uses for `agents`. `SUPPORTED_COMPONENT_PATH_KINDS` keeps `workflows`; only
-  the lineage paragraph in `tests/domain/resolver.test.ts` and the new doc
-  move. Two divergences fall out for the doc rather than the code: upstream
+Two things it settled that later phases should not re-litigate:
+
+- **Criterion 6 is CONFIRMED; no behavior rests on an unsourced premise any
+  more.** Upstream's plugin manifest does declare `workflows` as
+  `string | array` — Claude Code 2.1.251's own schema calls it "Path to a
+  workflows directory or .js file, relative to the plugin root", in a body
+  shaped like `themes` and `outputStyles`. `SUPPORTED_COMPONENT_PATH_KINDS`
+  keeps `workflows` and `tests/domain/resolver.test.ts` now carries the
+  citation. Two divergences went into the doc rather than the code: upstream
   *replaces* the convention directory where this project *unions* (D-07), and
   upstream admits a `.js` file path that this bridge silently drops.
-- **Every engine figure inherited from the archived phase is stale.** At 3.10.1
+- **Every engine figure inherited from the archived phase was stale.** At 3.10.1
   `parseWorkflowScript` refuses at NINE checks, not seven, and this bridge
-  replicates TWO, not one. Spike 027's own "twelve messages" does not reconcile
-  with the source and is corrected in the same change that publishes the doc.
-- **Criterion 1's wording predates the replay.** Main replaced the runtime
-  `DEPENDENCIES` tuple with a literal union, so there is no tuple to grow and no
-  order lock to add. The byte-order guarantee it wanted comes from two
-  `docs/output-catalog.md` states instead.
-- **The closed-set trail is eight sites, not seven.** The eighth is the catalog's
-  prose member count, which sits outside the byte gate and is already stale.
+  replicates TWO, not one. Spike 027's own "twelve messages" contradicted its
+  source and was corrected. The engine is past 1.0 (57 versions, 1.0.0 through
+  3.10.1), not the "0.x" the archived context claimed.
 
-The prior phase's three carried-forward findings still govern how this one is
-verified — a guard can be green because it checks nothing, a closed-set
-amendment is bigger than its enumeration, and a comment asserting something is
-safe is where the data-loss bugs live. Criterion 3's negative control is
-mandatory and its failing transcript goes in the SUMMARY.
+**The pattern that has now cost this milestone five times: an enumeration is
+smaller than the set it names.** Seven engine gates were nine. Five
+`composeReasons` translation sites were six. Two `piWithBothLoaded` definitions
+were four. Seven closed-set amendment sites were eight. Each was found by
+removing something and watching what went red — never by listing. Phases
+115-117 should assume their own enumerations are short until measured.
 
-Phase 113 made the remaining lifecycle verbs treat workflows as a first-class
-kind. `update` now prepares, aborts, commits and records workflows as a sixth
-bridge, with a deliberately asymmetric two-window record write -- workflow
-envelopes are the only artifacts living outside every scope root, so the record
-is the only thing that can name them. `enable` and `disable` carry the staged
-names, load-time reconcile re-materializes nothing, and `info` renders a
-`workflows:` line plus preview-tense discovery warnings on a new `note:`
-channel. WLIF-06 landed as the 44th closed-set reason, `stale workflow command`,
-stamped by six verbs.
+**And its companion: a guard can be green because it checks nothing.** Phase
+114's code review found the new marker-coverage gate had a hand-maintained
+seven-entry literal with nothing binding it to the real site set — planting an
+eighth site printed `pass 1 / fail 0`. After the fix it prints `pass 1 / fail 1`.
+Every gate this milestone adds gets a negative control run before it is
+believed, and the transcript goes in the SUMMARY.
 
-Three findings from this phase are worth carrying forward, because each is a
-recurrence of a class this milestone keeps hitting:
-
-- **A guard can be green because it checks nothing.** Research measured that
-  `notify.ts`'s exact-length `COMPONENT_KINDS` tuple did NOT fail to typecheck
-  when the component set gained a sixth key -- the comment claiming it did was
-  false. The replacement forcing construct was then itself found vacuous when
-  its mandated negative control ran: keeping the slot annotation makes
-  `Exclude<ComponentKind, ComponentKind>` unconditionally `never`. Only the
-  negative control caught either one.
-- **A closed-set amendment is bigger than its enumeration.** The WLIF-06 token
-  needed SEVEN sites, not the six the pattern map predicted. The extra two were
-  found by removing the token and observing what went red, never by listing.
-- **A comment asserting something is safe is where the data-loss bugs live.**
-  The code review's blocker was an intent-mark union recording PREPARED rather
-  than PLACED workflow names, justified by a comment reading "a name that never
-  landed costs a no-op" -- true except for the collision case the ownership
-  refusal exists for, where the name belongs to the user's own file. The first
-  fix pass then introduced a worse defect of the same shape, redacting the
-  manual-recovery instructions into identical basenames so "move it back by
-  hand" named nothing; the second pass reverted it.
-
-Deferred: the `info` surface reads every candidate script body twice, uncapped
-(code-review IN-02). Not fixed here because `install` shares that discovery
-pass, so a size ceiling would start refusing large but well-formed third-party
-scripts. Logged in `.planning/BACKLOG.md` as a scoped item.
+Carried debt, tracked not hidden: Broken Windows #34 (the compatibility doc's
+engine line-number citations are ungated and will rot; `WPIN-01` is the named
+future subject), and WDEP-03's live hop — installing the engine and reloading —
+has no automated home on this tree, resting on Spike 027 and the structural
+probe-purity gate instead.
 
 ## Progress
 
-**Phases Complete:** 5/9 verified (Phases 109-114 replay, 115-117 hardening)
-**Current Plan:** 1
+**Phases Complete:** 6/9 verified (Phases 109-114 replay, 115-117 hardening)
+**Current Plan:** Not started
 
 ```text
-[=====-----] 56%
+[=======---] 67%
 ```
 
 | Phase | Name | Status |
@@ -126,8 +99,8 @@ scripts. Logged in `.planning/BACKLOG.md` as a scoped item.
 | 111 | Workflows bridge | Complete (4/4 plans, verified) |
 | 112 | Install and removal lifecycle | Complete (4/4 plans, verified) |
 | 113 | Update, enable/disable, reconcile | Complete (5/5 plans, verified 9/9) |
-| 114 | Degradation and documentation | In progress (5 plans in 3 waves, executing) |
-| 115 | Install-time admission-gate warnings | Not started (hardening) |
+| 114 | Degradation and documentation | Complete (5/5 plans, verified 7/7) |
+| 115 | Install-time admission-gate warnings | Next (hardening) |
 | 116 | Load-time workflow convergence | Not started (hardening) |
 | 117 | Measured `agent()` failure evidence | Not started (hardening) |
 
@@ -159,18 +132,21 @@ What is on this branch right now, so a later session does not read the archived
   requirements, and the milestone audit all describe work that exists on
   `features/workflows-spike`, not here.
 - **Spike evidence:** ported and renumbered 021-026 (008-013 collided with this
-  branch's existing spikes). Re-verified against engine 3.10.1 in Spike 027.
-- **Production code:** the domain and platform leaves from Phase 110, and the
-  whole of `bridges/workflows/` (`types`, `discover`, `unstage`, `stage`,
-  `index`) plus the `persistence/locations.ts` workflows members from Phase 111.
-  Still absent: any orchestrator that DRIVES the bridge, and the
-  `EXTENSION_VERSION` bump.
-- **Behavior today:** Phase 109 inverted it. A workflow-bearing plugin now
-  resolves `installable`, installs with no `--partial`, and renders a clean
-  `● (installed)` row — and materializes nothing, because no bridge exists yet.
-  The `{workflows}` reason is retired from all four declaration sites. The
-  released 0.18.1 still behaves the #154 way; that difference is the D-109-06
-  window, and it is pinned by test rather than left undocumented.
+  branch's existing spikes). Re-verified against engine 3.10.1 in Spike 027,
+  whose own `validateMeta` message count was found wrong and corrected in
+  Phase 114.
+- **Production code: the replay is COMPLETE.** The domain and platform leaves
+  (110), the whole of `bridges/workflows/` (111), install and removal (112), the
+  remaining lifecycle verbs and read surfaces (113), and the soft-dependency
+  marker plus the published contract (114) are all on this branch. Still absent
+  by design: the `EXTENSION_VERSION` bump and the CHANGELOG entry, which are
+  milestone-close work.
+- **Behavior today:** a workflow-bearing plugin resolves `installable`, installs
+  with no `--partial`, materializes its envelopes through a sixth ledger phase
+  that unwinds with the rest, and renders `requires pi-dynamic-workflows` when
+  the host engine is absent. `update`, `enable`, `disable` and load-time
+  reconcile all treat `workflows` as first-class. The released 0.18.1 still
+  behaves the #154 way.
 
 ## Accumulated Context
 
@@ -233,7 +209,7 @@ implementation.
 
 **Last session:** 2026-09-05T19:20:00Z
 
-**Stopped At:** Phase 113 complete, ready to plan Phase 114
+**Stopped At:** Phase 114 complete, ready to plan Phase 115
 **Resume File:** None
 **Next Action:** `/gsd-verify-work 112` — all four plans are executed and the
 phase gate is green. Three stale "five kinds" statements survive OUTSIDE the six

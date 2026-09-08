@@ -108,7 +108,13 @@ Which phases cover which requirements. Updated during roadmap creation.
 | WLIF-05 | Phase 113 | Complete - `disable` removes and `enable` re-materializes workflow envelopes, with the staged names riding `InstallLedgerSummary.stagedWorkflowNames`. Evidence: `tests/orchestrators/plugin/enable-disable.test.ts` and `tests/orchestrators/plugin/install.test.ts`. |
 | WLIF-06 | Phase 113 | Complete - the lingering retired command names the reload remedy via the `stale workflow command` reason token, stamped by six verbs (uninstall clean + failed, disable both arms, reinstall, update, enable). Kept off the exported enable/disable outcome union so the load-time reconcile projection cannot stamp it. Evidence: `tests/architecture/notify-closed-set-locks.test.ts`, `tests/architecture/compat-01-no-expansion.test.ts`, `tests/architecture/catalog-uat.test.ts` and the per-verb suites. |
 | WFLW-04 | Phase 113 | Complete - `componentPaths.workflows` is consumed by the `info` read surface, which renders the `workflows:` line from the admitted arms. Evidence: `tests/orchestrators/plugin/info.test.ts` and the paired catalog states. |
-| WDEP-01..04, WDOC-01..03 | Phase 114 | Pending (re-land) |
+| WDEP-01 | Phase 114 | Complete |
+| WDEP-02 | Phase 114 | Complete |
+| WDEP-03 | Phase 114 | Complete |
+| WDEP-04 | Phase 114 | Complete |
+| WDOC-01 | Phase 114 | Complete |
+| WDOC-02 | Phase 114 | Complete |
+| WDOC-03 | Phase 114 | Complete (verification-only — `acorn` was already declared) |
 | WGATE-01 | Phase 115 | Pending |
 | WGATE-02 | Phase 115 | Pending |
 | WGATE-03 | Phase 115 | Pending |

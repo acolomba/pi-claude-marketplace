@@ -31,7 +31,7 @@
     {
       "number": "114",
       "name": "Degradation and documentation",
-      "status": "pending"
+      "status": "complete"
     },
     {
       "number": "115",
@@ -51,8 +51,8 @@
   ],
   "next": {
     "command": "/gsd:progress --next",
-    "label": "Advance to the next step",
-    "reason": "Phase 114 of 9 · 56% · executing"
+    "label": "Advance to the next step (plan phase 115)",
+    "reason": "Phase 115 of 9 — needs a plan"
   },
-  "updated_at": "2026-09-08T04:02:38.729Z"
+  "updated_at": "2026-09-08T08:48:06.412Z"
 }
