@@ -596,11 +596,7 @@ describe("getPluginToMarketplacesMap", () => {
       });
 
       // act
-      const candidatesByPlugin = await getPluginToMarketplacesMap(
-        mode,
-        resolver,
-        completionCache,
-      );
+      const candidatesByPlugin = await getPluginToMarketplacesMap(mode, resolver, completionCache);
 
       // assert
       assert.deepStrictEqual(Array.from(candidatesByPlugin), [
@@ -622,14 +618,9 @@ describe("getPluginToMarketplacesMap", () => {
       });
 
       // act
-      const candidatesByPlugin = await getPluginToMarketplacesMap(
-        mode,
-        resolver,
-        completionCache,
-        {
-          partial: true,
-        },
-      );
+      const candidatesByPlugin = await getPluginToMarketplacesMap(mode, resolver, completionCache, {
+        partial: true,
+      });
 
       // assert
       assert.deepStrictEqual(Array.from(candidatesByPlugin), [
@@ -696,17 +687,10 @@ describe("getPluginToMarketplacesMap", () => {
     });
 
     // act
-    const withoutPartial = await getPluginToMarketplacesMap(
-      "fetch",
-      resolver,
-      completionCache,
-    );
-    const withPartial = await getPluginToMarketplacesMap(
-      "fetch",
-      resolver,
-      completionCache,
-      { partial: true },
-    );
+    const withoutPartial = await getPluginToMarketplacesMap("fetch", resolver, completionCache);
+    const withPartial = await getPluginToMarketplacesMap("fetch", resolver, completionCache, {
+      partial: true,
+    });
 
     // assert
     assert.deepStrictEqual(Array.from(withoutPartial), [
@@ -758,15 +742,10 @@ describe("getPluginToMarketplacesMap", () => {
     });
 
     // act
-    const candidatesByPlugin = await getPluginToMarketplacesMap(
-      "info",
-      resolver,
-      completionCache,
-      {
-        targetScope: "project",
-        partial: true,
-      },
-    );
+    const candidatesByPlugin = await getPluginToMarketplacesMap("info", resolver, completionCache, {
+      targetScope: "project",
+      partial: true,
+    });
 
     // assert
     assert.deepStrictEqual(Array.from(candidatesByPlugin), [
@@ -917,16 +896,9 @@ describe("getPluginRefCompletions", () => {
     const { completionCache, resolver } = await seedResolver(t, "ref-all", twoMarketplaceSeed());
 
     // act
-    const items = await getPluginRefCompletions(
-      "update",
-      "",
-      "",
-      resolver,
-      completionCache,
-      {
-        allowMarketplaceOnly: true,
-      },
-    );
+    const items = await getPluginRefCompletions("update", "", "", resolver, completionCache, {
+      allowMarketplaceOnly: true,
+    });
 
     // assert
     assert.deepStrictEqual(items, [
@@ -968,7 +940,11 @@ describe("getPluginRefCompletions", () => {
 
   test("the marketplace half offers only the marketplaces that carry the named plugin", async (t) => {
     // arrange
-    const { completionCache, resolver } = await seedResolver(t, "ref-mp-half", twoMarketplaceSeed());
+    const { completionCache, resolver } = await seedResolver(
+      t,
+      "ref-mp-half",
+      twoMarketplaceSeed(),
+    );
 
     // act
     const items = await getPluginRefCompletions(
@@ -991,7 +967,11 @@ describe("getPluginRefCompletions", () => {
 
   test("the marketplace half narrows to the typed marketplace prefix", async (t) => {
     // arrange
-    const { completionCache, resolver } = await seedResolver(t, "ref-mp-half-narrow", twoMarketplaceSeed());
+    const { completionCache, resolver } = await seedResolver(
+      t,
+      "ref-mp-half-narrow",
+      twoMarketplaceSeed(),
+    );
 
     // act
     const items = await getPluginRefCompletions(
@@ -1011,7 +991,11 @@ describe("getPluginRefCompletions", () => {
 
   test("the marketplace half offers nothing for a plugin no marketplace carries", async (t) => {
     // arrange
-    const { completionCache, resolver } = await seedResolver(t, "ref-mp-half-unknown", twoMarketplaceSeed());
+    const { completionCache, resolver } = await seedResolver(
+      t,
+      "ref-mp-half-unknown",
+      twoMarketplaceSeed(),
+    );
 
     // act
     const items = await getPluginRefCompletions(
@@ -1054,7 +1038,11 @@ describe("getPluginRefCompletions", () => {
 
   test("the bare marketplace form narrows to the typed marketplace prefix", async (t) => {
     // arrange
-    const { completionCache, resolver } = await seedResolver(t, "ref-bare-narrow", twoMarketplaceSeed());
+    const { completionCache, resolver } = await seedResolver(
+      t,
+      "ref-bare-narrow",
+      twoMarketplaceSeed(),
+    );
 
     // act
     const items = await getPluginRefCompletions(
@@ -1078,7 +1066,11 @@ describe("getPluginRefCompletions", () => {
   // result would be `[]` with the flag either way -- nothing would be measured.
   test("the bare marketplace form offers nothing when the mode does not allow it", async (t) => {
     // arrange
-    const { completionCache, resolver } = await seedResolver(t, "ref-bare-denied", twoMarketplaceSeed());
+    const { completionCache, resolver } = await seedResolver(
+      t,
+      "ref-bare-denied",
+      twoMarketplaceSeed(),
+    );
 
     // act
     const items = await getPluginRefCompletions(
@@ -1107,18 +1099,11 @@ describe("getPluginRefCompletions", () => {
     });
 
     // act
-    const items = await getPluginRefCompletions(
-      "update",
-      "",
-      "update",
-      resolver,
-      completionCache,
-      {
-        allowMarketplaceOnly: false,
-        targetScope: "user",
-        partial: true,
-      },
-    );
+    const items = await getPluginRefCompletions("update", "", "update", resolver, completionCache, {
+      allowMarketplaceOnly: false,
+      targetScope: "user",
+      partial: true,
+    });
 
     // assert
     assert.deepStrictEqual(items, [
