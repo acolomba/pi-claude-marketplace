@@ -1,6 +1,7 @@
 // orchestrators/reconcile/apply.ts
 //
 // RECON-01..05: the load-time apply orchestrator.
+// behavioral-composition-exception: applyReconcile
 //
 // CONTRACT:
 //   - Per-scope READ PASS (locked, WRITE-FREE -- WR-05) under

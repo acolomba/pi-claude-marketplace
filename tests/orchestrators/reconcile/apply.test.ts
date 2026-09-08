@@ -1,4 +1,5 @@
 // Owner suite for orchestrators/reconcile/apply.ts.
+// behavioral-composition-exception: applyReconcile
 //
 // D-115-03: the load-time cascade's contract is the state it leaves on disk and
 // the single notification it renders, so every case drives the real install,
@@ -48,11 +49,12 @@
 //   plugin-backfilled        a promotion riding the same cascade as an install
 
 import assert from "node:assert/strict";
-import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { createRequire, syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, test } from "node:test";
+import { fileURLToPath } from "node:url";
 
 import lockfile from "proper-lockfile";
 
@@ -98,6 +100,48 @@ type MarketplaceRecord = ExtensionState["marketplaces"][string];
 type PluginRecord = MarketplaceRecord["plugins"][string];
 
 const RECORDED_AT = "2026-01-01T00:00:00.000Z";
+const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
+
+interface CompositionExceptionMarker {
+  readonly kind: "production" | "test";
+  readonly path: string;
+  readonly symbol: string;
+}
+
+/** Census the explicitly marked behavioral-composition exceptions. */
+async function compositionExceptionCensus(): Promise<readonly CompositionExceptionMarker[]> {
+  const markers: CompositionExceptionMarker[] = [];
+  const roots = [
+    { kind: "production" as const, path: "extensions/pi-claude-marketplace" },
+    { kind: "test" as const, path: "tests" },
+  ];
+
+  async function visit(kind: CompositionExceptionMarker["kind"], directory: string): Promise<void> {
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      const entryPath = path.join(directory, entry.name);
+      if (entry.isDirectory()) {
+        await visit(kind, entryPath);
+      } else if (entry.isFile() && entry.name.endsWith(".ts")) {
+        const source = await readFile(entryPath, "utf8");
+        for (const match of source.matchAll(
+          /^\/\/ behavioral-composition-exception: ([A-Za-z][A-Za-z0-9]*)$/gmu,
+        )) {
+          markers.push({
+            kind,
+            path: path.relative(REPOSITORY_ROOT, entryPath),
+            symbol: match[1]!,
+          });
+        }
+      }
+    }
+  }
+
+  for (const root of roots) {
+    await visit(root.kind, path.join(REPOSITORY_ROOT, root.path));
+  }
+
+  return markers.sort((left, right) => left.path.localeCompare(right.path));
+}
 
 /** Run one isolated reconcile lifecycle with a fresh production routing owner. */
 function applyReconcile(
@@ -523,6 +567,31 @@ function raceStateFromRead(
 function withoutTempSuffix(message: string): string {
   return message.replaceAll(/claude-plugins\.json\.\d+/g, "claude-plugins.json.<tmp>");
 }
+
+test("D-05-02: the source and owner-test census contains exactly the two approved behavioral-composition exceptions", async () => {
+  assert.deepStrictEqual(await compositionExceptionCensus(), [
+    {
+      kind: "production",
+      path: "extensions/pi-claude-marketplace/orchestrators/plugin/bootstrap.ts",
+      symbol: "bootstrapClaudePlugin",
+    },
+    {
+      kind: "production",
+      path: "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts",
+      symbol: "applyReconcile",
+    },
+    {
+      kind: "test",
+      path: "tests/orchestrators/plugin/bootstrap.test.ts",
+      symbol: "bootstrapClaudePlugin",
+    },
+    {
+      kind: "test",
+      path: "tests/orchestrators/reconcile/apply.test.ts",
+      symbol: "applyReconcile",
+    },
+  ]);
+});
 
 describe("applyReconcile", () => {
   test("WR-05: leaves a scope with neither a state file nor a configuration file untouched and silent", async (t) => {
