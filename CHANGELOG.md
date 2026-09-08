@@ -1,8 +1,10 @@
 # Changelog
 
-## [Unreleased]
+## [0.18.3] - 2026-09-08
 
 - Plugin commands now install on Windows, where the generated name joins with `.` instead of `:` (`/code-review.code-review`). Windows forbids `:` in a filename, so any plugin with a `commands/` directory failed. Thanks to @ricardofrantz (#143).
+- A hook `if` field can now use the `PowerShell(...)` rule prefix. It fell open before and matched every command. Matching is case-insensitive and canonicalizes the default cmdlet aliases, like Claude Code.
+- A `Bash(...)` rule no longer fires on a `powershell` command, and a `PowerShell(...)` rule never fires on a `bash` command. Both prefixes now check the event's tool name.
 
 ## [0.18.2] - 2026-09-07
 

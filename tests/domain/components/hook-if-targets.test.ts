@@ -10,6 +10,10 @@ test("maps every permission prefix to its complete Pi target", () => {
       piEvents: new Set(["bash"]),
       extractTarget: "command",
     },
+    PowerShell: {
+      piEvents: new Set(["powershell"]),
+      extractTarget: "command",
+    },
     Read: {
       piEvents: new Set(["read", "grep", "find", "ls"]),
       extractTarget: "path",
@@ -33,7 +37,7 @@ test("maps every permission prefix to its complete Pi target", () => {
 
 test("publishes unique permission prefixes in matching precedence", () => {
   // arrange
-  const expectedPrefixes = ["Bash", "Read", "Edit", "Write"];
+  const expectedPrefixes = ["Bash", "PowerShell", "Read", "Edit", "Write"];
 
   // act
   const prefixes = Object.keys(IF_PREFIX_TARGETS);
