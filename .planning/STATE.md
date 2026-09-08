@@ -3,10 +3,10 @@ gsd_state_version: "1.0"
 milestone: v1.19
 status: Awaiting next milestone
 stopped_at: Milestone v1.19 closed and archived; awaiting the next milestone
-last_updated: "2026-09-08T00:37:13.415Z"
+last_updated: "2026-09-08T03:04:31.784Z"
 last_activity: 2026-09-07
 last_activity_desc: Completed quick task 260907-m38 (SKFM-01 scalar repair)
-state_head: 98ecd330b4987f176a3cb85c963e614f3aedbf48
+state_head: fb54c5d7979b1cd79fb57a5db60b4454ec469ced
 milestone_name: Unit Test Refactor
 current_phase: 117
 current_phase_name: Extension Entry and Final Gate
@@ -34,8 +34,9 @@ component as a working Pi artifact.
 Phase: Milestone v1.19 complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-09-07 — Completed quick task 260907-q0h: platform-dependent
-command name separator so Windows installs stop failing with EINVAL (#143)
+Last activity: 2026-09-07 — Completed quick task 260907-uzb: strip a leading
+UTF-8 BOM at the agents, skills and commands frontmatter read sites (FMBOM-01,
+now CLOSED in BACKLOG.md)
 
 ## Performance Metrics
 
@@ -418,6 +419,7 @@ None for roadmap creation.
 | 260907-qsx | adopt SonarJS recommended ruleset for extensions | 2026-09-07 | fe1313c6 | [260907-qsx-adopt-sonarjs-recommended-ruleset-for-ex](./quick/260907-qsx-adopt-sonarjs-recommended-ruleset-for-ex/) |
 | 260907-q0h | Fix issue #143: make generated command name separator platform-dependent so Windows installs stop failing with EINVAL | 2026-09-07 | bf53dec0 | [260907-q0h-fix-issue-143-make-generated-command-nam](./quick/260907-q0h-fix-issue-143-make-generated-command-nam/) |
 | 6 | Switch the Windows command name separator from dash to dot (follow-up to 260907-q0h, #143) | 2026-09-08 | 7ce485b1 | — |
+| 260907-uzb | FMBOM-01: strip leading UTF-8 BOM at skill and agent frontmatter read sites | 2026-09-08 | fb54c5d7 | [260907-uzb-fmbom-01-strip-leading-utf-8-bom-at-skil](./quick/260907-uzb-fmbom-01-strip-leading-utf-8-bom-at-skil/) |
 
 ## Deferred Items
 
