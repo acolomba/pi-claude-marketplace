@@ -19,17 +19,16 @@ import path from "node:path";
 import test from "node:test";
 
 import {
+  createHooksHydration,
   createHooksRouting,
   createHooksRuntime,
-  registerHooksBridge,
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
-import {
-  resetRoutingState,
-  routingTableEntries,
-} from "../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
 import { applyReconcile } from "../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
-import { saveState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import {
+  loadState,
+  saveState,
+} from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 
 import type { ExtensionState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
@@ -88,11 +87,11 @@ function buildStateWithSingleHooksPlugin(opts: {
   };
 }
 
-test("RECON / cross-scope: applyReconcile's per-scope rebuild loop preserves hooks-plugin entries in BOTH scopes", async (t) => {
-  resetRoutingState();
-  t.after(() => {
-    resetRoutingState();
-  });
+test("RECON / cross-scope: applyReconcile's per-scope rebuild loop preserves hooks-plugin entries in BOTH scopes", async () => {
+  const runtime = createHooksRuntime();
+  const hooksRouting = createHooksRouting(runtime);
+  const hooksHydration = createHooksHydration(runtime, { loadState });
+  const completionCache = createCompletionCache();
 
   const originalAgentDir = process.env.PI_CODING_AGENT_DIR;
   const tmpRoot = await mkdtemp(path.join(tmpdir(), "hooks-cross-scope-recon-"));
@@ -171,11 +170,14 @@ test("RECON / cross-scope: applyReconcile's per-scope rebuild loop preserves hoo
         getSessionFile: () => undefined,
       },
     } as unknown as ExtensionContext;
-    await registerHooksBridge(makeMockPi(), { ctx: placeholderCtx, cwd: projectCwd });
+    await hooksHydration.registerHooksBridge(makeMockPi(), {
+      ctx: placeholderCtx,
+      cwd: projectCwd,
+    });
 
     // Sanity: after boot, the routing table holds both scopes' PreToolUse
     // entries. This is the pre-condition the regression broke.
-    const preBucket = routingTableEntries().get("PreToolUse") ?? [];
+    const preBucket = runtime.routingTableEntries().get("PreToolUse") ?? [];
     assert.equal(
       preBucket.length,
       2,
@@ -190,15 +192,15 @@ test("RECON / cross-scope: applyReconcile's per-scope rebuild loop preserves hoo
       ctx: placeholderCtx,
       pi: makeMockPi(),
       cwd: projectCwd,
-      completionCache: createCompletionCache(),
-      hooksRouting: createHooksRouting(createHooksRuntime()),
+      completionCache,
+      hooksRouting,
     });
 
     // Post-condition: BOTH scopes' PreToolUse entries must still surface.
     // This is the regression gate -- if the per-scope rebuild ever
     // returns to a scope-filtered cache walk, the test red-fails because
     // one of the two entries goes missing.
-    const postBucket = routingTableEntries().get("PreToolUse") ?? [];
+    const postBucket = runtime.routingTableEntries().get("PreToolUse") ?? [];
     assert.equal(
       postBucket.length,
       2,
