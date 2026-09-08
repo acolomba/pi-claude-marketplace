@@ -63,6 +63,7 @@ import type {
   ToolInventoryItem,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { CompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 import type { TestContext } from "node:test";
 
 const require = createRequire(import.meta.url);
@@ -73,6 +74,12 @@ interface InstallTestOwner {
   readonly completionCache: CompletionCache;
   readonly hooksRuntime: HooksRuntime;
   readonly installPlugin: InstallOperation;
+}
+
+interface ObservedCompletionDrop {
+  readonly cacheFilePath: string;
+  readonly marketplace: string;
+  readonly scope: string;
 }
 
 test("install exposes its required transaction factory", () => {
@@ -326,6 +333,27 @@ async function withHermeticHome<T>(fn: (owner: InstallTestOwner) => Promise<T>):
       installPlugin: createNodeInstallPlugin(createHooksRouting(hooksRuntime), completionCache),
     });
   });
+}
+
+/** Observe exact lifecycle-cache invalidations while preserving production behavior. */
+function observeCompletionDrops(
+  t: TestContext,
+  completionCache: CompletionCache,
+  beforeDrop?: (drop: ObservedCompletionDrop) => void | Promise<void>,
+): ObservedCompletionDrop[] {
+  const calls: ObservedCompletionDrop[] = [];
+  const originalDrop = completionCache.dropMarketplaceCache.bind(completionCache);
+  t.mock.method(
+    completionCache,
+    "dropMarketplaceCache",
+    async (cacheFilePath: string, scope: Scope, marketplace: string): Promise<void> => {
+      const drop = { cacheFilePath, marketplace, scope };
+      await beforeDrop?.(drop);
+      calls.push(drop);
+      await originalDrop(cacheFilePath, scope, marketplace);
+    },
+  );
+  return calls;
 }
 
 interface SeededPlugin {
@@ -707,8 +735,8 @@ async function seedPathMarketplaceWithPlugin(opts: {
 // PI-3 -- plugin not in marketplace manifest
 // ───────────────────────────────────────────────────────────────────────────
 
-test("PI-3: plugin name not in marketplace plugins[] -> V2 failed/{not in manifest}", async () => {
-  await withHermeticHome(async ({ installPlugin }) => {
+test("PI-3: plugin name not in marketplace plugins[] -> V2 failed/{not in manifest}", async (t) => {
+  await withHermeticHome(async ({ completionCache, installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-pi3-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -722,6 +750,7 @@ test("PI-3: plugin name not in marketplace plugins[] -> V2 failed/{not in manife
       });
 
       const { ctx, pi, notifications } = makeCtx();
+      const cacheDrops = observeCompletionDrops(t, completionCache);
       await installPlugin({
         ctx,
         pi,
@@ -751,14 +780,15 @@ test("PI-3: plugin name not in marketplace plugins[] -> V2 failed/{not in manife
       const mp = after.marketplaces["mp"];
       assert.ok(mp !== undefined);
       assert.equal("ghost-plugin" in mp.plugins, false);
+      assert.deepStrictEqual(cacheDrops, []);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
   });
 });
 
-test("ATTR-01 / M1: marketplace itself absent -> standalone {marketplace not added} on the marketplace subject", async () => {
-  await withHermeticHome(async ({ installPlugin }) => {
+test("ATTR-01 / M1: marketplace itself absent -> standalone {marketplace not added} on the marketplace subject", async (t) => {
+  await withHermeticHome(async ({ completionCache, installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-pi3b-"));
     try {
       // No state seeded -- the marketplace record is absent. After the CMP-3
@@ -766,6 +796,7 @@ test("ATTR-01 / M1: marketplace itself absent -> standalone {marketplace not add
       // to the MARKETPLACE subject via the canonical `MarketplaceNotAddedMessage` variant
       // (ATTR-01 / ATTR-08 split), NOT `{not in manifest}` on a plugin row.
       const { ctx, pi, notifications } = makeCtx();
+      const cacheDrops = observeCompletionDrops(t, completionCache);
       const outcome = await installPlugin({
         ctx,
         pi,
@@ -790,6 +821,7 @@ test("ATTR-01 / M1: marketplace itself absent -> standalone {marketplace not add
       // State unchanged -- no marketplace container was synthesized.
       const after = await loadState(locationsFor("project", cwd).extensionRoot);
       assert.equal(after.marketplaces["ghost-mp"], undefined);
+      assert.deepStrictEqual(cacheDrops, []);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -2452,8 +2484,8 @@ test("T-102-01: the same hooks fixture installed ENABLED does get its routing en
 // those artifacts are still there.
 // ───────────────────────────────────────────────────────────────────────────
 
-test("D-102-02 / NFR-3: a disable cascade that throws reports failure and leaves the record shrunk to what survived", async () => {
-  await withHermeticHome(async ({ installPlugin }) => {
+test("D-102-02 / NFR-3: a disable cascade that throws reports failure and leaves the record shrunk to what survived", async (t) => {
+  await withHermeticHome(async ({ completionCache, installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-d10202-cascade-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -2508,6 +2540,7 @@ test("D-102-02 / NFR-3: a disable cascade that throws reports failure and leaves
       );
 
       const { ctx, pi, notifications } = makeCtx();
+      const cacheDrops = observeCompletionDrops(t, completionCache);
       await installPlugin({
         ctx,
         pi,
@@ -2582,6 +2615,8 @@ test("D-102-02 / NFR-3: a disable cascade that throws reports failure and leaves
           "a failed disable cascade must still declare enabled:false",
         );
       }
+
+      assert.deepStrictEqual(cacheDrops, []);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -3490,10 +3525,10 @@ test("Sanity: staged agent target carries the AG-5 owned-agent marker", async ()
 // staged artifacts when a later phase fails.
 // ───────────────────────────────────────────────────────────────────────────
 
-test("Rollback-skills-undo: skills committed then commands phase fails -> skill target removed", async () => {
+test("Rollback-skills-undo: skills committed then commands phase fails -> skill target removed", async (t) => {
   // Gap: skillsPhase.undo body -- unstagePluginSkills called when skills
   // committed but a later phase (commands) fails with a non-containment error.
-  await withHermeticHome(async ({ installPlugin }) => {
+  await withHermeticHome(async ({ completionCache, installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-undo-skills-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -3514,6 +3549,7 @@ test("Rollback-skills-undo: skills committed then commands phase fails -> skill 
       await writeFile(locations.commandsStagingDir, "not-a-dir");
 
       const { ctx, pi, notifications } = makeCtx();
+      const cacheDrops = observeCompletionDrops(t, completionCache);
       await installPlugin({
         ctx,
         pi,
@@ -3542,6 +3578,7 @@ test("Rollback-skills-undo: skills committed then commands phase fails -> skill 
       // No state record persisted.
       const after = await loadState(locations.extensionRoot);
       assert.equal("hello" in (after.marketplaces["mp"]?.plugins ?? {}), false);
+      assert.deepStrictEqual(cacheDrops, []);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -3921,6 +3958,79 @@ test("retry proof: install: completion-cache maintenance failure stays installed
   });
 });
 
+test("install keeps a completion-cache maintenance failure silent in standalone mode", async (t) => {
+  await withHermeticHome(async ({ completionCache, hooksRuntime, installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-cache-silent-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        skills: [{ sourceName: "tool" }],
+      });
+      const cacheDrops: ObservedCompletionDrop[] = [];
+      t.mock.method(
+        completionCache,
+        "dropMarketplaceCache",
+        (cacheFilePath: string, scope: Scope, marketplace: string): Promise<void> => {
+          cacheDrops.push({ cacheFilePath, marketplace, scope });
+          return Promise.reject(new Error("cache maintenance denied"));
+        },
+      );
+      const { ctx, notifications, pi } = makeCtx();
+
+      const outcome = await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      assert.deepStrictEqual(outcome, {
+        declaresAgents: false,
+        declaresMcp: false,
+        resourcesChanged: true,
+        status: "installed",
+        version: "0.0.1",
+      });
+      assert.deepStrictEqual(notifications, [
+        { message: "● mp [project]\n  ● hello v0.0.1 (installed)\n\n/reload to pick up changes" },
+      ]);
+      assert.deepStrictEqual(cacheDrops, [
+        {
+          cacheFilePath: await locations.pluginCacheFile("mp"),
+          marketplace: "mp",
+          scope: "project",
+        },
+      ]);
+      assert.deepStrictEqual(
+        (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.hello?.resources,
+        { agents: [], hooks: [], mcpServers: [], prompts: [], skills: ["hello-tool"] },
+      );
+      assert.deepStrictEqual(hooksRuntime.getRoutingBucket("PreToolUse"), []);
+      assert.deepStrictEqual(await retryTree(locations.scopeRoot), [
+        "claude-plugins.json",
+        "pi-claude-marketplace/",
+        "pi-claude-marketplace/data/",
+        "pi-claude-marketplace/data/mp/",
+        "pi-claude-marketplace/data/mp/hello/",
+        "pi-claude-marketplace/resources/",
+        "pi-claude-marketplace/resources/skills/",
+        "pi-claude-marketplace/resources/skills/hello-tool/",
+        "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+        "pi-claude-marketplace/skills-staging/",
+        "pi-claude-marketplace/state.json",
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("retry proof: install: plugin-data-dir maintenance failure stays installed and retry is idempotent", async (t) => {
   // Gap: orchestrated variant of AS-6 -- pluginDataDir mkdir failure appends
   // 'data dir creation deferred' to postCommitWarnings instead of calling
@@ -4091,7 +4201,7 @@ test("Orchestrated-agent-foreign: agentForeignFailures -> postCommitWarnings has
   });
 });
 
-test("D-03-INV :: install invalidates plugin cache for the target marketplace", async () => {
+test("D-03-INV :: install invalidates plugin cache for the target marketplace", async (t) => {
   // invalidateMarketplaceCache runs in installPlugin's
   // post-state-commit window (after the AS-6 pluginDataDir mkdir, before
   // AS-7 surfaces foreign-content rows). The plugin moves from
@@ -4115,15 +4225,24 @@ test("D-03-INV :: install invalidates plugin cache for the target marketplace", 
 
       // Pre-warm the plugin index memory entry.
       const pluginCachePath = await locations.pluginCacheFile("mp");
+      const unrelatedCachePath = await locations.pluginCacheFile("unrelated");
       let rebuildCount = 0;
       await completionCache.getPluginIndex(pluginCachePath, "project", "mp", () => {
         rebuildCount += 1;
         return Promise.resolve([{ name: "hello", status: "available" }]);
       });
       assert.equal(rebuildCount, 1, "pre-test: rebuild invoked on first read");
+      await completionCache.getPluginIndex(unrelatedCachePath, "project", "unrelated", () =>
+        Promise.resolve([{ name: "peer", status: "available" }]),
+      );
 
       // Drop the on-disk cache file so the next memory-miss MUST rebuild.
       await rm(pluginCachePath, { force: true });
+      await rm(unrelatedCachePath, { force: true });
+      const cacheDrops = observeCompletionDrops(t, completionCache, async () => {
+        const record = (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.hello;
+        assert.ok(record !== undefined, "the durable state save must precede cache invalidation");
+      });
 
       const { ctx, pi } = makeCtx();
       await installPlugin({
@@ -4141,6 +4260,15 @@ test("D-03-INV :: install invalidates plugin cache for the target marketplace", 
         return Promise.resolve([{ name: "hello", status: "installed" }]);
       });
       assert.equal(rebuildCount, 2, "post-invalidation read re-invokes rebuild");
+      assert.deepStrictEqual(cacheDrops, [
+        { cacheFilePath: pluginCachePath, marketplace: "mp", scope: "project" },
+      ]);
+      assert.deepStrictEqual(
+        await completionCache.getPluginIndex(unrelatedCachePath, "project", "unrelated", () =>
+          Promise.reject(new Error("the unrelated row must remain cached")),
+        ),
+        [{ name: "peer", status: "available" }],
+      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -9444,7 +9572,7 @@ test("retry proof: install: containment failure preserves the refused residue an
 });
 
 test("retry proof: install: state commit race after staged work retries from unchanged state bytes", async (t) => {
-  await withHermeticHome(async ({ installPlugin }) => {
+  await withHermeticHome(async ({ completionCache, installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-retry-state-race-"));
     const originalParse: (text: string) => unknown = JSON.parse;
     let parseMock: ReturnType<typeof t.mock.method> | undefined;
@@ -9495,6 +9623,7 @@ test("retry proof: install: state commit race after staged work retries from unc
         },
         activeSchedule,
       );
+      const cacheDrops = observeCompletionDrops(t, completionCache);
       const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
 
       // act
@@ -9511,6 +9640,7 @@ test("retry proof: install: state commit race after staged work retries from unc
       const firstTree = await retryTree(locations.scopeRoot);
       const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
       const firstConfigBytes = await readFile(locations.configJsonPath, "utf8");
+      assert.deepStrictEqual(cacheDrops, []);
       eraseFreshRecord = false;
       activeSchedule.current = secondSchedule;
       const second = await installPlugin({
@@ -9541,6 +9671,13 @@ test("retry proof: install: state commit race after staged work retries from unc
         status: "installed",
         version: "0.0.1",
       });
+      assert.deepStrictEqual(cacheDrops, [
+        {
+          cacheFilePath: await locations.pluginCacheFile("mp"),
+          marketplace: "mp",
+          scope: "project",
+        },
+      ]);
       assert.deepStrictEqual(notifications, []);
       assert.strictEqual(firstStateBytes, stateBytes);
       assert.match(firstConfigBytes, /"enabled": false/);
