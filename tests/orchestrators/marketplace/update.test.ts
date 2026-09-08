@@ -2125,6 +2125,55 @@ test("D-03-INV :: update invalidates plugin cache for that marketplace", async (
   });
 });
 
+test("leaves completion rows intact when a marketplace refresh has no effect", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const marketplaceRoot = path.join(cwd, "marketplace");
+    await cp(fixtureMarketplaceDir("valid-marketplace"), marketplaceRoot, { recursive: true });
+    await seedPathMarketplace({ cwd, name: "no-effect", marketplaceRoot });
+    const completionCache = createCompletionCache();
+    const locations = locationsFor("project", cwd);
+    const pluginCachePath = await locations.pluginCacheFile("no-effect");
+    let rebuildCount = 0;
+    const expectedRows = [{ name: "still-current", status: "available" }] as const;
+    await completionCache.getPluginIndex(pluginCachePath, "project", "no-effect", () => {
+      rebuildCount += 1;
+      return Promise.resolve(expectedRows);
+    });
+    await rm(pluginCachePath, { force: true });
+    const { ctx, pi, notifications } = makeCtx();
+    const git = makeForbiddenGitOps();
+
+    // act
+    await updateMarketplace({
+      completionCache,
+      ctx,
+      pi,
+      name: "no-effect",
+      scope: "project",
+      cwd,
+      gitOps: git.gitOps,
+    });
+    const rows = await completionCache.getPluginIndex(
+      pluginCachePath,
+      "project",
+      "no-effect",
+      () => {
+        rebuildCount += 1;
+        return Promise.resolve([]);
+      },
+    );
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      { message: "● no-effect [project] (skipped) {up-to-date}" },
+    ]);
+    assert.deepStrictEqual(rows, expectedRows);
+    assert.strictEqual(rebuildCount, 1);
+    assert.deepStrictEqual(git.calls, []);
+  });
+});
+
 test("a newly degraded autoupdate cascade emits its partial row and warning envelope", async () => {
   // This genuine lifecycle case drives target refresh, the injected plugin
   // collaborator, cascade grouping, and the final notify envelope together.
