@@ -21,6 +21,7 @@ import {
   cascadeUnstagePlugin,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import {
+  createNodeUninstallPlugin,
   createUninstallPlugin,
   uninstallPlugin,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
@@ -45,11 +46,11 @@ import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts"
 
 import { retryTree } from "./scope-tree-inventory.ts";
 
-import type { UninstallPluginOutcome } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
 import type {
   HooksRouting,
   HooksRuntime,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
+import type { UninstallPluginOutcome } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
 import type { AgentsIndex } from "../../../extensions/pi-claude-marketplace/persistence/agents-index-schema.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
@@ -1089,6 +1090,7 @@ test("TR-03 (non-AG-5 partial): resources.* filtered by outcome.dropped.*; sReco
                 skills: ["skill1", "skill2"],
                 prompts: ["cmd1", "cmd2"],
                 agents: ["agent1", "agent2"],
+                hooks: ["hello"],
                 mcpServers: ["mcp1", "mcp2"],
               }),
             },
@@ -1110,7 +1112,7 @@ test("TR-03 (non-AG-5 partial): resources.* filtered by outcome.dropped.*; sReco
             skills: ["skill1"],
             commands: ["cmd1"],
             agents: [],
-            hooks: [],
+            hooks: ["hello"],
             mcpServers: [],
           },
           cause: err,
@@ -1118,7 +1120,19 @@ test("TR-03 (non-AG-5 partial): resources.* filtered by outcome.dropped.*; sReco
       };
 
       const { ctx, pi, notifications } = makeCtx();
-      await uninstallPlugin({
+      const ownerRuntime = createHooksRuntime();
+      const peerRuntime = createHooksRuntime();
+      const hooksRouting = await populateRuntimeRoute(cwd, ownerRuntime, {
+        command: "echo partial-owner",
+        marketplace: "mp",
+        plugin: "hello",
+      });
+      await populateRuntimeRoute(cwd, peerRuntime, {
+        command: "echo partial-peer",
+        marketplace: "mp",
+        plugin: "hello",
+      });
+      await createNodeUninstallPlugin(hooksRouting)({
         ctx,
         pi,
         scope: "project",
@@ -1172,6 +1186,11 @@ test("TR-03 (non-AG-5 partial): resources.* filtered by outcome.dropped.*; sReco
         (notifications[0]?.message ?? "").includes("/reload to pick up changes"),
         false,
         "TR-03 partial: failed uninstall must not emit reload-hint trailer",
+      );
+      assert.deepEqual(ownerRuntime.getRoutingBucket("PreToolUse"), []);
+      assert.deepEqual(
+        peerRuntime.getRoutingBucket("PreToolUse").map((entry) => entry.pluginId),
+        ["hello"],
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -1231,7 +1250,13 @@ test("TR-03 (AG-5 cause): full row preserved intact when cause instanceof Agents
       };
 
       const { ctx, pi, notifications } = makeCtx();
-      await uninstallPlugin({
+      const ownerRuntime = createHooksRuntime();
+      const hooksRouting = await populateRuntimeRoute(cwd, ownerRuntime, {
+        command: "echo ag5-owner",
+        marketplace: "mp",
+        plugin: "hello",
+      });
+      await createNodeUninstallPlugin(hooksRouting)({
         ctx,
         pi,
         scope: "project",
@@ -1280,6 +1305,10 @@ test("TR-03 (AG-5 cause): full row preserved intact when cause instanceof Agents
           "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello v0.0.1 (failed) {source mismatch}\n",
         ),
         `TR-03 AG-5: expected failure row; got "${notifications[0]?.message ?? ""}"`,
+      );
+      assert.deepEqual(
+        ownerRuntime.getRoutingBucket("PreToolUse").map((entry) => entry.pluginId),
+        ["hello"],
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -2203,7 +2232,7 @@ test("WR-03: uninstallPlugin clears the plugin's routing-table entries without /
       );
 
       const { ctx, pi, notifications } = makeCtx();
-      await uninstallPlugin({
+      await createNodeUninstallPlugin(hooksRouting)({
         ctx,
         pi,
         scope: "project",
@@ -2236,6 +2265,46 @@ test("WR-03: uninstallPlugin clears the plugin's routing-table entries without /
         peerRuntime.getRoutingBucket("PreToolUse").map((entry) => entry.pluginId),
         ["p1"],
       );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WR-03: a post-save routing failure cannot roll back committed uninstall", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-routing-failure-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedState(locations.extensionRoot, {
+        schemaVersion: 1,
+        marketplaces: {
+          mp: {
+            name: "mp",
+            scope: "project",
+            source: pathSource("./src"),
+            addedFromCwd: cwd,
+            manifestPath: path.join(cwd, "marketplace.json"),
+            marketplaceRoot: cwd,
+            plugins: { hello: makePluginRecord() },
+          },
+        },
+      });
+      const routingError = new Error("forced post-save routing failure");
+      const { ctx, pi, notifications } = makeCtx();
+
+      await createNodeUninstallPlugin({
+        rebuildRoutingTables(): void {
+          throw new Error("rebuild must not run after cache removal throws");
+        },
+        removePluginConfigFromCache(): void {
+          throw routingError;
+        },
+      })({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+
+      assert.deepEqual(Object.keys((await loadState(locations.extensionRoot)).marketplaces.mp?.plugins ?? {}), []);
+      assert.equal(notifications.length, 1);
+      assert.match(notifications[0]?.message ?? "", /hello v0\.0\.1 \(uninstalled\)/);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

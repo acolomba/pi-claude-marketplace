@@ -4,11 +4,12 @@
 // `/claude:plugin uninstall <plugin>@<marketplace> [--scope user|project]`.
 // Identical shim shape as install.ts; delegates to `uninstallPlugin`.
 
-import { uninstallPlugin } from "../../../orchestrators/plugin/uninstall.ts";
+import { createNodeUninstallPlugin } from "../../../orchestrators/plugin/uninstall.ts";
 import { extractLocalFlag } from "../shared.ts";
 
 import { parseRequiredPluginMarketplaceRef } from "./shared.ts";
 
+import type { UninstallHooksRouting } from "../../../orchestrators/plugin/uninstall.ts";
 import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
 
 const USAGE =
@@ -16,7 +17,9 @@ const USAGE =
 
 export function makeUninstallHandler(
   pi: ExtensionAPI,
+  hooksRouting: UninstallHooksRouting,
 ): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
+  const uninstallPlugin = createNodeUninstallPlugin(hooksRouting);
   return async (args, ctx): Promise<void> => {
     // Shared scanner; see edge/handlers/shared.ts.
     const localFlag = extractLocalFlag(args, ctx, USAGE);

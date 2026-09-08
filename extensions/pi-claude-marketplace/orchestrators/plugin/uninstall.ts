@@ -48,6 +48,7 @@ import { rebuildRoutingTables, removePluginConfigFromCache } from "../../bridges
 import { loadConfig } from "../../persistence/config-io.ts";
 import { deletePluginConfigEntry } from "../../persistence/config-write-back.ts";
 import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
+import { hookDebugLog } from "../../shared/debug-log.ts";
 import { StateLockHeldError, errorMessage, isErrnoException } from "../../shared/errors.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
@@ -63,6 +64,7 @@ import {
 } from "./shared.ts";
 import { UNINSTALL_CONTEXT } from "./uninstall.messaging.ts";
 
+import type { HooksRouting } from "../../bridges/hooks/index.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
 import type {
@@ -166,6 +168,12 @@ export interface UninstallTransaction {
   readonly sweepConfigLayers: typeof sweepPluginFromConfigLayers;
   readonly withLockedStateTransaction: typeof withLockedStateTransaction;
 }
+
+/** Lifecycle route effects used by uninstall after durable state commits. */
+export type UninstallHooksRouting = Pick<
+  HooksRouting,
+  "rebuildRoutingTables" | "removePluginConfigFromCache"
+>;
 
 const REAL_UNINSTALL_TRANSACTION: UninstallTransaction = {
   cascadeUnstagePlugin,
@@ -369,21 +377,9 @@ function foldPartialCascadeFailure(
 }
 
 /**
- * The state-side removal commit: drop the record, then keep the hooks bridge
- * in lockstep.
- *
- * D-59-02: the parsed-config cache removal is a synchronous in-memory delete
- * and is idempotent, so the unconditional call is safe even for a plugin that
- * never declared hooks. A closure throw between here and `tx.save()` leaves a
- * bounded leak -- the routing table still resolves entries on the next
- * dispatch until reconcile rebuilds -- and the next `/reload` resets it
- * (D-59-03 epoch bump plus factory-time hydrate from disk).
- *
- * WR-03: the routing-table rebuild lets subsequent events bypass the removed
- * plugin without requiring `/reload` (NFR-2). Without it dispatch would still
- * try to spawn the uninstalled command; the never-throws contract would turn
- * that into `{ kind: "noop" }` plus a debug log, which is correct but
- * wasteful. Synchronous and zero disk I/O per DISP-02.
+ * The state-side removal commit. Runtime routes are updated separately after
+ * the state save succeeds so a config or persistence rollback retains the
+ * route set required by durable state.
  */
 function commitPluginRemoval(
   mp: { plugins: Record<string, unknown> },
@@ -391,8 +387,27 @@ function commitPluginRemoval(
 ): void {
   // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- mp.plugins is a dynamic-key Record<string, ...>.
   delete mp.plugins[ids.plugin];
-  removePluginConfigFromCache(ids.scope, ids.marketplace, ids.plugin);
-  rebuildRoutingTables();
+}
+
+/**
+ * Remove one committed plugin's routes from its lifecycle owner. A routing
+ * failure is post-commit hygiene: it cannot rewrite the durable uninstall,
+ * and `/reload` rehydrates the owner from state.
+ */
+function dropCachedHooks(
+  hooksRouting: UninstallHooksRouting,
+  scope: Scope,
+  marketplace: string,
+  plugin: string,
+): void {
+  try {
+    hooksRouting.removePluginConfigFromCache(scope, marketplace, plugin);
+    hooksRouting.rebuildRoutingTables();
+  } catch (cacheErr) {
+    hookDebugLog(
+      `uninstall: post-save cache/routing mutation failed for ${plugin}@${marketplace}: ${errorMessage(cacheErr)} -- hooks for this plugin remain active until /reload rebuilds routing from state.json`,
+    );
+  }
 }
 
 /**
@@ -553,6 +568,7 @@ function emitAlreadyGone(args: {
  */
 async function uninstallPluginWithTransaction(
   transaction: UninstallTransaction,
+  hooksRouting: UninstallHooksRouting,
   opts: UninstallPluginOptions,
 ): Promise<UninstallPluginOutcome | undefined> {
   const { ctx, pi, cwd, marketplace, plugin } = opts;
@@ -622,6 +638,7 @@ async function uninstallPluginWithTransaction(
   // shrunken-row save has committed. AG-5 still throws (preserves row);
   // non-AG-5 mutates resources.* in place and surfaces via this sentinel.
   let cascadeFailure: Error | undefined;
+  const routeEffect = { removeAfterSave: false };
 
   try {
     // WR-04: explicit-save transaction so the abort arms
@@ -692,6 +709,7 @@ async function uninstallPluginWithTransaction(
         // into the record in place and returns the cause for the sentinel.
         cascadeFailure = foldPartialCascadeFailure(plugin, installed, localOutcome);
         await tx.save();
+        routeEffect.removeAfterSave = localOutcome.dropped.hooks.length > 0;
         return;
       }
 
@@ -706,6 +724,7 @@ async function uninstallPluginWithTransaction(
       // AFTER the config write-back (a write-back throw aborts the save,
       // keeping the record intact for retry exactly as before).
       await tx.save();
+      routeEffect.removeAfterSave = true;
     });
   } catch (err) {
     // PU-7 propagation: AG-5 (or any other cascade failure). State was NOT
@@ -741,6 +760,10 @@ async function uninstallPluginWithTransaction(
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- `alreadyGone` is mutated inside the withLockedStateTransaction closure above; TS flow analysis cannot prove the closure executed, so it sees the variable as still `false`. The check is required at runtime.
   if (alreadyGone) {
     return emitAlreadyGone({ ctx, pi, marketplace, scope, plugin, orchestrated });
+  }
+
+  if (routeEffect.removeAfterSave) {
+    dropCachedHooks(hooksRouting, scope, marketplace, plugin);
   }
 
   // TR-03: non-AG-5 cascade partial-failure surface.
@@ -824,7 +847,10 @@ export interface UninstallPluginOperation {
   (opts: UninstallPluginOptions): Promise<UninstallPluginOutcome | undefined>;
 }
 
-export function createUninstallPlugin(transaction: UninstallTransaction): UninstallPluginOperation {
+export function createUninstallPlugin(
+  transaction: UninstallTransaction,
+  hooksRouting: UninstallHooksRouting,
+): UninstallPluginOperation {
   function configuredUninstallPlugin(
     opts: UninstallPluginOptions & { notifications: { mode: "orchestrated" } },
   ): Promise<UninstallPluginOutcome>;
@@ -834,11 +860,23 @@ export function createUninstallPlugin(transaction: UninstallTransaction): Uninst
   function configuredUninstallPlugin(
     opts: UninstallPluginOptions,
   ): Promise<UninstallPluginOutcome | undefined> {
-    return uninstallPluginWithTransaction(transaction, opts);
+    return uninstallPluginWithTransaction(transaction, hooksRouting, opts);
   }
 
   return configuredUninstallPlugin;
 }
 
+/** Production uninstall operation bound to the root lifecycle routing owner. */
+export function createNodeUninstallPlugin(
+  hooksRouting: UninstallHooksRouting,
+): UninstallPluginOperation {
+  return createUninstallPlugin(REAL_UNINSTALL_TRANSACTION, hooksRouting);
+}
+
+const TRANSITION_UNINSTALL_HOOKS_ROUTING: UninstallHooksRouting = {
+  rebuildRoutingTables,
+  removePluginConfigFromCache,
+};
+
 /** Production uninstall operation composed through the real transaction adapter. */
-export const uninstallPlugin = createUninstallPlugin(REAL_UNINSTALL_TRANSACTION);
+export const uninstallPlugin = createNodeUninstallPlugin(TRANSITION_UNINSTALL_HOOKS_ROUTING);
