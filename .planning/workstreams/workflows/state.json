@@ -26,7 +26,7 @@
     {
       "number": "113",
       "name": "Update, enable/disable, reconcile",
-      "status": "pending"
+      "status": "complete"
     },
     {
       "number": "114",
@@ -51,8 +51,8 @@
   ],
   "next": {
     "command": "/gsd:progress --next",
-    "label": "Advance to the next step (plan phase 113)",
-    "reason": "Phase 113 of 9 — needs a plan"
+    "label": "Advance to the next step (plan phase 114)",
+    "reason": "Phase 114 of 9 — needs a plan"
   },
-  "updated_at": "2026-09-05T21:32:21.997Z"
+  "updated_at": "2026-09-08T03:59:52.564Z"
 }

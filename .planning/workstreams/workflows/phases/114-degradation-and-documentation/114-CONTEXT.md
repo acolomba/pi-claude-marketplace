@@ -240,7 +240,7 @@ things changed under it and both alter the work:
 Research re-derived every inherited number against the current tree and against
 the 3.10.1 engine. Several moved. These decisions dispose of what it escalated.
 
-- **R1 — criterion 6 is CONFIRMED; the behavior does not change.** Upstream's
+- **D-114-01 — criterion 6 is CONFIRMED; the behavior does not change.** Upstream's
   plugin manifest declares `workflows` as `string | array`, described in Claude
   Code 2.1.251's own schema as "Path to a workflows directory or .js file,
   relative to the plugin root", in a body shaped identically to `themes` and
@@ -253,7 +253,7 @@ the 3.10.1 engine. Several moved. These decisions dispose of what it escalated.
   `docs/workflows-compatibility.md` carries it too. Grade the binary read HIGH
   and the published page MEDIUM, and say which is which.
 
-- **R2 — two upstream divergences fall out of that confirmation and belong in
+- **D-114-02 — two upstream divergences fall out of that confirmation and belong in
   the doc, not in the code.** Upstream *replaces* the convention directory when
   the field is declared; this project *unions* declared-with-implicit (D-07).
   And upstream admits a `.js` FILE path where this project's discovery walk
@@ -263,7 +263,7 @@ the 3.10.1 engine. Several moved. These decisions dispose of what it escalated.
   bug and earns a `[workflows-replay]` Broken Windows entry rather than a
   same-phase fix.
 
-- **R3 — the refusal count: nine checks, six shapes, no total.** State that
+- **D-114-03 — the refusal count: nine checks, six shapes, no total.** State that
   `parseWorkflowScript` refuses at NINE checks at 3.10.1 and that this bridge
   replicates TWO of them (determinism and parse), with determinism running
   first. Enumerate the six distinct `validateMeta` message shapes. Do NOT state
@@ -276,7 +276,7 @@ the 3.10.1 engine. Several moved. These decisions dispose of what it escalated.
   Every "seven gates / we replicate one" figure inherited from the archived
   phase is stale — do not ship it anywhere.
 
-- **R4 — `piWithBothLoaded()` is renamed to `piWithAllLoaded()` across all 302
+- **D-114-04 — `piWithBothLoaded()` is renamed to `piWithAllLoaded()` across all 302
   call sites**, with `{ name: "workflow_control" }` added to its body. Its
   current name and its "no soft-dep markers fire" comment both become false the
   moment the third probe field lands, and leaving a lying name in 302 places is
@@ -289,7 +289,7 @@ the 3.10.1 engine. Several moved. These decisions dispose of what it escalated.
   so the added tool should change zero catalog bytes; if it does not, the byte
   gate is reporting a state this phase did not intend to touch.
 
-- **R5 — the criterion-3 gate asserts on the RENDERED ROW at every site.** The
+- **D-114-05 — the criterion-3 gate asserts on the RENDERED ROW at every site.** The
   seven derivation sites sit in three reachability tiers: two are already
   exported functions with their own tests, two sit one hop behind exported
   outcome-to-row composers, and three are reachable only by driving a full
@@ -300,19 +300,19 @@ the 3.10.1 engine. Several moved. These decisions dispose of what it escalated.
   not at an easy one: those are the cases a gate can most easily satisfy
   vacuously.
 
-- **R6 — the eighth closed-set site is `docs/output-catalog.md`'s prose member
+- **D-114-06 — the eighth closed-set site is `docs/output-catalog.md`'s prose member
   count**, which reads "43-member" against a tuple that has been 44 since Phase
   113 and becomes 45 here. It sits outside the byte gate, which is why it went
   stale. Fix it, and treat the trail as eight sites rather than the seven the
   prior phase recorded.
 
-- **R7 — `WDOC-03` is already satisfied.** `acorn` is declared at `^8.16.0` in
+- **D-114-07 — `WDOC-03` is already satisfied.** `acorn` is declared at `^8.16.0` in
   `package.json` `dependencies`. This phase VERIFIES that and changes nothing.
   No `package.json`, `package-lock.json`, `sonar-project.properties`,
   `CHANGELOG.md` or version-constant edit is in scope; any such change is a
   review finding.
 
-- **R8 — do not plan against `tests/live-uat/workflow-storage-canary.mjs`.** It
+- **D-114-08 — do not plan against `tests/live-uat/workflow-storage-canary.mjs`.** It
   does not exist on this tree. Cite Spike 027 for engine behavior instead, and
   do not let the compatibility doc name a `tests/...` path that does not
   resolve — `tests/architecture/no-stale-test-citations.test.ts` gates that.

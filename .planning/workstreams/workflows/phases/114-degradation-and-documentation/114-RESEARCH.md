@@ -1455,10 +1455,19 @@ line 367,536).
 | A6 | Criterion 3's gate can reach all seven sites without a new export | §The seven derivation sites | Verified by reading each site's caller chain, but the three Tier C sites have not been *driven* in a prototype gate this session. If a Tier C drive turns out to need a seam, that is a finding about the surface (per CONTEXT), not a licence to export. |
 | A7 | Upstream's `.js`-file `workflows` path is admitted by this project's resolver but may not be enumerated by the bridge | §Criterion 6 divergences | Not driven. If the bridge silently ignores a file target, that is a divergence the doc must name — see Open Questions. |
 
-## Open Questions
+## Open Questions (RESOLVED)
+
+All four were settled after this document was written. Each resolution lives in
+`114-CONTEXT.md`'s `### Settled after research` block and is cited by label from the
+plans; the pointers below are the trail, not a second copy.
 
 1. **Does `discoverPluginWorkflows` handle a `workflows` component path that points at a
-   `.js` FILE rather than a directory?**
+   `.js` FILE rather than a directory?** — **RESOLVED. See CONTEXT D-114-02.** Answered by
+   reading the code at plan time: `bridges/workflows/discover.ts` reaches the filesystem
+   through `shared/fs-utils.ts::readDirEntriesTolerant`, which returns `[]` on both
+   `ENOENT` and `ENOTDIR`. An upstream-legal `.js` file target is therefore silently
+   dropped — no throw, no warning. That is a documented install-time disposition for the
+   compatibility doc, not a bug, so no Broken Windows entry is owed.
    - What we know: upstream's schema explicitly admits "a workflows directory **or .js
      file**"; `validateComponentPath` does not stat and accepts any contained relative
      string, so the path reaches the bridge.
@@ -1469,14 +1478,22 @@ line 367,536).
      disposition section, NOT a behavior change this phase makes. If it throws, it is a
      bug worth a Broken Windows entry.
 
-2. **How many refusal MESSAGES should the divergence table claim?**
+2. **How many refusal MESSAGES should the divergence table claim?** — **RESOLVED. See
+   CONTEXT D-114-03.** Nine checks, two replicated, the six `validateMeta` message shapes
+   enumerated, and no single refusal-message total (check 2's message is acorn's and is not
+   enumerable). Spike 027's "twelve" must not be repeated, and Spike 027's own record is
+   corrected in the same change that publishes the doc.
    - What we know: nine checks; `validateMeta` throws six distinct messages; check 2's
      message is acorn's and is not enumerable.
    - Recommendation: state the nine checks and enumerate the six shapes the CONTEXT
      mandates. Escalate the "twelve" figure to the operator rather than repeating it or
      silently replacing it.
 
-3. **Does the reinstall row's no-severity-raise asymmetry apply to workflows too?**
+3. **Does the reinstall row's no-severity-raise asymmetry apply to workflows too?** —
+   **RESOLVED. Yes; copy it.** CONTEXT's "Engine-independent bytes" area locks it: the
+   asymmetry is an existing deliberate precedent and diverging from it here would make one
+   component kind behave unlike the other five. Recorded as a decision so a reviewer does
+   not read it as an oversight.
    - What we know: `reinstall` stamps severity from `reasons.length` alone and never calls
      `companionSeverity`; the catalog's reinstall soft-dep block carries no
      `needs attention` line, so the asymmetry is byte-pinned and deliberate.
@@ -1484,7 +1501,10 @@ line 367,536).
      does not read it as an oversight.
 
 4. **Does the criterion-3 gate assert on the rendered ROW or on the derived
-   `Dependency[]`?**
+   `Dependency[]`?** — **RESOLVED. The rendered ROW, at every site. See CONTEXT D-114-05.** All
+   seven cases then prove the same end-to-end claim rather than seven different
+   intermediate ones, and the negative control targets one of the three hard-to-reach
+   sites, never an easy one.
    - What we know: Tier A/B sites hand back a `Dependency[]` or a message directly; Tier C
      sites hand back a rendered notification string.
    - Recommendation: assert on the RENDERED row for every case, so all seven prove the

@@ -696,7 +696,7 @@ function piWithMcpLoaded(): MockPi {
 }
 ```
 
-This is the `piWithBothLoaded` -> `piWithAllLoaded` rename target (R4). Note the helper
+This is the `piWithBothLoaded` -> `piWithAllLoaded` rename target (D-114-04). Note the helper
 exists **independently** at `tests/shared/notify.test.ts:67-71` — two definitions, both
 needing the same edit; an editor symbol rename in one file does not reach the other.
 

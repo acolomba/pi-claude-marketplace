@@ -1,22 +1,22 @@
 ---
-gsd_state_version: 1.0
+gsd_state_version: "1.0"
 milestone: workflows-replay
 milestone_name: Workflow Bridge Replay onto main
 current_phase: 114
 current_phase_name: Degradation and documentation
-current_plan: 113-05 (wave 4)
-status: planning
-stopped_at: Phase 113 complete, ready to plan Phase 114
-last_updated: "2026-09-06T18:09:13.262Z"
-last_activity: 2026-09-06
-last_activity_desc: Phase 113 complete, transitioned to Phase 114
-state_head: b2459e2c6d92cccc2cde7fda71ffc5227f618919
+current_plan: none started — 114-01 is next (wave 1)
+status: ready_to_execute
+stopped_at: Phase 114 planned — 5 plans in 3 waves, ready to execute
+last_updated: "2026-09-08T03:59:52.528Z"
+state_head: c7fdd4eb3a84f91b1edc387f1e8ed064d33be9a9
 progress:
   total_phases: 9
   completed_phases: 5
-  total_plans: 21
+  total_plans: 26
   completed_plans: 21
   percent: 56
+last_activity: 2026-09-08
+last_activity_desc: Phase 114 planned — 5 plans in 3 waves
 ---
 
 # Project State
@@ -35,10 +35,42 @@ never merged. Since then #154 declared `workflows` an *unsupported* kind, and
 
 ## Current Position
 
-Phase: 114 — Degradation and documentation
-Plan: none yet — Phase 114 is not planned
-Status: Ready to plan Phase 114. Phase 113 is complete and verified 9/9 against
-the ROADMAP's nine success criteria.
+Phase: 114 (Degradation and documentation) — READY TO EXECUTE
+Plan: none started — 114-01 is next (wave 1 of 3)
+Status: Planned. 5 plans in 3 waves, 0 blockers from the plan checker,
+requirements 7/7 and decisions 8/8 covered.
+
+Phase 114 makes the host engine the third soft dependency and writes down the
+contract of the one bridge that installs executable code. Research settled the
+criterion-6 premise the ROADMAP left open and invalidated several inherited
+numbers, so the shape of the phase moved before a line was planned:
+
+- **Criterion 6 is CONFIRMED and no behavior changes.** Upstream's plugin
+  manifest does declare `workflows` as `string | array`, described by Claude
+  Code 2.1.251's own schema as "Path to a workflows directory or .js file,
+  relative to the plugin root", in a body shaped like `themes` and
+  `outputStyles`, normalized by the same `Array.isArray(...)` idiom the loader
+  uses for `agents`. `SUPPORTED_COMPONENT_PATH_KINDS` keeps `workflows`; only
+  the lineage paragraph in `tests/domain/resolver.test.ts` and the new doc
+  move. Two divergences fall out for the doc rather than the code: upstream
+  *replaces* the convention directory where this project *unions* (D-07), and
+  upstream admits a `.js` file path that this bridge silently drops.
+- **Every engine figure inherited from the archived phase is stale.** At 3.10.1
+  `parseWorkflowScript` refuses at NINE checks, not seven, and this bridge
+  replicates TWO, not one. Spike 027's own "twelve messages" does not reconcile
+  with the source and is corrected in the same change that publishes the doc.
+- **Criterion 1's wording predates the replay.** Main replaced the runtime
+  `DEPENDENCIES` tuple with a literal union, so there is no tuple to grow and no
+  order lock to add. The byte-order guarantee it wanted comes from two
+  `docs/output-catalog.md` states instead.
+- **The closed-set trail is eight sites, not seven.** The eighth is the catalog's
+  prose member count, which sits outside the byte gate and is already stale.
+
+The prior phase's three carried-forward findings still govern how this one is
+verified — a guard can be green because it checks nothing, a closed-set
+amendment is bigger than its enumeration, and a comment asserting something is
+safe is where the data-loss bugs live. Criterion 3's negative control is
+mandatory and its failing transcript goes in the SUMMARY.
 
 Phase 113 made the remaining lifecycle verbs treat workflows as a first-class
 kind. `update` now prepares, aborts, commits and records workflows as a sixth

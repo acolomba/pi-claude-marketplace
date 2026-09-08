@@ -101,7 +101,7 @@ commands.
 - [ ] `tests/platform/pi-api.test.ts` — the discriminating `workflow`-without-`workflow_control` case
 - [ ] Two paired catalog states plus their fixtures; the exact-count assertion moves with them
 - [ ] `piWithBothLoaded()` → `piWithAllLoaded()` across all 302 call sites, with
-      `{ name: "workflow_control" }` added to its body (CONTEXT R4). Editor-scoped symbol
+      `{ name: "workflow_control" }` added to its body (CONTEXT D-114-04). Editor-scoped symbol
       rename, never `sed`. Run `catalog-uat.test.ts` immediately after the probe field
       lands and BEFORE any fixture edit, to confirm the added tool changes zero bytes.
 
@@ -111,12 +111,12 @@ commands.
 
 The gate's claim is "every `Dependency[]` derivation site stamps `workflows`". A gate that
 reads seven sites but only exercises two is green over five it never touched. Every case
-asserts on the RENDERED ROW, so all seven prove the same end-to-end claim (CONTEXT R5).
+asserts on the RENDERED ROW, so all seven prove the same end-to-end claim (CONTEXT D-114-05).
 
 1. Pick one hard-to-reach site — `install.ts`, `list.ts` or `import/execute.ts`, the three
    reachable only by driving a full `installPlugin` / `loadPluginListPayload` /
    `importClaudeSettings`. These are the cases a gate can most easily satisfy vacuously,
-   so the control must target one of them, never an easy site (CONTEXT R5).
+   so the control must target one of them, never an easy site (CONTEXT D-114-05).
 2. Delete its `dependencies.push("workflows")` arm.
 3. Run the gate. **Exactly one case must redden**, and the failure message must name that
    site.
