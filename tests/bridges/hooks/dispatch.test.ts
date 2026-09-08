@@ -20,6 +20,7 @@ import {
   resetRoutingState,
   setRoutingBucket,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
+import { createHooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import { parseMatcher } from "../../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 
@@ -226,6 +227,64 @@ function createRecordingExecutor(
 }
 
 describe("compositeHandlerFor", () => {
+  test("routes SessionStart context through only the supplied runtime", async () => {
+    // arrange
+    const owningRuntime = createHooksRuntime();
+    const peerRuntime = createHooksRuntime();
+    const capturedGeneration = owningRuntime.advanceGeneration();
+    const entry = createRoutingEntry({
+      pluginId: "session-owner",
+      claudeEvent: "SessionStart",
+      rawMatcher: "startup",
+      declarationIndex: 0,
+      scope: "project",
+      marketplace: "owner-marketplace",
+    });
+    owningRuntime.setRoutingBucket("SessionStart", [entry]);
+    peerRuntime.setRoutingBucket("SessionStart", [
+      createRoutingEntry({
+        pluginId: "peer-session",
+        claudeEvent: "SessionStart",
+        rawMatcher: "startup",
+        declarationIndex: 0,
+      }),
+    ]);
+    const context = createExtensionContext("/workspace/session-owner");
+    const executorCalls: RecordedCall[] = [];
+    const executor = createRecordingExecutor(
+      { "session-owner": { kind: "mutate", additionalContext: "owned context" } },
+      executorCalls,
+    );
+    const handler = compositeHandlerFor(
+      owningRuntime,
+      "SessionStart",
+      capturedGeneration,
+      undefined,
+      executor,
+    );
+
+    // act
+    const adaptation = await handler({ type: "session_start", reason: "startup" }, context);
+
+    // assert
+    assert.strictEqual(adaptation, undefined);
+    assert.deepStrictEqual(owningRuntime.pendingSessionStartContextEntries(), [
+      {
+        context: "owned context",
+        scope: "project",
+        marketplace: "owner-marketplace",
+        pluginId: "session-owner",
+      },
+    ]);
+    assert.deepStrictEqual(peerRuntime.pendingSessionStartContextEntries(), []);
+    assert.deepStrictEqual(executorCalls, [
+      {
+        pluginId: "session-owner",
+        event: { type: "session_start", reason: "startup" },
+      },
+    ]);
+  });
+
   test("requires matcher and if agreement before composing mutations in declaration order", async (t) => {
     // arrange
     resetRoutingState();
