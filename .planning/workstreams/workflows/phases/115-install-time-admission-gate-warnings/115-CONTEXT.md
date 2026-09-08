@@ -140,11 +140,84 @@ together or not at all.
   in the file; do not delete the entry outright and do not invent a new footer
   format.
 
+### Settled after research (orchestrator decisions, do not re-open)
+
+Research measured the engine at 3.10.1 and ran the real `admitWorkflowScript`
+beside the real `parseWorkflowScript` across 35 script shapes. It falsified two
+claims written above. **Where these conflict with anything earlier in this file,
+these win.**
+
+- **D-115-01 — the warnable set is SIX gates, not seven, and the ROADMAP's list
+  is wrong three ways.** Nine engine checks, two replicated, seven unreplicated.
+  Six of those seven are warnable: checks 3, 4, 5, 6, 8 and 9. The ROADMAP's
+  criterion-1 sentence names check 3 twice, names check 7, and omits check 6
+  entirely. Build the gate list from the measurement, not from the criterion.
+
+- **D-115-02 — check 7 is `neither` because it is UNREACHABLE, not because it is
+  undetectable.** The engine's "declarator has an initializer" check is dead code:
+  `export const meta;` is a `SyntaxError` acorn rejects at check 2 (measured
+  output `Unexpected token (1:17)`), and every non-`const` form fails check 4
+  first. So no reachable script can arrive there. Say that in the doc's Notes
+  cell; `neither` earns its own reason and should not be confused with the
+  "cannot detect without evaluating" case.
+
+- **D-115-03 — the "needs evaluation" `neither` example written above is WRONG
+  and must not reach the doc.** A substituted template-literal `meta.name` is a
+  one-property AST test (`TemplateLiteral` with `expressions.length > 0`), and
+  the engine's own `evaluateLiteral` decides it the same way. The bridge cannot
+  *resolve* such a name, but it can name the gate perfectly. **Nothing in the
+  seven needs evaluation.** The doc must not claim otherwise.
+
+- **D-115-04 — the gate reader is first-failure-wins, in the engine's own check
+  order.** A top-level `const meta` is unique in any parseable module (measured:
+  a second binding is `Identifier 'meta' has already been declared`), which is
+  what makes it safe for checks 8 and 9 to read `findMetaObject`'s object. But a
+  reader that reports every failing gate would name gates the engine never
+  reaches, because the engine stops at its first. Report the gate the engine
+  would actually refuse at.
+
+- **D-115-05 — standalone `install` drops workflow discovery warnings today, and
+  this phase fixes it on BOTH `install` and `reinstall`.** `install.ts:1229`
+  pushes to `bridgeWarnings`, which `collectPostCommitWarnings` gates behind
+  `orchestrated` (D-19-01); `reinstall.ts:1062` drops the same array; only
+  `update` reads it standalone. Adding a gate warning to that channel alone would
+  satisfy WGATE-01's letter and fail on the verb the phase is named after.
+  **Operator decision: reclassify both drop sites together**, so the four verbs
+  behave uniformly and no three-way split is left behind. This widens the phase
+  beyond gate warnings — it also surfaces the pre-existing discovery warnings on
+  those two verbs — so pin the newly-visible output rather than letting it appear
+  untested.
+
+- **D-115-06 — criterion 2 is pinnable as a byte assertion, and must be pinned
+  that way.** The install warning channel is a SECOND `ctx.ui.notify` call
+  (`notifyDiagnostic`, severity `warning`), not a row mutation, and it carries no
+  catalog state — so `catalog-uat` cannot redden from it. Assert the row bytes of
+  a warned plugin are identical to those of an unwarned one, rather than assuming
+  a separate notify call leaves them alone.
+
+- **D-115-07 — `workflows-doc-pins.test.ts` will trip on the obvious rewrite.**
+  Its lines 119-123 bar `/seven gates/i`, so the natural phrasing "the seven
+  gates the bridge does not replicate" turns the tree red. Its count regexes are
+  document-wide, so a second numbered table anywhere in the doc breaks the
+  `[1..9]` deepEqual. Update the gate deliberately and state what changed and
+  why; do not weaken an assertion to get green.
+
+- **D-115-08 — the pruned footer cites `workflows-replay`.** Three artifacts
+  disagree on which milestone closed `WFLW-01`. Name the milestone that actually
+  re-landed the bridge on this branch — the work a reader can find in this
+  repository's own history.
+
+- **D-115-09 — one `neither` value per row, nuance in the Notes cell.** Do not
+  split the column into "unreachable" versus "pre-empted by an existing
+  skip/refusal". Three sub-arms of checks 6 and 9 are pre-empted; check 7 is
+  unreachable. The column stays three-valued and the distinction is prose.
+
 ### Claude's Discretion
 
 - Plan and task decomposition; the exact spelling of the gate names in the closed
   union; the wording of each warning phrase in both tenses; the precise shape of
-  the totality construct.
+  the totality construct; whether the check-8/9 gate line enriches the existing
+  `unrunnableWarning` or adds a second line for the same file.
 
 </decisions>
 
