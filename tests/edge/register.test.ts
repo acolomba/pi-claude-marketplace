@@ -993,6 +993,123 @@ test("rebuilds completion rows through the cache that owns a successful register
   peer.verifyRegistrar();
 });
 
+test("rebuilds completion rows through the cache that owns a successful registered uninstall", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticScope(t, "uninstall-completion-owner");
+  const marketplace = "registered-uninstall";
+  const unrelated = "unrelated-marketplace";
+  const sourceRoot = path.join(cwd, "marketplaces", marketplace);
+  const pluginRoot = path.join(sourceRoot, "plugins", "hello");
+  await mkdir(path.join(sourceRoot, ".claude-plugin"), { recursive: true });
+  await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
+  await writeFile(
+    path.join(sourceRoot, ".claude-plugin", "marketplace.json"),
+    JSON.stringify({
+      name: marketplace,
+      owner: { name: "registration owner" },
+      plugins: [{ name: "hello", source: "./plugins/hello", version: "1.0.0" }],
+    }),
+    "utf8",
+  );
+  await writeFile(
+    path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "hello", version: "1.0.0" }),
+    "utf8",
+  );
+  await seedProjectMarketplaces(cwd, [marketplace, unrelated]);
+  const extensionRoot = path.join(cwd, ".pi", "pi-claude-marketplace");
+  const state = await loadState(extensionRoot);
+  const record = state.marketplaces[marketplace];
+  if (record === undefined) {
+    throw new Error("the registered uninstall fixture has no target marketplace");
+  }
+
+  record.plugins["hello"] = buildInstalledPluginRecord(
+    { version: "1.0.0", resolvedSource: pluginRoot },
+    { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+  ) as ExtensionState["marketplaces"][string]["plugins"][string];
+  await saveState(extensionRoot, state);
+  const resolver = makeLocationsResolver(cwd);
+  const cachePath = await resolver.pluginCachePath("project", marketplace);
+  const unrelatedCachePath = await resolver.pluginCachePath("project", unrelated);
+  const ownerCache = createCompletionCache();
+  const peerCache = createCompletionCache();
+  await ownerCache.getPluginIndex(cachePath, "project", marketplace, () =>
+    Promise.resolve([{ name: "hello", status: "installed" }]),
+  );
+  await rm(cachePath, { force: true });
+  await peerCache.getPluginIndex(cachePath, "project", marketplace, () =>
+    Promise.resolve([{ name: "hello", status: "installed" }]),
+  );
+  await rm(cachePath, { force: true });
+  await ownerCache.getPluginIndex(unrelatedCachePath, "project", unrelated, () =>
+    Promise.resolve([{ name: "owner-unrelated", status: "available" }]),
+  );
+  await rm(unrelatedCachePath, { force: true });
+  const owner = registerCommandWithCache(
+    ownerCache,
+    createHooksRouting(createHooksRuntime()),
+    undefined,
+    1,
+  );
+  const peer = registerCommandWithCache(peerCache);
+  const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
+  const ui = mock<NotificationUi>({ exactParams: true, name: "command UI" });
+  const notifications: Notification[] = [];
+  when(() => ctx.cwd)
+    .thenReturn(cwd)
+    .times(1);
+  when(() => ctx.ui)
+    .thenReturn(ui)
+    .times(1);
+  when(() => ui.notify)
+    .thenReturn((message, severity) => {
+      notifications.push(severity === undefined ? { message } : { message, severity });
+    })
+    .times(1);
+
+  // act
+  await owner.registration.handler(`uninstall hello@${marketplace} --scope project`, ctx);
+  const ownerInstallCandidates = await owner.registration.getArgumentCompletions?.(
+    "install --scope project ",
+  );
+  const ownerUninstallCandidates = await owner.registration.getArgumentCompletions?.(
+    "uninstall --scope project ",
+  );
+  const peerUninstallCandidates = await peer.registration.getArgumentCompletions?.(
+    "uninstall --scope project ",
+  );
+
+  // assert
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "● registered-uninstall [project]\n  ○ hello v1.0.0 (uninstalled)\n\n/reload to pick up changes",
+    },
+  ]);
+  assert.deepStrictEqual(ownerInstallCandidates, [
+    {
+      label: "hello@registered-uninstall",
+      value: "install --scope project hello@registered-uninstall ",
+    },
+    {
+      label: "owner-unrelated@unrelated-marketplace",
+      value: "install --scope project owner-unrelated@unrelated-marketplace ",
+    },
+  ]);
+  assert.deepStrictEqual(ownerUninstallCandidates, []);
+  assert.deepStrictEqual(peerUninstallCandidates, [
+    {
+      label: "hello@registered-uninstall",
+      value: "uninstall --scope project hello@registered-uninstall ",
+    },
+  ]);
+  verify(ctx);
+  verify(ui);
+  owner.verifyRegistrar();
+  peer.verifyRegistrar();
+});
+
 describe("registerClaudePluginCommand autocomplete wrapper", () => {
   test("installs exactly one autocomplete provider when the session starts (TC-7)", async (t) => {
     // arrange
