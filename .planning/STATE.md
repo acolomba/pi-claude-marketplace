@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 05
 current_phase_name: Injection and Ownership Design
 status: executing
-stopped_at: Completed Phase 05 Wave 22 through 05-30-PLAN.md
-last_updated: "2026-09-08T11:48:06.591Z"
+stopped_at: Completed Phase 05 Wave 23 Plan 05-31
+last_updated: "2026-09-08T20:25:46.733Z"
 last_activity: 2026-09-08
-last_activity_desc: Phase 05 Plan 30 complete; completion resets migrated
-state_head: 3db119dbe672e33b88352a0b69017046ba032b8c
+last_activity_desc: Phase 05 Plan 31 complete; terminal reset and transition surfaces removed
+state_head: 602f7e23f09a616eda1e0e4b0eeb720bf2fe956a
 progress:
   total_phases: 9
   completed_phases: 3
   total_plans: 127
-  completed_plans: 124
+  completed_plans: 125
   percent: 33
 ---
 
@@ -33,9 +33,9 @@ component as a working Pi artifact.
 
 Phase: 05 (Injection and Ownership Design) — EXECUTING
 Next: Execute Phase 5
-Plan: 31 of 33
+Plan: 32 of 33
 Status: Ready to execute
-Last activity: 2026-09-08 — Phase 05 Plan 30 complete; completion resets migrated
+Last activity: 2026-09-08 — Phase 05 Plan 31 complete; terminal reset and transition surfaces removed
 
 ## Performance Metrics
 
@@ -305,6 +305,7 @@ Last activity: 2026-09-08 — Phase 05 Plan 30 complete; completion resets migra
 | Phase 05 P28                            | 30 min   | 2 tasks | 8 files  |
 | Phase 05 P29                            | 20 min   | 2 tasks | 4 files  |
 | Phase 05 P30                            | 37 min   | 2 tasks | 6 files  |
+| Phase 05 P31                            | 8h 35min | 2 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -759,24 +760,24 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed Phase 05 Wave 22 through 05-30-PLAN.md
+**Stopped at:** Completed Phase 05 Wave 23 Plan 05-31
 
 Phase 04 completed all seven plans and closed AUTH-01 and TREF-01 through
 TREF-03. Independent verification passed 4/4 with no behavioral or UAT gap;
 the complete quality gate passed 5,397 unit tests and 32 integration tests.
-Phase 5 planning passed independent review. Plans 05-01 through 05-30 completed
+Phase 5 planning passed independent review. Plans 05-01 through 05-31 completed
 the hidden-dependency ports, runtime and cache cores, hook registration,
-dispatch, settle, async-child, and PID-operation ownership.
+dispatch, settle, async-child, PID-operation ownership, and terminal reset cleanup.
 
 **Resume file:** None
 
 **Read beside it:** `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`, the
 Phase 01 terminal evidence ledger, and Phase 5's roadmap criteria.
 
-Last session: 2026-09-08T11:48:06.099Z
+Last session: 2026-09-08T20:25:46.253Z
 
-**Next:** Execute Phase 5 Plan 05-31 by deleting terminal reset surfaces after
-a fresh zero-caller census.
+**Next:** Execute Phase 5 Plan 05-32 by removing the `BOOLEAN_FLAGS` test
+surface while retaining its independent public contract proofs.
 
 ## Deferred Verification
 
