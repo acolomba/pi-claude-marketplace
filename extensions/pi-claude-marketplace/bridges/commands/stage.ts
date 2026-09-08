@@ -17,7 +17,7 @@
 //
 // Both basenames are the generated command name, whose namespace separator
 // is platform-dependent: `platform/os.ts::commandNamespaceSeparator` gives a
-// colon on POSIX, which the filesystem accepts, and a dash on Windows, where
+// colon on POSIX, which the filesystem accepts, and a dot on Windows, where
 // NTFS forbids a colon in a filename.
 //
 // Atomicity: per-file `rename` from staging into the target dir is atomic

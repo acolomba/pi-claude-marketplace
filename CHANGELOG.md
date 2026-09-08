@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-- Plugin commands now install on Windows. Their generated name used `:`, which Windows forbids in a filename, so any plugin with a `commands/` directory failed. The name uses `-` on Windows only. Thanks to @ricardofrantz (#143).
+- Plugin commands now install on Windows, where the generated name joins with `.` instead of `:` (`/code-review.code-review`). Windows forbids `:` in a file name, so any plugin with a `commands/` directory failed. Thanks to @ricardofrantz (#143).
 
 ## [0.18.2] - 2026-09-07
 

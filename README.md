@@ -106,13 +106,13 @@ Commands and skill names use Pi's colon form:
 | `foo`       | `foo-bar`             | `/foo:bar` |
 | `foo`       | `foo`                 | `/foo:foo` |
 
-Windows file names cannot contain a colon. On Windows, this extension joins the prefix to command names with a dash (`-`) instead. Skill names do not change:
+On Windows, commands are prefixed with a dot (`.`) instead of a dash (`-`). Skill names do not change:
 
 | Plugin name | Command name | Pi name (Windows) |
 | ----------- | ------------ | ----------------- |
-| `foo`       | `bar`        | `/foo-bar`        |
-| `foo`       | `foo-bar`    | `/foo-bar`        |
-| `foo`       | `foo`        | `/foo-foo`        |
+| `foo`       | `bar`        | `/foo.bar`        |
+| `foo`       | `foo-bar`    | `/foo.bar`        |
+| `foo`       | `foo`        | `/foo.foo`        |
 
 This extension also registers skills with hyphenated names after the `/skill:` prefix:
 

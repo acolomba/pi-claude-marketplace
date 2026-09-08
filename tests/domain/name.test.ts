@@ -301,22 +301,22 @@ describe("generatedCommandName", () => {
   }
 
   for (const { plugin, source, expectedCommandName } of [
-    { plugin: "acme", source: "foo", expectedCommandName: "acme-foo" },
-    { plugin: "acme", source: "acme-foo", expectedCommandName: "acme-foo" },
+    { plugin: "acme", source: "foo", expectedCommandName: "acme.foo" },
+    { plugin: "acme", source: "acme-foo", expectedCommandName: "acme.foo" },
     {
       plugin: "acme",
       source: "build/web",
-      expectedCommandName: "acme-build-web",
+      expectedCommandName: "acme.build.web",
     },
     {
       plugin: "acme",
       source: "acme-tools/lint",
-      expectedCommandName: "acme-tools-lint",
+      expectedCommandName: "acme.tools.lint",
     },
     {
       plugin: "acme",
       source: "acme-",
-      expectedCommandName: "acme-acme-",
+      expectedCommandName: "acme.acme-",
     },
   ]) {
     test(`generates ${JSON.stringify(expectedCommandName)} from ${JSON.stringify(source)} on win32`, (t) => {

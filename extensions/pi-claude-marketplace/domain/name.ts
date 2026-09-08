@@ -87,7 +87,7 @@ export function generatedSkillName(plugin: string, source: string): string {
  *
  * Format: `<plugin><separator><command>`, where the separator comes from
  * `commandNamespaceSeparator()`: a colon on POSIX, matching what Claude Code
- * registers, and a dash on Windows, because the generated name becomes a
+ * registers, and a dot on Windows, because the generated name becomes a
  * filename and NTFS forbids a colon in one. The `<plugin>-` prefix is elided
  * from `source` (acme + acme-foo -> acme:foo, NOT acme:acme-foo).
  *
@@ -98,20 +98,20 @@ export function generatedSkillName(plugin: string, source: string): string {
  * prefix is elided from the FIRST segment only; and the segments are joined
  * with the separator, so the nested file becomes `<plugin>:build:web` --
  * matching Claude Code's nested-command convention -- or
- * `<plugin>-build-web` on Windows. A flat source ("foo") has a single
+ * `<plugin>.build.web` on Windows. A flat source ("foo") has a single
  * segment; "acme-foo" elides to the same name "foo" produces.
  *
- * The dash separator makes two sources collide on Windows: in plugin "acme",
- * `commands/foo.md` and `commands/acme-foo.md` both name "acme-foo". That is
- * the D-07 first-wins skip, which discovery already resolves with a warning
- * naming the winner, and it is the collision shape `generatedSkillName` has
- * on every platform.
+ * The dot separator lets two sources collide on Windows when a source name
+ * itself contains a dot: in plugin "acme", `commands/foo/bar.md` and
+ * `commands/foo.bar.md` both name "acme.foo.bar". That is the D-07
+ * first-wins skip, which discovery already resolves with a warning naming
+ * the winner.
  *
  * D-141-02: an elision that would empty the head does not fire. A head of
  * exactly "acme-" in plugin "acme" keeps its verbatim form, so
  * `commands/acme-.md` becomes "acme:acme-" and `commands/acme-/lint.md`
  * becomes "acme:acme-:lint" -- the two names Claude Code registers for the
- * same tree -- and "acme-acme-" / "acme-acme--lint" on Windows. The elision
+ * same tree -- and "acme.acme-" / "acme.acme-.lint" on Windows. The elision
  * exists to remove a stutter, and a head that is nothing but the stutter has
  * no command name left underneath it.
  *

@@ -6,7 +6,7 @@ import { commandNamespaceSeparator } from "../../extensions/pi-claude-marketplac
 import { setCasePlatform } from "./case-platform.ts";
 
 for (const { platform, expectedSeparator } of [
-  { platform: "win32", expectedSeparator: "-" },
+  { platform: "win32", expectedSeparator: "." },
   { platform: "darwin", expectedSeparator: ":" },
   { platform: "linux", expectedSeparator: ":" },
 ] satisfies { platform: NodeJS.Platform; expectedSeparator: string }[]) {
