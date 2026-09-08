@@ -11,7 +11,7 @@ import {
 import { pathSource } from "../../extensions/pi-claude-marketplace/domain/source.ts";
 import { createNodeInstallPlugin } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/install.ts";
 import { createNodeReinstallPlugin } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts";
-import { uninstallPlugin } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
+import { createNodeUninstallPlugin } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
 import { createPluginUpdateOperations } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/update.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
@@ -278,7 +278,10 @@ test("LIFE-01 / LIFE-02 integration: install -> update -> reinstall -> uninstall
         const { ctx, pi, notifications } = makeCtx();
 
         // act
-        await uninstallPlugin({
+        await createNodeUninstallPlugin(
+          hooksRouting,
+          completionCache,
+        )({
           ctx,
           pi,
           scope: "project",

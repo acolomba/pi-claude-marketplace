@@ -44,10 +44,8 @@
 import { rm } from "node:fs/promises";
 import path from "node:path";
 
-import { rebuildRoutingTables, removePluginConfigFromCache } from "../../bridges/hooks/index.ts";
 import { loadConfig } from "../../persistence/config-io.ts";
 import { deletePluginConfigEntry } from "../../persistence/config-write-back.ts";
-import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { StateLockHeldError, errorMessage, isErrnoException } from "../../shared/errors.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
@@ -67,6 +65,7 @@ import { UNINSTALL_CONTEXT } from "./uninstall.messaging.ts";
 import type { HooksRouting } from "../../bridges/hooks/index.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
+import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type {
   ContentReason,
   PluginFailedMessage,
@@ -459,13 +458,18 @@ async function sweepPluginFromConfigLayers(
  * returned string[] rather than throwing; the try/catch is belt and braces.
  */
 async function runPostUninstallCleanup(
+  completionCache: CompletionCache,
   locations: ScopedLocations,
   scope: Scope,
   marketplace: string,
   plugin: string,
 ): Promise<void> {
   try {
-    await dropMarketplaceCache(await locations.pluginCacheFile(marketplace), scope, marketplace);
+    await completionCache.dropMarketplaceCache(
+      await locations.pluginCacheFile(marketplace),
+      scope,
+      marketplace,
+    );
   } catch {
     // D-19-01: hygienic cleanup never becomes the primary user-facing path.
   }
@@ -569,6 +573,7 @@ function emitAlreadyGone(args: {
 async function uninstallPluginWithTransaction(
   transaction: UninstallTransaction,
   hooksRouting: UninstallHooksRouting,
+  completionCache: CompletionCache,
   opts: UninstallPluginOptions,
 ): Promise<UninstallPluginOutcome | undefined> {
   const { ctx, pi, cwd, marketplace, plugin } = opts;
@@ -780,7 +785,7 @@ async function uninstallPluginWithTransaction(
     });
   }
 
-  await transaction.runPostCommitCleanup(locations, scope, marketplace, plugin);
+  await transaction.runPostCommitCleanup(completionCache, locations, scope, marketplace, plugin);
 
   // PU-8 reload hint: computed by notify from the
   // PluginUninstalledMessage status (uninstalled is in the state-changing
@@ -850,6 +855,7 @@ export interface UninstallPluginOperation {
 export function createUninstallPlugin(
   transaction: UninstallTransaction,
   hooksRouting: UninstallHooksRouting,
+  completionCache: CompletionCache,
 ): UninstallPluginOperation {
   function configuredUninstallPlugin(
     opts: UninstallPluginOptions & { notifications: { mode: "orchestrated" } },
@@ -860,7 +866,7 @@ export function createUninstallPlugin(
   function configuredUninstallPlugin(
     opts: UninstallPluginOptions,
   ): Promise<UninstallPluginOutcome | undefined> {
-    return uninstallPluginWithTransaction(transaction, hooksRouting, opts);
+    return uninstallPluginWithTransaction(transaction, hooksRouting, completionCache, opts);
   }
 
   return configuredUninstallPlugin;
@@ -869,14 +875,7 @@ export function createUninstallPlugin(
 /** Production uninstall operation bound to the root lifecycle routing owner. */
 export function createNodeUninstallPlugin(
   hooksRouting: UninstallHooksRouting,
+  completionCache: CompletionCache,
 ): UninstallPluginOperation {
-  return createUninstallPlugin(REAL_UNINSTALL_TRANSACTION, hooksRouting);
+  return createUninstallPlugin(REAL_UNINSTALL_TRANSACTION, hooksRouting, completionCache);
 }
-
-const TRANSITION_UNINSTALL_HOOKS_ROUTING: UninstallHooksRouting = {
-  rebuildRoutingTables,
-  removePluginConfigFromCache,
-};
-
-/** Production uninstall operation composed through the real transaction adapter. */
-export const uninstallPlugin = createNodeUninstallPlugin(TRANSITION_UNINSTALL_HOOKS_ROUTING);

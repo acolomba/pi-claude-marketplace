@@ -343,7 +343,7 @@ async function applyPluginUninstalls(
   plan: ReconcilePlan,
   outcomes: PerEntryOutcome[],
 ): Promise<void> {
-  const uninstallPlugin = createNodeUninstallPlugin(opts.hooksRouting);
+  const uninstallPlugin = createNodeUninstallPlugin(opts.hooksRouting, opts.completionCache);
   for (const op of plan.pluginsToUninstall) {
     try {
       const result = await uninstallPlugin({

@@ -64,6 +64,7 @@ import {
 } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { asAbsolutePluginRoot } from "../../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import { makeUninstallHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/uninstall.ts";
+import { createCompletionCache } from "../../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
 import { buildInstalledPluginRecord, mergeMarketplaceIntoState } from "../marketplace-seed.ts";
 
@@ -120,7 +121,11 @@ const USER_OVERRIDE_REJECTED = {
 
 /** Construct one isolated registered-handler routing owner per test case. */
 function makeHandlerUnderTest(pi: Parameters<typeof makeUninstallHandler>[0]) {
-  return makeUninstallHandler(pi, createHooksRouting(createHooksRuntime()));
+  return makeUninstallHandler(
+    pi,
+    createHooksRouting(createHooksRuntime()),
+    createCompletionCache(),
+  );
 }
 
 /** Populate a real lifecycle owner with one observable hook route. */
@@ -288,7 +293,7 @@ test("removes the project-scope record when the reference alone selects the plug
   const hooksRouting = await populateRuntimeRoute(workspace, ownerRuntime, "demo", "owner-target");
   await populateRuntimeRoute(workspace, ownerRuntime, "other", "owner-unrelated");
   await populateRuntimeRoute(workspace, peerRuntime, "demo", "peer-target");
-  const uninstallHandler = makeUninstallHandler(pi, hooksRouting);
+  const uninstallHandler = makeUninstallHandler(pi, hooksRouting, createCompletionCache());
 
   // act
   await uninstallHandler("demo@alpha", ctx);
