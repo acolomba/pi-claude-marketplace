@@ -93,7 +93,8 @@ export type HookExecutor = (
   entry: RoutingEntry,
   event: unknown,
   ctx: ExtensionContext,
-  pi?: ExtensionAPI,
+  pi: ExtensionAPI | undefined,
+  runtime: HooksRuntime,
 ) => Promise<HookExecResult>;
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -166,6 +167,7 @@ interface ReducedBucket {
 }
 
 async function reduceBucket(
+  runtime: HooksRuntime,
   bucket: ReadonlyArray<RoutingEntry>,
   event: unknown,
   ctx: ExtensionContext,
@@ -186,7 +188,7 @@ async function reduceBucket(
       continue;
     }
 
-    const r = await executor(entry, event, ctx, pi);
+    const r = await executor(entry, event, ctx, pi, runtime);
     switch (r.kind) {
       case "block":
       case "stop":
@@ -250,6 +252,7 @@ export interface BucketOutcome {
  * paths.
  */
 export async function collectBucketOutcomes(
+  runtime: HooksRuntime,
   bucket: ReadonlyArray<RoutingEntry>,
   event: unknown,
   ctx: ExtensionContext,
@@ -275,7 +278,7 @@ export async function collectBucketOutcomes(
       continue;
     }
 
-    const result = await executor(entry, event, ctx, pi);
+    const result = await executor(entry, event, ctx, pi, runtime);
     outcomes.push({ entry, result });
   }
 
@@ -334,7 +337,7 @@ export function compositeHandlerFor<E extends CompositeDispatchEvent>(
       return undefined as CompositeReturnFor<E>;
     }
 
-    const reduced = await reduceBucket(bucket, event, ctx, pi, executor, (entry) =>
+    const reduced = await reduceBucket(runtime, bucket, event, ctx, pi, executor, (entry) =>
       entryFires(claudeEvent, entry, event),
     );
 
@@ -372,7 +375,7 @@ export function toolResultCompositeHandler(
       return undefined;
     }
 
-    const reduced = await reduceBucket(bucket, event, ctx, pi, executor, (entry) =>
+    const reduced = await reduceBucket(runtime, bucket, event, ctx, pi, executor, (entry) =>
       matcherFiresOnToolEvent(entry.matcher, event.toolName),
     );
 

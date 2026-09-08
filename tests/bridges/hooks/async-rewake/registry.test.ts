@@ -21,10 +21,7 @@ import {
   shutdownInMemoryChildren,
   spawnAndRegister,
 } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts";
-import {
-  bumpEpoch,
-  resetRoutingState,
-} from "../../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
+import { resetRoutingState } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
 import { createHooksRuntime } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import { asAbsolutePluginRoot } from "../../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import { locationsFor } from "../../../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -452,6 +449,7 @@ test(
 
     try {
       await spawnAndRegister(
+        firstRuntime,
         createEntry(root, {
           pluginId: "plugin-runtime-first",
           handlerDecl: {
@@ -473,9 +471,9 @@ test(
             return Promise.resolve();
           },
         },
-        firstRuntime,
       );
       await spawnAndRegister(
+        secondRuntime,
         createEntry(root, {
           pluginId: "plugin-runtime-second",
           handlerDecl: {
@@ -498,7 +496,6 @@ test(
             return Promise.resolve();
           },
         },
-        secondRuntime,
       );
       firstRuntime.advanceGeneration();
       firstChild.stderr.end("stale first body");
@@ -532,10 +529,10 @@ test(
       assert.deepStrictEqual(secondContext.notifications, [
         { text: "second summary", severity: "info" },
       ]);
-      assert.deepStrictEqual(firstWrites.map((entries) => entries.map((entry) => entry.dispatchId)), [
-        ["dispatch-runtime-first"],
-        [],
-      ]);
+      assert.deepStrictEqual(
+        firstWrites.map((entries) => entries.map((entry) => entry.dispatchId)),
+        [["dispatch-runtime-first"], []],
+      );
       assert.deepStrictEqual(
         secondWrites.map((entries) => entries.map((entry) => entry.dispatchId)),
         [["dispatch-runtime-second"], []],
@@ -558,11 +555,12 @@ test(
   { concurrency: false },
   async (t) => {
     // arrange
+    const runtime = createHooksRuntime();
     const root = await mkdtemp(path.join(tmpdir(), "async-registry-lifecycle-"));
     const fixedNow = Date.parse("2026-08-31T10:00:00.000Z");
     const timers = observeTimers(t, fixedNow);
     resetRoutingState();
-    shutdownInMemoryChildren();
+    shutdownInMemoryChildren(runtime);
     const locations = locationsFor("project", root);
     const entry = createEntry(root);
     const event = {
@@ -618,7 +616,7 @@ test(
 
     try {
       // act
-      await spawnAndRegister(entry, event, context.context, pi.pi, locations, {
+      await spawnAndRegister(runtime, entry, event, context.context, pi.pi, locations, {
         spawnImpl,
         dispatchId: () => "dispatch-lifecycle",
       });
@@ -645,7 +643,7 @@ test(
         childError: child.child.listenerCount("error"),
       };
       const orphanProbeCalls: Array<{ pid: number; signal: number | NodeJS.Signals }> = [];
-      await reapOrphans(locations, {
+      await reapOrphans(runtime, locations, {
         killProbe(pid, signal): void {
           orphanProbeCalls.push({ pid, signal });
         },
@@ -654,7 +652,7 @@ test(
         },
       });
       const finalTableState = await stat(tablePath).catch(filesystemErrorCode);
-      shutdownInMemoryChildren();
+      shutdownInMemoryChildren(runtime);
       t.mock.timers.tick(605_000);
 
       // assert
@@ -705,7 +703,7 @@ test(
       assert.strictEqual(finalTableState, "ENOENT");
       assert.deepStrictEqual(child.signals, []);
     } finally {
-      shutdownInMemoryChildren();
+      shutdownInMemoryChildren(runtime);
       resetRoutingState();
       child.child.removeAllListeners();
       child.stdin?.destroy();
@@ -718,10 +716,11 @@ test(
 
 test("registers a child whose optional stdin pipe is absent", { concurrency: false }, async (t) => {
   // arrange
+  const runtime = createHooksRuntime();
   const root = await mkdtemp(path.join(tmpdir(), "async-registry-no-stdin-"));
   const timers = observeTimers(t, Date.parse("2026-08-31T10:05:00.000Z"));
   resetRoutingState();
-  shutdownInMemoryChildren();
+  shutdownInMemoryChildren(runtime);
   const locations = locationsFor("project", root);
   const entry = createEntry(root);
   const event = {
@@ -739,15 +738,15 @@ test("registers a child whose optional stdin pipe is absent", { concurrency: fal
 
   try {
     // act
-    await spawnAndRegister(entry, event, context.context, pi.pi, locations, {
+    await spawnAndRegister(runtime, entry, event, context.context, pi.pi, locations, {
       spawnImpl,
       dispatchId: () => "dispatch-no-stdin",
     });
     const registeredEntries = await readPidTable(locations);
-    shutdownInMemoryChildren();
+    shutdownInMemoryChildren(runtime);
     t.mock.timers.tick(605_000);
     const probeCalls: Array<{ pid: number; signal: number | NodeJS.Signals }> = [];
-    await reapOrphans(locations, {
+    await reapOrphans(runtime, locations, {
       killProbe(pid, signal): void {
         probeCalls.push({ pid, signal });
         if (signal === 0) {
@@ -782,7 +781,7 @@ test("registers a child whose optional stdin pipe is absent", { concurrency: fal
     assert.deepStrictEqual(pi.messages, []);
     assert.deepStrictEqual(context.notifications, []);
   } finally {
-    shutdownInMemoryChildren();
+    shutdownInMemoryChildren(runtime);
     resetRoutingState();
     child.child.removeAllListeners();
     child.stdout.destroy();
@@ -793,6 +792,7 @@ test("registers a child whose optional stdin pipe is absent", { concurrency: fal
 
 test("contains a synchronous spawn failure with semantic diagnostics", async (t) => {
   // arrange
+  const runtime = createHooksRuntime();
   const root = await mkdtemp(path.join(tmpdir(), "async-registry-spawn-throw-"));
   const previousDebug = process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
   t.after(() => {
@@ -808,7 +808,7 @@ test("contains a synchronous spawn failure with semantic diagnostics", async (t)
     diagnostics.push(parts.map(String).join(" "));
   });
   resetRoutingState();
-  shutdownInMemoryChildren();
+  shutdownInMemoryChildren(runtime);
   const locations = locationsFor("project", root);
   const context = createContext(root, "session-spawn-throw", true);
   const pi = createPi();
@@ -819,7 +819,7 @@ test("contains a synchronous spawn failure with semantic diagnostics", async (t)
 
   try {
     // act
-    await spawnAndRegister(createEntry(root), {}, context.context, pi.pi, locations, {
+    await spawnAndRegister(runtime, createEntry(root), {}, context.context, pi.pi, locations, {
       spawnImpl,
       dispatchId: () => "dispatch-spawn-throw",
     });
@@ -834,7 +834,7 @@ test("contains a synchronous spawn failure with semantic diagnostics", async (t)
     assert.match(diagnostics[0] ?? "", /plugin-lifecycle\/PreToolUse/);
     assert.match(diagnostics[0] ?? "", /spawn denied by case boundary/);
   } finally {
-    shutdownInMemoryChildren();
+    shutdownInMemoryChildren(runtime);
     resetRoutingState();
     await rm(root, { recursive: true, force: true, maxRetries: 3 });
   }
@@ -842,9 +842,10 @@ test("contains a synchronous spawn failure with semantic diagnostics", async (t)
 
 test("kills a spawned child that has no PID and leaves no registry state", async () => {
   // arrange
+  const runtime = createHooksRuntime();
   const root = await mkdtemp(path.join(tmpdir(), "async-registry-no-pid-"));
   resetRoutingState();
-  shutdownInMemoryChildren();
+  shutdownInMemoryChildren(runtime);
   const locations = locationsFor("project", root);
   const context = createContext(root, "session-no-pid", true);
   const pi = createPi();
@@ -853,12 +854,12 @@ test("kills a spawned child that has no PID and leaves no registry state", async
 
   try {
     // act
-    await spawnAndRegister(createEntry(root), {}, context.context, pi.pi, locations, {
+    await spawnAndRegister(runtime, createEntry(root), {}, context.context, pi.pi, locations, {
       spawnImpl: createSpawn(child.child, spawnCalls),
       dispatchId: () => "dispatch-no-pid",
     });
     const tableState = await stat(pidTablePath(locations)).catch(filesystemErrorCode);
-    shutdownInMemoryChildren();
+    shutdownInMemoryChildren(runtime);
 
     // assert
     assert.strictEqual(spawnCalls.length, 1);
@@ -867,7 +868,7 @@ test("kills a spawned child that has no PID and leaves no registry state", async
     assert.deepStrictEqual(pi.messages, []);
     assert.deepStrictEqual(context.notifications, []);
   } finally {
-    shutdownInMemoryChildren();
+    shutdownInMemoryChildren(runtime);
     resetRoutingState();
     child.child.removeAllListeners();
     child.stdin?.destroy();
@@ -882,9 +883,10 @@ test(
   { concurrency: false, timeout: 5_000 },
   async () => {
     // arrange
+    const runtime = createHooksRuntime();
     const root = await mkdtemp(path.join(tmpdir(), "async-registry-no-pid-error-"));
     resetRoutingState();
-    shutdownInMemoryChildren();
+    shutdownInMemoryChildren(runtime);
     const locations = locationsFor("project", root);
     const context = createContext(root, "session-no-pid-error", true);
     const pi = createPi();
@@ -923,7 +925,7 @@ test(
 
     try {
       // act
-      await spawnAndRegister(createEntry(root), {}, context.context, pi.pi, locations, {
+      await spawnAndRegister(runtime, createEntry(root), {}, context.context, pi.pi, locations, {
         spawnImpl,
         dispatchId: () => "dispatch-no-pid-error",
       });
@@ -933,7 +935,7 @@ test(
       });
       child.emitClose(2);
       const tableState = await stat(pidTablePath(locations)).catch(filesystemErrorCode);
-      shutdownInMemoryChildren();
+      shutdownInMemoryChildren(runtime);
 
       // assert
       assert.strictEqual(spawnCalls.length, 1);
@@ -949,7 +951,7 @@ test(
     } finally {
       process.off("uncaughtException", onUncaughtException);
       process.off("unhandledRejection", onUnhandledRejection);
-      shutdownInMemoryChildren();
+      shutdownInMemoryChildren(runtime);
       resetRoutingState();
       destroyChild(child);
       await rm(root, { recursive: true, force: true, maxRetries: 3 });
@@ -959,9 +961,10 @@ test(
 
 test("contains a kill failure for a spawned child that has no PID", async () => {
   // arrange
+  const runtime = createHooksRuntime();
   const root = await mkdtemp(path.join(tmpdir(), "async-registry-no-pid-kill-"));
   resetRoutingState();
-  shutdownInMemoryChildren();
+  shutdownInMemoryChildren(runtime);
   const locations = locationsFor("project", root);
   const context = createContext(root, "session-no-pid-kill", true);
   const pi = createPi();
@@ -969,7 +972,7 @@ test("contains a kill failure for a spawned child that has no PID", async () => 
 
   try {
     // act
-    await spawnAndRegister(createEntry(root), {}, context.context, pi.pi, locations, {
+    await spawnAndRegister(runtime, createEntry(root), {}, context.context, pi.pi, locations, {
       spawnImpl: createSpawn(child.child, []),
       dispatchId: () => "dispatch-no-pid-kill",
     });
@@ -979,7 +982,7 @@ test("contains a kill failure for a spawned child that has no PID", async () => 
     assert.deepStrictEqual(pi.messages, []);
     assert.deepStrictEqual(context.notifications, []);
   } finally {
-    shutdownInMemoryChildren();
+    shutdownInMemoryChildren(runtime);
     resetRoutingState();
     child.child.removeAllListeners();
     child.stdin?.destroy();
@@ -991,10 +994,11 @@ test("contains a kill failure for a spawned child that has no PID", async () => 
 
 test("contains stdin errors after registering the listener before delivery", async (t) => {
   // arrange
+  const runtime = createHooksRuntime();
   const root = await mkdtemp(path.join(tmpdir(), "async-registry-stdin-error-"));
   const timers = observeTimers(t, Date.parse("2026-08-31T10:10:00.000Z"));
   resetRoutingState();
-  shutdownInMemoryChildren();
+  shutdownInMemoryChildren(runtime);
   const locations = locationsFor("project", root);
   const context = createContext(root, "session-stdin-error", true);
   const pi = createPi();
@@ -1002,12 +1006,12 @@ test("contains stdin errors after registering the listener before delivery", asy
 
   try {
     // act
-    await spawnAndRegister(createEntry(root), {}, context.context, pi.pi, locations, {
+    await spawnAndRegister(runtime, createEntry(root), {}, context.context, pi.pi, locations, {
       spawnImpl: createSpawn(child.child, []),
       dispatchId: () => "dispatch-stdin-error",
     });
     child.stdin?.emit("error", new Error("EPIPE from case child"));
-    shutdownInMemoryChildren();
+    shutdownInMemoryChildren(runtime);
     t.mock.timers.tick(605_000);
 
     // assert
@@ -1017,13 +1021,13 @@ test("contains stdin errors after registering the listener before delivery", asy
     assert.deepStrictEqual(pi.messages, []);
     assert.deepStrictEqual(context.notifications, []);
   } finally {
-    shutdownInMemoryChildren();
+    shutdownInMemoryChildren(runtime);
     resetRoutingState();
     child.child.removeAllListeners();
     child.stdin?.destroy();
     child.stdout.destroy();
     child.stderr.destroy();
-    await reapOrphans(locations, {
+    await reapOrphans(runtime, locations, {
       killProbe(): never {
         const error = new Error("child stopped by shutdown") as NodeJS.ErrnoException;
         error.code = "ESRCH";
@@ -1039,10 +1043,11 @@ test("contains stdin errors after registering the listener before delivery", asy
 
 test("contains a synchronous stdin end failure and cleans the registered child", async (t) => {
   // arrange
+  const runtime = createHooksRuntime();
   const root = await mkdtemp(path.join(tmpdir(), "async-registry-stdin-end-"));
   const timers = observeTimers(t, Date.parse("2026-08-31T10:15:00.000Z"));
   resetRoutingState();
-  shutdownInMemoryChildren();
+  shutdownInMemoryChildren(runtime);
   const locations = locationsFor("project", root);
   const context = createContext(root, "session-stdin-end", true);
   const pi = createPi();
@@ -1053,12 +1058,12 @@ test("contains a synchronous stdin end failure and cleans the registered child",
 
   try {
     // act
-    await spawnAndRegister(createEntry(root), {}, context.context, pi.pi, locations, {
+    await spawnAndRegister(runtime, createEntry(root), {}, context.context, pi.pi, locations, {
       spawnImpl: createSpawn(child.child, []),
       dispatchId: () => "dispatch-stdin-end",
     });
     const tableState = await stat(pidTablePath(locations)).catch(filesystemErrorCode);
-    shutdownInMemoryChildren();
+    shutdownInMemoryChildren(runtime);
     t.mock.timers.tick(605_000);
 
     // assert
@@ -1068,7 +1073,7 @@ test("contains a synchronous stdin end failure and cleans the registered child",
     assert.deepStrictEqual(pi.messages, []);
     assert.deepStrictEqual(context.notifications, []);
   } finally {
-    shutdownInMemoryChildren();
+    shutdownInMemoryChildren(runtime);
     resetRoutingState();
     child.child.removeAllListeners();
     child.stdin?.destroy();
@@ -1100,17 +1105,18 @@ function deadOrphanProbes(): OrphanProbes {
 
 test("settles a child error once and ignores its later exit", { concurrency: false }, async (t) => {
   // arrange
+  const runtime = createHooksRuntime();
   const root = await mkdtemp(path.join(tmpdir(), "async-registry-child-error-"));
   const timers = observeTimers(t, Date.parse("2026-08-31T10:20:00.000Z"));
   resetRoutingState();
-  shutdownInMemoryChildren();
+  shutdownInMemoryChildren(runtime);
   const locations = locationsFor("project", root);
   const context = createContext(root, "session-child-error", true);
   const pi = createPi();
   const child = createChild(24_685);
 
   try {
-    await spawnAndRegister(createEntry(root), {}, context.context, pi.pi, locations, {
+    await spawnAndRegister(runtime, createEntry(root), {}, context.context, pi.pi, locations, {
       spawnImpl: createSpawn(child.child, []),
       dispatchId: () => "dispatch-child-error",
     });
@@ -1133,10 +1139,10 @@ test("settles a child error once and ignores its later exit", { concurrency: fal
     assert.strictEqual(child.child.listenerCount("exit"), 0);
     assert.deepStrictEqual(child.signals, []);
   } finally {
-    shutdownInMemoryChildren();
+    shutdownInMemoryChildren(runtime);
     resetRoutingState();
     destroyChild(child);
-    await reapOrphans(locations, deadOrphanProbes());
+    await reapOrphans(runtime, locations, deadOrphanProbes());
     await rm(root, { recursive: true, force: true, maxRetries: 3 });
   }
 });
@@ -1146,10 +1152,11 @@ test(
   { concurrency: false },
   async (t) => {
     // arrange
+    const runtime = createHooksRuntime();
     const root = await mkdtemp(path.join(tmpdir(), "async-registry-late-error-"));
     const timers = observeTimers(t, Date.parse("2026-08-31T10:25:00.000Z"));
     resetRoutingState();
-    shutdownInMemoryChildren();
+    shutdownInMemoryChildren(runtime);
     const locations = locationsFor("project", root);
     const context = createContext(root, "session-late-error", true);
     const pi = createPi();
@@ -1157,6 +1164,7 @@ test(
 
     try {
       await spawnAndRegister(
+        runtime,
         createEntry(root, {
           handlerDecl: {
             type: "command",
@@ -1191,10 +1199,10 @@ test(
       assert.strictEqual(child.child.listenerCount("error"), 0);
       assert.strictEqual(child.child.listenerCount("exit"), 0);
     } finally {
-      shutdownInMemoryChildren();
+      shutdownInMemoryChildren(runtime);
       resetRoutingState();
       destroyChild(child);
-      await reapOrphans(locations, deadOrphanProbes());
+      await reapOrphans(runtime, locations, deadOrphanProbes());
       await rm(root, { recursive: true, force: true, maxRetries: 3 });
     }
   },
@@ -1205,17 +1213,18 @@ test(
   { concurrency: false },
   async (t) => {
     // arrange
+    const runtime = createHooksRuntime();
     const root = await mkdtemp(path.join(tmpdir(), "async-registry-exit-zero-"));
     const timers = observeTimers(t, Date.parse("2026-08-31T10:30:00.000Z"));
     resetRoutingState();
-    shutdownInMemoryChildren();
+    shutdownInMemoryChildren(runtime);
     const locations = locationsFor("project", root);
     const context = createContext(root, "session-exit-zero", true);
     const pi = createPi();
     const child = createChild(24_687);
 
     try {
-      await spawnAndRegister(createEntry(root), {}, context.context, pi.pi, locations, {
+      await spawnAndRegister(runtime, createEntry(root), {}, context.context, pi.pi, locations, {
         spawnImpl: createSpawn(child.child, []),
         dispatchId: () => "dispatch-exit-zero",
       });
@@ -1234,10 +1243,10 @@ test(
       assert.deepStrictEqual(timers.clearHandles, timers.handles);
       assert.deepStrictEqual(await readPidTable(locations), []);
     } finally {
-      shutdownInMemoryChildren();
+      shutdownInMemoryChildren(runtime);
       resetRoutingState();
       destroyChild(child);
-      await reapOrphans(locations, deadOrphanProbes());
+      await reapOrphans(runtime, locations, deadOrphanProbes());
       await rm(root, { recursive: true, force: true, maxRetries: 3 });
     }
   },
@@ -1245,10 +1254,11 @@ test(
 
 test("records a signalled exit as silent completion", { concurrency: false }, async (t) => {
   // arrange
+  const runtime = createHooksRuntime();
   const root = await mkdtemp(path.join(tmpdir(), "async-registry-signal-exit-"));
   const timers = observeTimers(t, Date.parse("2026-08-31T10:35:00.000Z"));
   resetRoutingState();
-  shutdownInMemoryChildren();
+  shutdownInMemoryChildren(runtime);
   const locations = locationsFor("project", root);
   const context = createContext(root, "session-signal-exit", true);
   const pi = createPi();
@@ -1256,6 +1266,7 @@ test("records a signalled exit as silent completion", { concurrency: false }, as
 
   try {
     await spawnAndRegister(
+      runtime,
       createEntry(root, {
         handlerDecl: { type: "command", command: "/opt/hooks/signal", timeout: 600 },
       }),
@@ -1278,10 +1289,10 @@ test("records a signalled exit as silent completion", { concurrency: false }, as
     assert.deepStrictEqual(timers.clearHandles, timers.handles);
     assert.deepStrictEqual(await readPidTable(locations), []);
   } finally {
-    shutdownInMemoryChildren();
+    shutdownInMemoryChildren(runtime);
     resetRoutingState();
     destroyChild(child);
-    await reapOrphans(locations, deadOrphanProbes());
+    await reapOrphans(runtime, locations, deadOrphanProbes());
     await rm(root, { recursive: true, force: true, maxRetries: 3 });
   }
 });
@@ -1291,10 +1302,11 @@ test(
   { concurrency: false },
   async (t) => {
     // arrange
+    const runtime = createHooksRuntime();
     const root = await mkdtemp(path.join(tmpdir(), "async-registry-empty-exit-two-"));
     const timers = observeTimers(t, Date.parse("2026-08-31T10:40:00.000Z"));
     resetRoutingState();
-    shutdownInMemoryChildren();
+    shutdownInMemoryChildren(runtime);
     const locations = locationsFor("project", root);
     const context = createContext(root, "session-empty-exit-two", true);
     const pi = createPi();
@@ -1302,6 +1314,7 @@ test(
 
     try {
       await spawnAndRegister(
+        runtime,
         createEntry(root, {
           handlerDecl: { type: "command", command: "/opt/hooks/empty", timeout: 600 },
         }),
@@ -1325,10 +1338,10 @@ test(
       assert.deepStrictEqual(context.notifications, []);
       assert.deepStrictEqual(timers.clearHandles, timers.handles);
     } finally {
-      shutdownInMemoryChildren();
+      shutdownInMemoryChildren(runtime);
       resetRoutingState();
       destroyChild(child);
-      await reapOrphans(locations, deadOrphanProbes());
+      await reapOrphans(runtime, locations, deadOrphanProbes());
       await rm(root, { recursive: true, force: true, maxRetries: 3 });
     }
   },
@@ -1336,10 +1349,11 @@ test(
 
 test("injects ordered stdout on the busy follow-up lane", { concurrency: false }, async (t) => {
   // arrange
+  const runtime = createHooksRuntime();
   const root = await mkdtemp(path.join(tmpdir(), "async-registry-stdout-busy-"));
   const timers = observeTimers(t, Date.parse("2026-08-31T10:45:00.000Z"));
   resetRoutingState();
-  shutdownInMemoryChildren();
+  shutdownInMemoryChildren(runtime);
   const locations = locationsFor("project", root);
   const context = createContext(root, "session-stdout-busy", false);
   const pi = createPi();
@@ -1347,6 +1361,7 @@ test("injects ordered stdout on the busy follow-up lane", { concurrency: false }
 
   try {
     await spawnAndRegister(
+      runtime,
       createEntry(root, {
         handlerDecl: {
           type: "command",
@@ -1387,10 +1402,10 @@ test("injects ordered stdout on the busy follow-up lane", { concurrency: false }
     assert.deepStrictEqual(context.notifications, []);
     assert.deepStrictEqual(timers.clearHandles, timers.handles);
   } finally {
-    shutdownInMemoryChildren();
+    shutdownInMemoryChildren(runtime);
     resetRoutingState();
     destroyChild(child);
-    await reapOrphans(locations, deadOrphanProbes());
+    await reapOrphans(runtime, locations, deadOrphanProbes());
     await rm(root, { recursive: true, force: true, maxRetries: 3 });
   }
 });
@@ -1400,17 +1415,18 @@ test(
   { concurrency: false },
   async (t) => {
     // arrange
+    const runtime = createHooksRuntime();
     const root = await mkdtemp(path.join(tmpdir(), "async-registry-interleaved-"));
     const timers = observeTimers(t, Date.parse("2026-08-31T10:50:00.000Z"));
     resetRoutingState();
-    shutdownInMemoryChildren();
+    shutdownInMemoryChildren(runtime);
     const locations = locationsFor("project", root);
     const context = createContext(root, "session-interleaved", true);
     const pi = createPi();
     const child = createChild(24_691);
 
     try {
-      await spawnAndRegister(createEntry(root), {}, context.context, pi.pi, locations, {
+      await spawnAndRegister(runtime, createEntry(root), {}, context.context, pi.pi, locations, {
         spawnImpl: createSpawn(child.child, []),
         dispatchId: () => "dispatch-interleaved",
       });
@@ -1441,10 +1457,10 @@ test(
       assert.deepStrictEqual(context.notifications, [{ text: "scan complete", severity: "info" }]);
       assert.deepStrictEqual(timers.clearHandles, timers.handles);
     } finally {
-      shutdownInMemoryChildren();
+      shutdownInMemoryChildren(runtime);
       resetRoutingState();
       destroyChild(child);
-      await reapOrphans(locations, deadOrphanProbes());
+      await reapOrphans(runtime, locations, deadOrphanProbes());
       await rm(root, { recursive: true, force: true, maxRetries: 3 });
     }
   },
@@ -1455,10 +1471,11 @@ test(
   { concurrency: false },
   async (t) => {
     // arrange
+    const runtime = createHooksRuntime();
     const root = await mkdtemp(path.join(tmpdir(), "async-registry-truncated-"));
     const timers = observeTimers(t, Date.parse("2026-08-31T10:55:00.000Z"));
     resetRoutingState();
-    shutdownInMemoryChildren();
+    shutdownInMemoryChildren(runtime);
     const locations = locationsFor("project", root);
     const context = createContext(root, "session-truncated", true);
     const pi = createPi();
@@ -1466,7 +1483,7 @@ test(
     const survivingTail = "x".repeat(65_536);
 
     try {
-      await spawnAndRegister(createEntry(root), {}, context.context, pi.pi, locations, {
+      await spawnAndRegister(runtime, createEntry(root), {}, context.context, pi.pi, locations, {
         spawnImpl: createSpawn(child.child, []),
         dispatchId: () => "dispatch-truncated",
       });
@@ -1494,10 +1511,10 @@ test(
       assert.deepStrictEqual(context.notifications, [{ text: "scan complete", severity: "info" }]);
       assert.deepStrictEqual(timers.clearHandles, timers.handles);
     } finally {
-      shutdownInMemoryChildren();
+      shutdownInMemoryChildren(runtime);
       resetRoutingState();
       destroyChild(child);
-      await reapOrphans(locations, deadOrphanProbes());
+      await reapOrphans(runtime, locations, deadOrphanProbes());
       await rm(root, { recursive: true, force: true, maxRetries: 3 });
     }
   },
@@ -1508,10 +1525,11 @@ test(
   { concurrency: false },
   async (t) => {
     // arrange
+    const runtime = createHooksRuntime();
     const root = await mkdtemp(path.join(tmpdir(), "async-registry-exit-before-close-"));
     const timers = observeTimers(t, Date.parse("2026-08-31T11:00:00.000Z"));
     resetRoutingState();
-    shutdownInMemoryChildren();
+    shutdownInMemoryChildren(runtime);
     const locations = locationsFor("project", root);
     const context = createContext(root, "session-exit-before-close", true);
     const pi = createPi();
@@ -1519,6 +1537,7 @@ test(
 
     try {
       await spawnAndRegister(
+        runtime,
         createEntry(root, {
           handlerDecl: {
             type: "command",
@@ -1568,10 +1587,10 @@ test(
       assert.deepStrictEqual(context.notifications, []);
       assert.deepStrictEqual(timers.clearHandles, timers.handles);
     } finally {
-      shutdownInMemoryChildren();
+      shutdownInMemoryChildren(runtime);
       resetRoutingState();
       destroyChild(child);
-      await reapOrphans(locations, deadOrphanProbes());
+      await reapOrphans(runtime, locations, deadOrphanProbes());
       await rm(root, { recursive: true, force: true, maxRetries: 3 });
     }
   },
@@ -1582,10 +1601,11 @@ test(
   { concurrency: false },
   async (t) => {
     // arrange
+    const runtime = createHooksRuntime();
     const root = await mkdtemp(path.join(tmpdir(), "async-registry-notify-failure-"));
     const timers = observeTimers(t, Date.parse("2026-08-31T11:05:00.000Z"));
     resetRoutingState();
-    shutdownInMemoryChildren();
+    shutdownInMemoryChildren(runtime);
     const locations = locationsFor("project", root);
     const context = createContext(
       root,
@@ -1597,7 +1617,7 @@ test(
     const child = createChild(24_694);
 
     try {
-      await spawnAndRegister(createEntry(root), {}, context.context, pi.pi, locations, {
+      await spawnAndRegister(runtime, createEntry(root), {}, context.context, pi.pi, locations, {
         spawnImpl: createSpawn(child.child, []),
         dispatchId: () => "dispatch-notify-failure",
       });
@@ -1614,10 +1634,10 @@ test(
       assert.deepStrictEqual(timers.clearHandles, timers.handles);
       assert.deepStrictEqual(await readPidTable(locations), []);
     } finally {
-      shutdownInMemoryChildren();
+      shutdownInMemoryChildren(runtime);
       resetRoutingState();
       destroyChild(child);
-      await reapOrphans(locations, deadOrphanProbes());
+      await reapOrphans(runtime, locations, deadOrphanProbes());
       await rm(root, { recursive: true, force: true, maxRetries: 3 });
     }
   },
@@ -1628,10 +1648,11 @@ test(
   { concurrency: false },
   async (t) => {
     // arrange
+    const runtime = createHooksRuntime();
     const root = await mkdtemp(path.join(tmpdir(), "async-registry-send-failure-"));
     const timers = observeTimers(t, Date.parse("2026-08-31T11:10:00.000Z"));
     resetRoutingState();
-    shutdownInMemoryChildren();
+    shutdownInMemoryChildren(runtime);
     const locations = locationsFor("project", root);
     const context = createContext(root, "session-send-failure", true);
     const pi = createPi();
@@ -1640,6 +1661,7 @@ test(
 
     try {
       await spawnAndRegister(
+        runtime,
         createEntry(root, {
           handlerDecl: {
             type: "command",
@@ -1669,10 +1691,10 @@ test(
       assert.deepStrictEqual(timers.clearHandles, timers.handles);
       assert.deepStrictEqual(await readPidTable(locations), []);
     } finally {
-      shutdownInMemoryChildren();
+      shutdownInMemoryChildren(runtime);
       resetRoutingState();
       destroyChild(child);
-      await reapOrphans(locations, deadOrphanProbes());
+      await reapOrphans(runtime, locations, deadOrphanProbes());
       await rm(root, { recursive: true, force: true, maxRetries: 3 });
     }
   },
@@ -1683,23 +1705,24 @@ test(
   { concurrency: false },
   async (t) => {
     // arrange
+    const runtime = createHooksRuntime();
     const root = await mkdtemp(path.join(tmpdir(), "async-registry-stale-epoch-"));
     const timers = observeTimers(t, Date.parse("2026-08-31T11:15:00.000Z"));
     resetRoutingState();
-    shutdownInMemoryChildren();
+    shutdownInMemoryChildren(runtime);
     const locations = locationsFor("project", root);
     const context = createContext(root, "session-stale-epoch", true);
     const pi = createPi();
     const child = createChild(24_696);
 
     try {
-      await spawnAndRegister(createEntry(root), {}, context.context, pi.pi, locations, {
+      await spawnAndRegister(runtime, createEntry(root), {}, context.context, pi.pi, locations, {
         spawnImpl: createSpawn(child.child, []),
         dispatchId: () => "dispatch-stale-epoch",
       });
       child.stderr.end("stale output");
       await once(child.stderr, "end");
-      bumpEpoch();
+      runtime.advanceGeneration();
 
       // act
       child.emitExit(2);
@@ -1713,10 +1736,10 @@ test(
       assert.deepStrictEqual(timers.clearHandles, timers.handles);
       assert.deepStrictEqual(await readPidTable(locations), []);
     } finally {
-      shutdownInMemoryChildren();
+      shutdownInMemoryChildren(runtime);
       resetRoutingState();
       destroyChild(child);
-      await reapOrphans(locations, deadOrphanProbes());
+      await reapOrphans(runtime, locations, deadOrphanProbes());
       await rm(root, { recursive: true, force: true, maxRetries: 3 });
     }
   },
@@ -1727,10 +1750,11 @@ test(
   { concurrency: false, timeout: 10_000 },
   async (t) => {
     // arrange
+    const runtime = createHooksRuntime();
     const root = await mkdtemp(path.join(tmpdir(), "async-registry-persist-order-"));
     const timers = observeTimers(t, Date.parse("2026-08-31T11:20:00.000Z"));
     resetRoutingState();
-    shutdownInMemoryChildren();
+    shutdownInMemoryChildren(runtime);
     const locations = locationsFor("project", root);
     const context = createContext(root, "session-persist-order", true);
     const pi = createPi();
@@ -1742,6 +1766,7 @@ test(
 
     try {
       firstSpawn = spawnAndRegister(
+        runtime,
         createEntry(root, {
           pluginId: "plugin-first",
           handlerDecl: { type: "command", command: "/opt/hooks/first", timeout: 600 },
@@ -1772,6 +1797,7 @@ test(
         return child;
       }) as NonNullable<SpawnDeps["spawnImpl"]>;
       secondSpawn = spawnAndRegister(
+        runtime,
         createEntry(root, {
           pluginId: "plugin-second",
           handlerDecl: { type: "command", command: "/opt/hooks/second", timeout: 600 },
@@ -1840,11 +1866,11 @@ test(
       await Promise.allSettled(
         [firstSpawn, secondSpawn].filter((value): value is Promise<void> => value !== undefined),
       );
-      shutdownInMemoryChildren();
+      shutdownInMemoryChildren(runtime);
       resetRoutingState();
       destroyChild(firstChild);
       destroyChild(secondChild);
-      await reapOrphans(locations, deadOrphanProbes());
+      await reapOrphans(runtime, locations, deadOrphanProbes());
       await rm(root, { recursive: true, force: true, maxRetries: 3 });
     }
   },
@@ -1855,10 +1881,11 @@ test(
   { concurrency: false, timeout: 10_000 },
   async (t) => {
     // arrange
+    const runtime = createHooksRuntime();
     const root = await mkdtemp(path.join(tmpdir(), "async-registry-persist-failure-"));
     const timers = observeTimers(t, Date.parse("2026-08-31T11:22:00.000Z"));
     resetRoutingState();
-    shutdownInMemoryChildren();
+    shutdownInMemoryChildren(runtime);
     const locations = locationsFor("project", root);
     const context = createContext(root, "session-persist-failure", true);
     const pi = createPi();
@@ -1877,6 +1904,7 @@ test(
 
     try {
       firstSpawn = spawnAndRegister(
+        runtime,
         createEntry(root, {
           pluginId: "plugin-failing-first",
           handlerDecl: { type: "command", command: "/opt/hooks/failing-first", timeout: 600 },
@@ -1907,6 +1935,7 @@ test(
         return child;
       }) as NonNullable<SpawnDeps["spawnImpl"]>;
       secondSpawn = spawnAndRegister(
+        runtime,
         createEntry(root, {
           pluginId: "plugin-surviving-second",
           handlerDecl: { type: "command", command: "/opt/hooks/surviving-second", timeout: 600 },
@@ -1923,7 +1952,7 @@ test(
       );
       await secondSpawned;
       firstChild.emitError(new Error("case-owned terminal cleanup"));
-      orphanCleanup = reapOrphans(locations, deadOrphanProbes());
+      orphanCleanup = reapOrphans(runtime, locations, deadOrphanProbes());
       assert.strictEqual(persistence.writesStarted, 1);
 
       // act
@@ -1936,7 +1965,7 @@ test(
       await new Promise<void>((resolve) => {
         setImmediate(resolve);
       });
-      shutdownInMemoryChildren();
+      shutdownInMemoryChildren(runtime);
       t.mock.timers.tick(605_000);
 
       // assert
@@ -1975,11 +2004,11 @@ test(
           (value): value is Promise<void> => value !== undefined,
         ),
       );
-      shutdownInMemoryChildren();
+      shutdownInMemoryChildren(runtime);
       resetRoutingState();
       destroyChild(firstChild);
       destroyChild(secondChild);
-      await reapOrphans(locations, deadOrphanProbes());
+      await reapOrphans(runtime, locations, deadOrphanProbes());
       await rm(root, { recursive: true, force: true, maxRetries: 3 });
       await new Promise<void>((resolve) => {
         setImmediate(resolve);
@@ -1994,10 +2023,11 @@ test(
   { concurrency: false },
   async (t) => {
     // arrange
+    const runtime = createHooksRuntime();
     const root = await mkdtemp(path.join(tmpdir(), "async-registry-same-root-"));
     const timers = observeTimers(t, Date.parse("2026-08-31T11:20:00.000Z"));
     resetRoutingState();
-    shutdownInMemoryChildren();
+    shutdownInMemoryChildren(runtime);
     const firstLocations = locationsFor("project", root);
     const equalRootLocations = locationsFor("project", root);
     const context = createContext(root, "session-same-root", true);
@@ -2007,6 +2037,7 @@ test(
 
     try {
       await spawnAndRegister(
+        runtime,
         createEntry(root, {
           pluginId: "plugin-first",
           handlerDecl: { type: "command", command: "/opt/hooks/first", timeout: 600 },
@@ -2018,6 +2049,7 @@ test(
         { spawnImpl: createSpawn(firstChild.child, []), dispatchId: () => "dispatch-first" },
       );
       await spawnAndRegister(
+        runtime,
         createEntry(root, {
           pluginId: "plugin-second",
           handlerDecl: { type: "command", command: "/opt/hooks/second", timeout: 600 },
@@ -2077,11 +2109,11 @@ test(
       assert.deepStrictEqual(pi.messages, []);
       assert.deepStrictEqual(context.notifications, []);
     } finally {
-      shutdownInMemoryChildren();
+      shutdownInMemoryChildren(runtime);
       resetRoutingState();
       destroyChild(firstChild);
       destroyChild(secondChild);
-      await reapOrphans(firstLocations, deadOrphanProbes());
+      await reapOrphans(runtime, firstLocations, deadOrphanProbes());
       await rm(root, { recursive: true, force: true, maxRetries: 3 });
     }
   },
@@ -2092,6 +2124,7 @@ test(
   { concurrency: false },
   async (t) => {
     // arrange
+    const runtime = createHooksRuntime();
     const root = await mkdtemp(path.join(tmpdir(), "async-registry-cross-scope-"));
     const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
     t.after(() => {
@@ -2105,7 +2138,7 @@ test(
     process.env.PI_CODING_AGENT_DIR = agentRoot;
     const timers = observeTimers(t, Date.parse("2026-08-31T11:25:00.000Z"));
     resetRoutingState();
-    shutdownInMemoryChildren();
+    shutdownInMemoryChildren(runtime);
     const userLocations = locationsFor("user", root);
     const projectLocations = locationsFor("project", root);
     const userContext = createContext(root, "session-user-scope", true);
@@ -2116,6 +2149,7 @@ test(
 
     try {
       await spawnAndRegister(
+        runtime,
         createEntry(root, {
           scope: "user",
           marketplace: "catalog-user",
@@ -2129,6 +2163,7 @@ test(
         { spawnImpl: createSpawn(userChild.child, []), dispatchId: () => "dispatch-user" },
       );
       await spawnAndRegister(
+        runtime,
         createEntry(root, {
           scope: "project",
           marketplace: "catalog-project",
@@ -2145,11 +2180,11 @@ test(
       const projectEntries = await readPidTable(projectLocations);
 
       // act
-      shutdownInMemoryChildren();
-      shutdownInMemoryChildren();
+      shutdownInMemoryChildren(runtime);
+      shutdownInMemoryChildren(runtime);
       t.mock.timers.tick(605_000);
-      await reapOrphans(userLocations, deadOrphanProbes());
-      await reapOrphans(projectLocations, deadOrphanProbes());
+      await reapOrphans(runtime, userLocations, deadOrphanProbes());
+      await reapOrphans(runtime, projectLocations, deadOrphanProbes());
       const userTableState = await stat(pidTablePath(userLocations)).catch(filesystemErrorCode);
       const projectTableState = await stat(pidTablePath(projectLocations)).catch(
         filesystemErrorCode,
@@ -2186,12 +2221,12 @@ test(
       assert.deepStrictEqual(userContext.notifications, []);
       assert.deepStrictEqual(projectContext.notifications, []);
     } finally {
-      shutdownInMemoryChildren();
+      shutdownInMemoryChildren(runtime);
       resetRoutingState();
       destroyChild(userChild);
       destroyChild(projectChild);
-      await reapOrphans(userLocations, deadOrphanProbes());
-      await reapOrphans(projectLocations, deadOrphanProbes());
+      await reapOrphans(runtime, userLocations, deadOrphanProbes());
+      await reapOrphans(runtime, projectLocations, deadOrphanProbes());
       await rm(root, { recursive: true, force: true, maxRetries: 3 });
     }
   },
@@ -2199,9 +2234,10 @@ test(
 
 test("uses the real spawn and generated dispatch ID at the default boundary", async () => {
   // arrange
+  const runtime = createHooksRuntime();
   const root = await mkdtemp(path.join(tmpdir(), "async-registry-default-spawn-"));
   resetRoutingState();
-  shutdownInMemoryChildren();
+  shutdownInMemoryChildren(runtime);
   const locations = locationsFor("project", root);
   const context = createContext(root, "session-default-spawn", true);
   const pi = createPi();
@@ -2217,10 +2253,10 @@ test("uses the real spawn and generated dispatch ID at the default boundary", as
 
   try {
     // act
-    await spawnAndRegister(entry, {}, context.context, pi.pi, locations);
+    await spawnAndRegister(runtime, entry, {}, context.context, pi.pi, locations);
     const registeredEntries = await readPidTable(locations);
-    shutdownInMemoryChildren();
-    await reapOrphans(locations, deadOrphanProbes());
+    shutdownInMemoryChildren(runtime);
+    await reapOrphans(runtime, locations, deadOrphanProbes());
     const tableState = await stat(pidTablePath(locations)).catch(filesystemErrorCode);
 
     // assert
@@ -2246,9 +2282,9 @@ test("uses the real spawn and generated dispatch ID at the default boundary", as
     assert.deepStrictEqual(pi.messages, []);
     assert.deepStrictEqual(context.notifications, []);
   } finally {
-    shutdownInMemoryChildren();
+    shutdownInMemoryChildren(runtime);
     resetRoutingState();
-    await reapOrphans(locations, deadOrphanProbes());
+    await reapOrphans(runtime, locations, deadOrphanProbes());
     await rm(root, { recursive: true, force: true, maxRetries: 3 });
   }
 });
@@ -2270,6 +2306,7 @@ test(
   { concurrency: false },
   async (t) => {
     // arrange
+    const runtime = createHooksRuntime();
     const root = await mkdtemp(path.join(tmpdir(), "async-registry-orphan-owned-"));
     setCasePlatform(t, "linux");
     const locations = locationsFor("project", root);
@@ -2301,7 +2338,7 @@ test(
 
     try {
       // act
-      await reapOrphans(locations, probes);
+      await reapOrphans(runtime, locations, probes);
       const tableState = await stat(pidTablePath(locations)).catch(filesystemErrorCode);
 
       // assert
@@ -2322,6 +2359,7 @@ test(
   { concurrency: false },
   async (t) => {
     // arrange
+    const runtime = createHooksRuntime();
     const root = await mkdtemp(path.join(tmpdir(), "async-registry-orphan-mismatch-"));
     setCasePlatform(t, "linux");
     const locations = locationsFor("project", root);
@@ -2357,7 +2395,7 @@ test(
 
     try {
       // act
-      await reapOrphans(locations, probes);
+      await reapOrphans(runtime, locations, probes);
       const tableState = await stat(pidTablePath(locations)).catch(filesystemErrorCode);
 
       // assert
@@ -2377,6 +2415,7 @@ test(
   { concurrency: false },
   async (t) => {
     // arrange
+    const runtime = createHooksRuntime();
     const root = await mkdtemp(path.join(tmpdir(), "async-registry-orphan-read-failure-"));
     setCasePlatform(t, "linux");
     const locations = locationsFor("project", root);
@@ -2402,7 +2441,7 @@ test(
 
     try {
       // act
-      await reapOrphans(locations, probes);
+      await reapOrphans(runtime, locations, probes);
       const tableState = await stat(pidTablePath(locations)).catch(filesystemErrorCode);
 
       // assert
@@ -2419,6 +2458,7 @@ test(
   { concurrency: false },
   async (t) => {
     // arrange
+    const runtime = createHooksRuntime();
     const root = await mkdtemp(path.join(tmpdir(), "async-registry-orphan-permission-"));
     setCasePlatform(t, "linux");
     const locations = locationsFor("project", root);
@@ -2449,7 +2489,7 @@ test(
 
     try {
       // act
-      await reapOrphans(locations, probes);
+      await reapOrphans(runtime, locations, probes);
       const tableState = await stat(pidTablePath(locations)).catch(filesystemErrorCode);
 
       // assert
@@ -2466,6 +2506,7 @@ test(
 
 test("skips dead and unprobeable orphan PIDs", { concurrency: false }, async (t) => {
   // arrange
+  const runtime = createHooksRuntime();
   const root = await mkdtemp(path.join(tmpdir(), "async-registry-orphan-dead-"));
   setCasePlatform(t, "linux");
   const locations = locationsFor("project", root);
@@ -2504,7 +2545,7 @@ test("skips dead and unprobeable orphan PIDs", { concurrency: false }, async (t)
 
   try {
     // act
-    await reapOrphans(locations, probes);
+    await reapOrphans(runtime, locations, probes);
     const tableState = await stat(pidTablePath(locations)).catch(filesystemErrorCode);
 
     // assert
@@ -2523,6 +2564,7 @@ test(
   { concurrency: false },
   async (t) => {
     // arrange
+    const runtime = createHooksRuntime();
     const root = await mkdtemp(path.join(tmpdir(), "async-registry-orphan-nonlinux-"));
     setCasePlatform(t, "darwin");
     const locations = locationsFor("project", root);
@@ -2548,7 +2590,7 @@ test(
 
     try {
       // act
-      await reapOrphans(locations, probes);
+      await reapOrphans(runtime, locations, probes);
       const tableState = await stat(pidTablePath(locations)).catch(filesystemErrorCode);
 
       // assert
@@ -2565,6 +2607,7 @@ test(
   { concurrency: false },
   async (t) => {
     // arrange
+    const runtime = createHooksRuntime();
     const root = await mkdtemp(path.join(tmpdir(), "async-registry-orphan-kill-failure-"));
     setCasePlatform(t, "linux");
     const locations = locationsFor("project", root);
@@ -2593,7 +2636,7 @@ test(
 
     try {
       // act
-      await reapOrphans(locations, probes);
+      await reapOrphans(runtime, locations, probes);
       const tableState = await stat(pidTablePath(locations)).catch(filesystemErrorCode);
 
       // assert
@@ -2613,6 +2656,7 @@ test(
   { concurrency: false },
   async (t) => {
     // arrange
+    const runtime = createHooksRuntime();
     const root = await mkdtemp(path.join(tmpdir(), "async-registry-default-probes-"));
     setCasePlatform(t, "linux");
     const locations = locationsFor("project", root);
@@ -2634,7 +2678,7 @@ test(
 
     try {
       // act
-      await reapOrphans(locations);
+      await reapOrphans(runtime, locations);
       const tableState = await stat(pidTablePath(locations)).catch(filesystemErrorCode);
 
       // assert

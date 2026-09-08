@@ -869,7 +869,7 @@ async function registerHooksBridgeWith(
   // the prior factory invocation BEFORE the persisted-orphan reap reads
   // the PID table. The in-memory walk covers same-process /reload
   // cycles; reapOrphans below covers cross-process crash recovery.
-  shutdownInMemoryChildren();
+  shutdownInMemoryChildren(owner.runtime);
 
   const hydrated = await hydrateCacheFromDisk(opts, reader, routingState);
   for (const { loc } of hydrated) {
@@ -902,7 +902,7 @@ async function registerHooksBridgeWith(
     // NEVER kill strangers), SIGKILL surviving owned PIDs, unlink the
     // table. Awaited so the pi.on registrations below cannot race
     // against an in-flight kill probe.
-    await reapOrphans(loc);
+    await reapOrphans(owner.runtime, loc);
   }
 
   // SessionStart dispatch with lazy project-scope hydrate. Pi fires

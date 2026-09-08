@@ -533,6 +533,7 @@ describe("matcherFiresOnClosedSetValue", () => {
 describe("collectBucketOutcomes", () => {
   test("preserves matching observation order while degrading async rewake to noop", async () => {
     // arrange
+    const runtime = createHooksRuntime();
     const cwd = "/workspace/dispatch-collection";
     const context = createExtensionContext(cwd);
     const compileContext = { homedir: "/home/tester", cwd, projectRoot: cwd };
@@ -657,6 +658,7 @@ describe("collectBucketOutcomes", () => {
 
     // act
     const outcomes = await collectBucketOutcomes(
+      runtime,
       bucket,
       event,
       context,
@@ -672,11 +674,13 @@ describe("collectBucketOutcomes", () => {
 
   test("returns an empty outcome list for an empty bucket", async () => {
     // arrange
+    const runtime = createHooksRuntime();
     const context = createExtensionContext("/workspace/dispatch-empty-collection");
     const expectedOutcomes: readonly [] = [];
 
     // act
     const outcomes = await collectBucketOutcomes(
+      runtime,
       [],
       { phase: "stop" },
       context,

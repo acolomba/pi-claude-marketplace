@@ -243,7 +243,15 @@ async function runStopBucket(
     // bridge-driven continuation loop.
     stop_hook_active: runtime.isStopHookActive(),
   };
-  const outcomes = await collectBucketOutcomes(bucket, event, ctx, pi, () => true, executor);
+  const outcomes = await collectBucketOutcomes(
+    runtime,
+    bucket,
+    event,
+    ctx,
+    pi,
+    () => true,
+    executor,
+  );
 
   // A /reload while the bucket's hooks were running advanced the generation and reset
   // the settle state; bail before any loop-state mutation or re-entry.
@@ -330,6 +338,7 @@ async function runStopFailure(
   // is literal equality against the classified error (the shared
   // `matcherFiresOnClosedSetValue` predicate).
   await collectBucketOutcomes(
+    runtime,
     bucket,
     event,
     ctx,

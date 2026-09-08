@@ -24,7 +24,6 @@ import {
 import { adaptObservationResultForEvent } from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts";
 import {
   addPluginConfigToCache,
-  beforeAgentStartHandlerFor,
   createBeforeAgentStartHandler,
   createHooksHydration,
   hydrateProjectScopeForCwd,
@@ -35,8 +34,6 @@ import {
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
 import { MATCH_ALL_IF } from "../../../extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts";
 import {
-  appendPendingSessionStartContext,
-  currentEpoch,
   getRoutingBucket,
   parsedConfigEntries,
   pendingSessionStartContextEntries,
@@ -49,7 +46,10 @@ import { type BucketAEvent } from "../../../extensions/pi-claude-marketplace/dom
 import { parseMatcher } from "../../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
-import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import {
+  loadState,
+  saveState,
+} from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
 import type { SpawnDeps } from "../../../extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts";
 import type { HookExecutor } from "../../../extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts";
@@ -90,6 +90,8 @@ test(
   { concurrency: false },
   async (t) => {
     // arrange
+    const runtime = createHooksRuntime();
+    const hydration = createHooksHydration(runtime, { loadState });
     const root = await mkdtemp(path.join(tmpdir(), "hooks-router-reload-"));
     const projectRoot = path.join(root, "project");
     const userAgentRoot = path.join(root, "user-agent");
@@ -98,7 +100,7 @@ test(
     process.env.HOME = path.join(root, "home");
     process.env.PI_CODING_AGENT_DIR = userAgentRoot;
     t.after(async () => {
-      shutdownInMemoryChildren();
+      shutdownInMemoryChildren(runtime);
       resetRoutingState();
       if (originalHome === undefined) {
         delete process.env.HOME;
@@ -114,7 +116,7 @@ test(
 
       await rm(root, { recursive: true, force: true, maxRetries: 3 });
     });
-    shutdownInMemoryChildren();
+    shutdownInMemoryChildren(runtime);
     const userLocations = locationsFor("user", projectRoot);
     const projectLocations = locationsFor("project", projectRoot);
     const userHooksPath = path.join(userLocations.hooksDir, "user-hooks", "hooks.json");
@@ -264,15 +266,15 @@ test(
       return Promise.resolve({ kind: "noop" });
     };
 
-    await registerHooksBridge(pi, { ctx: context, cwd: projectRoot, executor });
-    const previousEpoch = currentEpoch();
+    await hydration.registerHooksBridge(pi, { ctx: context, cwd: projectRoot, executor });
+    const previousEpoch = runtime.currentGeneration();
     const staleToolCallHandler = registrations.find(({ event }) => event === "tool_call")?.handler;
     const staleAgentEndHandler = registrations.find(({ event }) => event === "agent_end")?.handler;
     const staleAgentSettledHandler = registrations.find(
       ({ event }) => event === "agent_settled",
     )?.handler;
     registrations.length = 0;
-    appendPendingSessionStartContext({
+    runtime.appendPendingSessionStartContext({
       context: "stale context",
       scope: "user",
       marketplace: "user-catalog",
@@ -316,9 +318,9 @@ test(
       spawnargs: [],
       spawnfile: "",
       kill(signal?: NodeJS.Signals | number): boolean {
-        assert.strictEqual(currentEpoch(), previousEpoch + 1);
+        assert.strictEqual(runtime.currentGeneration(), previousEpoch + 1);
         operationLog.push("epoch:bumped");
-        assert.deepStrictEqual(pendingSessionStartContextEntries(), []);
+        assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), []);
         operationLog.push("pending:reset");
         const settleResult =
           typeof staleAgentSettledHandler === "function"
@@ -372,7 +374,7 @@ test(
       toolName: "bash",
       input: { command: "printf reload" },
     } satisfies ToolCallEvent;
-    await spawnAndRegister(asyncEntry, toolCall, context, pi, userLocations, {
+    await spawnAndRegister(runtime, asyncEntry, toolCall, context, pi, userLocations, {
       spawnImpl,
       dispatchId: () => "router-in-memory-child",
     });
@@ -474,14 +476,14 @@ test(
     traceReload = true;
 
     // act
-    await registerHooksBridge(pi, { ctx: context, cwd: projectRoot, executor });
+    await hydration.registerHooksBridge(pi, { ctx: context, cwd: projectRoot, executor });
     const persistedOrphanOutcome = await persistedOrphanExit;
     await Promise.all(settleResetPromises);
     if (typeof staleToolCallHandler === "function") {
       await Reflect.apply(staleToolCallHandler, undefined, [toolCall, context]);
     }
 
-    const staleBeforeAgentResult = await beforeAgentStartHandlerFor(previousEpoch)(
+    const staleBeforeAgentResult = await createBeforeAgentStartHandler(runtime, previousEpoch)(
       {
         type: "before_agent_start",
         prompt: "",
@@ -492,34 +494,34 @@ test(
     );
     assert.strictEqual(staleBeforeAgentResult, undefined);
 
-    const cacheAfterReload = Array.from(parsedConfigEntries().values()).map((entry) => ({
+    const cacheAfterReload = Array.from(runtime.parsedConfigEntries().values()).map((entry) => ({
       scope: entry.scope,
       marketplace: entry.marketplace,
       pluginId: entry.pluginId,
       resolvedSource: entry.resolvedSource,
     }));
-    const epochAfterReload = currentEpoch();
-    const pendingAfterReload = [...pendingSessionStartContextEntries()];
+    const epochAfterReload = runtime.currentGeneration();
+    const pendingAfterReload = [...runtime.pendingSessionStartContextEntries()];
     const orphanTableExistsAfterReload = fs.existsSync(pidTablePath(projectLocations));
     const routesAfterReload = {
-      preToolUse: getRoutingBucket("PreToolUse").map((entry) => ({
+      preToolUse: runtime.getRoutingBucket("PreToolUse").map((entry) => ({
         scope: entry.scope,
         pluginId: entry.pluginId,
         command: entry.handlerDecl.command,
       })),
-      sessionStart: getRoutingBucket("SessionStart").map((entry) => ({
+      sessionStart: runtime.getRoutingBucket("SessionStart").map((entry) => ({
         scope: entry.scope,
         pluginId: entry.pluginId,
         command: entry.handlerDecl.command,
       })),
     };
-    shutdownInMemoryChildren();
+    shutdownInMemoryChildren(runtime);
     resetRoutingState();
     const stateAfterCleanup = {
-      epoch: currentEpoch(),
-      cache: Array.from(parsedConfigEntries()),
-      routes: Array.from(routingTableEntries()),
-      pending: [...pendingSessionStartContextEntries()],
+      epoch: runtime.currentGeneration(),
+      cache: Array.from(runtime.parsedConfigEntries()),
+      routes: Array.from(runtime.routingTableEntries()),
+      pending: [...runtime.pendingSessionStartContextEntries()],
     };
 
     // assert
@@ -743,7 +745,6 @@ function registeredHandler(
 function ownRoutingState(t: TestContext): void {
   resetRoutingState();
   t.after(() => {
-    shutdownInMemoryChildren();
     resetRoutingState();
   });
 }

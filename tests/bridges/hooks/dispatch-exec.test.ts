@@ -11,6 +11,7 @@ import { mock, verify } from "strong-mock";
 
 import { dispatchHookExec } from "../../../extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts";
 import { MATCH_ALL_IF } from "../../../extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts";
+import { createHooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 
 import type { HookExecResult } from "../../../extensions/pi-claude-marketplace/bridges/hooks/exec-result.ts";
@@ -33,6 +34,7 @@ import type { SpawnOptions } from "node:child_process";
 
 test("executes a blocking hook through the portable process boundary", async (t) => {
   // arrange
+  const runtime = createHooksRuntime();
   const caseRoot = await mkdtemp(path.join(tmpdir(), "dispatch-exec-portable-"));
   const agentDir = path.join(caseRoot, "agent");
   const cwd = path.join(caseRoot, "workspace");
@@ -259,7 +261,7 @@ test("executes a blocking hook through the portable process boundary", async (t)
   } satisfies HookExecResult;
 
   // act
-  const hookOutcome = await dispatchHookExec(entry, event, extensionContext);
+  const hookOutcome = await dispatchHookExec(entry, event, extensionContext, undefined, runtime);
   const stdout = await readFile(stdoutCapturePath, "utf8");
   const stderr = await readFile(stderrCapturePath, "utf8");
   const childObservation =
@@ -784,6 +786,7 @@ for (const translatorCase of TRANSLATOR_CASES) {
     "dispatches the " + translatorCase.claudeEvent + " translator with exact stdin bytes",
     async (t) => {
       // arrange
+      const runtime = createHooksRuntime();
       const caseRoot = await makeCaseRoot(t, "dispatch-translator-");
       const processChild = makeInjectedChild(t);
       const processBoundary = observeSpawn(t, processChild);
@@ -800,7 +803,7 @@ for (const translatorCase of TRANSLATOR_CASES) {
       const expectedStdin = JSON.stringify(expectedPayload);
 
       // act
-      const pendingOutcome = dispatchHookExec(entry, event, context, undefined, {
+      const pendingOutcome = dispatchHookExec(entry, event, context, undefined, runtime, {
         spawnImpl: processBoundary.spawnImpl,
       });
       await processBoundary.spawned;
@@ -826,6 +829,7 @@ for (const translatorCase of TRANSLATOR_CASES) {
       JSON.stringify(translatorCase.requiredFields),
     async (t) => {
       // arrange
+      const runtime = createHooksRuntime();
       const caseRoot = await makeCaseRoot(t, "dispatch-required-fields-");
       const errorSpy = observeDebug(t);
       const processChild = makeInjectedChild(t);
@@ -833,9 +837,16 @@ for (const translatorCase of TRANSLATOR_CASES) {
       const entry = makeEntry(caseRoot, { claudeEvent: translatorCase.claudeEvent });
 
       // act
-      const pendingOutcome = dispatchHookExec(entry, {}, makeContext(caseRoot), undefined, {
-        spawnImpl: processBoundary.spawnImpl,
-      });
+      const pendingOutcome = dispatchHookExec(
+        entry,
+        {},
+        makeContext(caseRoot),
+        undefined,
+        runtime,
+        {
+          spawnImpl: processBoundary.spawnImpl,
+        },
+      );
       await processBoundary.spawned;
       await processChild.close(0);
       const hookOutcome = await pendingOutcome;
@@ -863,6 +874,7 @@ for (const translatorCase of TRANSLATOR_CASES) {
 
 test("contains a null unknown payload with diagnostics and no child", async (t) => {
   // arrange
+  const runtime = createHooksRuntime();
   const caseRoot = await makeCaseRoot(t, "dispatch-null-payload-");
   const errorSpy = observeDebug(t);
   const processChild = makeInjectedChild(t);
@@ -870,9 +882,16 @@ test("contains a null unknown payload with diagnostics and no child", async (t) 
   const entry = makeEntry(caseRoot, { claudeEvent: "UserPromptSubmit" });
 
   // act
-  const hookOutcome = await dispatchHookExec(entry, null, makeContext(caseRoot), undefined, {
-    spawnImpl: processBoundary.spawnImpl,
-  });
+  const hookOutcome = await dispatchHookExec(
+    entry,
+    null,
+    makeContext(caseRoot),
+    undefined,
+    runtime,
+    {
+      spawnImpl: processBoundary.spawnImpl,
+    },
+  );
   const lines = debugLines(errorSpy);
 
   // assert
@@ -900,6 +919,7 @@ test("contains a null unknown payload with diagnostics and no child", async (t) 
 
 test("diagnoses a non-object unknown payload while containing its partial child payload", async (t) => {
   // arrange
+  const runtime = createHooksRuntime();
   const caseRoot = await makeCaseRoot(t, "dispatch-number-payload-");
   const errorSpy = observeDebug(t);
   const processChild = makeInjectedChild(t);
@@ -907,7 +927,7 @@ test("diagnoses a non-object unknown payload while containing its partial child 
   const entry = makeEntry(caseRoot, { claudeEvent: "UserPromptSubmit" });
 
   // act
-  const pendingOutcome = dispatchHookExec(entry, 42, makeContext(caseRoot), undefined, {
+  const pendingOutcome = dispatchHookExec(entry, 42, makeContext(caseRoot), undefined, runtime, {
     spawnImpl: processBoundary.spawnImpl,
   });
   await processBoundary.spawned;
@@ -935,6 +955,7 @@ test("diagnoses a non-object unknown payload while containing its partial child 
 
 test("contains a wrong-shape payload whose required property throws", async (t) => {
   // arrange
+  const runtime = createHooksRuntime();
   const caseRoot = await makeCaseRoot(t, "dispatch-wrong-shape-");
   const errorSpy = observeDebug(t);
   const processChild = makeInjectedChild(t);
@@ -948,9 +969,16 @@ test("contains a wrong-shape payload whose required property throws", async (t) 
   };
 
   // act
-  const hookOutcome = await dispatchHookExec(entry, event, makeContext(caseRoot), undefined, {
-    spawnImpl: processBoundary.spawnImpl,
-  });
+  const hookOutcome = await dispatchHookExec(
+    entry,
+    event,
+    makeContext(caseRoot),
+    undefined,
+    runtime,
+    {
+      spawnImpl: processBoundary.spawnImpl,
+    },
+  );
   const lines = debugLines(errorSpy);
 
   // assert
@@ -973,6 +1001,7 @@ test("contains a wrong-shape payload whose required property throws", async (t) 
 
 test("delegates only literal async true and preserves absent async stdin", async (t) => {
   // arrange
+  const runtime = createHooksRuntime();
   const caseRoot = await makeCaseRoot(t, "dispatch-async-");
   const processChild = makeInjectedChild(t, { stdin: null, pid: 52_101 });
   const processBoundary = observeSpawn(t, processChild);
@@ -991,7 +1020,7 @@ test("delegates only literal async true and preserves absent async stdin", async
   } satisfies InputEvent;
 
   // act
-  const hookOutcome = await dispatchHookExec(entry, event, makeContext(caseRoot), pi, {
+  const hookOutcome = await dispatchHookExec(entry, event, makeContext(caseRoot), pi, runtime, {
     spawnImpl: processBoundary.spawnImpl,
     dispatchId: () => "dispatch-async-1",
   });
@@ -1027,6 +1056,7 @@ test("delegates only literal async true and preserves absent async stdin", async
 
 test("noops async dispatch without Pi before resolving locations or spawning", async (t) => {
   // arrange
+  const runtime = createHooksRuntime();
   const caseRoot = await makeCaseRoot(t, "dispatch-async-no-pi-");
   const errorSpy = observeDebug(t);
   const processChild = makeInjectedChild(t);
@@ -1042,6 +1072,7 @@ test("noops async dispatch without Pi before resolving locations or spawning", a
     { type: "session_start", reason: "startup" } satisfies SessionStartEvent,
     makeContext(caseRoot),
     undefined,
+    runtime,
     { spawnImpl: processBoundary.spawnImpl },
   );
   const lines = debugLines(errorSpy);
@@ -1062,6 +1093,7 @@ test("noops async dispatch without Pi before resolving locations or spawning", a
 
 test("contains a rejected async spawn delegation and returns noop", async (t) => {
   // arrange
+  const runtime = createHooksRuntime();
   const caseRoot = await makeCaseRoot(t, "dispatch-async-rejection-");
   const errorSpy = observeDebug(t);
   const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension api" });
@@ -1082,6 +1114,7 @@ test("contains a rejected async spawn delegation and returns noop", async (t) =>
     { type: "input", text: "rejected", source: "interactive" } satisfies InputEvent,
     makeContext(caseRoot),
     pi,
+    runtime,
     {
       spawnImpl,
       dispatchId: () => "dispatch-rejected",
@@ -1105,6 +1138,7 @@ test("contains a rejected async spawn delegation and returns noop", async (t) =>
 
 test("contains an async delegate rejection from its failing diagnostic sink", async (t) => {
   // arrange
+  const runtime = createHooksRuntime();
   const caseRoot = await makeCaseRoot(t, "dispatch-async-diagnostic-rejection-");
   const previousDebug = {
     existed: Object.hasOwn(process.env, "PI_CLAUDE_MARKETPLACE_DEBUG"),
@@ -1143,6 +1177,7 @@ test("contains an async delegate rejection from its failing diagnostic sink", as
     { type: "input", text: "diagnostic rejection", source: "interactive" } satisfies InputEvent,
     makeContext(caseRoot),
     pi,
+    runtime,
     {
       spawnImpl,
       dispatchId: () => "dispatch-diagnostic-rejection",
@@ -1181,6 +1216,7 @@ test("contains an async delegate rejection from its failing diagnostic sink", as
 
 test("preserves chunk order within each stream and decodes split UTF-8", async (t) => {
   // arrange
+  const runtime = createHooksRuntime();
   const caseRoot = await makeCaseRoot(t, "dispatch-split-utf8-");
   const errorSpy = observeDebug(t);
   const processChild = makeInjectedChild(t);
@@ -1204,6 +1240,7 @@ test("preserves chunk order within each stream and decodes split UTF-8", async (
     } satisfies ToolCallEvent,
     makeContext(caseRoot),
     undefined,
+    runtime,
     { spawnImpl: processBoundary.spawnImpl },
   );
   await processBoundary.spawned;
@@ -1237,6 +1274,7 @@ test("preserves chunk order within each stream and decodes split UTF-8", async (
 
 test("accepts string stream chunks and parses their complete result", async (t) => {
   // arrange
+  const runtime = createHooksRuntime();
   const caseRoot = await makeCaseRoot(t, "dispatch-string-chunks-");
   const processChild = makeInjectedChild(t);
   const processBoundary = observeSpawn(t, processChild);
@@ -1248,6 +1286,7 @@ test("accepts string stream chunks and parses their complete result", async (t) 
     { toolName: "bash", input: {} },
     makeContext(caseRoot),
     undefined,
+    runtime,
     { spawnImpl: processBoundary.spawnImpl },
   );
   await processBoundary.spawned;
@@ -1263,6 +1302,7 @@ test("accepts string stream chunks and parses their complete result", async (t) 
 
 test("flushes an incomplete decoder tail before parsing", async (t) => {
   // arrange
+  const runtime = createHooksRuntime();
   const caseRoot = await makeCaseRoot(t, "dispatch-decoder-tail-");
   const errorSpy = observeDebug(t);
   const processChild = makeInjectedChild(t);
@@ -1275,6 +1315,7 @@ test("flushes an incomplete decoder tail before parsing", async (t) => {
     { toolName: "bash", input: {} },
     makeContext(caseRoot),
     undefined,
+    runtime,
     { spawnImpl: processBoundary.spawnImpl },
   );
   await processBoundary.spawned;
@@ -1299,6 +1340,7 @@ test("flushes an incomplete decoder tail before parsing", async (t) => {
 
 test("cancels timers and returns noop when the child emits a spawn error", async (t) => {
   // arrange
+  const runtime = createHooksRuntime();
   const caseRoot = await makeCaseRoot(t, "dispatch-spawn-error-");
   const errorSpy = observeDebug(t);
   t.mock.timers.enable({ apis: ["setTimeout"] });
@@ -1312,6 +1354,7 @@ test("cancels timers and returns noop when the child emits a spawn error", async
     { toolName: "bash", input: {} },
     makeContext(caseRoot),
     undefined,
+    runtime,
     { spawnImpl: processBoundary.spawnImpl },
   );
   await processBoundary.spawned;
@@ -1337,6 +1380,7 @@ test("cancels timers and returns noop when the child emits a spawn error", async
 
 test("waits for pipe close after an earlier process exit", async (t) => {
   // arrange
+  const runtime = createHooksRuntime();
   const caseRoot = await makeCaseRoot(t, "dispatch-exit-before-close-");
   const processChild = makeInjectedChild(t);
   const processBoundary = observeSpawn(t, processChild);
@@ -1349,6 +1393,7 @@ test("waits for pipe close after an earlier process exit", async (t) => {
     { toolName: "bash", input: {} },
     makeContext(caseRoot),
     undefined,
+    runtime,
     { spawnImpl: processBoundary.spawnImpl },
   );
   void pendingOutcome.then(() => {
@@ -1370,6 +1415,7 @@ test("waits for pipe close after an earlier process exit", async (t) => {
 
 test("ignores a late error after close has already settled the child", async (t) => {
   // arrange
+  const runtime = createHooksRuntime();
   const caseRoot = await makeCaseRoot(t, "dispatch-late-error-");
   const errorSpy = observeDebug(t);
   const processChild = makeInjectedChild(t);
@@ -1382,6 +1428,7 @@ test("ignores a late error after close has already settled the child", async (t)
     { toolName: "bash", input: {} },
     makeContext(caseRoot),
     undefined,
+    runtime,
     { spawnImpl: processBoundary.spawnImpl },
   );
   await processBoundary.spawned;
@@ -1410,6 +1457,7 @@ test("ignores a late error after close has already settled the child", async (t)
 
 test("treats null stdout and stderr streams as empty output", async (t) => {
   // arrange
+  const runtime = createHooksRuntime();
   const caseRoot = await makeCaseRoot(t, "dispatch-null-streams-");
   const processChild = makeInjectedChild(t, { stdout: null, stderr: null });
   const processBoundary = observeSpawn(t, processChild);
@@ -1421,6 +1469,7 @@ test("treats null stdout and stderr streams as empty output", async (t) => {
     { toolName: "bash", input: {} },
     makeContext(caseRoot),
     undefined,
+    runtime,
     { spawnImpl: processBoundary.spawnImpl },
   );
   await processBoundary.spawned;
@@ -1435,6 +1484,7 @@ test("treats null stdout and stderr streams as empty output", async (t) => {
 
 test("uses shell form only when the declaration omits args", async (t) => {
   // arrange
+  const runtime = createHooksRuntime();
   const caseRoot = await makeCaseRoot(t, "dispatch-shell-form-");
   const processChild = makeInjectedChild(t);
   const processBoundary = observeSpawn(t, processChild);
@@ -1449,6 +1499,7 @@ test("uses shell form only when the declaration omits args", async (t) => {
     { toolName: "bash", input: {} },
     makeContext(caseRoot),
     undefined,
+    runtime,
     { spawnImpl: processBoundary.spawnImpl },
   );
   const call = await processBoundary.spawned;
@@ -1477,6 +1528,7 @@ test("uses shell form only when the declaration omits args", async (t) => {
 
 test("contains an EPIPE from stdin after registering its error listener", async (t) => {
   // arrange
+  const runtime = createHooksRuntime();
   const caseRoot = await makeCaseRoot(t, "dispatch-stdin-epipe-");
   const errorSpy = observeDebug(t);
   const processChild = makeInjectedChild(t);
@@ -1490,6 +1542,7 @@ test("contains an EPIPE from stdin after registering its error listener", async 
     { toolName: "bash", input: { command: "stdin" } },
     makeContext(caseRoot),
     undefined,
+    runtime,
     { spawnImpl: processBoundary.spawnImpl },
   );
   await processBoundary.spawned;
@@ -1514,6 +1567,7 @@ test("contains an EPIPE from stdin after registering its error listener", async 
 
 test("contains a synchronous stdin end failure and cancels on child error", async (t) => {
   // arrange
+  const runtime = createHooksRuntime();
   const caseRoot = await makeCaseRoot(t, "dispatch-stdin-end-throw-");
   const errorSpy = observeDebug(t);
   t.mock.timers.enable({ apis: ["setTimeout"] });
@@ -1534,6 +1588,7 @@ test("contains a synchronous stdin end failure and cancels on child error", asyn
     { toolName: "bash", input: {} },
     makeContext(caseRoot),
     undefined,
+    runtime,
     { spawnImpl: processBoundary.spawnImpl },
   );
   processChild.emitError(new Error("child error after stdin failure"));
@@ -1557,6 +1612,7 @@ test("contains a synchronous stdin end failure and cancels on child error", asyn
 
 test("accepts the exact independent stdout and stderr byte caps", async (t) => {
   // arrange
+  const runtime = createHooksRuntime();
   const caseRoot = await makeCaseRoot(t, "dispatch-exact-caps-");
   const processChild = makeInjectedChild(t);
   const processBoundary = observeSpawn(t, processChild);
@@ -1570,6 +1626,7 @@ test("accepts the exact independent stdout and stderr byte caps", async (t) => {
     { toolName: "bash", input: {} },
     makeContext(caseRoot),
     undefined,
+    runtime,
     { spawnImpl: processBoundary.spawnImpl },
   );
   await processBoundary.spawned;
@@ -1587,6 +1644,7 @@ test("accepts the exact independent stdout and stderr byte caps", async (t) => {
 
 test("removes listeners and immediately escalates one-byte stdout overflow", async (t) => {
   // arrange
+  const runtime = createHooksRuntime();
   const caseRoot = await makeCaseRoot(t, "dispatch-stdout-overflow-");
   t.mock.timers.enable({ apis: ["setTimeout"] });
   const processChild = makeInjectedChild(t);
@@ -1600,6 +1658,7 @@ test("removes listeners and immediately escalates one-byte stdout overflow", asy
     { toolName: "bash", input: {} },
     makeContext(caseRoot),
     undefined,
+    runtime,
     { spawnImpl: processBoundary.spawnImpl },
   );
   await processBoundary.spawned;
@@ -1639,6 +1698,7 @@ test("removes listeners and immediately escalates one-byte stdout overflow", asy
 
 test("contains one-byte stderr overflow when the child is already marked killed", async (t) => {
   // arrange
+  const runtime = createHooksRuntime();
   const caseRoot = await makeCaseRoot(t, "dispatch-stderr-overflow-");
   t.mock.timers.enable({ apis: ["setTimeout"] });
   const processChild = makeInjectedChild(t, { initiallyKilled: true });
@@ -1652,6 +1712,7 @@ test("contains one-byte stderr overflow when the child is already marked killed"
     { toolName: "bash", input: {} },
     makeContext(caseRoot),
     undefined,
+    runtime,
     { spawnImpl: processBoundary.spawnImpl },
   );
   await processBoundary.spawned;
@@ -1680,6 +1741,7 @@ test("contains one-byte stderr overflow when the child is already marked killed"
 
 test("ignores a second overflow after the first lane starts cleanup", async (t) => {
   // arrange
+  const runtime = createHooksRuntime();
   const caseRoot = await makeCaseRoot(t, "dispatch-duplicate-overflow-");
   t.mock.timers.enable({ apis: ["setTimeout"] });
   const stdout = new PassThrough();
@@ -1705,6 +1767,7 @@ test("ignores a second overflow after the first lane starts cleanup", async (t) 
     { toolName: "bash", input: {} },
     makeContext(caseRoot),
     undefined,
+    runtime,
     { spawnImpl: processBoundary.spawnImpl },
   );
   await processBoundary.spawned;

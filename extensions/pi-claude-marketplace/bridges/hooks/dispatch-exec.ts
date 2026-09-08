@@ -77,6 +77,7 @@ import { parseHookStdout } from "./wire-protocol.ts";
 import type { SpawnDeps } from "./async-rewake/registry.ts";
 import type { HookExecResult } from "./exec-result.ts";
 import type { RoutingEntry } from "./routing-state.ts";
+import type { HooksRuntime } from "./runtime.ts";
 import type { DispatchableEvent } from "../../domain/components/hook-events.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 
@@ -146,7 +147,8 @@ export async function dispatchHookExec(
   entry: RoutingEntry,
   event: unknown,
   ctx: ExtensionContext,
-  pi?: ExtensionAPI,
+  pi: ExtensionAPI | undefined,
+  runtime: HooksRuntime,
   deps: SpawnDeps = {},
 ): Promise<HookExecResult> {
   const spawnImpl = deps.spawnImpl ?? spawn;
@@ -175,7 +177,7 @@ export async function dispatchHookExec(
 
     try {
       const loc = locationsFor(entry.scope, ctx.cwd);
-      await spawnAndRegister(entry, event, ctx, pi, loc, deps);
+      await spawnAndRegister(runtime, entry, event, ctx, pi, loc, deps);
     } catch (err) {
       hookDebugLog(
         `async-rewake: spawnAndRegister threw (${entry.pluginId}/${entry.claudeEvent}): ${errorMessage(err)}`,
