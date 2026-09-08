@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.18.3] - 2026-09-08
+## [Unreleased]
 
 - Plugin commands now install on Windows, where the generated name joins with `.` instead of `:` (`/code-review.code-review`). Windows forbids `:` in a filename, so any plugin with a `commands/` directory failed. Thanks to @ricardofrantz (#143).
 
