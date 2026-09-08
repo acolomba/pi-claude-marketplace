@@ -323,6 +323,12 @@ One acceptance criterion reads differently than written, benignly:
 asks for. The second match is the doc comment naming the refusal, which the plan
 directs to extend rather than rewrite.
 
+**Commit-count basis.** `actuals.commits: 2` counts the two TASK commits
+(`0877b6a3`, `3464f1b4`), matching the basis `114-01-SUMMARY.md` used. A
+`git rev-list --count b7732300..HEAD` run after this file lands reads higher,
+because it also counts this SUMMARY's own docs commit and this note's. The
+`plan_head_before` field is recorded so either basis can be re-derived.
+
 **Estimate calibration note.** `actuals.tokens` above is measured as
 `chars / 4` over the realized diff (`git diff <base>..HEAD` restricted to added
 and removed content lines): 40,872 chars → ~10,200. That instrument is NOT the
