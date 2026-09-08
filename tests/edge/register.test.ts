@@ -215,14 +215,24 @@ function marketplaceRecordIn(root: string, marketplaceName: string): Marketplace
   };
 }
 
-/** Record one project-scope marketplace under `root`, the completion read path. */
-async function seedProjectMarketplace(root: string, marketplaceName: string): Promise<void> {
+/** Record project-scope marketplaces under `root`, the completion read path. */
+async function seedProjectMarketplaces(
+  root: string,
+  marketplaceNames: readonly string[],
+): Promise<void> {
   const extensionRoot = path.join(root, ".pi", "pi-claude-marketplace");
   await mkdir(extensionRoot, { recursive: true });
   await saveState(extensionRoot, {
     schemaVersion: 2,
-    marketplaces: { [marketplaceName]: marketplaceRecordIn(root, marketplaceName) },
+    marketplaces: Object.fromEntries(
+      marketplaceNames.map((name) => [name, marketplaceRecordIn(root, name)]),
+    ),
   });
+}
+
+/** Record one project-scope marketplace under `root`. */
+async function seedProjectMarketplace(root: string, marketplaceName: string): Promise<void> {
+  await seedProjectMarketplaces(root, [marketplaceName]);
 }
 
 /**
@@ -565,6 +575,7 @@ test("rebuilds completion rows through the cache that owns a successful register
   // arrange
   const { cwd } = await createHermeticScope(t, "remove-completion-owner");
   const marketplace = "registered-remove";
+  const unrelated = "unrelated-marketplace";
   const sourceRoot = path.join(cwd, "marketplaces", marketplace);
   await mkdir(path.join(sourceRoot, ".claude-plugin"), { recursive: true });
   await mkdir(path.join(sourceRoot, "plugins", "fresh"), { recursive: true });
@@ -577,9 +588,10 @@ test("rebuilds completion rows through the cache that owns a successful register
     }),
     "utf8",
   );
-  await seedProjectMarketplace(cwd, marketplace);
+  await seedProjectMarketplaces(cwd, [marketplace, unrelated]);
   const resolver = makeLocationsResolver(cwd);
   const cachePath = await resolver.pluginCachePath("project", marketplace);
+  const unrelatedCachePath = await resolver.pluginCachePath("project", unrelated);
   const ownerCache = createCompletionCache();
   const peerCache = createCompletionCache();
   await ownerCache.getPluginIndex(cachePath, "project", marketplace, () =>
@@ -590,6 +602,14 @@ test("rebuilds completion rows through the cache that owns a successful register
     Promise.resolve([{ name: "peer-stale", status: "available" }]),
   );
   await rm(cachePath, { force: true });
+  await ownerCache.getPluginIndex(unrelatedCachePath, "project", unrelated, () =>
+    Promise.resolve([{ name: "owner-unrelated", status: "available" }]),
+  );
+  await rm(unrelatedCachePath, { force: true });
+  await peerCache.getPluginIndex(unrelatedCachePath, "project", unrelated, () =>
+    Promise.resolve([{ name: "peer-unrelated", status: "available" }]),
+  );
+  await rm(unrelatedCachePath, { force: true });
   const owner = registerCommandWithCache(
     ownerCache,
     createHooksRouting(createHooksRuntime()),
@@ -614,7 +634,7 @@ test("rebuilds completion rows through the cache that owns a successful register
 
   // act
   await owner.registration.handler(`marketplace remove ${marketplace} --scope project`, ctx);
-  await seedProjectMarketplace(cwd, marketplace);
+  await seedProjectMarketplaces(cwd, [marketplace, unrelated]);
   const ownerCandidates = await owner.registration.getArgumentCompletions?.(
     "install --scope project ",
   );
@@ -629,11 +649,19 @@ test("rebuilds completion rows through the cache that owns a successful register
       label: "fresh@registered-remove",
       value: "install --scope project fresh@registered-remove ",
     },
+    {
+      label: "owner-unrelated@unrelated-marketplace",
+      value: "install --scope project owner-unrelated@unrelated-marketplace ",
+    },
   ]);
   assert.deepStrictEqual(peerCandidates, [
     {
       label: "peer-stale@registered-remove",
       value: "install --scope project peer-stale@registered-remove ",
+    },
+    {
+      label: "peer-unrelated@unrelated-marketplace",
+      value: "install --scope project peer-unrelated@unrelated-marketplace ",
     },
   ]);
   verify(ctx);

@@ -31,15 +31,17 @@ import {
   loadState,
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { MarketplaceNotFoundError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
-import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type {
   ExtensionAPI,
   ExtensionContext,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { CompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 
 interface NotificationCall {
   readonly message: string;
@@ -56,6 +58,34 @@ interface NotificationBoundary {
   readonly pi: ExtensionAPI;
   readonly calls: NotificationCall[];
   verifyInteractions(): void;
+}
+
+type InvalidationCall =
+  | { readonly kind: "names"; readonly path: string; readonly scope: Scope }
+  | {
+      readonly kind: "plugins";
+      readonly marketplace: string;
+      readonly path: string;
+      readonly scope: Scope;
+    };
+
+function recordingCompletionCache(calls: InvalidationCall[]): CompletionCache {
+  const delegate = createCompletionCache();
+  return {
+    getPluginIndex: (pluginCachePath, scope, marketplace, rebuild, options) =>
+      delegate.getPluginIndex(pluginCachePath, scope, marketplace, rebuild, options),
+    invalidateMarketplaceCache: (scope, marketplace) => {
+      delegate.invalidateMarketplaceCache(scope, marketplace);
+    },
+    invalidateMarketplaceNames: async (marketplaceNamesCachePath, scope) => {
+      calls.push({ kind: "names", path: marketplaceNamesCachePath, scope });
+      await delegate.invalidateMarketplaceNames(marketplaceNamesCachePath, scope);
+    },
+    dropMarketplaceCache: async (pluginCachePath, scope, marketplace) => {
+      calls.push({ kind: "plugins", path: pluginCachePath, scope, marketplace });
+      await delegate.dropMarketplaceCache(pluginCachePath, scope, marketplace);
+    },
+  };
 }
 
 function notificationBoundary(expectedCalls: 0 | 1): NotificationBoundary {
@@ -215,10 +245,11 @@ test("reports an explicit-scope missing marketplace without mutating project sta
   // arrange
   const { cwd, locations } = await projectCase(testContext);
   const notification = notificationBoundary(1);
+  const invalidations: InvalidationCall[] = [];
 
   // act
   const outcome = await removeMarketplace({
-    completionCache: createCompletionCache(),
+    completionCache: recordingCompletionCache(invalidations),
     ctx: notification.ctx,
     pi: notification.pi,
     name: "absent",
@@ -239,8 +270,229 @@ test("reports an explicit-scope missing marketplace without mutating project sta
     schemaVersion: 2,
     marketplaces: {},
   });
+  assert.deepStrictEqual(invalidations, []);
   notification.verifyInteractions();
 });
+
+test("invalidates committed full removal after persistence and before data hygiene", async (testContext) => {
+  // arrange
+  const { cwd, locations } = await projectCase(testContext);
+  const marketplace = "ordered-remove";
+  await seedMarketplace(locations, {
+    cwd,
+    name: marketplace,
+    source: pathSource("./ordered-remove"),
+    plugins: { tool: pluginRecord() },
+  });
+  await saveConfig(
+    locations.configJsonPath,
+    {
+      schemaVersion: 1,
+      marketplaces: { [marketplace]: { source: "./ordered-remove" } },
+      plugins: { [`tool@${marketplace}`]: { enabled: true } },
+    },
+    locations.scopeRoot,
+  );
+  const marketplaceData = await locations.marketplaceDataDir(marketplace);
+  const pluginData = await locations.pluginDataDir(marketplace, "tool");
+  await mkdir(pluginData, { recursive: true });
+  await writeFile(path.join(pluginData, "sentinel"), "installed");
+  const events: string[] = [];
+  const delegate = createCompletionCache();
+  const completionCache: CompletionCache = {
+    ...delegate,
+    invalidateMarketplaceNames: async (marketplaceNamesCachePath, scope) => {
+      events.push("names");
+      assert.deepStrictEqual(await loadState(locations.extensionRoot), {
+        schemaVersion: 2,
+        marketplaces: {},
+      });
+      const config = await loadConfig(locations.configJsonPath);
+      assert.strictEqual(config.status, "valid");
+      if (config.status === "valid") {
+        assert.deepStrictEqual(config.config, {
+          schemaVersion: 1,
+          marketplaces: {},
+          plugins: {},
+        });
+      }
+
+      assert.strictEqual(await pathExists(pluginData), true);
+      assert.strictEqual(await pathExists(marketplaceData), true);
+      assert.strictEqual(scope, "project");
+      assert.strictEqual(marketplaceNamesCachePath, locations.marketplaceNamesCacheFile);
+      await delegate.invalidateMarketplaceNames(marketplaceNamesCachePath, scope);
+    },
+    dropMarketplaceCache: async (pluginCachePath, scope, name) => {
+      events.push("plugins");
+      assert.deepStrictEqual(await loadState(locations.extensionRoot), {
+        schemaVersion: 2,
+        marketplaces: {},
+      });
+      assert.strictEqual(await pathExists(pluginData), true);
+      assert.strictEqual(await pathExists(marketplaceData), true);
+      assert.strictEqual(scope, "project");
+      assert.strictEqual(name, marketplace);
+      assert.strictEqual(pluginCachePath, await locations.pluginCacheFile(marketplace));
+      await delegate.dropMarketplaceCache(pluginCachePath, scope, name);
+    },
+  };
+  const notification = notificationBoundary(1);
+  const cascade: typeof cascadeUnstagePlugin = () => {
+    events.push("cascade");
+    return Promise.resolve({ ok: true, dropped: emptyDropped() });
+  };
+
+  // act
+  const outcome = await removeMarketplace({
+    completionCache,
+    ctx: notification.ctx,
+    pi: notification.pi,
+    name: marketplace,
+    scope: "project",
+    cwd,
+    cascade,
+  });
+
+  // assert
+  assert.strictEqual(outcome, undefined);
+  assert.deepStrictEqual(events, ["cascade", "names", "plugins"]);
+  assert.strictEqual(await pathExists(pluginData), false);
+  assert.strictEqual(await pathExists(marketplaceData), false);
+  assert.deepStrictEqual(notification.calls, [
+    {
+      message:
+        "● ordered-remove [project] (removed)\n  ○ tool (uninstalled)\n\n/reload to pick up changes",
+    },
+  ]);
+  notification.verifyInteractions();
+});
+
+test("invalidates a partial removal while retaining failed plugin data", async (testContext) => {
+  // arrange
+  const { cwd, locations } = await projectCase(testContext);
+  const marketplace = "partial-invalidation";
+  await seedMarketplace(locations, {
+    cwd,
+    name: marketplace,
+    source: pathSource("./partial-invalidation"),
+    plugins: { alpha: pluginRecord(), beta: pluginRecord() },
+  });
+  const marketplaceData = await locations.marketplaceDataDir(marketplace);
+  const alphaData = await locations.pluginDataDir(marketplace, "alpha");
+  const betaData = await locations.pluginDataDir(marketplace, "beta");
+  await mkdir(alphaData, { recursive: true });
+  await mkdir(betaData, { recursive: true });
+  const invalidations: InvalidationCall[] = [];
+  const completionCache = recordingCompletionCache(invalidations);
+  const notification = notificationBoundary(1);
+  const failure = Object.assign(new Error("beta denied"), { code: "EACCES" });
+  const cascade: typeof cascadeUnstagePlugin = (plugin) =>
+    Promise.resolve(
+      plugin === "beta"
+        ? { ok: false, dropped: emptyDropped(), cause: failure }
+        : { ok: true, dropped: emptyDropped() },
+    );
+
+  // act
+  const outcome = await removeMarketplace({
+    completionCache,
+    ctx: notification.ctx,
+    pi: notification.pi,
+    name: marketplace,
+    scope: "project",
+    cwd,
+    cascade,
+  });
+
+  // assert
+  assert.strictEqual(outcome, undefined);
+  assert.deepStrictEqual(invalidations, [
+    { kind: "names", path: locations.marketplaceNamesCacheFile, scope: "project" },
+    {
+      kind: "plugins",
+      marketplace,
+      path: await locations.pluginCacheFile(marketplace),
+      scope: "project",
+    },
+  ]);
+  assert.deepStrictEqual(
+    Object.keys((await loadState(locations.extensionRoot)).marketplaces[marketplace]?.plugins ?? {}),
+    ["beta"],
+  );
+  assert.strictEqual(await pathExists(alphaData), false);
+  assert.strictEqual(await pathExists(betaData), true);
+  assert.strictEqual(await pathExists(marketplaceData), true);
+  assert.deepStrictEqual(notification.calls, [
+    {
+      message:
+        "Some operations have failed.\n\n⊘ partial-invalidation [project] (failed)\n  ○ alpha (uninstalled)\n  ⊘ beta (failed) {permission denied}\n    cause: beta denied\n\n/reload to pick up changes",
+      severity: "error",
+    },
+  ]);
+  notification.verifyInteractions();
+});
+
+for (const failurePoint of ["names", "plugins"] as const) {
+  test(`continues data hygiene after ${failurePoint} invalidation fails`, async (testContext) => {
+    // arrange
+    const { cwd, locations } = await projectCase(testContext);
+    const marketplace = `${failurePoint}-failure`;
+    await seedMarketplace(locations, {
+      cwd,
+      name: marketplace,
+      source: pathSource(`./${marketplace}`),
+    });
+    const marketplaceData = await locations.marketplaceDataDir(marketplace);
+    await mkdir(marketplaceData, { recursive: true });
+    await writeFile(path.join(marketplaceData, "sentinel"), "data");
+    const events: string[] = [];
+    const delegate = createCompletionCache();
+    const completionCache: CompletionCache = {
+      ...delegate,
+      invalidateMarketplaceNames: async (marketplaceNamesCachePath, scope) => {
+        events.push("names");
+        if (failurePoint === "names") {
+          throw new Error("names cache denied");
+        }
+
+        await delegate.invalidateMarketplaceNames(marketplaceNamesCachePath, scope);
+      },
+      dropMarketplaceCache: async (pluginCachePath, scope, name) => {
+        events.push("plugins");
+        if (failurePoint === "plugins") {
+          throw new Error("plugin cache denied");
+        }
+
+        await delegate.dropMarketplaceCache(pluginCachePath, scope, name);
+      },
+    };
+    const notification = notificationBoundary(1);
+
+    // act
+    const outcome = await removeMarketplace({
+      completionCache,
+      ctx: notification.ctx,
+      pi: notification.pi,
+      name: marketplace,
+      scope: "project",
+      cwd,
+    });
+
+    // assert
+    assert.strictEqual(outcome, undefined);
+    assert.deepStrictEqual(events, failurePoint === "names" ? ["names"] : ["names", "plugins"]);
+    assert.strictEqual(await pathExists(marketplaceData), false);
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), {
+      schemaVersion: 2,
+      marketplaces: {},
+    });
+    assert.deepStrictEqual(notification.calls, [
+      { message: `● ${marketplace} [project] (removed)` },
+    ]);
+    notification.verifyInteractions();
+  });
+}
 
 test("returns the complete orchestrated missing-marketplace outcome without notifying", async (testContext) => {
   // arrange
@@ -752,10 +1004,11 @@ test("returns an orchestrated invalid-config outcome without notifying or saving
   const stateBytes = await readFile(locations.stateJsonPath, "utf8");
   await writeFile(locations.configJsonPath, "{ invalid base config");
   const notification = notificationBoundary(0);
+  const invalidations: InvalidationCall[] = [];
 
   // act
   const outcome = await removeMarketplace({
-    completionCache: createCompletionCache(),
+    completionCache: recordingCompletionCache(invalidations),
     ctx: notification.ctx,
     pi: notification.pi,
     name: "invalid-config",
@@ -771,6 +1024,7 @@ test("returns an orchestrated invalid-config outcome without notifying or saving
   });
   assert.deepStrictEqual(notification.calls, []);
   assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
+  assert.deepStrictEqual(invalidations, []);
   notification.verifyInteractions();
 });
 
@@ -808,11 +1062,12 @@ test("propagates config write failure, preserves state, and converges on retry",
   };
 
   let thrown: unknown;
+  const failedInvalidations: InvalidationCall[] = [];
 
   // act
   try {
     await removeMarketplace({
-      completionCache: createCompletionCache(),
+      completionCache: recordingCompletionCache(failedInvalidations),
       ctx: firstNotification.ctx,
       pi: firstNotification.pi,
       name: "write-failure",
@@ -844,6 +1099,7 @@ test("propagates config write failure, preserves state, and converges on retry",
   assert.ok(thrown instanceof Error);
   assert.match(thrown.message, /contains symlink/i);
   assert.deepStrictEqual(firstNotification.calls, []);
+  assert.deepStrictEqual(failedInvalidations, []);
   assert.deepStrictEqual(stateAfterFailure, initialState);
   assert.strictEqual(configAfterFailure, configBytes);
   assert.strictEqual(await readFile(outsideConfigPath, "utf8"), configBytes);
