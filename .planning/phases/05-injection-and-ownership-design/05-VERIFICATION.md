@@ -1,6 +1,6 @@
 ---
 phase: 05-injection-and-ownership-design
-verified: 2026-09-08T22:28:04Z
+verified: 2026-09-08T22:35:48Z
 status: passed
 score: 6/6 must-haves verified
 covered_files:
@@ -188,7 +188,7 @@ covered_files:
   - tests/orchestrators/reconcile/types.test.ts
   - tests/shared/completion-cache.test.ts
   - tests/shared/path-safety.test.ts
-covered_digest: "v1:sha256:a90ca0d420c48effa7e7458d4ceec0eb8467f3143a501605e6080a3ebc9952b2"
+covered_digest: "v1:sha256:ddf5ffc476c283485741f4b4d7e37b02360ed004c184bf9a44819795980b4dd9"
 behavior_unverified: 0
 overrides_applied: 0
 re_verification:
@@ -208,24 +208,24 @@ decision_coverage:
 # Phase 5: Injection and Ownership Design Verification Report
 
 **Phase Goal:** Expose legitimate test seams with correctly owned runtime state and public contracts.
-**Verified:** 2026-09-08T22:28:04Z
+**Verified:** 2026-09-08T22:35:48Z
 **Status:** passed
 **Re-verification:** Yes — after Plan 05-34 gap closure
 
 ## Goal Achievement
 
-Fresh verification at tracked HEAD `455ea4c417e98c97ff011165b0c3c41535b2238a` closes both prior gaps. The implementation has not changed since tracking base `2ef1533255a6b93aa42c622d73c272406b0fae9e`; Plan 05-34 corrected the stale closure contract and supplied a reproducible clean-tracked-tree gate without editing user-owned workspace content.
+Fresh verification closed both prior gaps, with the clean canonical run performed at tracked HEAD `455ea4c417e98c97ff011165b0c3c41535b2238a`. Commit `a64fdea40514a2503d66e72f2731ae99c11d47f3` then added only this verification report. The implementation remains identical to tracking base `2ef1533255a6b93aa42c622d73c272406b0fae9e`; the post-verification REQUIREMENTS/ROADMAP/STATE transition is metadata-only and agrees with the PASS verdict.
 
 ### Observable Truths
 
-|   # | Truth                                                                                                                                     | Status     | Independent evidence                                                                                                                                                                                                                                                                    |
-| --: | ----------------------------------------------------------------------------------------------------------------------------------------- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-|   1 | All eleven MF-DEC-07 roots have exactly one classification, live production binding, and public proof.                                    | ✓ VERIFIED | CodeGraph and targeted source checks found all eleven consumer-owned interfaces/factories and real bindings; the 13-file root/exception suite passed; every one of the 16 direct owner pairs is 100% line/function/branch coverage.                                                     |
-|   2 | `applyReconcile` and `bootstrapClaudePlugin` are exactly the two behavioral-composition exceptions and retain real-child public evidence. | ✓ VERIFIED | Exactly two `behavioral-composition-exception` source markers exist. The exact-census named test and the apply/bootstrap owner and edge suites passed with whole-result, state, tree, order, cache, and notification assertions.                                                        |
-|   3 | Terminal test state surfaces are removed; runtime/cache state has lifecycle/factory ownership and ports are narrow and production-used.   | ✓ VERIFIED | Terminal and bounded-transition symbols are absent. Named runtime-isolation, cache-isolation, and stale-registration lifecycle tests passed. Fallow found no dead capability and all direct pairs are 100%.                                                                             |
-|   4 | The reviewed Phase 6 patch handoff is exact and split ownership stays deferred.                                                           | ✓ VERIFIED | The approved gap contract supersedes the stale 14/83 audit premise: current tracked implementation is exactly 13 files/85 `syncBuiltinESMExports(` calls and 9 files/9 `createRequire(` calls, with exact 8→0, 2→10, and 11→13 Phase 5 deltas. No broad Phase 6 split/removal occurred. |
-|   5 | Exact Fallow/no-suppression and focused/direct/type/lint/format/Fallow/full repository gates pass.                                        | ✓ VERIFIED | The sole exact Fallow comment occurs once and no suppression was added. In-place `npm run check` reached format after typecheck/lint/Fallow and failed on `.mcp.json` alone; unmodified canonical `npm run check` passed in a clean detached worktree at current HEAD.                  |
-|   6 | Gap closure is evidence-only and performs no source/test repair.                                                                          | ✓ VERIFIED | From tracking base to HEAD, only ROADMAP/STATE and Plan 05-34 planning evidence changed. The implementation/test/script/package/config diff is empty, and all Plan 34/verifier temporary resources were removed.                                                                        |
+|   # | Truth                                                                                                                                     | Status     | Independent evidence                                                                                                                                                                                                                                                                                 |
+| --: | ----------------------------------------------------------------------------------------------------------------------------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+|   1 | All eleven MF-DEC-07 roots have exactly one classification, live production binding, and public proof.                                    | ✓ VERIFIED | CodeGraph and targeted source checks found all eleven consumer-owned interfaces/factories and real bindings; the 13-file root/exception suite passed; every one of the 16 direct owner pairs is 100% line/function/branch coverage.                                                                  |
+|   2 | `applyReconcile` and `bootstrapClaudePlugin` are exactly the two behavioral-composition exceptions and retain real-child public evidence. | ✓ VERIFIED | Exactly two `behavioral-composition-exception` source markers exist. The exact-census named test and the apply/bootstrap owner and edge suites passed with whole-result, state, tree, order, cache, and notification assertions.                                                                     |
+|   3 | Terminal test state surfaces are removed; runtime/cache state has lifecycle/factory ownership and ports are narrow and production-used.   | ✓ VERIFIED | Terminal and bounded-transition symbols are absent. Named runtime-isolation, cache-isolation, and stale-registration lifecycle tests passed. Fallow found no dead capability and all direct pairs are 100%.                                                                                          |
+|   4 | The reviewed Phase 6 patch handoff is exact and split ownership stays deferred.                                                           | ✓ VERIFIED | The approved gap contract supersedes the stale 14/83 audit premise: current tracked implementation is exactly 13 files/85 `syncBuiltinESMExports(` calls and 9 files/9 `createRequire(` calls, with exact 8→0, 2→10, and 11→13 Phase 5 deltas. No broad Phase 6 split/removal occurred.              |
+|   5 | Exact Fallow/no-suppression and focused/direct/type/lint/format/Fallow/full repository gates pass.                                        | ✓ VERIFIED | The sole exact Fallow comment occurs once and no suppression was added. In-place `npm run check` reached format after typecheck/lint/Fallow and failed on `.mcp.json` alone; unmodified canonical `npm run check` passed in a clean detached worktree at current HEAD.                               |
+|   6 | Gap closure is evidence-only and performs no source/test repair.                                                                          | ✓ VERIFIED | The tracked and working-tree implementation/test/script/package/config diffs are empty. After the clean verified HEAD, only this report was committed; the current uncommitted completion transition changes REQUIREMENTS/ROADMAP/STATE only. All Plan 34/verifier temporary resources were removed. |
 
 **Score:** 6/6 truths verified (0 present, behavior-unverified)
 
@@ -366,7 +366,7 @@ Step 7c: SKIPPED — no Phase 05 plan/summary declares a `probe-*.sh`, and no co
 | TREF-05 — move terminal mutable state to lifecycle/factory ownership without test reset exports                                       | 05-06–31, 05-33, 05-34        | ✓ SATISFIED | One lifecycle runtime/cache pair, terminal absence checks, named isolation/stale tests, Fallow and canonical gates                  |
 | TREF-06 — exercise public contracts and trace-preserve terminal test-surface removal                                                  | 05-28–34                      | ✓ SATISFIED | Public result/state/tree/order/notification assertions, removed reset/export surfaces, exact list behavior, full green tracked gate |
 
-No Phase 05 requirement is orphaned. Requirement checkboxes remain pending for the orchestrator to update after this independent pass.
+No Phase 05 requirement is orphaned. The post-verification metadata transition marks TREF-04, TREF-05, and TREF-06 Complete, closes Plans 05-33/34 and Phase 5, records 4/9 phases and 128/128 plans, and routes next work to Phase 6 discussion. Each change is consistent with this PASS verdict.
 
 ## Test Quality Audit
 
@@ -391,6 +391,10 @@ No Phase 05 requirement is orphaned. Requirement checkboxes remain pending for t
 
 All 9 trackable `05-CONTEXT.md` decisions are honored by shipped artifacts (`honored: 9`, `not_honored: []`). This gate is non-blocking by design and produced no warning.
 
+## Post-Verification Metadata Audit
+
+The exact completion diff is limited to `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`, and `.planning/STATE.md`. It marks TREF-04/05/06 complete, marks Plans 05-33/34 and Phase 5 complete, updates progress to 4/9 phases and 128/128 plans (44%), and sets the next action to discuss Phase 6. No source, test, script, package, gate configuration, or ignore file changed; the user-owned `.mcp.json` remains untracked at its locked hash; the sole Fallow comment remains exact; and no temporary path or worktree registration remains.
+
 ## Human Verification Required
 
 N/A — infrastructure/foundation phase with no user-facing elements. All lifecycle, ordering, cleanup, state, cache, and exception invariants have explicit passing behavioral tests; `behavior_unverified` is 0.
@@ -401,5 +405,5 @@ No gaps remain. Both carried-forward blockers are closed without source/test rep
 
 ---
 
-_Verified: 2026-09-08T22:28:04Z_
+_Verified: 2026-09-08T22:35:48Z_
 _Verifier: the agent (gsd-verifier)_

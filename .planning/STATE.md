@@ -3,19 +3,19 @@ gsd_state_version: "1.0"
 milestone: refine-unit-tests
 milestone_name: Refine Unit Tests
 current_phase: 05
-current_phase_name: Injection and Ownership Design
-status: executing
-stopped_at: Planned Phase 05 gap closure Plan 05-34
-last_updated: "2026-09-08T21:36:41.231Z"
+status: ready
+stopped_at: Completed and independently verified Phase 05 gap closure
+last_updated: "2026-09-08T22:34:42.024Z"
 last_activity: 2026-09-08
-last_activity_desc: Phase 05 gap closure Plan 34 planned and verified
-state_head: 2ef1533255a6b93aa42c622d73c272406b0fae9e
+last_activity_desc: Phase 05 gap closure independently verified at 6/6
+state_head: a64fdea40514a2503d66e72f2731ae99c11d47f3
 progress:
   total_phases: 9
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 128
-  completed_plans: 126
-  percent: 33
+  completed_plans: 128
+  percent: 44
+current_phase_name: Injection and Ownership Design
 ---
 
 # Project State
@@ -27,15 +27,15 @@ See: `.planning/PROJECT.md` (updated 2026-09-07 after refine-unit-tests Phase 4)
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 05 — Injection and Ownership Design
+**Current focus:** Phase 06 — Assertion and Module Refinement
 
 ## Current Position
 
-Phase: 05 (Injection and Ownership Design) — READY TO EXECUTE
-Next: Execute Phase 5
+Phase: 05 — COMPLETE
+Next: Discuss Phase 6
 Plan: 34 of 34
-Status: Ready to execute
-Last activity: 2026-09-08 — Phase 05 gap closure Plan 34 planned and verified
+Status: Phase 05 complete; Phase 06 ready for discussion
+Last activity: 2026-09-08 — Phase 05 gap closure independently verified at 6/6
 
 ## Performance Metrics
 
@@ -307,6 +307,7 @@ Last activity: 2026-09-08 — Phase 05 gap closure Plan 34 planned and verified
 | Phase 05 P30                            | 37 min   | 2 tasks | 6 files  |
 | Phase 05 P31                            | 8h 35min | 2 tasks | 11 files |
 | Phase 05 P32                            | 22min    | 2 tasks | 2 files  |
+| Phase 05 P34                            | 26min    | 3 tasks | 1 files  |
 
 ## Accumulated Context
 
@@ -709,6 +710,9 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 05]: Create exactly one HooksRuntime in the extension root and require it together with the state reader for hook hydration.
 - [Phase 05]: Guard all retained Pi callbacks by runtime generation before any callback argument or mutable state is touched.
 - [Phase 05]: Keep Node-backed compatibility exports while live runtime callbacks bridge owned routes into the legacy dispatch boundary.
+- [Phase 05]: Ratify the reviewed 13-file/85-call and 9-file/9-call Phase 6 patch manifests with exact historical attribution. — Fresh independent verification confirmed the current inventory is intentional Phase 5 port and lifecycle evidence, not forbidden early Phase 6 work.
+- [Phase 05]: Treat the in-place .mcp.json format stop as a workspace obstruction only after clean tracked HEAD passes canonical checks. — The user-owned untracked file remained byte-identical while the clean detached worktree passed npm run check end to end.
+- [Phase 05]: Preserve the exact sole Fallow complexity suppression until the planned Phase 01-71 refactor. — Fallow reports zero above threshold and Phase 5 added no suppression or implementation repair.
 
 ### Pending Todos
 
@@ -761,7 +765,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Planned Phase 05 gap closure Plan 05-34
+**Stopped at:** Completed and independently verified Phase 05 gap closure
 
 Phase 04 completed all seven plans and closed AUTH-01 and TREF-01 through
 TREF-03. Independent verification passed 4/4 with no behavioral or UAT gap;
@@ -770,17 +774,19 @@ Phase 5 planning passed independent review. Plans 05-01 through 05-32 completed
 the hidden-dependency ports, runtime and cache cores, hook registration,
 dispatch, settle, async-child, PID-operation ownership, terminal reset cleanup,
 and the final test-facing flag export removal. Plan 05-33 recorded a stale
-inventory blocker; verified gap-closure Plan 05-34 is ready to execute.
+inventory blocker. Gap-closure Plan 05-34 ratified the corrected patch inventory
+and proved the canonical repository gates from clean tracked HEAD. Fresh
+independent verification passed 6/6 with zero unverified behaviors.
 
 **Resume file:** None
 
 **Read beside it:** `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`, the
 Phase 01 terminal evidence ledger, and Phase 5's roadmap criteria.
 
-Last session: 2026-09-08T20:50:50.882Z
+Last session: 2026-09-08T22:34:41.458Z
 
-**Next:** Execute Phase 5 gap-closure Plan 05-34 to ratify the reviewed patch
-inventory and seal canonical repository gates from clean tracked HEAD.
+**Next:** Discuss Phase 06 to define the assertion-strengthening and approved
+module-refinement work before planning.
 
 ## Deferred Verification
 

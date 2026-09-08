@@ -348,7 +348,7 @@ Plans:
 **Goal:** Expose legitimate test seams with correctly owned runtime state and public contracts.
 **Depends on:** Phase 4
 **Requirements:** TREF-04, TREF-05, TREF-06
-**Plans:** 32/34 plans executed
+**Plans:** 34/34 plans complete
 
 **Success Criteria**:
 
@@ -466,11 +466,11 @@ Plans:
 
 **Wave 24** _(blocked on Wave 23 completion)_
 
-- [ ] 05-33-PLAN.md — Seal classification, ownership, security, Fallow, and repository gates.
+- [x] 05-33-PLAN.md — Seal classification, ownership, security, Fallow, and repository gates.
 
 **Wave 25** _(gap closure after the Wave 24 audit blocker)_
 
-- [ ] 05-34-PLAN.md — Ratify the reviewed patch inventory and prove canonical gates from clean tracked HEAD.
+- [x] 05-34-PLAN.md — Ratify the reviewed patch inventory and prove canonical gates from clean tracked HEAD.
 
 **Cross-cutting constraints:**
 
@@ -571,7 +571,7 @@ baseline, which still includes both pairs; neither is a terminal shortfall.
 | 2. Containment and Input Safety      | 3/3            | Complete    | 2026-09-05 |
 | 3. Production Defect Corrections     | 14/14          | Complete    | 2026-09-07 |
 | 4. Hermetic Test Infrastructure      | 7/7            | Complete    | 2026-09-07 |
-| 5. Injection and Ownership Design    | 32/34          | In Progress | —          |
+| 5. Injection and Ownership Design    | 34/34          | Complete    | 2026-09-08 |
 | 6. Assertion and Module Refinement   | 0/0            | Not started | —          |
 | 7. Gate Integrity                    | 0/0            | Not started | —          |
 | 8. Direct Coverage                   | 0/0            | Not started | —          |
