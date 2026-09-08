@@ -53,6 +53,7 @@ import type {
   ExtensionAPI,
   ExtensionContext,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { CompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import type { TestContext } from "node:test";
 
 type MarketplaceRecord = ExtensionState["marketplaces"][string];
@@ -290,7 +291,14 @@ function backfillOptions(
   cwd: string,
   gitOps: GitOps,
 ): ApplyReconcileOptions {
-  return backfillOptionsWithRouting(ctx, pi, cwd, gitOps, createHooksRouting(createHooksRuntime()));
+  return backfillOptionsWithRouting(
+    ctx,
+    pi,
+    cwd,
+    gitOps,
+    createHooksRouting(createHooksRuntime()),
+    createCompletionCache(),
+  );
 }
 
 function backfillOptionsWithRouting(
@@ -299,13 +307,14 @@ function backfillOptionsWithRouting(
   cwd: string,
   gitOps: GitOps,
   hooksRouting: HooksRouting,
+  completionCache: CompletionCache,
 ): ApplyReconcileOptions {
   return {
     ctx,
     pi,
     cwd,
     scope: "project",
-    completionCache: createCompletionCache(),
+    completionCache,
     gitOps,
     hooksRouting,
   };
@@ -962,16 +971,32 @@ describe("scanForceInstalledBackfills", () => {
     const ownerRuntime = createHooksRuntime();
     const peerRuntime = createHooksRuntime();
     const hooksRouting = createHooksRouting(ownerRuntime);
+    const ownerCache = createCompletionCache();
+    const peerCache = createCompletionCache();
+    const cachePath = await locations.pluginCacheFile("mp");
+    const unrelatedCachePath = await locations.pluginCacheFile("unrelated");
+    await ownerCache.getPluginIndex(cachePath, "project", "mp", () =>
+      Promise.resolve([{ name: "owner-stale", status: "available" }]),
+    );
+    await rm(cachePath, { force: true });
+    await peerCache.getPluginIndex(cachePath, "project", "mp", () =>
+      Promise.resolve([{ name: "peer-stale", status: "available" }]),
+    );
+    await rm(cachePath, { force: true });
+    await ownerCache.getPluginIndex(unrelatedCachePath, "project", "unrelated", () =>
+      Promise.resolve([{ name: "owner-unrelated", status: "available" }]),
+    );
+    await rm(unrelatedCachePath, { force: true });
+    await rm(path.dirname(path.dirname(cachePath)), { recursive: true, force: true });
     const outcomes: PerEntryOutcome[] = [];
 
     // act
     const anyFailure = await scanForceInstalledBackfills(
-      backfillOptionsWithRouting(ctx, pi, cwd, gitOps, hooksRouting),
+      backfillOptionsWithRouting(ctx, pi, cwd, gitOps, hooksRouting, ownerCache),
       "project",
       seeded,
       outcomes,
     );
-
     // assert
     assert.strictEqual(anyFailure, false);
     assert.deepStrictEqual(outcomes, [
@@ -1032,6 +1057,18 @@ describe("scanForceInstalledBackfills", () => {
       "pi-claude-marketplace/skills-staging/",
       "pi-claude-marketplace/state.json",
     ]);
+    const ownerRows = await ownerCache.getPluginIndex(cachePath, "project", "mp", () =>
+      Promise.resolve([{ name: "owner-fresh", status: "installed" }]),
+    );
+    const peerRows = await peerCache.getPluginIndex(cachePath, "project", "mp", () =>
+      Promise.reject(new Error("the peer cache must retain its warmed target row")),
+    );
+    const unrelatedRows = await ownerCache.getPluginIndex(
+      unrelatedCachePath,
+      "project",
+      "unrelated",
+      () => Promise.reject(new Error("the owner cache must retain its unrelated row")),
+    );
     assert.deepStrictEqual(
       ownerRuntime.getRoutingBucket("PreToolUse").map((entry) => ({
         command: entry.handlerDecl["command"],
@@ -1042,6 +1079,9 @@ describe("scanForceInstalledBackfills", () => {
       [{ command: "echo orphan", marketplace: "mp", plugin: "hello", scope: "project" }],
     );
     assert.deepStrictEqual(peerRuntime.getRoutingBucket("PreToolUse"), []);
+    assert.deepStrictEqual(ownerRows, [{ name: "owner-fresh", status: "installed" }]);
+    assert.deepStrictEqual(peerRows, [{ name: "peer-stale", status: "available" }]);
+    assert.deepStrictEqual(unrelatedRows, [{ name: "owner-unrelated", status: "available" }]);
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
   });
