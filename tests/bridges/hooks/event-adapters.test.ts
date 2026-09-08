@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { describe, test } from "node:test";
+import { beforeEach, describe, test } from "node:test";
 
 import {
   adaptInputResult,
@@ -8,17 +8,21 @@ import {
   adaptToolResultResult,
   applyMutationInPlace,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts";
-import {
-  pendingSessionStartContextEntries,
-  resetRoutingState,
-} from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
+import { createHooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 
 import type { HookExecResult } from "../../../extensions/pi-claude-marketplace/bridges/hooks/exec-result.ts";
+import type { HooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import type {
   InputEvent,
   ToolCallEvent,
   ToolResultEvent,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+
+let runtime: HooksRuntime;
+
+beforeEach(() => {
+  runtime = createHooksRuntime();
+});
 
 describe("applyMutationInPlace", () => {
   for (const { name, event } of [
@@ -388,12 +392,8 @@ describe("adaptToolResultResult", () => {
     assert.strictEqual(event.isError, false);
   });
 
-  test("applies only whitelisted tool-result fields", (t) => {
+  test("applies only whitelisted tool-result fields", () => {
     // arrange
-    resetRoutingState();
-    t.after(() => {
-      resetRoutingState();
-    });
     const input = { command: "inspect owner" };
     const originalContent = [{ type: "text" as const, text: "original output" }];
     const details = { exitCode: 0, routeToken: "details-original" };
@@ -903,12 +903,8 @@ describe("adaptInputResult", () => {
 });
 
 describe("adaptObservationResultForEvent", () => {
-  test("captures ordered SessionStart context with exact plugin provenance", (t) => {
+  test("captures ordered SessionStart context with exact plugin provenance", () => {
     // arrange
-    resetRoutingState();
-    t.after(() => {
-      resetRoutingState();
-    });
     const firstProvenance = {
       scope: "user",
       marketplace: "user-marketplace",
@@ -922,18 +918,20 @@ describe("adaptObservationResultForEvent", () => {
 
     // act
     adaptObservationResultForEvent(
+      runtime,
       { kind: "mutate", additionalContext: "first context" },
       "SessionStart",
       firstProvenance,
     );
     adaptObservationResultForEvent(
+      runtime,
       { kind: "mutate", additionalContext: "second context" },
       "SessionStart",
       secondProvenance,
     );
 
     // assert
-    assert.deepStrictEqual(pendingSessionStartContextEntries(), [
+    assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), [
       {
         context: "first context",
         scope: "user",
@@ -949,12 +947,8 @@ describe("adaptObservationResultForEvent", () => {
     ]);
   });
 
-  test("does not capture SessionStart context when it is truly absent", (t) => {
+  test("does not capture SessionStart context when it is truly absent", () => {
     // arrange
-    resetRoutingState();
-    t.after(() => {
-      resetRoutingState();
-    });
     const provenance = {
       scope: "user",
       marketplace: "owner-marketplace",
@@ -966,19 +960,15 @@ describe("adaptObservationResultForEvent", () => {
     } satisfies HookExecResult;
 
     // act
-    adaptObservationResultForEvent(hookOutcome, "SessionStart", provenance);
+    adaptObservationResultForEvent(runtime, hookOutcome, "SessionStart", provenance);
 
     // assert
     assert.strictEqual(Object.hasOwn(hookOutcome, "additionalContext"), false);
-    assert.deepStrictEqual(pendingSessionStartContextEntries(), []);
+    assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), []);
   });
 
-  test("does not capture an empty SessionStart context", (t) => {
+  test("does not capture an empty SessionStart context", () => {
     // arrange
-    resetRoutingState();
-    t.after(() => {
-      resetRoutingState();
-    });
     const provenance = {
       scope: "project",
       marketplace: "owner-marketplace",
@@ -987,13 +977,14 @@ describe("adaptObservationResultForEvent", () => {
 
     // act
     adaptObservationResultForEvent(
+      runtime,
       { kind: "mutate", additionalContext: "" },
       "SessionStart",
       provenance,
     );
 
     // assert
-    assert.deepStrictEqual(pendingSessionStartContextEntries(), []);
+    assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), []);
   });
 
   for (const { eventName, context, scope } of [
@@ -1001,12 +992,8 @@ describe("adaptObservationResultForEvent", () => {
     { eventName: "PreCompact", context: "discarded PreCompact context", scope: "project" },
     { eventName: "PostCompact", context: "discarded PostCompact context", scope: "user" },
   ] as const) {
-    test(`drops ${eventName} additional context`, (t) => {
+    test(`drops ${eventName} additional context`, () => {
       // arrange
-      resetRoutingState();
-      t.after(() => {
-        resetRoutingState();
-      });
       const provenance = {
         scope,
         marketplace: `${eventName}-marketplace`,
@@ -1015,22 +1002,19 @@ describe("adaptObservationResultForEvent", () => {
 
       // act
       adaptObservationResultForEvent(
+        runtime,
         { kind: "mutate", additionalContext: context },
         eventName,
         provenance,
       );
 
       // assert
-      assert.deepStrictEqual(pendingSessionStartContextEntries(), []);
+      assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), []);
     });
   }
 
-  test("returns from noop without changing pending state", (t) => {
+  test("returns from noop without changing pending state", () => {
     // arrange
-    resetRoutingState();
-    t.after(() => {
-      resetRoutingState();
-    });
     const provenance = {
       scope: "user",
       marketplace: "noop-marketplace",
@@ -1038,10 +1022,10 @@ describe("adaptObservationResultForEvent", () => {
     } as const;
 
     // act
-    adaptObservationResultForEvent({ kind: "noop" }, "SessionStart", provenance);
+    adaptObservationResultForEvent(runtime, { kind: "noop" }, "SessionStart", provenance);
 
     // assert
-    assert.deepStrictEqual(pendingSessionStartContextEntries(), []);
+    assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), []);
   });
 
   for (const { name, eventName, hookOutcome, diagnostic } of [
@@ -1076,10 +1060,6 @@ describe("adaptObservationResultForEvent", () => {
   ]) {
     test(`reports a ${name}`, (t) => {
       // arrange
-      resetRoutingState();
-      t.after(() => {
-        resetRoutingState();
-      });
       const debugKey = "PI_CLAUDE_MARKETPLACE_DEBUG";
       const hadDebug = Object.hasOwn(process.env, debugKey);
       const previousDebug = process.env[debugKey];
@@ -1099,10 +1079,10 @@ describe("adaptObservationResultForEvent", () => {
       } as const;
 
       // act
-      adaptObservationResultForEvent(hookOutcome, eventName, provenance);
+      adaptObservationResultForEvent(runtime, hookOutcome, eventName, provenance);
 
       // assert
-      assert.deepStrictEqual(pendingSessionStartContextEntries(), []);
+      assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), []);
       assert.deepStrictEqual(
         consoleErrorSpy.mock.calls.map(({ arguments: consoleArguments }) => consoleArguments),
         [[diagnostic]],
@@ -1110,12 +1090,8 @@ describe("adaptObservationResultForEvent", () => {
     });
   }
 
-  test("rejects a result outside the exhaustive observation vocabulary", (t) => {
+  test("rejects a result outside the exhaustive observation vocabulary", () => {
     // arrange
-    resetRoutingState();
-    t.after(() => {
-      resetRoutingState();
-    });
     const provenance = {
       scope: "user",
       marketplace: "future-marketplace",
@@ -1123,6 +1099,7 @@ describe("adaptObservationResultForEvent", () => {
     } as const;
     const adaptFutureOutcome = (): void => {
       Reflect.apply(adaptObservationResultForEvent, undefined, [
+        runtime,
         { kind: "future" },
         "SessionStart",
         provenance,

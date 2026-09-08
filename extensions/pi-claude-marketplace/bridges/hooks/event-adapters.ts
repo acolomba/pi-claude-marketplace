@@ -50,8 +50,8 @@
 import { hookDebugLog } from "../../shared/debug-log.ts";
 
 import { assertNever, type HookExecResult } from "./exec-result.ts";
-import { appendPendingSessionStartContext } from "./routing-state.ts";
 
+import type { HooksRuntime } from "./runtime.ts";
 import type { BucketAEvent } from "../../domain/components/hook-events.ts";
 import type {
   InputEvent,
@@ -306,6 +306,7 @@ export function adaptInputResult(
  * at this call site (NFR-7).
  */
 export function adaptObservationResultForEvent(
+  runtime: HooksRuntime,
   result: HookExecResult,
   claudeEvent: Extract<BucketAEvent, "SessionStart" | "SessionEnd" | "PreCompact" | "PostCompact">,
   provenance: { readonly scope: Scope; readonly marketplace: string; readonly pluginId: string },
@@ -323,7 +324,7 @@ export function adaptObservationResultForEvent(
         // drained one-shot by beforeAgentStartHandlerFor and cleared on
         // registerHooksBridge entry (so /reload does not leak stale
         // context across sessions).
-        appendPendingSessionStartContext({
+        runtime.appendPendingSessionStartContext({
           context: result.additionalContext,
           scope: provenance.scope,
           marketplace: provenance.marketplace,

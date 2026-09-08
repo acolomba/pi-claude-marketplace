@@ -64,11 +64,9 @@ import { compileIfPredicate, MATCH_ALL_IF, type IfPredicate } from "./if-field/i
 import {
   bumpEpoch,
   clearPendingSessionStartContext,
-  currentEpoch,
   deleteParsedConfig,
   getRoutingBucket,
   parsedConfigEntries,
-  pendingSessionStartContextEntries,
   setParsedConfig,
   setRoutingBucket,
   createRoutingStateOperations,
@@ -76,6 +74,7 @@ import {
   type RoutingEntry,
   type RoutingStateOperations,
 } from "./routing-state.ts";
+import { createHooksRuntime } from "./runtime.ts";
 import {
   agentEndCacheHandler,
   inputResetHandlerFor,
@@ -242,25 +241,24 @@ export async function readAndCachePluginHooks(opts: {
  * Claude Code's SessionStart semantics where the injected text is added
  * to the session prompt once at session boot.
  */
-export function beforeAgentStartHandlerFor(
-  capturedEpoch: number,
+export function createBeforeAgentStartHandler(
+  runtime: HooksRuntime,
+  capturedGeneration: number,
 ): (
   event: BeforeAgentStartEvent,
   ctx: ExtensionContext,
 ) => Promise<BeforeAgentStartEventResult | undefined> {
   return (event) => {
-    if (capturedEpoch !== currentEpoch()) {
+    if (capturedGeneration !== runtime.currentGeneration()) {
       return Promise.resolve(undefined);
     }
 
-    if (pendingSessionStartContextEntries().length === 0) {
+    const pendingContext = runtime.drainPendingSessionStartContext();
+    if (pendingContext.length === 0) {
       return Promise.resolve(undefined);
     }
 
-    const buffered = pendingSessionStartContextEntries()
-      .map((e) => e.context)
-      .join("\n\n");
-    clearPendingSessionStartContext();
+    const buffered = pendingContext.map((entry) => entry.context).join("\n\n");
     return Promise.resolve({ systemPrompt: `${event.systemPrompt}\n\n${buffered}` });
   };
 }
@@ -466,33 +464,52 @@ interface RuntimeRegistrationOwner {
 
 interface TransitionRegistrationOwner {
   readonly kind: "transition";
+  readonly runtime: HooksRuntime;
 }
 
 type RegistrationOwner = RuntimeRegistrationOwner | TransitionRegistrationOwner;
 
 type RegistrationCallbackFactory<Args extends readonly unknown[], Result> = (
-  epoch: number,
+  capturedGeneration: number,
 ) => (...args: Args) => Result;
 
 function bindRegistrationCallback<Args extends readonly unknown[], Result>(
   owner: RegistrationOwner,
   capturedGeneration: number,
-  capturedEpoch: number,
   routingState: EventRouterRoutingState,
-  callbackForEpoch: RegistrationCallbackFactory<Args, Result>,
+  callbackForGeneration: RegistrationCallbackFactory<Args, Result>,
 ): (...args: Args) => Result | undefined {
-  if (owner.kind === "transition") {
-    return callbackForEpoch(capturedEpoch);
-  }
-
+  const callback = callbackForGeneration(capturedGeneration);
   return (...args: Args): Result | undefined => {
     if (owner.runtime.currentGeneration() !== capturedGeneration) {
       return undefined;
     }
 
-    mirrorRuntimeRoutingState(routingState);
-    return callbackForEpoch(currentEpoch())(...args);
+    if (owner.kind === "runtime") {
+      mirrorRuntimeRoutingState(routingState);
+    } else {
+      mirrorRoutingStateIntoRuntime(routingState, owner.runtime);
+    }
+
+    return callback(...args);
   };
+}
+
+function mirrorRoutingStateIntoRuntime(
+  routingState: EventRouterRoutingState,
+  runtime: HooksRuntime,
+): void {
+  for (const key of Array.from(runtime.parsedConfigEntries().keys())) {
+    runtime.deleteParsedConfig(key);
+  }
+
+  for (const [key, entry] of routingState.parsedConfigEntries()) {
+    runtime.setParsedConfig(key, entry);
+  }
+
+  for (const event of BUCKET_A_EVENTS) {
+    runtime.setRoutingBucket(event, routingState.getRoutingBucket(event));
+  }
 }
 
 function mirrorRuntimeRoutingState(routingState: EventRouterRoutingState): void {
@@ -818,18 +835,12 @@ async function registerHooksBridgeWith(
     owner.kind === "runtime"
       ? createRoutingStateOperations(owner.runtime)
       : TRANSITION_ROUTING_STATE;
-  const capturedGeneration = owner.kind === "runtime" ? owner.runtime.advanceGeneration() : 0;
-  const capturedEpoch = bumpEpoch();
+  const capturedGeneration = owner.runtime.advanceGeneration();
+  bumpEpoch();
   function bind<Args extends readonly unknown[], Result>(
-    callbackForEpoch: RegistrationCallbackFactory<Args, Result>,
+    callbackForGeneration: RegistrationCallbackFactory<Args, Result>,
   ): (...args: Args) => Result | undefined {
-    return bindRegistrationCallback(
-      owner,
-      capturedGeneration,
-      capturedEpoch,
-      routingState,
-      callbackForEpoch,
-    );
+    return bindRegistrationCallback(owner, capturedGeneration, routingState, callbackForGeneration);
   }
 
   // /reload re-enters this factory and must not leak a stale SessionStart
@@ -837,18 +848,14 @@ async function registerHooksBridgeWith(
   // Clearing here makes the invariant explicit: each bridge load starts
   // with an empty pending buffer, which only `adaptObservationResultForEvent`
   // (via `appendPendingSessionStartContext`) can subsequently populate.
-  if (owner.kind === "runtime") {
-    owner.runtime.preparePendingContextForRegistration();
-  }
+  owner.runtime.preparePendingContextForRegistration();
 
   clearPendingSessionStartContext();
 
   // Same epoch hygiene for the settle dispatcher's cached last-assistant
   // message: clear it so a `/reload` cannot leak the prior session's message
   // into the new one's `stopReason` gate.
-  if (owner.kind === "runtime") {
-    owner.runtime.prepareSettleForRegistration();
-  }
+  owner.runtime.prepareSettleForRegistration();
 
   resetSettleState();
 
@@ -863,6 +870,8 @@ async function registerHooksBridgeWith(
     rebuildRoutingTablesWith(routingState);
     if (owner.kind === "runtime") {
       mirrorRuntimeRoutingState(routingState);
+    } else {
+      mirrorRoutingStateIntoRuntime(routingState, owner.runtime);
     }
 
     // D-60-06: ensure the per-session `_shared` data dir exists so a
@@ -918,14 +927,22 @@ async function registerHooksBridgeWith(
   // add a registration.
   pi.on(
     "session_start",
-    bind((epoch) => {
-      const sessionStartHandler = compositeHandlerFor("SessionStart", epoch, pi, opts.executor);
+    bind((generation) => {
+      const sessionStartHandler = compositeHandlerFor(
+        owner.runtime,
+        "SessionStart",
+        generation,
+        pi,
+        opts.executor,
+      );
       return async (event, ctx) => {
         try {
           await hydrateProjectScopeForCwdWith(reader, ctx.cwd, routingState);
           rebuildRoutingTablesWith(routingState);
           if (owner.kind === "runtime") {
             mirrorRuntimeRoutingState(routingState);
+          } else {
+            mirrorRoutingStateIntoRuntime(routingState, owner.runtime);
           }
 
           if (routingState.getRoutingBucket("SessionStart").some((e) => e.scope === "project")) {
@@ -941,27 +958,37 @@ async function registerHooksBridgeWith(
   );
   pi.on(
     "session_shutdown",
-    bind((epoch) => compositeHandlerFor("SessionEnd", epoch, pi, opts.executor)),
+    bind((generation) =>
+      compositeHandlerFor(owner.runtime, "SessionEnd", generation, pi, opts.executor),
+    ),
   );
   pi.on(
     "session_before_compact",
-    bind((epoch) => compositeHandlerFor("PreCompact", epoch, pi, opts.executor)),
+    bind((generation) =>
+      compositeHandlerFor(owner.runtime, "PreCompact", generation, pi, opts.executor),
+    ),
   );
   pi.on(
     "session_compact",
-    bind((epoch) => compositeHandlerFor("PostCompact", epoch, pi, opts.executor)),
+    bind((generation) =>
+      compositeHandlerFor(owner.runtime, "PostCompact", generation, pi, opts.executor),
+    ),
   );
   pi.on(
     "input",
-    bind((epoch) => compositeHandlerFor("UserPromptSubmit", epoch, pi, opts.executor)),
+    bind((generation) =>
+      compositeHandlerFor(owner.runtime, "UserPromptSubmit", generation, pi, opts.executor),
+    ),
   );
   pi.on(
     "tool_call",
-    bind((epoch) => compositeHandlerFor("PreToolUse", epoch, pi, opts.executor)),
+    bind((generation) =>
+      compositeHandlerFor(owner.runtime, "PreToolUse", generation, pi, opts.executor),
+    ),
   );
   pi.on(
     "tool_result",
-    bind((epoch) => toolResultCompositeHandler(epoch, pi, opts.executor)),
+    bind((generation) => toolResultCompositeHandler(owner.runtime, generation, pi, opts.executor)),
   );
   // SessionStart additionalContext drain: every agent turn fires
   // before_agent_start; the handler returns early when the pending
@@ -969,7 +996,11 @@ async function registerHooksBridgeWith(
   // turn.
   pi.on(
     "before_agent_start",
-    bind((epoch) => beforeAgentStartHandlerFor(epoch)),
+    bind((generation) =>
+      owner.kind === "runtime"
+        ? createBeforeAgentStartHandler(owner.runtime, generation)
+        : beforeAgentStartHandlerFor(generation),
+    ),
   );
   // Settle-time turn-boundary dispatch: agent_end caches the run's
   // last-assistant message; agent_settled reads it and gates on stopReason
@@ -1019,6 +1050,17 @@ const NODE_HOOKS_HYDRATION_READER: HooksHydrationReader = {
   },
 };
 
+const NODE_TRANSITION_RUNTIME = createHooksRuntime();
+
+export function beforeAgentStartHandlerFor(
+  capturedGeneration: number,
+): (
+  event: BeforeAgentStartEvent,
+  ctx: ExtensionContext,
+) => Promise<BeforeAgentStartEventResult | undefined> {
+  return createBeforeAgentStartHandler(NODE_TRANSITION_RUNTIME, capturedGeneration);
+}
+
 const NODE_HOOKS_HYDRATION: HooksHydration = {
   async hydrateProjectScopeForCwd(cwd: string): Promise<void> {
     await hydrateProjectScopeForCwdWith(NODE_HOOKS_HYDRATION_READER, cwd, TRANSITION_ROUTING_STATE);
@@ -1027,7 +1069,12 @@ const NODE_HOOKS_HYDRATION: HooksHydration = {
     pi: ExtensionAPI,
     opts: { ctx: ExtensionContext; cwd: string; executor?: HookExecutor },
   ): Promise<void> {
-    await registerHooksBridgeWith({ kind: "transition" }, NODE_HOOKS_HYDRATION_READER, pi, opts);
+    await registerHooksBridgeWith(
+      { kind: "transition", runtime: NODE_TRANSITION_RUNTIME },
+      NODE_HOOKS_HYDRATION_READER,
+      pi,
+      opts,
+    );
   },
 };
 

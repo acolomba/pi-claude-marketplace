@@ -24,7 +24,7 @@ import {
 import { adaptObservationResultForEvent } from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts";
 import {
   addPluginConfigToCache,
-  beforeAgentStartHandlerFor,
+  createBeforeAgentStartHandler,
   createHooksHydration,
   hydrateProjectScopeForCwd,
   readAndCachePluginHooks,
@@ -34,7 +34,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
 import { MATCH_ALL_IF } from "../../../extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts";
 import {
-  bumpEpoch,
+  appendPendingSessionStartContext,
   currentEpoch,
   getRoutingBucket,
   parsedConfigEntries,
@@ -274,11 +274,12 @@ test(
     const previousEpoch = currentEpoch();
     const staleToolCallHandler = registrations.find(({ event }) => event === "tool_call")?.handler;
     registrations.length = 0;
-    adaptObservationResultForEvent(
-      { kind: "mutate", additionalContext: "stale context" },
-      "SessionStart",
-      { scope: "user", marketplace: "user-catalog", pluginId: "user-plugin" },
-    );
+    appendPendingSessionStartContext({
+      context: "stale context",
+      scope: "user",
+      marketplace: "user-catalog",
+      pluginId: "user-plugin",
+    });
     const previousEnding = {
       type: "agent_end",
       messages: [
@@ -900,17 +901,21 @@ test("readAndCachePluginHooks leaves the cache unchanged after a parse failure",
 test("beforeAgentStartHandlerFor drains ordered context once and leaves an empty turn unchanged", async (t) => {
   // arrange
   ownRoutingState(t);
+  const runtime = createHooksRuntime();
+  const capturedGeneration = runtime.advanceGeneration();
   adaptObservationResultForEvent(
+    runtime,
     { kind: "mutate", additionalContext: "alpha context" },
     "SessionStart",
     { scope: "project", marketplace: "catalog", pluginId: "alpha" },
   );
   adaptObservationResultForEvent(
+    runtime,
     { kind: "mutate", additionalContext: "beta context" },
     "SessionStart",
     { scope: "user", marketplace: "catalog", pluginId: "beta" },
   );
-  const handler = beforeAgentStartHandlerFor(currentEpoch());
+  const handler = createBeforeAgentStartHandler(runtime, capturedGeneration);
   const event = {
     type: "before_agent_start",
     prompt: "prompt",
@@ -927,20 +932,22 @@ test("beforeAgentStartHandlerFor drains ordered context once and leaves an empty
     systemPrompt: "base prompt\n\nalpha context\n\nbeta context",
   });
   assert.strictEqual(secondTurn, undefined);
-  assert.deepStrictEqual(pendingSessionStartContextEntries(), []);
+  assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), []);
 });
 
 test("beforeAgentStartHandlerFor rejects a stale epoch without draining live context", async (t) => {
   // arrange
   ownRoutingState(t);
-  const staleEpoch = currentEpoch();
-  bumpEpoch();
+  const runtime = createHooksRuntime();
+  const staleGeneration = runtime.advanceGeneration();
+  runtime.advanceGeneration();
   adaptObservationResultForEvent(
+    runtime,
     { kind: "mutate", additionalContext: "live context" },
     "SessionStart",
     { scope: "project", marketplace: "catalog", pluginId: "live" },
   );
-  const handler = beforeAgentStartHandlerFor(staleEpoch);
+  const handler = createBeforeAgentStartHandler(runtime, staleGeneration);
   const event = {
     type: "before_agent_start",
     prompt: "prompt",
@@ -953,7 +960,7 @@ test("beforeAgentStartHandlerFor rejects a stale epoch without draining live con
 
   // assert
   assert.strictEqual(promptUpdate, undefined);
-  assert.deepStrictEqual(pendingSessionStartContextEntries(), [
+  assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), [
     {
       context: "live context",
       scope: "project",

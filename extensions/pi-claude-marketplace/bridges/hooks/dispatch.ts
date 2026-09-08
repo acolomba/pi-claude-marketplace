@@ -51,8 +51,9 @@ import {
 } from "./event-adapters.ts";
 import { assertNever, type HookExecResult } from "./exec-result.ts";
 import { ifFires } from "./if-field/index.ts";
-import { currentEpoch, getRoutingBucket, type RoutingEntry } from "./routing-state.ts";
 
+import type { RoutingEntry } from "./routing-state.ts";
+import type { HooksRuntime } from "./runtime.ts";
 import type { BucketAEvent, DispatchableEvent } from "../../domain/components/hook-events.ts";
 import type { ParsedMatcher } from "../../domain/components/hooks.ts";
 import type {
@@ -317,17 +318,18 @@ export type CompositeDispatchEvent = Exclude<
  * and assert on dispatch without spawning a child (see `HookExecutor`).
  */
 export function compositeHandlerFor<E extends CompositeDispatchEvent>(
+  runtime: HooksRuntime,
   claudeEvent: E,
-  capturedEpoch: number,
+  capturedGeneration: number,
   pi?: ExtensionAPI,
   executor: HookExecutor = dispatchHookExec,
 ): (event: CompositeEventFor<E>, ctx: ExtensionContext) => Promise<CompositeReturnFor<E>> {
   return async (event, ctx) => {
-    if (capturedEpoch !== currentEpoch()) {
+    if (capturedGeneration !== runtime.currentGeneration()) {
       return undefined as CompositeReturnFor<E>;
     }
 
-    const bucket = getRoutingBucket(claudeEvent);
+    const bucket = runtime.getRoutingBucket(claudeEvent);
     if (bucket.length === 0) {
       return undefined as CompositeReturnFor<E>;
     }
@@ -336,7 +338,7 @@ export function compositeHandlerFor<E extends CompositeDispatchEvent>(
       entryFires(claudeEvent, entry, event),
     );
 
-    return adaptForEvent(claudeEvent, reduced, event) as CompositeReturnFor<E>;
+    return adaptForEvent(runtime, claudeEvent, reduced, event) as CompositeReturnFor<E>;
   };
 }
 
@@ -354,17 +356,18 @@ export function compositeHandlerFor<E extends CompositeDispatchEvent>(
  * and forwarded identically.
  */
 export function toolResultCompositeHandler(
-  capturedEpoch: number,
+  runtime: HooksRuntime,
+  capturedGeneration: number,
   pi?: ExtensionAPI,
   executor: HookExecutor = dispatchHookExec,
 ): (event: ToolResultEvent, ctx: ExtensionContext) => Promise<ToolResultEventResult | undefined> {
   return async (event, ctx) => {
-    if (capturedEpoch !== currentEpoch()) {
+    if (capturedGeneration !== runtime.currentGeneration()) {
       return undefined;
     }
 
     const claudeEvent: BucketAEvent = event.isError ? "PostToolUseFailure" : "PostToolUse";
-    const bucket = getRoutingBucket(claudeEvent);
+    const bucket = runtime.getRoutingBucket(claudeEvent);
     if (bucket.length === 0) {
       return undefined;
     }
@@ -388,6 +391,7 @@ export function toolResultCompositeHandler(
  * and always returns undefined.
  */
 function adaptForEvent(
+  runtime: HooksRuntime,
   claudeEvent: CompositeDispatchEvent,
   reduced: ReducedBucket,
   event: unknown,
@@ -417,7 +421,7 @@ function adaptForEvent(
         marketplace: "",
         pluginId: "",
       };
-      adaptObservationResultForEvent(reduced.result, claudeEvent, provenance);
+      adaptObservationResultForEvent(runtime, reduced.result, claudeEvent, provenance);
       return undefined;
     }
   }
