@@ -599,6 +599,34 @@ const PROJECT_ONE_UPDATED: ScopeFootprint = {
   agents: [{ file: ONE_AGENT_FILE }],
 };
 
+test("forwards the exact direct update request through the required update operation", async (t) => {
+  const workspace = await createHermeticWorkspace(t, "forward-operation");
+  const { ctx, pi } = createNotificationBoundary(1, 4, {
+    value: workspace.cwd,
+    reads: 1,
+  });
+  const calls: unknown[] = [];
+  const updateOperation = async (options: unknown): Promise<void> => {
+    calls.push(options);
+  };
+  const updateHandler = makeUpdateHandler(pi, updateOperation);
+
+  await updateHandler("one@alpha --scope project --map-model --partial --local", ctx);
+
+  assert.deepStrictEqual(calls, [
+    {
+      ctx,
+      pi,
+      cwd: workspace.cwd,
+      target: { kind: "plugin", plugin: "one", marketplace: "alpha" },
+      scope: "project",
+      mapModel: true,
+      partial: true,
+      local: true,
+    },
+  ]);
+});
+
 // ---------------------------------------------------------------------------
 // The three target forms. Each excludes something the other two include, so a
 // form that collapsed into another is visible rather than merely unproven. The
