@@ -38,10 +38,7 @@ import {
   loadState,
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import {
-  createCompletionCache,
-  resetCompletionCache,
-} from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
@@ -125,14 +122,7 @@ function makeCtx(piOverrides?: { readonly toolNames?: readonly string[] }): {
 }
 
 async function withHermeticHome<T>(fn: () => Promise<T>): Promise<T> {
-  return withHermeticEnvironment("reinstall-", async () => {
-    resetCompletionCache();
-    try {
-      return await fn();
-    } finally {
-      resetCompletionCache();
-    }
-  });
+  return withHermeticEnvironment("reinstall-", fn);
 }
 
 interface SeededReinstallAgent {

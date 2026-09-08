@@ -37,10 +37,7 @@ import {
   saveState,
   STATE_VALIDATOR,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import {
-  createCompletionCache,
-  resetCompletionCache,
-} from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { SymlinkRefusedError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
@@ -3860,10 +3857,6 @@ test("retry proof: install: completion-cache maintenance failure stays installed
     let unlinkMock: ReturnType<typeof t.mock.method> | undefined;
     try {
       // arrange
-      resetCompletionCache();
-      t.after(() => {
-        resetCompletionCache();
-      });
       const locations = locationsFor("project", cwd);
       const { manifestPath } = await seedPathMarketplaceWithPlugin({
         cwd,
@@ -5327,12 +5320,9 @@ test("WR-03: installPlugin of a hooks-declaring plugin rebuilds the routing tabl
 // ─────────────────────────────────────────────────────────────────────────────
 
 test("LIFE-01: installPlugin with hooks writes <hooksDir>/<plugin>/hooks.json via the hooks bridge slot", async () => {
-  const { resetRoutingState } =
-    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-life01-"));
     try {
-      resetRoutingState();
       const locations = locationsFor("project", cwd);
       await mkdir(locations.extensionRoot, { recursive: true });
 
@@ -5373,12 +5363,9 @@ test("LIFE-01: installPlugin with hooks writes <hooksDir>/<plugin>/hooks.json vi
 });
 
 test("SURF-05: installPlugin of a hooks-declaring plugin with rewakeMessage but no asyncRewake surfaces `(installed) {orphan rewake}`", async () => {
-  const { resetRoutingState } =
-    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-surf05-"));
     try {
-      resetRoutingState();
       const locations = locationsFor("project", cwd);
       await mkdir(locations.extensionRoot, { recursive: true });
 
@@ -5430,12 +5417,9 @@ test("SURF-05: installPlugin of a hooks-declaring plugin with rewakeMessage but 
 });
 
 test("SURF-05: installPlugin of a hooks-declaring plugin with rewakeMessage AND asyncRewake: true does NOT surface `{orphan rewake}`", async () => {
-  const { resetRoutingState } =
-    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-surf05neg-"));
     try {
-      resetRoutingState();
       const locations = locationsFor("project", cwd);
       await mkdir(locations.extensionRoot, { recursive: true });
 
@@ -8984,8 +8968,6 @@ test("retry proof: install: agents prepare failure after committed commands unwi
 });
 
 test("retry proof: install: hooks reparse failure after three bridges retries without reseeding", async (t) => {
-  const { resetRoutingState } =
-    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-retry-hooks-"));
     const originalReadFile = filesystemPromises.readFile.bind(filesystemPromises);
@@ -8993,7 +8975,6 @@ test("retry proof: install: hooks reparse failure after three bridges retries wi
     let restoreSchedule: (() => void) | undefined;
     try {
       // arrange
-      resetRoutingState();
       const locations = locationsFor("project", cwd);
       const { manifestPath, pluginRoot } = await seedPathMarketplaceWithPlugin({
         agents: [{ sourceName: "reviewer" }],
@@ -9146,21 +9127,17 @@ test("retry proof: install: hooks reparse failure after three bridges retries wi
       restoreSchedule?.();
       readMock?.mock.restore();
       syncBuiltinESMExports();
-      resetRoutingState();
       await rm(cwd, { force: true, recursive: true });
     }
   });
 });
 
 test("retry proof: install: MCP prepare failure after hooks compensates every completed bridge", async (t) => {
-  const { resetRoutingState } =
-    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-retry-mcp-"));
     let restoreSchedule: (() => void) | undefined;
     try {
       // arrange
-      resetRoutingState();
       const locations = locationsFor("project", cwd);
       const { manifestPath, pluginRoot } = await seedPathMarketplaceWithPlugin({
         agents: [{ sourceName: "reviewer" }],
@@ -9297,7 +9274,6 @@ test("retry proof: install: MCP prepare failure after hooks compensates every co
       );
     } finally {
       restoreSchedule?.();
-      resetRoutingState();
       await rm(cwd, { force: true, recursive: true });
     }
   });

@@ -6104,12 +6104,9 @@ test("WR-03: one update owner refreshes direct and cascade routes without leakin
 // ─────────────────────────────────────────────────────────────────────────────
 
 test("LIFE-01 (update): version A->B (both ship hooks) overwrites <hooksDir>/<plugin>/hooks.json atomically with version B's content", async () => {
-  const { resetRoutingState } =
-    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "update-life01-overwrite-"));
     try {
-      resetRoutingState();
       const locations = locationsFor("project", cwd);
 
       const oldHooksJson = {
@@ -6174,12 +6171,9 @@ test("LIFE-01 (update): version A->B (both ship hooks) overwrites <hooksDir>/<pl
 });
 
 test("LIFE-01 (update): version A (with hooks) -> version B (no hooks) removes the stale hooks file", async () => {
-  const { resetRoutingState } =
-    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "update-life01-remove-"));
     try {
-      resetRoutingState();
       const locations = locationsFor("project", cwd);
 
       const oldHooksJson = {
@@ -6253,12 +6247,9 @@ test("LIFE-01 (update): version A (with hooks) -> version B (no hooks) removes t
 });
 
 test("LIFE-01 (update): version A (no hooks) -> version B (with hooks) writes the new hooks.json", async () => {
-  const { resetRoutingState } =
-    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "update-life01-add-"));
     try {
-      resetRoutingState();
       const locations = locationsFor("project", cwd);
 
       const seeded = await seedPathMarketplace({
@@ -8111,12 +8102,9 @@ test("WR-01 / SURF-05: an update that materializes an orphan-rewake handler name
   // that INHERITS the shared signal shape, so a bare row here made the
   // inheritance's own claim false. The token names itself and moves NO severity
   // channel: the update was carried out in full.
-  const { resetRoutingState } =
-    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "update-wr01-orphan-"));
     try {
-      resetRoutingState();
       await seedPathMarketplace({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
