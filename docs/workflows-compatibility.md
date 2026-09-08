@@ -16,6 +16,8 @@ Every claim about either engine carries its evidence grade where it is made. The
 
 A source read is not a runtime measurement, and this document never presents one as the other. Where a claim is a source read, the sentence says so, and the measurement that would upgrade it is named as work that has not been done rather than implied to have been done.
 
+**Every `src/...` line-number citation below is pinned to 3.10.1 and is not maintained against later releases.** The engine is not vendored in this repository, so nothing here can detect that a citation has drifted, and the same absent exported contract that makes the storage layout a standing risk makes its line numbers one. Read that exact version to follow a citation -- `npm pack @quintinshaw/pi-dynamic-workflows@3.10.1` -- rather than whichever version is current. Re-reading the vendored internals against a newer engine is tracked as `WPIN-01`; until that lands, a citation that no longer lands on the code it names means the engine moved, not that the claim was wrong when it was read.
+
 ## Installing executable code
 
 **This is the first bridge that installs executable code rather than data.** Every other component kind this extension installs is a descriptor: markdown a model reads, or JSON naming a command the host spawns out of the plugin's own tree. A workflow is third-party JavaScript. The bridge copies the script bytes verbatim into a JSON envelope it writes under the host engine's own storage root, outside the plugin tree, where a separate Pi extension -- `@quintinshaw/pi-dynamic-workflows` -- loads it and runs it. Nothing in this extension ever evaluates a script; `domain/workflow-script.ts` parses and never executes, and `bridges/workflows/stage.ts` copies bytes it never reformats, transpiles, minifies, re-encodes or line-ending-normalizes.
@@ -181,7 +183,9 @@ pi install npm:@quintinshaw/pi-dynamic-workflows
 
 ## When the host engine is absent
 
-The bridge writes envelopes whether or not the engine is loaded in the session. The install succeeds, the envelope bytes are byte-identical to what an engine-present install writes, and the row carries the `{requires pi-dynamic-workflows}` marker at `warning` severity: the operation WAS carried out, but the desired state is not reached, because nothing runs the workflows yet. A missing companion degrades an install; it never blocks one.
+The bridge writes envelopes whether or not the engine is loaded in the session. The install succeeds, the envelope bytes are byte-identical to what an engine-present install writes, and the row carries the `{requires pi-dynamic-workflows}` marker. A missing companion degrades an install; it never blocks one.
+
+**The marker bytes are the same on every surface; the severity they arrive at is not.** Three surfaces raise the row from `info` to `warning` when the engine is absent: a standalone install, the manual update cascade, and a standalone enable. On those the raise says what the tri-state model means by `warning` -- the operation WAS carried out, but the desired state is not reached, because nothing runs the workflows yet. Every other surface renders the identical marker at its own base severity, normally `info`: the read-only inventory surfaces (`list`, `info`), the load-time reconcile projection, `import`, `reinstall` and the autoupdate cascade. They report a standing fact about a record rather than a shortfall in an action just taken, so the same plugin can read `warning` from `install` and `info` from `list` in one session. This split is not particular to workflows -- the `requires pi-subagents` and `requires pi-mcp` markers have behaved this way since they were introduced, and the workflows marker follows them rather than diverging.
 
 Writing anyway is only correct because recovery costs nothing: installing the engine and running `/reload` is enough. The engine registers saved workflows on `session_start` by walking its saved directories, with no index, no install-time registration hook and no engine API to call, so an envelope already on disk is picked up on the next session start regardless of who wrote it or when (source-read at 3.10.1, `src/pi-extension.ts`, `src/saved-commands.ts:119-137`, `src/workflow-saved.ts:287`). No reinstall is required.
 
@@ -189,7 +193,7 @@ Two structural guarantees back that up rather than leaving it a claim in prose. 
 
 ## Upstream stability
 
-**The engine's storage contract is private, and this is a stated risk rather than a footnote.** The envelope shape, the working-directory key derivation, the saved-directory layout and the name validator are all internals of a 0.x package with 57 published versions and no exported contract for any of them. This bridge writes into that layout directly, so an engine release that changes it can strand already-installed workflows until they are reinstalled.
+**The engine's storage contract is private, and this is a stated risk rather than a footnote.** The envelope shape, the working-directory key derivation, the saved-directory layout and the name validator are all internals, and the engine exports a contract for none of them. Its version number offers no cover either way: the package is well past 1.0, and it has still published 57 versions across three majors in fourteen weeks -- `1.0.0` on 2026-05-30 through `3.10.1` on 2026-09-03 (`npm view @quintinshaw/pi-dynamic-workflows versions time`). Semver binds what a package exports, so a release of any size can move an unexported layout without breaking its own promise. This bridge writes into that layout directly, so an engine release that changes it can strand already-installed workflows until they are reinstalled.
 
 Specifically, at 3.10.1:
 

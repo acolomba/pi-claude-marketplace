@@ -162,8 +162,10 @@ export function outcomeToCascadePluginMessage(
       // own renderer; the warning fires ONLY on this autoupdate surface.
       // WR-12 / CR-01: BOTH row forms are composed by the SAME composer the
       // manual update cascade calls, so the two surfaces cannot report one
-      // ledger run differently -- and no mapper can pick a form itself and
-      // short-circuit past a signal the composer threads. The base severities
+      // ledger run's ROW BYTES differently -- and no mapper can pick a form
+      // itself and short-circuit past a signal the composer threads. The claim
+      // is about the bytes only: the severity channel is per-surface, and this
+      // surface and the manual cascade do differ on it. The base severities
       // below are this surface's own policy (WR-01 silence on the clean row,
       // the SEV-03 newly-degraded raise on the dropped-kind row); the composer
       // applies only the orthogonal WARN-01 malformed-component raise on top.
