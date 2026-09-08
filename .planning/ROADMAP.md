@@ -348,7 +348,7 @@ Plans:
 **Goal:** Expose legitimate test seams with correctly owned runtime state and public contracts.
 **Depends on:** Phase 4
 **Requirements:** TREF-04, TREF-05, TREF-06
-**Plans:** 16/33 plans executed
+**Plans:** 17/33 plans executed
 
 **Success Criteria**:
 
@@ -411,7 +411,7 @@ Plans:
 
 **Wave 11** _(blocked on Wave 10 completion)_
 
-- [ ] 05-17-PLAN.md — Route update and marketplace cascades through lifecycle ownership.
+- [x] 05-17-PLAN.md — Route update and marketplace cascades through lifecycle ownership.
 
 **Wave 12** _(blocked on Wave 11 completion)_
 
@@ -567,7 +567,7 @@ baseline, which still includes both pairs; neither is a terminal shortfall.
 | 2. Containment and Input Safety      | 3/3            | Complete    | 2026-09-05 |
 | 3. Production Defect Corrections     | 14/14          | Complete    | 2026-09-07 |
 | 4. Hermetic Test Infrastructure      | 7/7            | Complete    | 2026-09-07 |
-| 5. Injection and Ownership Design    | 16/33          | In Progress | —          |
+| 5. Injection and Ownership Design    | 17/33          | In Progress | —          |
 | 6. Assertion and Module Refinement   | 0/0            | Not started | —          |
 | 7. Gate Integrity                    | 0/0            | Not started | —          |
 | 8. Direct Coverage                   | 0/0            | Not started | —          |
