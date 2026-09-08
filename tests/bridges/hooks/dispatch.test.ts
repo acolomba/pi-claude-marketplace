@@ -967,6 +967,75 @@ describe("composite dispatch closure partitions", () => {
     assert.deepStrictEqual(output, expectedOutput);
   });
 
+  test("drops a tool-input mutation when its executor becomes stale while awaited", async () => {
+    // arrange
+    const context = createExtensionContext("/workspace/dispatch-stale-await");
+    const entry = createRoutingEntry({
+      pluginId: "stale-await-entry",
+      claudeEvent: "PreToolUse",
+      rawMatcher: "Bash",
+      declarationIndex: 0,
+    });
+    runtime.setRoutingBucket("PreToolUse", [entry]);
+    let finishExecution: ((result: HookExecResult) => void) | undefined;
+    const executor: HookExecutor = () =>
+      new Promise((resolve) => {
+        finishExecution = resolve;
+      });
+    const handler = compositeHandlerFor(
+      runtime,
+      "PreToolUse",
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+    );
+    const event = createToolCallEvent();
+    const pending = handler(event, context);
+    runtime.advanceGeneration();
+
+    // act
+    finishExecution?.({ kind: "mutate", updatedInput: { command: "stale command" } });
+    const output = await pending;
+
+    // assert
+    assert.strictEqual(output, undefined);
+    assert.deepStrictEqual(event, createToolCallEvent());
+  });
+
+  test("drops SessionStart context when its executor becomes stale while awaited", async () => {
+    // arrange
+    const context = createExtensionContext("/workspace/session-stale-await");
+    const entry = createRoutingEntry({
+      pluginId: "stale-session-entry",
+      claudeEvent: "SessionStart",
+      rawMatcher: "startup",
+      declarationIndex: 0,
+    });
+    runtime.setRoutingBucket("SessionStart", [entry]);
+    let finishExecution: ((result: HookExecResult) => void) | undefined;
+    const executor: HookExecutor = () =>
+      new Promise((resolve) => {
+        finishExecution = resolve;
+      });
+    const handler = compositeHandlerFor(
+      runtime,
+      "SessionStart",
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+    );
+    const pending = handler({ type: "session_start", reason: "startup" }, context);
+    runtime.advanceGeneration();
+
+    // act
+    finishExecution?.({ kind: "mutate", additionalContext: "stale context" });
+    const output = await pending;
+
+    // assert
+    assert.strictEqual(output, undefined);
+    assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), []);
+  });
+
   test("returns undefined from a live composite closure with an empty bucket", async () => {
     // arrange
     const context = createExtensionContext("/workspace/dispatch-empty");
@@ -1141,6 +1210,40 @@ describe("toolResultCompositeHandler", () => {
 
     // assert
     assert.deepStrictEqual(output, expectedOutput);
+  });
+
+  test("drops a tool-result decision when its executor becomes stale while awaited", async () => {
+    // arrange
+    const context = createExtensionContext("/workspace/tool-result-stale-await");
+    const entry = createRoutingEntry({
+      pluginId: "stale-result-await",
+      claudeEvent: "PostToolUse",
+      rawMatcher: "Bash",
+      declarationIndex: 0,
+    });
+    runtime.setRoutingBucket("PostToolUse", [entry]);
+    let finishExecution: ((result: HookExecResult) => void) | undefined;
+    const executor: HookExecutor = () =>
+      new Promise((resolve) => {
+        finishExecution = resolve;
+      });
+    const handler = toolResultCompositeHandler(
+      runtime,
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+    );
+    const event = createToolResultEvent(false);
+    const pending = handler(event, context);
+    runtime.advanceGeneration();
+
+    // act
+    finishExecution?.({ kind: "block", reason: "stale block" });
+    const output = await pending;
+
+    // assert
+    assert.strictEqual(output, undefined);
+    assert.deepStrictEqual(event, createToolResultEvent(false));
   });
 
   test("returns undefined from a live tool-result closure with an empty bucket", async () => {

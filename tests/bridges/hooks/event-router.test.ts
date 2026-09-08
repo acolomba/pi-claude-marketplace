@@ -1632,6 +1632,118 @@ test("same-runtime registration invalidates an earlier callback before lazy hydr
   assert.strictEqual(registrations.length, 22);
 });
 
+test(
+  "same-runtime registration stops stale lazy hydration before post-await route and file effects",
+  { concurrency: false },
+  async (t) => {
+    // arrange
+    ownRoutingState(t);
+    const root = await mkdtemp(path.join(tmpdir(), "hooks-router-stale-hydration-"));
+    t.after(() => rm(root, { recursive: true, force: true, maxRetries: 3 }));
+    ownAgentRoot(t, path.join(root, "agent"));
+    const factoryRoot = path.join(root, "factory");
+    const projectRoot = path.join(root, "project");
+    const projectLocations = locationsFor("project", projectRoot);
+    const hookPath = path.join(projectLocations.hooksDir, "stale-owner", "hooks.json");
+    await mkdir(path.dirname(hookPath), { recursive: true });
+    await writeFile(
+      hookPath,
+      JSON.stringify(makeConfig([{ event: "PreToolUse", handlers: 1 }])),
+      "utf8",
+    );
+    const staleState = {
+      schemaVersion: 2,
+      marketplaces: {
+        stale: {
+          name: "stale",
+          scope: "project",
+          source: { kind: "path", raw: path.join(root, "marketplace") },
+          addedFromCwd: projectRoot,
+          manifestPath: path.join(root, "marketplace", ".claude-plugin", "marketplace.json"),
+          marketplaceRoot: path.join(root, "marketplace"),
+          plugins: {
+            "stale-owner": {
+              version: "1.0.0",
+              resolvedSource: path.join(root, "marketplace", "plugins", "stale-owner"),
+              compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+              resources: {
+                skills: [],
+                prompts: [],
+                agents: [],
+                mcpServers: [],
+                hooks: ["stale-owner"],
+              },
+              enabled: true,
+              installedAt: "2026-09-08T00:00:00.000Z",
+              updatedAt: "2026-09-08T00:00:00.000Z",
+            },
+          },
+        },
+      },
+    } satisfies ExtensionState;
+    let releaseStaleState: ((state: ExtensionState) => void) | undefined;
+    let deferProjectRead = false;
+    const reader: HooksHydrationReader = {
+      loadState(extensionRoot: string): Promise<ExtensionState> {
+        if (deferProjectRead && extensionRoot === projectLocations.extensionRoot) {
+          deferProjectRead = false;
+          return new Promise((resolve) => {
+            releaseStaleState = resolve;
+          });
+        }
+
+        return Promise.resolve({ schemaVersion: 2, marketplaces: {} });
+      },
+    };
+    const runtime = createHooksRuntime();
+    const hydration = createHooksHydration(runtime, reader);
+    const { pi, registrations, messages } = makeRecordingPi();
+    const context = makeContext(projectRoot, root);
+    await hydration.registerHooksBridge(pi, { ctx: context, cwd: factoryRoot });
+    const staleSessionStart = registeredHandler(registrations, "session_start");
+    const originalReadFile = fs.promises.readFile.bind(fs.promises);
+    let staleHookReads = 0;
+    const readFile = t.mock.method(
+      fs.promises,
+      "readFile",
+      async (
+        target: Parameters<typeof originalReadFile>[0],
+        options?: Parameters<typeof originalReadFile>[1],
+      ) => {
+        if (target === hookPath) {
+          staleHookReads += 1;
+        }
+
+        return originalReadFile(target, options);
+      },
+    );
+    t.after(() => {
+      readFile.mock.restore();
+      syncBuiltinESMExports();
+    });
+    syncBuiltinESMExports();
+    deferProjectRead = true;
+    const staleCompletion = staleSessionStart(
+      { type: "session_start", reason: "startup" },
+      context,
+    );
+    await hydration.registerHooksBridge(pi, { ctx: context, cwd: factoryRoot });
+
+    // act
+    releaseStaleState?.(staleState);
+    const staleUpdate = await staleCompletion;
+
+    // assert
+    assert.strictEqual(staleUpdate, undefined);
+    assert.strictEqual(runtime.currentGeneration(), 2);
+    assert.strictEqual(staleHookReads, 0);
+    assert.deepStrictEqual(Array.from(runtime.parsedConfigEntries()), []);
+    assert.deepStrictEqual(runtime.getRoutingBucket("PreToolUse"), []);
+    assert.deepStrictEqual(messages, []);
+    assert.strictEqual(registrations.length, 22);
+  },
+);
+
 test("separate runtimes keep their current callbacks live and route through their own buckets", async (t) => {
   // arrange
   ownRoutingState(t);
