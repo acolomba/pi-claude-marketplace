@@ -888,7 +888,37 @@ Code seams: `shared/notify.ts` (message shapes), `platform/pi-api.ts`
 (re-exports `ExtensionContext`), `edge/router.ts` (the `/claude:plugin`
 command entry point every handler's `ctx` flows through).
 
-## WFLW-01: `workflows` component kind is unrecognized (silent gap)
+## ~~WFLW-01: `workflows` component kind is unrecognized (silent gap)~~ -- CLOSED
+
+**CLOSED 2026-08-29** by `872b2d34` ("feat: detect unsupported workflow
+components", #154). Found stale on 2026-09-07 during a backlog triage sweep.
+`.planning/BACKLOG.md` was edited after the fix landed -- `9abdf9e4` ("docs:
+file upstream review findings to backlog", #160, 2026-09-01) -- without closing
+this entry or [DFEN-01], so both read as open work and were sized for future
+milestones.
+
+The fix went past the mechanical one this entry proposed. Four parts, each
+verified by source read:
+
+- `workflows` joined `UNSUPPORTED_COMPONENT_KINDS` (`domain/resolver.ts:388`).
+  That is the half this entry asked for, and it restores the closed-set
+  guarantee the T-02-25 warning is about.
+- A conventional-path probe was added alongside it:
+  `workflows: [{ relativePath: "workflows", kind: "dir" }]`
+  (`domain/resolver.ts:403`). A bare `<pluginRoot>/workflows/` directory now
+  demotes the plugin even when the manifest never declares the field. This
+  entry did not ask for that half.
+- The reason is its own token rather than the generic
+  `{unsupported component}`. `"workflows"` sits in the closed `REASONS` set
+  (`shared/notify.ts:237`, D-106-04 / WDET-04) with a matching `kindToReason`
+  arm (`shared/probe-classifiers.ts:216`).
+- The schema field landed at `domain/components/plugin.ts:45`.
+
+Still out of scope, exactly as this entry scoped it: a real bridge that
+translates a Claude workflow script into a Pi-native equivalent. No known Pi
+analog exists.
+
+Original report follows.
 
 Surfaced 2026-08-13 auditing Claude Code's official plugin-marketplace and
 plugins-reference docs (`code.claude.com/docs/en/plugins-reference`) against
@@ -994,7 +1024,39 @@ Code seams: `transaction/phase-ledger.ts` (the 5-phase ledger pattern),
 `shared/notify.ts` (a new closed-set reason for a skipped/failed dependency
 install).
 
-## DFEN-01: `defaultEnabled` manifest field unsupported
+## ~~DFEN-01: `defaultEnabled` manifest field unsupported~~ -- CLOSED
+
+**CLOSED 2026-08-19** by `8992d850` ("feat: honor defaultEnabled so a plugin
+can install disabled", #130). Found stale on 2026-09-07 during the same backlog
+triage sweep that closed [WFLW-01], and missed by the same later edit
+(`9abdf9e4`, #160, 2026-09-01).
+
+`defaultEnabled` now threads through ten files: `domain/components/plugin.ts`,
+`domain/resolver.ts`, `orchestrators/plugin/install.ts`,
+`orchestrators/plugin/install.messaging.ts`, `orchestrators/types.ts`,
+`orchestrators/reconcile/apply.ts`,
+`orchestrators/reconcile/apply-outcomes.ts`,
+`edge/handlers/plugin/install.ts`, `shared/notify.ts` and
+`shared/notify-reasons.ts`.
+
+Two details are worth recording, because both go past what this entry asked
+for:
+
+- **The precedence rule shipped whole.** `resolveDefaultEnabled(entry,
+  manifest)` (`domain/resolver.ts:751`) lets the marketplace entry win when it
+  carries a boolean and falls back to the manifest otherwise, which is the rule
+  this entry named. Above both, an explicit user `enabled` declaration wins in
+  either direction and is never overwritten
+  (`install.ts::readDeclaredEnabled`) -- the equivalent of Claude Code's
+  `enabledPlugins` override.
+- **The resolved value is non-optional** on the materializable arms
+  (`domain/resolver.ts:201`, DFEN-02 / DFEN-03), so no consumer re-derives the
+  rule behind a `?? true` fallback. `list` and `info` also predict the outcome
+  through one shared `rowClaimsInstallDisabled` (DFEN-04 / DFEN-05, OUT-02 /
+  OUT-03), so the two surfaces cannot answer it differently. This entry asked
+  for neither.
+
+Original report follows.
 
 Surfaced 2026-08-13 auditing Claude Code's plugins-reference docs. A
 `plugin.json` (or marketplace entry, which takes precedence) can set
@@ -2388,6 +2450,74 @@ compound split on `;` `|` `&&` `||` and newline, backtick-as-escape, `$(...)`
 recursion, no wrapper stripping. Both command arms now guard on
 `event.toolName` so `Bash(...)` rules no longer fire on powershell events.
 -->
+
+## SWTEST-01: the Sonar way ruleset stops at `extensions/`; `tests/` is unmeasured by it
+
+Filed 2026-09-07 alongside the change that adopted the ruleset (`fe1313c6`,
+quick task 260907-qsx). Deferred deliberately, with the cost measured rather
+than guessed, so the decision is a scoping call and not a discovery exercise.
+
+`eslint.config.js` runs `sonarjs.configs.recommended.rules` over
+`extensions/pi-claude-marketplace/**/*.ts` only. That scope mirrors
+`sonar.sources`. The test tree is outside it for two independent reasons:
+`sonar.test.exclusions=tests/**` means SonarCloud never reads it, so there is
+no upstream parity pressure; and the same ruleset reports 1021 problems there
+today.
+
+**There is no blanket exemption to lean on.** The `tests/**/*.ts` block turns
+off five sonarjs rules and a handful of typescript-eslint ones, nothing more.
+Every other active rule already runs on the test tree and passes. So this is
+an opt-in decision about 1021 specific findings, not a wall.
+
+**The measured breakdown**, from the full ruleset against `tests/`:
+
+| Count | Rule | Reading |
+|---|---|---|
+| 797 | `void-use` | The house `void (x satisfies T)` compile-time assertion idiom, plus `void symbol;` to mark an intentional reference. Not a defect. |
+| 48 | `no-alphabetical-sort` | Probably real. `.sort()` with no comparator. |
+| 46 | `publicly-writable-directories` | Fixture temp paths. |
+| 34 | `no-hardcoded-passwords` | Fixture credentials. |
+| 14 | `no-unused-vars` | Overlaps the typescript-eslint rule already configured with a `^_` ignore pattern. |
+| 13 | `super-linear-regex` | Probably real; worth reading. |
+| 12 | `assertions-in-tests` | See below. |
+| 10 | `different-types-comparison` | Probably real. |
+| 8 | `no-nested-conditional` | Currently `off` for tests by choice. |
+| 7 | `no-empty-test-file` | See below. |
+| 6 each | `regex-complexity`, `no-identical-functions`, `no-clear-text-protocols` | |
+| 4 | `no-misleading-array-reverse` | |
+| 2 each | `no-trivial-assertions`, `no-os-command-from-path`, `no-invariant-returns` | |
+| 1 each | `no-extra-arguments`, `use-type-alias`, `no-nested-template-literals`, `no-selector-parameter` | |
+
+Drop `void-use` and roughly 224 remain, most of them fixture artifacts.
+
+**The reason to pick this up is narrower than the total, and it is the
+interesting part.** Three of these rules measure assertion strength directly:
+`assertions-in-tests` (S2699, a test with no assertion at all, 12 hits),
+`no-empty-test-file` (S2187, 7 hits) and `no-trivial-assertions` (S5914, an
+assertion that cannot fail, 2 hits). That is 21 findings against exactly the
+gap [TESTQ-01] names in its own calibration warning -- "93% pair completeness
+coexists with ~231 surviving-mutation BLOCKERs; per-pair coverage is not
+evidence of assertion strength". These three rules are a cheap, automated
+probe for that class, and nothing in the repo currently runs them.
+
+Direction for later: do NOT enable the ruleset wholesale on `tests/`. Enable
+the three assertion-strength rules first and read their 21 findings, since
+they carry the value and are separable from the noise. Then decide the rest
+per cluster: `void-use` should almost certainly stay off for the test tree
+(the idiom is deliberate and documented), the fixture clusters
+(`publicly-writable-directories`, `no-hardcoded-passwords`) want a
+`tests/fixtures/**` carve-out rather than a rule-level disable, and
+`no-unused-vars` should be left to the typescript-eslint rule already
+configured for it rather than run twice under two ignore patterns.
+
+Sequence it against [TESTQ-01] rather than beside it. That item already owns a
+large test-quality corpus with 9 operator decisions pending, and its
+`test:coverage:direct` work would collide with a broad test-tree lint change.
+
+Code seams: `eslint.config.js` (the Sonar way block, currently scoped to
+`extensions/`; and the `tests/**/*.ts` block that disables five sonarjs
+rules), `.planning/codebase/CONVENTIONS.md` (the "Sonar way on `extensions/`
+only" bullet, which states the scope this item would change).
 
 <!--
 Pruned 2026-06-08: both prior items shipped in v1.10 Error Attribution.
