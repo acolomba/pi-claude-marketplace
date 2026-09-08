@@ -24,6 +24,7 @@ import {
 import { adaptObservationResultForEvent } from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts";
 import {
   addPluginConfigToCache,
+  beforeAgentStartHandlerFor,
   createBeforeAgentStartHandler,
   createHooksHydration,
   hydrateProjectScopeForCwd,
@@ -34,6 +35,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
 import { MATCH_ALL_IF } from "../../../extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts";
 import {
+  bumpEpoch,
   currentEpoch,
   getRoutingBucket,
   parsedConfigEntries,
@@ -444,7 +446,7 @@ test(
       pi,
       userLocations,
       {
-        spawnImpl: () => peerChild.child,
+        spawnImpl: (() => peerChild.child) as NonNullable<SpawnDeps["spawnImpl"]>,
         dispatchId: () => "router-peer-child",
         pidTableWriter: () => Promise.resolve(),
       },
@@ -568,6 +570,20 @@ test(
       context,
     );
     assert.strictEqual(staleBeforeAgentResult, undefined);
+    const previousTransitionEpoch = currentEpoch();
+    bumpEpoch();
+    const staleTransitionBeforeAgentResult = await beforeAgentStartHandlerFor(
+      previousTransitionEpoch,
+    )(
+      {
+        type: "before_agent_start",
+        prompt: "",
+        systemPrompt: "stale transition",
+        systemPromptOptions: {},
+      } as unknown as BeforeAgentStartEvent,
+      context,
+    );
+    assert.strictEqual(staleTransitionBeforeAgentResult, undefined);
 
     const cacheAfterReload = Array.from(runtime.parsedConfigEntries().values()).map((entry) => ({
       scope: entry.scope,
