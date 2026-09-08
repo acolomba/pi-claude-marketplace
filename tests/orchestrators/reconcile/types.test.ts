@@ -287,12 +287,12 @@ void ({
   pluginsToDisable: [],
   // @ts-expect-error reconcile plans always expose their mismatch bucket
 } satisfies ReconcilePlan);
-// @ts-expect-error apply options always expose the Pi context
 void ({
   pi: extensionApi,
   cwd: "/work/project",
   completionCache,
   hooksRouting,
+  // @ts-expect-error apply options always expose the Pi context
 } satisfies ApplyReconcileOptions);
 void ({
   ctx: extensionContext,

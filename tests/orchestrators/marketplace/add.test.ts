@@ -1041,7 +1041,7 @@ test("invalidates names before the plugin index only after the add is durable", 
         durableAtFirstInvalidation =
           persisted.marketplaces["valid-marketplace"] !== undefined &&
           config.status === "valid" &&
-          config.config.marketplaces["valid-marketplace"]?.source ===
+          config.config.marketplaces?.["valid-marketplace"]?.source ===
             "anthropics/claude-plugins-official" &&
           (await pathExists(await locations.sourceCloneDir("valid-marketplace")));
       },
