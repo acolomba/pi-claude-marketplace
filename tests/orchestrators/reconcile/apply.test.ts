@@ -72,6 +72,7 @@ import {
   loadState,
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { EXTENSION_VERSION } from "../../../extensions/pi-claude-marketplace/shared/extension-version.ts";
 import { createNotificationBoundary } from "../../edge/notification-boundary.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
@@ -99,9 +100,12 @@ type PluginRecord = MarketplaceRecord["plugins"][string];
 const RECORDED_AT = "2026-01-01T00:00:00.000Z";
 
 /** Run one isolated reconcile lifecycle with a fresh production routing owner. */
-function applyReconcile(opts: Omit<ApplyReconcileOptions, "hooksRouting">): Promise<void> {
+function applyReconcile(
+  opts: Omit<ApplyReconcileOptions, "completionCache" | "hooksRouting">,
+): Promise<void> {
   return applyReconcileWithRouting({
     ...opts,
+    completionCache: createCompletionCache(),
     hooksRouting: createHooksRouting(createHooksRuntime()),
   });
 }
@@ -1169,11 +1173,28 @@ describe("applyReconcile", () => {
       marketplace: "mp",
       plugin: "hello",
     });
+    const completionCache = createCompletionCache();
 
     // act
-    await applyReconcileWithRouting({ ctx, pi, cwd, scope: "project", gitOps, hooksRouting });
+    await applyReconcileWithRouting({
+      ctx,
+      pi,
+      cwd,
+      scope: "project",
+      completionCache,
+      gitOps,
+      hooksRouting,
+    });
     const afterFirst = await loadState(project.extensionRoot);
-    await applyReconcileWithRouting({ ctx, pi, cwd, scope: "project", gitOps, hooksRouting });
+    await applyReconcileWithRouting({
+      ctx,
+      pi,
+      cwd,
+      scope: "project",
+      completionCache,
+      gitOps,
+      hooksRouting,
+    });
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -1566,7 +1587,15 @@ describe("applyReconcile", () => {
     const hooksRouting = createHooksRouting(ownerRuntime);
 
     // act
-    await applyReconcileWithRouting({ ctx, pi, cwd, scope: "project", gitOps, hooksRouting });
+    await applyReconcileWithRouting({
+      ctx,
+      pi,
+      cwd,
+      scope: "project",
+      completionCache: createCompletionCache(),
+      gitOps,
+      hooksRouting,
+    });
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -2938,10 +2967,11 @@ describe("applyReconcile", () => {
     const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
     const { gitOps, clonedUrls } = createOfflineGitOps();
     const hooksRouting = createHooksRouting(createHooksRuntime());
+    const completionCache = createCompletionCache();
 
     // act
-    await applyWithReader({ ctx, pi, cwd, gitOps, hooksRouting });
-    await applyWithReader({ ctx, pi, cwd, gitOps, hooksRouting });
+    await applyWithReader({ ctx, pi, cwd, completionCache, gitOps, hooksRouting });
+    await applyWithReader({ ctx, pi, cwd, completionCache, gitOps, hooksRouting });
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -3003,6 +3033,7 @@ describe("surfacePostCommitWarnings", () => {
   function diagnosticOptions(ctx: ExtensionContext, pi: ExtensionAPI, gitOps: GitOps) {
     return {
       ctx,
+      completionCache: createCompletionCache(),
       cwd: "/work/project",
       gitOps,
       hooksRouting: createHooksRouting(createHooksRuntime()),

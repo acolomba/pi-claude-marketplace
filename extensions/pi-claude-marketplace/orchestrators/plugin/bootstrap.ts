@@ -42,6 +42,7 @@ import { addMarketplace } from "../marketplace/add.ts";
 import { setMarketplaceAutoupdate } from "../marketplace/autoupdate.ts";
 
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
+import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { GitOps } from "../marketplace/shared.ts";
 
 /**
@@ -70,6 +71,7 @@ export interface BootstrapOptions {
    */
   readonly pi: ExtensionAPI;
   readonly cwd: string;
+  readonly completionCache: CompletionCache;
   /** D-12 injection seam. Always provided by the edge handler via EdgeDeps. */
   readonly gitOps: GitOps;
 }
@@ -106,6 +108,7 @@ export async function bootstrapClaudePlugin(opts: BootstrapOptions): Promise<voi
       scope: "user",
       cwd: opts.cwd,
       rawSource: BOOTSTRAP_SOURCE,
+      completionCache: opts.completionCache,
       gitOps: opts.gitOps,
       // ATTR-07: re-throw the typed precondition (incl. MarketplaceDuplicateName
       // Error) instead of emitting a `(failed)` row, so the catch below can

@@ -49,6 +49,7 @@ import test from "node:test";
 import { addMarketplace } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts";
 import { installPlugin } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/install.ts";
 import { listPlugins } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/list.ts";
+import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 
 import type {
   ExtensionAPI,
@@ -182,6 +183,7 @@ test("CMC-21 / D-13-17 step 1: project-scope plugin installed from user-scope ma
     const userAdd = makeCtx(env.cwd);
     const installCtx = makeCtx(env.cwd);
     const listCtx = makeCtx(env.cwd);
+    const completionCache = createCompletionCache();
 
     // act
     await addMarketplace({
@@ -189,6 +191,7 @@ test("CMC-21 / D-13-17 step 1: project-scope plugin installed from user-scope ma
       pi: userAdd.pi,
       scope: "user",
       cwd: env.cwd,
+      completionCache,
       rawSource: officialRoot,
     });
     await installPlugin({
@@ -265,6 +268,7 @@ test("CMC-21 / D-13-17 step 2: when an INDEPENDENT project-scope marketplace is 
     const beforeListCtx = makeCtx(env.cwd);
     const projectAdd = makeCtx(env.cwd);
     const afterListCtx = makeCtx(env.cwd);
+    const completionCache = createCompletionCache();
 
     // act
     await addMarketplace({
@@ -272,6 +276,7 @@ test("CMC-21 / D-13-17 step 2: when an INDEPENDENT project-scope marketplace is 
       pi: userAdd.pi,
       scope: "user",
       cwd: env.cwd,
+      completionCache,
       rawSource: userOfficialRoot,
     });
     await installPlugin({
@@ -289,6 +294,7 @@ test("CMC-21 / D-13-17 step 2: when an INDEPENDENT project-scope marketplace is 
       pi: projectAdd.pi,
       scope: "project",
       cwd: env.cwd,
+      completionCache,
       rawSource: projectOfficialRoot,
     });
     await listPlugins({ ctx: afterListCtx.ctx, pi: afterListCtx.pi, cwd: env.cwd });

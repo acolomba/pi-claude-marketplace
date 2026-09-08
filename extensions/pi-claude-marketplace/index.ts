@@ -93,7 +93,7 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
     // notify (inside its own try/catch so a UI failure can't propagate
     // either) and aggregateDiscoveredResources still runs.
     try {
-      await applyReconcile({ ctx, pi, cwd: event.cwd, hooksRouting });
+      await applyReconcile({ ctx, pi, cwd: event.cwd, hooksRouting, completionCache });
     } catch (err) {
       try {
         // AUTH-01 / IL-2 escape: makeRawNotifyFn is the sanctioned raw-text

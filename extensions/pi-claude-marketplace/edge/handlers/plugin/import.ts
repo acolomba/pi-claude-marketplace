@@ -10,10 +10,12 @@ import { parseArgs } from "../../args.ts";
 import type { GitOps } from "../../../orchestrators/marketplace/shared.ts";
 import type { InstallHooksRouting } from "../../../orchestrators/plugin/install.ts";
 import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
+import type { CompletionCache } from "../../../shared/completion-cache.ts";
 
 const USAGE = "Usage: /claude:plugin import [--scope user|project]";
 
 export interface ImportHandlerDeps {
+  readonly completionCache: CompletionCache;
   readonly gitOps: GitOps;
   readonly importClaudeSettings?: (
     opts: ImportClaudeSettingsOptions,
@@ -52,6 +54,7 @@ export function makeImportHandler(
       selectedScopes: parsed.scope === undefined ? ["project", "user"] : [parsed.scope],
       gitOps: deps.gitOps,
       hooksRouting,
+      completionCache: deps.completionCache,
     };
 
     await (deps.importClaudeSettings ?? importClaudeSettings)(options);

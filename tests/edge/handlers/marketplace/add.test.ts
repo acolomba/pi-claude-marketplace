@@ -79,9 +79,11 @@ import { test, type TestContext } from "node:test";
 
 import { makeAddHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/marketplace/add.ts";
 import { locationsFor } from "../../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { createCompletionCache } from "../../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { createGitOpsFake } from "../../../platform/git-ops-fake.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
 
+import type { GitOps } from "../../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { Scope } from "../../../../extensions/pi-claude-marketplace/shared/types.ts";
 
 // The Git call shape is derived from the injected fake so a seam change is a
@@ -269,6 +271,10 @@ function createGitPort(sourceTree: string): ReturnType<typeof createGitOpsFake> 
   });
 }
 
+function createAddDeps(gitOps: GitOps) {
+  return { completionCache: createCompletionCache(), gitOps };
+}
+
 for (const { args, arity } of [
   { args: URL_SOURCE, arity: "at the accepted arity" },
   { args: `${URL_SOURCE} extra`, arity: "with a surplus positional token dropped" },
@@ -281,7 +287,7 @@ for (const { args, arity } of [
       reads: 1,
     });
     const git = createGitPort(sourceTree);
-    const addHandler = makeAddHandler(pi, { gitOps: git.gitOps });
+    const addHandler = makeAddHandler(pi, createAddDeps(git.gitOps));
 
     // act
     await addHandler(args, ctx);
@@ -325,7 +331,7 @@ for (const { footprint, row, scope } of [
       reads: 1,
     });
     const git = createGitPort(sourceTree);
-    const addHandler = makeAddHandler(pi, { gitOps: git.gitOps });
+    const addHandler = makeAddHandler(pi, createAddDeps(git.gitOps));
 
     // act
     await addHandler(`${URL_SOURCE} --scope ${scope}`, ctx);
@@ -354,7 +360,7 @@ for (const { args, position } of [
       reads: 1,
     });
     const git = createGitPort(sourceTree);
-    const addHandler = makeAddHandler(pi, { gitOps: git.gitOps });
+    const addHandler = makeAddHandler(pi, createAddDeps(git.gitOps));
 
     // act
     await addHandler(args, ctx);
@@ -379,7 +385,7 @@ test("carries a scope flag and the scope-target flag through together rather tha
     reads: 1,
   });
   const git = createGitPort(sourceTree);
-  const addHandler = makeAddHandler(pi, { gitOps: git.gitOps });
+  const addHandler = makeAddHandler(pi, createAddDeps(git.gitOps));
 
   // act
   await addHandler(`${URL_SOURCE} --scope project --local`, ctx);
@@ -406,7 +412,7 @@ test("adds a path source without ever reaching the git port it was handed (NFR-5
     reads: 1,
   });
   const git = createGitPort(sourceTree);
-  const addHandler = makeAddHandler(pi, { gitOps: git.gitOps });
+  const addHandler = makeAddHandler(pi, createAddDeps(git.gitOps));
 
   // act
   await addHandler(sourceTree, ctx);
@@ -424,7 +430,7 @@ test("collapses the duplicated usage block to one sentence when no source is sup
   const { cwd, sourceTree, networkCallCount } = await createHermeticScope(t, "no-source");
   const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
   const git = createGitPort(sourceTree);
-  const addHandler = makeAddHandler(pi, { gitOps: git.gitOps });
+  const addHandler = makeAddHandler(pi, createAddDeps(git.gitOps));
 
   // act
   await addHandler("", ctx);
@@ -444,7 +450,7 @@ test("reports an unknown long flag against the add usage block and adds nothing"
   const { cwd, sourceTree, networkCallCount } = await createHermeticScope(t, "unknown-flag");
   const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
   const git = createGitPort(sourceTree);
-  const addHandler = makeAddHandler(pi, { gitOps: git.gitOps });
+  const addHandler = makeAddHandler(pi, createAddDeps(git.gitOps));
 
   // act
   await addHandler(`${URL_SOURCE} --frobnicate`, ctx);
@@ -464,7 +470,7 @@ test("shows an unrecognised scope value verbatim against the add usage block and
   const { cwd, sourceTree, networkCallCount } = await createHermeticScope(t, "invalid-scope");
   const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
   const git = createGitPort(sourceTree);
-  const addHandler = makeAddHandler(pi, { gitOps: git.gitOps });
+  const addHandler = makeAddHandler(pi, createAddDeps(git.gitOps));
 
   // act
   await addHandler(`${URL_SOURCE} --scope bogus`, ctx);

@@ -315,6 +315,7 @@ async function applyMarketplaceAdds(
       scope: op.scope,
       cwd: opts.cwd,
       rawSource: op.source,
+      completionCache: opts.completionCache,
       notifications: { mode: "orchestrated" },
       ...(opts.gitOps !== undefined && { gitOps: opts.gitOps }),
     });

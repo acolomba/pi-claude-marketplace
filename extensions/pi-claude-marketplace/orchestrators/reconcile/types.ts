@@ -43,6 +43,7 @@
 import type { PerEntryOutcome } from "./apply-outcomes.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
+import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { GitOps } from "../marketplace/shared.ts";
 import type { InstallHooksRouting } from "../plugin/install.ts";
@@ -255,6 +256,8 @@ export interface ApplyReconcileOptions {
   readonly cwd: string;
   /** Lifecycle-owned route effects shared with registered hook callbacks. */
   readonly hooksRouting: InstallHooksRouting;
+  /** Lifecycle-owned completion cache shared with command completion reads. */
+  readonly completionCache: CompletionCache;
   readonly scope?: Scope;
   /**
    * D-12 injection seam threaded into `addMarketplace` for RECON-03 network

@@ -35,6 +35,7 @@ import {
 import { mergeScopeConfigs } from "../../extensions/pi-claude-marketplace/persistence/config-merge.ts";
 import { writeMarketplaceConfigEntry } from "../../extensions/pi-claude-marketplace/persistence/config-write-back.ts";
 import { DEFAULT_STATE } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { createGitOpsFake } from "../platform/git-ops-fake.ts";
 
 import type { ScopeConfig } from "../../extensions/pi-claude-marketplace/persistence/config-io.ts";
@@ -173,6 +174,7 @@ test("WB-01 SC#4 (add path): after addMarketplace, reconcile is a no-op AND stat
       pi,
       scope: "project",
       cwd,
+      completionCache: createCompletionCache(),
       rawSource: "anthropics/claude-plugins-official",
       gitOps,
     });
@@ -242,6 +244,7 @@ test("WB-01 SC#4 (add + autoupdate enable): post-flip reconcile is a no-op AND u
       pi,
       scope: "project",
       cwd,
+      completionCache: createCompletionCache(),
       rawSource: "anthropics/claude-plugins-official",
       gitOps,
     });
@@ -313,6 +316,7 @@ test("WB-01 SC#4 (add + autoupdate disable): post-flip reconcile is a no-op", as
       pi,
       scope: "project",
       cwd,
+      completionCache: createCompletionCache(),
       rawSource: "anthropics/claude-plugins-official",
       gitOps,
     });
@@ -376,6 +380,7 @@ test("WB-01 SC#4 (add + remove cascade): post-remove reconcile is a no-op and co
       pi,
       scope: "project",
       cwd,
+      completionCache: createCompletionCache(),
       rawSource: "anthropics/claude-plugins-official",
       gitOps,
     });
@@ -602,6 +607,7 @@ test("WR-09 orchestrated-mode SKIP: addMarketplace with notifications.mode 'orch
       pi,
       scope: "project",
       cwd,
+      completionCache: createCompletionCache(),
       rawSource: "anthropics/claude-plugins-official",
       gitOps,
       notifications: { mode: "orchestrated" },

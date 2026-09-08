@@ -14,23 +14,38 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { bootstrapClaudePlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/bootstrap.ts";
+import { bootstrapClaudePlugin as bootstrapClaudePluginWithCache } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/bootstrap.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   loadState,
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { createNotificationBoundary } from "../../edge/notification-boundary.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 
 import { retryTree } from "./scope-tree-inventory.ts";
 
 import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
+import type { BootstrapOptions } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/bootstrap.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { TestContext } from "node:test";
 
 type MarketplaceRecord = ExtensionState["marketplaces"][string];
+type TestBootstrapOptions = Omit<BootstrapOptions, "completionCache">;
+
+const completionCachesByGitOps = new WeakMap<GitOps, ReturnType<typeof createCompletionCache>>();
+
+function bootstrapClaudePlugin(opts: TestBootstrapOptions): Promise<void> {
+  let completionCache = completionCachesByGitOps.get(opts.gitOps);
+  if (completionCache === undefined) {
+    completionCache = createCompletionCache();
+    completionCachesByGitOps.set(opts.gitOps, completionCache);
+  }
+
+  return bootstrapClaudePluginWithCache({ ...opts, completionCache });
+}
 
 const BOOTSTRAP_REMOTE = "https://github.com/anthropics/claude-plugins-official.git";
 

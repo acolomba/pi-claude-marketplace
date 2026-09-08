@@ -30,6 +30,7 @@ import {
 import { applyReconcile } from "../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 
 import type { ExtensionState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type {
@@ -189,6 +190,7 @@ test("RECON / cross-scope: applyReconcile's per-scope rebuild loop preserves hoo
       ctx: placeholderCtx,
       pi: makeMockPi(),
       cwd: projectCwd,
+      completionCache: createCompletionCache(),
       hooksRouting: createHooksRouting(createHooksRuntime()),
     });
 

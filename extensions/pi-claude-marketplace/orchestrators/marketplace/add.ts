@@ -56,7 +56,6 @@ import { loadConfig } from "../../persistence/config-io.ts";
 import { writeMarketplaceConfigEntry } from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { DEFAULT_CREDENTIAL_OPS } from "../../platform/git-credential.ts";
-import { dropMarketplaceCache, invalidateMarketplaceNames } from "../../shared/completion-cache.ts";
 import {
   InvalidMarketplaceManifestError,
   MarketplaceDuplicateNameError,
@@ -86,6 +85,7 @@ import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { CredentialOps } from "../../platform/git-credential.ts";
 import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
+import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { ContentReason, Reason } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 
@@ -154,6 +154,8 @@ export interface AddMarketplaceOptions {
   readonly cwd: string;
   /** The user-supplied source string (`owner/repo`, `https://...`, `~/path`, `./path`, etc.). */
   readonly rawSource: string;
+  /** Lifecycle-owned completion cache shared with the registered read path. */
+  readonly completionCache: CompletionCache;
   /** D-12 injection seam. Defaults to DEFAULT_GIT_OPS (which wraps platform/git.ts). */
   readonly gitOps?: GitOps;
   /**
@@ -576,8 +578,11 @@ export async function addMarketplace(
   // runs after the state commit so a cache hiccup never rolls back the user's
   // primary success.
   try {
-    await invalidateMarketplaceNames(locations.marketplaceNamesCacheFile, opts.scope);
-    await dropMarketplaceCache(
+    await opts.completionCache.invalidateMarketplaceNames(
+      locations.marketplaceNamesCacheFile,
+      opts.scope,
+    );
+    await opts.completionCache.dropMarketplaceCache(
       await locations.pluginCacheFile(recordedName),
       opts.scope,
       recordedName,

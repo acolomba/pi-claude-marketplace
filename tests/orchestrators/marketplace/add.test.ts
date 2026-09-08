@@ -17,11 +17,12 @@ import test from "node:test";
 
 import { mock, verify, when } from "strong-mock";
 
-import { addMarketplace } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts";
+import { addMarketplace as addMarketplaceWithCache } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts";
 import { loadConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { loadState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { buildAuthCallbacks } from "../../../extensions/pi-claude-marketplace/platform/git.ts";
+import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import {
   MarketplaceDuplicateNameError,
   UnsupportedSourceError,
@@ -35,6 +36,10 @@ import type {
   DeviceCodeResponse,
   PollResult,
 } from "../../../extensions/pi-claude-marketplace/domain/github-auth.ts";
+import type {
+  AddMarketplaceOptions,
+  AddMarketplaceOutcome,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts";
 import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { GitCredentials } from "../../../extensions/pi-claude-marketplace/platform/git.ts";
@@ -174,6 +179,39 @@ type NotificationSeverity = Parameters<ExtensionContext["ui"]["notify"]>[1];
 type NotificationUi = Omit<ExtensionContext["ui"], "notify"> & {
   readonly notify: (message: string, severity?: NotificationSeverity) => void;
 };
+
+type TestAddMarketplaceOptions = Omit<AddMarketplaceOptions, "completionCache">;
+
+const completionCachesByGitOps = new WeakMap<GitOps, ReturnType<typeof createCompletionCache>>();
+
+function completionCacheFor(
+  opts: TestAddMarketplaceOptions,
+): ReturnType<typeof createCompletionCache> {
+  if (opts.gitOps === undefined) {
+    return createCompletionCache();
+  }
+
+  const existing = completionCachesByGitOps.get(opts.gitOps);
+  if (existing !== undefined) {
+    return existing;
+  }
+
+  const created = createCompletionCache();
+  completionCachesByGitOps.set(opts.gitOps, created);
+  return created;
+}
+
+function addMarketplace(
+  opts: TestAddMarketplaceOptions & { notifications: { mode: "orchestrated" } },
+): Promise<AddMarketplaceOutcome>;
+function addMarketplace(
+  opts: TestAddMarketplaceOptions,
+): Promise<AddMarketplaceOutcome | undefined>;
+function addMarketplace(
+  opts: TestAddMarketplaceOptions,
+): Promise<AddMarketplaceOutcome | undefined> {
+  return addMarketplaceWithCache({ ...opts, completionCache: completionCacheFor(opts) });
+}
 
 function makeCtx(expectedNotifications = 1): {
   ctx: ExtensionContext;

@@ -37,6 +37,7 @@ import type {
 } from "../../orchestrators/marketplace/add.ts";
 import type { InstallPluginOutcome } from "../../orchestrators/types.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
+import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type {
   ContentReason,
@@ -174,6 +175,7 @@ export interface ImportClaudeSettingsOptions {
   readonly cwd: string;
   readonly selectedScopes: readonly Scope[];
   readonly hooksRouting: InstallHooksRouting;
+  readonly completionCache: CompletionCache;
   readonly gitOps?: AddMarketplaceOptions["gitOps"];
   readonly deps?: ImportDeps;
 }
@@ -777,6 +779,7 @@ async function addOnePlannedMarketplace(
       scope: marketplace.scope,
       cwd: opts.cwd,
       rawSource: marketplace.source,
+      completionCache: opts.completionCache,
       notifications: { mode: "orchestrated" },
       ...(opts.gitOps !== undefined && { gitOps: opts.gitOps }),
     });

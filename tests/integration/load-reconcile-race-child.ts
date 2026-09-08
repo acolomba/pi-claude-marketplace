@@ -17,6 +17,7 @@ import {
   createHooksRuntime,
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { applyReconcile } from "../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
+import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 
 import { makeNotifyCollectingCtx, makeStubPi, type NotificationRecord } from "./ipc-child.ts";
 
@@ -61,6 +62,7 @@ async function handleMessage(message: unknown): Promise<void> {
       pi: makeStubPi(),
       cwd: message.cwd,
       scope: "project",
+      completionCache: createCompletionCache(),
       hooksRouting: createHooksRouting(createHooksRuntime()),
     });
     sendResult({ ok: true, notifyArgs });

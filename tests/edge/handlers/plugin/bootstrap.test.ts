@@ -90,6 +90,7 @@ import { test, type TestContext } from "node:test";
 import { makeBootstrapHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/bootstrap.ts";
 import { BOOTSTRAP_MARKETPLACE_NAME } from "../../../../extensions/pi-claude-marketplace/orchestrators/plugin/bootstrap.ts";
 import { locationsFor } from "../../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { createCompletionCache } from "../../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { createGitOpsFake } from "../../../platform/git-ops-fake.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
 
@@ -147,6 +148,10 @@ interface HermeticScope {
 interface GitPort {
   readonly gitOps: EdgeDeps["gitOps"];
   readonly clones: readonly GitCloneCall[];
+}
+
+function createBootstrapDeps(gitOps: EdgeDeps["gitOps"]) {
+  return { completionCache: createCompletionCache(), gitOps };
 }
 
 /**
@@ -270,7 +275,7 @@ test("clones through the injected git port into the user scope at the accepted a
   const { cwd, sourceTree, networkCallCount } = await createHermeticScope(t, "accepted");
   const { ctx, pi, verifyBoundary } = createNotificationBoundary(2, 4, { value: cwd, reads: 1 });
   const git = createGitPort(sourceTree);
-  const bootstrapHandler = makeBootstrapHandler(pi, { gitOps: git.gitOps });
+  const bootstrapHandler = makeBootstrapHandler(pi, createBootstrapDeps(git.gitOps));
 
   // act
   await bootstrapHandler("", ctx);
@@ -290,7 +295,7 @@ for (const { args, label, tokens } of [
     const { sourceTree, networkCallCount } = await createHermeticScope(t, `positional-${label}`);
     const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
     const git = createGitPort(sourceTree);
-    const bootstrapHandler = makeBootstrapHandler(pi, { gitOps: git.gitOps });
+    const bootstrapHandler = makeBootstrapHandler(pi, createBootstrapDeps(git.gitOps));
 
     // act
     await bootstrapHandler(args, ctx);
@@ -309,7 +314,7 @@ for (const scope of ["user", "project"] satisfies readonly Scope[]) {
     const { sourceTree, networkCallCount } = await createHermeticScope(t, `scope-${scope}`);
     const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
     const git = createGitPort(sourceTree);
-    const bootstrapHandler = makeBootstrapHandler(pi, { gitOps: git.gitOps });
+    const bootstrapHandler = makeBootstrapHandler(pi, createBootstrapDeps(git.gitOps));
 
     // act
     await bootstrapHandler(`--scope ${scope}`, ctx);
@@ -337,7 +342,7 @@ for (const { args, label, subject } of [
     const { sourceTree, networkCallCount } = await createHermeticScope(t, `scope-target-${label}`);
     const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
     const git = createGitPort(sourceTree);
-    const bootstrapHandler = makeBootstrapHandler(pi, { gitOps: git.gitOps });
+    const bootstrapHandler = makeBootstrapHandler(pi, createBootstrapDeps(git.gitOps));
 
     // act
     await bootstrapHandler(args, ctx);
@@ -363,7 +368,7 @@ for (const { args, label, subject } of [
     const { sourceTree, networkCallCount } = await createHermeticScope(t, `invalid-scope-${label}`);
     const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
     const git = createGitPort(sourceTree);
-    const bootstrapHandler = makeBootstrapHandler(pi, { gitOps: git.gitOps });
+    const bootstrapHandler = makeBootstrapHandler(pi, createBootstrapDeps(git.gitOps));
 
     // act
     await bootstrapHandler(args, ctx);
@@ -384,7 +389,7 @@ test("converts a thrown bootstrap failure into one failed marketplace row carryi
     reads: 1,
   });
   const git = createGitPort(sourceTree, new Error(REFUSED_CLONE_MESSAGE));
-  const bootstrapHandler = makeBootstrapHandler(pi, { gitOps: git.gitOps });
+  const bootstrapHandler = makeBootstrapHandler(pi, createBootstrapDeps(git.gitOps));
 
   // act
   await bootstrapHandler("", ctx);

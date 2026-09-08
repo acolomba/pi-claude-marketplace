@@ -34,7 +34,7 @@ const USAGE = "Usage: /claude:plugin bootstrap";
 
 export function makeBootstrapHandler(
   pi: ExtensionAPI,
-  deps: Pick<EdgeDeps, "gitOps">,
+  deps: Pick<EdgeDeps, "completionCache" | "gitOps">,
 ): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
   return async (args, ctx): Promise<void> => {
     let parsed;
@@ -64,6 +64,7 @@ export function makeBootstrapHandler(
         ctx,
         pi,
         cwd: ctx.cwd,
+        completionCache: deps.completionCache,
         gitOps: deps.gitOps,
       });
     } catch {

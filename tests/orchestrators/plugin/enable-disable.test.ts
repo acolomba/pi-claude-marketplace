@@ -33,6 +33,7 @@ import { isDeclaredEnabled } from "../../../extensions/pi-claude-marketplace/per
 import { loadMergedScopeConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-merge.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { loadState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { MarketplaceNotFoundError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { notify } from "../../../extensions/pi-claude-marketplace/shared/notify.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
@@ -3826,6 +3827,7 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable of a BASE-declared plugi
       cwd,
       pi,
       scope: "user",
+      completionCache: createCompletionCache(),
       hooksRouting: createHooksRouting(createHooksRuntime()),
     });
     const afterFirstReload = await observe();
@@ -3864,6 +3866,7 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable of a BASE-declared plugi
       cwd,
       pi,
       scope: "user",
+      completionCache: createCompletionCache(),
       hooksRouting: createHooksRouting(createHooksRuntime()),
     });
     const afterSecondReload = await observe();
@@ -3961,6 +3964,7 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable of a LOCALLY-declared pl
       cwd,
       pi,
       scope: "user",
+      completionCache: createCompletionCache(),
       hooksRouting: createHooksRouting(createHooksRuntime()),
     });
     const afterFirstReload = await observe();
@@ -4001,6 +4005,7 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable of a LOCALLY-declared pl
       cwd,
       pi,
       scope: "user",
+      completionCache: createCompletionCache(),
       hooksRouting: createHooksRouting(createHooksRuntime()),
     });
     const afterSecondReload = await observe();

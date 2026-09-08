@@ -36,8 +36,9 @@ import {
   createHooksRuntime,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
-import { importClaudeSettings } from "../../../extensions/pi-claude-marketplace/orchestrators/import/execute.ts";
+import { importClaudeSettings as importClaudeSettingsWithCache } from "../../../extensions/pi-claude-marketplace/orchestrators/import/execute.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import {
   ConcurrentInstallError,
   PluginShapeError,
@@ -77,6 +78,30 @@ type AddOptions = Parameters<AddMarketplace>[0];
 type InstallOptions = Parameters<InstallPlugin>[0];
 type Diagnostic = ClaudeImportExecutionResult["diagnostics"][number];
 type Collaborators = Required<ImportDeps>;
+type TestImportOptions = Omit<ImportClaudeSettingsOptions, "completionCache">;
+
+const completionCachesByRouting = new WeakMap<
+  HooksRouting,
+  ReturnType<typeof createCompletionCache>
+>();
+
+function completionCacheFor(hooksRouting: HooksRouting): ReturnType<typeof createCompletionCache> {
+  let completionCache = completionCachesByRouting.get(hooksRouting);
+  if (completionCache === undefined) {
+    completionCache = createCompletionCache();
+    completionCachesByRouting.set(hooksRouting, completionCache);
+  }
+
+  return completionCache;
+}
+
+function importClaudeSettings(
+  opts: TestImportOptions,
+): ReturnType<typeof importClaudeSettingsWithCache> {
+  const completionCache = completionCacheFor(opts.hooksRouting);
+
+  return importClaudeSettingsWithCache({ ...opts, completionCache });
+}
 
 interface HermeticScopes {
   readonly cwd: string;
@@ -492,6 +517,8 @@ test("passes the marketplace add an options object that carries the git port onl
   const withPort = createNotificationBoundary(1, 2);
   const withoutPort = createNotificationBoundary(1, 2);
   const gitOps = createOfflineGitOps();
+  const withRouting = createHooksRouting(createHooksRuntime());
+  const withoutRouting = createHooksRouting(createHooksRuntime());
   // The whole options object, not just its `gitOps` value: a conditional spread
   // OMITS the key, and an omitted key is a different object from one holding an
   // explicit undefined.
@@ -519,7 +546,7 @@ test("passes the marketplace add an options object that carries the git port onl
     deps: collaborators(promised()),
     gitOps,
     pi: withPort.pi,
-    hooksRouting: createHooksRouting(createHooksRuntime()),
+    hooksRouting: withRouting,
     selectedScopes: ["user"],
   });
   await importClaudeSettings({
@@ -527,7 +554,7 @@ test("passes the marketplace add an options object that carries the git port onl
     cwd,
     deps: collaborators(promised()),
     pi: withoutPort.pi,
-    hooksRouting: createHooksRouting(createHooksRuntime()),
+    hooksRouting: withoutRouting,
     selectedScopes: ["user"],
   });
 
@@ -535,6 +562,7 @@ test("passes the marketplace add an options object that carries the git port onl
   assert.deepStrictEqual(requested, [
     {
       ctx: withPort.ctx,
+      completionCache: completionCacheFor(withRouting),
       cwd,
       gitOps,
       notifications: { mode: "orchestrated" },
@@ -544,6 +572,7 @@ test("passes the marketplace add an options object that carries the git port onl
     },
     {
       ctx: withoutPort.ctx,
+      completionCache: completionCacheFor(withoutRouting),
       cwd,
       notifications: { mode: "orchestrated" },
       pi: withoutPort.pi,

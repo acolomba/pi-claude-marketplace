@@ -35,6 +35,7 @@ import {
   loadState,
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { EXTENSION_VERSION } from "../../../extensions/pi-claude-marketplace/shared/extension-version.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { retryTree } from "../plugin/scope-tree-inventory.ts";
@@ -304,6 +305,7 @@ function backfillOptionsWithRouting(
     pi,
     cwd,
     scope: "project",
+    completionCache: createCompletionCache(),
     gitOps,
     hooksRouting,
   };
