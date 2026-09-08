@@ -56,6 +56,10 @@ import { describe, test } from "node:test";
 
 import lockfile from "proper-lockfile";
 
+import {
+  createHooksRouting,
+  createHooksRuntime,
+} from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
   applyReconcile,
@@ -1490,9 +1494,12 @@ describe("applyReconcile", () => {
     });
     const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
     const { gitOps, clonedUrls } = createOfflineGitOps();
+    const ownerRuntime = createHooksRuntime();
+    const peerRuntime = createHooksRuntime();
+    const hooksRouting = createHooksRouting(ownerRuntime);
 
     // act
-    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps });
+    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps, hooksRouting });
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -1501,6 +1508,11 @@ describe("applyReconcile", () => {
       },
     ]);
     assert.deepStrictEqual((await recordFor(project, "mp", "orphan"))?.resources.hooks, ["orphan"]);
+    assert.deepStrictEqual(
+      ownerRuntime.getRoutingBucket("PreToolUse").map((entry) => entry.pluginId),
+      ["orphan"],
+    );
+    assert.deepStrictEqual(peerRuntime.getRoutingBucket("PreToolUse"), []);
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
   });
