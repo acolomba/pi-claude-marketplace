@@ -100,17 +100,23 @@ commands.
 - [ ] `tests/orchestrators/plugin/install.test.ts` — the byte-comparison pair with a non-vacuity assertion (criterion 2)
 - [ ] `tests/platform/pi-api.test.ts` — the discriminating `workflow`-without-`workflow_control` case
 - [ ] Two paired catalog states plus their fixtures; the exact-count assertion moves with them
-- [ ] The `piWithBothLoaded` fixture-helper decision, applied in the same task as the probe
+- [ ] `piWithBothLoaded()` → `piWithAllLoaded()` across all 302 call sites, with
+      `{ name: "workflow_control" }` added to its body (CONTEXT R4). Editor-scoped symbol
+      rename, never `sed`. Run `catalog-uat.test.ts` immediately after the probe field
+      lands and BEFORE any fixture edit, to confirm the added tool changes zero bytes.
 
 ---
 
 ## The Negative Control for Criterion 3's Gate
 
 The gate's claim is "every `Dependency[]` derivation site stamps `workflows`". A gate that
-reads seven sites but only exercises two is green over five it never touched.
+reads seven sites but only exercises two is green over five it never touched. Every case
+asserts on the RENDERED ROW, so all seven prove the same end-to-end claim (CONTEXT R5).
 
-1. Pick one Tier C site (`install.ts`, `list.ts` or `import/execute.ts`) — the ones most
-   likely to be reached vacuously.
+1. Pick one hard-to-reach site — `install.ts`, `list.ts` or `import/execute.ts`, the three
+   reachable only by driving a full `installPlugin` / `loadPluginListPayload` /
+   `importClaudeSettings`. These are the cases a gate can most easily satisfy vacuously,
+   so the control must target one of them, never an easy site (CONTEXT R5).
 2. Delete its `dependencies.push("workflows")` arm.
 3. Run the gate. **Exactly one case must redden**, and the failure message must name that
    site.
