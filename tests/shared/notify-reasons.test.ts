@@ -331,6 +331,46 @@ const companionSeverityCases = [
     },
     expectedSeverity: "info",
   },
+  {
+    // SEV-01 / WDEP-04: the workflows axis. The envelopes are written either
+    // way, so the shortfall is a severity raise and never a failure.
+    title: "raises to warning when workflows are declared and the host engine is absent",
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: true,
+    probe: {
+      piSubagentsLoaded: true,
+      piMcpAdapterLoaded: true,
+      workflowEngineLoaded: false,
+    },
+    expectedSeverity: "warning",
+  },
+  {
+    title: "keeps info when workflows are declared and the host engine is loaded",
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: true,
+    probe: {
+      piSubagentsLoaded: true,
+      piMcpAdapterLoaded: true,
+      workflowEngineLoaded: true,
+    },
+    expectedSeverity: "info",
+  },
+  {
+    // The third disjunct COMPOSES with the other two rather than replacing
+    // them: two unloaded companions still reach warning through their own arms.
+    title: "raises to warning for two unloaded companions while the host engine is loaded",
+    declaresAgents: true,
+    declaresMcp: true,
+    declaresWorkflows: true,
+    probe: {
+      piSubagentsLoaded: false,
+      piMcpAdapterLoaded: false,
+      workflowEngineLoaded: true,
+    },
+    expectedSeverity: "warning",
+  },
 ] as const;
 
 for (const {

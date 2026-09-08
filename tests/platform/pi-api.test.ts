@@ -348,7 +348,7 @@ describe("hasLoadedPiMcpAdapter", () => {
 describe("hasLoadedWorkflowEngine", () => {
   for (const { tools, expectedLoaded, behavior } of [
     {
-      behavior: "recognizes the workflow_control tool name",
+      behavior: "WDEP-01 recognizes the workflow_control tool name",
       tools: [{ name: "workflow_control" }],
       expectedLoaded: true,
     },
@@ -356,7 +356,7 @@ describe("hasLoadedWorkflowEngine", () => {
       // WDEP-01: the discriminating case. `@nicknisi/pi-workflows` registers a
       // tool named `workflow` and no `workflow_control`, so a bare-name probe
       // would report that engine as the host.
-      behavior: "rejects a session exposing only the decoy `workflow` tool name",
+      behavior: "WDEP-01 rejects a session exposing only the decoy `workflow` tool name",
       tools: [{ name: "workflow" }],
       expectedLoaded: false,
     },
@@ -364,12 +364,12 @@ describe("hasLoadedWorkflowEngine", () => {
       // WDEP-01: the host engine's real session shape -- it registers BOTH
       // names, so the probe must SELECT on the discriminator while the decoy is
       // present, not merely reject an absent name.
-      behavior: "recognizes workflow_control beside the decoy `workflow` tool name",
+      behavior: "WDEP-01 recognizes workflow_control beside the decoy `workflow` tool name",
       tools: [{ name: "workflow" }, { name: "workflow_control" }],
       expectedLoaded: true,
     },
     {
-      behavior: "reports unloaded for an empty tool list",
+      behavior: "WDEP-01 reports unloaded for an empty tool list",
       tools: [],
       expectedLoaded: false,
     },
@@ -386,7 +386,7 @@ describe("hasLoadedWorkflowEngine", () => {
     });
   }
 
-  test("degrades to unloaded when tool discovery fails", () => {
+  test("WDEP-01 degrades to unloaded when tool discovery fails", () => {
     // arrange
     const extensionApi = {
       getAllTools: () => {
@@ -429,6 +429,18 @@ describe("softDepStatus", () => {
         piSubagentsLoaded: false,
         piMcpAdapterLoaded: true,
         workflowEngineLoaded: false,
+      },
+    },
+    {
+      // WDEP-01: `softDepStatus` composes the third field from the SAME tool
+      // list the standalone probe reads -- the discriminator alone is enough,
+      // and it moves no other field.
+      behavior: "WDEP-01 reports the host engine alone as loaded",
+      tools: [{ name: "workflow_control" }],
+      expectedStatus: {
+        piSubagentsLoaded: false,
+        piMcpAdapterLoaded: false,
+        workflowEngineLoaded: true,
       },
     },
     {

@@ -8,6 +8,7 @@ import {
 
 void ("agents" satisfies Dependency);
 void ("mcp" satisfies Dependency);
+void ("workflows" satisfies Dependency);
 // @ts-expect-error Dependency excludes unknown companion targets
 void ("hooks" satisfies Dependency);
 
@@ -204,6 +205,59 @@ const markerCases = [
       workflowEngineLoaded: true,
     },
     expectedMarkers: [],
+  },
+  {
+    // WDEP-04: the workflows axis. The engine-absent probe is what makes the
+    // marker fire; the declaration alone does not.
+    title:
+      "returns the host-engine marker when only workflows are declared and the engine is absent",
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: true,
+    probe: {
+      piSubagentsLoaded: true,
+      piMcpAdapterLoaded: true,
+      workflowEngineLoaded: false,
+    },
+    expectedMarkers: ["requires pi-dynamic-workflows"],
+  },
+  {
+    title: "returns no markers when workflows are declared and the host engine is loaded",
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: true,
+    probe: {
+      piSubagentsLoaded: true,
+      piMcpAdapterLoaded: true,
+      workflowEngineLoaded: true,
+    },
+    expectedMarkers: [],
+  },
+  {
+    title: "returns no markers when the host engine is absent and no workflow is declared",
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+    probe: {
+      piSubagentsLoaded: true,
+      piMcpAdapterLoaded: true,
+      workflowEngineLoaded: false,
+    },
+    expectedMarkers: [],
+  },
+  {
+    // WDEP-04: the brace join is byte-critical, so the order is asserted as an
+    // exact array rather than as membership.
+    title: "returns agents, then MCP, then the host engine when all three are declared and absent",
+    declaresAgents: true,
+    declaresMcp: true,
+    declaresWorkflows: true,
+    probe: {
+      piSubagentsLoaded: false,
+      piMcpAdapterLoaded: false,
+      workflowEngineLoaded: false,
+    },
+    expectedMarkers: ["requires pi-subagents", "requires pi-mcp", "requires pi-dynamic-workflows"],
   },
 ] as const;
 
