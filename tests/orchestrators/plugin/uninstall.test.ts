@@ -2302,7 +2302,10 @@ test("WR-03: a post-save routing failure cannot roll back committed uninstall", 
         },
       })({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
 
-      assert.deepEqual(Object.keys((await loadState(locations.extensionRoot)).marketplaces.mp?.plugins ?? {}), []);
+      assert.deepEqual(
+        Object.keys((await loadState(locations.extensionRoot)).marketplaces.mp?.plugins ?? {}),
+        [],
+      );
       assert.equal(notifications.length, 1);
       assert.match(notifications[0]?.message ?? "", /hello v0\.0\.1 \(uninstalled\)/);
     } finally {
