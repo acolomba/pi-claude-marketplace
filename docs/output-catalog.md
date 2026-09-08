@@ -521,6 +521,36 @@ A plugin operation needs attention.
 
 `helper` declares both `agents` and `mcp` dependencies; the probe reports both companion extensions unloaded so both markers fire inside one brace block (D-16-15). SEV-01: a declared companion that is unloaded silently degrades an otherwise-clean install, so the success row stamps `warning` and the cascade carries the `needs attention` summary line. The per-row bytes are unchanged from the info form -- only the severity (and therefore the summary line) moves.
 
+### Success with the host workflow engine absent
+
+<!-- catalog-state: success-with-workflow-engine-absent -->
+
+```text
+A plugin operation needs attention.
+
+● official [user]
+  ● helper v1.0.0 (installed) {requires pi-dynamic-workflows}
+
+/reload to pick up changes
+```
+
+`helper` declares only `workflows` and the session carries no host workflow engine, so the brace holds exactly one marker (WDEP-02). The severity is `warning` rather than `info` by the tri-state rule: the operation WAS carried out -- the envelopes are written and correct -- but the desired state is not reached, because nothing runs them yet. It is not `error` either, because the install itself succeeded; a missing companion degrades an install and never blocks it. The `warning` is what puts the `needs attention` summary line above the cascade.
+
+### Success with the agents and workflows markers in one brace
+
+<!-- catalog-state: success-with-agents-and-workflows-soft-dep -->
+
+```text
+A plugin operation needs attention.
+
+● official [user]
+  ● helper v1.0.0 (installed) {requires pi-subagents, requires pi-dynamic-workflows}
+
+/reload to pick up changes
+```
+
+`helper` declares `agents` and `workflows`; the probe reports `pi-mcp-adapter` loaded and the other two companions absent, so two markers render inside ONE brace, comma-space separated, with the host-engine marker SECOND (WDEP-04, D-16-15 injection). Marker order inside the brace is `agents`, `mcp`, `workflows` -- appended, never interleaved, which is what leaves every existing two-marker byte form unchanged. These rendered bytes are the order authority: no runtime tuple enumerates the `Dependency` members, so nothing but this block pins where a marker sits.
+
 ### Success with orphan-rewake warning (SURF-05 / D-63-08)
 
 <!-- catalog-state: success-with-orphan-rewake -->

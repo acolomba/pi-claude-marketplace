@@ -220,6 +220,17 @@ function piWithAllLoaded(): MockPi {
 }
 
 /**
+ * Probe reports pi-subagents and pi-mcp-adapter loaded, the host workflow engine
+ * NOT loaded -- {requires pi-dynamic-workflows} fires on dep-bearing rows
+ * declaring workflows, and no other soft-dep marker fires (WDEP-01).
+ */
+function piWithoutWorkflowEngine(): MockPi {
+  return {
+    getAllTools: () => [{ name: "subagent" }, { name: "mcp" }],
+  };
+}
+
+/**
  * Probe reports pi-mcp-adapter loaded, pi-subagents and the host workflow engine
  * NOT loaded -- {requires pi-subagents} fires on dep-bearing rows declaring
  * agents, and {requires pi-dynamic-workflows} on those declaring workflows.
@@ -1118,6 +1129,63 @@ const FIXTURES: FixtureMap = {
                 name: "helper",
                 version: "1.0.0",
                 dependencies: ["agents", "mcp"],
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // WDEP-02: the plugin declares only `workflows` and the session carries no
+    // host workflow engine, so the brace holds exactly one marker. The tri-state
+    // severity rule puts it at `warning`, not `info`: the envelopes ARE written
+    // and correct, but the desired state is not reached because nothing runs
+    // them yet.
+    "success-with-workflow-engine-absent": {
+      pi: piWithoutWorkflowEngine(),
+      expectedSeverity: "warning",
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "installed",
+                severity: "warning",
+                needsReload: true,
+                name: "helper",
+                version: "1.0.0",
+                dependencies: ["workflows"],
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // WDEP-04 / D-16-15: two markers, ONE brace, comma-space separated, with the
+    // host-engine marker SECOND. Marker order inside the brace is `agents`,
+    // `mcp`, `workflows` -- appended, never interleaved -- and these rendered
+    // bytes are the order authority, because no runtime tuple carries an index
+    // that could imply it. Probe with only `mcp` loaded so the `agents` and
+    // `workflows` markers both fire and `mcp` does not.
+    "success-with-agents-and-workflows-soft-dep": {
+      pi: piWithMcpLoaded(),
+      expectedSeverity: "warning",
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "installed",
+                severity: "warning",
+                needsReload: true,
+                name: "helper",
+                version: "1.0.0",
+                dependencies: ["agents", "workflows"],
               },
             ],
           },
@@ -5498,14 +5566,14 @@ test("catalog UAT: every <!-- catalog-state: --> annotation pairs byte-equal wit
   const catalog = await readFile(CATALOG_PATH, "utf8");
   const examples = loadCatalogExamples(catalog);
 
-  // Exact count, not a floor: 192 is the number of annotated examples in
+  // Exact count, not a floor: 194 is the number of annotated examples in
   // docs/output-catalog.md, and it is what stops a `loadCatalogExamples`
   // refactor from silently parsing a fraction of the corpus. Update it
   // deliberately when catalog examples are added or removed.
   assert.equal(
     examples.length,
-    192,
-    `Expected exactly 192 annotated catalog examples; found ${examples.length}. Check that the discriminator comments in docs/output-catalog.md were not lost, and update this count when examples are added.`,
+    194,
+    `Expected exactly 194 annotated catalog examples; found ${examples.length}. Check that the discriminator comments in docs/output-catalog.md were not lost, and update this count when examples are added.`,
   );
 
   const failures: Failure[] = [];
