@@ -995,12 +995,7 @@ async function registerHooksBridgeWith(
       );
       return async (event, ctx) => {
         try {
-          await hydrateProjectScopeForCwdWith(
-            reader,
-            ctx.cwd,
-            routingState,
-            generationIsCurrent,
-          );
+          await hydrateProjectScopeForCwdWith(reader, ctx.cwd, routingState, generationIsCurrent);
           if (!generationIsCurrent()) {
             return;
           }
@@ -1111,8 +1106,7 @@ export function createHooksHydration(
   return {
     async hydrateProjectScopeForCwd(cwd: string): Promise<void> {
       const capturedGeneration = runtime.currentGeneration();
-      const generationIsCurrent = (): boolean =>
-        runtime.currentGeneration() === capturedGeneration;
+      const generationIsCurrent = (): boolean => runtime.currentGeneration() === capturedGeneration;
       await hydrateProjectScopeForCwdWith(reader, cwd, routingState, generationIsCurrent);
       if (!generationIsCurrent()) {
         return;

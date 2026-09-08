@@ -270,9 +270,8 @@ async function loadExtension(
     toolProbes,
     cwd,
   );
-  const bridgeSessionStartListener = It.willCapture<BridgeSessionStartListener>(
-    "bridge session start",
-  );
+  const bridgeSessionStartListener =
+    It.willCapture<BridgeSessionStartListener>("bridge session start");
   when(() => {
     pi.on("session_start", bridgeSessionStartListener);
   })
@@ -616,7 +615,11 @@ async function seedBlockingHookPlugin(cwd: string): Promise<void> {
 }
 
 /** Seed a path marketplace accepted by the public `marketplace add` command. */
-async function seedMarketplaceSource(cwd: string, name: string, pluginName: string): Promise<string> {
+async function seedMarketplaceSource(
+  cwd: string,
+  name: string,
+  pluginName: string,
+): Promise<string> {
   const sourceRoot = path.join(cwd, `${name}-source`);
   await mkdir(path.join(sourceRoot, ".claude-plugin"), { recursive: true });
   await mkdir(path.join(sourceRoot, "plugins", pluginName), { recursive: true });
@@ -767,10 +770,7 @@ test("keeps hook routing and command completion state inside each extension-load
   process.chdir(ownerCwd);
   const owner = await loadExtension(1, 2, { value: ownerCwd, reads: 1 });
   const ownerHookContext = hookContext(ownerCwd, "owner-graph-session");
-  await owner.bridgeSessionStart(
-    { type: "session_start", reason: "startup" },
-    ownerHookContext,
-  );
+  await owner.bridgeSessionStart({ type: "session_start", reason: "startup" }, ownerHookContext);
   const toolEvent: ToolCallEvent = {
     type: "tool_call",
     toolCallId: "owner-graph-call",
@@ -779,11 +779,11 @@ test("keeps hook routing and command completion state inside each extension-load
   };
 
   // act
-  const ownerHookBeforeMutation = await owner.toolCall(structuredClone(toolEvent), ownerHookContext);
-  await owner.command.handler(
-    `marketplace add ${ownerMarketplace} --scope project`,
-    owner.ctx,
+  const ownerHookBeforeMutation = await owner.toolCall(
+    structuredClone(toolEvent),
+    ownerHookContext,
   );
+  await owner.command.handler(`marketplace add ${ownerMarketplace} --scope project`, owner.ctx);
   const ownerCandidates = await owner.command.getArgumentCompletions?.("install --scope project ");
   process.chdir(peerCwd);
   const peer = await loadExtension(0, 0);

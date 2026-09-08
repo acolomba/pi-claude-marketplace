@@ -1890,13 +1890,13 @@ test(
         target: Parameters<typeof originalLstat>[0],
         options?: Parameters<typeof originalLstat>[1],
       ) => {
-      if (deferContainment && target === fixture.hookPath) {
-        deferContainment = false;
-        containmentStarted.resolve(undefined);
-        await releaseContainment.promise;
-      }
+        if (deferContainment && target === fixture.hookPath) {
+          deferContainment = false;
+          containmentStarted.resolve(undefined);
+          await releaseContainment.promise;
+        }
 
-      return originalLstat(target, options);
+        return originalLstat(target, options);
       },
     );
     const readFile = t.mock.method(
@@ -1906,11 +1906,11 @@ test(
         target: Parameters<typeof originalReadFile>[0],
         options?: Parameters<typeof originalReadFile>[1],
       ) => {
-      if (target === fixture.hookPath) {
-        hookReads += 1;
-      }
+        if (target === fixture.hookPath) {
+          hookReads += 1;
+        }
 
-      return originalReadFile(target, options);
+        return originalReadFile(target, options);
       },
     );
     t.after(() => {
@@ -1970,14 +1970,14 @@ test(
         target: Parameters<typeof originalReadFile>[0],
         options?: Parameters<typeof originalReadFile>[1],
       ) => {
-      if (deferHookRead && target === fixture.hookPath) {
-        deferHookRead = false;
-        hookReadStarted.resolve(undefined);
-        await releaseHookRead.promise;
-        return fixture.hookBytes;
-      }
+        if (deferHookRead && target === fixture.hookPath) {
+          deferHookRead = false;
+          hookReadStarted.resolve(undefined);
+          await releaseHookRead.promise;
+          return fixture.hookBytes;
+        }
 
-      return originalReadFile(target, options);
+        return originalReadFile(target, options);
       },
     );
     t.after(() => {
@@ -2050,13 +2050,13 @@ test(
         target: Parameters<typeof originalMkdir>[0],
         options?: Parameters<typeof originalMkdir>[1],
       ) => {
-      if (deferShared && target === projectShared) {
-        deferShared = false;
-        sharedStarted.resolve(undefined);
-        await releaseShared.promise;
-      }
+        if (deferShared && target === projectShared) {
+          deferShared = false;
+          sharedStarted.resolve(undefined);
+          await releaseShared.promise;
+        }
 
-      return originalMkdir(target, options);
+        return originalMkdir(target, options);
       },
     );
     t.after(() => {
@@ -2064,10 +2064,7 @@ test(
       syncBuiltinESMExports();
     });
     syncBuiltinESMExports();
-    const staleAtShared = firstSessionStart(
-      { type: "session_start", reason: "startup" },
-      context,
-    );
+    const staleAtShared = firstSessionStart({ type: "session_start", reason: "startup" }, context);
     await sharedStarted.promise;
     await hydration.registerHooksBridge(pi, { ctx: context, cwd: fixture.factoryRoot, executor });
     releaseShared.resolve(undefined);
