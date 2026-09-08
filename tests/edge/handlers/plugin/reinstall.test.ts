@@ -100,6 +100,7 @@ import path from "node:path";
 import { test, type TestContext } from "node:test";
 
 import { makeReinstallHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/reinstall.ts";
+import { reinstallPlugins } from "../../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
 import {
   buildInstalledPluginRecord,
@@ -108,6 +109,7 @@ import {
 } from "../marketplace-seed.ts";
 
 import type { Scope } from "../../../../extensions/pi-claude-marketplace/shared/types.ts";
+import type { ReinstallPluginsOptions } from "../../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts";
 
 /** The usage block this shim appends after a blank line to every rejection. */
 const REINSTALL_USAGE =
@@ -420,7 +422,16 @@ test("re-materialises only the named plugin when a plugin reference is supplied 
     value: workspace.cwd,
     reads: 1,
   });
-  const reinstallHandler = makeReinstallHandler(pi);
+  const calls: ReinstallPluginsOptions[] = [];
+  const reinstallPluginsSpy = async (
+    opts: ReinstallPluginsOptions,
+  ): Promise<
+    readonly import("../../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts").ReinstallPluginOutcome[]
+  > => {
+    calls.push(opts);
+    return reinstallPlugins(opts);
+  };
+  const reinstallHandler = makeReinstallHandler(pi, reinstallPluginsSpy);
 
   // act
   await reinstallHandler("alpha@mp", ctx);
@@ -435,6 +446,14 @@ test("re-materialises only the named plugin when a plugin reference is supplied 
     userBase: undefined,
     userLocal: undefined,
   });
+  assert.deepStrictEqual(calls, [
+    {
+      ctx,
+      pi,
+      cwd: workspace.cwd,
+      target: { kind: "plugin", plugin: "alpha", marketplace: "mp" },
+    },
+  ]);
   assert.strictEqual(workspace.transportCalls(), 0);
   verifyBoundary();
 });
