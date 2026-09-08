@@ -13,11 +13,6 @@
 export {
   createHooksHydration,
   createHooksRouting,
-  hydrateProjectScopeForCwd,
-  readAndCachePluginHooks,
-  registerHooksBridge,
-  rebuildRoutingTables,
-  removePluginConfigFromCache,
 } from "./event-router.ts";
 
 export type {

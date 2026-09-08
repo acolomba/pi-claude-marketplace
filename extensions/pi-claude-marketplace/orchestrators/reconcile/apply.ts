@@ -48,7 +48,6 @@
 
 import path from "node:path";
 
-import { rebuildRoutingTables } from "../../bridges/hooks/index.ts";
 import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { migrateFirstRunConfig } from "../../persistence/migrate-config.ts";
@@ -60,7 +59,7 @@ import { notifyDiagnostic, redactAbsolutePaths } from "../../shared/notify.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 import { addMarketplace } from "../marketplace/add.ts";
 import { removeMarketplace } from "../marketplace/remove.ts";
-import { setPluginEnabled } from "../plugin/enable-disable.ts";
+import { createNodeSetPluginEnabled } from "../plugin/enable-disable.ts";
 import { createNodeInstallPlugin } from "../plugin/install.ts";
 import { createNodeUninstallPlugin } from "../plugin/uninstall.ts";
 
@@ -572,6 +571,7 @@ async function applyPluginToggles(
   outcomes: PerEntryOutcome[],
   axes: PluginToggleAxes,
 ): Promise<void> {
+  const setPluginEnabled = createNodeSetPluginEnabled(opts.hooksRouting);
   // Y6: successStatus is derivable from `enable` -- enable=true => "enabled",
   // enable=false => "disabled". Deriving it here closes a redundant-axis
   // footgun where a caller could pass an inconsistent (enable, successStatus)
@@ -818,7 +818,7 @@ async function applyReconcileWithReader(
     // bucket reflecting the post-reconcile state. WR-01-style isolation:
     // a transient lock-held / EACCES throw is captured into a structured
     // `invalid-block` outcome via `rebuildScopeRoutingTableIsolated`.
-    await rebuildScopeRoutingTableIsolated(scope, opts.cwd, outcomes);
+    await rebuildScopeRoutingTableIsolated(scope, opts.cwd, opts.hooksRouting, outcomes);
   }
 
   // Empty-and-clean reconcile -> SILENT (NFR-2 / A4 / RECON-05). The load-
@@ -884,14 +884,18 @@ export const applyReconcile = createApplyReconcile(NODE_RECONCILE_STATE_READER);
  * files" contract. A scope without a state.json has zero installed plugins
  * to register anyway.
  */
-async function rebuildScopeRoutingTable(scope: Scope, cwd: string): Promise<void> {
+async function rebuildScopeRoutingTable(
+  scope: Scope,
+  cwd: string,
+  hooksRouting: ApplyReconcileOptions["hooksRouting"],
+): Promise<void> {
   const loc = locationsFor(scope, cwd);
   if (!(await pathExists(loc.stateJsonPath))) {
     return;
   }
 
   await withLockedStateTransaction(loc, async (_tx) => {
-    rebuildRoutingTables();
+    hooksRouting.rebuildRoutingTables();
     // NO tx.save() -- read-only snapshot acquisition.
     await Promise.resolve();
   });
@@ -907,9 +911,12 @@ async function rebuildScopeRoutingTable(scope: Scope, cwd: string): Promise<void
 async function rebuildScopeRoutingTableIsolated(
   scope: Scope,
   cwd: string,
+  hooksRouting: ApplyReconcileOptions["hooksRouting"],
   outcomes: PerEntryOutcome[],
 ): Promise<void> {
-  await runScopeIsolated(scope, outcomes, () => rebuildScopeRoutingTable(scope, cwd));
+  await runScopeIsolated(scope, outcomes, () =>
+    rebuildScopeRoutingTable(scope, cwd, hooksRouting),
+  );
 }
 
 export function surfacePostCommitWarnings(

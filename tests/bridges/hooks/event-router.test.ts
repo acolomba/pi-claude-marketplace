@@ -1140,7 +1140,7 @@ test("readAndCachePluginHooks leaves the cache unchanged after a parse failure",
   assert.deepStrictEqual(Array.from(runtime.parsedConfigEntries()), []);
 });
 
-test("beforeAgentStartHandlerFor drains ordered context once and leaves an empty turn unchanged", async () => {
+test("createBeforeAgentStartHandler drains ordered context once and leaves an empty turn unchanged", async () => {
   // arrange
   const runtime = createHooksRuntime();
   const capturedGeneration = runtime.advanceGeneration();
@@ -1176,7 +1176,7 @@ test("beforeAgentStartHandlerFor drains ordered context once and leaves an empty
   assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), []);
 });
 
-test("beforeAgentStartHandlerFor rejects a stale epoch without draining live context", async () => {
+test("createBeforeAgentStartHandler rejects a stale epoch without draining live context", async () => {
   // arrange
   const runtime = createHooksRuntime();
   const staleGeneration = runtime.advanceGeneration();

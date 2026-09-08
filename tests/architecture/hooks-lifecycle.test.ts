@@ -252,26 +252,26 @@ test("WR-03 Block D: update.ts wires remove + add + rebuildRoutingTables in its 
 });
 
 // ──────────────────────────────────────────────────────────────────────────
-// Block E: WR-01 -- hydrateProjectScopeForCwd opens with a clear-cache
+// Block E: WR-01 -- hydrateProjectScopeForCwdWith opens with a clear-cache
 // prefix that drops phantom project-arm entries BEFORE the re-hydrate
 // loop. The prefix must precede the existing `loadState` / `hydrateScopeFromState`
 // calls so the rebuild never observes stale entries.
 // ──────────────────────────────────────────────────────────────────────────
 
-test("WR-01 Block E: event-router.ts::hydrateProjectScopeForCwd opens with a deleteParsedConfig prefix", async () => {
+test("WR-01 Block E: event-router.ts::hydrateProjectScopeForCwdWith opens with a deleteParsedConfig prefix", async () => {
   const raw = await readFile(EVENT_ROUTER_PATH, "utf8");
 
   // Locate the function body. The function is declared as
-  // `export async function hydrateProjectScopeForCwd(cwd: string): Promise<void> { ... }`.
+  // `async function hydrateProjectScopeForCwdWith(...) { ... }`.
   // Grab everything between the opening brace and the matching closing
   // brace via a forgiving regex (the function body has no nested braces
   // at depth > 1 in current source; if a future contributor adds a
   // block-statement inside, the regex still matches the first balanced
   // pair via the lazy `[\s\S]*?` and a tail anchor of `\n}`).
-  const match = /export async function hydrateProjectScopeForCwd[^{]*\{([\s\S]*?)\n\}/.exec(raw);
+  const match = /async function hydrateProjectScopeForCwdWith[^{]*\{([\s\S]*?)\n\}/.exec(raw);
   assert.ok(
     match !== null,
-    "event-router.ts: could not locate hydrateProjectScopeForCwd function body",
+    "event-router.ts: could not locate hydrateProjectScopeForCwdWith function body",
   );
   const body = match[1] ?? "";
 
@@ -279,7 +279,7 @@ test("WR-01 Block E: event-router.ts::hydrateProjectScopeForCwd opens with a del
   assert.match(
     body,
     /deleteParsedConfig\b/,
-    "WR-01: hydrateProjectScopeForCwd must call deleteParsedConfig to drop phantom entries",
+    "WR-01: hydrateProjectScopeForCwdWith must call deleteParsedConfig to drop phantom entries",
   );
 
   // The delete call must precede the load-state-then-rehydrate calls so

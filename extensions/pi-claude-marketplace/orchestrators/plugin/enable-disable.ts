@@ -61,11 +61,6 @@
 
 import path from "node:path";
 
-import {
-  readAndCachePluginHooks,
-  rebuildRoutingTables,
-  removePluginConfigFromCache,
-} from "../../bridges/hooks/index.ts";
 import { asAbsolutePluginRoot } from "../../domain/plugin-root.ts";
 import { isRecordedButDisabled, toDisabledRecord } from "../../persistence/state-io.ts";
 import { softDepStatus } from "../../platform/pi-api.ts";
@@ -1016,15 +1011,6 @@ export function createNodeSetPluginEnabled(
 ): SetPluginEnabledOperation {
   return createSetPluginEnabled(REAL_ENABLE_DISABLE_TRANSACTION, hooksRouting);
 }
-
-const TRANSITION_ENABLE_DISABLE_HOOKS_ROUTING: EnableDisableHooksRouting = {
-  readAndCachePluginHooks,
-  rebuildRoutingTables,
-  removePluginConfigFromCache,
-};
-
-/** Production enable/disable operation composed through the real transaction adapter. */
-export const setPluginEnabled = createNodeSetPluginEnabled(TRANSITION_ENABLE_DISABLE_HOOKS_ROUTING);
 
 /**
  * Closed-set reason for an orchestrated transaction

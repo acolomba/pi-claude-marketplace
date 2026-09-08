@@ -5,8 +5,8 @@
 // `extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts`.
 //
 // Hermetic harness: each test uses a temp HOME + cwd so state/config files
-// are isolated. The orchestrator is exercised end-to-end through its single
-// public entry point `setPluginEnabled`.
+// are isolated. The orchestrator is exercised end-to-end through its
+// production runtime-bound factory.
 
 import assert from "node:assert/strict";
 import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
@@ -24,7 +24,6 @@ import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/
 import {
   createNodeSetPluginEnabled,
   createSetPluginEnabled,
-  setPluginEnabled,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts";
 import { createNodeReinstallPlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts";
 import { createPluginUpdateOperations } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update.ts";
@@ -42,7 +41,10 @@ import type {
   HooksRouting,
   HooksRuntime,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
-import type { EnableDisablePluginOutcome } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts";
+import type {
+  EnableDisablePluginOptions,
+  EnableDisablePluginOutcome,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts";
 import type {
   NotificationContext,
   ToolInventory,
@@ -93,6 +95,19 @@ function createReinstallPlugin() {
     createHooksRouting(createHooksRuntime()),
     createCompletionCache(),
   );
+}
+
+function setPluginEnabled(
+  opts: EnableDisablePluginOptions & { notifications: { mode: "orchestrated" } },
+): Promise<EnableDisablePluginOutcome>;
+function setPluginEnabled(
+  opts: EnableDisablePluginOptions,
+): Promise<EnableDisablePluginOutcome | undefined>;
+function setPluginEnabled(
+  opts: EnableDisablePluginOptions,
+): Promise<EnableDisablePluginOutcome | undefined> {
+  const operation = createNodeSetPluginEnabled(createHooksRouting(createHooksRuntime()));
+  return operation(opts);
 }
 
 async function populateRuntimeRoute(
