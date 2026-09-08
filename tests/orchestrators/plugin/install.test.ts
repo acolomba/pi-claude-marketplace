@@ -18,7 +18,6 @@ import {
   pluginMirrorKey,
 } from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
 import { PLUGIN_ENTRY_VALIDATOR } from "../../../extensions/pi-claude-marketplace/domain/components/plugin.ts";
-import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
   materializeOrRefreshPluginMirror,
@@ -30,6 +29,7 @@ import {
   createNodeInstallPlugin,
   runInstallLedger,
   type InstallCloneCacheSeam,
+  type InstallHooksRouting,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
@@ -50,7 +50,6 @@ import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts"
 
 import { retryTree } from "./scope-tree-inventory.ts";
 
-import type { CacheEntry } from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
 import type { HooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import type {
   GitAuthBundle,
@@ -72,6 +71,7 @@ type InstallOperation = ReturnType<typeof createNodeInstallPlugin>;
 
 interface InstallTestOwner {
   readonly completionCache: CompletionCache;
+  readonly hooksRouting: InstallHooksRouting;
   readonly hooksRuntime: HooksRuntime;
   readonly installPlugin: InstallOperation;
 }
@@ -326,11 +326,13 @@ function makeCtx(piOverrides?: { readonly toolNames?: readonly string[] }): {
 async function withHermeticHome<T>(fn: (owner: InstallTestOwner) => Promise<T>): Promise<T> {
   return withHermeticEnvironment("install-", () => {
     const hooksRuntime = createHooksRuntime();
+    const hooksRouting = createHooksRouting(hooksRuntime);
     const completionCache = createCompletionCache();
     return fn({
       completionCache,
+      hooksRouting,
       hooksRuntime,
-      installPlugin: createNodeInstallPlugin(createHooksRouting(hooksRuntime), completionCache),
+      installPlugin: createNodeInstallPlugin(hooksRouting, completionCache),
     });
   });
 }
@@ -2376,8 +2378,8 @@ test("D-102-03: an install that does not opt in ignores defaultEnabled and lands
 // would clear them.
 // ───────────────────────────────────────────────────────────────────────────
 
-test("T-102-01: an install-disabled plugin gets no hooks routing entry and no on-disk hooks config", async () => {
-  await withHermeticHome(async ({ hooksRuntime, installPlugin }) => {
+test("T-102-01: an install-disabled plugin gets no hooks routing entry and no on-disk hooks config", async (t) => {
+  await withHermeticHome(async ({ hooksRouting, hooksRuntime, installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-t10201-disabled-"));
     try {
       const locations = locationsFor("project", cwd);
@@ -2395,6 +2397,9 @@ test("T-102-01: an install-disabled plugin gets no hooks routing entry and no on
       });
 
       assert.equal(hooksRuntime.getRoutingBucket("PreToolUse").length, 0);
+      t.mock.method(hooksRouting, "removePluginConfigFromCache", () => {
+        throw new Error("post-save routing removal denied");
+      });
 
       const { ctx, pi, notifications } = makeCtx();
       await installPlugin({
@@ -8022,27 +8027,12 @@ test("runInstallLedger rejects a hooks file that changes after resolver validati
 });
 
 test("retry proof: install: post-save hook-cache failure stays installed and retry is idempotent", async (t) => {
-  const { resetRoutingState, setParsedConfig } =
-    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
-
-  await withHermeticHome(async ({ installPlugin }) => {
+  await withHermeticHome(async ({ hooksRouting, installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-hooks-post-save-race-"));
     const originalReadFile = filesystemPromises.readFile.bind(filesystemPromises);
     let read: ReturnType<typeof t.mock.method> | undefined;
     try {
       // arrange
-      resetRoutingState();
-      const poison: CacheEntry = {
-        get config(): CacheEntry["config"] {
-          throw new Error("routing rebuild denied");
-        },
-        ifPredicates: new Map(),
-        marketplace: "poison-marketplace",
-        pluginId: "poison-plugin",
-        resolvedSource: asAbsolutePluginRoot(cwd),
-        scope: "project",
-      };
-      setParsedConfig("project:poison-marketplace:poison-plugin", poison);
       const { manifestPath, pluginRoot } = await seedPathMarketplaceWithPlugin({
         cwd,
         hooksJson: {
@@ -8064,21 +8054,27 @@ test("retry proof: install: post-save hook-cache failure stays installed and ret
         async (...args: Parameters<typeof filesystemPromises.readFile>) => {
           if (args[0] === hooksPath) {
             activeHooksReads += 1;
-            activeSchedule.push(
-              activeHooksReads === 1
-                ? "resolve:hooks"
-                : activeHooksReads === 2
-                  ? "commit:hooks"
-                  : hookCacheFault
-                    ? "post-save:hook-cache:failed"
-                    : "post-save:hook-cache:ok",
-            );
-            if (activeHooksReads === 3 && hookCacheFault) {
-              throw new Error("post-save hook read denied");
-            }
+            activeSchedule.push(activeHooksReads === 1 ? "resolve:hooks" : "commit:hooks");
           }
 
           return originalReadFile(...args);
+        },
+      );
+      const originalRoutingRead = hooksRouting.readAndCachePluginHooks.bind(hooksRouting);
+      t.mock.method(
+        hooksRouting,
+        "readAndCachePluginHooks",
+        async (
+          opts: Parameters<InstallHooksRouting["readAndCachePluginHooks"]>[0],
+        ): Promise<void> => {
+          activeSchedule.push(
+            hookCacheFault ? "post-save:hook-cache:failed" : "post-save:hook-cache:ok",
+          );
+          if (hookCacheFault) {
+            throw new Error("post-save hook read denied");
+          }
+
+          await originalRoutingRead(opts);
         },
       );
       syncBuiltinESMExports();
@@ -8147,23 +8143,18 @@ test("retry proof: install: post-save hook-cache failure stays installed and ret
     } finally {
       read?.mock.restore();
       syncBuiltinESMExports();
-      resetRoutingState();
       await rm(cwd, { force: true, recursive: true });
     }
   });
 });
 
 test("retry proof: install: disabled cascade failure preserves shrunken record and retry is safely idempotent", async (t) => {
-  const { resetRoutingState, setParsedConfig } =
-    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
-
-  await withHermeticHome(async ({ installPlugin }) => {
+  await withHermeticHome(async ({ hooksRouting, installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-disable-hooks-mcp-failure-"));
     const originalReadFile = filesystemPromises.readFile.bind(filesystemPromises);
     let read: ReturnType<typeof t.mock.method> | undefined;
     try {
       // arrange
-      resetRoutingState();
       const locations = locationsFor("project", cwd);
       const { manifestPath } = await seedPathMarketplaceWithPlugin({
         cwd,
@@ -8177,17 +8168,9 @@ test("retry proof: install: disabled cascade failure preserves shrunken record a
         pluginName: "hooky",
       });
       const cacheError = new Error("routing rebuild denied");
-      const poison: CacheEntry = {
-        get config(): CacheEntry["config"] {
-          throw cacheError;
-        },
-        ifPredicates: new Map(),
-        marketplace: "poison-marketplace",
-        pluginId: "poison-plugin",
-        resolvedSource: asAbsolutePluginRoot(cwd),
-        scope: "project",
-      };
-      setParsedConfig("project:poison-marketplace:poison-plugin", poison);
+      t.mock.method(hooksRouting, "rebuildRoutingTables", () => {
+        throw cacheError;
+      });
       const mcpError = new Error("mcp cleanup denied");
       const firstSchedule: string[] = [];
       const secondSchedule: string[] = [];
@@ -8281,7 +8264,6 @@ test("retry proof: install: disabled cascade failure preserves shrunken record a
     } finally {
       read?.mock.restore();
       syncBuiltinESMExports();
-      resetRoutingState();
       await rm(cwd, { force: true, recursive: true });
     }
   });
