@@ -49,10 +49,11 @@ export interface ReinstallReinstalledOutcome extends ReinstallOutcomeBase {
    * CMC-13: per-row soft-dep predicate inputs. `true` iff
    * the plugin's resolved manifest declared the kind AND it was actually
    * staged at reinstall time (the orchestrator already tracks
-   * `stagedAgentNames.length > 0` / `stagedMcpServerNames.length > 0`
-   * per-outcome; these flags surface them through the typed outcome so
-   * cascade rendering
-   * (`PluginCascadeRow.declaresAgents` / `.declaresMcp`) consumes the
+   * `stagedAgentNames.length > 0` / `stagedMcpServerNames.length > 0` /
+   * `resources.workflows.length > 0` per-outcome; these flags surface them
+   * through the typed outcome so cascade rendering
+   * (`PluginCascadeRow.declaresAgents` / `.declaresMcp` /
+   * `.declaresWorkflows`) consumes the
    * effective-state-at-render-time signal without re-deriving from the
    * staged-name arrays at the renderer site).
    *
@@ -70,6 +71,7 @@ export interface ReinstallReinstalledOutcome extends ReinstallOutcomeBase {
    */
   readonly declaresAgents: boolean;
   readonly declaresMcp: boolean;
+  readonly declaresWorkflows: boolean;
   /**
    * WARN-01 / WR-04 / D-86-03: the component kinds whose SOURCE frontmatter
    * could not be parsed and which re-materialized in degraded form. The
@@ -175,6 +177,7 @@ export interface PluginUpdateBase {
    */
   readonly declaresAgents: boolean;
   readonly declaresMcp: boolean;
+  readonly declaresWorkflows: boolean;
 }
 
 /**
@@ -242,11 +245,13 @@ export interface PluginUpdateUpdatedOutcome extends PluginUpdateBase, LedgerDegr
    *    actionable.
    *  - `stagedAgents` / `stagedMcpServers` are the presence half of
    *    `stagedAgentNames` / `stagedMcpServerNames`, already reduced to the
-   *    required `declaresAgents` / `declaresMcp` predicates above.
+   *    required `declaresAgents` / `declaresMcp` predicates above. The
+   *    workflows counterpart rides `declaresWorkflows` for the same reason.
    */
   readonly unsupported?: never;
   readonly stagedAgents?: never;
   readonly stagedMcpServers?: never;
+  readonly stagedWorkflows?: never;
   /**
    * FSTAT-07 / D-66-04 / SEV-03 / D-69-01: the partial-degrade signal for a
    * `--partial` update whose candidate re-resolved `partially-available`. Present
@@ -375,8 +380,8 @@ export interface PluginUpdateFailedOutcome extends PluginUpdateBase {
  * unreachable on the wrong partition, so the renderer cannot read
  * `outcome.fromVersion!` from a skipped outcome without a narrow.
  *
- * Each partition variant carries `declaresAgents` / `declaresMcp` via
- * the shared `PluginUpdateBase` base (CMC-13 required
+ * Each partition variant carries `declaresAgents` / `declaresMcp` /
+ * `declaresWorkflows` via the shared `PluginUpdateBase` base (CMC-13 required
  * booleans).
  */
 export type PluginUpdateOutcome =
@@ -420,11 +425,13 @@ export type PluginUpdateFn = (
  *
  * SNM-04 / D-15-02: the `"installed"` variant carries REQUIRED
  * `dependencies: readonly Dependency[]` (the closed-set
- * `"agents" | "mcp"` per SNM-04). The orchestrator derives the
+ * `"agents" | "mcp" | "workflows"` per SNM-04). The orchestrator derives the
  * array at the success-return site from
- * `installCtx.stagedAgentNames.length > 0` (-> `"agents"`) and
- * `installCtx.stagedMcpServerNames.length > 0` (-> `"mcp"`); the
- * `declaresAgents`/`declaresMcp` predicates on `InstallPluginOutcome`
+ * `installCtx.stagedAgentNames.length > 0` (-> `"agents"`),
+ * `installCtx.stagedMcpServerNames.length > 0` (-> `"mcp"`) and
+ * `installCtx.stagedWorkflowNames.length > 0` (-> `"workflows"`); the
+ * `declaresAgents`/`declaresMcp`/`declaresWorkflows` predicates on
+ * `InstallPluginOutcome`
  * remain (consumed by `orchestrators/import/execute.ts` for its
  * cascade-row composition) -- NFR-7's discriminated-outcome contract
  * is unchanged.
@@ -435,7 +442,7 @@ export type PluginUpdateFn = (
  * the same ledger run. Each field is omitted when empty, so a clean install's
  * outcome shape is unchanged (NREG-01).
  *
- * WR-03: the intersection EXCLUDES the two staged-count verdicts, and every
+ * WR-03: the intersection EXCLUDES the three staged-count verdicts, and every
  * field it keeps is populated below. WR-11: the type operator is an EXCLUSION,
  * so it cannot state that second half on its own -- a signal added to the shared
  * shape would widen this arm with a field nothing here writes. The key set is
@@ -443,11 +450,12 @@ export type PluginUpdateFn = (
  * signals installPlugin populates` in
  * `tests/architecture/compat-01-no-expansion.test.ts`, which stops compiling on
  * either a widening or a narrowing. Each field of the shared shape is optional,
- * so intersecting all five never made a missing one a compile error -- it only
- * advertised `stagedAgents` / `stagedMcpServers` that `installPlugin` never
- * writes, which a consumer reads as `undefined` and takes for "no agents
- * staged". Those two facts already ride the REQUIRED `declaresAgents` /
- * `declaresMcp` predicates below (consumed by `orchestrators/import/execute.ts`
+ * so intersecting all six never made a missing one a compile error -- it only
+ * advertised `stagedAgents` / `stagedMcpServers` / `stagedWorkflows` that
+ * `installPlugin` never writes, which a consumer reads as `undefined` and takes
+ * for "no agents staged". Those two facts already ride the REQUIRED `declaresAgents` /
+ * `declaresMcp` / `declaresWorkflows` predicates below (consumed by
+ * `orchestrators/import/execute.ts`
  * and the reconcile projection), so excluding the optional twins removes a
  * duplicate vocabulary rather than a signal. The dropped-component
  * `unsupported` kind list stays and is populated: an install admitted through
@@ -461,6 +469,7 @@ export type InstallPluginOutcome =
       readonly resourcesChanged: boolean;
       readonly declaresAgents: boolean;
       readonly declaresMcp: boolean;
+      readonly declaresWorkflows: boolean;
       /**
        * The resolved install version, as the standalone rows render it. An
        * orchestrated caller has no other way to fill the version slot its own
@@ -482,7 +491,7 @@ export type InstallPluginOutcome =
        * shape) is undisturbed.
        */
       readonly landedDisabled?: true;
-    } & Omit<LedgerDegradationSignals, "stagedAgents" | "stagedMcpServers">)
+    } & Omit<LedgerDegradationSignals, "stagedAgents" | "stagedMcpServers" | "stagedWorkflows">)
   | {
       /**
        * Collapsed failure shape. All failure variants (`already-installed`,

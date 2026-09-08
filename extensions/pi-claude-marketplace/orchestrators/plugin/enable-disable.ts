@@ -354,6 +354,7 @@ async function runEnableBranch(
       // declaration verdict, nothing more.
       ...(summary.stagedAgentNames.length > 0 && { stagedAgents: true }),
       ...(summary.stagedMcpServerNames.length > 0 && { stagedMcpServers: true }),
+      ...(summary.stagedWorkflowNames.length > 0 && { stagedWorkflows: true }),
       // WLIF-05 / WLIF-06: the retirement gate, computed here because this is
       // the only place both operands exist. `installed` is the PRE-enable record
       // -- captured before the ledger rewrote it, which is why it is a parameter
@@ -1088,6 +1089,7 @@ function freshOutcomeToTypedResult(
       outcome.degradedKinds.length > 0 && { degradedKinds: outcome.degradedKinds }),
     ...(outcome.stagedAgents === true && { stagedAgents: true }),
     ...(outcome.stagedMcpServers === true && { stagedMcpServers: true }),
+    ...(outcome.stagedWorkflows === true && { stagedWorkflows: true }),
   };
 }
 
@@ -1272,6 +1274,7 @@ function freshEnableRow(
           {
             declaresAgents: outcome.stagedAgents === true,
             declaresMcp: outcome.stagedMcpServers === true,
+            declaresWorkflows: outcome.stagedWorkflows === true,
           },
           probe,
         );

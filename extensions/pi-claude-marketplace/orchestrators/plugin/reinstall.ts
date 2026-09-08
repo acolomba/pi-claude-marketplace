@@ -1637,6 +1637,7 @@ function successOutcome(
     stagedMcpServerNames: resources.mcpServers,
     declaresAgents: resources.agents.length > 0,
     declaresMcp: resources.mcpServers.length > 0,
+    declaresWorkflows: resources.workflows.length > 0,
     resourcesChanged: resourcesChanged(oldRecord.resources, resources),
     ...(degradedKinds.length > 0 && { degradedKinds }),
     // WLIF-06: the record's PRE-reinstall inventory minus what the replace step

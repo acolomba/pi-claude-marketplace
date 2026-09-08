@@ -50,6 +50,7 @@ const pluginUpdate = (() =>
   Promise.resolve({
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
     fromVersion: "1.0.0",
     name: "formatter",
     partition: "unchanged",

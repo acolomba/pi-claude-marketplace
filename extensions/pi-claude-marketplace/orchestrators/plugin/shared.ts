@@ -105,6 +105,13 @@ export interface LedgerDegradationSignals {
    * `stagedAgents`, driving the `{requires pi-mcp}` marker and the same raise.
    */
   readonly stagedMcpServers?: boolean;
+  /**
+   * SEV-01: the ledger staged at least one workflow, so the row DECLARES the
+   * host workflow engine. The workflows counterpart of `stagedAgents`, driving
+   * the `{requires pi-dynamic-workflows}` marker and the same raise. Carries a
+   * COUNT verdict only -- the staged workflow names never reach a rendered row.
+   */
+  readonly stagedWorkflows?: boolean;
 }
 
 /**

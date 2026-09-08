@@ -652,6 +652,7 @@ export const updateSinglePlugin: PluginUpdateFn = async (plugin, marketplace, sc
       // the soft-dep marker (MSG-SD-3), so the value is `false`.
       declaresAgents: false,
       declaresMcp: false,
+      declaresWorkflows: false,
     };
     return { ...base, reasons: reasonsFromTypedError(err) };
   }
@@ -1037,6 +1038,7 @@ async function resolveUpdateCandidate(
         reasons: [networkReason] as const,
         declaresAgents: false,
         declaresMcp: false,
+        declaresWorkflows: false,
       };
     }
 
@@ -1056,6 +1058,7 @@ async function resolveUpdateCandidate(
         partialUpgradable: true,
         declaresAgents: false,
         declaresMcp: false,
+        declaresWorkflows: false,
       };
     }
 
@@ -1067,6 +1070,7 @@ async function resolveUpdateCandidate(
       reasons: ["no longer installable"] as const,
       declaresAgents: false,
       declaresMcp: false,
+      declaresWorkflows: false,
     };
   }
 }
@@ -1123,6 +1127,7 @@ function staticPreflightRow(
       reasons: [args.reason],
       declaresAgents: false,
       declaresMcp: false,
+      declaresWorkflows: false,
     };
   }
 
@@ -1134,6 +1139,7 @@ function staticPreflightRow(
     reasons: [args.reason],
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
   };
 }
 
@@ -1286,6 +1292,7 @@ async function preflightUpdate(
       toVersion,
       declaresAgents: false,
       declaresMcp: false,
+      declaresWorkflows: false,
     };
   }
 
@@ -1876,6 +1883,7 @@ async function runDisabledRecordRefresh(
       toVersion,
       declaresAgents: false,
       declaresMcp: false,
+      declaresWorkflows: false,
     };
   }
 
@@ -1897,6 +1905,7 @@ async function runDisabledRecordRefresh(
     reasons: ["already disabled"] as const,
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
   };
 }
 
@@ -2432,6 +2441,7 @@ function composePhase3FailureOutcome(
     // do not render the soft-dep marker.
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
   };
 }
 
@@ -2646,6 +2656,7 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<UpdateRunOutco
     stagedMcpServerNames,
     declaresAgents: stagedAgentNames.length > 0,
     declaresMcp: stagedMcpServerNames.length > 0,
+    declaresWorkflows: handles.workflows.result.stagedNames.length > 0,
     // Spread only when non-empty: a clean update's outcome keeps the key ABSENT
     // rather than present-and-empty, so its shape is unchanged (NREG-01).
     ...(degradedKinds.length > 0 && { degradedKinds }),
@@ -2831,7 +2842,11 @@ function outcomeToCascadePluginMessage(
   // unloaded silently degrades a clean update -> raise the desired-state
   // severity from info to warning (symmetric with the install success arm).
   const successSeverity = companionSeverity(
-    { declaresAgents: outcome.declaresAgents, declaresMcp: outcome.declaresMcp },
+    {
+      declaresAgents: outcome.declaresAgents,
+      declaresMcp: outcome.declaresMcp,
+      declaresWorkflows: outcome.declaresWorkflows,
+    },
     probe,
   );
   switch (outcome.partition) {

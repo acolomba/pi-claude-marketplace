@@ -1851,7 +1851,7 @@ function composeInstalledRow(installCtx: InstallCtx, pi: ExtensionAPI): InstallM
   const severity =
     installCtx.frontmatterDegradations.length > 0
       ? "warning"
-      : companionSeverity({ declaresAgents, declaresMcp }, softDepStatus(pi));
+      : companionSeverity({ declaresAgents, declaresMcp, declaresWorkflows }, softDepStatus(pi));
 
   // IN-02 / IN-04: `version` passes straight through. Row-level `scope` is
   // OMITTED -- it always equals the marketplace block's scope here, and
@@ -1913,6 +1913,7 @@ function buildInstalledOutcome(
     resourcesChanged: !landedDisabled && stagedAny,
     declaresAgents: installCtx.stagedAgentNames.length > 0,
     declaresMcp: installCtx.stagedMcpServerNames.length > 0,
+    declaresWorkflows: installCtx.stagedWorkflowNames.length > 0,
     ...(landedDisabled && { landedDisabled: true as const }),
     ...(postCommitWarnings.length > 0 && { postCommitWarnings: [...postCommitWarnings] }),
     // WR-03: the LIVE dropped-component kinds. An install admitted through

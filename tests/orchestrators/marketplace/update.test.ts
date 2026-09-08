@@ -1286,6 +1286,7 @@ test("MU-6 + MU-8: cascade runs ONLY when autoupdate=true; pluginUpdate called o
         stagedMcpServerNames: [],
         declaresAgents: false,
         declaresMcp: false,
+        declaresWorkflows: false,
       });
     };
 
@@ -1340,6 +1341,7 @@ test("MU-6: cascade skipped when autoupdate=false (default)", async () => {
         stagedMcpServerNames: [],
         declaresAgents: false,
         declaresMcp: false,
+        declaresWorkflows: false,
       });
     };
 
@@ -1406,6 +1408,7 @@ test("LIFE-06: cascade mapper carries a preflight `not in manifest` skip through
         reasons: ["not in manifest"],
         declaresAgents: false,
         declaresMcp: false,
+        declaresWorkflows: false,
       });
 
     // act
@@ -1651,6 +1654,7 @@ test("CMC-26 / MSG-GR-3: cascade body emits per-plugin rows sorted alphabeticall
           stagedMcpServerNames: [],
           declaresAgents: false,
           declaresMcp: false,
+          declaresWorkflows: false,
         });
       }
 
@@ -1662,6 +1666,7 @@ test("CMC-26 / MSG-GR-3: cascade body emits per-plugin rows sorted alphabeticall
           toVersion: "0.0.1",
           declaresAgents: false,
           declaresMcp: false,
+          declaresWorkflows: false,
         });
       }
 
@@ -1673,6 +1678,7 @@ test("CMC-26 / MSG-GR-3: cascade body emits per-plugin rows sorted alphabeticall
           reasons: [],
           declaresAgents: false,
           declaresMcp: false,
+          declaresWorkflows: false,
         });
       }
 
@@ -1682,6 +1688,7 @@ test("CMC-26 / MSG-GR-3: cascade body emits per-plugin rows sorted alphabeticall
         notes: [],
         declaresAgents: false,
         declaresMcp: false,
+        declaresWorkflows: false,
       });
     };
 
@@ -1754,6 +1761,7 @@ test("MU-9 + MSG-RH-1: success emits canonical reload hint trailer for updated p
         stagedMcpServerNames: [],
         declaresAgents: false,
         declaresMcp: false,
+        declaresWorkflows: false,
       });
 
     // act
@@ -1801,6 +1809,7 @@ test("UXG-05 (UAT Test-3 gap) + RH-1 + SNM-33 / D-22-01: autoupdate-ON cascade a
         toVersion: "0.0.1",
         declaresAgents: false,
         declaresMcp: false,
+        declaresWorkflows: false,
       });
     // act
     await updateMarketplace({
@@ -1858,6 +1867,7 @@ test("UXG-05 (UAT Test-3 gap) regression guard: autoupdate-ON cascade where a pl
         stagedMcpServerNames: [],
         declaresAgents: false,
         declaresMcp: false,
+        declaresWorkflows: false,
       });
     // act
     await updateMarketplace({
@@ -1997,6 +2007,7 @@ test("a newly degraded autoupdate cascade emits its partial row and warning enve
         stagedMcpServerNames: [],
         declaresAgents: false,
         declaresMcp: false,
+        declaresWorkflows: false,
         partialDegrade: { kinds: ["lspServers"], newlyDegraded: true },
       });
 
@@ -2305,6 +2316,7 @@ test("updateAllMarketplaces forwards optional Device Flow and plugin cascade por
         toVersion: "0.0.1",
         declaresAgents: false,
         declaresMcp: false,
+        declaresWorkflows: false,
       });
     };
 
@@ -2732,6 +2744,7 @@ test("WR-12: the autoupdate cascade row is byte-identical to the standalone upda
         stagedMcpServerNames: [],
         declaresAgents: false,
         declaresMcp: false,
+        declaresWorkflows: false,
         degradedKinds: ["skill"],
       });
 

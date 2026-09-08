@@ -198,7 +198,13 @@ function recordedState(records: readonly MarketplaceRecord[]): ImportState {
 }
 
 function installedOutcome(): InstallOutcome {
-  return { declaresAgents: false, declaresMcp: false, resourcesChanged: true, status: "installed" };
+  return {
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+    resourcesChanged: true,
+    status: "installed",
+  };
 }
 
 function failedInstallOutcome(error: Error, cause: string): InstallOutcome {

@@ -5721,6 +5721,7 @@ test("retry proof: reinstall: skills prepare failure with no prepared handles co
       assert.deepStrictEqual(second, {
         declaresAgents: false,
         declaresMcp: false,
+        declaresWorkflows: false,
         marketplace: "mp",
         name: "hello",
         partition: "reinstalled",
@@ -5876,6 +5877,7 @@ test("retry proof: reinstall: commands prepare failure aborts the one prepared h
       assert.deepStrictEqual(second, {
         declaresAgents: false,
         declaresMcp: false,
+        declaresWorkflows: false,
         marketplace: "mp",
         name: "hello",
         partition: "reinstalled",

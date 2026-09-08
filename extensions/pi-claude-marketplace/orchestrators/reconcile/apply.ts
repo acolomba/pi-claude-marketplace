@@ -536,6 +536,7 @@ function degradationFromEnable(
     ...(result.degradedKinds !== undefined && { degradedKinds: result.degradedKinds }),
     ...(result.stagedAgents === true && { stagedAgents: true }),
     ...(result.stagedMcpServers === true && { stagedMcpServers: true }),
+    ...(result.stagedWorkflows === true && { stagedWorkflows: true }),
   };
 }
 

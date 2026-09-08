@@ -143,6 +143,7 @@ const companionSeverityCases = [
     title: "keeps info when no companion is declared and neither companion is loaded",
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
     probe: {
       piSubagentsLoaded: false,
       piMcpAdapterLoaded: false,
@@ -154,6 +155,7 @@ const companionSeverityCases = [
     title: "warns when only agents are declared and neither companion is loaded",
     declaresAgents: true,
     declaresMcp: false,
+    declaresWorkflows: false,
     probe: {
       piSubagentsLoaded: false,
       piMcpAdapterLoaded: false,
@@ -165,6 +167,7 @@ const companionSeverityCases = [
     title: "warns when only MCP is declared and neither companion is loaded",
     declaresAgents: false,
     declaresMcp: true,
+    declaresWorkflows: false,
     probe: {
       piSubagentsLoaded: false,
       piMcpAdapterLoaded: false,
@@ -176,6 +179,7 @@ const companionSeverityCases = [
     title: "warns when both companions are declared and neither companion is loaded",
     declaresAgents: true,
     declaresMcp: true,
+    declaresWorkflows: false,
     probe: {
       piSubagentsLoaded: false,
       piMcpAdapterLoaded: false,
@@ -187,6 +191,7 @@ const companionSeverityCases = [
     title: "keeps info when no companion is declared and only MCP is loaded",
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
     probe: {
       piSubagentsLoaded: false,
       piMcpAdapterLoaded: true,
@@ -198,6 +203,7 @@ const companionSeverityCases = [
     title: "warns when only agents are declared and only MCP is loaded",
     declaresAgents: true,
     declaresMcp: false,
+    declaresWorkflows: false,
     probe: {
       piSubagentsLoaded: false,
       piMcpAdapterLoaded: true,
@@ -209,6 +215,7 @@ const companionSeverityCases = [
     title: "keeps info when only MCP is declared and loaded",
     declaresAgents: false,
     declaresMcp: true,
+    declaresWorkflows: false,
     probe: {
       piSubagentsLoaded: false,
       piMcpAdapterLoaded: true,
@@ -220,6 +227,7 @@ const companionSeverityCases = [
     title: "warns when agents are also declared but only MCP is loaded",
     declaresAgents: true,
     declaresMcp: true,
+    declaresWorkflows: false,
     probe: {
       piSubagentsLoaded: false,
       piMcpAdapterLoaded: true,
@@ -231,6 +239,7 @@ const companionSeverityCases = [
     title: "keeps info when no companion is declared and only agents are loaded",
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
     probe: {
       piSubagentsLoaded: true,
       piMcpAdapterLoaded: false,
@@ -242,6 +251,7 @@ const companionSeverityCases = [
     title: "keeps info when only agents are declared and loaded",
     declaresAgents: true,
     declaresMcp: false,
+    declaresWorkflows: false,
     probe: {
       piSubagentsLoaded: true,
       piMcpAdapterLoaded: false,
@@ -253,6 +263,7 @@ const companionSeverityCases = [
     title: "warns when only MCP is declared and only agents are loaded",
     declaresAgents: false,
     declaresMcp: true,
+    declaresWorkflows: false,
     probe: {
       piSubagentsLoaded: true,
       piMcpAdapterLoaded: false,
@@ -264,6 +275,7 @@ const companionSeverityCases = [
     title: "warns when MCP is also declared but only agents are loaded",
     declaresAgents: true,
     declaresMcp: true,
+    declaresWorkflows: false,
     probe: {
       piSubagentsLoaded: true,
       piMcpAdapterLoaded: false,
@@ -275,6 +287,7 @@ const companionSeverityCases = [
     title: "keeps info when no companion is declared and both companions are loaded",
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
     probe: {
       piSubagentsLoaded: true,
       piMcpAdapterLoaded: true,
@@ -286,6 +299,7 @@ const companionSeverityCases = [
     title: "keeps info when only agents are declared and both companions are loaded",
     declaresAgents: true,
     declaresMcp: false,
+    declaresWorkflows: false,
     probe: {
       piSubagentsLoaded: true,
       piMcpAdapterLoaded: true,
@@ -297,6 +311,7 @@ const companionSeverityCases = [
     title: "keeps info when only MCP is declared and both companions are loaded",
     declaresAgents: false,
     declaresMcp: true,
+    declaresWorkflows: false,
     probe: {
       piSubagentsLoaded: true,
       piMcpAdapterLoaded: true,
@@ -308,6 +323,7 @@ const companionSeverityCases = [
     title: "keeps info when both companions are declared and loaded",
     declaresAgents: true,
     declaresMcp: true,
+    declaresWorkflows: false,
     probe: {
       piSubagentsLoaded: true,
       piMcpAdapterLoaded: true,
@@ -321,6 +337,7 @@ for (const {
   title,
   declaresAgents,
   declaresMcp,
+  declaresWorkflows,
   probe,
   expectedSeverity,
 } of companionSeverityCases) {
@@ -329,7 +346,7 @@ for (const {
     const expectedCompanionSeverity = expectedSeverity;
 
     // act
-    const severity = companionSeverity({ declaresAgents, declaresMcp }, probe);
+    const severity = companionSeverity({ declaresAgents, declaresMcp, declaresWorkflows }, probe);
 
     // assert
     assert.strictEqual(severity, expectedCompanionSeverity);

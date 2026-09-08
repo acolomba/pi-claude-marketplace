@@ -8,6 +8,7 @@ test("composes agent and MCP dependencies in declared display order", () => {
   const outcome = {
     declaresAgents: true,
     declaresMcp: true,
+    declaresWorkflows: false,
     fromVersion: "1.0.0",
     name: "alpha",
     partition: "updated" as const,
@@ -38,6 +39,7 @@ test("composes agent-only dependencies without an MCP marker", () => {
   const outcome = {
     declaresAgents: true,
     declaresMcp: false,
+    declaresWorkflows: false,
     fromVersion: "2.0.0",
     name: "beta",
     partition: "updated" as const,
@@ -68,6 +70,7 @@ test("composes MCP-only dependencies without an agent marker", () => {
   const outcome = {
     declaresAgents: false,
     declaresMcp: true,
+    declaresWorkflows: false,
     fromVersion: "3.0.0",
     name: "gamma",
     partition: "updated" as const,
@@ -98,6 +101,7 @@ test("composes no dependencies and truly omits clean optional reasons", () => {
   const outcome = {
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
     fromVersion: "4.0.0",
     name: "delta",
     partition: "updated" as const,
@@ -129,6 +133,7 @@ test("keeps an empty partial degradation on the updated row", () => {
   const outcome = {
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
     fromVersion: "5.0.0",
     name: "epsilon",
     partialDegrade: { kinds: [], newlyDegraded: true },
@@ -161,6 +166,7 @@ test("preserves orphan, malformed, and dropped reason order on a partial row", (
   const outcome = {
     declaresAgents: true,
     declaresMcp: true,
+    declaresWorkflows: false,
     degradedKinds: ["command", "skill", "command"] as const,
     fromVersion: "6.0.0",
     name: "zeta",
@@ -204,6 +210,7 @@ test("raises a clean updated row only for malformed written content", () => {
   const outcome = {
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
     degradedKinds: ["command"] as const,
     fromVersion: "7.0.0",
     name: "eta",
@@ -236,6 +243,7 @@ test("retains base info severity for an already degraded partial update", () => 
   const outcome = {
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
     fromVersion: "8.0.0",
     name: "theta",
     partialDegrade: { kinds: ["hooks"], newlyDegraded: false },
@@ -267,6 +275,7 @@ test("retains base warning severity for a newly degraded partial update", () => 
   const outcome = {
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
     fromVersion: "9.0.0",
     name: "iota",
     partialDegrade: { kinds: ["lspServers"], newlyDegraded: true },
@@ -298,6 +307,7 @@ test("reports orphan rewake without overriding clean base severity", () => {
   const outcome = {
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
     fromVersion: "10.0.0",
     name: "kappa",
     orphanRewake: true,
@@ -330,6 +340,7 @@ test("WLIF-06: a retired workflow command takes the tail token and raises the ro
   const outcome = {
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
     fromVersion: "1.0.0",
     name: "alpha",
     partition: "updated" as const,
@@ -367,6 +378,7 @@ test("WLIF-06: an update that retired nothing renders the row it always rendered
   const outcome = {
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
     fromVersion: "1.0.0",
     name: "alpha",
     partition: "updated" as const,
@@ -398,6 +410,7 @@ test("WLIF-06: all four axes at once emit in one brace in the established order"
   const outcome = {
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
     degradedKinds: ["skill" as const],
     fromVersion: "1.0.0",
     name: "alpha",
@@ -440,6 +453,7 @@ test("WLIF-06: the dropped-kind row raises on the stale token alone", () => {
   const outcome = {
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
     fromVersion: "1.0.0",
     name: "alpha",
     partialDegrade: { kinds: ["monitors"], newlyDegraded: false },

@@ -112,6 +112,7 @@ test("reinstalledRowFromOutcome omits empty version, matching scope, reasons, an
     stagedMcpServerNames: [],
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
     degradedKinds: [],
   };
 
@@ -141,6 +142,7 @@ test("reinstalledRowFromOutcome orders agent dependency and degraded reasons wit
     stagedMcpServerNames: [],
     declaresAgents: true,
     declaresMcp: false,
+    declaresWorkflows: false,
     degradedKinds: ["command", "skill", "command"],
   };
 
@@ -173,6 +175,7 @@ test("reinstalledRowFromOutcome projects an MCP-only dependency", () => {
     stagedMcpServerNames: ["docs"],
     declaresAgents: false,
     declaresMcp: true,
+    declaresWorkflows: false,
   };
 
   // act
@@ -202,6 +205,7 @@ test("reinstalledRowFromOutcome preserves agents before MCP when both dependenci
     stagedMcpServerNames: ["docs"],
     declaresAgents: true,
     declaresMcp: true,
+    declaresWorkflows: false,
   };
 
   // act
@@ -231,6 +235,7 @@ test("outcomeToPluginMessage projects a clean reinstalled outcome without row sc
     stagedMcpServerNames: [],
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
   };
 
   // act
@@ -579,6 +584,7 @@ test("renderReinstallPartitionAndNotify sorts case-insensitive names and scopes 
       stagedMcpServerNames: ["docs"],
       declaresAgents: true,
       declaresMcp: true,
+      declaresWorkflows: false,
     },
     {
       partition: "failed",
@@ -649,6 +655,7 @@ test("WLIF-06: a retired workflow command takes the tail token and raises the ro
     stagedMcpServerNames: [],
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
     degradedKinds: ["skill"],
     staleWorkflowCommand: true,
   };
@@ -682,6 +689,7 @@ test("WLIF-06: the token raises a row that has no other reason of its own", () =
     stagedMcpServerNames: [],
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
     staleWorkflowCommand: true,
   };
 
@@ -714,6 +722,7 @@ test("WLIF-06: a reinstall that retired nothing renders the row it always render
     stagedMcpServerNames: [],
     declaresAgents: false,
     declaresMcp: false,
+    declaresWorkflows: false,
   };
 
   // act

@@ -80,18 +80,25 @@ export function skipSeverity(reasons: readonly Reason[] | undefined): "info" | "
  * SEV-01: per-producer severity for an otherwise-successful install/update row,
  * classified from the plugin's DECLARED soft-dep companions and the host's
  * companion-loaded probe. A declared `agents` kind requires `pi-subagents`; a
- * declared `mcp` kind requires `pi-mcp-adapter`. When a declared companion is
- * unloaded the clean operation is silently degraded -> `warning`; otherwise
- * (companion present, or none declared) -> `info`. The caller passes the single
- * sanctioned `softDepStatus(pi)` probe (the same one the renderer uses for the
+ * declared `mcp` kind requires `pi-mcp-adapter`; a declared `workflows` kind
+ * requires the host workflow engine. When a declared companion is unloaded the
+ * clean operation is silently degraded -> `warning`; otherwise (companion
+ * present, or none declared) -> `info`. The caller passes the single sanctioned
+ * `softDepStatus(pi)` probe (the same one the renderer uses for the
  * `{requires pi-...}` marker), so the row bytes are unchanged -- only the
  * desired-state severity moves.
  */
 export function companionSeverity(
-  { declaresAgents, declaresMcp }: { declaresAgents: boolean; declaresMcp: boolean },
+  {
+    declaresAgents,
+    declaresMcp,
+    declaresWorkflows,
+  }: { declaresAgents: boolean; declaresMcp: boolean; declaresWorkflows: boolean },
   probe: SoftDepStatus,
 ): "info" | "warning" {
-  return (declaresAgents && !probe.piSubagentsLoaded) || (declaresMcp && !probe.piMcpAdapterLoaded)
+  return (declaresAgents && !probe.piSubagentsLoaded) ||
+    (declaresMcp && !probe.piMcpAdapterLoaded) ||
+    (declaresWorkflows && !probe.workflowEngineLoaded)
     ? "warning"
     : "info";
 }

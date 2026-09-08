@@ -7215,6 +7215,7 @@ test("updateSinglePlugin keeps a recorded provider SHA offline without an auth c
       toVersion: "sha-111111111111",
       declaresAgents: false,
       declaresMcp: false,
+      declaresWorkflows: false,
     });
   });
 });
@@ -8732,7 +8733,11 @@ test("WLIF-02: a workflow version B cannot admit reaches the standalone diagnost
         { sourceName: "broken", body: "export default function run() {}\n" },
       ]);
       await rewriteManifest(manifestPath, "mp", { hello: { version: "2.10.0" } });
-      const { ctx, pi, notifications } = makeCtx();
+      // The session exposes the host workflow engine, so the verb's own row
+      // stays `info` and the severity filter below isolates the diagnostic.
+      const { ctx, pi, notifications } = makeCtx({
+        getAllTools: () => [{ name: "workflow_control" }],
+      });
 
       // act
       await updatePlugins({
@@ -8982,14 +8987,18 @@ test("WLIF-06: an update that re-placed every recorded workflow stamps nothing",
     try {
       // arrange -- the SAME verb over a tree whose workflow set did not change.
       // Every recorded name is in the staged set, so the difference is empty
-      // and this is the ordinary re-place.
+      // and this is the ordinary re-place. The session exposes the host
+      // workflow engine, so the only axis left that could raise the row is the
+      // retirement this case is about.
       const { manifestPath } = await seedInstalledWorkflowPlugin({
         cwd,
         version: "1.0.0",
         workflows: [{ sourceName: "greet" }],
       });
       await rewriteManifest(manifestPath, "mp", { hello: { version: "2.10.0" } });
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, pi, notifications } = makeCtx({
+        getAllTools: () => [{ name: "workflow_control" }],
+      });
 
       // act
       await updatePlugins({

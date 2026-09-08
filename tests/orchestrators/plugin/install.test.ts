@@ -3779,6 +3779,7 @@ test("retry proof: install: completion-cache maintenance failure stays installed
       assert.deepStrictEqual(first, {
         declaresAgents: false,
         declaresMcp: false,
+        declaresWorkflows: false,
         postCommitWarnings: [
           'Plugin "hello" installed; completion cache refresh deferred: cache maintenance denied',
         ],
@@ -3893,6 +3894,7 @@ test("retry proof: install: plugin-data-dir maintenance failure stays installed 
       assert.deepStrictEqual(first, {
         declaresAgents: false,
         declaresMcp: false,
+        declaresWorkflows: false,
         postCommitWarnings: [
           `Plugin "hello" installed; data dir creation deferred at ${pluginDataDir}: data directory maintenance denied`,
         ],
@@ -6851,6 +6853,7 @@ test("plugin install authentication: threads a GitHub provider bundle to the pin
       assert.deepStrictEqual(outcome, {
         declaresAgents: false,
         declaresMcp: false,
+        declaresWorkflows: false,
         resourcesChanged: true,
         status: "installed",
         version: "sha-a1b2c3d4e5f6",
@@ -6918,6 +6921,7 @@ test("plugin install authentication: leaves a providerless clone authless", asyn
       assert.deepStrictEqual(outcome, {
         declaresAgents: false,
         declaresMcp: false,
+        declaresWorkflows: false,
         resourcesChanged: true,
         status: "installed",
         version: "sha-a1b2c3d4e5f6",
@@ -6979,6 +6983,7 @@ test("plugin install authentication: threads the GitLab provider bundle onto the
       assert.deepStrictEqual(outcome, {
         declaresAgents: false,
         declaresMcp: false,
+        declaresWorkflows: false,
         resourcesChanged: true,
         status: "installed",
         version: "sha-a1b2c3d4e5f6",
@@ -7081,6 +7086,7 @@ test("plugin install authentication: memoizes one Device Flow result across same
           {
             declaresAgents: false,
             declaresMcp: false,
+            declaresWorkflows: false,
             resourcesChanged: true,
             status: "installed",
             version: "sha-a1b2c3d4e5f6",
@@ -7088,6 +7094,7 @@ test("plugin install authentication: memoizes one Device Flow result across same
           {
             declaresAgents: false,
             declaresMcp: false,
+            declaresWorkflows: false,
             resourcesChanged: true,
             status: "installed",
             version: "sha-b2c3d4e5f607",
@@ -7655,6 +7662,7 @@ test("retry proof: install: ordered bridge cleanup leaks remain explicit and ret
       assert.deepStrictEqual(first, {
         declaresAgents: true,
         declaresMcp: false,
+        declaresWorkflows: false,
         postCommitWarnings: [
           `failed to clean up skills staging directory at ${leakedTargets[0]}: staging cleanup denied`,
           `failed to clean up commands staging directory at ${leakedTargets[1]}: staging cleanup denied`,
@@ -7913,6 +7921,7 @@ test("retry proof: install: post-save hook-cache failure stays installed and ret
       assert.deepStrictEqual(first, {
         declaresAgents: false,
         declaresMcp: false,
+        declaresWorkflows: false,
         resourcesChanged: false,
         status: "installed",
         version: "0.0.1",
@@ -8284,6 +8293,7 @@ test("install forwards explicit map-model and version-pin entrypoint options", a
       assert.deepStrictEqual(outcome, {
         declaresAgents: false,
         declaresMcp: false,
+        declaresWorkflows: false,
         resourcesChanged: false,
         status: "installed",
         version: "pinned-by-entrypoint",
@@ -8356,6 +8366,7 @@ test("an unpinned ref-only source forwards the moving ref to its cold mirror clo
       assert.deepStrictEqual(outcome, {
         declaresAgents: false,
         declaresMcp: false,
+        declaresWorkflows: false,
         resourcesChanged: true,
         status: "installed",
         version: `sha-${headSha.slice(0, 12)}`,
@@ -8505,6 +8516,7 @@ test("retry proof: install: commands prepare failure after a committed skill con
       assert.deepStrictEqual(second, {
         declaresAgents: false,
         declaresMcp: false,
+        declaresWorkflows: false,
         resourcesChanged: true,
         status: "installed",
         version: "0.0.1",
@@ -8638,6 +8650,7 @@ test("retry proof: install: skills prepare failure with no committed phases conv
       assert.deepStrictEqual(second, {
         declaresAgents: false,
         declaresMcp: false,
+        declaresWorkflows: false,
         resourcesChanged: true,
         status: "installed",
         version: "0.0.1",
@@ -8759,6 +8772,7 @@ test("retry proof: install: agents prepare failure after committed commands unwi
       assert.deepStrictEqual(second, {
         declaresAgents: true,
         declaresMcp: false,
+        declaresWorkflows: false,
         resourcesChanged: true,
         status: "installed",
         version: "0.0.1",
@@ -8926,6 +8940,7 @@ test("retry proof: install: hooks reparse failure after three bridges retries wi
       assert.deepStrictEqual(second, {
         declaresAgents: true,
         declaresMcp: false,
+        declaresWorkflows: false,
         resourcesChanged: true,
         status: "installed",
         version: "0.0.1",
@@ -9084,6 +9099,7 @@ test("retry proof: install: MCP prepare failure after hooks compensates every co
       assert.deepStrictEqual(second, {
         declaresAgents: true,
         declaresMcp: true,
+        declaresWorkflows: false,
         resourcesChanged: true,
         status: "installed",
         version: "0.0.1",
@@ -9214,6 +9230,7 @@ test("retry proof: install: non-containment undo failure reports ordered rollbac
       assert.deepStrictEqual(second, {
         declaresAgents: false,
         declaresMcp: false,
+        declaresWorkflows: false,
         resourcesChanged: true,
         status: "installed",
         version: "0.0.1",
@@ -9352,6 +9369,7 @@ test("retry proof: install: containment failure preserves the refused residue an
       assert.deepStrictEqual(second, {
         declaresAgents: false,
         declaresMcp: false,
+        declaresWorkflows: false,
         resourcesChanged: true,
         status: "installed",
         version: "0.0.1",
@@ -9490,6 +9508,7 @@ test("retry proof: install: state commit race after staged work retries from unc
       assert.deepStrictEqual(second, {
         declaresAgents: false,
         declaresMcp: false,
+        declaresWorkflows: false,
         resourcesChanged: true,
         status: "installed",
         version: "0.0.1",
@@ -9699,6 +9718,13 @@ test("WDEP-02: a workflow-bearing install names the host engine only when it is 
   // assert
   assert.match(withoutEngine.message, /\{[^}]*requires pi-dynamic-workflows[^}]*\}/);
   assert.doesNotMatch(withEngine.message, /requires pi-dynamic-workflows/);
+  // SEV-01: the envelope IS written, so the operation was carried out -- but the
+  // desired state is not reached until something runs it, which is `warning`
+  // rather than `info` or `error`.
+  assert.strictEqual(withoutEngine.severity, "warning");
+  // `notify()` omits the severity argument for an `info` row, so the recorded
+  // row carries no severity at all -- that omission IS the info stamp here.
+  assert.strictEqual(withEngine.severity, undefined);
 });
 
 test("WLIF-01: a plugin declaring no workflows records an empty inventory", async () => {

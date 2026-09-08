@@ -1421,12 +1421,16 @@ test("WLIF-06: a name in both the recorded and the staged set retires nothing", 
     // act
     await setPluginEnabled({ ...args, ctx, enable: true });
 
-    // assert
+    // assert -- SEV-01: this enable staged workflows into a session with no
+    // host workflow engine, so the desired state is not reached and the row is
+    // stamped `warning`.
     assert.deepStrictEqual(soleRow(notifications), {
       message:
+        "A plugin operation needs attention.\n\n" +
         "● claude-plugins-official [user]\n" +
         "  ● foo-plugin v1.2.3 (installed)\n\n" +
         "/reload to pick up changes",
+      severity: "warning",
     });
   });
 });
@@ -1536,7 +1540,12 @@ test("WLIF-06: the reconcile projection carries no token after a retiring enable
 
     // assert
     assert.equal(notifications.length, 0);
-    assert.deepStrictEqual(outcome, { status: "enabled", name: "foo-plugin", version: "1.2.3" });
+    assert.deepStrictEqual(outcome, {
+      status: "enabled",
+      name: "foo-plugin",
+      version: "1.2.3",
+      stagedWorkflows: true,
+    });
   });
 });
 
