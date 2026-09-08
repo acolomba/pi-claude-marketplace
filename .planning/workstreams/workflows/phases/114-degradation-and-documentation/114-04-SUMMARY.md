@@ -41,7 +41,7 @@ decisions:
   - "The `PluginNotificationMessage` variant enumeration in the style guide is separately stale (16 vs 19, lists a retired `present`, omits both partial-state tokens). Logged to `deferred-items.md`, not fixed -- it is a different defect from the soft-dependency prose sweep."
 
 metrics:
-  duration: "~50m"
+  duration: "~35m"
   completed: 2026-09-08
 
 actuals:
