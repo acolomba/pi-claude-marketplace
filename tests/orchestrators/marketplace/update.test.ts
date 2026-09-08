@@ -49,11 +49,12 @@ import type {
 import type { Severity } from "../../../extensions/pi-claude-marketplace/shared/notify.ts";
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 
-const updateSinglePlugin: PluginUpdateFn = (plugin, marketplace, scope) =>
-  createPluginUpdateOperations(
+function createUpdateSinglePlugin(): PluginUpdateFn {
+  return createPluginUpdateOperations(
     createHooksRouting(createHooksRuntime()),
     createCompletionCache(),
-  ).pluginUpdate(plugin, marketplace, scope);
+  ).pluginUpdate;
+}
 
 interface MarketplaceGitOpsSeed {
   readonly checkoutThrows?: Error;
@@ -1624,7 +1625,7 @@ test("LIFE-06: autoupdate cascade through the REAL single-plugin update renders 
         gitOps,
         // The REAL implementation, so the skip travels its whole route: the
         // shared preflight originates it and the cascade mapper re-narrows it.
-        pluginUpdate: updateSinglePlugin,
+        pluginUpdate: createUpdateSinglePlugin(),
       });
 
       // assert
@@ -1723,7 +1724,7 @@ test("WR-10: an autoupdate cascade over a disabled record whose pin moved render
         scope: "user",
         cwd,
         gitOps,
-        pluginUpdate: updateSinglePlugin,
+        pluginUpdate: createUpdateSinglePlugin(),
       });
 
       // assert
