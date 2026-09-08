@@ -26,7 +26,7 @@ import {
   createSetPluginEnabled,
   setPluginEnabled,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts";
-import { reinstallPlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts";
+import { createNodeReinstallPlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts";
 import { createPluginUpdateOperations } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update.ts";
 import { applyReconcile } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
 import { isDeclaredEnabled } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
@@ -82,6 +82,10 @@ function makePi(toolNames: readonly string[] = []): ToolInventory {
 
 function createUpdatePlugins() {
   return createPluginUpdateOperations(createHooksRouting(createHooksRuntime())).updatePlugins;
+}
+
+function createReinstallPlugin() {
+  return createNodeReinstallPlugin(createHooksRouting(createHooksRuntime()));
 }
 
 async function populateRuntimeRoute(
@@ -3846,7 +3850,7 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable of a BASE-declared plugi
       target: { kind: "plugin", marketplace: "mp", plugin: "foo" },
     });
     const afterUpdate = await observe();
-    await reinstallPlugin({
+    await createReinstallPlugin()({
       ctx: reinstallContext.ctx,
       cwd,
       marketplace: "mp",
@@ -3983,7 +3987,7 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable of a LOCALLY-declared pl
     });
     const afterUpdate = await observe();
     const baseAfterUpdate = await readConfig(configPath);
-    await reinstallPlugin({
+    await createReinstallPlugin()({
       ctx: reinstallContext.ctx,
       cwd,
       marketplace: "mp",

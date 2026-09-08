@@ -65,13 +65,7 @@ import {
   rollbackCommandsReplacement,
 } from "../../bridges/commands/index.ts";
 import { compileIfPredicate } from "../../bridges/hooks/if-field/index.ts";
-import {
-  readAndCachePluginHooks,
-  rebuildRoutingTables,
-  removeHookConfig,
-  removePluginConfigFromCache,
-  writeHookConfig,
-} from "../../bridges/hooks/index.ts";
+import { removeHookConfig, writeHookConfig } from "../../bridges/hooks/index.ts";
 import {
   abortPreparedMcp,
   finalizeMcpReplacement,
@@ -140,6 +134,7 @@ import {
 
 import type { AgentsReplacement, PreparedAgentsStaging } from "../../bridges/agents/index.ts";
 import type { CommandsReplacement, PreparedCommandsStaging } from "../../bridges/commands/index.ts";
+import type { HooksRouting } from "../../bridges/hooks/index.ts";
 import type { McpReplacement, PreparedMcpStaging } from "../../bridges/mcp/index.ts";
 import type { PreparedSkillsStaging, SkillsReplacement } from "../../bridges/skills/index.ts";
 import type { PluginEntry } from "../../domain/components/plugin.ts";
@@ -174,6 +169,12 @@ export type RemoveDataDirFn = (
   options: { recursive: true; force: true },
 ) => Promise<void>;
 export type DropMarketplaceCacheFn = typeof dropMarketplaceCache;
+
+/** Hook-routing capabilities consumed by committed reinstall finalization. */
+export type ReinstallHooksRouting = Pick<
+  HooksRouting,
+  "readAndCachePluginHooks" | "rebuildRoutingTables" | "removePluginConfigFromCache"
+>;
 
 export interface ReinstallPluginOptions {
   readonly ctx: NotificationContext;
@@ -260,6 +261,14 @@ export interface ReinstallPluginsOptions {
   readonly __deps?: ReinstallPluginDeps;
 }
 
+/** One plugin reinstall bound to a transaction and lifecycle routing owner. */
+export type ReinstallPluginFn = (opts: ReinstallPluginOptions) => Promise<ReinstallPluginOutcome>;
+
+/** Direct/bulk reinstall operation bound to one lifecycle routing owner. */
+export type ReinstallPluginsFn = (
+  opts: ReinstallPluginsOptions,
+) => Promise<readonly ReinstallPluginOutcome[]>;
+
 interface PreparedHandles {
   readonly skills: PreparedSkillsStaging;
   readonly commands: PreparedCommandsStaging;
@@ -341,6 +350,7 @@ const defaultRemoveDataDir: RemoveDataDirFn = async (dataDir) => {
 
 async function reinstallPluginWithTransaction(
   transaction: ReinstallTransaction,
+  hooksRouting: ReinstallHooksRouting,
   opts: ReinstallPluginOptions,
 ): Promise<ReinstallPluginOutcome> {
   const { ctx, pi, scope, cwd, marketplace, plugin } = opts;
@@ -351,7 +361,7 @@ async function reinstallPluginWithTransaction(
   try {
     locked = await transaction.withLockedStateTransaction(
       locations,
-      (tx) => runLockedReinstall(transaction, tx, locations, opts),
+      (tx) => runLockedReinstall(transaction, hooksRouting, tx, locations, opts),
       opts.__deps?.stateTransaction,
     );
   } catch (err) {
@@ -485,12 +495,15 @@ async function reinstallPluginWithTransaction(
 /** Bind one reinstall operation to a required semantic transaction owner. */
 export function createReinstallPlugin(
   transaction: ReinstallTransaction,
-): (opts: ReinstallPluginOptions) => Promise<ReinstallPluginOutcome> {
-  return (opts) => reinstallPluginWithTransaction(transaction, opts);
+  hooksRouting: ReinstallHooksRouting,
+): ReinstallPluginFn {
+  return (opts) => reinstallPluginWithTransaction(transaction, hooksRouting, opts);
 }
 
-/** Production reinstall operation composed through the real transaction adapter. */
-export const reinstallPlugin = createReinstallPlugin(REAL_REINSTALL_TRANSACTION);
+/** Binds one production reinstall to the real transaction and supplied routing owner. */
+export function createNodeReinstallPlugin(hooksRouting: ReinstallHooksRouting): ReinstallPluginFn {
+  return createReinstallPlugin(REAL_REINSTALL_TRANSACTION, hooksRouting);
+}
 
 /**
  * handle the single-plugin reinstall failure path. Extracted
@@ -567,8 +580,9 @@ function handleSinglePluginFailure(
   };
 }
 
-export async function reinstallPlugins(
+async function reinstallPluginsWith(
   opts: ReinstallPluginsOptions,
+  reinstallPlugin: ReinstallPluginFn,
 ): Promise<readonly ReinstallPluginOutcome[]> {
   const { ctx, pi, cwd } = opts;
   // OUT-04 / D-04: cardinality belongs to the parsed invocation, including
@@ -623,6 +637,14 @@ export async function reinstallPlugins(
   renderReinstallPartitionAndNotify(ctx, pi, outcomes, cardinality);
   surfaceReinstallDiscoveryWarnings(ctx, outcomes);
   return Object.freeze(outcomes);
+}
+
+/** Binds direct and bulk production reinstall to one lifecycle routing owner. */
+export function createNodeReinstallPlugins(
+  hooksRouting: ReinstallHooksRouting,
+): ReinstallPluginsFn {
+  const reinstallPlugin = createNodeReinstallPlugin(hooksRouting);
+  return (opts) => reinstallPluginsWith(opts, reinstallPlugin);
 }
 
 /**
@@ -950,6 +972,7 @@ function reasonsFromTypedError(err: unknown): readonly ContentReason[] | undefin
 
 async function runLockedReinstall(
   transaction: ReinstallTransaction,
+  hooksRouting: ReinstallHooksRouting,
   tx: LockedStateTransaction,
   locations: ScopedLocations,
   opts: ReinstallPluginOptions,
@@ -1093,9 +1116,9 @@ async function runLockedReinstall(
     // record (state divergence). `/reload`'s factory-time hydrate
     // (D-59-03) rebuilds the cache from state.json. Failures route
     // through the hooks helper's debug log.
-    removePluginConfigFromCache(scope, marketplace, plugin);
+    hooksRouting.removePluginConfigFromCache(scope, marketplace, plugin);
     if (installable.hooksConfigPath !== undefined) {
-      await readAndCachePluginHooks({
+      await hooksRouting.readAndCachePluginHooks({
         scope,
         marketplace,
         plugin,
@@ -1106,7 +1129,7 @@ async function runLockedReinstall(
       });
     }
 
-    rebuildRoutingTables();
+    hooksRouting.rebuildRoutingTables();
   } catch (err) {
     throw errorWithManualRecovery(err, await transaction.rollbackReplacements(replacements));
   }

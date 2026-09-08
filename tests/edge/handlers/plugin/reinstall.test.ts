@@ -99,8 +99,12 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { test, type TestContext } from "node:test";
 
-import { makeReinstallHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/reinstall.ts";
-import { reinstallPlugins } from "../../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts";
+import {
+  createHooksRouting,
+  createHooksRuntime,
+} from "../../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
+import { makeReinstallHandler as makeReinstallHandlerWithOperation } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/reinstall.ts";
+import { createNodeReinstallPlugins } from "../../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
 import {
   buildInstalledPluginRecord,
@@ -108,8 +112,21 @@ import {
   mergeMarketplaceIntoState,
 } from "../marketplace-seed.ts";
 
+import type {
+  ReinstallPluginsFn,
+  ReinstallPluginsOptions,
+} from "../../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts";
+import type { ExtensionAPI } from "../../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { Scope } from "../../../../extensions/pi-claude-marketplace/shared/types.ts";
-import type { ReinstallPluginsOptions } from "../../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts";
+
+function makeReinstallHandler(
+  pi: ExtensionAPI,
+): ReturnType<typeof makeReinstallHandlerWithOperation> {
+  return makeReinstallHandlerWithOperation(
+    pi,
+    createNodeReinstallPlugins(createHooksRouting(createHooksRuntime())),
+  );
+}
 
 /** The usage block this shim appends after a blank line to every rejection. */
 const REINSTALL_USAGE =
@@ -423,15 +440,13 @@ test("re-materialises only the named plugin when a plugin reference is supplied 
     reads: 1,
   });
   const calls: ReinstallPluginsOptions[] = [];
-  const reinstallPluginsSpy = async (
-    opts: ReinstallPluginsOptions,
-  ): Promise<
-    readonly import("../../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts").ReinstallPluginOutcome[]
-  > => {
+  const reinstallPlugins = createNodeReinstallPlugins(createHooksRouting(createHooksRuntime()));
+  const reinstallPluginsSpy: ReinstallPluginsFn = async (opts) => {
     calls.push(opts);
     return reinstallPlugins(opts);
   };
-  const reinstallHandler = makeReinstallHandler(pi, reinstallPluginsSpy);
+
+  const reinstallHandler = makeReinstallHandlerWithOperation(pi, reinstallPluginsSpy);
 
   // act
   await reinstallHandler("alpha@mp", ctx);
@@ -446,6 +461,7 @@ test("re-materialises only the named plugin when a plugin reference is supplied 
     userBase: undefined,
     userLocal: undefined,
   });
+
   assert.deepStrictEqual(calls, [
     {
       ctx,

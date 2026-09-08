@@ -20,7 +20,7 @@ import { errorMessage } from "../../shared/errors.ts";
 import { EXTENSION_VERSION } from "../../shared/extension-version.ts";
 import { redactAbsolutePaths } from "../../shared/notify.ts";
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
-import { reinstallPlugin } from "../plugin/reinstall.ts";
+import { createNodeReinstallPlugin } from "../plugin/reinstall.ts";
 
 import {
   classifyOrchestratorThrow,
@@ -32,6 +32,7 @@ import type { PerEntryOutcome } from "./apply-outcomes.ts";
 import type { ApplyReconcileOptions, ScopeReadResult } from "./types.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { Scope } from "../../shared/types.ts";
+import type { ReinstallPluginFn } from "../plugin/reinstall.ts";
 
 /**
  * BFILL-01 / BFILL-02 / D-68-03: the load-time backfill step. Runs as a sibling
@@ -210,6 +211,7 @@ export async function scanForceInstalledBackfills(
   state: ExtensionState,
   outcomes: PerEntryOutcome[],
 ): Promise<boolean> {
+  const reinstallPlugin = createNodeReinstallPlugin(opts.hooksRouting);
   const alreadyTouched = new Set<string>();
   for (const o of outcomes) {
     if (o.scope === scope && "plugin" in o) {
@@ -223,6 +225,7 @@ export async function scanForceInstalledBackfills(
       const failed = await backfillOnePluginIsolated(
         opts,
         { scope, marketplace, mp, plugin, record },
+        reinstallPlugin,
         alreadyTouched,
         outcomes,
       );
@@ -259,6 +262,7 @@ async function backfillOnePluginIsolated(
     plugin: string;
     record: StatePluginRecord;
   },
+  reinstallPlugin: ReinstallPluginFn,
   alreadyTouched: ReadonlySet<string>,
   outcomes: PerEntryOutcome[],
 ): Promise<boolean> {
@@ -289,7 +293,16 @@ async function backfillOnePluginIsolated(
   }
 
   try {
-    return await maybeBackfillPlugin(opts, scope, marketplace, mp, plugin, record, outcomes);
+    return await maybeBackfillPlugin(
+      opts,
+      scope,
+      marketplace,
+      mp,
+      plugin,
+      record,
+      reinstallPlugin,
+      outcomes,
+    );
   } catch (err) {
     outcomes.push({
       kind: "plugin-install-failed",
@@ -326,6 +339,7 @@ async function maybeBackfillPlugin(
   mp: StateMarketplaceRecord,
   plugin: string,
   record: StatePluginRecord,
+  reinstallPlugin: ReinstallPluginFn,
   outcomes: PerEntryOutcome[],
 ): Promise<boolean> {
   const resolved = await resolveRecordedPluginOffline(mp, plugin);

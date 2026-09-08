@@ -9,6 +9,10 @@ import test from "node:test";
 
 import { GENERATED_AGENT_PREFIX } from "../../../extensions/pi-claude-marketplace/bridges/agents/marker.ts";
 import {
+  createHooksRouting,
+  createHooksRuntime,
+} from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
+import {
   pluginCloneKey,
   pluginMirrorKey,
 } from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
@@ -24,9 +28,9 @@ import {
   type InstallCloneCacheSeam,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install.ts";
 import {
+  createNodeReinstallPlugin,
+  createNodeReinstallPlugins,
   createReinstallPlugin,
-  reinstallPlugin,
-  reinstallPlugins,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
@@ -52,6 +56,8 @@ import type {
 import type {
   ReinstallCloneCacheSeam,
   ReinstallPluginDeps,
+  ReinstallPluginOptions,
+  ReinstallPluginsOptions,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts";
 import type {
   NotificationContext,
@@ -63,6 +69,14 @@ import type { TestContext } from "node:test";
 interface NotifyRecord {
   message: string;
   severity?: string;
+}
+
+function reinstallPlugin(opts: ReinstallPluginOptions) {
+  return createNodeReinstallPlugin(createHooksRouting(createHooksRuntime()))(opts);
+}
+
+function reinstallPlugins(opts: ReinstallPluginsOptions) {
+  return createNodeReinstallPlugins(createHooksRouting(createHooksRuntime()))(opts);
 }
 
 test("reinstall exposes its required transaction factory", () => {

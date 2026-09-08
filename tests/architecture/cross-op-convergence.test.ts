@@ -51,7 +51,7 @@ import { removeMarketplace } from "../../extensions/pi-claude-marketplace/orches
 import { updateMarketplace } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts";
 import { getPluginInfo } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts";
 import { installPlugin } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/install.ts";
-import { reinstallPlugins } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts";
+import { createNodeReinstallPlugins } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts";
 import { uninstallPlugin } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
 import { createPluginUpdateOperations } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/update.ts";
 import { createGitOpsFake } from "../platform/git-ops-fake.ts";
@@ -79,6 +79,10 @@ function createGitOps() {
 
 function createUpdatePlugins() {
   return createPluginUpdateOperations(createHooksRouting(createHooksRuntime())).updatePlugins;
+}
+
+function createReinstallPlugins() {
+  return createNodeReinstallPlugins(createHooksRouting(createHooksRuntime()));
 }
 
 function makeCtx(): {
@@ -157,7 +161,7 @@ const INVOKERS: Record<string, Invoker> = {
   },
   // reinstall (marketplace target). reinstall.test.ts ATTR-03.
   reinstall: async ({ ctx, pi, cwd, mode }) => {
-    await reinstallPlugins({
+    await createReinstallPlugins()({
       ctx,
       pi,
       cwd,

@@ -32,6 +32,7 @@
 // provider but does NOT emit user-visible messages.
 
 import { makeLocationsResolver } from "../orchestrators/edge-deps.ts";
+import { createNodeReinstallPlugins } from "../orchestrators/plugin/reinstall.ts";
 
 import {
   isClaudePluginCommandLine,
@@ -83,13 +84,14 @@ export function registerClaudePluginCommand(
   hooksRouting: InstallHooksRouting,
   updatePlugins: UpdatePluginsFn,
 ): void {
+  const reinstallPlugins = createNodeReinstallPlugins(hooksRouting);
   const handlers: SubcommandHandlers = {
     bootstrap: makeBootstrapHandler(pi, deps),
     install: makeInstallHandler(pi, hooksRouting),
     uninstall: makeUninstallHandler(pi, hooksRouting),
     update: makeUpdateHandler(pi, updatePlugins),
     fetch: makeFetchHandler(pi),
-    reinstall: makeReinstallHandler(pi),
+    reinstall: makeReinstallHandler(pi, reinstallPlugins),
     list: makeListHandler(pi),
     pluginInfo: makePluginInfoHandler(pi),
     pending: makePendingHandler(pi),
