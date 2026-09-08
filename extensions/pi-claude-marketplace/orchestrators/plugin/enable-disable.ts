@@ -98,6 +98,7 @@ import {
 } from "./shared.ts";
 
 import type { InstallFailureCapture, InstallLedgerResult } from "./install.ts";
+import type { HooksRouting } from "../../bridges/hooks/index.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { DisabledPluginRecord, ExtensionState } from "../../persistence/state-io.ts";
 import type { NotificationContext, SoftDepStatus, ToolInventory } from "../../platform/pi-api.ts";
@@ -207,8 +208,6 @@ export interface EnableDisablePluginOptions {
 /** Owns only the semantic transaction steps composed by enable and disable. */
 export interface EnableDisableTransaction {
   readonly cascadeUnstagePlugin: typeof cascadeUnstagePlugin;
-  readonly rebuildHookRoutes: typeof rebuildRoutingTables;
-  readonly removeHooksFromRuntime: typeof removePluginConfigFromCache;
   readonly runInstallLedger: typeof runInstallLedger;
   readonly selectConfigWriteTarget: typeof selectDeclaringConfigWriteTarget;
   readonly withLockedStateTransaction: typeof withLockedStateTransaction;
@@ -217,13 +216,17 @@ export interface EnableDisableTransaction {
 
 const REAL_ENABLE_DISABLE_TRANSACTION: EnableDisableTransaction = {
   cascadeUnstagePlugin,
-  rebuildHookRoutes: rebuildRoutingTables,
-  removeHooksFromRuntime: removePluginConfigFromCache,
   runInstallLedger,
   selectConfigWriteTarget: selectDeclaringConfigWriteTarget,
   withLockedStateTransaction,
   writeConfigEntries: writeAdoptingConfigEntries,
 };
+
+/** Hook route effects required by enable and disable after durable state changes. */
+export type EnableDisableHooksRouting = Pick<
+  HooksRouting,
+  "rebuildRoutingTables" | "removePluginConfigFromCache"
+>;
 
 /** Outcome sentinel populated by the withStateGuard closure. */
 type SetEnabledOutcome =
@@ -372,10 +375,14 @@ async function runEnableBranch(
 async function runDisableBranch(
   transaction: EnableDisableTransaction,
   opts: EnableDisablePluginOptions,
-  scope: Scope,
   locations: ScopedLocations,
   installed: InstalledPluginRecord,
-): Promise<{ outcome: SetEnabledOutcome; saveShrunken: boolean; disabled?: DisabledPluginRecord }> {
+): Promise<{
+  outcome: SetEnabledOutcome;
+  saveShrunken: boolean;
+  removeRoutesAfterSave: boolean;
+  disabled?: DisabledPluginRecord;
+}> {
   const recordedVersion = installed.version;
   const cascade = await transaction.cascadeUnstagePlugin(
     opts.plugin,
@@ -396,10 +403,6 @@ async function runDisableBranch(
     // parsed-config cache entry and rebuild the routing table in lockstep
     // so dispatch does not try to spawn a now-deleted handler. Mirrors
     // the uninstall.ts cache-mutation invariant.
-    if (cascade.dropped.hooks.length > 0) {
-      dropCachedHooks(transaction, scope, opts.marketplace, opts.plugin, "partial-cascade ", false);
-    }
-
     return {
       outcome: {
         kind: "disable-failed",
@@ -407,6 +410,7 @@ async function runDisableBranch(
         recordedVersion,
       },
       saveShrunken: true,
+      removeRoutesAfterSave: cascade.dropped.hooks.length > 0,
     };
   }
 
@@ -431,9 +435,12 @@ async function runDisableBranch(
   // drop the parsed-config cache entry and rebuild the routing table in
   // lockstep so subsequent dispatch events bypass the now-disabled plugin
   // without requiring /reload (NFR-2). Mirrors the uninstall.ts invariant.
-  dropCachedHooks(transaction, scope, opts.marketplace, opts.plugin, "", true);
-
-  return { outcome: { kind: "fresh", version: recordedVersion }, saveShrunken: false, disabled };
+  return {
+    outcome: { kind: "fresh", version: recordedVersion },
+    saveShrunken: false,
+    removeRoutesAfterSave: true,
+    disabled,
+  };
 }
 
 type FailedUnstageOutcome = UnstageOutcome & {
@@ -478,7 +485,7 @@ function primaryDisableFailureReason(cause: Error): ContentReason {
  * expected secondary symptom of the cascade throw, so it stays terse.
  */
 function dropCachedHooks(
-  transaction: EnableDisableTransaction,
+  hooksRouting: EnableDisableHooksRouting,
   scope: Scope,
   marketplace: string,
   plugin: string,
@@ -486,8 +493,8 @@ function dropCachedHooks(
   unexpected: boolean,
 ): void {
   try {
-    transaction.removeHooksFromRuntime(scope, marketplace, plugin);
-    transaction.rebuildHookRoutes();
+    hooksRouting.removePluginConfigFromCache(scope, marketplace, plugin);
+    hooksRouting.rebuildRoutingTables();
   } catch (cacheErr) {
     const consequence = unexpected
       ? " -- hooks for this plugin remain active in the running process until the disable's /reload rebuilds the routing table from state.json"
@@ -675,6 +682,7 @@ async function emitUnresolvedTarget(args: {
  */
 async function setPluginEnabledWithTransaction(
   transaction: EnableDisableTransaction,
+  hooksRouting: EnableDisableHooksRouting,
   opts: EnableDisablePluginOptions,
 ): Promise<EnableDisablePluginOutcome | undefined> {
   const { ctx, pi, cwd, marketplace, plugin, enable } = opts;
@@ -799,6 +807,7 @@ async function setPluginEnabledWithTransaction(
         }
 
         let branchOutcome: SetEnabledOutcome;
+        let removeRoutesAfterSave = false;
         if (enable) {
           branchOutcome = await runEnableBranch(
             transaction,
@@ -809,14 +818,9 @@ async function setPluginEnabledWithTransaction(
             installed,
           );
         } else {
-          const disableResult = await runDisableBranch(
-            transaction,
-            opts,
-            scope,
-            locations,
-            installed,
-          );
+          const disableResult = await runDisableBranch(transaction, opts, locations, installed);
           branchOutcome = disableResult.outcome;
+          removeRoutesAfterSave = disableResult.removeRoutesAfterSave;
           // ENBL-02: on a clean disable, replace the map slot with the branded
           // `DisabledPluginRecord` the branch built via `toDisabledRecord`
           // (rather than mutating `installed` in place). The terminal
@@ -832,6 +836,18 @@ async function setPluginEnabledWithTransaction(
           // post-guard branch that surfaces the failed row.
           if (disableResult.saveShrunken) {
             await tx.save();
+
+            if (disableResult.removeRoutesAfterSave) {
+              dropCachedHooks(
+                hooksRouting,
+                scope,
+                opts.marketplace,
+                opts.plugin,
+                "partial-cascade ",
+                false,
+              );
+            }
+
             return branchOutcome;
           }
         }
@@ -853,6 +869,11 @@ async function setPluginEnabledWithTransaction(
         }
 
         await tx.save();
+
+        if (removeRoutesAfterSave) {
+          dropCachedHooks(hooksRouting, scope, opts.marketplace, opts.plugin, "", true);
+        }
+
         return branchOutcome;
       },
     );
@@ -907,6 +928,7 @@ export interface SetPluginEnabledOperation {
 
 export function createSetPluginEnabled(
   transaction: EnableDisableTransaction,
+  hooksRouting: EnableDisableHooksRouting,
 ): SetPluginEnabledOperation {
   function configuredSetPluginEnabled(
     opts: EnableDisablePluginOptions & { notifications: { mode: "orchestrated" } },
@@ -917,14 +939,26 @@ export function createSetPluginEnabled(
   function configuredSetPluginEnabled(
     opts: EnableDisablePluginOptions,
   ): Promise<EnableDisablePluginOutcome | undefined> {
-    return setPluginEnabledWithTransaction(transaction, opts);
+    return setPluginEnabledWithTransaction(transaction, hooksRouting, opts);
   }
 
   return configuredSetPluginEnabled;
 }
 
+/** Compose the real enable/disable transaction with one required routing owner. */
+export function createNodeSetPluginEnabled(
+  hooksRouting: EnableDisableHooksRouting,
+): SetPluginEnabledOperation {
+  return createSetPluginEnabled(REAL_ENABLE_DISABLE_TRANSACTION, hooksRouting);
+}
+
+const TRANSITION_ENABLE_DISABLE_HOOKS_ROUTING: EnableDisableHooksRouting = {
+  rebuildRoutingTables,
+  removePluginConfigFromCache,
+};
+
 /** Production enable/disable operation composed through the real transaction adapter. */
-export const setPluginEnabled = createSetPluginEnabled(REAL_ENABLE_DISABLE_TRANSACTION);
+export const setPluginEnabled = createNodeSetPluginEnabled(TRANSITION_ENABLE_DISABLE_HOOKS_ROUTING);
 
 /**
  * Closed-set reason for an orchestrated transaction

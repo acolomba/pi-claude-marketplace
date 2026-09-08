@@ -13,7 +13,7 @@
 // then scans the residual argv for `--local`. Rejects unknown long flags via
 // `notifyUsageError`.
 
-import { setPluginEnabled } from "../../../orchestrators/plugin/enable-disable.ts";
+import { createNodeSetPluginEnabled } from "../../../orchestrators/plugin/enable-disable.ts";
 import { errorMessage } from "../../../shared/errors.ts";
 import { notify } from "../../../shared/notify.ts";
 // Shared scanner; see edge/handlers/shared.ts.
@@ -21,6 +21,7 @@ import { extractLocalFlag } from "../shared.ts";
 
 import { parseRequiredPluginMarketplaceRef } from "./shared.ts";
 
+import type { EnableDisableHooksRouting } from "../../../orchestrators/plugin/enable-disable.ts";
 import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
 
 function usageFor(enable: boolean): string {
@@ -32,8 +33,10 @@ function usageFor(enable: boolean): string {
 export function makeEnableDisableHandler(
   pi: ExtensionAPI,
   enable: boolean,
+  hooksRouting: EnableDisableHooksRouting,
 ): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
   const usage = usageFor(enable);
+  const setPluginEnabled = createNodeSetPluginEnabled(hooksRouting);
   return async (args, ctx): Promise<void> => {
     const localFlag = extractLocalFlag(args, ctx, usage);
     if (localFlag === undefined) {
