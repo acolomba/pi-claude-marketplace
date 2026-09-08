@@ -4,6 +4,10 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 
+import {
+  createHooksRouting,
+  createHooksRuntime,
+} from "../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { registerClaudePluginCommand } from "../../extensions/pi-claude-marketplace/edge/register.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { loadState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
@@ -114,19 +118,23 @@ function registerImportCommand(cwd: string, gitOps: GitOps) {
     { name: "subagent" },
     { name: "mcp", sourceInfo: { source: "pi-mcp-adapter" } },
   ]);
-  registerClaudePluginCommand(mock.pi, {
-    completionCache: createCompletionCache(),
-    gitOps,
-    pluginUpdate: () =>
-      Promise.resolve({
-        partition: "unchanged",
-        name: "unused",
-        fromVersion: "0.0.0",
-        toVersion: "0.0.0",
-        declaresAgents: false,
-        declaresMcp: false,
-      }),
-  });
+  registerClaudePluginCommand(
+    mock.pi,
+    {
+      completionCache: createCompletionCache(),
+      gitOps,
+      pluginUpdate: () =>
+        Promise.resolve({
+          partition: "unchanged",
+          name: "unused",
+          fromVersion: "0.0.0",
+          toVersion: "0.0.0",
+          declaresAgents: false,
+          declaresMcp: false,
+        }),
+    },
+    createHooksRouting(createHooksRuntime()),
+  );
   const command = mock.commands.get("claude:plugin");
   assert.ok(command, "claude:plugin command should be registered");
   const { ctx, notifications } = makeCtx(cwd);

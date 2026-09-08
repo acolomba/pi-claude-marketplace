@@ -165,6 +165,7 @@ import {
 
 import type { PreparedAgentsStaging } from "../../bridges/agents/index.ts";
 import type { PreparedCommandsStaging } from "../../bridges/commands/index.ts";
+import type { HooksRouting } from "../../bridges/hooks/index.ts";
 import type { PreparedMcpStaging } from "../../bridges/mcp/index.ts";
 import type { PreparedSkillsStaging } from "../../bridges/skills/index.ts";
 import type { PluginEntry } from "../../domain/components/plugin.ts";
@@ -311,6 +312,12 @@ export interface InstallPluginOptions {
    */
   readonly authMemo?: Map<string, AuthAttemptResult>;
 }
+
+/** Hooks route effects required by install at its durable-state boundary. */
+export type InstallHooksRouting = Pick<
+  HooksRouting,
+  "readAndCachePluginHooks" | "rebuildRoutingTables" | "removePluginConfigFromCache"
+>;
 
 /**
  * Local context type for the 5-phase ledger. Carries every value the
@@ -1345,10 +1352,15 @@ function buildInstallLedgerOptions(
  * here, so the reverse edge closes a cycle), and the debug message names the
  * install surface so the log says which command left the routing table stale.
  */
-function dropInstallDisabledHooks(scope: Scope, marketplace: string, plugin: string): void {
+function dropInstallDisabledHooks(
+  hooksRouting: InstallHooksRouting,
+  scope: Scope,
+  marketplace: string,
+  plugin: string,
+): void {
   try {
-    removePluginConfigFromCache(scope, marketplace, plugin);
-    rebuildRoutingTables();
+    hooksRouting.removePluginConfigFromCache(scope, marketplace, plugin);
+    hooksRouting.rebuildRoutingTables();
   } catch (cacheErr) {
     hookDebugLog(
       `install: hooks cache/routing drop failed for install-disabled ${plugin}@${marketplace}: ${errorMessage(cacheErr)} -- this plugin's hooks may keep dispatching in the running process until the next /reload rebuilds the routing table from state.json`,
@@ -1387,8 +1399,11 @@ async function disableFreshlyInstalledPlugin(args: {
   readonly locations: ScopedLocations;
   readonly marketplace: string;
   readonly plugin: string;
-}): Promise<{ readonly ok: true } | { readonly ok: false; readonly cause: Error }> {
-  const { state, scope, locations, marketplace, plugin } = args;
+}): Promise<
+  | { readonly ok: true; readonly removeRoutes: true }
+  | { readonly ok: false; readonly cause: Error; readonly removeRoutes: boolean }
+> {
+  const { state, locations, marketplace, plugin } = args;
   const target = locateFreshlyInstalledRecord(state, marketplace, plugin);
   if (target === undefined) {
     return {
@@ -1396,6 +1411,7 @@ async function disableFreshlyInstalledPlugin(args: {
       cause: new Error(
         `installPlugin: internal error -- the state phase left no record for plugin "${plugin}" to disable.`,
       ),
+      removeRoutes: false,
     };
   }
 
@@ -1405,8 +1421,7 @@ async function disableFreshlyInstalledPlugin(args: {
   }
 
   target.mp.plugins[plugin] = toDisabledRecord(target.installed, new Date().toISOString());
-  dropInstallDisabledHooks(scope, marketplace, plugin);
-  return { ok: true };
+  return { ok: true, removeRoutes: true };
 }
 
 type FailedUnstageOutcome = UnstageOutcome & {
@@ -1449,17 +1464,14 @@ function foldFailedDisableCascade(args: {
   readonly plugin: string;
   readonly installed: InstalledPluginRecord;
   readonly cascade: FailedUnstageOutcome;
-}): { readonly ok: false; readonly cause: Error } {
-  const { scope, marketplace, plugin, installed, cascade } = args;
+}): { readonly ok: false; readonly cause: Error; readonly removeRoutes: boolean } {
+  const { installed, cascade } = args;
   applyPartialCascadeFold(installed, cascade.dropped);
   installed.updatedAt = new Date().toISOString();
-  if (cascade.dropped.hooks.length > 0) {
-    dropInstallDisabledHooks(scope, marketplace, plugin);
-  }
-
   return {
     ok: false,
     cause: cascade.cause,
+    removeRoutes: cascade.dropped.hooks.length > 0,
   };
 }
 
@@ -1945,6 +1957,7 @@ function handleInstallThrow(args: {
 // `composeInstalledRow`, `buildInstalledOutcome`, `handleInstallThrow`).
 async function installPluginWithTransaction(
   transaction: InstallTransaction,
+  hooksRouting: InstallHooksRouting,
   opts: InstallPluginOptions,
 ): Promise<InstallPluginOutcome> {
   const { ctx, pi, scope, cwd, marketplace, plugin } = opts;
@@ -1986,6 +1999,7 @@ async function installPluginWithTransaction(
   // writes stay visible to the post-guard reads without a narrowing override at
   // every site.
   const disabledInstall: { landed: boolean; cascadeError?: Error } = { landed: false };
+  let removeDisabledRoutesAfterSave = false;
 
   // WB-01: target-path selection happens ONCE, and both write arms below read
   // that one decision, so they cannot drift onto different files. The
@@ -2128,6 +2142,7 @@ async function installPluginWithTransaction(
           marketplace,
           plugin,
         });
+        removeDisabledRoutesAfterSave = disableResult.removeRoutes;
         if (!disableResult.ok) {
           // D-102-02: record the cause and fall through. The fold already
           // subtracted what DID drop, so the `tx.save()` below persists the
@@ -2240,6 +2255,10 @@ async function installPluginWithTransaction(
       // state snapshot discarded exactly as before).
       await tx.save();
 
+      if (removeDisabledRoutesAfterSave) {
+        dropInstallDisabledHooks(hooksRouting, scope, marketplace, plugin);
+      }
+
       // WR-06 / D-59-02: hooks-bridge parsed-config cache add + routing
       // table rebuild. Moved AFTER `tx.save()` so a write-back throw
       // (lines above) or a tx.save throw aborts BEFORE the cache mutates.
@@ -2279,7 +2298,7 @@ async function installPluginWithTransaction(
       // the cache entry, which is the correct mutation on that path.
       if (!disabledInstall.landed && installCtx.resolved.hooksConfigPath !== undefined) {
         try {
-          await readAndCachePluginHooks({
+          await hooksRouting.readAndCachePluginHooks({
             scope,
             marketplace,
             plugin,
@@ -2292,7 +2311,7 @@ async function installPluginWithTransaction(
             logPrefix: "install",
           });
 
-          rebuildRoutingTables();
+          hooksRouting.rebuildRoutingTables();
         } catch (cacheErr) {
           hookDebugLog(
             `install: post-save cache/routing mutation failed for ${plugin}@${marketplace}: ${errorMessage(cacheErr)}`,
@@ -2460,12 +2479,26 @@ async function installPluginWithTransaction(
 /** Bind install orchestration to one required semantic transaction owner. */
 export function createInstallPlugin(
   transaction: InstallTransaction,
+  hooksRouting: InstallHooksRouting,
 ): (opts: InstallPluginOptions) => Promise<InstallPluginOutcome> {
-  return (opts) => installPluginWithTransaction(transaction, opts);
+  return (opts) => installPluginWithTransaction(transaction, hooksRouting, opts);
 }
 
-/** Production install operation composed through the real transaction adapter. */
-export const installPlugin = createInstallPlugin(REAL_INSTALL_TRANSACTION);
+/** Bind production install behavior to one required hooks-routing owner. */
+export function createNodeInstallPlugin(
+  hooksRouting: InstallHooksRouting,
+): (opts: InstallPluginOptions) => Promise<InstallPluginOutcome> {
+  return createInstallPlugin(REAL_INSTALL_TRANSACTION, hooksRouting);
+}
+
+const TRANSITION_INSTALL_HOOKS_ROUTING: InstallHooksRouting = {
+  readAndCachePluginHooks,
+  rebuildRoutingTables,
+  removePluginConfigFromCache,
+};
+
+/** Bounded compatibility operation for callers not yet migrated to runtime ownership. */
+export const installPlugin = createNodeInstallPlugin(TRANSITION_INSTALL_HOOKS_ROUTING);
 
 // D-19-03 / CMC-17 / MSG-RP-1: the PluginFailedMessage.rollbackPartial
 // field (SNM-09 + SNM-10) is the structural rollback-partial channel; the

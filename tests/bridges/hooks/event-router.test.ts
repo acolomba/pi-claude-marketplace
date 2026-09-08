@@ -27,6 +27,7 @@ import {
   beforeAgentStartHandlerFor,
   createBeforeAgentStartHandler,
   createHooksHydration,
+  createHooksRouting,
   hydrateProjectScopeForCwd,
   readAndCachePluginHooks,
   rebuildRoutingTables,
@@ -970,17 +971,50 @@ test("readAndCachePluginHooks reads and parses one case-owned config", async (t)
   ]);
 });
 
-test("exports a production factory for runtime-bound route mutation", async () => {
+test("runtime-bound routing mutations update only their supplied lifecycle owner", async (t) => {
   // arrange
-  const routerModule: Record<string, unknown> = await import(
-    "../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts"
+  const root = await mkdtemp(path.join(tmpdir(), "hooks-router-owner-"));
+  t.after(async () => {
+    await rm(root, { recursive: true, force: true });
+  });
+  const hooksJsonPath = path.join(root, "hooks.json");
+  await writeFile(
+    hooksJsonPath,
+    JSON.stringify({
+      PreToolUse: [{ matcher: "", hooks: [{ type: "command", command: "echo owner" }] }],
+    }),
+    "utf8",
   );
+  const ownerRuntime = createHooksRuntime();
+  const peerRuntime = createHooksRuntime();
+  const routing = createHooksRouting(ownerRuntime);
 
   // act
-  const factory = routerModule["createHooksRouting"];
+  await routing.readAndCachePluginHooks({
+    scope: "project",
+    marketplace: "catalog",
+    plugin: "owned",
+    resolvedSource: asAbsolutePluginRoot(root),
+    hooksJsonPath,
+    cwd: root,
+    logPrefix: "owner-test",
+  });
+  routing.rebuildRoutingTables();
 
   // assert
-  assert.strictEqual(typeof factory, "function");
+  assert.deepStrictEqual(
+    ownerRuntime.getRoutingBucket("PreToolUse").map((entry) => entry.pluginId),
+    ["owned"],
+  );
+  assert.deepStrictEqual(peerRuntime.getRoutingBucket("PreToolUse"), []);
+
+  // act
+  routing.removePluginConfigFromCache("project", "catalog", "owned");
+  routing.rebuildRoutingTables();
+
+  // assert
+  assert.deepStrictEqual(ownerRuntime.getRoutingBucket("PreToolUse"), []);
+  assert.deepStrictEqual(peerRuntime.getRoutingBucket("PreToolUse"), []);
 });
 
 test("readAndCachePluginHooks leaves the cache unchanged after a read failure", async (t) => {

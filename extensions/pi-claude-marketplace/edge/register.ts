@@ -60,6 +60,7 @@ import { routeClaudePlugin } from "./router.ts";
 
 import type { SubcommandHandlers } from "./router.ts";
 import type { EdgeDeps } from "./types.ts";
+import type { InstallHooksRouting } from "../orchestrators/plugin/install.ts";
 import type { ExtensionAPI } from "../platform/pi-api.ts";
 
 const COMMAND_DESCRIPTION =
@@ -75,10 +76,14 @@ const COMMAND_DESCRIPTION =
  * `deps.gitOps` and `deps.pluginUpdate` are threaded into the marketplace
  * add/update/remove handlers per D-04 EdgeDeps.
  */
-export function registerClaudePluginCommand(pi: ExtensionAPI, deps: EdgeDeps): void {
+export function registerClaudePluginCommand(
+  pi: ExtensionAPI,
+  deps: EdgeDeps,
+  hooksRouting: InstallHooksRouting,
+): void {
   const handlers: SubcommandHandlers = {
     bootstrap: makeBootstrapHandler(pi, deps),
-    install: makeInstallHandler(pi),
+    install: makeInstallHandler(pi, hooksRouting),
     uninstall: makeUninstallHandler(pi),
     update: makeUpdateHandler(pi),
     fetch: makeFetchHandler(pi),

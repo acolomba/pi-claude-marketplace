@@ -10,6 +10,10 @@ import {
   GENERATED_AGENT_PREFIX,
 } from "../../../extensions/pi-claude-marketplace/bridges/agents/marker.ts";
 import {
+  createHooksRouting,
+  createHooksRuntime,
+} from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
+import {
   pluginCloneKey,
   pluginMirrorKey,
 } from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
@@ -23,6 +27,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts";
 import {
   createInstallPlugin,
+  createNodeInstallPlugin,
   installPlugin,
   runInstallLedger,
   type InstallCloneCacheSeam,
@@ -5074,15 +5079,12 @@ test("UAT-05: base-targeted install with marketplace already in base leaves the 
 // ─────────────────────────────────────────────────────────────────────────────
 
 test("WR-03: installPlugin of a hooks-declaring plugin rebuilds the routing table without /reload", async () => {
-  const { resetRoutingState } =
-    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
-  const { getRoutingBucket } =
-    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
-
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-wr03-"));
     try {
-      resetRoutingState();
+      const ownerRuntime = createHooksRuntime();
+      const peerRuntime = createHooksRuntime();
+      const runtimeInstallPlugin = createNodeInstallPlugin(createHooksRouting(ownerRuntime));
       const locations = locationsFor("project", cwd);
       await mkdir(locations.extensionRoot, { recursive: true });
 
@@ -5097,10 +5099,10 @@ test("WR-03: installPlugin of a hooks-declaring plugin rebuilds the routing tabl
       });
 
       // Pre-condition: the routing table's PreToolUse bucket is empty.
-      assert.equal(getRoutingBucket("PreToolUse").length, 0);
+      assert.equal(ownerRuntime.getRoutingBucket("PreToolUse").length, 0);
 
       const { ctx, pi, notifications } = makeCtx();
-      await installPlugin({
+      await runtimeInstallPlugin({
         ctx,
         pi,
         scope: "project",
@@ -5142,7 +5144,7 @@ test("WR-03: installPlugin of a hooks-declaring plugin rebuilds the routing tabl
       // Post-condition: the routing-table now reflects the installed plugin's
       // PreToolUse entry. This proves WR-03's `rebuildRoutingTables()` ran
       // inside the per-plugin lock right after `addPluginConfigToCache`.
-      const bucket = getRoutingBucket("PreToolUse");
+      const bucket = ownerRuntime.getRoutingBucket("PreToolUse");
       assert.equal(bucket.length, 1);
       assert.equal(bucket[0]?.pluginId, "p1");
       assert.equal(bucket[0]?.scope, "project");
@@ -5157,6 +5159,7 @@ test("WR-03: installPlugin of a hooks-declaring plugin rebuilds the routing tabl
         afterState.marketplaces["mp"]?.plugins["p1"]?.resolvedSource,
         "RoutingEntry.resolvedSource must mirror state.json's resolvedSource",
       );
+      assert.deepStrictEqual(peerRuntime.getRoutingBucket("PreToolUse"), []);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

@@ -45,6 +45,10 @@ import { describe, test, type TestContext } from "node:test";
 import { It, mock, verify, when } from "strong-mock";
 
 import {
+  createHooksRouting,
+  createHooksRuntime,
+} from "../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
+import {
   registerClaudeMarketplaceTools,
   registerClaudePluginCommand,
 } from "../../extensions/pi-claude-marketplace/edge/register.ts";
@@ -252,7 +256,11 @@ function registerCommandWithCache(completionCache: CompletionCache): CommandUnde
     .thenReturn()
     .times(1);
 
-  registerClaudePluginCommand(pi, createEdgeDeps(completionCache));
+  registerClaudePluginCommand(
+    pi,
+    createEdgeDeps(completionCache),
+    createHooksRouting(createHooksRuntime()),
+  );
 
   const registration = commandOptions.value;
   const sessionStart = sessionStartListener.value;

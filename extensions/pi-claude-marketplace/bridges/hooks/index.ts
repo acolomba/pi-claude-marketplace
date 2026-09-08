@@ -12,6 +12,7 @@
 
 export {
   createHooksHydration,
+  createHooksRouting,
   hydrateProjectScopeForCwd,
   readAndCachePluginHooks,
   registerHooksBridge,
@@ -19,7 +20,12 @@ export {
   removePluginConfigFromCache,
 } from "./event-router.ts";
 
-export type { HooksHydration, HooksHydrationReader } from "./event-router.ts";
+export type {
+  HooksHydration,
+  HooksHydrationReader,
+  HooksRouting,
+  ReadAndCachePluginHooksOptions,
+} from "./event-router.ts";
 export { createHooksRuntime } from "./runtime.ts";
 export type { HooksRuntime } from "./runtime.ts";
 

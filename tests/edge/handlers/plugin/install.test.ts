@@ -97,8 +97,9 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { test, type TestContext } from "node:test";
 
+import { createHooksRouting, createHooksRuntime } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { SCOPE_TARGET_FLAG } from "../../../../extensions/pi-claude-marketplace/edge/flag-catalog.ts";
-import { makeInstallHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/install.ts";
+import { makeInstallHandler as makeRuntimeInstallHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/install.ts";
 import { loadConfig } from "../../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { loadState } from "../../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
@@ -118,6 +119,12 @@ import type { Scope } from "../../../../extensions/pi-claude-marketplace/shared/
  */
 const MAP_MODEL_FLAG = "--map-model";
 const PARTIAL_FLAG = "--partial";
+
+function makeInstallHandler(
+  pi: Parameters<typeof makeRuntimeInstallHandler>[0],
+): ReturnType<typeof makeRuntimeInstallHandler> {
+  return makeRuntimeInstallHandler(pi, createHooksRouting(createHooksRuntime()));
+}
 
 /** The frontmatter field the AG-7 mapping emits, and the prefix that finds it. */
 const MODEL_FIELD_PREFIX = "model: ";

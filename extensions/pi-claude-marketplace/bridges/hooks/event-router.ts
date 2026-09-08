@@ -174,7 +174,7 @@ export function removePluginConfigFromCache(
  * debug-log lines so the same shared helper can serve all three
  * orchestrators without losing call-site attribution.
  */
-export async function readAndCachePluginHooks(opts: {
+export interface ReadAndCachePluginHooksOptions {
   readonly scope: Scope;
   readonly marketplace: string;
   readonly plugin: string;
@@ -182,7 +182,12 @@ export async function readAndCachePluginHooks(opts: {
   readonly hooksJsonPath: string;
   readonly cwd: string;
   readonly logPrefix: string;
-}): Promise<void> {
+}
+
+async function readAndCachePluginHooksWith(
+  routingState: EventRouterRoutingState,
+  opts: ReadAndCachePluginHooksOptions,
+): Promise<void> {
   let raw: string;
   try {
     raw = await readFile(opts.hooksJsonPath, "utf8");
@@ -205,14 +210,20 @@ export async function readAndCachePluginHooks(opts: {
     return;
   }
 
-  addPluginConfigToCache(
-    opts.scope,
-    opts.marketplace,
-    opts.plugin,
-    opts.resolvedSource,
-    parsed.value,
-    parsed.ifPredicates,
-  );
+  routingState.setParsedConfig(cacheKey(opts.scope, opts.marketplace, opts.plugin), {
+    scope: opts.scope,
+    marketplace: opts.marketplace,
+    pluginId: opts.plugin,
+    resolvedSource: opts.resolvedSource,
+    config: parsed.value,
+    ifPredicates: parsed.ifPredicates,
+  });
+}
+
+export async function readAndCachePluginHooks(
+  opts: ReadAndCachePluginHooksOptions,
+): Promise<void> {
+  await readAndCachePluginHooksWith(TRANSITION_ROUTING_STATE, opts);
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -320,6 +331,35 @@ function rebuildRoutingTablesWith(routingState: EventRouterRoutingState): void {
 
 export function rebuildRoutingTables(): void {
   rebuildRoutingTablesWith(TRANSITION_ROUTING_STATE);
+}
+
+/** Route mutation operations bound to one extension-lifecycle runtime. */
+export interface HooksRouting {
+  readonly readAndCachePluginHooks: (
+    opts: ReadAndCachePluginHooksOptions,
+  ) => Promise<void>;
+  readonly removePluginConfigFromCache: (
+    scope: Scope,
+    marketplace: string,
+    pluginId: string,
+  ) => void;
+  readonly rebuildRoutingTables: () => void;
+}
+
+/** Bind install/uninstall route effects to an explicitly supplied runtime owner. */
+export function createHooksRouting(runtime: HooksRuntime): HooksRouting {
+  const routingState = createRoutingStateOperations(runtime);
+  return {
+    async readAndCachePluginHooks(opts: ReadAndCachePluginHooksOptions): Promise<void> {
+      await readAndCachePluginHooksWith(routingState, opts);
+    },
+    removePluginConfigFromCache(scope: Scope, marketplace: string, pluginId: string): void {
+      routingState.deleteParsedConfig(cacheKey(scope, marketplace, pluginId));
+    },
+    rebuildRoutingTables(): void {
+      rebuildRoutingTablesWith(routingState);
+    },
+  };
 }
 
 /**
