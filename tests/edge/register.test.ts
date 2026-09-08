@@ -55,7 +55,10 @@ import {
 import { TOP_LEVEL_USAGE } from "../../extensions/pi-claude-marketplace/edge/router.ts";
 import { makeLocationsResolver } from "../../extensions/pi-claude-marketplace/orchestrators/edge-deps.ts";
 import { createPluginUpdateOperations } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/update.ts";
-import { saveState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import {
+  loadState,
+  saveState,
+} from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { createGitOpsFake } from "../platform/git-ops-fake.ts";
 
@@ -688,6 +691,15 @@ test("rebuilds completion rows through the cache that owns a successful register
     "utf8",
   );
   await seedProjectMarketplaces(cwd, [marketplace, unrelated]);
+  const extensionRoot = path.join(cwd, ".pi", "pi-claude-marketplace");
+  const state = await loadState(extensionRoot);
+  const record = state.marketplaces[marketplace];
+  if (record === undefined) {
+    throw new Error("the registered update fixture has no target marketplace");
+  }
+
+  record.manifestPath = path.join(sourceRoot, ".claude-plugin", "before-update.json");
+  await saveState(extensionRoot, state);
   const resolver = makeLocationsResolver(cwd);
   const cachePath = await resolver.pluginCachePath("project", marketplace);
   const unrelatedCachePath = await resolver.pluginCachePath("project", unrelated);
@@ -741,9 +753,7 @@ test("rebuilds completion rows through the cache that owns a successful register
   );
 
   // assert
-  assert.deepStrictEqual(notifications, [
-    { message: "● registered-update [project] (skipped) {up-to-date}" },
-  ]);
+  assert.deepStrictEqual(notifications, [{ message: "● registered-update [project] (updated)" }]);
   assert.deepStrictEqual(ownerCandidates, [
     {
       label: "fresh@registered-update",

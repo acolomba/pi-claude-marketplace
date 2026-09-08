@@ -138,8 +138,8 @@ import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { CredentialOps } from "../../platform/git-credential.ts";
 import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
-import type { ContentReason, PluginFailedMessage } from "../../shared/notify.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
+import type { ContentReason, PluginFailedMessage } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { PluginUpdateFn, PluginUpdateOutcome } from "../types.ts";
 
@@ -735,22 +735,24 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
     return;
   }
 
-  // Post-state-commit completion-cache invalidation. Manifest refresh may
-  // have changed the plugin set; drop the cached plugin index so the next
-  // completion read rebuilds from the freshly updated marketplace.json.
-  // Defense-in-depth try/catch.
-  try {
-    await args.completionCache.dropMarketplaceCache(
-      await locations.pluginCacheFile(name),
-      scope,
-      name,
-    );
-  } catch {
-    // Intentional non-surfacing (PU-4 / AS-6): this cleanup runs AFTER the
-    // durable atomic state save, so a leak here cannot corrupt state. A
-    // cache-refresh failure is deliberately NOT surfaced -- emitting a second
-    // notify after the primary would double severity routing. The cache `rm`
-    // still runs above; only the user-facing warning is suppressed.
+  // Post-state-commit completion-cache invalidation. Only a changed manifest
+  // can change the marketplace's plugin index; an up-to-date refresh retains
+  // the exact existing row. The successful target drop completes before any
+  // plugin cascade observes the persisted state.
+  if (snapshot.changed) {
+    try {
+      await args.completionCache.dropMarketplaceCache(
+        await locations.pluginCacheFile(name),
+        scope,
+        name,
+      );
+    } catch {
+      // Intentional non-surfacing (PU-4 / AS-6): this cleanup runs AFTER the
+      // durable atomic state save, so a leak here cannot corrupt state. A
+      // cache-refresh failure is deliberately NOT surfaced -- emitting a second
+      // notify after the primary would double severity routing. The cache `rm`
+      // still runs above; only the user-facing warning is suppressed.
+    }
   }
 
   // CASCADE OUTSIDE the outer guard. Honors MU-4 literal

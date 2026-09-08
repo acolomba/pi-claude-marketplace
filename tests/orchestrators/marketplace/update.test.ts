@@ -1303,7 +1303,7 @@ test("ATTR-10: path-source SCHEMA-INVALID manifest renders `(failed) {invalid ma
   });
 });
 
-test("NFR-5: path-source update FAILURE (invalid manifest) still calls zero gitOps methods", async () => {
+test("a pre-persistence manifest failure leaves cache rows intact and calls zero git operations", async (testContext) => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
     // The failure path must not reach for the network either: the path branch of
@@ -1321,9 +1321,11 @@ test("NFR-5: path-source update FAILURE (invalid manifest) still calls zero gitO
 
       const { ctx, pi, notifications } = makeCtx();
       const { gitOps, state } = createGitOps();
+      const completionCache = createCompletionCache();
+      const drop = testContext.mock.method(completionCache, "dropMarketplaceCache");
       // act
       await updateMarketplace({
-        completionCache: createCompletionCache(),
+        completionCache,
         ctx,
         pi,
         name: "local-bad",
@@ -1345,6 +1347,7 @@ test("NFR-5: path-source update FAILURE (invalid manifest) still calls zero gitO
       assert.equal(state.forceUpdateRefCalls.length, 0);
       assert.equal(state.checkoutCalls.length, 0);
       assert.equal(state.resolveRefCalls.length, 0);
+      assert.strictEqual(drop.mock.callCount(), 0);
     } finally {
       await rm(localMpDir, { recursive: true, force: true });
     }
@@ -2072,37 +2075,57 @@ test("NFR-5: path-source update calls zero gitOps methods", async () => {
   });
 });
 
-test("D-03-INV :: update invalidates plugin cache for that marketplace", async () => {
-  // updateMarketplace wires invalidateMarketplaceCache into its
-  // post-state-commit window (after the inner withStateGuard returns,
-  // before any cascade runs). Manifest refresh may have changed the plugin
-  // set, so the cached plugin index for this (scope, marketplace) pair
-  // MUST be dropped. Memory-only op; the file is left intact as a rebuild
-  // source. Test pattern: pre-warm memory + delete the on-disk file ->
-  // run update -> next read MUST re-invoke rebuild (proves memory cleared).
+test("drops a changed target after persistence and before its plugin cascade", async (testContext) => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
+    const now = new Date("2026-09-08T07:00:00.000Z");
+    testContext.mock.timers.enable({ apis: ["Date"], now });
     const completionCache = createCompletionCache();
-    await seedGithubMarketplace({ cwd, name: "official", ref: "main" });
-    const { ctx, pi } = makeCtx();
+    const drop = testContext.mock.method(completionCache, "dropMarketplaceCache");
+    const { cloneDir } = await seedGithubMarketplace({
+      cwd,
+      name: "official",
+      ref: "main",
+      autoupdate: true,
+      plugins: { alpha: makePluginRecord() },
+    });
+    const { ctx, pi, notifications } = makeCtx();
     const { gitOps } = createGitOps({
       remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000001" },
     });
-
-    // Pre-warm the plugin index memory entry.
     const locations = locationsFor("project", cwd);
+    const state = await loadState(locations.extensionRoot);
+    const record = state.marketplaces.official;
+    if (record === undefined) {
+      throw new Error("the cache invalidation fixture has no target marketplace");
+    }
+
+    record.manifestPath = path.join(cloneDir, ".claude-plugin", "before-update.json");
+    await saveState(locations.extensionRoot, state);
     const pluginCachePath = await locations.pluginCacheFile("official");
     let rebuildCount = 0;
     await completionCache.getPluginIndex(pluginCachePath, "project", "official", () => {
       rebuildCount += 1;
       return Promise.resolve([{ name: "stale-plugin", status: "available" }]);
     });
-    assert.equal(rebuildCount, 1, "pre-test: rebuild invoked on first read");
-
-    // Drop the on-disk cache file so the next memory-miss MUST rebuild.
     await rm(pluginCachePath, { force: true });
+    let cascadeObservation:
+      { readonly dropCount: number; readonly state: ExtensionState } | undefined;
+    const pluginUpdate: PluginUpdateFn = async (plugin) => {
+      cascadeObservation = {
+        dropCount: drop.mock.callCount(),
+        state: await loadState(locations.extensionRoot),
+      };
+      return {
+        partition: "unchanged",
+        name: plugin,
+        fromVersion: "0.0.1",
+        toVersion: "0.0.1",
+        declaresAgents: false,
+        declaresMcp: false,
+      };
+    };
 
-    // Run update: must invalidate the plugin cache for (project, official).
     // act
     await updateMarketplace({
       completionCache,
@@ -2112,16 +2135,43 @@ test("D-03-INV :: update invalidates plugin cache for that marketplace", async (
       scope: "project",
       cwd,
       gitOps,
+      pluginUpdate,
     });
+    const rows = await completionCache.getPluginIndex(
+      pluginCachePath,
+      "project",
+      "official",
+      () => {
+        rebuildCount += 1;
+        return Promise.resolve([{ name: "fresh-plugin", status: "available" }]);
+      },
+    );
 
     // assert
-
-    // Memory must be cleared; with file absent, next read invokes rebuild.
-    await completionCache.getPluginIndex(pluginCachePath, "project", "official", () => {
-      rebuildCount += 1;
-      return Promise.resolve([]);
-    });
-    assert.equal(rebuildCount, 2, "post-invalidation read re-invokes rebuild");
+    const expectedState: ExtensionState = {
+      schemaVersion: 2,
+      marketplaces: {
+        official: {
+          name: "official",
+          scope: "project",
+          source: makeGithubSource("main"),
+          addedFromCwd: cwd,
+          manifestPath: path.join(cloneDir, ".claude-plugin", "marketplace.json"),
+          marketplaceRoot: cloneDir,
+          plugins: { alpha: makePluginRecord() },
+          lastUpdatedAt: now.toISOString(),
+        },
+      },
+    };
+    assert.deepStrictEqual(notifications, [
+      { message: "● official [project] (updated)\n  ⊘ alpha (skipped) {up-to-date}" },
+    ]);
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), expectedState);
+    assert.deepStrictEqual(rows, [{ name: "fresh-plugin", status: "available" }]);
+    assert.deepStrictEqual(cascadeObservation, { dropCount: 1, state: expectedState });
+    assert.strictEqual(rebuildCount, 2);
+    assert.strictEqual(drop.mock.callCount(), 1);
+    assert.deepStrictEqual(drop.mock.calls[0]?.arguments, [pluginCachePath, "project", "official"]);
   });
 });
 
@@ -2556,48 +2606,159 @@ test("updateAllMarketplaces forwards optional Device Flow and plugin cascade por
   });
 });
 
-test("D-28: all-marketplace update stays plural when it discovers many targets", async () => {
+test("all-target update drops changed rows in project-before-user order and isolates no-effect and peer rows", async (testContext) => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
-    const locations = locationsFor("project", cwd);
+    const now = new Date("2026-09-08T08:00:00.000Z");
+    testContext.mock.timers.enable({ apis: ["Date"], now });
+    const projectLocations = locationsFor("project", cwd);
+    const userLocations = locationsFor("user", cwd);
     const marketplaceRoot = fixtureMarketplaceDir("valid-marketplace");
-    await mkdir(locations.extensionRoot, { recursive: true });
-    const marketplaceRecord = (name: string): ExtensionState["marketplaces"][string] => ({
+    const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
+    await mkdir(projectLocations.extensionRoot, { recursive: true });
+    await mkdir(userLocations.extensionRoot, { recursive: true });
+    const marketplaceRecord = (
+      name: string,
+      scope: Scope,
+      storedManifestPath: string,
+    ): ExtensionState["marketplaces"][string] => ({
       name,
-      scope: "project",
+      scope,
       source: pathSource(marketplaceRoot),
       addedFromCwd: cwd,
-      manifestPath: path.join(marketplaceRoot, ".claude-plugin", "marketplace.json"),
+      manifestPath: storedManifestPath,
       marketplaceRoot,
       plugins: {},
     });
-    await saveState(locations.extensionRoot, {
+    await saveState(projectLocations.extensionRoot, {
       schemaVersion: 1,
       marketplaces: {
-        alpha: marketplaceRecord("alpha"),
-        beta: marketplaceRecord("beta"),
+        alpha: marketplaceRecord("alpha", "project", path.join(marketplaceRoot, "alpha-before")),
+        beta: marketplaceRecord("beta", "project", manifestPath),
+      },
+    });
+    await saveState(userLocations.extensionRoot, {
+      schemaVersion: 1,
+      marketplaces: {
+        alpha: marketplaceRecord("alpha", "user", path.join(marketplaceRoot, "user-before")),
       },
     });
     const { ctx, pi, notifications } = makeCtx();
+    const completionCache = createCompletionCache();
+    const peerCache = createCompletionCache();
+    const drop = testContext.mock.method(completionCache, "dropMarketplaceCache");
+    const targetPaths = {
+      projectAlpha: await projectLocations.pluginCacheFile("alpha"),
+      projectBeta: await projectLocations.pluginCacheFile("beta"),
+      userAlpha: await userLocations.pluginCacheFile("alpha"),
+    };
+    for (const [key, pluginCachePath] of Object.entries(targetPaths)) {
+      await completionCache.getPluginIndex(
+        pluginCachePath,
+        key.startsWith("project") ? "project" : "user",
+        key.endsWith("Alpha") ? "alpha" : "beta",
+        () => Promise.resolve([{ name: `owner-${key}`, status: "available" }]),
+      );
+      await rm(pluginCachePath, { force: true });
+      await peerCache.getPluginIndex(
+        pluginCachePath,
+        key.startsWith("project") ? "project" : "user",
+        key.endsWith("Alpha") ? "alpha" : "beta",
+        () => Promise.resolve([{ name: `peer-${key}`, status: "available" }]),
+      );
+      await rm(pluginCachePath, { force: true });
+    }
 
     // act
     await updateAllMarketplaces({
-      completionCache: createCompletionCache(),
+      completionCache,
       ctx,
       pi,
-      scope: "project",
       cwd,
     });
+    const ownerRows = {
+      projectAlpha: await completionCache.getPluginIndex(
+        targetPaths.projectAlpha,
+        "project",
+        "alpha",
+        () => Promise.resolve([{ name: "fresh-projectAlpha", status: "available" }]),
+      ),
+      projectBeta: await completionCache.getPluginIndex(
+        targetPaths.projectBeta,
+        "project",
+        "beta",
+        () => Promise.resolve([{ name: "fresh-projectBeta", status: "available" }]),
+      ),
+      userAlpha: await completionCache.getPluginIndex(targetPaths.userAlpha, "user", "alpha", () =>
+        Promise.resolve([{ name: "fresh-userAlpha", status: "available" }]),
+      ),
+    };
+    const peerRows = {
+      projectAlpha: await peerCache.getPluginIndex(
+        targetPaths.projectAlpha,
+        "project",
+        "alpha",
+        () => Promise.resolve([{ name: "fresh-peer-projectAlpha", status: "available" }]),
+      ),
+      projectBeta: await peerCache.getPluginIndex(targetPaths.projectBeta, "project", "beta", () =>
+        Promise.resolve([{ name: "fresh-peer-projectBeta", status: "available" }]),
+      ),
+      userAlpha: await peerCache.getPluginIndex(targetPaths.userAlpha, "user", "alpha", () =>
+        Promise.resolve([{ name: "fresh-peer-userAlpha", status: "available" }]),
+      ),
+    };
 
     // assert
     assert.deepStrictEqual(notifications, [
       {
-        message: "● alpha [project] (skipped) {up-to-date}\n\nMarketplace update: 1 success",
+        message: "● alpha [project] (updated)\n\nMarketplace update: 1 success",
       },
       {
         message: "● beta [project] (skipped) {up-to-date}\n\nMarketplace update: 1 success",
       },
+      {
+        message: "● alpha [user] (updated)\n\nMarketplace update: 1 success",
+      },
     ]);
+    assert.deepStrictEqual(await loadState(projectLocations.extensionRoot), {
+      schemaVersion: 2,
+      marketplaces: {
+        alpha: {
+          ...marketplaceRecord("alpha", "project", manifestPath),
+          lastUpdatedAt: now.toISOString(),
+        },
+        beta: {
+          ...marketplaceRecord("beta", "project", manifestPath),
+          lastUpdatedAt: now.toISOString(),
+        },
+      },
+    });
+    assert.deepStrictEqual(await loadState(userLocations.extensionRoot), {
+      schemaVersion: 2,
+      marketplaces: {
+        alpha: {
+          ...marketplaceRecord("alpha", "user", manifestPath),
+          lastUpdatedAt: now.toISOString(),
+        },
+      },
+    });
+    assert.deepStrictEqual(ownerRows, {
+      projectAlpha: [{ name: "fresh-projectAlpha", status: "available" }],
+      projectBeta: [{ name: "owner-projectBeta", status: "available" }],
+      userAlpha: [{ name: "fresh-userAlpha", status: "available" }],
+    });
+    assert.deepStrictEqual(peerRows, {
+      projectAlpha: [{ name: "peer-projectAlpha", status: "available" }],
+      projectBeta: [{ name: "peer-projectBeta", status: "available" }],
+      userAlpha: [{ name: "peer-userAlpha", status: "available" }],
+    });
+    assert.deepStrictEqual(
+      drop.mock.calls.map((call) => call.arguments),
+      [
+        [targetPaths.projectAlpha, "project", "alpha"],
+        [targetPaths.userAlpha, "user", "alpha"],
+      ],
+    );
   });
 });
 
@@ -3155,7 +3316,7 @@ for (const { expectedNotification, shape, title } of [
   });
 }
 
-test("silently retains a failed cache cleanup and converges on retry", async (testContext) => {
+test("silently retains a failed changed-target cache cleanup and preserves later no-effect rows", async (testContext) => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
     const now = new Date("2026-09-01T12:00:00.000Z");
@@ -3164,6 +3325,14 @@ test("silently retains a failed cache cleanup and converges on retry", async (te
     await cp(fixtureMarketplaceDir("valid-marketplace"), marketplaceRoot, { recursive: true });
     await seedPathMarketplace({ cwd, name: "cache-mp", marketplaceRoot });
     const locations = locationsFor("project", cwd);
+    const state = await loadState(locations.extensionRoot);
+    const record = state.marketplaces["cache-mp"];
+    if (record === undefined) {
+      throw new Error("the cache failure fixture has no target marketplace");
+    }
+
+    record.manifestPath = path.join(marketplaceRoot, ".claude-plugin", "before-update.json");
+    await saveState(locations.extensionRoot, state);
     const configBytes = await readFile(locations.configJsonPath, "utf8").catch(() => undefined);
     const pluginCachePath = await locations.pluginCacheFile("cache-mp");
     await mkdir(pluginCachePath, { recursive: true });
@@ -3171,10 +3340,12 @@ test("silently retains a failed cache cleanup and converges on retry", async (te
     await writeFile(residuePath, "cache residue");
     const { ctx, pi, notifications } = makeCtx();
     const git = makeForbiddenGitOps();
+    const completionCache = createCompletionCache();
+    const drop = testContext.mock.method(completionCache, "dropMarketplaceCache");
 
     // act
     await updateMarketplace({
-      completionCache: createCompletionCache(),
+      completionCache,
       ctx,
       pi,
       name: "cache-mp",
@@ -3186,7 +3357,7 @@ test("silently retains a failed cache cleanup and converges on retry", async (te
     const residueAfterFailure = await readFile(residuePath, "utf8");
     await rm(pluginCachePath, { recursive: true, force: true });
     await updateMarketplace({
-      completionCache: createCompletionCache(),
+      completionCache,
       ctx,
       pi,
       name: "cache-mp",
@@ -3212,7 +3383,7 @@ test("silently retains a failed cache cleanup and converges on retry", async (te
       },
     };
     assert.deepStrictEqual(notifications, [
-      { message: "● cache-mp [project] (skipped) {up-to-date}" },
+      { message: "● cache-mp [project] (updated)" },
       { message: "● cache-mp [project] (skipped) {up-to-date}" },
     ]);
     assert.deepStrictEqual(stateAfterFailure, expectedState);
@@ -3224,6 +3395,8 @@ test("silently retains a failed cache cleanup and converges on retry", async (te
       configBytes,
     );
     assert.deepStrictEqual(git.calls, []);
+    assert.strictEqual(drop.mock.callCount(), 1);
+    assert.deepStrictEqual(drop.mock.calls[0]?.arguments, [pluginCachePath, "project", "cache-mp"]);
   });
 });
 
