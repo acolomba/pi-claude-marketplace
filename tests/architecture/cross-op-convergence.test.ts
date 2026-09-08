@@ -54,6 +54,7 @@ import { installPlugin } from "../../extensions/pi-claude-marketplace/orchestrat
 import { createNodeReinstallPlugins } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts";
 import { uninstallPlugin } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
 import { createPluginUpdateOperations } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/update.ts";
+import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { createGitOpsFake } from "../platform/git-ops-fake.ts";
 import { withHermeticEnvironment } from "../platform/hermetic-environment.ts";
 
@@ -182,6 +183,7 @@ const INVOKERS: Record<string, Invoker> = {
   // marketplace remove. remove.test.ts ATTR-06 S3/S4.
   "marketplace remove": async ({ ctx, pi, cwd, mode }) => {
     await removeMarketplace({
+      completionCache: createCompletionCache(),
       ctx,
       pi,
       name: NAME,

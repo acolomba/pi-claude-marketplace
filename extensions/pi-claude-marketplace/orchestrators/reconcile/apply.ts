@@ -216,6 +216,7 @@ async function applyMarketplaceRemoves(
         ctx: opts.ctx,
         pi: opts.pi,
         name: op.marketplace,
+        completionCache: opts.completionCache,
         scope: op.scope,
         cwd: opts.cwd,
         notifications: { mode: "orchestrated" },

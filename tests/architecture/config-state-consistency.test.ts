@@ -372,6 +372,7 @@ test("WB-01 SC#4 (add + remove cascade): post-remove reconcile is a no-op and co
     const { gitOps } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
+    const completionCache = createCompletionCache();
 
     // Add then remove the same marketplace -- the round-trip should leave
     // config + state in their original empty shape.
@@ -385,6 +386,7 @@ test("WB-01 SC#4 (add + remove cascade): post-remove reconcile is a no-op and co
       gitOps,
     });
     await removeMarketplace({
+      completionCache,
       ctx,
       pi,
       name: "valid-marketplace",

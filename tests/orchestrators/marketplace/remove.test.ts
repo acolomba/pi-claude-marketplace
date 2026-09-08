@@ -33,6 +33,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { MarketplaceNotFoundError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
+import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type {
@@ -217,6 +218,7 @@ test("reports an explicit-scope missing marketplace without mutating project sta
 
   // act
   const outcome = await removeMarketplace({
+    completionCache: createCompletionCache(),
     ctx: notification.ctx,
     pi: notification.pi,
     name: "absent",
@@ -247,6 +249,7 @@ test("returns the complete orchestrated missing-marketplace outcome without noti
 
   // act
   const outcome = await removeMarketplace({
+    completionCache: createCompletionCache(),
     ctx: notification.ctx,
     pi: notification.pi,
     name: "absent",
@@ -294,6 +297,7 @@ test("prefers the project marketplace in orchestrated bare form", async (testCon
 
   // act
   const outcome = await removeMarketplace({
+    completionCache: createCompletionCache(),
     ctx: notification.ctx,
     pi: notification.pi,
     name: "shared",
@@ -326,6 +330,7 @@ test("selects the user marketplace in orchestrated bare form when project is abs
 
   // act
   const outcome = await removeMarketplace({
+    completionCache: createCompletionCache(),
     ctx: notification.ctx,
     pi: notification.pi,
     name: "user-only",
@@ -403,6 +408,7 @@ for (const sourceCase of SOURCE_CASES) {
 
     // act
     const outcome = await removeMarketplace({
+      completionCache: createCompletionCache(),
       ctx: notification.ctx,
       pi: notification.pi,
       name: marketplace,
@@ -449,6 +455,7 @@ test("swallows clone garbage-collection failure and safely reports the retry", a
 
   // act
   const firstOutcome = await removeMarketplace({
+    completionCache: createCompletionCache(),
     ctx: firstNotification.ctx,
     pi: firstNotification.pi,
     name: "gc-failure",
@@ -457,6 +464,7 @@ test("swallows clone garbage-collection failure and safely reports the retry", a
   });
   const retryNotification = notificationBoundary(0);
   const retryOutcome = await removeMarketplace({
+    completionCache: createCompletionCache(),
     ctx: retryNotification.ctx,
     pi: retryNotification.pi,
     name: "gc-failure",
@@ -524,6 +532,7 @@ test("retains the source clone when a forward-compatible recorded kind is unavai
 
   // act
   const outcome = await removeMarketplace({
+    completionCache: createCompletionCache(),
     ctx: notification.ctx,
     pi: notification.pi,
     name: marketplace,
@@ -580,6 +589,7 @@ test("sweeps marketplace and plugin declarations from both config layers", async
 
   // act
   const outcome = await removeMarketplace({
+    completionCache: createCompletionCache(),
     ctx: notification.ctx,
     pi: notification.pi,
     name: "remove-me",
@@ -637,6 +647,7 @@ test("leaves a valid unrelated sibling config layer byte-identical", async (test
 
   // act
   await removeMarketplace({
+    completionCache: createCompletionCache(),
     ctx: notification.ctx,
     pi: notification.pi,
     name: "remove-me",
@@ -673,6 +684,7 @@ test("leaves an invalid sibling config layer byte-identical", async (testContext
 
   // act
   await removeMarketplace({
+    completionCache: createCompletionCache(),
     ctx: notification.ctx,
     pi: notification.pi,
     name: "remove-me",
@@ -705,6 +717,7 @@ test("aborts a standalone local remove on invalid target config without leaking 
 
   // act
   const outcome = await removeMarketplace({
+    completionCache: createCompletionCache(),
     ctx: notification.ctx,
     pi: notification.pi,
     name: "invalid-config",
@@ -742,6 +755,7 @@ test("returns an orchestrated invalid-config outcome without notifying or saving
 
   // act
   const outcome = await removeMarketplace({
+    completionCache: createCompletionCache(),
     ctx: notification.ctx,
     pi: notification.pi,
     name: "invalid-config",
@@ -798,6 +812,7 @@ test("propagates config write failure, preserves state, and converges on retry",
   // act
   try {
     await removeMarketplace({
+      completionCache: createCompletionCache(),
       ctx: firstNotification.ctx,
       pi: firstNotification.pi,
       name: "write-failure",
@@ -816,6 +831,7 @@ test("propagates config write failure, preserves state, and converges on retry",
   blockWrite = false;
   const retryNotification = notificationBoundary(1);
   const retryOutcome = await removeMarketplace({
+    completionCache: createCompletionCache(),
     ctx: retryNotification.ctx,
     pi: retryNotification.pi,
     name: "write-failure",
@@ -883,6 +899,7 @@ test("preserves the state record after state-save failure while retaining commit
   // act
   try {
     await removeMarketplace({
+      completionCache: createCompletionCache(),
       ctx: firstNotification.ctx,
       pi: firstNotification.pi,
       name: "state-failure",
@@ -901,6 +918,7 @@ test("preserves the state record after state-save failure while retaining commit
   breakStateSave = false;
   const retryNotification = notificationBoundary(1);
   const retryOutcome = await removeMarketplace({
+    completionCache: createCompletionCache(),
     ctx: retryNotification.ctx,
     pi: retryNotification.pi,
     name: "state-failure",
@@ -1010,6 +1028,7 @@ test("keeps exact partial state and silent cleanup residue before retry converge
 
   // act
   const firstOutcome = await removeMarketplace({
+    completionCache: createCompletionCache(),
     ctx: firstNotification.ctx,
     pi: firstNotification.pi,
     name: marketplace,
@@ -1031,6 +1050,7 @@ test("keeps exact partial state and silent cleanup residue before retry converge
   retry = true;
   const retryNotification = notificationBoundary(1);
   const retryOutcome = await removeMarketplace({
+    completionCache: createCompletionCache(),
     ctx: retryNotification.ctx,
     pi: retryNotification.pi,
     name: marketplace,
@@ -1147,6 +1167,7 @@ test("returns every orchestrated partial row and preserves agent-conflict resour
 
   // act
   const outcome = await removeMarketplace({
+    completionCache: createCompletionCache(),
     ctx: notification.ctx,
     pi: notification.pi,
     name: "orchestrated-partial",
@@ -1207,6 +1228,7 @@ test("reports a concurrent in-lock disappearance as an empty successful removal"
 
   // act
   const outcome = await removeMarketplace({
+    completionCache: createCompletionCache(),
     ctx: notification.ctx,
     pi: notification.pi,
     name: "concurrent",

@@ -99,7 +99,7 @@ export function registerClaudePluginCommand(
     disable: makeEnableDisableHandler(pi, false, hooksRouting),
     import: makeImportHandler(pi, deps, hooksRouting),
     marketplaceAdd: makeAddHandler(pi, deps),
-    marketplaceRemove: makeRemoveHandler(pi),
+    marketplaceRemove: makeRemoveHandler(pi, deps),
     marketplaceList: makeMarketplaceListHandler(pi),
     marketplaceInfo: makeMarketplaceInfoHandler(pi),
     marketplaceUpdate: makeMarketplaceUpdateHandler(pi, deps),

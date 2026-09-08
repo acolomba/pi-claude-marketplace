@@ -40,6 +40,7 @@
 //        await tx.save()  // WR-04: explicit save on the mutating arms.
 //      })
 //   3. POST-STATE cleanup (after guard returns):
+//        - invalidate marketplace names and the target plugin-index cache
 //        - per-plugin data dirs (always)
 //        - marketplace data dir + GitHub clone dir (ONLY when failedPlugins.length === 0; MR-7)
 //        - cleanup failures are SWALLOWED silently per D-18-01.
@@ -55,7 +56,6 @@ import { loadConfig } from "../../persistence/config-io.ts";
 import { deleteMarketplaceConfigEntryWithCascade } from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
-import { dropMarketplaceCache, invalidateMarketplaceNames } from "../../shared/completion-cache.ts";
 import { errorMessage, MarketplaceNotFoundError } from "../../shared/errors.ts";
 import {
   notifyWithContext,
@@ -75,6 +75,7 @@ import {
 
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
+import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type {
   ContentReason,
   PluginFailedMessage,
@@ -135,6 +136,8 @@ export interface RemoveMarketplaceOptions {
   /** Factory `pi` reference -- carries `getAllTools()` for RH-5 soft-dep probes. */
   readonly pi: ToolInventory;
   readonly name: string;
+  /** Lifecycle-owned completion cache shared with the command's readers. */
+  readonly completionCache: CompletionCache;
   /** When omitted, `resolveScopeOrNotifyNotAdded` (standalone) / `resolveScopeOrFailedOutcome` (orchestrated) picks the scope; project takes precedence if found in both. */
   readonly scope?: Scope;
   /** Project-scope cwd (ignored for user scope). */
@@ -594,15 +597,16 @@ async function runPostRemoveCleanup(args: {
   readonly locations: ScopedLocations;
   readonly name: string;
   readonly scope: Scope;
+  readonly completionCache: CompletionCache;
   readonly successfullyUnstaged: readonly string[];
   readonly allPluginsUnstaged: boolean;
   readonly sourceKindAtRecord: RecordedSourceKind | undefined;
 }): Promise<void> {
-  const { locations, name, scope } = args;
+  const { completionCache, locations, name, scope } = args;
 
   try {
-    await invalidateMarketplaceNames(locations.marketplaceNamesCacheFile, scope);
-    await dropMarketplaceCache(await locations.pluginCacheFile(name), scope, name);
+    await completionCache.invalidateMarketplaceNames(locations.marketplaceNamesCacheFile, scope);
+    await completionCache.dropMarketplaceCache(await locations.pluginCacheFile(name), scope, name);
   } catch {
     // D-18-01: cache hygiene is never the primary user-facing path.
   }
@@ -736,6 +740,7 @@ export async function removeMarketplace(
     locations,
     name: opts.name,
     scope: resolved.scope,
+    completionCache: opts.completionCache,
     successfullyUnstaged,
     allPluginsUnstaged: failedPlugins.length === 0,
     sourceKindAtRecord,
