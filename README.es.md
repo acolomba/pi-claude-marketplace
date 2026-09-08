@@ -27,6 +27,7 @@ Esta extensión instala complementos desde los mercados de complementos de Claud
 - Agentes. Requiere [pi-subagents](https://pi.dev/packages/pi-subagents).
 - Hooks (ganchos). Soporte parcial. Para más información, consulta [Compatibilidad de hooks](docs/hooks-compatibility.md).
 - Servidores MCP. Requiere [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter).
+- Workflows (flujos de trabajo). Requiere [@quintinshaw/pi-dynamic-workflows](https://pi.dev/packages/@quintinshaw/pi-dynamic-workflows). Para más información, consulta [Compatibilidad de workflows](docs/workflows-compatibility.md).
 
 Los complementos que contienen componentes no compatibles pueden instalarse parcialmente. Un complemento instalado parcialmente puede no funcionar según lo previsto.
 
@@ -37,6 +38,7 @@ El comando `/claude:plugin` gestiona los mercados y complementos de Claude, como
 - [Pi Coding Agent](https://pi.dev)
 - [pi-subagents](https://pi.dev/packages/pi-subagents) (opcional pero recomendado, `pi install npm:pi-subagents`)
 - [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter) (opcional pero recomendado, `pi install npm:pi-mcp-adapter`)
+- [@quintinshaw/pi-dynamic-workflows](https://pi.dev/packages/@quintinshaw/pi-dynamic-workflows) (opcional pero recomendado, `pi install npm:@quintinshaw/pi-dynamic-workflows`)
 
 ## Uso
 

@@ -27,6 +27,7 @@ This extension installs plugins from Claude plugin marketplaces that contain the
 - Agents. Requires [pi-subagents](https://pi.dev/packages/pi-subagents).
 - Hooks. Partial support. For more information, see [Hook compatibility](docs/hooks-compatibility.md).
 - MCP servers. Requires [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter).
+- Workflows. Requires [@quintinshaw/pi-dynamic-workflows](https://pi.dev/packages/@quintinshaw/pi-dynamic-workflows). For more information, see [Workflow compatibility](docs/workflows-compatibility.md).
 
 Plugins that contain unsupported components can be partially installed. A partially installed plugin may fail to work as intended.
 
@@ -37,6 +38,7 @@ The `/claude:plugin` command manages Claude marketplaces and plugins, like Claud
 - [Pi Coding Agent](https://pi.dev)
 - [pi-subagents](https://pi.dev/packages/pi-subagents) (optional but recommended, `pi install npm:pi-subagents`)
 - [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter) (optional but recommended, `pi install npm:pi-mcp-adapter`)
+- [@quintinshaw/pi-dynamic-workflows](https://pi.dev/packages/@quintinshaw/pi-dynamic-workflows) (optional but recommended, `pi install npm:@quintinshaw/pi-dynamic-workflows`)
 
 ## Usage
 
