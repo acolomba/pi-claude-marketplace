@@ -61,7 +61,7 @@ import { addMarketplace } from "../marketplace/add.ts";
 import { removeMarketplace } from "../marketplace/remove.ts";
 import { setPluginEnabled } from "../plugin/enable-disable.ts";
 import { createNodeInstallPlugin } from "../plugin/install.ts";
-import { uninstallPlugin } from "../plugin/uninstall.ts";
+import { createNodeUninstallPlugin } from "../plugin/uninstall.ts";
 
 import {
   classifyOrchestratorThrow,
@@ -341,6 +341,7 @@ async function applyPluginUninstalls(
   plan: ReconcilePlan,
   outcomes: PerEntryOutcome[],
 ): Promise<void> {
+  const uninstallPlugin = createNodeUninstallPlugin(opts.hooksRouting);
   for (const op of plan.pluginsToUninstall) {
     try {
       const result = await uninstallPlugin({
