@@ -65,11 +65,7 @@ import {
   getPluginToMarketplacesMap,
   splitCompletionInput,
 } from "../../../extensions/pi-claude-marketplace/edge/completions/data.ts";
-import {
-  createCompletionCache,
-  resetCompletionCache,
-  transitionCompletionCache,
-} from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 
 import type {
   LocationsResolver,
@@ -89,6 +85,7 @@ interface ResolverSeed {
 }
 
 interface SeededResolver {
+  readonly completionCache: ReturnType<typeof createCompletionCache>;
   readonly resolver: LocationsResolver;
 }
 
@@ -121,9 +118,9 @@ function installNetworkTrap(t: TestContext): void {
 }
 
 /**
- * One temporary cache root per case. Removal and the process-global
- * completion-cache reset are registered before the module under test runs, so an
- * early throw still unwinds them.
+ * One temporary cache root and completion-cache owner per case. Removal is
+ * registered before the module under test runs, so an early throw still
+ * unwinds the filesystem fixture.
  *
  * No environment is substituted here. Neither `data.ts`, `shared/completion-
  * cache.ts` nor anything else in their import closure reads `process.env`,
@@ -137,10 +134,9 @@ async function seedResolver(
   label: string,
   seed: ResolverSeed,
 ): Promise<SeededResolver> {
-  resetCompletionCache();
+  const completionCache = createCompletionCache();
   const cacheRoot = await mkdtemp(path.join(tmpdir(), `completions-data-${label}-cache-`));
   t.after(async () => {
-    resetCompletionCache();
     await rm(cacheRoot, { recursive: true, force: true });
   });
   installNetworkTrap(t);
@@ -176,7 +172,7 @@ async function seedResolver(
     },
   } satisfies LocationsResolver;
 
-  return { resolver };
+  return { completionCache, resolver };
 }
 
 /** Every derived status the plugin-index cache can carry, in one marketplace. */
@@ -492,7 +488,7 @@ describe("getPluginToMarketplacesMap", () => {
 
   test("install offers the not-yet-installed and not-yet-fetched rows of the default user scope", async (t) => {
     // arrange
-    const { resolver } = await seedResolver(t, "map-install", {
+    const { completionCache, resolver } = await seedResolver(t, "map-install", {
       marketplaces: { user: { official: {} } },
       manifests: { user: { official: everyStatusManifest() } },
     });
@@ -501,7 +497,7 @@ describe("getPluginToMarketplacesMap", () => {
     const candidatesByPlugin = await getPluginToMarketplacesMap(
       "install",
       resolver,
-      transitionCompletionCache,
+      completionCache,
     );
 
     // assert
@@ -514,7 +510,7 @@ describe("getPluginToMarketplacesMap", () => {
   test("install with the partial option trades the not-fetched row for the degraded one", async (t) => {
     // arrange
     const options = { partial: true } satisfies PluginMapOptions;
-    const { resolver } = await seedResolver(t, "map-install-partial", {
+    const { completionCache, resolver } = await seedResolver(t, "map-install-partial", {
       marketplaces: { user: { official: {} } },
       manifests: { user: { official: everyStatusManifest() } },
     });
@@ -523,7 +519,7 @@ describe("getPluginToMarketplacesMap", () => {
     const candidatesByPlugin = await getPluginToMarketplacesMap(
       "install",
       resolver,
-      transitionCompletionCache,
+      completionCache,
       options,
     );
 
@@ -536,7 +532,7 @@ describe("getPluginToMarketplacesMap", () => {
 
   test("install excludes a plugin already recorded in the target scope (CMP-7)", async (t) => {
     // arrange
-    const { resolver } = await seedResolver(t, "map-install-recorded", {
+    const { completionCache, resolver } = await seedResolver(t, "map-install-recorded", {
       marketplaces: { user: { official: { plugins: { held: {} } } } },
       manifests: {
         user: {
@@ -552,7 +548,7 @@ describe("getPluginToMarketplacesMap", () => {
     const candidatesByPlugin = await getPluginToMarketplacesMap(
       "install",
       resolver,
-      transitionCompletionCache,
+      completionCache,
     );
 
     // assert
@@ -562,7 +558,7 @@ describe("getPluginToMarketplacesMap", () => {
   test("a project install reads project marketplaces first and falls back to unshadowed user ones (CMP-8)", async (t) => {
     // arrange
     const options = { targetScope: "project" } satisfies PluginMapOptions;
-    const { resolver } = await seedResolver(t, "map-install-project", {
+    const { completionCache, resolver } = await seedResolver(t, "map-install-project", {
       marketplaces: {
         user: { official: {}, "user-only-mp": {} },
         project: { official: {} },
@@ -580,7 +576,7 @@ describe("getPluginToMarketplacesMap", () => {
     const candidatesByPlugin = await getPluginToMarketplacesMap(
       "install",
       resolver,
-      transitionCompletionCache,
+      completionCache,
       options,
     );
 
@@ -594,7 +590,7 @@ describe("getPluginToMarketplacesMap", () => {
   for (const mode of INSTALLED_INVENTORY_MODES) {
     test(`${mode} offers the whole installed inventory and nothing outside it`, async (t) => {
       // arrange
-      const { resolver } = await seedResolver(t, `map-inventory-${mode}`, {
+      const { completionCache, resolver } = await seedResolver(t, `map-inventory-${mode}`, {
         marketplaces: { user: { official: {} } },
         manifests: { user: { official: everyStatusManifest() } },
       });
@@ -603,7 +599,7 @@ describe("getPluginToMarketplacesMap", () => {
       const candidatesByPlugin = await getPluginToMarketplacesMap(
         mode,
         resolver,
-        transitionCompletionCache,
+        completionCache,
       );
 
       // assert
@@ -620,7 +616,7 @@ describe("getPluginToMarketplacesMap", () => {
   for (const mode of INSTALLED_INVENTORY_MODES) {
     test(`the partial option narrows ${mode} to the rows with a newer candidate`, async (t) => {
       // arrange
-      const { resolver } = await seedResolver(t, `map-inventory-partial-${mode}`, {
+      const { completionCache, resolver } = await seedResolver(t, `map-inventory-partial-${mode}`, {
         marketplaces: { user: { official: {} } },
         manifests: { user: { official: everyStatusManifest() } },
       });
@@ -629,7 +625,7 @@ describe("getPluginToMarketplacesMap", () => {
       const candidatesByPlugin = await getPluginToMarketplacesMap(
         mode,
         resolver,
-        transitionCompletionCache,
+        completionCache,
         {
           partial: true,
         },
@@ -646,7 +642,7 @@ describe("getPluginToMarketplacesMap", () => {
 
   test("an installed-inventory mode without an explicit scope reads project before user", async (t) => {
     // arrange
-    const { resolver } = await seedResolver(t, "map-inventory-both", {
+    const { completionCache, resolver } = await seedResolver(t, "map-inventory-both", {
       marketplaces: { user: { official: {} }, project: { internal: {} } },
       manifests: {
         user: { official: [{ name: "user-side", status: "installed" }] },
@@ -658,7 +654,7 @@ describe("getPluginToMarketplacesMap", () => {
     const candidatesByPlugin = await getPluginToMarketplacesMap(
       "uninstall",
       resolver,
-      transitionCompletionCache,
+      completionCache,
     );
 
     // assert
@@ -670,7 +666,7 @@ describe("getPluginToMarketplacesMap", () => {
 
   test("an explicit target scope narrows an installed-inventory mode to that scope alone", async (t) => {
     // arrange
-    const { resolver } = await seedResolver(t, "map-inventory-scoped", {
+    const { completionCache, resolver } = await seedResolver(t, "map-inventory-scoped", {
       marketplaces: { user: { official: {} }, project: { internal: {} } },
       manifests: {
         user: { official: [{ name: "user-side", status: "installed" }] },
@@ -682,7 +678,7 @@ describe("getPluginToMarketplacesMap", () => {
     const candidatesByPlugin = await getPluginToMarketplacesMap(
       "uninstall",
       resolver,
-      transitionCompletionCache,
+      completionCache,
       {
         targetScope: "user",
       },
@@ -694,7 +690,7 @@ describe("getPluginToMarketplacesMap", () => {
 
   test("fetch offers the warm and warmable rows and ignores the partial option", async (t) => {
     // arrange
-    const { resolver } = await seedResolver(t, "map-fetch", {
+    const { completionCache, resolver } = await seedResolver(t, "map-fetch", {
       marketplaces: { user: { official: {} } },
       manifests: { user: { official: everyStatusManifest() } },
     });
@@ -703,12 +699,12 @@ describe("getPluginToMarketplacesMap", () => {
     const withoutPartial = await getPluginToMarketplacesMap(
       "fetch",
       resolver,
-      transitionCompletionCache,
+      completionCache,
     );
     const withPartial = await getPluginToMarketplacesMap(
       "fetch",
       resolver,
-      transitionCompletionCache,
+      completionCache,
       { partial: true },
     );
 
@@ -724,7 +720,7 @@ describe("getPluginToMarketplacesMap", () => {
 
   test("an explicit target scope narrows fetch to that scope alone", async (t) => {
     // arrange
-    const { resolver } = await seedResolver(t, "map-fetch-scoped", {
+    const { completionCache, resolver } = await seedResolver(t, "map-fetch-scoped", {
       marketplaces: { user: { official: {} }, project: { internal: {} } },
       manifests: {
         user: { official: [{ name: "user-side", status: "remote" }] },
@@ -736,7 +732,7 @@ describe("getPluginToMarketplacesMap", () => {
     const candidatesByPlugin = await getPluginToMarketplacesMap(
       "fetch",
       resolver,
-      transitionCompletionCache,
+      completionCache,
       {
         targetScope: "project",
       },
@@ -748,7 +744,7 @@ describe("getPluginToMarketplacesMap", () => {
 
   test("info spans both scopes with no status filter and ignores the target scope", async (t) => {
     // arrange
-    const { resolver } = await seedResolver(t, "map-info", {
+    const { completionCache, resolver } = await seedResolver(t, "map-info", {
       marketplaces: { user: { official: {} }, project: { internal: {} } },
       manifests: {
         user: {
@@ -765,7 +761,7 @@ describe("getPluginToMarketplacesMap", () => {
     const candidatesByPlugin = await getPluginToMarketplacesMap(
       "info",
       resolver,
-      transitionCompletionCache,
+      completionCache,
       {
         targetScope: "project",
         partial: true,
@@ -782,7 +778,7 @@ describe("getPluginToMarketplacesMap", () => {
 
   test("a plugin carried by two marketplaces records both in visit order", async (t) => {
     // arrange
-    const { resolver } = await seedResolver(t, "map-two-marketplaces", {
+    const { completionCache, resolver } = await seedResolver(t, "map-two-marketplaces", {
       marketplaces: { user: { "mp-a": {}, "mp-b": {} } },
       manifests: {
         user: {
@@ -796,7 +792,7 @@ describe("getPluginToMarketplacesMap", () => {
     const candidatesByPlugin = await getPluginToMarketplacesMap(
       "uninstall",
       resolver,
-      transitionCompletionCache,
+      completionCache,
     );
 
     // assert
@@ -805,7 +801,7 @@ describe("getPluginToMarketplacesMap", () => {
 
   test("a marketplace named in both scopes is recorded once for the same plugin", async (t) => {
     // arrange
-    const { resolver } = await seedResolver(t, "map-same-name-both-scopes", {
+    const { completionCache, resolver } = await seedResolver(t, "map-same-name-both-scopes", {
       marketplaces: { user: { official: {} }, project: { official: {} } },
       manifests: {
         user: { official: [{ name: "held", status: "installed" }] },
@@ -817,7 +813,7 @@ describe("getPluginToMarketplacesMap", () => {
     const candidatesByPlugin = await getPluginToMarketplacesMap(
       "uninstall",
       resolver,
-      transitionCompletionCache,
+      completionCache,
     );
 
     // assert
@@ -826,7 +822,7 @@ describe("getPluginToMarketplacesMap", () => {
 
   test("a marketplace whose manifest cannot be loaded contributes no candidates (TC-8)", async (t) => {
     // arrange
-    const { resolver } = await seedResolver(t, "map-manifest-soft-fail", {
+    const { completionCache, resolver } = await seedResolver(t, "map-manifest-soft-fail", {
       marketplaces: { user: { official: {}, "unreadable-mp": {} } },
       manifests: { user: { official: [{ name: "held", status: "installed" }] } },
     });
@@ -835,7 +831,7 @@ describe("getPluginToMarketplacesMap", () => {
     const candidatesByPlugin = await getPluginToMarketplacesMap(
       "uninstall",
       resolver,
-      transitionCompletionCache,
+      completionCache,
     );
 
     // assert
@@ -845,7 +841,7 @@ describe("getPluginToMarketplacesMap", () => {
   test("a state read failure during the candidate sweep propagates (TC-9)", async (t) => {
     // arrange
     const stateFailure = new Error("state is unreadable for project");
-    const { resolver } = await seedResolver(t, "map-state-fail", {
+    const { completionCache, resolver } = await seedResolver(t, "map-state-fail", {
       marketplaces: { user: { official: {} } },
       manifests: { user: { official: [{ name: "held", status: "installed" }] } },
       stateFailures: { project: stateFailure },
@@ -853,7 +849,7 @@ describe("getPluginToMarketplacesMap", () => {
 
     // act & assert
     await assert.rejects(
-      () => getPluginToMarketplacesMap("uninstall", resolver, transitionCompletionCache),
+      () => getPluginToMarketplacesMap("uninstall", resolver, completionCache),
       (error: unknown) => {
         assert.strictEqual(error, stateFailure);
         return true;
@@ -878,7 +874,7 @@ describe("getPluginRefCompletions", () => {
 
   test("the plugin half offers a fully qualified value for a plugin unique to one marketplace", async (t) => {
     // arrange
-    const { resolver } = await seedResolver(t, "ref-unique", twoMarketplaceSeed());
+    const { completionCache, resolver } = await seedResolver(t, "ref-unique", twoMarketplaceSeed());
 
     // act
     const items = await getPluginRefCompletions(
@@ -886,7 +882,7 @@ describe("getPluginRefCompletions", () => {
       "so",
       "update",
       resolver,
-      transitionCompletionCache,
+      completionCache,
       {
         allowMarketplaceOnly: true,
       },
@@ -898,7 +894,7 @@ describe("getPluginRefCompletions", () => {
 
   test("the plugin half stops at the separator for a plugin carried by two marketplaces", async (t) => {
     // arrange
-    const { resolver } = await seedResolver(t, "ref-multi", twoMarketplaceSeed());
+    const { completionCache, resolver } = await seedResolver(t, "ref-multi", twoMarketplaceSeed());
 
     // act
     const items = await getPluginRefCompletions(
@@ -906,7 +902,7 @@ describe("getPluginRefCompletions", () => {
       "sh",
       "update",
       resolver,
-      transitionCompletionCache,
+      completionCache,
       {
         allowMarketplaceOnly: true,
       },
@@ -918,7 +914,7 @@ describe("getPluginRefCompletions", () => {
 
   test("the plugin half keeps every candidate in map order when the partial token is empty", async (t) => {
     // arrange
-    const { resolver } = await seedResolver(t, "ref-all", twoMarketplaceSeed());
+    const { completionCache, resolver } = await seedResolver(t, "ref-all", twoMarketplaceSeed());
 
     // act
     const items = await getPluginRefCompletions(
@@ -926,7 +922,7 @@ describe("getPluginRefCompletions", () => {
       "",
       "",
       resolver,
-      transitionCompletionCache,
+      completionCache,
       {
         allowMarketplaceOnly: true,
       },
@@ -941,7 +937,7 @@ describe("getPluginRefCompletions", () => {
 
   test("the plugin half matches the partial token case-sensitively, with no case folding", async (t) => {
     // arrange
-    const { resolver } = await seedResolver(t, "ref-case", twoMarketplaceSeed());
+    const { completionCache, resolver } = await seedResolver(t, "ref-case", twoMarketplaceSeed());
 
     // act
     const upperCaseMatches = await getPluginRefCompletions(
@@ -949,7 +945,7 @@ describe("getPluginRefCompletions", () => {
       "SO",
       "update",
       resolver,
-      transitionCompletionCache,
+      completionCache,
       {
         allowMarketplaceOnly: true,
       },
@@ -959,7 +955,7 @@ describe("getPluginRefCompletions", () => {
       "so",
       "update",
       resolver,
-      transitionCompletionCache,
+      completionCache,
       {
         allowMarketplaceOnly: true,
       },
@@ -972,7 +968,7 @@ describe("getPluginRefCompletions", () => {
 
   test("the marketplace half offers only the marketplaces that carry the named plugin", async (t) => {
     // arrange
-    const { resolver } = await seedResolver(t, "ref-mp-half", twoMarketplaceSeed());
+    const { completionCache, resolver } = await seedResolver(t, "ref-mp-half", twoMarketplaceSeed());
 
     // act
     const items = await getPluginRefCompletions(
@@ -980,7 +976,7 @@ describe("getPluginRefCompletions", () => {
       "shared@mp-",
       "update",
       resolver,
-      transitionCompletionCache,
+      completionCache,
       {
         allowMarketplaceOnly: true,
       },
@@ -995,7 +991,7 @@ describe("getPluginRefCompletions", () => {
 
   test("the marketplace half narrows to the typed marketplace prefix", async (t) => {
     // arrange
-    const { resolver } = await seedResolver(t, "ref-mp-half-narrow", twoMarketplaceSeed());
+    const { completionCache, resolver } = await seedResolver(t, "ref-mp-half-narrow", twoMarketplaceSeed());
 
     // act
     const items = await getPluginRefCompletions(
@@ -1003,7 +999,7 @@ describe("getPluginRefCompletions", () => {
       "shared@mp-b",
       "update",
       resolver,
-      transitionCompletionCache,
+      completionCache,
       {
         allowMarketplaceOnly: true,
       },
@@ -1015,7 +1011,7 @@ describe("getPluginRefCompletions", () => {
 
   test("the marketplace half offers nothing for a plugin no marketplace carries", async (t) => {
     // arrange
-    const { resolver } = await seedResolver(t, "ref-mp-half-unknown", twoMarketplaceSeed());
+    const { completionCache, resolver } = await seedResolver(t, "ref-mp-half-unknown", twoMarketplaceSeed());
 
     // act
     const items = await getPluginRefCompletions(
@@ -1023,7 +1019,7 @@ describe("getPluginRefCompletions", () => {
       "ghost@",
       "update",
       resolver,
-      transitionCompletionCache,
+      completionCache,
       {
         allowMarketplaceOnly: true,
       },
@@ -1035,7 +1031,7 @@ describe("getPluginRefCompletions", () => {
 
   test("the bare marketplace form lists each marketplace once when the mode allows it", async (t) => {
     // arrange
-    const { resolver } = await seedResolver(t, "ref-bare", twoMarketplaceSeed());
+    const { completionCache, resolver } = await seedResolver(t, "ref-bare", twoMarketplaceSeed());
 
     // act
     const items = await getPluginRefCompletions(
@@ -1043,7 +1039,7 @@ describe("getPluginRefCompletions", () => {
       "@",
       "update",
       resolver,
-      transitionCompletionCache,
+      completionCache,
       {
         allowMarketplaceOnly: true,
       },
@@ -1058,7 +1054,7 @@ describe("getPluginRefCompletions", () => {
 
   test("the bare marketplace form narrows to the typed marketplace prefix", async (t) => {
     // arrange
-    const { resolver } = await seedResolver(t, "ref-bare-narrow", twoMarketplaceSeed());
+    const { completionCache, resolver } = await seedResolver(t, "ref-bare-narrow", twoMarketplaceSeed());
 
     // act
     const items = await getPluginRefCompletions(
@@ -1066,7 +1062,7 @@ describe("getPluginRefCompletions", () => {
       "@mp-b",
       "update",
       resolver,
-      transitionCompletionCache,
+      completionCache,
       {
         allowMarketplaceOnly: true,
       },
@@ -1082,7 +1078,7 @@ describe("getPluginRefCompletions", () => {
   // result would be `[]` with the flag either way -- nothing would be measured.
   test("the bare marketplace form offers nothing when the mode does not allow it", async (t) => {
     // arrange
-    const { resolver } = await seedResolver(t, "ref-bare-denied", twoMarketplaceSeed());
+    const { completionCache, resolver } = await seedResolver(t, "ref-bare-denied", twoMarketplaceSeed());
 
     // act
     const items = await getPluginRefCompletions(
@@ -1090,7 +1086,7 @@ describe("getPluginRefCompletions", () => {
       "@",
       "update",
       resolver,
-      transitionCompletionCache,
+      completionCache,
       {
         allowMarketplaceOnly: false,
       },
@@ -1102,7 +1098,7 @@ describe("getPluginRefCompletions", () => {
 
   test("the plugin half honours the target scope and the partial option it is given", async (t) => {
     // arrange
-    const { resolver } = await seedResolver(t, "ref-options", {
+    const { completionCache, resolver } = await seedResolver(t, "ref-options", {
       marketplaces: { user: { official: {} }, project: { internal: {} } },
       manifests: {
         user: { official: everyStatusManifest() },
@@ -1116,7 +1112,7 @@ describe("getPluginRefCompletions", () => {
       "",
       "update",
       resolver,
-      transitionCompletionCache,
+      completionCache,
       {
         allowMarketplaceOnly: false,
         targetScope: "user",
