@@ -31,10 +31,6 @@
 //
 // Ownership
 //   createCompletionCache() -- owns one private plugin-index memory map.
-//   transitionCompletionCache -- bounded production owner until root composition.
-//
-// Legacy test seam
-//   resetCompletionCache() -- replace transition plugin memory.
 //
 // TC-8 discriminator: callers wrap manifest-load failures in
 // ManifestSoftFailError; everything else propagates. The cache module cannot
@@ -356,11 +352,6 @@ async function dropMarketplaceCacheWithMemory(
   }
 }
 
-interface CompletionCacheOwner {
-  readonly cache: CompletionCache;
-  resetPluginIndexMemory(): void;
-}
-
 /** Plugin-index cache operations shared by readers and targeted invalidators. */
 export interface CompletionCache {
   /** Resolves one scoped marketplace's plugin-index rows. */
@@ -379,9 +370,10 @@ export interface CompletionCache {
   invalidateMarketplaceNames(marketplaceNamesCachePath: string, scope: Scope): Promise<void>;
 }
 
-function createCompletionCacheOwner(): CompletionCacheOwner {
+/** Creates one CompletionCache with private plugin-index memory. */
+export function createCompletionCache(): CompletionCache {
   const memPluginIndex = new Map<string, PluginIndexMemoryEntry>();
-  const cache: CompletionCache = {
+  return {
     getPluginIndex: (pluginCachePath, scope, marketplace, rebuild, options) =>
       getPluginIndexWithMemory(
         memPluginIndex,
@@ -399,71 +391,4 @@ function createCompletionCacheOwner(): CompletionCacheOwner {
     invalidateMarketplaceNames: (marketplaceNamesCachePath) =>
       invalidateMarketplaceNamesFile(marketplaceNamesCachePath),
   };
-
-  return {
-    cache,
-    resetPluginIndexMemory(): void {
-      memPluginIndex.clear();
-    },
-  };
-}
-
-/** Creates one CompletionCache with private plugin-index memory. */
-export function createCompletionCache(): CompletionCache {
-  return createCompletionCacheOwner().cache;
-}
-
-const transitionCompletionCacheOwner = createCompletionCacheOwner();
-
-/**
- * Bounded production cache used until Plan 05-12 moves ownership to the
- * extension root.
- */
-export const transitionCompletionCache: CompletionCache = transitionCompletionCacheOwner.cache;
-
-/** Resolves plugin-index rows through the bounded production cache. */
-export async function getPluginIndex(
-  pluginCachePath: string,
-  scope: Scope,
-  marketplace: string,
-  rebuild: () => Promise<readonly PluginIndexRow[]>,
-  options?: GetPluginIndexOptions,
-): Promise<readonly PluginIndexRow[]> {
-  return transitionCompletionCache.getPluginIndex(
-    pluginCachePath,
-    scope,
-    marketplace,
-    rebuild,
-    options,
-  );
-}
-
-/** Removes one bounded-production plugin-index entry from memory. */
-export function invalidateMarketplaceCache(scope: Scope, marketplace: string): void {
-  transitionCompletionCache.invalidateMarketplaceCache(scope, marketplace);
-}
-
-/** Removes one bounded-production plugin-index entry from memory and disk. */
-export async function dropMarketplaceCache(
-  pluginCachePath: string,
-  scope: Scope,
-  marketplace: string,
-): Promise<void> {
-  await transitionCompletionCache.dropMarketplaceCache(pluginCachePath, scope, marketplace);
-}
-
-/** Removes marketplace-name disk state through the bounded production cache. */
-export async function invalidateMarketplaceNames(
-  marketplaceNamesCachePath: string,
-  scope: Scope,
-): Promise<void> {
-  await transitionCompletionCache.invalidateMarketplaceNames(marketplaceNamesCachePath, scope);
-}
-
-/**
- * Clears legacy transition memory for callers not migrated to cache ownership.
- * Plan 05-31 removes this surface after its caller census reaches zero.
- */
-export function resetCompletionCache(): void {
-  transitionCompletionCacheOwner.resetPluginIndexMemory();
 }

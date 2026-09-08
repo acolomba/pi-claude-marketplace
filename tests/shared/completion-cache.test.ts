@@ -6,14 +6,9 @@ import { describe, test } from "node:test";
 
 import {
   createCompletionCache,
-  dropMarketplaceCache,
-  getPluginIndex,
-  invalidateMarketplaceCache,
-  invalidateMarketplaceNames,
   ManifestSoftFailError,
   MARKETPLACE_NAMES_CACHE_SCHEMA,
   PLUGIN_INDEX_CACHE_SCHEMA,
-  resetCompletionCache,
 } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 
 import type {
@@ -167,17 +162,18 @@ describe("getPluginIndex", () => {
     const cachePath = path.join(directory, "nested", "plugin-index.json");
     const scope = "user";
     const marketplace = "cold-index";
+    const cache = createCompletionCache();
     const expectedRows = [
       { name: "alpha", status: "installed", version: "1.0.0" },
       { name: "beta", status: "available" },
     ] satisfies PluginIndexRow[];
     t.after(async () => {
-      invalidateMarketplaceCache(scope, marketplace);
+      cache.invalidateMarketplaceCache(scope, marketplace);
       await rm(directory, { recursive: true, force: true });
     });
 
     // act
-    const rows = await getPluginIndex(cachePath, scope, marketplace, () =>
+    const rows = await cache.getPluginIndex(cachePath, scope, marketplace, () =>
       Promise.resolve(expectedRows),
     );
     const persisted = JSON.parse(await readFile(cachePath, "utf8")) as Record<string, unknown>;
@@ -209,14 +205,15 @@ describe("getPluginIndex", () => {
     const cachePath = path.join(directory, "plugin-index.json");
     const scope = "project";
     const marketplace = "warm-index";
+    const cache = createCompletionCache();
     let clock = 1_000_000;
     const options = { now: () => clock } satisfies GetPluginIndexOptions;
     const expectedRows = [{ name: "memory-row", status: "remote" }] satisfies PluginIndexRow[];
     t.after(async () => {
-      invalidateMarketplaceCache(scope, marketplace);
+      cache.invalidateMarketplaceCache(scope, marketplace);
       await rm(directory, { recursive: true, force: true });
     });
-    await getPluginIndex(
+    await cache.getPluginIndex(
       cachePath,
       scope,
       marketplace,
@@ -227,7 +224,7 @@ describe("getPluginIndex", () => {
     clock += 599_999;
 
     // act
-    const rows = await getPluginIndex(
+    const rows = await cache.getPluginIndex(
       cachePath,
       scope,
       marketplace,
@@ -245,12 +242,13 @@ describe("getPluginIndex", () => {
     const cachePath = path.join(directory, "plugin-index.json");
     const scope = "user";
     const marketplace = "disk-index";
+    const cache = createCompletionCache();
     const clock = Date.parse("2026-08-29T12:00:00.000Z");
     const expectedRows = [
       { name: "disk-row", status: "upgradable", version: "2.0.0" },
     ] satisfies PluginIndexRow[];
     t.after(async () => {
-      invalidateMarketplaceCache(scope, marketplace);
+      cache.invalidateMarketplaceCache(scope, marketplace);
       await rm(directory, { recursive: true, force: true });
     });
     await writeFile(
@@ -260,7 +258,7 @@ describe("getPluginIndex", () => {
     );
 
     // act
-    const rows = await getPluginIndex(
+    const rows = await cache.getPluginIndex(
       cachePath,
       scope,
       marketplace,
@@ -278,18 +276,19 @@ describe("getPluginIndex", () => {
     const cachePath = path.join(directory, "plugin-index.json");
     const scope = "project";
     const marketplace = "poison-index";
+    const cache = createCompletionCache();
     t.after(async () => {
-      invalidateMarketplaceCache(scope, marketplace);
+      cache.invalidateMarketplaceCache(scope, marketplace);
       await rm(directory, { recursive: true, force: true });
     });
 
     // act
-    const firstRows = await getPluginIndex(cachePath, scope, marketplace, () =>
+    const firstRows = await cache.getPluginIndex(cachePath, scope, marketplace, () =>
       Promise.reject(new ManifestSoftFailError(new Error("manifest missing"))),
     );
     const persisted = JSON.parse(await readFile(cachePath, "utf8")) as Record<string, unknown>;
-    invalidateMarketplaceCache(scope, marketplace);
-    const secondRows = await getPluginIndex(cachePath, scope, marketplace, () =>
+    cache.invalidateMarketplaceCache(scope, marketplace);
+    const secondRows = await cache.getPluginIndex(cachePath, scope, marketplace, () =>
       Promise.reject(new Error("persisted poison rebuilt")),
     );
 
@@ -316,15 +315,16 @@ describe("getPluginIndex", () => {
     const cachePath = path.join(directory, "plugin-index.json");
     const scope = "user";
     const marketplace = "unexpected-error-index";
+    const cache = createCompletionCache();
     const rebuildError = new Error("state document corrupt");
     t.after(async () => {
-      invalidateMarketplaceCache(scope, marketplace);
+      cache.invalidateMarketplaceCache(scope, marketplace);
       await rm(directory, { recursive: true, force: true });
     });
 
     // act & assert
     await assert.rejects(
-      () => getPluginIndex(cachePath, scope, marketplace, () => Promise.reject(rebuildError)),
+      () => cache.getPluginIndex(cachePath, scope, marketplace, () => Promise.reject(rebuildError)),
       (error: unknown) => error === rebuildError,
     );
   });
@@ -336,12 +336,13 @@ describe("getPluginIndex", () => {
       const cachePath = path.join(directory, "plugin-index.json");
       const scope = "project";
       const marketplace = `schema-${schemaVersion}-index`;
+      const cache = createCompletionCache();
       const clock = Date.parse("2026-08-29T12:00:00.000Z");
       const expectedRows = [
         { name: "rebuilt-row", status: "partially-installed" },
       ] satisfies PluginIndexRow[];
       t.after(async () => {
-        invalidateMarketplaceCache(scope, marketplace);
+        cache.invalidateMarketplaceCache(scope, marketplace);
         await rm(directory, { recursive: true, force: true });
       });
       await writeFile(
@@ -351,7 +352,7 @@ describe("getPluginIndex", () => {
       );
 
       // act
-      const rows = await getPluginIndex(
+      const rows = await cache.getPluginIndex(
         cachePath,
         scope,
         marketplace,
@@ -389,16 +390,17 @@ describe("getPluginIndex", () => {
       const cachePath = path.join(directory, "plugin-index.json");
       const scope = "user";
       const marketplace = `${name.replaceAll(" ", "-")}-index`;
+      const cache = createCompletionCache();
       const clock = Date.parse("2026-08-29T12:00:00.000Z");
       const expectedRows = [{ name: "valid-row", status: "available" }] satisfies PluginIndexRow[];
       t.after(async () => {
-        invalidateMarketplaceCache(scope, marketplace);
+        cache.invalidateMarketplaceCache(scope, marketplace);
         await rm(directory, { recursive: true, force: true });
       });
       await writeFile(cachePath, bytes, "utf8");
 
       // act
-      const rows = await getPluginIndex(
+      const rows = await cache.getPluginIndex(
         cachePath,
         scope,
         marketplace,
@@ -436,15 +438,16 @@ describe("getPluginIndex", () => {
       const cachePath = path.join(directory, "plugin-index.json");
       const scope = "project";
       const marketplace = `${name.replaceAll(" ", "-")}-index`;
+      const cache = createCompletionCache();
       const clock = Date.parse("2026-08-29T12:00:00.000Z");
       t.after(async () => {
-        invalidateMarketplaceCache(scope, marketplace);
+        cache.invalidateMarketplaceCache(scope, marketplace);
         await rm(directory, { recursive: true, force: true });
       });
       await writeFile(cachePath, bytes, "utf8");
 
       // act
-      const rows = await getPluginIndex(
+      const rows = await cache.getPluginIndex(
         cachePath,
         scope,
         marketplace,
@@ -480,15 +483,16 @@ describe("getPluginIndex", () => {
       const cachePath = path.join(directory, "plugin-index.json");
       const scope = "user";
       const marketplace = `${elapsed}-memory-ttl-index`;
+      const cache = createCompletionCache();
       let clock = 10_000_000;
       const options = { now: () => clock } satisfies GetPluginIndexOptions;
       const cachedRows = [{ name: "cached-row", status: "installed" }] satisfies PluginIndexRow[];
       const rebuiltRows = [{ name: "rebuilt-row", status: "available" }] satisfies PluginIndexRow[];
       t.after(async () => {
-        invalidateMarketplaceCache(scope, marketplace);
+        cache.invalidateMarketplaceCache(scope, marketplace);
         await rm(directory, { recursive: true, force: true });
       });
-      await getPluginIndex(
+      await cache.getPluginIndex(
         cachePath,
         scope,
         marketplace,
@@ -499,7 +503,7 @@ describe("getPluginIndex", () => {
       clock += elapsed;
 
       // act
-      const rows = await getPluginIndex(
+      const rows = await cache.getPluginIndex(
         cachePath,
         scope,
         marketplace,
@@ -518,11 +522,12 @@ describe("getPluginIndex", () => {
     const cachePath = path.join(directory, "plugin-index.json");
     const scope = "project";
     const marketplace = "file-precision-index";
+    const cache = createCompletionCache();
     const timestamp = Date.parse("2026-08-29T12:00:00.123Z");
     const clock = timestamp + 600_000;
     const expectedRows = [{ name: "precise-row", status: "remote" }] satisfies PluginIndexRow[];
     t.after(async () => {
-      invalidateMarketplaceCache(scope, marketplace);
+      cache.invalidateMarketplaceCache(scope, marketplace);
       await rm(directory, { recursive: true, force: true });
     });
     await writeFile(
@@ -532,7 +537,7 @@ describe("getPluginIndex", () => {
     );
 
     // act
-    const rows = await getPluginIndex(
+    const rows = await cache.getPluginIndex(
       cachePath,
       scope,
       marketplace,
@@ -550,11 +555,12 @@ describe("getPluginIndex", () => {
     const cachePath = path.join(directory, "plugin-index.json");
     const scope = "user";
     const marketplace = "file-stale-index";
+    const cache = createCompletionCache();
     const timestamp = Date.parse("2026-08-29T12:00:00.123Z");
     const clock = timestamp + 600_001;
     const expectedRows = [{ name: "rebuilt-row", status: "upgradable" }] satisfies PluginIndexRow[];
     t.after(async () => {
-      invalidateMarketplaceCache(scope, marketplace);
+      cache.invalidateMarketplaceCache(scope, marketplace);
       await rm(directory, { recursive: true, force: true });
     });
     await writeFile(
@@ -564,7 +570,7 @@ describe("getPluginIndex", () => {
     );
 
     // act
-    const rows = await getPluginIndex(
+    const rows = await cache.getPluginIndex(
       cachePath,
       scope,
       marketplace,
@@ -582,18 +588,19 @@ describe("getPluginIndex", () => {
     const cachePath = path.join(directory, "plugin-index.json");
     const scope = "project";
     const marketplace = "equal-row-order-index";
+    const cache = createCompletionCache();
     const expectedRows = [
       { name: "zeta", status: "available" },
       { name: "alpha", status: "available" },
       { name: "middle", status: "available" },
     ] satisfies PluginIndexRow[];
     t.after(async () => {
-      invalidateMarketplaceCache(scope, marketplace);
+      cache.invalidateMarketplaceCache(scope, marketplace);
       await rm(directory, { recursive: true, force: true });
     });
 
     // act
-    const rows = await getPluginIndex(cachePath, scope, marketplace, () =>
+    const rows = await cache.getPluginIndex(cachePath, scope, marketplace, () =>
       Promise.resolve(expectedRows),
     );
     const persistedRows = (JSON.parse(await readFile(cachePath, "utf8")) as { plugins: unknown[] })
@@ -615,14 +622,15 @@ describe("cache invalidation", () => {
     const directory = await mkdtemp(path.join(os.tmpdir(), "completion-invalidate-names-"));
     const cachePath = path.join(directory, "marketplace-names.json");
     const scope = "user";
+    const cache = createCompletionCache();
     t.after(async () => {
-      await invalidateMarketplaceNames(cachePath, scope);
+      await cache.invalidateMarketplaceNames(cachePath, scope);
       await rm(directory, { recursive: true, force: true });
     });
     await writeFile(cachePath, '{"schemaVersion":2,"names":["before"]}', "utf8");
 
     // act
-    await invalidateMarketplaceNames(cachePath, scope);
+    await cache.invalidateMarketplaceNames(cachePath, scope);
 
     // assert
     await assert.rejects(() => readFile(cachePath, "utf8"), { code: "ENOENT" });
@@ -634,18 +642,19 @@ describe("cache invalidation", () => {
     const cachePath = path.join(directory, "plugin-index.json");
     const scope = "project";
     const marketplace = "invalidate-memory-index";
+    const cache = createCompletionCache();
     const expectedRows = [
       { name: "persisted-row", status: "installed" },
     ] satisfies PluginIndexRow[];
     t.after(async () => {
-      invalidateMarketplaceCache(scope, marketplace);
+      cache.invalidateMarketplaceCache(scope, marketplace);
       await rm(directory, { recursive: true, force: true });
     });
-    await getPluginIndex(cachePath, scope, marketplace, () => Promise.resolve(expectedRows));
+    await cache.getPluginIndex(cachePath, scope, marketplace, () => Promise.resolve(expectedRows));
 
     // act
-    invalidateMarketplaceCache(scope, marketplace);
-    const rows = await getPluginIndex(cachePath, scope, marketplace, () =>
+    cache.invalidateMarketplaceCache(scope, marketplace);
+    const rows = await cache.getPluginIndex(cachePath, scope, marketplace, () =>
       Promise.reject(new Error("memory-only invalidation rebuilt")),
     );
 
@@ -663,17 +672,18 @@ describe("cache invalidation", () => {
     const cachePath = path.join(directory, "plugin-index.json");
     const scope = "user";
     const marketplace = "drop-index";
+    const cache = createCompletionCache();
     t.after(async () => {
-      invalidateMarketplaceCache(scope, marketplace);
+      cache.invalidateMarketplaceCache(scope, marketplace);
       await rm(directory, { recursive: true, force: true });
     });
-    await getPluginIndex(cachePath, scope, marketplace, () =>
+    await cache.getPluginIndex(cachePath, scope, marketplace, () =>
       Promise.resolve([{ name: "before", status: "installed" }]),
     );
 
     // act
-    await dropMarketplaceCache(cachePath, scope, marketplace);
-    const rows = await getPluginIndex(cachePath, scope, marketplace, () =>
+    await cache.dropMarketplaceCache(cachePath, scope, marketplace);
+    const rows = await cache.getPluginIndex(cachePath, scope, marketplace, () =>
       Promise.resolve([{ name: "after", status: "available" }]),
     );
 
@@ -686,10 +696,11 @@ describe("cache invalidation", () => {
     const directory = await mkdtemp(path.join(os.tmpdir(), "completion-invalidate-names-missing-"));
     const cachePath = path.join(directory, "missing.json");
     const scope = "project";
+    const cache = createCompletionCache();
     t.after(() => rm(directory, { recursive: true, force: true }));
 
     // act
-    await invalidateMarketplaceNames(cachePath, scope);
+    await cache.invalidateMarketplaceNames(cachePath, scope);
 
     // assert
     await assert.rejects(() => readFile(cachePath, "utf8"), { code: "ENOENT" });
@@ -699,11 +710,12 @@ describe("cache invalidation", () => {
     // arrange
     const directory = await mkdtemp(path.join(os.tmpdir(), "completion-invalidate-names-error-"));
     const scope = "user";
+    const cache = createCompletionCache();
     t.after(() => rm(directory, { recursive: true, force: true }));
 
     // act & assert
     await assert.rejects(
-      () => invalidateMarketplaceNames(directory, scope),
+      () => cache.invalidateMarketplaceNames(directory, scope),
       (error: unknown) => {
         assert.ok(error instanceof Error);
         assert.notStrictEqual((error as NodeJS.ErrnoException).code, "ENOENT");
@@ -718,13 +730,14 @@ describe("cache invalidation", () => {
     const cachePath = path.join(directory, "missing.json");
     const scope = "project";
     const marketplace = "missing-drop-index";
+    const cache = createCompletionCache();
     t.after(async () => {
-      invalidateMarketplaceCache(scope, marketplace);
+      cache.invalidateMarketplaceCache(scope, marketplace);
       await rm(directory, { recursive: true, force: true });
     });
 
     // act
-    await dropMarketplaceCache(cachePath, scope, marketplace);
+    await cache.dropMarketplaceCache(cachePath, scope, marketplace);
 
     // assert
     await assert.rejects(() => readFile(cachePath, "utf8"), { code: "ENOENT" });
@@ -735,14 +748,15 @@ describe("cache invalidation", () => {
     const directory = await mkdtemp(path.join(os.tmpdir(), "completion-drop-plugin-error-"));
     const scope = "user";
     const marketplace = "unlink-error-index";
+    const cache = createCompletionCache();
     t.after(async () => {
-      invalidateMarketplaceCache(scope, marketplace);
+      cache.invalidateMarketplaceCache(scope, marketplace);
       await rm(directory, { recursive: true, force: true });
     });
 
     // act & assert
     await assert.rejects(
-      () => dropMarketplaceCache(directory, scope, marketplace),
+      () => cache.dropMarketplaceCache(directory, scope, marketplace),
       (error: unknown) => {
         assert.ok(error instanceof Error);
         assert.notStrictEqual((error as NodeJS.ErrnoException).code, "ENOENT");
@@ -751,28 +765,4 @@ describe("cache invalidation", () => {
     );
   });
 
-  test("resetting the completion cache clears transition plugin memory", async (t) => {
-    // arrange
-    const directory = await mkdtemp(path.join(os.tmpdir(), "completion-reset-"));
-    const pluginPath = path.join(directory, "plugin-index.json");
-    const scope = "project";
-    const marketplace = "reset-index";
-    t.after(async () => {
-      invalidateMarketplaceCache(scope, marketplace);
-      await rm(directory, { recursive: true, force: true });
-    });
-    await getPluginIndex(pluginPath, scope, marketplace, () =>
-      Promise.resolve([{ name: "before-reset", status: "installed" }]),
-    );
-    await rm(pluginPath);
-
-    // act
-    resetCompletionCache();
-    const rows = await getPluginIndex(pluginPath, scope, marketplace, () =>
-      Promise.resolve([{ name: "after-reset", status: "available" }]),
-    );
-
-    // assert
-    assert.deepStrictEqual(rows, [{ name: "after-reset", status: "available" }]);
-  });
 });
