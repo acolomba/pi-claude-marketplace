@@ -1,7 +1,8 @@
 import { parsePluginSource, samePlannedSource, sourceLogical } from "../../domain/source.ts";
 import { addMarketplace as defaultAddMarketplace } from "../../orchestrators/marketplace/add.ts";
 import {
-  installPlugin as defaultInstallPlugin,
+  createNodeInstallPlugin,
+  type InstallHooksRouting,
   type InstallPluginOptions,
 } from "../../orchestrators/plugin/install.ts";
 import { loadConfig } from "../../persistence/config-io.ts";
@@ -172,6 +173,7 @@ export interface ImportClaudeSettingsOptions {
   readonly pi: ExtensionAPI;
   readonly cwd: string;
   readonly selectedScopes: readonly Scope[];
+  readonly hooksRouting: InstallHooksRouting;
   readonly gitOps?: AddMarketplaceOptions["gitOps"];
   readonly deps?: ImportDeps;
 }
@@ -223,8 +225,9 @@ function addMarketplaceFn(
 
 function installPluginFn(
   deps: ImportDeps | undefined,
+  hooksRouting: InstallHooksRouting,
 ): (opts: InstallPluginOptions) => Promise<InstallPluginOutcome> {
-  return deps?.installPlugin ?? (async (opts) => defaultInstallPlugin(opts));
+  return deps?.installPlugin ?? createNodeInstallPlugin(hooksRouting);
 }
 
 function pluginsForMarketplace(
@@ -685,7 +688,7 @@ async function installOnePlannedPlugin(
   result: MutableImportResult,
   plugin: PlannedPlugin,
 ): Promise<PlannedPluginBucket> {
-  const installPlugin = installPluginFn(opts.deps);
+  const installPlugin = installPluginFn(opts.deps, opts.hooksRouting);
   let outcome: InstallPluginOutcome;
   try {
     outcome = await installPlugin({

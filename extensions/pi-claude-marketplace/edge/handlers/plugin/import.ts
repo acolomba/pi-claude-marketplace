@@ -13,13 +13,11 @@ import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi
 
 const USAGE = "Usage: /claude:plugin import [--scope user|project]";
 
-interface ImportExecutionOptions extends ImportClaudeSettingsOptions {
-  readonly hooksRouting: InstallHooksRouting;
-}
-
 export interface ImportHandlerDeps {
   readonly gitOps: GitOps;
-  readonly importClaudeSettings?: (opts: ImportExecutionOptions) => Promise<ClaudeImportExecutionResult>;
+  readonly importClaudeSettings?: (
+    opts: ImportClaudeSettingsOptions,
+  ) => Promise<ClaudeImportExecutionResult>;
 }
 
 export function makeImportHandler(
@@ -47,7 +45,7 @@ export function makeImportHandler(
       return;
     }
 
-    const options: ImportExecutionOptions = {
+    const options: ImportClaudeSettingsOptions = {
       ctx,
       pi,
       cwd: ctx.cwd,
