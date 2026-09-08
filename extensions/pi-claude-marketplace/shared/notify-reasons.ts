@@ -4,14 +4,14 @@ import type { SoftDepStatus } from "../platform/pi-api.ts";
 /**
  * shared/notify-reasons.ts -- the topic-grouped organization of the closed
  * reasons set (D-09). The byte-critical runtime tuple `REASONS` stays declared
- * in `notify.ts` as the SINGLE source of catalog truth (OUT-08: the 44-entry
+ * in `notify.ts` as the SINGLE source of catalog truth (OUT-08: the 45-entry
  * membership AND order must stay byte-identical for catalog stability); this
  * module reorganizes that closed set into shared topic-grouped enums + a
  * structural completeness proof WITHOUT recomposing the `REASONS` tuple (which
  * would risk reordering). The topic groups below are typed views over the same
  * closed `Reason` literals, so a command module can reference an
  * intent-meaningful group (e.g. the failure-class reasons) instead of the flat
- * 44-entry set.
+ * 45-entry set.
  *
  * D-90-05 is what moved the count from 37 to 38: `"unsupported component"`
  * joined the set as the truthful marker for a dropped component kind that has
@@ -26,7 +26,9 @@ import type { SoftDepStatus } from "../platform/pi-api.ts";
  * D-106-04 appended the dedicated `workflows` reason (43 to 44). WINV-03 /
  * D-109-01 reverses that term (44 to 43). WLIF-06 appends `stale workflow
  * command`, the marker for a retired workflow command the host cannot
- * unregister until a reload (43 to 44).
+ * unregister until a reload (43 to 44). WDEP-04 appends
+ * `requires pi-dynamic-workflows`, the third soft-dep marker, for a row that
+ * staged a workflow in a session with no host workflow engine (44 to 45).
  *
  * The idempotent group keeps an `as const` tuple because `skipSeverity` needs
  * a runtime `Set` to test against; the unsupported and failure groups are
@@ -104,6 +106,8 @@ type UnsupportedReason =
   | "lsp"
   | "requires pi-subagents"
   | "requires pi-mcp"
+  // WDEP-04: the host workflow engine soft-dep marker.
+  | "requires pi-dynamic-workflows"
   | "unsupported source"
   // D-90-05: the truthful marker for a dropped non-carve-out component kind.
   | "unsupported component"

@@ -43,8 +43,8 @@
 //   * a rejection reads `ctx.ui` once, `ctx.cwd` never, and `pi.getAllTools()`
 //     never -- `notifyUsageError` writes straight to the channel;
 //   * a delegating command reads `ctx.ui` once, `ctx.cwd` once, and
-//     `pi.getAllTools()` TWICE -- the cascade runs ONE soft-dependency probe and
-//     that probe reads the tool list twice.
+//     `pi.getAllTools()` THREE times -- the cascade runs ONE soft-dependency
+//     probe and that probe reads the tool list once per companion target.
 //
 // Both scope roots are values this file chose: `<cwd>/.pi` for the project scope
 // and `<HOME>/.pi/agent` for the user scope, with the agent-directory variable
@@ -360,7 +360,7 @@ describe("makeFetchHandler", () => {
       // arrange
       const workspace = await createHermeticWorkspace(t, label);
       await seedBothScopes(workspace);
-      const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+      const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
         value: workspace.cwd,
         reads: 1,
       });
@@ -395,7 +395,7 @@ describe("makeFetchHandler", () => {
       // arrange
       const workspace = await createHermeticWorkspace(t, label);
       await seedBothScopes(workspace);
-      const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+      const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
         value: workspace.cwd,
         reads: 1,
       });

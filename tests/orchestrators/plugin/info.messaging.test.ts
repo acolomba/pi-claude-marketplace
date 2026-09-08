@@ -46,6 +46,7 @@ test("renders a bare skipped row with truly omitted optional fields", () => {
   const probe: SoftDepStatus = {
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: false,
+    workflowEngineLoaded: true,
   };
 
   // act
@@ -73,6 +74,7 @@ test("folds a same-scope skipped row and preserves version and ordered reasons",
   const probe: SoftDepStatus = {
     piSubagentsLoaded: true,
     piMcpAdapterLoaded: true,
+    workflowEngineLoaded: true,
   };
 
   // act
@@ -101,6 +103,7 @@ test("renders a cross-scope skipped row without soft-dependency markers", () => 
   const probe: SoftDepStatus = {
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: false,
+    workflowEngineLoaded: true,
   };
 
   // act

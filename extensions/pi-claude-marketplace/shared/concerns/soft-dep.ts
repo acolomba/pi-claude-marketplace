@@ -3,8 +3,8 @@ import type { Reason } from "../notify.ts";
 
 /**
  * shared/concerns/soft-dep.ts -- the soft-dep marker injection concern (D-01).
- * Owns the `Dependency` literal-union, the two soft-dep marker constants, and
- * the pure `softDepMarkers` helper that maps a per-row declares-flags pair + a
+ * Owns the `Dependency` literal-union, the three soft-dep marker constants, and
+ * the pure `softDepMarkers` helper that maps a per-row declares-flags triple + a
  * threaded `SoftDepStatus` probe to the soft-dep markers to append. The central
  * `composeReasons` (which stays in `notify.ts` as shared presentation
  * vocabulary) delegates its soft-dep branch here.
@@ -19,31 +19,41 @@ import type { Reason } from "../notify.ts";
  */
 
 /**
- * Closed set of dependency probe targets (SNM-06). 2 members, each driving the
+ * Closed set of dependency probe targets (SNM-06). 3 members, each driving the
  * renderer's per-dependency soft-dep probe path (`requires pi-subagents` /
- * `requires pi-mcp` reason emission).
+ * `requires pi-mcp` / `requires pi-dynamic-workflows` reason emission).
  *
  * Spelled out as a literal union rather than a runtime `DEPENDENCIES` tuple:
  * nothing iterates the members at runtime, so the union type alone is the
  * sole declaration site.
  */
-export type Dependency = "agents" | "mcp";
+export type Dependency = "agents" | "mcp" | "workflows";
 
-/** Soft-dep marker literals -- both are REASONS members (closed set). */
+/** Soft-dep marker literals -- all three are REASONS members (closed set). */
 const SOFT_DEP_MARKER_AGENTS: Reason = "requires pi-subagents";
 const SOFT_DEP_MARKER_MCP: Reason = "requires pi-mcp";
 
 /**
+ * WDEP-04: the host workflow engine `@quintinshaw/pi-dynamic-workflows`.
+ * Deliberately NOT spelled `pi-workflows` -- that is the npm name of
+ * `@nicknisi/pi-workflows`, a different engine, so the short form would point
+ * the operator at the wrong package to install.
+ */
+const SOFT_DEP_MARKER_WORKFLOWS: Reason = "requires pi-dynamic-workflows";
+
+/**
  * Pure given the probe result. Returns the soft-dep markers to append, in
- * canonical order (agents before mcp -- byte-critical for the `{<r1>, <r2>}`
- * brace join).
+ * canonical order (agents, then mcp, then workflows -- byte-critical for the
+ * `{<r1>, <r2>}` brace join).
  *
  *  - Appends `SOFT_DEP_MARKER_AGENTS` iff `declaresAgents && !probe.piSubagentsLoaded`.
  *  - Appends `SOFT_DEP_MARKER_MCP` iff `declaresMcp && !probe.piMcpAdapterLoaded`.
+ *  - Appends `SOFT_DEP_MARKER_WORKFLOWS` iff `declaresWorkflows && !probe.workflowEngineLoaded`.
  */
 export function softDepMarkers(
   declaresAgents: boolean,
   declaresMcp: boolean,
+  declaresWorkflows: boolean,
   probe: SoftDepStatus,
 ): readonly Reason[] {
   const markers: Reason[] = [];
@@ -54,6 +64,12 @@ export function softDepMarkers(
 
   if (declaresMcp && !probe.piMcpAdapterLoaded) {
     markers.push(SOFT_DEP_MARKER_MCP);
+  }
+
+  // Appended LAST: the brace join is byte-critical and this order is what the
+  // catalog states pin.
+  if (declaresWorkflows && !probe.workflowEngineLoaded) {
+    markers.push(SOFT_DEP_MARKER_WORKFLOWS);
   }
 
   return markers;

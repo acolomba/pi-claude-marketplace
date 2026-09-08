@@ -510,7 +510,7 @@ describe("applyReconcile", () => {
     await seedState(project, seeded);
     await writeUnder(project.configJsonPath, "{");
     const stateBytes = await readFile(project.stateJsonPath, "utf8");
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -553,7 +553,7 @@ describe("applyReconcile", () => {
     await seedState(project, seeded);
     await writeUnder(project.configJsonPath, "{");
     await writeUnder(project.configLocalJsonPath, JSON.stringify({ schemaVersion: 1, plugins: 7 }));
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -592,7 +592,7 @@ describe("applyReconcile", () => {
     });
     await writeUnder(project.configJsonPath, configBytes({ marketplaces: {} }));
     await writeUnder(project.configLocalJsonPath, JSON.stringify({ schemaVersion: 1, plugins: 7 }));
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -642,7 +642,7 @@ describe("applyReconcile", () => {
         }),
       },
     });
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -686,7 +686,7 @@ describe("applyReconcile", () => {
     t.after(async () => {
       await release();
     });
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -729,7 +729,7 @@ describe("applyReconcile", () => {
       },
     });
     await denyWrites(project.scopeRoot);
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -786,7 +786,7 @@ describe("applyReconcile", () => {
         lastReconciledExtensionVersion: EXTENSION_VERSION,
         marketplaces: {},
       });
-      const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+      const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
       const { gitOps, clonedUrls } = createOfflineGitOps();
 
       // act
@@ -846,7 +846,7 @@ describe("applyReconcile", () => {
       allowedRemoteUrls: ["https://github.com/acme/remote.git"],
       cloneError: unreachable,
     });
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
 
     // act
     await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps });
@@ -903,7 +903,7 @@ describe("applyReconcile", () => {
       path.join(project.skillsTargetDir, "hello-tool", "SKILL.md"),
       "---\nname: hello-tool\n---\n\nbody\n",
     );
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -972,7 +972,7 @@ describe("applyReconcile", () => {
       JSON.stringify({ PreToolUse: [] }),
     );
     await denyWrites(path.join(project.extensionRoot, "hooks", "stuck"));
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -1042,7 +1042,7 @@ describe("applyReconcile", () => {
       JSON.stringify({ PreToolUse: [] }),
     );
     await denyWrites(path.join(project.extensionRoot, "hooks", "stuck"));
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -1103,7 +1103,7 @@ describe("applyReconcile", () => {
       path.join(project.skillsTargetDir, "hello-tool", "SKILL.md"),
       "---\nname: hello-tool\n---\n\nbody\n",
     );
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -1196,7 +1196,7 @@ describe("applyReconcile", () => {
         JSON.stringify({ PreToolUse: [] }),
       );
       await denyWrites(path.join(project.extensionRoot, "hooks", "zulu"));
-      const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+      const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
       const { gitOps, clonedUrls } = createOfflineGitOps();
 
       // act
@@ -1249,7 +1249,7 @@ describe("applyReconcile", () => {
         }),
       },
     });
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -1314,7 +1314,7 @@ describe("applyReconcile", () => {
         }),
       },
     });
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(2, 2);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(2, 3);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -1377,7 +1377,7 @@ describe("applyReconcile", () => {
         }),
       },
     });
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -1421,7 +1421,7 @@ describe("applyReconcile", () => {
         }),
       },
     });
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -1471,7 +1471,7 @@ describe("applyReconcile", () => {
         }),
       },
     });
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(2, 2);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(2, 3);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -1526,7 +1526,7 @@ describe("applyReconcile", () => {
         }),
       },
     });
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -1587,7 +1587,7 @@ describe("applyReconcile", () => {
         }),
       },
     });
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -1662,7 +1662,7 @@ describe("applyReconcile", () => {
           }),
         },
       });
-      const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+      const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
       const { gitOps, clonedUrls } = createOfflineGitOps();
 
       // act
@@ -1723,7 +1723,7 @@ describe("applyReconcile", () => {
         }),
       },
     });
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -1810,7 +1810,7 @@ describe("applyReconcile", () => {
           }),
         },
       });
-      const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+      const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
       const { gitOps, clonedUrls } = createOfflineGitOps();
 
       // act
@@ -1865,7 +1865,7 @@ describe("applyReconcile", () => {
         }),
       },
     });
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -1915,7 +1915,7 @@ describe("applyReconcile", () => {
       },
     };
     await seedState(project, seeded);
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -1986,7 +1986,7 @@ describe("applyReconcile", () => {
       JSON.stringify({ PreToolUse: [] }),
     );
     await denyWrites(path.join(project.extensionRoot, "hooks", "zulu"));
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -2057,7 +2057,7 @@ describe("applyReconcile", () => {
         },
       },
     });
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -2113,7 +2113,7 @@ describe("applyReconcile", () => {
       lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {},
     });
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -2161,7 +2161,7 @@ describe("applyReconcile", () => {
       allowedRemoteUrls: ["https://github.com/acme/proj.git", "https://github.com/acme/user.git"],
       fixtureSourceDir: fixture.marketplaceRoot,
     });
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
 
     // act
     await applyReconcile({ ctx, pi, cwd, gitOps });
@@ -2208,7 +2208,7 @@ describe("applyReconcile", () => {
       lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {},
     });
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -2253,7 +2253,7 @@ describe("applyReconcile", () => {
     };
     await seedState(user, userState);
     const userStateBytes = await readFile(user.stateJsonPath, "utf8");
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -2349,7 +2349,7 @@ describe("applyReconcile", () => {
         }),
       },
     });
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -2441,7 +2441,7 @@ describe("applyReconcile", () => {
         }),
       },
     });
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(2, 2);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(2, 3);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -2493,7 +2493,7 @@ describe("applyReconcile", () => {
     // resolution, which runs before the removal takes its lock and therefore
     // outside its own failure handling.
     raceStateFromRead(t, project, 2, "{ half written");
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -2550,7 +2550,7 @@ describe("applyReconcile", () => {
     // cross-scope target resolution, which runs before the uninstall takes its
     // lock and therefore outside its own failure handling.
     raceStateFromRead(t, project, 2, "{ half written");
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -2650,7 +2650,7 @@ describe("applyReconcile", () => {
     // Reads in order: the planner's locked read, then the removal's own scope
     // resolution. Only the second sees the competitor's result.
     raceStateFromRead(t, project, 2, { ...recorded, marketplaces: {} });
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 3);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act

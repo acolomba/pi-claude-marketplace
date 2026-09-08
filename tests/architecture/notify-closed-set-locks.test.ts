@@ -26,7 +26,7 @@ import {
   STATUS_TOKENS,
 } from "../../extensions/pi-claude-marketplace/shared/notify.ts";
 
-test("OUT-08: REASONS is the closed 44-entry reason set", () => {
+test("OUT-08: REASONS is the closed 45-entry reason set", () => {
   // D-76-08: +1 for the `authentication required` failure-class member (32 -> 33).
   // PURL-06: +1 for the `dangling reference` failure-class member (33 -> 34).
   // MCPR-03 / D-02: +1 for the malformed mcp failure-class member (34 -> 35).
@@ -52,7 +52,10 @@ test("OUT-08: REASONS is the closed 44-entry reason set", () => {
   // WLIF-06: +1 for the `stale workflow command` member -- the marker a retiring
   // verb stamps when a removed workflow's command stays registered until a
   // reload (43 -> 44).
-  assert.equal(REASONS.length, 44);
+  // WDEP-04: +1 for the `requires pi-dynamic-workflows` member -- the third
+  // soft-dep marker, for a row that staged a workflow in a session with no host
+  // workflow engine (44 -> 45).
+  assert.equal(REASONS.length, 45);
 });
 
 test("SNM-02: STATUS_TOKENS is the closed 24-entry token set", () => {

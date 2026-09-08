@@ -71,6 +71,7 @@ test("renders an updated row with ordered reasons and both missing companions", 
   const probe: SoftDepStatus = {
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: false,
+    workflowEngineLoaded: true,
   };
 
   // act
@@ -109,6 +110,7 @@ test("renders a partially-installed row with a folded scope and MCP marker", () 
   const probe: SoftDepStatus = {
     piSubagentsLoaded: true,
     piMcpAdapterLoaded: false,
+    workflowEngineLoaded: true,
   };
 
   // act
@@ -145,6 +147,7 @@ test("renders a skipped row without failure-only metadata", () => {
   const probe: SoftDepStatus = {
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: false,
+    workflowEngineLoaded: true,
   };
 
   // act
@@ -182,6 +185,7 @@ test("renders a failed row while preserving cause and rollback metadata", () => 
   const probe: SoftDepStatus = {
     piSubagentsLoaded: true,
     piMcpAdapterLoaded: true,
+    workflowEngineLoaded: true,
   };
 
   // act

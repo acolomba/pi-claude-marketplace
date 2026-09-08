@@ -58,6 +58,7 @@ describe("INSTALL_CONTEXT", () => {
     const probe = {
       piSubagentsLoaded: false,
       piMcpAdapterLoaded: false,
+      workflowEngineLoaded: true,
     } satisfies SoftDepStatus;
 
     // act
@@ -85,6 +86,7 @@ describe("INSTALL_CONTEXT", () => {
     const probe = {
       piSubagentsLoaded: false,
       piMcpAdapterLoaded: true,
+      workflowEngineLoaded: true,
     } satisfies SoftDepStatus;
 
     // act
@@ -108,6 +110,7 @@ describe("INSTALL_CONTEXT", () => {
     const probe = {
       piSubagentsLoaded: false,
       piMcpAdapterLoaded: false,
+      workflowEngineLoaded: true,
     } satisfies SoftDepStatus;
 
     // act
@@ -130,6 +133,7 @@ describe("INSTALL_CONTEXT", () => {
     const probe = {
       piSubagentsLoaded: false,
       piMcpAdapterLoaded: false,
+      workflowEngineLoaded: true,
     } satisfies SoftDepStatus;
 
     // act
@@ -153,6 +157,7 @@ describe("INSTALL_CONTEXT", () => {
     const probe = {
       piSubagentsLoaded: false,
       piMcpAdapterLoaded: false,
+      workflowEngineLoaded: true,
     } satisfies SoftDepStatus;
 
     // act
@@ -177,6 +182,7 @@ describe("INSTALL_CONTEXT", () => {
     const probe = {
       piSubagentsLoaded: false,
       piMcpAdapterLoaded: false,
+      workflowEngineLoaded: true,
     } satisfies SoftDepStatus;
 
     // act

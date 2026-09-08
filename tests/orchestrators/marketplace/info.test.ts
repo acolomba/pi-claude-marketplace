@@ -57,7 +57,7 @@ function notificationBoundary(expectation?: NotificationExpectation): {
       .once();
     when(() => pi.getAllTools())
       .thenReturn([])
-      .twice();
+      .times(3);
     if (expectation.severity === undefined) {
       when(() => {
         ui.notify(expectation.message);
@@ -93,7 +93,7 @@ function multiNotificationBoundary(expectations: readonly NotificationExpectatio
     .times(expectations.length);
   when(() => pi.getAllTools())
     .thenReturn([])
-    .times(expectations.length * 2);
+    .times(expectations.length * 3);
   for (const expectation of expectations) {
     if (expectation.severity === undefined) {
       when(() => {

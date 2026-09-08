@@ -5,11 +5,12 @@
 // import Pi API types from here so peer-version bumps are auditable.
 //
 // The soft-dependency probes (`hasLoadedPiSubagents` /
-// `hasLoadedPiMcpAdapter` / `softDepStatus`) live here because they
-// inspect `pi.getAllTools()`, which belongs to the external Pi API
-// surface. `softDepStatus(pi)` returns a `SoftDepStatus` snapshot that
+// `hasLoadedPiMcpAdapter` / `hasLoadedWorkflowEngine` / `softDepStatus`) live
+// here because they inspect `pi.getAllTools()`, which belongs to the external
+// Pi API surface. `softDepStatus(pi)` returns a `SoftDepStatus` snapshot that
 // `shared/notify.ts` reads once per render to decide whether to append the
-// `requires pi-subagents` / `requires pi-mcp` markers to a plugin row whose
+// `requires pi-subagents` / `requires pi-mcp` /
+// `requires pi-dynamic-workflows` markers to a plugin row whose
 // `dependencies` declare the kind.
 
 export { getAgentDir } from "@earendil-works/pi-coding-agent";
@@ -120,6 +121,7 @@ export type StopReason = AssistantMessage["stopReason"];
 export interface SoftDepStatus {
   piSubagentsLoaded: boolean;
   piMcpAdapterLoaded: boolean;
+  workflowEngineLoaded: boolean;
 }
 
 /**
@@ -129,6 +131,21 @@ export interface SoftDepStatus {
 export function hasLoadedPiSubagents(pi: ExtensionAPI): boolean {
   try {
     return pi.getAllTools().some((tool) => tool.name === "subagent");
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * WDEP-01: the `@quintinshaw/pi-dynamic-workflows` host engine is loaded iff
+ * `pi.getAllTools()` contains a tool named "workflow_control". The engine
+ * registers BOTH `workflow` and `workflow_control`; `@nicknisi/pi-workflows`
+ * registers only `workflow`, so probing the bare name would report a different
+ * engine as the host. Probe failures degrade to unloaded.
+ */
+export function hasLoadedWorkflowEngine(pi: ExtensionAPI): boolean {
+  try {
+    return pi.getAllTools().some((tool) => tool.name === "workflow_control");
   } catch {
     return false;
   }
@@ -159,5 +176,6 @@ export function softDepStatus(pi: ExtensionAPI): SoftDepStatus {
   return {
     piSubagentsLoaded: hasLoadedPiSubagents(pi),
     piMcpAdapterLoaded: hasLoadedPiMcpAdapter(pi),
+    workflowEngineLoaded: hasLoadedWorkflowEngine(pi),
   };
 }

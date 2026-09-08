@@ -1813,9 +1813,11 @@ function composeInstalledRow(installCtx: InstallCtx, pi: ExtensionAPI): InstallM
   const { plugin } = installCtx;
   const declaresAgents = installCtx.stagedAgentNames.length > 0;
   const declaresMcp = installCtx.stagedMcpServerNames.length > 0;
+  const declaresWorkflows = installCtx.stagedWorkflowNames.length > 0;
 
   // The renderer emits the per-row soft-dep markers (`{requires
-  // pi-subagents}`, `{requires pi-mcp}`) from this list automatically.
+  // pi-subagents}`, `{requires pi-mcp}`, `{requires pi-dynamic-workflows}`)
+  // from this list automatically.
   const dependencies: Dependency[] = [];
   if (declaresAgents) {
     dependencies.push("agents");
@@ -1823,6 +1825,14 @@ function composeInstalledRow(installCtx: InstallCtx, pi: ExtensionAPI): InstallM
 
   if (declaresMcp) {
     dependencies.push("mcp");
+  }
+
+  // WDEP-02: a staged workflow declares the host engine. The envelope is
+  // written whether or not the engine is loaded -- the marker reports that
+  // nothing runs it yet, and the engine's own session_start storage scan picks
+  // it up on the next reload with no reinstall (WDEP-03).
+  if (declaresWorkflows) {
+    dependencies.push("workflows");
   }
 
   // SURF-05 / D-63-08: `{orphan rewake}` fires once per plugin regardless of

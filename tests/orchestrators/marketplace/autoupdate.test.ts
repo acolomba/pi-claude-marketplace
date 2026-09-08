@@ -47,7 +47,7 @@ function notificationBoundary(expectation: NotificationExpectation): {
     .once();
   when(() => pi.getAllTools())
     .thenReturn([])
-    .twice();
+    .times(3);
   if ("message" in expectation) {
     if (expectation.severity === undefined) {
       when(() => {

@@ -272,7 +272,7 @@ function describeClones(clones: readonly GitCloneCall[], stagingRoot: string): G
 test("clones through the injected git port into the user scope at the accepted arity", async (t) => {
   // arrange
   const { cwd, sourceTree, networkCallCount } = await createHermeticScope(t, "accepted");
-  const { ctx, pi, verifyBoundary } = createNotificationBoundary(2, 4, { value: cwd, reads: 1 });
+  const { ctx, pi, verifyBoundary } = createNotificationBoundary(2, 6, { value: cwd, reads: 1 });
   const git = createGitPort(sourceTree);
   const pluginUpdate = mock<PluginUpdate>({ exactParams: true, name: "plugin update" });
   const bootstrapHandler = makeBootstrapHandler(pi, { gitOps: git.gitOps, pluginUpdate });
@@ -393,7 +393,7 @@ for (const { args, label, subject } of [
 test("converts a thrown bootstrap failure into one failed marketplace row carrying no error text", async (t) => {
   // arrange
   const { cwd, sourceTree, networkCallCount } = await createHermeticScope(t, "failure");
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
     value: cwd,
     reads: 1,
   });

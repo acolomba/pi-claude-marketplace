@@ -24,9 +24,11 @@
 //   * a rejection reads `ctx.ui` once, `ctx.cwd` never, and `pi.getAllTools()`
 //     never -- `notifyUsageError` writes straight to the channel;
 //   * a delegating command reads `ctx.ui` once, `ctx.cwd` once, and
-//     `pi.getAllTools()` FOUR times -- the orchestrator's context cascade runs
-//     two soft-dependency probes and each probe reads the tool list twice;
-//   * the handler's own failure conversion reads `pi.getAllTools()` TWICE -- it
+//     `pi.getAllTools()` SIX times -- the orchestrator's context cascade runs
+//     two soft-dependency probes and each probe reads the tool list once per
+//     companion target;
+//   * the handler's own failure conversion reads `pi.getAllTools()` THREE times
+//     -- it
 //     calls `notify()` directly, so it runs one probe.
 //
 // Both scope roots are values this file chose: `<cwd>/.pi` for the project scope,
@@ -473,7 +475,7 @@ for (const { enable, expectedFootprint, label, seedDisabled, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace, seedDisabled);
-    const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 4, {
+    const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 6, {
       value: workspace.cwd,
       reads: 1,
     });
@@ -492,7 +494,7 @@ test("drops a surplus reference token and flips only the first one (ENBL-01)", a
   // arrange
   const workspace = await createHermeticWorkspace(t, "surplus-positional");
   await seedBothScopes(workspace, false);
-  const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 4, {
+  const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 6, {
     value: workspace.cwd,
     reads: 1,
   });
@@ -525,7 +527,7 @@ for (const { args, label, selection } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace, false);
-    const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 4, {
+    const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 6, {
       value: workspace.cwd,
       reads: 1,
     });
@@ -563,7 +565,7 @@ for (const { args, label, placement } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace, false);
-    const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 4, {
+    const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 6, {
       value: workspace.cwd,
       reads: 1,
     });
@@ -618,7 +620,7 @@ for (const { args, enable, expectedMessage, failure, label, reported } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace, false);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3);
     const enableDisableHandler = makeEnableDisableHandler(pi, enable);
 
     // act

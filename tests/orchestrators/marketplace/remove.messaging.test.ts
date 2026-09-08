@@ -77,6 +77,7 @@ test("renders an uninstalled row with truly omitted optional fields", () => {
   const probe: SoftDepStatus = {
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: false,
+    workflowEngineLoaded: true,
   };
 
   // act
@@ -106,6 +107,7 @@ test("folds an uninstalled row scope into its marketplace and preserves its vers
   const probe: SoftDepStatus = {
     piSubagentsLoaded: true,
     piMcpAdapterLoaded: true,
+    workflowEngineLoaded: true,
   };
 
   // act
@@ -135,6 +137,7 @@ test("renders a failed row with truly omitted optional fields", () => {
   const probe: SoftDepStatus = {
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: false,
+    workflowEngineLoaded: true,
   };
 
   // act
@@ -174,6 +177,7 @@ test("renders a cross-scope failed row without consuming its cause or lifecycle 
   const probe: SoftDepStatus = {
     piSubagentsLoaded: true,
     piMcpAdapterLoaded: true,
+    workflowEngineLoaded: true,
   };
 
   // act

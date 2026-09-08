@@ -243,7 +243,7 @@ for (const scope of ["project", "user"] satisfies readonly Scope[]) {
 test("runs the real import workflow when the dependency object declares no delegate", async (t) => {
   // arrange
   const { cwd } = await createHermeticScope(t, "no-delegate");
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
     value: cwd,
     reads: 1,
   });

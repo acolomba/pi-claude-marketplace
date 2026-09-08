@@ -17,123 +17,215 @@ const markerCases = [
       "returns no markers when neither dependency is declared and both companions are unavailable",
     declaresAgents: false,
     declaresMcp: false,
-    probe: { piSubagentsLoaded: false, piMcpAdapterLoaded: false },
+    declaresWorkflows: false,
+    probe: {
+      piSubagentsLoaded: false,
+      piMcpAdapterLoaded: false,
+      workflowEngineLoaded: true,
+    },
     expectedMarkers: [],
   },
   {
     title: "returns the agents marker when only agents are declared and unavailable",
     declaresAgents: true,
     declaresMcp: false,
-    probe: { piSubagentsLoaded: false, piMcpAdapterLoaded: false },
+    declaresWorkflows: false,
+    probe: {
+      piSubagentsLoaded: false,
+      piMcpAdapterLoaded: false,
+      workflowEngineLoaded: true,
+    },
     expectedMarkers: ["requires pi-subagents"],
   },
   {
     title: "returns the MCP marker when only MCP is declared and unavailable",
     declaresAgents: false,
     declaresMcp: true,
-    probe: { piSubagentsLoaded: false, piMcpAdapterLoaded: false },
+    declaresWorkflows: false,
+    probe: {
+      piSubagentsLoaded: false,
+      piMcpAdapterLoaded: false,
+      workflowEngineLoaded: true,
+    },
     expectedMarkers: ["requires pi-mcp"],
   },
   {
     title: "returns agents before MCP when both dependencies are declared and unavailable",
     declaresAgents: true,
     declaresMcp: true,
-    probe: { piSubagentsLoaded: false, piMcpAdapterLoaded: false },
+    declaresWorkflows: false,
+    probe: {
+      piSubagentsLoaded: false,
+      piMcpAdapterLoaded: false,
+      workflowEngineLoaded: true,
+    },
     expectedMarkers: ["requires pi-subagents", "requires pi-mcp"],
   },
   {
     title: "returns no markers when neither dependency is declared and only MCP is loaded",
     declaresAgents: false,
     declaresMcp: false,
-    probe: { piSubagentsLoaded: false, piMcpAdapterLoaded: true },
+    declaresWorkflows: false,
+    probe: {
+      piSubagentsLoaded: false,
+      piMcpAdapterLoaded: true,
+      workflowEngineLoaded: true,
+    },
     expectedMarkers: [],
   },
   {
     title: "returns the agents marker when only agents are declared and only MCP is loaded",
     declaresAgents: true,
     declaresMcp: false,
-    probe: { piSubagentsLoaded: false, piMcpAdapterLoaded: true },
+    declaresWorkflows: false,
+    probe: {
+      piSubagentsLoaded: false,
+      piMcpAdapterLoaded: true,
+      workflowEngineLoaded: true,
+    },
     expectedMarkers: ["requires pi-subagents"],
   },
   {
     title: "returns no markers when only MCP is declared and loaded",
     declaresAgents: false,
     declaresMcp: true,
-    probe: { piSubagentsLoaded: false, piMcpAdapterLoaded: true },
+    declaresWorkflows: false,
+    probe: {
+      piSubagentsLoaded: false,
+      piMcpAdapterLoaded: true,
+      workflowEngineLoaded: true,
+    },
     expectedMarkers: [],
   },
   {
     title: "returns the agents marker when both dependencies are declared and only MCP is loaded",
     declaresAgents: true,
     declaresMcp: true,
-    probe: { piSubagentsLoaded: false, piMcpAdapterLoaded: true },
+    declaresWorkflows: false,
+    probe: {
+      piSubagentsLoaded: false,
+      piMcpAdapterLoaded: true,
+      workflowEngineLoaded: true,
+    },
     expectedMarkers: ["requires pi-subagents"],
   },
   {
     title: "returns no markers when neither dependency is declared and only agents are loaded",
     declaresAgents: false,
     declaresMcp: false,
-    probe: { piSubagentsLoaded: true, piMcpAdapterLoaded: false },
+    declaresWorkflows: false,
+    probe: {
+      piSubagentsLoaded: true,
+      piMcpAdapterLoaded: false,
+      workflowEngineLoaded: true,
+    },
     expectedMarkers: [],
   },
   {
     title: "returns no markers when only agents are declared and loaded",
     declaresAgents: true,
     declaresMcp: false,
-    probe: { piSubagentsLoaded: true, piMcpAdapterLoaded: false },
+    declaresWorkflows: false,
+    probe: {
+      piSubagentsLoaded: true,
+      piMcpAdapterLoaded: false,
+      workflowEngineLoaded: true,
+    },
     expectedMarkers: [],
   },
   {
     title: "returns the MCP marker when only MCP is declared and only agents are loaded",
     declaresAgents: false,
     declaresMcp: true,
-    probe: { piSubagentsLoaded: true, piMcpAdapterLoaded: false },
+    declaresWorkflows: false,
+    probe: {
+      piSubagentsLoaded: true,
+      piMcpAdapterLoaded: false,
+      workflowEngineLoaded: true,
+    },
     expectedMarkers: ["requires pi-mcp"],
   },
   {
     title: "returns the MCP marker when both dependencies are declared and only agents are loaded",
     declaresAgents: true,
     declaresMcp: true,
-    probe: { piSubagentsLoaded: true, piMcpAdapterLoaded: false },
+    declaresWorkflows: false,
+    probe: {
+      piSubagentsLoaded: true,
+      piMcpAdapterLoaded: false,
+      workflowEngineLoaded: true,
+    },
     expectedMarkers: ["requires pi-mcp"],
   },
   {
     title: "returns no markers when neither dependency is declared and both companions are loaded",
     declaresAgents: false,
     declaresMcp: false,
-    probe: { piSubagentsLoaded: true, piMcpAdapterLoaded: true },
+    declaresWorkflows: false,
+    probe: {
+      piSubagentsLoaded: true,
+      piMcpAdapterLoaded: true,
+      workflowEngineLoaded: true,
+    },
     expectedMarkers: [],
   },
   {
     title: "returns no markers when only agents are declared and both companions are loaded",
     declaresAgents: true,
     declaresMcp: false,
-    probe: { piSubagentsLoaded: true, piMcpAdapterLoaded: true },
+    declaresWorkflows: false,
+    probe: {
+      piSubagentsLoaded: true,
+      piMcpAdapterLoaded: true,
+      workflowEngineLoaded: true,
+    },
     expectedMarkers: [],
   },
   {
     title: "returns no markers when only MCP is declared and both companions are loaded",
     declaresAgents: false,
     declaresMcp: true,
-    probe: { piSubagentsLoaded: true, piMcpAdapterLoaded: true },
+    declaresWorkflows: false,
+    probe: {
+      piSubagentsLoaded: true,
+      piMcpAdapterLoaded: true,
+      workflowEngineLoaded: true,
+    },
     expectedMarkers: [],
   },
   {
     title: "returns no markers when both dependencies are declared and both companions are loaded",
     declaresAgents: true,
     declaresMcp: true,
-    probe: { piSubagentsLoaded: true, piMcpAdapterLoaded: true },
+    declaresWorkflows: false,
+    probe: {
+      piSubagentsLoaded: true,
+      piMcpAdapterLoaded: true,
+      workflowEngineLoaded: true,
+    },
     expectedMarkers: [],
   },
 ] as const;
 
-for (const { title, declaresAgents, declaresMcp, probe, expectedMarkers } of markerCases) {
+for (const {
+  title,
+  declaresAgents,
+  declaresMcp,
+  declaresWorkflows,
+  probe,
+  expectedMarkers,
+} of markerCases) {
   test(title, () => {
     // arrange
     const expectedSoftDepMarkers = [...expectedMarkers];
 
     // act
-    const softDependencyMarkers = softDepMarkers(declaresAgents, declaresMcp, probe);
+    const softDependencyMarkers = softDepMarkers(
+      declaresAgents,
+      declaresMcp,
+      declaresWorkflows,
+      probe,
+    );
 
     // assert
     assert.deepStrictEqual(softDependencyMarkers, expectedSoftDepMarkers);

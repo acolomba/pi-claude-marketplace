@@ -199,7 +199,7 @@ function makeCtx(expectedNotifications = 1): {
       .times(expectedNotifications);
     when(() => pi.getAllTools())
       .thenReturn([])
-      .times(expectedNotifications === 2 ? 2 : expectedNotifications * 2);
+      .times(expectedNotifications === 2 ? 3 : expectedNotifications * 3);
     when(() => ui.notify)
       .thenReturn((message, severity) => {
         notifications.push(severity === undefined ? { message } : { message, severity });

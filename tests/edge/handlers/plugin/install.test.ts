@@ -63,9 +63,9 @@
 //   * a rejection reads `ctx.ui` once, `ctx.cwd` never, and `pi.getAllTools()`
 //     never -- `notifyUsageError` writes straight to the channel;
 //   * a delegating command that MATERIALISES reads `ctx.ui` once, `ctx.cwd`
-//     once, and `pi.getAllTools()` FOUR times;
+//     once, and `pi.getAllTools()` SIX times;
 //   * a delegating command that is refused by the install gate, or that lands
-//     disabled, reads `pi.getAllTools()` TWICE.
+//     disabled, reads `pi.getAllTools()` THREE times.
 // The count is a property of the emission the workflow reaches, not of the
 // module, so it is stated per row rather than shared.
 //
@@ -405,21 +405,21 @@ for (const { args, expectedFootprint, label, summary, toolProbes } of [
     args: "degraded@mp",
     label: "matrix-neither",
     summary: "neither downstream flag",
-    toolProbes: 2,
+    toolProbes: 3,
     expectedFootprint: NOTHING_MATERIALIZED,
   },
   {
     args: `degraded@mp ${MAP_MODEL_FLAG}`,
     label: "matrix-map-model",
     summary: "the model-mapping flag alone",
-    toolProbes: 2,
+    toolProbes: 3,
     expectedFootprint: NOTHING_MATERIALIZED,
   },
   {
     args: `degraded@mp ${PARTIAL_FLAG}`,
     label: "matrix-partial",
     summary: "the gate-widening flag alone",
-    toolProbes: 4,
+    toolProbes: 6,
     expectedFootprint: {
       project: EMPTY_SCOPE,
       user: {
@@ -434,7 +434,7 @@ for (const { args, expectedFootprint, label, summary, toolProbes } of [
     args: `degraded@mp ${PARTIAL_FLAG} ${MAP_MODEL_FLAG}`,
     label: "matrix-both",
     summary: "both downstream flags",
-    toolProbes: 4,
+    toolProbes: 6,
     expectedFootprint: {
       project: EMPTY_SCOPE,
       user: {
@@ -529,7 +529,7 @@ for (const { args, expectedFootprint, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 4, {
+    const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 6, {
       value: workspace.cwd,
       reads: 1,
     });
@@ -577,7 +577,7 @@ for (const { args, expectedAgents, label, position } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 4, {
+    const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 6, {
       value: workspace.cwd,
       reads: 1,
     });
@@ -604,7 +604,7 @@ test("honors a scope flag and the scope-target flag supplied together, narrowing
   // arrange
   const workspace = await createHermeticWorkspace(t, "both-selectors");
   await seedBothScopes(workspace);
-  const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 4, {
+  const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 6, {
     value: workspace.cwd,
     reads: 1,
   });
@@ -634,7 +634,7 @@ test("records a plugin declaring itself off by default as disabled, because the 
   // arrange
   const workspace = await createHermeticWorkspace(t, "default-enabled");
   await seedBothScopes(workspace);
-  const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+  const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
     value: workspace.cwd,
     reads: 1,
   });

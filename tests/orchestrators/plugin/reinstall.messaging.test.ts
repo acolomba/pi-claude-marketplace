@@ -85,7 +85,7 @@ function createNotifyHarness(
     .once();
   when(() => pi.getAllTools())
     .thenReturn(toolNames.map(toolInfo))
-    .twice();
+    .times(3);
   if (expected.severity === undefined) {
     when(() => {
       ui.notify(expected.message);

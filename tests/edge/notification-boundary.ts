@@ -3,7 +3,8 @@
 // WR-08: four suites carried byte-identical copies of this factory and its four
 // types. The contract they encode is not theirs -- it belongs to
 // `shared/notify.ts`: `notify()` runs one soft-dependency probe per emission,
-// and that probe reads `pi.getAllTools()` twice. When the probe count changes,
+// and that probe reads `pi.getAllTools()` once per companion target, so three
+// times over the closed `Dependency` set. When the probe count changes,
 // one shared definition breaks once instead of four suites drifting apart, and a
 // drifted `times()` count weakens the IL-2 sizing proof silently rather than
 // failing loudly.
@@ -59,8 +60,9 @@ export interface NotificationBoundary {
  *
  * `toolProbes` counts `pi.getAllTools()` reads, not emissions, and the ratio
  * between the two is NOT fixed. `notify()` takes one soft-dependency probe per
- * emission and each probe reads `getAllTools()` twice, so a case whose emissions
- * all go through `notify()` states `emissions * 2`. Three paths break that
+ * emission and each probe reads `getAllTools()` once per companion target --
+ * three times over the closed `Dependency` set -- so a case whose emissions all
+ * go through `notify()` states `emissions * 3`. Three paths break that
  * arithmetic:
  *
  * - `notifyUsageError` writes straight to `ctx.ui.notify` and probes nothing, so
@@ -79,8 +81,8 @@ export interface NotificationBoundary {
  * IL-2 sizing proof this file exists to protect goes with it. The count is stated
  * rather than derived because the paths disagree, and a wrong default fails naming
  * the probe instead of the mistake. The probe reports no companion extension
- * loaded, which is what makes a row's declared agent and MCP dependencies visible
- * as markers.
+ * loaded, which is what makes a row's declared agent, MCP and workflow
+ * dependencies visible as markers.
  *
  * `cwd` is stated only when the case's path forwards it. An edge handler reads
  * `ctx.cwd` once on the path that reaches its orchestrator and never on a

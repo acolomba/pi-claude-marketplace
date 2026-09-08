@@ -4920,14 +4920,14 @@ test("CLASS-01 / D-86-01: installed row renders `(installed) {malformed skill}` 
   ]);
 });
 
-type Probe = Parameters<typeof composeReasons>[3];
+type Probe = Parameters<typeof composeReasons>[4];
 
-function bothLoadedProbe(): Probe {
-  return { piSubagentsLoaded: true, piMcpAdapterLoaded: true };
+function allLoadedProbe(): Probe {
+  return { piSubagentsLoaded: true, piMcpAdapterLoaded: true, workflowEngineLoaded: true };
 }
 
-function neitherLoadedProbe(): Probe {
-  return { piSubagentsLoaded: false, piMcpAdapterLoaded: false };
+function noneLoadedProbe(): Probe {
+  return { piSubagentsLoaded: false, piMcpAdapterLoaded: false, workflowEngineLoaded: false };
 }
 
 test("closed notification constants preserve exact public values", () => {
@@ -5005,7 +5005,7 @@ test("closed notification constants preserve exact public values", () => {
     "partially-available",
     "remote",
   ]);
-  assert.equal(REASONS.length, 44);
+  assert.equal(REASONS.length, 45);
 });
 
 for (const { name, input, expected } of [
@@ -5159,13 +5159,14 @@ test("composeVersionArrow renders complete version bytes on both sides", () => {
   assert.equal(arrow, expectedArrow);
 });
 
-for (const { name, reasons, agents, mcp, probe, expected } of [
+for (const { name, reasons, agents, mcp, workflows, probe, expected } of [
   {
     name: "omits an empty reasons block",
     reasons: undefined,
     agents: false,
     mcp: false,
-    probe: bothLoadedProbe(),
+    workflows: false,
+    probe: allLoadedProbe(),
     expected: "",
   },
   {
@@ -5173,7 +5174,8 @@ for (const { name, reasons, agents, mcp, probe, expected } of [
     reasons: ["not found", "permission denied"] satisfies readonly Reason[],
     agents: false,
     mcp: false,
-    probe: bothLoadedProbe(),
+    workflows: false,
+    probe: allLoadedProbe(),
     expected: "{not found, permission denied}",
   },
   {
@@ -5181,7 +5183,8 @@ for (const { name, reasons, agents, mcp, probe, expected } of [
     reasons: ["not found"] satisfies readonly Reason[],
     agents: true,
     mcp: true,
-    probe: neitherLoadedProbe(),
+    workflows: false,
+    probe: noneLoadedProbe(),
     expected: "{not found, requires pi-subagents, requires pi-mcp}",
   },
 ] as const) {
@@ -5190,7 +5193,7 @@ for (const { name, reasons, agents, mcp, probe, expected } of [
     const expectedReasons = expected;
 
     // act
-    const renderedReasons = composeReasons(reasons, agents, mcp, probe);
+    const renderedReasons = composeReasons(reasons, agents, mcp, workflows, probe);
 
     // assert
     assert.equal(renderedReasons, expectedReasons);
@@ -5207,7 +5210,7 @@ test("pluginRow composes scope, version, label, and reasons exactly", () => {
     { name: "alpha", scope: "project", version: "1.0.0", reasons: ["not found"] },
     "user",
     "(failed)",
-    bothLoadedProbe(),
+    allLoadedProbe(),
   );
 
   // assert
@@ -5222,7 +5225,7 @@ test("partiallyInstalledRow composes dropped kinds before companion markers", ()
   const row = partiallyInstalledRow(
     { name: "alpha", version: "1.0.0", reasons: ["lsp"], dependencies: ["agents"] },
     "user",
-    neitherLoadedProbe(),
+    noneLoadedProbe(),
   );
 
   // assert
@@ -5241,7 +5244,7 @@ test("installedLikeRow composes an exact transition row", () => {
     "v1.0.0",
     "(installed)",
     ["orphan rewake"],
-    bothLoadedProbe(),
+    allLoadedProbe(),
   );
 
   // assert
@@ -5261,7 +5264,7 @@ for (const { name, row, expected } of [
           severity: "info",
           needsReload: true,
         },
-        bothLoadedProbe(),
+        allLoadedProbe(),
         "user",
       ),
     expected: "○ alpha [project] v1.0.0 (uninstalled)",
@@ -5271,7 +5274,7 @@ for (const { name, row, expected } of [
     row: () =>
       renderAvailableRow(
         { status: "available", name: "alpha", version: "1.0.0" },
-        bothLoadedProbe(),
+        allLoadedProbe(),
         "user",
         ["installs disabled"],
       ),
@@ -5282,7 +5285,7 @@ for (const { name, row, expected } of [
     row: () =>
       renderRemoteRow(
         { status: "remote", name: "alpha", version: "1.0.0" },
-        bothLoadedProbe(),
+        allLoadedProbe(),
         "user",
         ["installs disabled"],
       ),
@@ -5293,7 +5296,7 @@ for (const { name, row, expected } of [
     row: () =>
       renderUnavailableRow(
         { status: "unavailable", name: "alpha", version: "1.0.0", reasons: ["invalid manifest"] },
-        bothLoadedProbe(),
+        allLoadedProbe(),
         "user",
       ),
     expected: "⊘ alpha v1.0.0 (unavailable) {invalid manifest}",
@@ -5303,7 +5306,7 @@ for (const { name, row, expected } of [
     row: () =>
       renderPartiallyAvailableRow(
         { status: "partially-available", name: "alpha", version: "1.0.0", reasons: ["lsp"] },
-        bothLoadedProbe(),
+        allLoadedProbe(),
         "user",
       ),
     expected: "⊖ alpha v1.0.0 (partially-available) {lsp}",
@@ -5321,7 +5324,7 @@ for (const { name, row, expected } of [
           severity: "info",
           needsReload: false,
         },
-        bothLoadedProbe(),
+        allLoadedProbe(),
         "user",
       ),
     expected: "◍ alpha [project] v1.0.0 (disabled) {not in manifest}",
@@ -5557,7 +5560,11 @@ test("emitContextCascade composes controlled rows, a plural tally, and a reload 
     {
       name: "alpha",
       scope: "user",
-      probe: { piSubagentsLoaded: true, piMcpAdapterLoaded: true },
+      probe: {
+        piSubagentsLoaded: true,
+        piMcpAdapterLoaded: true,
+        workflowEngineLoaded: false,
+      },
     },
   ]);
 });

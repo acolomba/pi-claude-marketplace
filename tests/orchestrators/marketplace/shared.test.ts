@@ -270,7 +270,7 @@ function notificationBoundary(expectation?: NotificationExpectation): {
     when(() => ctx.ui).thenReturn(ui);
     when(() => pi.getAllTools())
       .thenReturn([])
-      .twice();
+      .times(3);
     when(() => {
       ui.notify(expectation.message, expectation.severity);
     }).thenReturn(undefined);

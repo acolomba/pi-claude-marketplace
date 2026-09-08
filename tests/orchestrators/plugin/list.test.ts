@@ -87,7 +87,7 @@ function makeCtx(): {
     .once();
   when(() => pi.getAllTools())
     .thenReturn([])
-    .twice();
+    .times(3);
   when(() => ui.notify)
     .thenReturn((message, severity) => {
       notifications.push(severity === undefined ? { message } : { message, severity });
@@ -4408,7 +4408,7 @@ test("listPlugins normalizes a non-Error notification failure before reporting i
       .twice();
     when(() => pi.getAllTools())
       .thenReturn([])
-      .times(4);
+      .times(6);
     when(() => ui.notify)
       .thenReturn((message, severity) => {
         notifyCall += 1;

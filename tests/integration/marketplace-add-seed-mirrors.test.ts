@@ -63,7 +63,7 @@ function notificationBoundary(name: string): NotificationBoundary {
   when(() => ctx.ui).thenReturn(ui);
   when(() => pi.getAllTools())
     .thenReturn([])
-    .twice();
+    .times(3);
   when(() => ui.notify).thenReturn((message, severity) => {
     notifications.push({ message, ...(severity === undefined ? {} : { severity }) });
   });

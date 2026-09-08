@@ -99,7 +99,7 @@ const renderUnavailable: RenderFn<PluginUnavailableMessage> = (p, probe, mpScope
     renderScopeBracket(undefined, mpScope),
     renderVersion(p.version),
     "(unavailable)",
-    composeReasons(p.reasons, false, false, probe),
+    composeReasons(p.reasons, false, false, false, probe),
   ]);
 
 /**

@@ -139,7 +139,7 @@ test("lists every scope project-first when no scope flag narrows the listing", a
   // arrange
   const { cwd } = await createHermeticScope(t, "both-scopes");
   await seedBothScopes(cwd);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
     value: cwd,
     reads: 1,
   });
@@ -161,7 +161,7 @@ for (const { args, label, surplus } of [
     // arrange
     const { cwd } = await createHermeticScope(t, label);
     await seedBothScopes(cwd);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
       value: cwd,
       reads: 1,
     });
@@ -184,7 +184,7 @@ for (const { row, scope } of [
     // arrange
     const { cwd } = await createHermeticScope(t, `scope-${scope}`);
     await seedBothScopes(cwd);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
       value: cwd,
       reads: 1,
     });
@@ -203,7 +203,7 @@ test("drops the scope-target flag as a surplus positional and honors the scope b
   // arrange
   const { cwd } = await createHermeticScope(t, "scope-target");
   await seedBothScopes(cwd);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
     value: cwd,
     reads: 1,
   });

@@ -35,8 +35,8 @@
 //   * a rejection reads `ctx.ui` once, `ctx.cwd` never, and `pi.getAllTools()`
 //     never -- `notifyUsageError` writes straight to the channel;
 //   * a delegating command reads `ctx.ui` once, `ctx.cwd` once, and
-//     `pi.getAllTools()` TWICE -- the cascade runs ONE soft-dependency probe
-//     and that probe reads the tool list twice.
+//     `pi.getAllTools()` THREE times -- the cascade runs ONE soft-dependency
+//     probe and that probe reads the tool list once per companion target.
 //
 // NFR-5, scoped: the fetch flag exists to warm a clone cache, so this surface
 // is offline only while the flag is ABSENT, and the claim is stated that way.
@@ -217,7 +217,7 @@ for (const { args, expectedMessage, label, summary } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
       value: workspace.cwd,
       reads: 1,
     });
@@ -236,7 +236,7 @@ test("reads a git-source plugin from disk alone while the fetch flag is absent, 
   // arrange
   const workspace = await createHermeticWorkspace(t, "offline");
   await seedBothScopes(workspace);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
     value: workspace.cwd,
     reads: 1,
   });
@@ -264,7 +264,7 @@ for (const { args, label, position } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
       value: workspace.cwd,
       reads: 1,
     });

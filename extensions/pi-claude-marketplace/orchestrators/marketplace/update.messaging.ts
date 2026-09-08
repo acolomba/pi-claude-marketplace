@@ -78,6 +78,7 @@ export const UPDATE_CONTEXT = {
           p.reasons,
           p.dependencies.includes("agents"),
           p.dependencies.includes("mcp"),
+          p.dependencies.includes("workflows"),
           probe,
         ),
       ]),

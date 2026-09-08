@@ -243,7 +243,7 @@ for (const { args, expectedFootprint, expectedMessage, selection } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, "delegates");
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
       reads: 1,
       value: workspace.cwd,
     });
@@ -281,7 +281,7 @@ test("removes the first positional alone, so a surplus token drops rather than r
   // arrange
   const workspace = await createHermeticWorkspace(t, "surplus");
   await seedBothScopes(workspace);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
     reads: 1,
     value: workspace.cwd,
   });
@@ -321,7 +321,7 @@ for (const { args, expectedFootprint, expectedNotification, placement } of [
     const workspace = await createHermeticWorkspace(t, "scope-target");
     await seedMarketplace(workspace.cwd, "project", "alpha");
     await seedInvalidLocalConfig(workspace.cwd, "project");
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
       reads: 1,
       value: workspace.cwd,
     });
@@ -341,7 +341,7 @@ test("accepts a scope flag beside the scope-target flag and honors the scope it 
   // arrange
   const workspace = await createHermeticWorkspace(t, "both-selectors");
   await seedBothScopes(workspace);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
     reads: 1,
     value: workspace.cwd,
   });

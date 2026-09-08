@@ -12,11 +12,11 @@ import {
 import type { SoftDepStatus } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
 function allSoftDependenciesLoaded(): SoftDepStatus {
-  return { piMcpAdapterLoaded: true, piSubagentsLoaded: true };
+  return { piMcpAdapterLoaded: true, piSubagentsLoaded: true, workflowEngineLoaded: true };
 }
 
 function noSoftDependenciesLoaded(): SoftDepStatus {
-  return { piMcpAdapterLoaded: false, piSubagentsLoaded: false };
+  return { piMcpAdapterLoaded: false, piSubagentsLoaded: false, workflowEngineLoaded: false };
 }
 
 void ({ name: "plugin", status: "will install" } satisfies PendingMsg);

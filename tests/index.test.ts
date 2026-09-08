@@ -622,7 +622,7 @@ test("reports the scope whose install state it cannot read once as a reconcile f
   // arrange
   const scope = await createHermeticScope(t, "path-warning");
   const statePath = await seedUnreadableState(scope.cwd);
-  const { discover, ctx, notifications, verifyBoundary } = await loadExtension(2, 2);
+  const { discover, ctx, notifications, verifyBoundary } = await loadExtension(2, 3);
   const expectedNotifications: readonly Notification[] = [
     { message: RECONCILE_CASCADE_FOR_UNREADABLE_STATE, severity: "error" },
     {
@@ -660,7 +660,7 @@ test("still answers when the deferred project-scope hydrate fails (NFR-2)", asyn
   // reconcile that never runs is silent and a reconcile with nothing to report
   // is silent too.
   await seedInvalidConfig(scope.cwd);
-  const { discover, ctx, notifications, verifyBoundary } = await loadExtension(1, 2);
+  const { discover, ctx, notifications, verifyBoundary } = await loadExtension(1, 3);
   process.env.PATH = "/usr/bin";
   Reflect.deleteProperty(process.env, "PI_CLAUDE_MARKETPLACE_PATH");
   const refusal = eventRefusingCwdRead(discoverEvent(scope.cwd), CWD_READ_DEFERRED_HYDRATE);
@@ -747,7 +747,7 @@ test("reports an aborted reconcile as one raw error line and still answers (NFR-
   // arrange
   const scope = await createHermeticScope(t, "reconcile-aborted");
   await seedInvalidConfig(scope.cwd);
-  const { discover, ctx, verifyBoundary } = await loadExtension(0, 2);
+  const { discover, ctx, verifyBoundary } = await loadExtension(0, 3);
   const recorded: Notification[] = [];
   let attempts = 0;
   const refusing = contextNotifyingThrough(ctx, (message, severity) => {
@@ -775,7 +775,7 @@ test("still answers when the last-ditch reconcile notification is also refused (
   // arrange
   const scope = await createHermeticScope(t, "last-ditch-refused");
   await seedInvalidConfig(scope.cwd);
-  const { discover, ctx, verifyBoundary } = await loadExtension(0, 2);
+  const { discover, ctx, verifyBoundary } = await loadExtension(0, 3);
   const attempted: Notification[] = [];
   const refusing = contextNotifyingThrough(ctx, refuseEveryNotification(attempted));
   const expectedAttempts: readonly Notification[] = [
@@ -796,7 +796,7 @@ test("still answers when the plugin PATH warning notification is refused (NFR-2)
   // arrange
   const scope = await createHermeticScope(t, "warning-refused");
   const statePath = await seedUnreadableState(scope.cwd);
-  const { discover, ctx, verifyBoundary } = await loadExtension(0, 2);
+  const { discover, ctx, verifyBoundary } = await loadExtension(0, 3);
   const attempted: Notification[] = [];
   const refusing = contextNotifyingThrough(ctx, refuseEveryNotification(attempted));
   const expectedAttempts: readonly Notification[] = [

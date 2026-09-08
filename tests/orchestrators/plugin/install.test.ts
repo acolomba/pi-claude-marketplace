@@ -9648,6 +9648,59 @@ test("WLIF-01: an installed workflow lands as an envelope and the record names i
   });
 });
 
+/**
+ * Install one plugin carrying a single well-formed workflow script in a session
+ * whose tool list is exactly `toolNames`, and return the row the install
+ * rendered.
+ *
+ * The script carries a NAMED `meta` export on purpose: a default-export body
+ * classifies as skipped and writes zero envelopes, so the plugin would declare
+ * no workflow at all and the caller would assert over the wrong subject.
+ */
+async function installWorkflowBearingPlugin(toolNames: readonly string[]): Promise<NotifyRecord> {
+  return withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-workflows-softdep-"));
+    try {
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "hello",
+        workflows: [
+          {
+            sourceName: "greet",
+            body: 'export const meta = { name: "greet", description: "greets" };\n',
+          },
+        ],
+      });
+      const { ctx, pi, notifications } = makeCtx({ toolNames });
+
+      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+
+      const row = notifications[0];
+      assert.ok(row !== undefined);
+      return row;
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+}
+
+test("WDEP-02: a workflow-bearing install names the host engine only when it is absent", async () => {
+  // arrange -- the two sessions differ ONLY in their tool list. A session
+  // exposing `workflow` alone is the `@nicknisi/pi-workflows` shape, which is
+  // not the host engine; `workflow_control` is the discriminator the host
+  // engine registers.
+
+  // act
+  const withoutEngine = await installWorkflowBearingPlugin(["workflow"]);
+  const withEngine = await installWorkflowBearingPlugin(["workflow_control"]);
+
+  // assert
+  assert.match(withoutEngine.message, /\{[^}]*requires pi-dynamic-workflows[^}]*\}/);
+  assert.doesNotMatch(withEngine.message, /requires pi-dynamic-workflows/);
+});
+
 test("WLIF-01: a plugin declaring no workflows records an empty inventory", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-workflows-empty-"));

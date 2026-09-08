@@ -190,7 +190,7 @@ for (const { expectedMessage, flags, selection } of [
     // arrange
     const workspace = await createHermeticWorkspace(t, "delegates");
     await seedBothScopes(workspace);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
       reads: 1,
       value: workspace.cwd,
     });
@@ -246,7 +246,7 @@ test("queries the first positional alone, so a surplus token reaches no second l
   // arrange
   const workspace = await createHermeticWorkspace(t, "surplus");
   await seedBothScopes(workspace);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
     reads: 1,
     value: workspace.cwd,
   });
@@ -264,7 +264,7 @@ test("treats the scope-target flag as the name positional rather than a scope se
   // arrange
   const workspace = await createHermeticWorkspace(t, "scope-target");
   await seedBothScopes(workspace);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 3, {
     reads: 1,
     value: workspace.cwd,
   });

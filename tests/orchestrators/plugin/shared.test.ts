@@ -1753,7 +1753,7 @@ describe("emitMarketplaceNotAdded", () => {
     const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
     when(() => pi.getAllTools())
       .thenReturn([])
-      .twice();
+      .times(3);
     when(() => ctx.ui)
       .thenReturn(ui)
       .once();
@@ -1794,7 +1794,7 @@ describe("emitMarketplaceNotAdded", () => {
     const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
     when(() => pi.getAllTools())
       .thenReturn([])
-      .twice();
+      .times(3);
     when(() => ctx.ui)
       .thenReturn(ui)
       .once();

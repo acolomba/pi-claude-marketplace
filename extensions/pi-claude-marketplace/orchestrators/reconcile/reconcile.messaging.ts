@@ -186,7 +186,7 @@ const renderUninstalled: RenderFn<PluginUninstalledMessage> = (p, probe, mpScope
     renderScopeBracket(p.scope, mpScope),
     renderVersion(p.version),
     "(uninstalled)",
-    composeReasons(undefined, false, false, probe),
+    composeReasons(undefined, false, false, false, probe),
   ]);
 
 /**

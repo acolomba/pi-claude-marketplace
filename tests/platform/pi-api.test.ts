@@ -10,6 +10,7 @@ import {
   getAgentDir,
   hasLoadedPiMcpAdapter,
   hasLoadedPiSubagents,
+  hasLoadedWorkflowEngine,
   parseFrontmatter,
   softDepStatus,
 } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
@@ -66,6 +67,7 @@ void ({
 void ({
   piSubagentsLoaded: true,
   piMcpAdapterLoaded: false,
+  workflowEngineLoaded: false,
 } satisfies PiBoundary.SoftDepStatus);
 void (true satisfies Same<PiBoundary.AgentMessage, PiBoundary.AgentEndEvent["messages"][number]>);
 void (true satisfies Same<
@@ -82,7 +84,7 @@ void ({ content: [{ type: "image", text: "message" }] } satisfies PiBoundary.Too
 void ("manual" satisfies PiBoundary.ResourcesDiscoverEvent["reason"]);
 // @ts-expect-error resource paths are strings
 void ({ skillPaths: [42] } satisfies PiBoundary.ResourcesDiscoverResult);
-// @ts-expect-error soft-dependency status reports both dependencies
+// @ts-expect-error soft-dependency status reports every dependency
 void ({ piSubagentsLoaded: true } satisfies PiBoundary.SoftDepStatus);
 // @ts-expect-error an agent message has a supported role
 void ({ role: "unsupported" } satisfies PiBoundary.AgentMessage);
@@ -343,27 +345,100 @@ describe("hasLoadedPiMcpAdapter", () => {
   });
 });
 
+describe("hasLoadedWorkflowEngine", () => {
+  for (const { tools, expectedLoaded, behavior } of [
+    {
+      behavior: "recognizes the workflow_control tool name",
+      tools: [{ name: "workflow_control" }],
+      expectedLoaded: true,
+    },
+    {
+      // WDEP-01: the discriminating case. `@nicknisi/pi-workflows` registers a
+      // tool named `workflow` and no `workflow_control`, so a bare-name probe
+      // would report that engine as the host.
+      behavior: "rejects a session exposing only the decoy `workflow` tool name",
+      tools: [{ name: "workflow" }],
+      expectedLoaded: false,
+    },
+    {
+      // WDEP-01: the host engine's real session shape -- it registers BOTH
+      // names, so the probe must SELECT on the discriminator while the decoy is
+      // present, not merely reject an absent name.
+      behavior: "recognizes workflow_control beside the decoy `workflow` tool name",
+      tools: [{ name: "workflow" }, { name: "workflow_control" }],
+      expectedLoaded: true,
+    },
+    {
+      behavior: "reports unloaded for an empty tool list",
+      tools: [],
+      expectedLoaded: false,
+    },
+  ]) {
+    test(behavior, () => {
+      // arrange
+      const extensionApi = extensionApiWithTools(tools);
+
+      // act
+      const isLoaded = hasLoadedWorkflowEngine(extensionApi);
+
+      // assert
+      assert.strictEqual(isLoaded, expectedLoaded);
+    });
+  }
+
+  test("degrades to unloaded when tool discovery fails", () => {
+    // arrange
+    const extensionApi = {
+      getAllTools: () => {
+        throw new Error("not ready");
+      },
+    } as unknown as PiBoundary.ExtensionAPI;
+
+    // act
+    const isLoaded = hasLoadedWorkflowEngine(extensionApi);
+
+    // assert
+    assert.strictEqual(isLoaded, false);
+  });
+});
+
 describe("softDepStatus", () => {
   for (const { tools, expectedStatus, behavior } of [
     {
-      behavior: "reports both dependencies as loaded",
-      tools: [{ name: "subagent" }, { name: "mcp" }],
-      expectedStatus: { piSubagentsLoaded: true, piMcpAdapterLoaded: true },
+      behavior: "reports every dependency as loaded",
+      tools: [{ name: "subagent" }, { name: "mcp" }, { name: "workflow_control" }],
+      expectedStatus: {
+        piSubagentsLoaded: true,
+        piMcpAdapterLoaded: true,
+        workflowEngineLoaded: true,
+      },
     },
     {
       behavior: "reports only subagents as loaded",
       tools: [{ name: "subagent" }],
-      expectedStatus: { piSubagentsLoaded: true, piMcpAdapterLoaded: false },
+      expectedStatus: {
+        piSubagentsLoaded: true,
+        piMcpAdapterLoaded: false,
+        workflowEngineLoaded: false,
+      },
     },
     {
       behavior: "reports only the MCP adapter as loaded",
       tools: [{ sourceInfo: { source: "pi-mcp-adapter" } }],
-      expectedStatus: { piSubagentsLoaded: false, piMcpAdapterLoaded: true },
+      expectedStatus: {
+        piSubagentsLoaded: false,
+        piMcpAdapterLoaded: true,
+        workflowEngineLoaded: false,
+      },
     },
     {
-      behavior: "reports both dependencies as unloaded",
+      behavior: "reports every dependency as unloaded",
       tools: [],
-      expectedStatus: { piSubagentsLoaded: false, piMcpAdapterLoaded: false },
+      expectedStatus: {
+        piSubagentsLoaded: false,
+        piMcpAdapterLoaded: false,
+        workflowEngineLoaded: false,
+      },
     },
   ]) {
     test(behavior, () => {
@@ -378,7 +453,7 @@ describe("softDepStatus", () => {
     });
   }
 
-  test("degrades both dependencies to unloaded when discovery fails", () => {
+  test("degrades every dependency to unloaded when discovery fails", () => {
     // arrange
     const extensionApi = {
       getAllTools: () => {
@@ -393,6 +468,7 @@ describe("softDepStatus", () => {
     assert.deepStrictEqual(status, {
       piSubagentsLoaded: false,
       piMcpAdapterLoaded: false,
+      workflowEngineLoaded: false,
     });
   });
 });

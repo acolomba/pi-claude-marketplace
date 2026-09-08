@@ -63,6 +63,7 @@ test("renders an available row without scope, reload state, or description bytes
   const probe: SoftDepStatus = {
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: false,
+    workflowEngineLoaded: true,
   };
 
   // act
@@ -95,6 +96,7 @@ test("renders a disabled row without soft-dependency markers", () => {
   const probe: SoftDepStatus = {
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: false,
+    workflowEngineLoaded: true,
   };
 
   // act
@@ -129,6 +131,7 @@ test("renders a failed row without consuming its cause or lifecycle fields", () 
   const probe: SoftDepStatus = {
     piSubagentsLoaded: true,
     piMcpAdapterLoaded: true,
+    workflowEngineLoaded: true,
   };
 
   // act
@@ -167,6 +170,7 @@ test("renders an installed row with durable and missing-companion reasons", () =
   const probe: SoftDepStatus = {
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: false,
+    workflowEngineLoaded: true,
   };
 
   // act
@@ -202,6 +206,7 @@ test("renders a partially-available row without a scope or reload stamp", () => 
   const probe: SoftDepStatus = {
     piSubagentsLoaded: true,
     piMcpAdapterLoaded: true,
+    workflowEngineLoaded: true,
   };
 
   // act
@@ -233,6 +238,7 @@ test("renders a partially-installed row without inventory soft-dependency marker
   const probe: SoftDepStatus = {
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: false,
+    workflowEngineLoaded: true,
   };
 
   // act
@@ -268,6 +274,7 @@ test("renders a partially-upgradable row in its marketplace scope", () => {
   const probe: SoftDepStatus = {
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: true,
+    workflowEngineLoaded: true,
   };
 
   // act
@@ -298,6 +305,7 @@ test("renders a remote row without scope, reload state, or probe-derived reasons
   const probe: SoftDepStatus = {
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: false,
+    workflowEngineLoaded: true,
   };
 
   // act
@@ -327,6 +335,7 @@ test("renders an unavailable row without a scope or reload stamp", () => {
   const probe: SoftDepStatus = {
     piSubagentsLoaded: false,
     piMcpAdapterLoaded: false,
+    workflowEngineLoaded: true,
   };
 
   // act
@@ -360,6 +369,7 @@ test("renders an upgradable row with cross-scope attribution", () => {
   const probe: SoftDepStatus = {
     piSubagentsLoaded: true,
     piMcpAdapterLoaded: true,
+    workflowEngineLoaded: true,
   };
 
   // act
