@@ -1801,11 +1801,15 @@ test("WINV-01 strict: workflows/ plus themes -> partially-available, unsupported
 // upstream's `workflows` field is path-bearing; if that premise is ever
 // falsified this test is the first thing that has to move.
 //
-// The premise has lineage but no upstream citation: WFLW-02 states the
-// `string | array` shape, and Spike 021 recorded it as assumption A1 at risk
-// grade Low, naming this exact consequence. What is missing is confirmation
-// against Claude Code's own documentation. WDOC-01 owns that confirmation --
-// see the Phase 114 criteria in the workstream ROADMAP.
+// The premise carries an upstream citation. Claude Code 2.1.251's own plugin
+// manifest schema declares `workflows` as a union of a path string and an
+// array of path strings, describing both arms as "Path to a workflows
+// directory or .js file, relative to the plugin root", in a body written
+// identically to the `themes` and `outputStyles` definitions; the published
+// plugins reference at code.claude.com/docs/en/plugins-reference agrees. So
+// the harsher verdict this case pins rests on a confirmed premise rather than
+// an open one. `docs/workflows-compatibility.md` carries the same citation
+// and the two upstream divergences it exposes.
 test("WINV-01 strict: a non-string workflows declaration resolves unavailable", async () => {
   // arrange
   const context = resolveContext(marketplaceRoot, {

@@ -53,7 +53,17 @@ discriminates rather than passing by construction.
 roadmap says the engine "runs seven gates ... the bridge replicates one";
 `WGATE-02` says "the six gate checks". Neither matches the source. At 3.10.1
 `parseWorkflowScript` refuses a script at **nine distinct checks**, and
-`validateMeta` alone carries four messages, for twelve refusal messages in all.
+`validateMeta` alone throws **six** distinct messages, read verbatim at
+`src/workflow.ts:1611-1626`: "meta must be an object", "meta.name must be a
+non-empty string", "meta.description must be a non-empty string", "meta.model
+must be a string", "meta.phases must be an array", and "each meta phase must
+have a title string".
+
+**No total refusal-message count is stated, and none should be.** Check 2's
+message is acorn's own parser text, which varies with the input and cannot be
+enumerated, so any total would be a number with no honest counting rule behind
+it. The nine checks and the six `validateMeta` messages are each countable;
+their sum is not.
 
 In execution order:
 
@@ -67,7 +77,7 @@ In execution order:
 | 6 | declarator is an Identifier named `meta` | meta export must declare `meta` | partly |
 | 7 | declarator has an initializer | meta must have a literal value | partly |
 | 8 | `evaluateLiteral` on the initializer | meta must have a literal value | partly, falls back |
-| 9 | `validateMeta` | `meta.name` / `meta.description` / `meta.model` / `meta.phases` | name only |
+| 9 | `validateMeta` | one of the six messages listed above | name only |
 
 Note the order: **determinism runs before the parse**, so a script that is both
 nondeterministic and unparseable reports the determinism failure.
