@@ -22,6 +22,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import {
+  createNodeSetPluginEnabled,
   createSetPluginEnabled,
   setPluginEnabled,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts";
@@ -987,6 +988,58 @@ test("CR-01: fresh enable succeeds end-to-end against a real on-disk marketplace
       true,
       "config entry should carry enabled:true",
     );
+  });
+});
+
+test("publishes a freshly enabled hook only to the supplied runtime after durable save", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { configPath, statePath } = await seedRealDisabledMarketplace(home, {
+      configSeed: { file: "base", entry: { enabled: false } },
+      hooksJson: {
+        PreToolUse: [{ hooks: [{ command: "echo enabled", type: "command" }], matcher: "" }],
+      },
+      marketplaceName: "mp",
+      pluginName: "foo",
+      version: "1.2.3",
+    });
+    const ownerRuntime = createHooksRuntime();
+    const peerRuntime = createHooksRuntime();
+    const setPluginEnabledForOwner = createNodeSetPluginEnabled(createHooksRouting(ownerRuntime));
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    const outcome = await setPluginEnabledForOwner({
+      ctx,
+      cwd,
+      enable: true,
+      marketplace: "mp",
+      notifications: { mode: "orchestrated" },
+      pi: makePi(),
+      plugin: "foo",
+      scope: "user",
+    });
+
+    // assert
+    assert.deepStrictEqual(outcome, { name: "foo", status: "enabled", version: "1.2.3" });
+    assert.deepStrictEqual(notifications, []);
+    assert.equal(
+      (await loadState(locationsFor("user", cwd).extensionRoot)).marketplaces.mp?.plugins.foo
+        ?.enabled,
+      true,
+    );
+    assert.notEqual(await readFile(statePath, "utf8"), "");
+    assert.equal(isDeclaredEnabled((await readConfig(configPath)).plugins?.["foo@mp"]), false);
+    assert.deepStrictEqual(
+      ownerRuntime.getRoutingBucket("PreToolUse").map((entry) => ({
+        command: entry.config.PreToolUse?.[0]?.hooks[0]?.command,
+        marketplace: entry.marketplace,
+        pluginId: entry.pluginId,
+        scope: entry.scope,
+      })),
+      [{ command: "echo enabled", marketplace: "mp", pluginId: "foo", scope: "user" }],
+    );
+    assert.deepStrictEqual(peerRuntime.getRoutingBucket("PreToolUse"), []);
   });
 });
 
