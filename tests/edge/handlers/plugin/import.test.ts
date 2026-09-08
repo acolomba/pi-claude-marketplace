@@ -69,6 +69,10 @@ import { test, type TestContext } from "node:test";
 import { mock, verify, when } from "strong-mock";
 
 import {
+  createHooksRouting,
+  createHooksRuntime,
+} from "../../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
+import {
   makeImportHandler,
   type ImportHandlerDeps,
 } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/import.ts";
@@ -203,6 +207,36 @@ test("imports the project scope before the user scope when no scope flag narrows
   assert.deepStrictEqual(git.state.calls.clone, []);
   verifyBoundary();
   verify(importClaudeSettings);
+});
+
+test("forwards the supplied lifecycle routing owner into import execution", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticScope(t, "routing-owner");
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(0, 0, {
+    value: cwd,
+    reads: 1,
+  });
+  const git = createGitOpsFake({ boundary: "memory" });
+  const hooksRouting = createHooksRouting(createHooksRuntime());
+  let forwardedHooksRouting: unknown;
+  const importClaudeSettings: ImportDelegate = (options) => {
+    forwardedHooksRouting = Reflect.get(options, "hooksRouting");
+    return Promise.resolve(nothingImported());
+  };
+  const importHandler = Reflect.apply(makeImportHandler, undefined, [
+    pi,
+    { gitOps: git.gitOps, importClaudeSettings },
+    hooksRouting,
+  ]) as ReturnType<typeof makeImportHandler>;
+
+  // act
+  await importHandler("--scope project", ctx);
+
+  // assert
+  assert.strictEqual(forwardedHooksRouting, hooksRouting);
+  assert.deepStrictEqual(notifications, []);
+  assert.deepStrictEqual(git.state.calls.clone, []);
+  verifyBoundary();
 });
 
 for (const scope of ["project", "user"] satisfies readonly Scope[]) {

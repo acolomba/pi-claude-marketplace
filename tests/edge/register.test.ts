@@ -78,6 +78,7 @@ import type {
 } from "@earendil-works/pi-tui";
 
 type MarketplaceRecord = ExtensionState["marketplaces"][string];
+type ImportDelegate = NonNullable<EdgeDeps["importClaudeSettings"]>;
 
 /** The options bag `registerCommand` receives, derived from the Pi surface. */
 type CommandRegistration = Parameters<ExtensionAPI["registerCommand"]>[1];
@@ -222,7 +223,10 @@ async function seedProjectMarketplace(root: string, marketplaceName: string): Pr
  * the two orchestrator entrypoints refuse to run: no case here dispatches a
  * subcommand that reaches them, so a call is a defect rather than a fixture gap.
  */
-function createEdgeDeps(completionCache: CompletionCache): EdgeDeps {
+function createEdgeDeps(
+  completionCache: CompletionCache,
+  importClaudeSettings?: ImportDelegate,
+): EdgeDeps {
   const { gitOps } = createGitOpsFake({ boundary: "memory" });
   return {
     completionCache,
@@ -230,9 +234,11 @@ function createEdgeDeps(completionCache: CompletionCache): EdgeDeps {
     pluginUpdate: (): Promise<PluginUpdateOutcome> => {
       throw new Error("the registration glue must not run a plugin update");
     },
-    importClaudeSettings: (): Promise<ClaudeImportExecutionResult> => {
-      throw new Error("the registration glue must not run a settings import");
-    },
+    importClaudeSettings:
+      importClaudeSettings ??
+      ((): Promise<ClaudeImportExecutionResult> => {
+        throw new Error("the registration glue must not run a settings import");
+      }),
   } satisfies EdgeDeps;
 }
 
@@ -241,7 +247,11 @@ function createEdgeDeps(completionCache: CompletionCache): EdgeDeps {
  * callbacks. The command name and the event name are stated by hand; only the
  * two callbacks are captured, because a function has no structural comparison.
  */
-function registerCommandWithCache(completionCache: CompletionCache): CommandUnderTest {
+function registerCommandWithCache(
+  completionCache: CompletionCache,
+  hooksRouting = createHooksRouting(createHooksRuntime()),
+  importClaudeSettings?: ImportDelegate,
+): CommandUnderTest {
   const pi = mock<PiRegistrar>({ exactParams: true, name: "extension API" });
   const commandOptions = It.willCapture<CommandRegistration>("claude:plugin registration");
   const sessionStartListener = It.willCapture<SessionStartListener>("session start listener");
@@ -258,8 +268,8 @@ function registerCommandWithCache(completionCache: CompletionCache): CommandUnde
 
   registerClaudePluginCommand(
     pi,
-    createEdgeDeps(completionCache),
-    createHooksRouting(createHooksRuntime()),
+    createEdgeDeps(completionCache, importClaudeSettings),
+    hooksRouting,
   );
 
   const registration = commandOptions.value;
@@ -344,6 +354,46 @@ describe("registerClaudePluginCommand", () => {
 
     // assert
     assert.deepStrictEqual(notifications, expectedNotifications);
+    verifyBoundary();
+    verifyRegistrar();
+  });
+
+  test("shares the supplied lifecycle routing owner with registered import execution", async (t) => {
+    // arrange
+    const { cwd } = await createHermeticScope(t, "import-routing-owner");
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0, {
+      value: cwd,
+      reads: 1,
+    });
+    const hooksRouting = createHooksRouting(createHooksRuntime());
+    let forwardedHooksRouting: unknown;
+    const importClaudeSettings: ImportDelegate = (options) => {
+      forwardedHooksRouting = Reflect.get(options, "hooksRouting");
+      return Promise.resolve({
+        addedMarketplaces: [],
+        changedResources: false,
+        diagnostics: [],
+        installedPlugins: [],
+        marketplaceFailures: [],
+        skippedExistingMarketplaces: [],
+        skippedExistingPlugins: [],
+        sourceMismatches: [],
+        unexpectedPluginFailures: [],
+        warnings: [],
+      });
+    };
+    const { registration, verifyRegistrar } = registerCommandWithCache(
+      createCompletionCache(),
+      hooksRouting,
+      importClaudeSettings,
+    );
+
+    // act
+    await registration.handler("import --scope project", ctx);
+
+    // assert
+    assert.strictEqual(forwardedHooksRouting, hooksRouting);
+    assert.deepStrictEqual(notifications, []);
     verifyBoundary();
     verifyRegistrar();
   });
