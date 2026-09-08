@@ -25,7 +25,9 @@
 //       the exact sets their handlers accept. install/update DO consume the
 //       catalog for their long-flag gates, but the mapModel/partial field
 //       mapping in edge/handlers/plugin/shared.ts names the flags literally --
-//       the pin makes a catalog rename or addition fail here first.
+//       the pin makes a catalog rename or addition fail here first. Each pin
+//       row is kept in canonical sorted order; only the catalog side is sorted,
+//       so reordering a literal row also fails the equality.
 //
 // Closed-set tripwire: adding a flag to any verb requires updating
 // edge/flag-catalog.ts, the handler wiring, and the pin table in the SAME
@@ -122,7 +124,7 @@ const HANDLER_ACCEPTED_PARSE_SETS: Record<CatalogVerb, readonly string[]> = {
   bootstrap: [],
 };
 
-test("catalog vs handlers: every verb's parse-set matches the handler-accepted pin", () => {
+test("catalog vs handlers: every verb's parse-set matches the ordered handler-accepted pin", () => {
   assert.deepEqual(
     sorted(Object.keys(HANDLER_ACCEPTED_PARSE_SETS)),
     sorted(CATALOG_VERBS),
@@ -132,7 +134,7 @@ test("catalog vs handlers: every verb's parse-set matches the handler-accepted p
   for (const verb of CATALOG_VERBS) {
     assert.deepEqual(
       sorted(parseFlagNames(verb)),
-      sorted(HANDLER_ACCEPTED_PARSE_SETS[verb]),
+      HANDLER_ACCEPTED_PARSE_SETS[verb],
       `Parse-set drift for "${verb}": the catalog's parse bits no longer match what the handler accepts. Update the handler wiring and this pin in the same change.`,
     );
   }
