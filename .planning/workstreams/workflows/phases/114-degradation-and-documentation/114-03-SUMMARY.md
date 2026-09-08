@@ -36,7 +36,7 @@ decisions:
   - "Both planted-violation controls were run, not just the forbidden-symbol one: the missing-target half is what proves WR-06 is live, and it is the half a glob would have silently disabled."
 
 metrics:
-  duration: "~35m"
+  duration: "~25m"
   completed: 2026-09-08
 
 actuals:
