@@ -36,7 +36,7 @@
 // cases fails where it happens. See `installNetworkTrap`.
 
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import https from "node:https";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -55,11 +55,13 @@ import {
 import { TOP_LEVEL_USAGE } from "../../extensions/pi-claude-marketplace/edge/router.ts";
 import { makeLocationsResolver } from "../../extensions/pi-claude-marketplace/orchestrators/edge-deps.ts";
 import { createPluginUpdateOperations } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/update.ts";
+import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   loadState,
   saveState,
 } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import { retryTree } from "../orchestrators/plugin/scope-tree-inventory.ts";
 import { createGitOpsFake } from "../platform/git-ops-fake.ts";
 
 import { buildInstalledPluginRecord } from "./handlers/marketplace-seed.ts";
@@ -247,11 +249,12 @@ async function seedProjectMarketplace(root: string, marketplaceName: string): Pr
 function createEdgeDeps(
   completionCache: CompletionCache,
   importClaudeSettings?: ImportDelegate,
+  gitOps?: EdgeDeps["gitOps"],
 ): EdgeDeps {
-  const { gitOps } = createGitOpsFake({ boundary: "memory" });
+  const selectedGitOps = gitOps ?? createGitOpsFake({ boundary: "memory" }).gitOps;
   return {
     completionCache,
-    gitOps,
+    gitOps: selectedGitOps,
     pluginUpdate: (): Promise<PluginUpdateOutcome> => {
       throw new Error("the registration glue must not run a plugin update");
     },
@@ -273,6 +276,7 @@ function registerCommandWithCache(
   hooksRouting = createHooksRouting(createHooksRuntime()),
   importClaudeSettings?: ImportDelegate,
   expectedNotifications = 0,
+  gitOps?: EdgeDeps["gitOps"],
 ): CommandUnderTest {
   const pi = mock<PiRegistrar>({ exactParams: true, name: "extension API" });
   const commandOptions = It.willCapture<CommandRegistration>("claude:plugin registration");
@@ -295,7 +299,7 @@ function registerCommandWithCache(
 
   registerClaudePluginCommand(
     pi,
-    createEdgeDeps(completionCache, importClaudeSettings),
+    createEdgeDeps(completionCache, importClaudeSettings, gitOps),
     hooksRouting,
     createPluginUpdateOperations(hooksRouting, completionCache).updatePlugins,
   );
@@ -317,6 +321,21 @@ function registerCommandWithCache(
 
 function registerCommandUnderTest(): CommandUnderTest {
   return registerCommandWithCache(createCompletionCache());
+}
+
+function createBootstrapGitOps(sourceTree: string): EdgeDeps["gitOps"] {
+  const git = createGitOpsFake({
+    boundary: "memory",
+    allowedRemoteUrls: ["https://github.com/anthropics/claude-plugins-official.git"],
+    cloneFixture: { boundary: "local", sourceDir: sourceTree },
+  });
+  return {
+    ...git.gitOps,
+    async clone(cloneOptions) {
+      const { auth: _auth, ...transportOptions } = cloneOptions;
+      await git.gitOps.clone(transportOptions);
+    },
+  };
 }
 
 /**
@@ -493,6 +512,137 @@ describe("registerClaudePluginCommand", () => {
     assert.deepStrictEqual(peerCandidates, expectedPeerCandidates);
     owner.verifyRegistrar();
     peer.verifyRegistrar();
+  });
+
+  test("runs registered bootstrap through the supplied lifecycle cache and both real children", async (t) => {
+    // arrange
+    const { cwd } = await createHermeticScope(t, "bootstrap-owner");
+    t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-02-03T04:05:06.000Z") });
+    const sourceTree = await mkdtemp(path.join(tmpdir(), "register-bootstrap-source-"));
+    t.after(async () => {
+      await rm(sourceTree, { force: true, recursive: true });
+    });
+    await mkdir(path.join(sourceTree, ".claude-plugin"), { recursive: true });
+    await writeFile(
+      path.join(sourceTree, ".claude-plugin", "marketplace.json"),
+      JSON.stringify({
+        name: "claude-plugins-official",
+        owner: { name: "registration owner" },
+        plugins: [],
+      }),
+      "utf8",
+    );
+    const userLocations = locationsFor("user", cwd);
+    const projectLocations = locationsFor("project", cwd);
+    const marketplaceRoot = await userLocations.sourceCloneDir("claude-plugins-official");
+    const pluginCachePath = await userLocations.pluginCacheFile("claude-plugins-official");
+    const completionCache = createCompletionCache();
+    const peerCompletionCache = createCompletionCache();
+    await completionCache.getPluginIndex(pluginCachePath, "user", "claude-plugins-official", () =>
+      Promise.resolve([{ name: "owner-stale", status: "available" }]),
+    );
+    await rm(pluginCachePath, { force: true });
+    await peerCompletionCache.getPluginIndex(
+      pluginCachePath,
+      "user",
+      "claude-plugins-official",
+      () => Promise.resolve([{ name: "peer-stale", status: "available" }]),
+    );
+    await rm(path.dirname(path.dirname(pluginCachePath)), { force: true, recursive: true });
+    const owner = registerCommandWithCache(
+      completionCache,
+      createHooksRouting(createHooksRuntime()),
+      undefined,
+      2,
+      createBootstrapGitOps(sourceTree),
+    );
+    const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
+    const ui = mock<NotificationUi>({ exactParams: true, name: "command UI" });
+    const notifications: Notification[] = [];
+    when(() => ctx.cwd)
+      .thenReturn(cwd)
+      .times(1);
+    when(() => ctx.ui)
+      .thenReturn(ui)
+      .times(2);
+    when(() => ui.notify)
+      .thenReturn((message, severity) => {
+        notifications.push(severity === undefined ? { message } : { message, severity });
+      })
+      .times(2);
+
+    // act
+    await owner.registration.handler("bootstrap", ctx);
+    const userTree = await retryTree(userLocations.scopeRoot);
+    const projectTree = await retryTree(projectLocations.scopeRoot);
+    const ownerRows = await completionCache.getPluginIndex(
+      pluginCachePath,
+      "user",
+      "claude-plugins-official",
+      () => Promise.resolve([{ name: "owner-fresh", status: "available" }]),
+    );
+    const peerRows = await peerCompletionCache.getPluginIndex(
+      pluginCachePath,
+      "user",
+      "claude-plugins-official",
+      () => Promise.reject(new Error("the peer cache must retain its warmed row")),
+    );
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      { message: "● claude-plugins-official [user] (added)" },
+      { message: "● claude-plugins-official [user] <autoupdate>" },
+    ]);
+    assert.deepStrictEqual(await loadState(userLocations.extensionRoot), {
+      schemaVersion: 2,
+      marketplaces: {
+        "claude-plugins-official": {
+          addedFromCwd: cwd,
+          lastUpdatedAt: "2026-02-03T04:05:06.000Z",
+          manifestPath: path.join(marketplaceRoot, ".claude-plugin", "marketplace.json"),
+          marketplaceRoot,
+          name: "claude-plugins-official",
+          plugins: {},
+          scope: "user",
+          source: {
+            kind: "github",
+            owner: "anthropics",
+            raw: "anthropics/claude-plugins-official",
+            repo: "claude-plugins-official",
+          },
+        },
+      },
+    });
+    assert.deepStrictEqual(JSON.parse(await readFile(userLocations.configJsonPath, "utf8")), {
+      schemaVersion: 1,
+      marketplaces: {
+        "claude-plugins-official": {
+          autoupdate: true,
+          source: "anthropics/claude-plugins-official",
+        },
+      },
+      plugins: {},
+    });
+    assert.deepStrictEqual(userTree, [
+      "claude-plugins.json",
+      "pi-claude-marketplace/",
+      "pi-claude-marketplace/sources/",
+      "pi-claude-marketplace/sources/claude-plugins-official/",
+      "pi-claude-marketplace/sources/claude-plugins-official/.claude-plugin/",
+      "pi-claude-marketplace/sources/claude-plugins-official/.claude-plugin/marketplace.json",
+      "pi-claude-marketplace/sources-staging/",
+      "pi-claude-marketplace/state.json",
+    ]);
+    assert.deepStrictEqual(projectTree, []);
+    assert.deepStrictEqual(await loadState(projectLocations.extensionRoot), {
+      schemaVersion: 2,
+      marketplaces: {},
+    });
+    assert.deepStrictEqual(ownerRows, [{ name: "owner-fresh", status: "available" }]);
+    assert.deepStrictEqual(peerRows, [{ name: "peer-stale", status: "available" }]);
+    verify(ctx);
+    verify(ui);
+    owner.verifyRegistrar();
   });
 });
 

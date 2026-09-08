@@ -1,6 +1,7 @@
 // orchestrators/plugin/bootstrap.ts
 //
 // One-keystroke onboarding for the Anthropic marketplace.
+// behavioral-composition-exception: bootstrapClaudePlugin
 //
 // Composes the two already-idempotent orchestrators
 // (`addMarketplace` + `setMarketplaceAutoupdate`) under hard-coded
