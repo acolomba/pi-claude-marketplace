@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { beforeEach, describe, test } from "node:test";
+import { describe, test } from "node:test";
 
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 
@@ -24,7 +24,6 @@ import type {
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts";
 import type { HookExecResult } from "../../../extensions/pi-claude-marketplace/bridges/hooks/exec-result.ts";
 import type { RoutingEntry } from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
-import type { HooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import type { BucketAEvent } from "../../../extensions/pi-claude-marketplace/domain/components/hook-events.ts";
 import type {
   ExtensionAPI,
@@ -78,13 +77,6 @@ interface RecordedCall {
   readonly pluginId: string;
   readonly event: unknown;
 }
-
-let runtime: HooksRuntime;
-
-beforeEach(() => {
-  runtime = createHooksRuntime();
-  runtime.advanceGeneration();
-});
 
 function createExtensionContext(cwd: string): ExtensionContext {
   return {
@@ -299,6 +291,8 @@ describe("compositeHandlerFor", () => {
 
   test("requires matcher and if agreement before composing mutations in declaration order", async () => {
     // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
     const cwd = "/workspace/dispatch-owner";
     const compileContext = { homedir: "/home/tester", cwd, projectRoot: cwd };
     const context = createExtensionContext(cwd);
@@ -706,6 +700,8 @@ describe("collectBucketOutcomes", () => {
 
   test("stops the bucket before a later executor when the generation changes during await", async () => {
     // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
     const context = createExtensionContext("/workspace/stale-outcome-collection");
     const bucket = [
       createRoutingEntry({
@@ -758,6 +754,8 @@ describe("collectBucketOutcomes", () => {
 describe("composite dispatch reduction", () => {
   test("keeps equal noop outcomes in stable declaration order", async () => {
     // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
     const context = createExtensionContext("/workspace/dispatch-noops");
     const entries = [
       createRoutingEntry({
@@ -813,6 +811,8 @@ describe("composite dispatch reduction", () => {
 
   test("returns the first block and skips every later entry", async () => {
     // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
     const context = createExtensionContext("/workspace/dispatch-block");
     const entries = [
       createRoutingEntry({
@@ -867,6 +867,8 @@ describe("composite dispatch reduction", () => {
 
   test("returns on the first stop and skips every later entry", async () => {
     // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
     const context = createExtensionContext("/workspace/dispatch-stop");
     const entries = [
       createRoutingEntry({
@@ -913,6 +915,8 @@ describe("composite dispatch reduction", () => {
 
   test("composes multiple mutations from left to right", async () => {
     // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
     const context = createExtensionContext("/workspace/dispatch-mutations");
     const entries = [
       createRoutingEntry({
@@ -982,6 +986,8 @@ describe("composite dispatch reduction", () => {
 describe("composite dispatch closure partitions", () => {
   test("rejects an unsupported executor result through the exhaustiveness guard", async () => {
     // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
     const context = createExtensionContext("/workspace/dispatch-exhaustive");
     const entry = createRoutingEntry({
       pluginId: "future-result",
@@ -1010,6 +1016,8 @@ describe("composite dispatch closure partitions", () => {
 
   test("returns undefined from a stale composite closure without dispatching", async () => {
     // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
     const context = createExtensionContext("/workspace/dispatch-stale");
     const entry = createRoutingEntry({
       pluginId: "stale-entry",
@@ -1031,6 +1039,8 @@ describe("composite dispatch closure partitions", () => {
 
   test("drops a tool-input mutation when its executor becomes stale while awaited", async () => {
     // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
     const context = createExtensionContext("/workspace/dispatch-stale-await");
     const entry = createRoutingEntry({
       pluginId: "stale-await-entry",
@@ -1069,6 +1079,8 @@ describe("composite dispatch closure partitions", () => {
 
   test("drops SessionStart context when its executor becomes stale while awaited", async () => {
     // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
     const context = createExtensionContext("/workspace/session-stale-await");
     const entry = createRoutingEntry({
       pluginId: "stale-session-entry",
@@ -1105,6 +1117,8 @@ describe("composite dispatch closure partitions", () => {
 
   test("returns undefined from a live composite closure with an empty bucket", async () => {
     // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
     const context = createExtensionContext("/workspace/dispatch-empty");
     const handler = compositeHandlerFor(runtime, "PreToolUse", runtime.currentGeneration());
     const expectedOutput: CompositeReturnFor<"PreToolUse"> = undefined;
@@ -1118,6 +1132,8 @@ describe("composite dispatch closure partitions", () => {
 
   test("dispatches only match-all and exact MCP tool matchers", async () => {
     // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
     const context = createExtensionContext("/workspace/dispatch-tool-matchers");
     const entries = [
       createRoutingEntry({
@@ -1196,6 +1212,8 @@ describe("composite dispatch closure partitions", () => {
 
   test("dispatches SessionStart empty, star, and exact raw matchers in declaration order", async () => {
     // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
     const context = createExtensionContext("/workspace/dispatch-session-matchers");
     const entries = [
       createRoutingEntry({
@@ -1260,6 +1278,8 @@ describe("composite dispatch closure partitions", () => {
 describe("toolResultCompositeHandler", () => {
   test("returns undefined from a stale tool-result closure without dispatching", async () => {
     // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
     const context = createExtensionContext("/workspace/tool-result-stale");
     const entry = createRoutingEntry({
       pluginId: "stale-result",
@@ -1281,6 +1301,8 @@ describe("toolResultCompositeHandler", () => {
 
   test("drops a tool-result decision when its executor becomes stale while awaited", async () => {
     // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
     const context = createExtensionContext("/workspace/tool-result-stale-await");
     const entry = createRoutingEntry({
       pluginId: "stale-result-await",
@@ -1315,6 +1337,8 @@ describe("toolResultCompositeHandler", () => {
 
   test("returns undefined from a live tool-result closure with an empty bucket", async () => {
     // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
     const context = createExtensionContext("/workspace/tool-result-empty");
     const handler = toolResultCompositeHandler(runtime, runtime.currentGeneration());
     const expectedOutput = undefined;
@@ -1328,6 +1352,8 @@ describe("toolResultCompositeHandler", () => {
 
   test("routes a successful result only through the PostToolUse bucket", async () => {
     // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
     const context = createExtensionContext("/workspace/tool-result-success");
     const successEntry = createRoutingEntry({
       pluginId: "success-observer",
@@ -1372,6 +1398,8 @@ describe("toolResultCompositeHandler", () => {
 
   test("routes a failed result only through the PostToolUseFailure bucket", async () => {
     // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
     const context = createExtensionContext("/workspace/tool-result-failure");
     const successEntry = createRoutingEntry({
       pluginId: "success-observer",
@@ -1416,6 +1444,8 @@ describe("toolResultCompositeHandler", () => {
 
   test("adapts a block without a reason to an error result", async () => {
     // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
     const context = createExtensionContext("/workspace/tool-result-block-empty");
     const entry = createRoutingEntry({
       pluginId: "block-empty",
@@ -1447,6 +1477,8 @@ describe("toolResultCompositeHandler", () => {
 
   test("adapts the first reasoned block and skips the later tool-result entry", async () => {
     // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
     const context = createExtensionContext("/workspace/tool-result-block");
     const firstEntry = createRoutingEntry({
       pluginId: "block-first",
@@ -1493,6 +1525,8 @@ describe("toolResultCompositeHandler", () => {
 
   test("applies a tool-output mutation through the selected result bucket", async () => {
     // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
     const context = createExtensionContext("/workspace/tool-result-mutate");
     const entry = createRoutingEntry({
       pluginId: "result-mutation",
@@ -1547,6 +1581,8 @@ describe("toolResultCompositeHandler", () => {
 
   test("drops a tool-result stop after terminating the bucket", async () => {
     // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
     const context = createExtensionContext("/workspace/tool-result-stop");
     const entry = createRoutingEntry({
       pluginId: "result-stop",
@@ -1583,6 +1619,8 @@ describe("toolResultCompositeHandler", () => {
 describe("composite per-event adapters", () => {
   test("adapts a PreToolUse block without a reason", async () => {
     // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
     const context = createExtensionContext("/workspace/pre-tool-block-empty");
     const entry = createRoutingEntry({
       pluginId: "pre-tool-block-empty",
@@ -1618,6 +1656,8 @@ describe("composite per-event adapters", () => {
 
   test("adapts a UserPromptSubmit block to handled", async () => {
     // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
     const context = createExtensionContext("/workspace/input-block");
     const entry = createRoutingEntry({
       pluginId: "input-block",
@@ -1661,6 +1701,8 @@ describe("composite per-event adapters", () => {
 
   test("adapts UserPromptSubmit additional context to transformed text", async () => {
     // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
     const context = createExtensionContext("/workspace/input-transform");
     const entry = createRoutingEntry({
       pluginId: "input-transform",
@@ -1704,6 +1746,8 @@ describe("composite per-event adapters", () => {
 
   test("drops a UserPromptSubmit mutation without additional context", async () => {
     // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
     const context = createExtensionContext("/workspace/input-mutation-empty");
     const entry = createRoutingEntry({
       pluginId: "input-mutation-empty",
@@ -1747,6 +1791,8 @@ describe("composite per-event adapters", () => {
 
   test("drops a UserPromptSubmit stop after terminating the bucket", async () => {
     // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
     const context = createExtensionContext("/workspace/input-stop");
     const entry = createRoutingEntry({
       pluginId: "input-stop",
@@ -1790,6 +1836,8 @@ describe("composite per-event adapters", () => {
 
   test("passes a UserPromptSubmit noop through as undefined", async () => {
     // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
     const context = createExtensionContext("/workspace/input-noop");
     const entry = createRoutingEntry({
       pluginId: "input-noop",
@@ -1830,6 +1878,8 @@ describe("composite per-event adapters", () => {
 
   test("captures SessionStart context with the producing entry provenance", async () => {
     // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
     const context = createExtensionContext("/workspace/session-start-provenance");
     const entry = createRoutingEntry({
       pluginId: "session-context",
@@ -1878,6 +1928,8 @@ describe("composite per-event adapters", () => {
 
   test("drops a SessionEnd block after observing it", async () => {
     // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
     const context = createExtensionContext("/workspace/session-end-block");
     const entry = createRoutingEntry({
       pluginId: "session-end-block",
@@ -1915,6 +1967,8 @@ describe("composite per-event adapters", () => {
 
   test("drops a PreCompact stop after observing it", async () => {
     // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
     const context = createExtensionContext("/workspace/pre-compact-stop");
     const entry = createRoutingEntry({
       pluginId: "pre-compact-stop",
@@ -1966,6 +2020,8 @@ describe("composite per-event adapters", () => {
 
   test("passes a PostCompact noop through after observing it", async () => {
     // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
     const context = createExtensionContext("/workspace/post-compact-noop");
     const entry = createRoutingEntry({
       pluginId: "post-compact-noop",

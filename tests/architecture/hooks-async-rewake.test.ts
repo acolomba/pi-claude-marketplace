@@ -19,7 +19,6 @@ import {
   spawnAndRegister,
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts";
 import { dispatchHookExec } from "../../extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts";
-import { resetRoutingState } from "../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
 import { createHooksRuntime } from "../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import { asAbsolutePluginRoot } from "../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -279,7 +278,6 @@ test("keeps PreToolUse hook environments equal across sync and async lanes excep
   // arrange
   const runtime = createHooksRuntime();
   const root = await mkdtemp(path.join(tmpdir(), "async-architecture-pretool-parity-"));
-  resetRoutingState();
   shutdownInMemoryChildren(runtime);
   const locations = locationsFor("project", root);
   const context = createContext(root, "session-pretool-parity");
@@ -321,7 +319,6 @@ test("keeps PreToolUse hook environments equal across sync and async lanes excep
     assert.strictEqual(Object.hasOwn(asyncEnvironment, "CLAUDE_ENV_FILE"), false);
   } finally {
     shutdownInMemoryChildren(runtime);
-    resetRoutingState();
     destroyChildren(processes.children);
     await rm(root, { recursive: true, force: true, maxRetries: 3 });
   }
@@ -331,7 +328,6 @@ test("keeps SessionStart env-file identity equal across sync and async lanes", a
   // arrange
   const runtime = createHooksRuntime();
   const root = await mkdtemp(path.join(tmpdir(), "async-architecture-session-parity-"));
-  resetRoutingState();
   shutdownInMemoryChildren(runtime);
   const locations = locationsFor("project", root);
   const context = createContext(root, "session-start-parity");
@@ -378,7 +374,6 @@ test("keeps SessionStart env-file identity equal across sync and async lanes", a
     assert.strictEqual(asyncEnvironment.CLAUDE_ENV_FILE, syncEnvironment.CLAUDE_ENV_FILE);
   } finally {
     shutdownInMemoryChildren(runtime);
-    resetRoutingState();
     destroyChildren(processes.children);
     await rm(root, { recursive: true, force: true, maxRetries: 3 });
   }
@@ -388,7 +383,6 @@ test("prevents a pre-reload async child from affecting the advanced routing epoc
   // arrange
   const runtime = createHooksRuntime();
   const root = await mkdtemp(path.join(tmpdir(), "async-architecture-reload-"));
-  resetRoutingState();
   shutdownInMemoryChildren(runtime);
   const locations = locationsFor("project", root);
   const context = createContext(root, "session-reload");
@@ -425,7 +419,6 @@ test("prevents a pre-reload async child from affecting the advanced routing epoc
     assert.deepStrictEqual(child?.signals, []);
   } finally {
     shutdownInMemoryChildren(runtime);
-    resetRoutingState();
     destroyChildren(processes.children);
     await rm(root, { recursive: true, force: true, maxRetries: 3 });
   }

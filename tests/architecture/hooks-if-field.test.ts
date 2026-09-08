@@ -1,27 +1,21 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import {
-  addPluginConfigToCache,
-  rebuildRoutingTables,
-} from "../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
+import { createHooksRouting } from "../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
 import {
   compileIfPredicate,
   MATCH_ALL_IF,
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts";
-import {
-  resetRoutingState,
-  routingTableEntries,
-} from "../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
+import { createRoutingStateOperations } from "../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
+import { createHooksRuntime } from "../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import { parseHooksConfig } from "../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
 import { asAbsolutePluginRoot } from "../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 
-test("parseHooksConfig side-map flows into RoutingEntry predicates in declaration order", (t) => {
+test("parseHooksConfig side-map flows into RoutingEntry predicates in declaration order", () => {
   // arrange
-  resetRoutingState();
-  t.after(() => {
-    resetRoutingState();
-  });
+  const runtime = createHooksRuntime();
+  const routingState = createRoutingStateOperations(runtime);
+  const hooksRouting = createHooksRouting(runtime);
   const compileContext = {
     homedir: "/home/plugin-user",
     cwd: "/workspace/plugin",
@@ -103,16 +97,16 @@ test("parseHooksConfig side-map flows into RoutingEntry predicates in declaratio
     throw new Error(`fixture did not parse: ${parsed.reason}`);
   }
 
-  addPluginConfigToCache(
-    "project",
-    "verified-marketplace",
-    "verified-plugin",
+  routingState.setParsedConfig("project\u0000verified-marketplace\u0000verified-plugin", {
+    scope: "project",
+    marketplace: "verified-marketplace",
+    pluginId: "verified-plugin",
     resolvedSource,
-    parsed.value,
-    parsed.ifPredicates,
-  );
-  rebuildRoutingTables();
-  const rows = routingTableEntries().get("PreToolUse") ?? [];
+    config: parsed.value,
+    ifPredicates: parsed.ifPredicates,
+  });
+  hooksRouting.rebuildRoutingTables();
+  const rows = runtime.getRoutingBucket("PreToolUse");
   const actualRows = rows.map((row) => ({
     scope: row.scope,
     marketplace: row.marketplace,
