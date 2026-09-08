@@ -9667,19 +9667,35 @@ test("WLIF-01: an installed workflow lands as an envelope and the record names i
   });
 });
 
+/** What one workflow-bearing install produced, on disk and on screen. */
+interface WorkflowInstallRun {
+  /** Raw utf-8 contents of the envelope the install committed. */
+  envelopeBytes: string;
+  /** `record.resources.workflows` as the install persisted it. */
+  recordedWorkflows: readonly string[];
+  /** The row the install rendered. */
+  row: NotifyRecord;
+}
+
 /**
  * Install one plugin carrying a single well-formed workflow script in a session
- * whose tool list is exactly `toolNames`, and return the row the install
- * rendered.
+ * whose tool list is exactly `toolNames`, and return the envelope bytes, the
+ * persisted inventory and the rendered row.
  *
  * The script carries a NAMED `meta` export on purpose: a default-export body
  * classifies as skipped and writes zero envelopes, so the plugin would declare
  * no workflow at all and the caller would assert over the wrong subject.
+ *
+ * Each call takes its OWN hermetic home and its own cwd. Two runs sharing one
+ * home would let the first run's envelope satisfy the second run's read.
  */
-async function installWorkflowBearingPlugin(toolNames: readonly string[]): Promise<NotifyRecord> {
+async function installWorkflowBearingPlugin(
+  toolNames: readonly string[],
+): Promise<WorkflowInstallRun> {
   return withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-workflows-softdep-"));
     try {
+      const locations = locationsFor("project", cwd);
       await seedPathMarketplaceWithPlugin({
         cwd,
         marketplaceName: "mp",
@@ -9696,9 +9712,19 @@ async function installWorkflowBearingPlugin(toolNames: readonly string[]): Promi
 
       await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
 
+      // The envelope path is composed with `path.join`, NOT with the async
+      // artifact-path composer: a forgotten await there yields a leaf named
+      // after a promise instead of throwing.
+      const envelopeBytes = await readFile(
+        path.join(locations.workflowsSavedDir, "hello:greet.json"),
+        "utf8",
+      );
+      const state = await loadState(locations.extensionRoot);
+      const recordedWorkflows = state.marketplaces.mp?.plugins.hello?.resources.workflows;
+      assert.ok(recordedWorkflows !== undefined);
       const row = notifications[0];
       assert.ok(row !== undefined);
-      return row;
+      return { envelopeBytes, recordedWorkflows, row };
     } finally {
       await rm(cwd, { force: true, recursive: true });
     }
@@ -9716,15 +9742,58 @@ test("WDEP-02: a workflow-bearing install names the host engine only when it is 
   const withEngine = await installWorkflowBearingPlugin(["workflow_control"]);
 
   // assert
-  assert.match(withoutEngine.message, /\{[^}]*requires pi-dynamic-workflows[^}]*\}/);
-  assert.doesNotMatch(withEngine.message, /requires pi-dynamic-workflows/);
+  assert.match(withoutEngine.row.message, /\{[^}]*requires pi-dynamic-workflows[^}]*\}/);
+  assert.doesNotMatch(withEngine.row.message, /requires pi-dynamic-workflows/);
   // SEV-01: the envelope IS written, so the operation was carried out -- but the
   // desired state is not reached until something runs it, which is `warning`
   // rather than `info` or `error`.
-  assert.strictEqual(withoutEngine.severity, "warning");
+  assert.strictEqual(withoutEngine.row.severity, "warning");
   // `notify()` omits the severity argument for an `info` row, so the recorded
   // row carries no severity at all -- that omission IS the info stamp here.
-  assert.strictEqual(withEngine.severity, undefined);
+  assert.strictEqual(withEngine.row.severity, undefined);
+});
+
+/**
+ * The exact envelope the fixture produces, written independently of the bridge
+ * that serializes it: a 2-space-indented object in `name`, `description`,
+ * `script` order, with a trailing newline.
+ *
+ * This is the non-vacuity anchor for the byte-equality pair below. Two runs
+ * agreeing on their envelope bytes proves nothing on its own -- it reads the
+ * same when neither run wrote anything at all -- so the pair pins what one run
+ * actually wrote before it compares the two.
+ */
+const workflowEnvelopeBytes = `{
+  "name": "hello:greet",
+  "description": "greets",
+  "script": "export const meta = { name: \\"greet\\", description: \\"greets\\" };\\n"
+}
+`;
+
+test("WDEP-02 / WDEP-03: the envelope bytes do not depend on whether the host engine is loaded", async () => {
+  // arrange -- the two runs install the SAME fixture and differ only in the
+  // session's tool list. `workflow` alone is the `@nicknisi/pi-workflows`
+  // shape, which is not the host engine; `workflow_control` is the tool the
+  // host engine registers.
+
+  // act
+  const withoutEngine = await installWorkflowBearingPlugin(["workflow"]);
+  const withEngine = await installWorkflowBearingPlugin(["workflow_control"]);
+
+  // assert -- non-vacuity first. Each run wrote a real envelope and recorded a
+  // real inventory, so "the two agree" cannot be satisfied by two empty reads.
+  assert.equal(withoutEngine.envelopeBytes, workflowEnvelopeBytes);
+  assert.deepStrictEqual(withoutEngine.recordedWorkflows, ["hello:greet"]);
+  // The comparison is over raw bytes, never a `JSON.parse` round trip: a
+  // parsed comparison greens over a key-order or whitespace difference, which
+  // is exactly the difference this case exists to rule out.
+  assert.equal(withoutEngine.envelopeBytes, withEngine.envelopeBytes);
+  assert.deepStrictEqual(withoutEngine.recordedWorkflows, withEngine.recordedWorkflows);
+  // Non-vacuity, both directions: the engine-absent run MUST have degraded...
+  assert.match(withoutEngine.row.message, /\{[^}]*requires pi-dynamic-workflows[^}]*\}/);
+  // ...and the engine-present run must not carry the marker anywhere, so two
+  // agreeing runs cannot mean neither run degraded.
+  assert.doesNotMatch(withEngine.row.message, /requires pi-dynamic-workflows/);
 });
 
 test("WLIF-01: a plugin declaring no workflows records an empty inventory", async () => {
