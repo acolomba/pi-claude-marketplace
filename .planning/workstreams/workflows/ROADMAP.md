@@ -531,7 +531,35 @@ Plans:
    record whichever way it goes.
 7. `npm run check` is green.
 
-**Plans**: TBD
+**Note on criterion 1's wording**: it predates the replay. Main replaced the runtime `DEPENDENCIES`
+tuple with a literal union `type Dependency = "agents" | "mcp"`. The decision is to add `"workflows"`
+to the UNION and not to reintroduce the tuple or an order-and-length lock for it; the byte-order
+guarantee criterion 1 wanted is delivered instead by two new `docs/output-catalog.md` states.
+Criterion 6 is settled in advance by research and confirms the premise, so no behavior changes —
+only prose in `tests/domain/resolver.test.ts` and in the new compatibility document.
+
+**Plans**: 5 plans in 3 waves. Same-wave plans have no `files_modified` overlap, but the waves are
+serialized in practice because `use_worktrees` is `false` here and every gate this phase leans on
+scans the whole tree rather than the staged diff. Wave 1 is a single tracer plan: a required probe
+field and a required renderer parameter make the tree non-compiling until every forced site is fixed,
+so the shared vocabulary and one derivation site land as one slice with a real install proving it end
+to end.
+
+Plans:
+
+- [ ] 114-01-PLAN.md — Tracer: the probe, the third `Dependency` member, the 45th reason token and the
+  install row's derivation and severity, wired end to end and verified against zero moved catalog
+  bytes (wave 1)
+- [ ] 114-02-PLAN.md — The six remaining `Dependency[]` derivation sites, the one architecture suite
+  that owns the cross-site coverage claim, and the mandatory negative control at a full-orchestrator
+  site (wave 2)
+- [ ] 114-03-PLAN.md — Engine-independent bytes: the probe-independence install pair with its
+  non-vacuity assertions, and the forbidden-surface gate that stops the bridge reading the probe
+  (wave 2)
+- [ ] 114-04-PLAN.md — The catalog: the probe-helper rename in both of its independent definitions,
+  the two byte-pinned rendered states, and the prose counts that sit outside the gate (wave 2)
+- [ ] 114-05-PLAN.md — The executable-code contract: `docs/workflows-compatibility.md`, both READMEs,
+  the upstream citation replacing the open-premise paragraph, and the corrected spike record (wave 3)
 
 ### Phase 115: Install-time admission-gate warnings
 
@@ -625,7 +653,7 @@ Plans:
 | 111. Workflows bridge | 4/4 | Complete    | 2026-09-05 |
 | 112. Install and removal lifecycle | 4/4 | Complete    | 2026-09-05 |
 | 113. Update, enable/disable, reconcile | 5/5 | Complete    | 2026-09-06 |
-| 114. Degradation and documentation | 0/? | Not started | - |
+| 114. Degradation and documentation | 0/5 | Planned     | - |
 | 115. Install-time admission-gate warnings | 0/? | Not started | - |
 | 116. Load-time workflow convergence | 0/? | Not started | - |
 | 117. Measured `agent()` failure evidence | 0/? | Not started | - |
