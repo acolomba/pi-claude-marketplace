@@ -7,6 +7,7 @@ import {
   generatedCommandName,
   generatedSkillName,
 } from "../../extensions/pi-claude-marketplace/domain/name.ts";
+import { setCasePlatform } from "../platform/case-platform.ts";
 
 describe("assertSafeName", () => {
   for (const name of ["a", "Foo.Bar_Baz-123", "acme:foo", "pi-claude-marketplace-acme-bot"]) {
@@ -288,6 +289,39 @@ describe("generatedCommandName", () => {
   ]) {
     test(`generates ${JSON.stringify(expectedCommandName)} from ${JSON.stringify(source)}`, () => {
       // arrange
+      const pluginName = plugin;
+      const sourceName = source;
+
+      // act
+      const commandName = generatedCommandName(pluginName, sourceName);
+
+      // assert
+      assert.strictEqual(commandName, expectedCommandName);
+    });
+  }
+
+  for (const { plugin, source, expectedCommandName } of [
+    { plugin: "acme", source: "foo", expectedCommandName: "acme.foo" },
+    { plugin: "acme", source: "acme-foo", expectedCommandName: "acme.foo" },
+    {
+      plugin: "acme",
+      source: "build/web",
+      expectedCommandName: "acme.build.web",
+    },
+    {
+      plugin: "acme",
+      source: "acme-tools/lint",
+      expectedCommandName: "acme.tools.lint",
+    },
+    {
+      plugin: "acme",
+      source: "acme-",
+      expectedCommandName: "acme.acme-",
+    },
+  ]) {
+    test(`generates ${JSON.stringify(expectedCommandName)} from ${JSON.stringify(source)} on win32`, (t) => {
+      // arrange
+      setCasePlatform(t, "win32");
       const pluginName = plugin;
       const sourceName = source;
 

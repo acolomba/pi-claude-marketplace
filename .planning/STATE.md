@@ -1,20 +1,20 @@
 ---
-gsd_state_version: 1.0
+gsd_state_version: "1.0"
 milestone: v1.19
 status: Awaiting next milestone
 stopped_at: Milestone v1.19 closed and archived; awaiting the next milestone
-last_updated: "2026-09-07T20:23:50Z"
+last_updated: "2026-09-08T00:37:13.415Z"
 last_activity: 2026-09-07
 last_activity_desc: Completed quick task 260907-m38 (SKFM-01 scalar repair)
-state_head: 609eb6981589605a03daa90eddc1a1dd8b711228
+state_head: 98ecd330b4987f176a3cb85c963e614f3aedbf48
+milestone_name: Unit Test Refactor
+current_phase: 117
+current_phase_name: Extension Entry and Final Gate
 progress:
   total_phases: 10
   completed_phases: 10
   total_plans: 220
   completed_plans: 220
-milestone_name: Unit Test Refactor
-current_phase: 117
-current_phase_name: Extension Entry and Final Gate
 ---
 
 # Project State
@@ -34,8 +34,8 @@ component as a working Pi artifact.
 Phase: Milestone v1.19 complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-09-07 — Completed quick task 260907-qsx: Sonar way
-ruleset enforced on extensions/ at lint time
+Last activity: 2026-09-07 — Completed quick task 260907-q0h: platform-dependent
+command name separator so Windows installs stop failing with EINVAL (#143)
 
 ## Performance Metrics
 
@@ -416,6 +416,8 @@ None for roadmap creation.
 | 260907-m38 | Implement SKFM-01: repair a single-line frontmatter scalar whose only defect is an unquoted colon | 2026-09-07 | 66be4e43 | [260907-m38-implement-skfm-01-repair-single-line-fro](./quick/260907-m38-implement-skfm-01-repair-single-line-fro/) |
 | 260907-qar | mark backlog entries WFLW-01 and DFEN-01 closed | 2026-09-07 | 32396cff | [260907-qar-mark-backlog-entries-wflw-01-and-dfen-01](./quick/260907-qar-mark-backlog-entries-wflw-01-and-dfen-01/) |
 | 260907-qsx | adopt SonarJS recommended ruleset for extensions | 2026-09-07 | fe1313c6 | [260907-qsx-adopt-sonarjs-recommended-ruleset-for-ex](./quick/260907-qsx-adopt-sonarjs-recommended-ruleset-for-ex/) |
+| 260907-q0h | Fix issue #143: make generated command name separator platform-dependent so Windows installs stop failing with EINVAL | 2026-09-07 | bf53dec0 | [260907-q0h-fix-issue-143-make-generated-command-nam](./quick/260907-q0h-fix-issue-143-make-generated-command-nam/) |
+| 6 | Switch the Windows command name separator from dash to dot (follow-up to 260907-q0h, #143) | 2026-09-08 | 7ce485b1 | — |
 
 ## Deferred Items
 
