@@ -970,6 +970,19 @@ test("readAndCachePluginHooks reads and parses one case-owned config", async (t)
   ]);
 });
 
+test("exports a production factory for runtime-bound route mutation", async () => {
+  // arrange
+  const routerModule: Record<string, unknown> = await import(
+    "../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts"
+  );
+
+  // act
+  const factory = routerModule["createHooksRouting"];
+
+  // assert
+  assert.strictEqual(typeof factory, "function");
+});
+
 test("readAndCachePluginHooks leaves the cache unchanged after a read failure", async (t) => {
   // arrange
   ownRoutingState(t);

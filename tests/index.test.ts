@@ -581,6 +581,7 @@ test("constructs one runtime and completion cache for edge registration and hook
   );
   const runtimeConstructions = source.match(/createHooksRuntime\(\)/g) ?? [];
   const cacheConstructions = source.match(/createCompletionCache\(\)/g) ?? [];
+  const routingConstructions = source.match(/createHooksRouting\(hooksRuntime\)/g) ?? [];
 
   // act
   const hydrationConstruction = source.match(
@@ -590,6 +591,7 @@ test("constructs one runtime and completion cache for edge registration and hook
   // assert
   assert.deepStrictEqual(runtimeConstructions, ["createHooksRuntime()"]);
   assert.deepStrictEqual(cacheConstructions, ["createCompletionCache()"]);
+  assert.deepStrictEqual(routingConstructions, ["createHooksRouting(hooksRuntime)"]);
   assert.deepStrictEqual(hydrationConstruction, [
     "createHooksHydration(hooksRuntime, { loadState })",
   ]);
