@@ -31,6 +31,11 @@ import { test } from "node:test";
 
 import { mock, verify, when } from "strong-mock";
 
+import {
+  createHooksRouting,
+  createHooksRuntime,
+} from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
+import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import { importClaudeSettings } from "../../../extensions/pi-claude-marketplace/orchestrators/import/execute.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
@@ -45,6 +50,10 @@ import type {
   ImportClaudeSettingsOptions,
   ImportDeps,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/import/execute.ts";
+import type {
+  HooksRouting,
+  HooksRuntime,
+} from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { TestContext } from "node:test";
 
@@ -2260,10 +2269,57 @@ async function writeUnder(filePath: string, bytes: string): Promise<void> {
   await writeFile(filePath, bytes, "utf8");
 }
 
+async function seedHookRoute(
+  hooksRouting: HooksRouting,
+  cwd: string,
+  marketplace: string,
+  plugin: string,
+  command: string,
+): Promise<void> {
+  const pluginRoot = path.join(cwd, `${marketplace}-${plugin}`);
+  const hooksJsonPath = path.join(pluginRoot, "hooks", "hooks.json");
+  await writeUnder(
+    hooksJsonPath,
+    JSON.stringify({
+      PreToolUse: [{ matcher: "", hooks: [{ type: "command", command }] }],
+    }),
+  );
+  await hooksRouting.readAndCachePluginHooks({
+    cwd,
+    hooksJsonPath,
+    logPrefix: "import owner route fixture",
+    marketplace,
+    plugin,
+    resolvedSource: asAbsolutePluginRoot(pluginRoot),
+    scope: "project",
+  });
+  hooksRouting.rebuildRoutingTables();
+}
+
+function preToolUseRoutes(runtime: HooksRuntime): readonly {
+  readonly command: string;
+  readonly marketplace: string;
+  readonly plugin: string;
+  readonly scope: Scope;
+}[] {
+  return runtime.getRoutingBucket("PreToolUse").map((entry) => ({
+    command: entry.handlerDecl.command,
+    marketplace: entry.marketplace,
+    plugin: entry.pluginId,
+    scope: entry.scope,
+  }));
+}
+
 test("resolves every collaborator from production when the caller supplies no dependency bundle", async (t) => {
   // arrange
   const { cwd, project } = await createHermeticScopes(t, "no-deps");
   const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(2, 4);
+  const ownerRuntime = createHooksRuntime();
+  const peerRuntime = createHooksRuntime();
+  const hooksRouting = createHooksRouting(ownerRuntime);
+  const peerHooksRouting = createHooksRouting(peerRuntime);
+  await seedHookRoute(hooksRouting, cwd, "unrelated-mp", "unrelated", "echo unrelated");
+  await seedHookRoute(peerHooksRouting, cwd, "peer-mp", "peer", "echo peer");
   const marketplaceRoot = path.join(cwd, "fixture-mp");
   await writeUnder(
     path.join(marketplaceRoot, ".claude-plugin", "marketplace.json"),
@@ -2276,6 +2332,12 @@ test("resolves every collaborator from production when the caller supplies no de
   await writeUnder(
     path.join(marketplaceRoot, "plugins", "sample", ".claude-plugin", "plugin.json"),
     JSON.stringify({ name: "sample", version: "1.0.0" }),
+  );
+  await writeUnder(
+    path.join(marketplaceRoot, "plugins", "sample", "hooks", "hooks.json"),
+    JSON.stringify({
+      PreToolUse: [{ matcher: "", hooks: [{ type: "command", command: "echo imported" }] }],
+    }),
   );
   await writeUnder(
     path.join(cwd, ".claude", "settings.json"),
@@ -2303,27 +2365,40 @@ test("resolves every collaborator from production when the caller supplies no de
     marketplaces: { "fixture-mp": { source: marketplaceRoot } },
     plugins: { "sample@fixture-mp": {} },
   });
+  const importOptions = {
+    ctx,
+    cwd,
+    gitOps: createOfflineGitOps(),
+    hooksRouting,
+    pi,
+    selectedScopes: ["project"] as const,
+  };
 
   // act
-  const firstResult = await importClaudeSettings({
-    ctx,
-    cwd,
-    gitOps: createOfflineGitOps(),
-    pi,
-    selectedScopes: ["project"],
-  });
-  const secondResult = await importClaudeSettings({
-    ctx,
-    cwd,
-    gitOps: createOfflineGitOps(),
-    pi,
-    selectedScopes: ["project"],
-  });
+  const firstResult = await importClaudeSettings(importOptions);
+  const secondResult = await importClaudeSettings(importOptions);
 
   // assert
   assert.deepStrictEqual(firstResult, expectedFirstResult);
   assert.deepStrictEqual(secondResult, expectedSecondResult);
   assert.strictEqual(await readFile(project.configJsonPath, "utf8"), expectedBytes);
+  assert.deepStrictEqual(preToolUseRoutes(ownerRuntime), [
+    {
+      command: "echo imported",
+      marketplace: "fixture-mp",
+      plugin: "sample",
+      scope: "project",
+    },
+    {
+      command: "echo unrelated",
+      marketplace: "unrelated-mp",
+      plugin: "unrelated",
+      scope: "project",
+    },
+  ]);
+  assert.deepStrictEqual(preToolUseRoutes(peerRuntime), [
+    { command: "echo peer", marketplace: "peer-mp", plugin: "peer", scope: "project" },
+  ]);
   assert.deepStrictEqual(notifications, [
     {
       message:
