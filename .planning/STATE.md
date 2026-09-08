@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 05
 current_phase_name: Injection and Ownership Design
 status: executing
-stopped_at: Completed Phase 05 Wave 5 through 05-11-PLAN.md
-last_updated: "2026-09-08T01:30:10.241Z"
+stopped_at: Completed Phase 05 Wave 6 through 05-12-PLAN.md
+last_updated: "2026-09-08T02:03:27.197Z"
 last_activity: 2026-09-08
-last_activity_desc: Phase 05 Plan 11 complete; runtime owns async children and PID operations
-state_head: a7a73236719e0a1292c246749ca7c3439a5f26ea
+last_activity_desc: Phase 05 Plan 12 complete; root and edge lifecycle ownership established
+state_head: 9cfbf0529e8732fda79e6f53d638590174c81d48
 progress:
   total_phases: 9
   completed_phases: 3
   total_plans: 127
-  completed_plans: 105
+  completed_plans: 106
   percent: 33
 ---
 
@@ -33,9 +33,9 @@ component as a working Pi artifact.
 
 Phase: 05 (Injection and Ownership Design) — EXECUTING
 Next: Execute Phase 5
-Plan: 12 of 33
+Plan: 13 of 33
 Status: Ready to execute
-Last activity: 2026-09-08 — Phase 05 Plan 11 complete; runtime owns async children and PID operations
+Last activity: 2026-09-08 — Phase 05 Plan 12 complete; root and edge lifecycle ownership established
 
 ## Performance Metrics
 
@@ -286,6 +286,7 @@ Last activity: 2026-09-08 — Phase 05 Plan 11 complete; runtime owns async chil
 | Phase 05 P09                            | 37min    | 2 tasks | 7 files  |
 | Phase 05 P10                            | 43 min   | 2 tasks | 8 files  |
 | Phase 05 P11                            | 23 min   | 2 tasks | 10 files |
+| Phase 05 P12                            | 30 min   | 2 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -740,12 +741,12 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed Phase 05 Wave 5 through 05-11-PLAN.md
+**Stopped at:** Completed Phase 05 Wave 6 through 05-12-PLAN.md
 
 Phase 04 completed all seven plans and closed AUTH-01 and TREF-01 through
 TREF-03. Independent verification passed 4/4 with no behavioral or UAT gap;
 the complete quality gate passed 5,397 unit tests and 32 integration tests.
-Phase 5 planning passed independent review. Plans 05-01 through 05-11 completed
+Phase 5 planning passed independent review. Plans 05-01 through 05-12 completed
 the hidden-dependency ports, runtime and cache cores, hook registration,
 dispatch, settle, async-child, and PID-operation ownership.
 
@@ -754,10 +755,10 @@ dispatch, settle, async-child, and PID-operation ownership.
 **Read beside it:** `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`, the
 Phase 01 terminal evidence ledger, and Phase 5's roadmap criteria.
 
-Last session: 2026-09-08T01:30:09.761Z
+Last session: 2026-09-08T02:03:26.756Z
 
-**Next:** Execute Phase 5 Plan 05-12 by establishing final root and edge
-lifecycle plumbing.
+**Next:** Execute Phase 5 Plan 05-13 by tracing runtime ownership through
+install and reconcile.
 
 ## Deferred Verification
 
