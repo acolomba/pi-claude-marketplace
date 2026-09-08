@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 05
 current_phase_name: Injection and Ownership Design
 status: executing
-stopped_at: Completed Phase 05 Wave 21 Plan 05-27
-last_updated: "2026-09-08T10:09:57.146Z"
+stopped_at: Completed Phase 05 Wave 21 Plan 05-28
+last_updated: "2026-09-08T10:43:18.236Z"
 last_activity: 2026-09-08
-last_activity_desc: Phase 05 Plan 27 complete; exactly two compositions remain
-state_head: be1859408145e7aab38308d348d3558059423613
+last_activity_desc: Phase 05 Plan 28 complete; hooks unit resets migrated
+state_head: af2a610d2e9660c2f67ebb8e80aee58a154db199
 progress:
   total_phases: 9
   completed_phases: 3
   total_plans: 127
-  completed_plans: 121
+  completed_plans: 122
   percent: 33
 ---
 
@@ -33,9 +33,9 @@ component as a working Pi artifact.
 
 Phase: 05 (Injection and Ownership Design) — EXECUTING
 Next: Execute Phase 5
-Plan: 28 of 33
+Plan: 29 of 33
 Status: Ready to execute
-Last activity: 2026-09-08 — Phase 05 Plan 27 complete; exactly two compositions remain
+Last activity: 2026-09-08 — Phase 05 Plan 28 complete; hooks unit resets migrated
 
 ## Performance Metrics
 
@@ -302,6 +302,7 @@ Last activity: 2026-09-08 — Phase 05 Plan 27 complete; exactly two composition
 | Phase 05 P25                            | 24 min   | 2 tasks | 10 files |
 | Phase 05 P26                            | 39 min   | 2 tasks | 5 files  |
 | Phase 05 P27                            | 21 min   | 2 tasks | 5 files  |
+| Phase 05 P28                            | 30 min   | 2 tasks | 8 files  |
 
 ## Accumulated Context
 
@@ -756,12 +757,12 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed Phase 05 Wave 21 Plan 05-27
+**Stopped at:** Completed Phase 05 Wave 21 Plan 05-28
 
 Phase 04 completed all seven plans and closed AUTH-01 and TREF-01 through
 TREF-03. Independent verification passed 4/4 with no behavioral or UAT gap;
 the complete quality gate passed 5,397 unit tests and 32 integration tests.
-Phase 5 planning passed independent review. Plans 05-01 through 05-27 completed
+Phase 5 planning passed independent review. Plans 05-01 through 05-28 completed
 the hidden-dependency ports, runtime and cache cores, hook registration,
 dispatch, settle, async-child, and PID-operation ownership.
 
@@ -770,10 +771,10 @@ dispatch, settle, async-child, and PID-operation ownership.
 **Read beside it:** `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`, the
 Phase 01 terminal evidence ledger, and Phase 5's roadmap criteria.
 
-Last session: 2026-09-08T10:09:56.660Z
+Last session: 2026-09-08T10:43:17.769Z
 
-**Next:** Execute Phase 5 Plan 05-28 by migrating hooks unit reset callers to
-fresh runtime fixtures.
+**Next:** Execute Phase 5 Plan 05-29 by migrating hooks integration reset
+callers to fresh lifecycle fixtures.
 
 ## Deferred Verification
 
