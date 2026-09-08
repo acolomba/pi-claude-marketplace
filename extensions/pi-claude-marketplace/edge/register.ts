@@ -32,7 +32,6 @@
 // provider but does NOT emit user-visible messages.
 
 import { makeLocationsResolver } from "../orchestrators/edge-deps.ts";
-import { transitionCompletionCache } from "../shared/completion-cache.ts";
 
 import {
   isClaudePluginCommandLine,
@@ -77,7 +76,6 @@ const COMMAND_DESCRIPTION =
  * add/update/remove handlers per D-04 EdgeDeps.
  */
 export function registerClaudePluginCommand(pi: ExtensionAPI, deps: EdgeDeps): void {
-  const completionCache = transitionCompletionCache;
   const handlers: SubcommandHandlers = {
     bootstrap: makeBootstrapHandler(pi, deps),
     install: makeInstallHandler(pi),
@@ -107,7 +105,7 @@ export function registerClaudePluginCommand(pi: ExtensionAPI, deps: EdgeDeps): v
     // Captured at registration time; threads through every keystroke's
     // completion lookup via the closed-over resolver.
     getArgumentCompletions: (prefix) =>
-      getArgumentCompletions(prefix, makeLocationsResolver(process.cwd()), completionCache),
+      getArgumentCompletions(prefix, makeLocationsResolver(process.cwd()), deps.completionCache),
   });
 
   // TC-7 autocomplete wrapper. Installed unconditionally on every

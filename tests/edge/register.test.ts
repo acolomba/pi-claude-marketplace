@@ -66,12 +66,12 @@ import type {
   ExtensionContext,
   SessionStartEvent,
 } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { CompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import type {
   AutocompleteItem,
   AutocompleteProvider,
   AutocompleteSuggestions,
 } from "@earendil-works/pi-tui";
-import type { CompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 
 type MarketplaceRecord = ExtensionState["marketplaces"][string];
 
