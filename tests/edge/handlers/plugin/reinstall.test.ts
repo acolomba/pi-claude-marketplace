@@ -105,6 +105,7 @@ import {
 } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { makeReinstallHandler as makeReinstallHandlerWithOperation } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/reinstall.ts";
 import { createNodeReinstallPlugins } from "../../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts";
+import { createCompletionCache } from "../../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
 import {
   buildInstalledPluginRecord,
@@ -124,7 +125,7 @@ function makeReinstallHandler(
 ): ReturnType<typeof makeReinstallHandlerWithOperation> {
   return makeReinstallHandlerWithOperation(
     pi,
-    createNodeReinstallPlugins(createHooksRouting(createHooksRuntime())),
+    createNodeReinstallPlugins(createHooksRouting(createHooksRuntime()), createCompletionCache()),
   );
 }
 
@@ -440,7 +441,10 @@ test("re-materialises only the named plugin when a plugin reference is supplied 
     reads: 1,
   });
   const calls: ReinstallPluginsOptions[] = [];
-  const reinstallPlugins = createNodeReinstallPlugins(createHooksRouting(createHooksRuntime()));
+  const reinstallPlugins = createNodeReinstallPlugins(
+    createHooksRouting(createHooksRuntime()),
+    createCompletionCache(),
+  );
   const reinstallPluginsSpy: ReinstallPluginsFn = async (opts) => {
     calls.push(opts);
     return reinstallPlugins(opts);

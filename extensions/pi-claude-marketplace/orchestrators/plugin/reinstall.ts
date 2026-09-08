@@ -88,7 +88,6 @@ import { requirePartialInstallable, resolveStrict } from "../../domain/resolver.
 import { parsePluginSource } from "../../domain/source.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { clonePluginRecord, isRecordedButDisabled, loadState } from "../../persistence/state-io.ts";
-import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
 import {
   composeErrorWithCauseChain,
   errorMessage,
@@ -143,6 +142,7 @@ import type { GitHubSource, GitSubdirSource, UrlSource } from "../../domain/sour
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState, PluginInstallRecord } from "../../persistence/state-io.ts";
 import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
+import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { HookSummaryEntry } from "../../shared/concerns/hooks.ts";
 import type { DegradeKind } from "../../shared/notify-reasons.ts";
 import type {
@@ -168,7 +168,6 @@ export type RemoveDataDirFn = (
   path: string,
   options: { recursive: true; force: true },
 ) => Promise<void>;
-export type DropMarketplaceCacheFn = typeof dropMarketplaceCache;
 
 /** Hook-routing capabilities consumed by committed reinstall finalization. */
 export type ReinstallHooksRouting = Pick<
@@ -214,7 +213,6 @@ export interface ReinstallPluginOptions {
 
 export interface ReinstallPluginDeps {
   readonly stateTransaction?: LockedStateTransactionDeps;
-  readonly dropMarketplaceCache?: DropMarketplaceCacheFn;
   readonly removeDataDir?: RemoveDataDirFn;
   /**
    * PURL-07 / D-78-02: test-only clone-cache seam override. When undefined
@@ -351,6 +349,7 @@ const defaultRemoveDataDir: RemoveDataDirFn = async (dataDir) => {
 async function reinstallPluginWithTransaction(
   transaction: ReinstallTransaction,
   hooksRouting: ReinstallHooksRouting,
+  completionCache: CompletionCache,
   opts: ReinstallPluginOptions,
 ): Promise<ReinstallPluginOutcome> {
   const { ctx, pi, scope, cwd, marketplace, plugin } = opts;
@@ -395,7 +394,11 @@ async function reinstallPluginWithTransaction(
     return locked.outcome;
   }
 
-  const maintenanceWarnings = await transaction.runPostSuccessMaintenance(opts, locations);
+  const maintenanceWarnings = await transaction.runPostSuccessMaintenance(
+    opts,
+    locations,
+    completionCache,
+  );
   if (render === "none") {
     const notes = [
       ...locked.discoveryWarnings,
@@ -496,13 +499,17 @@ async function reinstallPluginWithTransaction(
 export function createReinstallPlugin(
   transaction: ReinstallTransaction,
   hooksRouting: ReinstallHooksRouting,
+  completionCache: CompletionCache,
 ): ReinstallPluginFn {
-  return (opts) => reinstallPluginWithTransaction(transaction, hooksRouting, opts);
+  return (opts) => reinstallPluginWithTransaction(transaction, hooksRouting, completionCache, opts);
 }
 
 /** Binds one production reinstall to the real transaction and supplied routing owner. */
-export function createNodeReinstallPlugin(hooksRouting: ReinstallHooksRouting): ReinstallPluginFn {
-  return createReinstallPlugin(REAL_REINSTALL_TRANSACTION, hooksRouting);
+export function createNodeReinstallPlugin(
+  hooksRouting: ReinstallHooksRouting,
+  completionCache: CompletionCache,
+): ReinstallPluginFn {
+  return createReinstallPlugin(REAL_REINSTALL_TRANSACTION, hooksRouting, completionCache);
 }
 
 /**
@@ -642,8 +649,9 @@ async function reinstallPluginsWith(
 /** Binds direct and bulk production reinstall to one lifecycle routing owner. */
 export function createNodeReinstallPlugins(
   hooksRouting: ReinstallHooksRouting,
+  completionCache: CompletionCache,
 ): ReinstallPluginsFn {
-  const reinstallPlugin = createNodeReinstallPlugin(hooksRouting);
+  const reinstallPlugin = createNodeReinstallPlugin(hooksRouting, completionCache);
   return (opts) => reinstallPluginsWith(opts, reinstallPlugin);
 }
 
@@ -1695,12 +1703,16 @@ function pushLeak(leaks: string[], phase: BridgePhase, leak: string | undefined)
 async function runPostSuccessMaintenance(
   opts: ReinstallPluginOptions,
   locations: ScopedLocations,
+  completionCache: CompletionCache,
 ): Promise<readonly string[]> {
   const { scope, marketplace, plugin } = opts;
   const warnings: string[] = [];
-  const cacheDrop = opts.__deps?.dropMarketplaceCache ?? dropMarketplaceCache;
   try {
-    await cacheDrop(await locations.pluginCacheFile(marketplace), scope, marketplace);
+    await completionCache.dropMarketplaceCache(
+      await locations.pluginCacheFile(marketplace),
+      scope,
+      marketplace,
+    );
   } catch (err) {
     warnings.push(
       `Plugin "${plugin}" reinstalled; completion cache refresh deferred: ${errorMessage(err)}`,

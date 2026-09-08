@@ -84,7 +84,7 @@ export function registerClaudePluginCommand(
   hooksRouting: InstallHooksRouting,
   updatePlugins: UpdatePluginsFn,
 ): void {
-  const reinstallPlugins = createNodeReinstallPlugins(hooksRouting);
+  const reinstallPlugins = createNodeReinstallPlugins(hooksRouting, deps.completionCache);
   const handlers: SubcommandHandlers = {
     bootstrap: makeBootstrapHandler(pi, deps),
     install: makeInstallHandler(pi, hooksRouting, deps.completionCache),

@@ -40,7 +40,6 @@ import {
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import {
   createCompletionCache,
-  dropMarketplaceCache,
   resetCompletionCache,
 } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
@@ -66,6 +65,7 @@ import type {
   ToolInventory,
   ToolInventoryItem,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { CompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import type { TestContext } from "node:test";
 
 interface NotifyRecord {
@@ -74,11 +74,27 @@ interface NotifyRecord {
 }
 
 function reinstallPlugin(opts: ReinstallPluginOptions) {
-  return createNodeReinstallPlugin(createHooksRouting(createHooksRuntime()))(opts);
+  return createNodeReinstallPlugin(
+    createHooksRouting(createHooksRuntime()),
+    createCompletionCache(),
+  )(opts);
 }
 
 function reinstallPlugins(opts: ReinstallPluginsOptions) {
-  return createNodeReinstallPlugins(createHooksRouting(createHooksRuntime()))(opts);
+  return createNodeReinstallPlugins(
+    createHooksRouting(createHooksRuntime()),
+    createCompletionCache(),
+  )(opts);
+}
+
+function createCompletionCacheWithDrop(
+  dropMarketplaceCache: CompletionCache["dropMarketplaceCache"],
+): CompletionCache {
+  return { ...createCompletionCache(), dropMarketplaceCache };
+}
+
+function reinstallPluginWithCache(opts: ReinstallPluginOptions, completionCache: CompletionCache) {
+  return createNodeReinstallPlugin(createHooksRouting(createHooksRuntime()), completionCache)(opts);
 }
 
 test("reinstall exposes its required transaction factory", () => {
@@ -1063,18 +1079,20 @@ test("PRL-12: cache and data cleanup failures are SILENTLY swallowed after succe
       await writePluginTree(seeded.pluginRoot, "hello", { skill: "new skill" });
       const { ctx, pi, notifications } = makeCtx();
 
-      const outcome = await reinstallPlugin({
-        ctx,
-        pi,
-        scope: "project",
-        cwd,
-        marketplace: "mp",
-        plugin: "hello",
-        __deps: {
-          dropMarketplaceCache: () => Promise.reject(new Error("cache drop failed")),
-          removeDataDir: () => Promise.reject(new Error("data cleanup failed")),
+      const outcome = await reinstallPluginWithCache(
+        {
+          ctx,
+          pi,
+          scope: "project",
+          cwd,
+          marketplace: "mp",
+          plugin: "hello",
+          __deps: {
+            removeDataDir: () => Promise.reject(new Error("data cleanup failed")),
+          },
         },
-      });
+        createCompletionCacheWithDrop(() => Promise.reject(new Error("cache drop failed"))),
+      );
 
       assert.equal(outcome.partition, "reinstalled");
       // Exactly one notification (the V2 success cascade); zero warnings.
@@ -1193,19 +1211,21 @@ test("PRL-13 quiet render returns warning notes after successful cleanup warning
       });
       const { ctx, pi, notifications } = makeCtx();
 
-      const outcome = await reinstallPlugin({
-        ctx,
-        pi,
-        scope: "project",
-        cwd,
-        marketplace: "mp",
-        plugin: "hello",
-        render: "none",
-        __deps: {
-          dropMarketplaceCache: () => Promise.reject(new Error("cache drop failed")),
-          removeDataDir: () => Promise.reject(new Error("data cleanup failed")),
+      const outcome = await reinstallPluginWithCache(
+        {
+          ctx,
+          pi,
+          scope: "project",
+          cwd,
+          marketplace: "mp",
+          plugin: "hello",
+          render: "none",
+          __deps: {
+            removeDataDir: () => Promise.reject(new Error("data cleanup failed")),
+          },
         },
-      });
+        createCompletionCacheWithDrop(() => Promise.reject(new Error("cache drop failed"))),
+      );
 
       assert.equal(outcome.partition, "reinstalled");
       assert.deepEqual(notifications, []);
@@ -1981,20 +2001,20 @@ test("GAP-07: reinstallPlugin skipped does not trigger runPostSuccessMaintenance
       let maintenanceCalled = false;
       const { ctx, pi } = makeCtx();
 
-      const outcome = await reinstallPlugin({
-        ctx,
-        pi,
-        scope: "project",
-        cwd,
-        marketplace: "mp",
-        plugin: "hello",
-        __deps: {
-          dropMarketplaceCache: () => {
-            maintenanceCalled = true;
-            return Promise.resolve();
-          },
+      const outcome = await reinstallPluginWithCache(
+        {
+          ctx,
+          pi,
+          scope: "project",
+          cwd,
+          marketplace: "mp",
+          plugin: "hello",
         },
-      });
+        createCompletionCacheWithDrop(() => {
+          maintenanceCalled = true;
+          return Promise.resolve();
+        }),
+      );
 
       assert.equal(outcome.partition, "skipped");
       assert.equal(maintenanceCalled, false);
@@ -2275,17 +2295,17 @@ test("GAP-15: reinstallPlugin with bridge warning emits notifyWarning before suc
       });
       const { ctx, pi, notifications } = makeCtx();
 
-      const outcome = await reinstallPlugin({
-        ctx,
-        pi,
-        scope: "project",
-        cwd,
-        marketplace: "mp",
-        plugin: "hello",
-        __deps: {
-          dropMarketplaceCache: () => Promise.reject(new Error("cache-drop-warn")),
+      const outcome = await reinstallPluginWithCache(
+        {
+          ctx,
+          pi,
+          scope: "project",
+          cwd,
+          marketplace: "mp",
+          plugin: "hello",
         },
-      });
+        createCompletionCacheWithDrop(() => Promise.reject(new Error("cache-drop-warn"))),
+      );
 
       // dropMarketplaceCache failure is swallowed; reinstall still succeeds.
       assert.equal(outcome.partition, "reinstalled");
@@ -2769,7 +2789,10 @@ test("WR-03: reinstallPlugin round-trips the plugin's routing-table entries with
       );
 
       const { ctx, pi, notifications } = makeCtx();
-      const outcome = await createNodeReinstallPlugin(hooksRouting)({
+      const outcome = await createNodeReinstallPlugin(
+        hooksRouting,
+        createCompletionCache(),
+      )({
         ctx,
         pi,
         scope: "project",
@@ -5777,21 +5800,12 @@ test("a pinned git-subdir reinstall reports a missing cached subdirectory", asyn
 function observeRetryDeps(
   schedule: { current: string[] },
   faults?: {
-    readonly cache?: { enabled: boolean; readonly message: string };
     readonly data?: { enabled: boolean; readonly message: string };
     readonly persistence?: { enabled: boolean; readonly message: string };
   },
   loadStateOverride?: typeof loadState,
 ): ReinstallPluginDeps {
   return {
-    dropMarketplaceCache: async (cachePath, scope, marketplace) => {
-      schedule.current.push("drop:cache");
-      if (faults?.cache?.enabled === true) {
-        throw new Error(faults.cache.message);
-      }
-
-      await dropMarketplaceCache(cachePath, scope, marketplace);
-    },
     removeDataDir: async (target, options) => {
       schedule.current.push("remove:data");
       if (faults?.data?.enabled === true) {
@@ -5812,6 +5826,17 @@ function observeRetryDeps(
       },
     },
   };
+}
+
+function createRetryReinstall(schedule: {
+  current: string[];
+}): ReturnType<typeof createNodeReinstallPlugin> {
+  const delegate = createCompletionCache();
+  const completionCache = createCompletionCacheWithDrop(async (cachePath, scope, marketplace) => {
+    schedule.current.push("drop:cache");
+    await delegate.dropMarketplaceCache(cachePath, scope, marketplace);
+  });
+  return createNodeReinstallPlugin(createHooksRouting(createHooksRuntime()), completionCache);
 }
 
 /** The doubled `<message>\n\ncause: <message>` shape reinstall folds onto `notes`. */
@@ -5869,10 +5894,11 @@ test("retry proof: reinstall: skills prepare failure with no prepared handles co
         activeSchedule,
       );
       const deps = observeRetryDeps(activeSchedule);
+      const reinstall = createRetryReinstall(activeSchedule);
       const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
 
       // act
-      const first = await reinstallPlugin({
+      const first = await reinstall({
         __deps: deps,
         ctx,
         cwd,
@@ -5888,7 +5914,7 @@ test("retry proof: reinstall: skills prepare failure with no prepared handles co
       const firstCommand = await readCommand(cwd);
       await rm(locations.skillsStagingDir, { force: true });
       activeSchedule.current = secondSchedule;
-      const second = await reinstallPlugin({
+      const second = await reinstall({
         __deps: deps,
         ctx,
         cwd,
@@ -6032,10 +6058,11 @@ test("retry proof: reinstall: commands prepare failure aborts the one prepared h
         activeSchedule,
       );
       const deps = observeRetryDeps(activeSchedule);
+      const reinstall = createRetryReinstall(activeSchedule);
       const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
 
       // act
-      const first = await reinstallPlugin({
+      const first = await reinstall({
         __deps: deps,
         ctx,
         cwd,
@@ -6050,7 +6077,7 @@ test("retry proof: reinstall: commands prepare failure aborts the one prepared h
       const firstSkill = await readSkill(cwd);
       await rm(locations.commandsStagingDir, { force: true });
       activeSchedule.current = secondSchedule;
-      const second = await reinstallPlugin({
+      const second = await reinstall({
         __deps: deps,
         ctx,
         cwd,
@@ -6182,10 +6209,11 @@ test("retry proof: reinstall: an abort cleanup leak reports manual recovery and 
         stagingRmFault,
       );
       const deps = observeRetryDeps(activeSchedule);
+      const reinstall = createRetryReinstall(activeSchedule);
       const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
 
       // act
-      const first = await reinstallPlugin({
+      const first = await reinstall({
         __deps: deps,
         ctx,
         cwd,
@@ -6200,7 +6228,7 @@ test("retry proof: reinstall: an abort cleanup leak reports manual recovery and 
       stagingRmFault.enabled = false;
       await rm(locations.commandsStagingDir, { force: true });
       activeSchedule.current = secondSchedule;
-      const second = await reinstallPlugin({
+      const second = await reinstall({
         __deps: deps,
         ctx,
         cwd,
@@ -6359,10 +6387,11 @@ test("retry proof: reinstall: MCP prepare failure aborts three prepared handles 
         activeSchedule,
       );
       const deps = observeRetryDeps(activeSchedule);
+      const reinstall = createRetryReinstall(activeSchedule);
       const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
 
       // act
-      const first = await reinstallPlugin({
+      const first = await reinstall({
         __deps: deps,
         ctx,
         cwd,
@@ -6377,7 +6406,7 @@ test("retry proof: reinstall: MCP prepare failure aborts three prepared handles 
       const firstAgent = await readFile(agentPath, "utf8");
       await rm(locations.mcpJsonPath, { force: true, recursive: true });
       activeSchedule.current = secondSchedule;
-      const second = await reinstallPlugin({
+      const second = await reinstall({
         __deps: deps,
         ctx,
         cwd,
@@ -6514,10 +6543,11 @@ test("retry proof: reinstall: skills replacement refusal leaves an empty replace
         activeSchedule,
       );
       const deps = observeRetryDeps(activeSchedule);
+      const reinstall = createRetryReinstall(activeSchedule);
       const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
 
       // act
-      const first = await reinstallPlugin({
+      const first = await reinstall({
         __deps: deps,
         ctx,
         cwd,
@@ -6533,7 +6563,7 @@ test("retry proof: reinstall: skills replacement refusal leaves an empty replace
       const firstForeign = await readFile(path.join(foreignSkillDir, "foreign.md"), "utf8");
       await retryRepairRm(foreignSkillDir, { force: true, recursive: true });
       activeSchedule.current = secondSchedule;
-      const second = await reinstallPlugin({
+      const second = await reinstall({
         __deps: deps,
         ctx,
         cwd,
@@ -6677,10 +6707,11 @@ test("retry proof: reinstall: commands replacement refusal unwinds the committed
         activeSchedule,
       );
       const deps = observeRetryDeps(activeSchedule);
+      const reinstall = createRetryReinstall(activeSchedule);
       const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
 
       // act
-      const first = await reinstallPlugin({
+      const first = await reinstall({
         __deps: deps,
         ctx,
         cwd,
@@ -6697,7 +6728,7 @@ test("retry proof: reinstall: commands replacement refusal unwinds the committed
       const firstForeign = await readFile(foreignCommandPath, "utf8");
       await retryRepairRm(foreignCommandPath, { force: true });
       activeSchedule.current = secondSchedule;
-      const second = await reinstallPlugin({
+      const second = await reinstall({
         __deps: deps,
         ctx,
         cwd,
@@ -6841,10 +6872,11 @@ test("retry proof: reinstall: a persistence failure after hooks removal leaves t
         activeSchedule,
       );
       const deps = observeRetryDeps(activeSchedule, { persistence: persistenceFault });
+      const reinstall = createRetryReinstall(activeSchedule);
       const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
 
       // act
-      const first = await reinstallPlugin({
+      const first = await reinstall({
         __deps: deps,
         ctx,
         cwd,
@@ -6862,7 +6894,7 @@ test("retry proof: reinstall: a persistence failure after hooks removal leaves t
       const firstSkill = await readSkill(cwd);
       persistenceFault.enabled = false;
       activeSchedule.current = secondSchedule;
-      const second = await reinstallPlugin({
+      const second = await reinstall({
         __deps: deps,
         ctx,
         cwd,
@@ -6980,10 +7012,11 @@ test("retry proof: reinstall: a persistence failure after four committed replace
         activeSchedule,
       );
       const deps = observeRetryDeps(activeSchedule, { persistence: persistenceFault });
+      const reinstall = createRetryReinstall(activeSchedule);
       const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
 
       // act
-      const first = await reinstallPlugin({
+      const first = await reinstall({
         __deps: deps,
         ctx,
         cwd,
@@ -7001,7 +7034,7 @@ test("retry proof: reinstall: a persistence failure after four committed replace
       const firstCommand = await readCommand(cwd);
       persistenceFault.enabled = false;
       activeSchedule.current = secondSchedule;
-      const second = await reinstallPlugin({
+      const second = await reinstall({
         __deps: deps,
         ctx,
         cwd,
@@ -7173,10 +7206,11 @@ test("retry proof: reinstall: a concurrently removed record unwinds before any s
         (state.marketplaces as Record<string, unknown>)["mp"] = { ...mp, plugins };
         return state;
       });
+      const reinstall = createRetryReinstall(activeSchedule);
       const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
 
       // act
-      const first = await reinstallPlugin({
+      const first = await reinstall({
         __deps: deps,
         ctx,
         cwd,
@@ -7191,7 +7225,7 @@ test("retry proof: reinstall: a concurrently removed record unwinds before any s
       const firstSkill = await readSkill(cwd);
       removalFault.enabled = false;
       activeSchedule.current = secondSchedule;
-      const second = await reinstallPlugin({
+      const second = await reinstall({
         __deps: deps,
         ctx,
         cwd,
@@ -7315,10 +7349,11 @@ test("retry proof: reinstall: an invalid config write-back is reported beside th
         activeSchedule,
       );
       const deps = observeRetryDeps(activeSchedule);
+      const reinstall = createRetryReinstall(activeSchedule);
       const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
 
       // act
-      const first = await reinstallPlugin({
+      const first = await reinstall({
         __deps: deps,
         ctx,
         cwd,
@@ -7335,7 +7370,7 @@ test("retry proof: reinstall: an invalid config write-back is reported beside th
       ];
       await rm(locations.configJsonPath, { force: true });
       activeSchedule.current = secondSchedule;
-      const second = await reinstallPlugin({
+      const second = await reinstall({
         __deps: deps,
         ctx,
         cwd,
@@ -7568,11 +7603,26 @@ test("retry proof: reinstall: a completion-cache maintenance failure notes the d
         retryScheduleDirs(cwd, "hello"),
         activeSchedule,
       );
-      const deps = observeRetryDeps(activeSchedule, { cache: cacheFault });
+      const deps = observeRetryDeps(activeSchedule);
+      const delegate = createCompletionCache();
+      const completionCache = createCompletionCacheWithDrop(
+        async (cachePath, scope, marketplace) => {
+          activeSchedule.current.push("drop:cache");
+          if (cacheFault.enabled) {
+            throw new Error(cacheFault.message);
+          }
+
+          await delegate.dropMarketplaceCache(cachePath, scope, marketplace);
+        },
+      );
+      const reinstall = createNodeReinstallPlugin(
+        createHooksRouting(createHooksRuntime()),
+        completionCache,
+      );
       const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
 
       // act
-      const first = await reinstallPlugin({
+      const first = await reinstall({
         __deps: deps,
         ctx,
         cwd,
@@ -7588,7 +7638,7 @@ test("retry proof: reinstall: a completion-cache maintenance failure notes the d
       ];
       cacheFault.enabled = false;
       activeSchedule.current = secondSchedule;
-      const second = await reinstallPlugin({
+      const second = await reinstall({
         __deps: deps,
         ctx,
         cwd,
@@ -7673,10 +7723,11 @@ test("retry proof: reinstall: a plugin-data-dir maintenance failure keeps the di
         activeSchedule,
       );
       const deps = observeRetryDeps(activeSchedule, { data: dataFault });
+      const reinstall = createRetryReinstall(activeSchedule);
       const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
 
       // act
-      const first = await reinstallPlugin({
+      const first = await reinstall({
         __deps: deps,
         ctx,
         cwd,
@@ -7692,7 +7743,7 @@ test("retry proof: reinstall: a plugin-data-dir maintenance failure keeps the di
       ];
       dataFault.enabled = false;
       activeSchedule.current = secondSchedule;
-      const second = await reinstallPlugin({
+      const second = await reinstall({
         __deps: deps,
         ctx,
         cwd,

@@ -89,7 +89,10 @@ function createUpdatePlugins() {
 }
 
 function createReinstallPlugin() {
-  return createNodeReinstallPlugin(createHooksRouting(createHooksRuntime()));
+  return createNodeReinstallPlugin(
+    createHooksRouting(createHooksRuntime()),
+    createCompletionCache(),
+  );
 }
 
 async function populateRuntimeRoute(

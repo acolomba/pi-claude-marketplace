@@ -211,7 +211,7 @@ export async function scanForceInstalledBackfills(
   state: ExtensionState,
   outcomes: PerEntryOutcome[],
 ): Promise<boolean> {
-  const reinstallPlugin = createNodeReinstallPlugin(opts.hooksRouting);
+  const reinstallPlugin = createNodeReinstallPlugin(opts.hooksRouting, opts.completionCache);
   const alreadyTouched = new Set<string>();
   for (const o of outcomes) {
     if (o.scope === scope && "plugin" in o) {

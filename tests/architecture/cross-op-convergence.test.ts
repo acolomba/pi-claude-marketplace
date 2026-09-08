@@ -86,7 +86,10 @@ function createUpdatePlugins() {
 }
 
 function createReinstallPlugins() {
-  return createNodeReinstallPlugins(createHooksRouting(createHooksRuntime()));
+  return createNodeReinstallPlugins(
+    createHooksRouting(createHooksRuntime()),
+    createCompletionCache(),
+  );
 }
 
 function makeCtx(): {
