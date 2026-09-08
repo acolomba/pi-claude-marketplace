@@ -34,6 +34,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
 import { MATCH_ALL_IF } from "../../../extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts";
 import {
+  currentEpoch,
   getRoutingBucket,
   parsedConfigEntries,
   pendingSessionStartContextEntries,
@@ -81,6 +82,63 @@ import type {
  * primitives.
  */
 
+interface RuntimeChildHarness {
+  readonly child: ChildProcess;
+  readonly signals: Array<number | NodeJS.Signals>;
+  destroy(): void;
+}
+
+function createRuntimeChild(pid: number): RuntimeChildHarness {
+  const events = new EventEmitter();
+  const stdin = new PassThrough();
+  const stdout = new PassThrough();
+  const stderr = new PassThrough();
+  const signals: Array<number | NodeJS.Signals> = [];
+  const child = Object.assign(events, {
+    stdin,
+    stdout,
+    stderr,
+    stdio: [stdin, stdout, stderr, undefined, undefined] as ChildProcess["stdio"],
+    connected: false,
+    pid,
+    exitCode: null,
+    signalCode: null,
+    killed: false,
+    spawnargs: [],
+    spawnfile: "",
+    kill(signal?: NodeJS.Signals | number): boolean {
+      signals.push(signal ?? "SIGTERM");
+      return true;
+    },
+    disconnect(): void {
+      return;
+    },
+    send(): boolean {
+      return false;
+    },
+    ref(): void {
+      return;
+    },
+    unref(): void {
+      return;
+    },
+    [Symbol.dispose](): void {
+      return;
+    },
+  });
+
+  return {
+    child,
+    signals,
+    destroy(): void {
+      child.removeAllListeners();
+      stdin.destroy();
+      stdout.destroy();
+      stderr.destroy();
+    },
+  };
+}
+
 beforeEach(() => {
   resetRoutingState();
 });
@@ -91,7 +149,9 @@ test(
   async (t) => {
     // arrange
     const runtime = createHooksRuntime();
+    const peerRuntime = createHooksRuntime();
     const hydration = createHooksHydration(runtime, { loadState });
+    const peerChild = createRuntimeChild(43_108);
     const root = await mkdtemp(path.join(tmpdir(), "hooks-router-reload-"));
     const projectRoot = path.join(root, "project");
     const userAgentRoot = path.join(root, "user-agent");
@@ -101,6 +161,8 @@ test(
     process.env.PI_CODING_AGENT_DIR = userAgentRoot;
     t.after(async () => {
       shutdownInMemoryChildren(runtime);
+      shutdownInMemoryChildren(peerRuntime);
+      peerChild.destroy();
       resetRoutingState();
       if (originalHome === undefined) {
         delete process.env.HOME;
@@ -374,6 +436,19 @@ test(
       toolName: "bash",
       input: { command: "printf reload" },
     } satisfies ToolCallEvent;
+    await spawnAndRegister(
+      peerRuntime,
+      { ...asyncEntry, pluginId: "peer-plugin" },
+      toolCall,
+      context,
+      pi,
+      userLocations,
+      {
+        spawnImpl: () => peerChild.child,
+        dispatchId: () => "router-peer-child",
+        pidTableWriter: () => Promise.resolve(),
+      },
+    );
     await spawnAndRegister(runtime, asyncEntry, toolCall, context, pi, userLocations, {
       spawnImpl,
       dispatchId: () => "router-in-memory-child",
@@ -515,16 +590,31 @@ test(
         command: entry.handlerDecl.command,
       })),
     };
+    const peerEntriesAfterReload = peerRuntime.pidTableEntries(userLocations);
+    const peerSignalsAfterReload = [...peerChild.signals];
     shutdownInMemoryChildren(runtime);
     resetRoutingState();
     const stateAfterCleanup = {
-      epoch: runtime.currentGeneration(),
-      cache: Array.from(runtime.parsedConfigEntries()),
-      routes: Array.from(runtime.routingTableEntries()),
-      pending: [...runtime.pendingSessionStartContextEntries()],
+      epoch: currentEpoch(),
+      cache: Array.from(parsedConfigEntries()),
+      routes: Array.from(routingTableEntries()),
+      pending: [...pendingSessionStartContextEntries()],
     };
 
     // assert
+    assert.deepStrictEqual(peerEntriesAfterReload, [
+      {
+        pid: 43_108,
+        dispatchId: "router-peer-child",
+        scope: "user",
+        marketplace: "user-catalog",
+        plugin: "peer-plugin",
+        spawnedAt: peerEntriesAfterReload[0]?.spawnedAt,
+      },
+    ]);
+    assert.deepStrictEqual(peerSignalsAfterReload, []);
+    assert.deepStrictEqual(sentMessages, []);
+    assert.deepStrictEqual(notifications, []);
     assert.deepStrictEqual(operationLog, [
       "epoch:bumped",
       "pending:reset",
