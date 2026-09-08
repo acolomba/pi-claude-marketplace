@@ -15,15 +15,18 @@ import {
   resetSettleState,
   settleHandlerFor,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/settle.ts";
+import { createHooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import { parseMatcher } from "../../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 
 import type { HookExecutor } from "../../../extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts";
 import type { HookExecResult } from "../../../extensions/pi-claude-marketplace/bridges/hooks/exec-result.ts";
+import type { HooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import type { StopReason } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type {
   AgentEndEvent,
   AgentSettledEvent,
+  AssistantMessage,
   ExtensionAPI,
   ExtensionContext,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
@@ -152,6 +155,61 @@ async function runStop(
   agentEndCacheHandler(epoch)(agentEnd("stop"));
   await settleHandlerFor(epoch, pi, executor)(settledEvent, ctx);
 }
+
+test("uses only the supplied runtime for Stop re-entry", async () => {
+  // arrange
+  const owningRuntime = createHooksRuntime();
+  const peerRuntime = createHooksRuntime();
+  const generation = owningRuntime.advanceGeneration();
+  peerRuntime.advanceGeneration();
+  owningRuntime.setRoutingBucket("Stop", [stopEntry("owner")]);
+  peerRuntime.setRoutingBucket("Stop", [stopEntry("peer")]);
+  const ownerMessage = agentEnd("stop").messages[1] as AssistantMessage;
+  const peerMessage = agentEnd("stop").messages[1] as AssistantMessage;
+  owningRuntime.recordLastAssistant(ownerMessage);
+  peerRuntime.recordLastAssistant(peerMessage);
+  const events: unknown[] = [];
+  const executor: HookExecutor = (entry, event): Promise<HookExecResult> => {
+    events.push({ pluginId: entry.pluginId, event });
+    return Promise.resolve({ kind: "block", reason: "continue" });
+  };
+  const { pi, sent } = makePi();
+  type RuntimeSettleFactory = (
+    runtime: HooksRuntime,
+    capturedGeneration: number,
+    pi: ExtensionAPI,
+    executor?: HookExecutor,
+  ) => (event: AgentSettledEvent, ctx: ExtensionContext) => Promise<void>;
+
+  // act
+  const handler = (settleHandlerFor as unknown as RuntimeSettleFactory)(
+    owningRuntime,
+    generation,
+    pi,
+    executor,
+  );
+  await handler(settledEvent, emptyContext);
+
+  // assert
+  assert.deepStrictEqual(events, [
+    {
+      pluginId: "owner",
+      event: { last_assistant_message: "done", stop_hook_active: false },
+    },
+  ]);
+  assert.deepStrictEqual(
+    sent.map((call) => call.message),
+    [
+      {
+        customType: "claude-hook-stop-block",
+        content: "continue",
+        display: false,
+        details: { pluginId: "owner" },
+      },
+    ],
+  );
+  assert.strictEqual(peerRuntime.takeLastAssistant(), peerMessage);
+});
 
 test("cache miss, one-shot hit, and stale epoch are visible at public boundaries", async (t) => {
   // arrange
