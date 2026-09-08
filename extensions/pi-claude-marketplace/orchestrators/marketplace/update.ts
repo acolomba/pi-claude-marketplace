@@ -99,7 +99,6 @@ import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import { DEFAULT_CREDENTIAL_OPS } from "../../platform/git-credential.ts";
-import { dropMarketplaceCache } from "../../shared/completion-cache.ts";
 import {
   InvalidMarketplaceManifestError,
   MarketplaceUpdateError,
@@ -140,10 +139,12 @@ import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { CredentialOps } from "../../platform/git-credential.ts";
 import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
 import type { ContentReason, PluginFailedMessage } from "../../shared/notify.ts";
+import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { PluginUpdateFn, PluginUpdateOutcome } from "../types.ts";
 
 export interface UpdateMarketplaceOptions {
+  readonly completionCache: CompletionCache;
   readonly ctx: NotificationContext;
   /** Single marketplace by name. Required for `updateMarketplace`; rejected by `updateAllMarketplaces` (which derives the list from state). */
   readonly name: string;
@@ -178,6 +179,7 @@ export interface UpdateMarketplaceOptions {
 }
 
 export interface UpdateAllMarketplacesOptions {
+  readonly completionCache: CompletionCache;
   readonly ctx: NotificationContext;
   readonly scope?: Scope;
   readonly cwd: string;
@@ -216,6 +218,7 @@ export async function updateMarketplace(opts: UpdateMarketplaceOptions): Promise
   }
 
   await refreshOneMarketplace({
+    completionCache: opts.completionCache,
     ctx: opts.ctx,
     pi: opts.pi,
     cardinality: "single",
@@ -264,6 +267,7 @@ export async function updateAllMarketplaces(opts: UpdateAllMarketplacesOptions):
   // Process sequentially.
   for (const t of targets) {
     await refreshOneMarketplace({
+      completionCache: opts.completionCache,
       ctx: opts.ctx,
       pi: opts.pi,
       cardinality: "plural",
@@ -279,6 +283,7 @@ export async function updateAllMarketplaces(opts: UpdateAllMarketplacesOptions):
 }
 
 interface RefreshOneArgs {
+  readonly completionCache: CompletionCache;
   readonly ctx: NotificationContext;
   readonly cardinality: "single" | "plural";
   readonly name: string;
@@ -735,7 +740,11 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
   // completion read rebuilds from the freshly updated marketplace.json.
   // Defense-in-depth try/catch.
   try {
-    await dropMarketplaceCache(await locations.pluginCacheFile(name), scope, name);
+    await args.completionCache.dropMarketplaceCache(
+      await locations.pluginCacheFile(name),
+      scope,
+      name,
+    );
   } catch {
     // Intentional non-surfacing (PU-4 / AS-6): this cleanup runs AFTER the
     // durable atomic state save, so a leak here cannot corrupt state. A

@@ -7,9 +7,8 @@
 //   - bare    -> updateAllMarketplaces
 //   - <name>  -> updateMarketplace
 //
-// `deps.gitOps` and `deps.pluginUpdate` are injected per D-04 EdgeDeps
-// pattern; the orchestrator side accepts them as optional, but the wiring
-// always supplies both.
+// The lifecycle CompletionCache travels beside the unchanged `pluginUpdate`
+// callback. The handler creates neither owner and always supplies both.
 
 import {
   updateAllMarketplaces,
@@ -25,7 +24,7 @@ const USAGE = "Usage: /claude:plugin marketplace update [<name>] [--scope user|p
 
 export function makeMarketplaceUpdateHandler(
   pi: ExtensionAPI,
-  deps: Pick<EdgeDeps, "gitOps" | "pluginUpdate">,
+  deps: Pick<EdgeDeps, "completionCache" | "gitOps" | "pluginUpdate">,
 ): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
   return async (args, ctx): Promise<void> => {
     const parsed = parseCommandArgs(
@@ -38,7 +37,7 @@ export function makeMarketplaceUpdateHandler(
         // Argument-parsing failure:
         // -> sentence + Usage block via notifyUsageError.
         notifyUsageError(ctx, {
-          message: message === USAGE ? "Missing required argument." : message,
+          message,
           usage: USAGE,
         });
       },
@@ -49,6 +48,7 @@ export function makeMarketplaceUpdateHandler(
 
     if (parsed.name === undefined) {
       await updateAllMarketplaces({
+        completionCache: deps.completionCache,
         ctx,
         pi,
         cwd: ctx.cwd,
@@ -60,6 +60,7 @@ export function makeMarketplaceUpdateHandler(
     }
 
     await updateMarketplace({
+      completionCache: deps.completionCache,
       ctx,
       pi,
       name: parsed.name,

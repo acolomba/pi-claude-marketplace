@@ -209,6 +209,7 @@ const INVOKERS: Record<string, Invoker> = {
   "marketplace update": async ({ ctx, pi, cwd, mode }) => {
     const { gitOps } = createGitOps();
     await updateMarketplace({
+      completionCache: createCompletionCache(),
       ctx,
       pi,
       name: NAME,
