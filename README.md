@@ -106,7 +106,7 @@ Commands and skill names use Pi's colon form:
 | `foo`       | `foo-bar`             | `/foo:bar` |
 | `foo`       | `foo`                 | `/foo:foo` |
 
-On Windows, commands are prefixed with a dot (`.`) instead of a dash (`-`). Skill names do not change:
+On Windows, commands are prefixed with a dot (`.`) instead of a colon (`:`). Skill names do not change:
 
 | Plugin name | Command name | Pi name (Windows) |
 | ----------- | ------------ | ----------------- |

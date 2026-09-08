@@ -106,7 +106,7 @@ Los nombres de comandos y habilidades usan el formato con dos puntos de Pi:
 | `foo`                  | `foo-bar`                      | `/foo:bar`   |
 | `foo`                  | `foo`                          | `/foo:foo`   |
 
-En Windows, los comandos se prefijan con un punto (`.`) en lugar de un guion (`-`). Los nombres de habilidades no cambian:
+En Windows, los comandos se prefijan con un punto (`.`) en lugar de dos puntos (`:`). Los nombres de habilidades no cambian:
 
 | Nombre del complemento | Nombre del comando | Nombre en Pi (Windows) |
 | ---------------------- | ------------------ | ---------------------- |
