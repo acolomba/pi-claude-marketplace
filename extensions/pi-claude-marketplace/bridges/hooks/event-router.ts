@@ -480,6 +480,9 @@ interface HydratedScope {
   readonly loc: ScopedLocations;
 }
 
+/** True while awaited work still belongs to the lifecycle that started it. */
+type GenerationGuard = () => boolean;
+
 /** Required persisted-state operation for hooks hydration. */
 export interface HooksHydrationReader {
   readonly loadState: (extensionRoot: string) => Promise<ExtensionState>;
@@ -592,6 +595,7 @@ async function hydrateCacheFromDisk(
   },
   reader: HooksHydrationReader,
   routingState: EventRouterRoutingState,
+  generationIsCurrent: GenerationGuard,
 ): Promise<readonly HydratedScope[]> {
   const hydrated: HydratedScope[] = [];
 
@@ -615,7 +619,7 @@ async function hydrateCacheFromDisk(
     // projectRoot for project scope; user-scope hydrate paths use
     // homedir-rooted paths so opts.cwd is the right "current project"
     // anchor for path globs.
-    await hydrateScopeFromState(state, loc, opts.cwd, routingState);
+    await hydrateScopeFromState(state, loc, opts.cwd, routingState, generationIsCurrent);
     hydrated.push({ state, loc });
   }
 
@@ -634,26 +638,22 @@ async function hydrateScopeFromState(
   loc: ScopedLocations,
   cwd: string,
   routingState: EventRouterRoutingState,
+  generationIsCurrent: GenerationGuard,
 ): Promise<void> {
-  for (const [mpName, mpRecord] of Object.entries(state.marketplaces)) {
-    if (mpRecord.scope !== loc.scope) {
-      continue;
-    }
-
-    for (const [pluginId, pluginRecord] of Object.entries(mpRecord.plugins)) {
+  const scopedMarketplaces = Object.entries(state.marketplaces).filter(
+    ([, marketplace]) => marketplace.scope === loc.scope,
+  );
+  for (const [mpName, mpRecord] of scopedMarketplaces) {
+    const hookPlugins = Object.entries(mpRecord.plugins).filter(([, plugin]) => {
       // ENBL-14 / D-100-05: a disabled plugin's hooks must not re-register.
       // ENBL-18 keeps `resources.hooks` populated on a disabled record, so a
       // file restored by any means would hydrate again -- this guard is what
       // stops it. Read through the single predicate so this site cannot
       // drift from ENBL-05.
-      if (isRecordedButDisabled(pluginRecord)) {
-        continue;
-      }
-
+      return !isRecordedButDisabled(plugin) && plugin.resources.hooks.length > 0;
+    });
+    for (const [pluginId, pluginRecord] of hookPlugins) {
       const hookSlugs = pluginRecord.resources.hooks;
-      if (hookSlugs.length === 0) {
-        continue;
-      }
 
       // D-57-03: `resources.hooks` carries the per-plugin hooks-container-dir
       // generatedName; the on-disk file is `<hooksDir>/<generatedName>/hooks.json`.
@@ -669,7 +669,11 @@ async function hydrateScopeFromState(
           loc.hooksDir,
           cwd,
           routingState,
+          generationIsCurrent,
         );
+        if (!generationIsCurrent()) {
+          return;
+        }
       }
     }
   }
@@ -684,6 +688,7 @@ async function tryHydrateOnePlugin(
   hooksDir: string,
   cwd: string,
   routingState: EventRouterRoutingState,
+  generationIsCurrent: GenerationGuard,
 ): Promise<void> {
   // Defense-in-depth (NFR-10): state.json is normally written only by this
   // extension, but the slug component (`pluginRecord.resources.hooks[i]`) is
@@ -697,6 +702,10 @@ async function tryHydrateOnePlugin(
     hookDebugLog(
       `hydrate: containment violation for ${scope}/${marketplace}/${pluginId} at ${hooksJsonPath}: ${errorMessage(err)}`,
     );
+    return;
+  }
+
+  if (!generationIsCurrent()) {
     return;
   }
 
@@ -721,6 +730,10 @@ async function tryHydrateOnePlugin(
     hookDebugLog(
       `hydrate: read failed for ${scope}/${marketplace}/${pluginId} at ${hooksJsonPath}: ${errorMessage(err)}`,
     );
+    return;
+  }
+
+  if (!generationIsCurrent()) {
     return;
   }
 
@@ -767,6 +780,7 @@ async function hydrateProjectScopeForCwdWith(
   reader: HooksHydrationReader,
   cwd: string,
   routingState: EventRouterRoutingState,
+  generationIsCurrent: GenerationGuard,
 ): Promise<void> {
   // WR-01: factory-time hydrate ran with `cwd = homedir()` because
   // `resources_discover` had not fired yet, so any project-scope entries
@@ -804,7 +818,11 @@ async function hydrateProjectScopeForCwdWith(
     return;
   }
 
-  await hydrateScopeFromState(state, loc, cwd, routingState);
+  if (!generationIsCurrent()) {
+    return;
+  }
+
+  await hydrateScopeFromState(state, loc, cwd, routingState, generationIsCurrent);
 }
 
 /**
@@ -831,19 +849,15 @@ async function ensureSharedDataDir(loc: ScopedLocations): Promise<void> {
  * D-59-03 / DISP-01 / DISP-02 / DISP-03 hooks-bridge factory.
  *
  * Step order is load-bearing:
- *   1. Bump liveEpoch and capture the new value; every closure registered
+ *   1. Advance the runtime generation and capture the new value; every closure registered
  *      below sees the captured value and short-circuits on mismatch
  *      against any future bump.
- *   1.5. SIGKILL prior-cycle in-memory async-rewake children (HOOK-06) AND
- *      reap persisted orphans per scope (D-62-05). Runs AFTER the liveEpoch
- *      bump so any stale exit handlers from prior children fall through the
- *      captured-epoch guard rather than firing against the freshly hydrated
- *      session.
- *   2. Hydrate the parsed-config cache from disk for both scopes (factory-
- *      time cold-start path).
- *   3. Rebuild routing tables for both scopes so the first Pi event fires
- *      against a populated table.
- *   4. Register exactly 11 pi.on call sites -- 7 Bucket-A dispatch surfaces
+ *   2. Reset pending-context and settle transitions for the new generation.
+ *   3. SIGKILL prior-cycle in-memory async-rewake children (HOOK-06).
+ *   4. Hydrate the parsed-config cache from disk, then rebuild routing tables.
+ *   5. Prepare each required SessionStart shared directory.
+ *   6. Reap persisted orphans per scope (D-62-05).
+ *   7. Register exactly 11 pi.on call sites -- 7 Bucket-A dispatch surfaces
  *      (DISP-01) plus `before_agent_start` (the drain point for the
  *      SessionStart `additionalContext` capture buffer) plus the two
  *      settle-time surfaces `agent_end` (caches the run's last-assistant
@@ -860,7 +874,7 @@ async function ensureSharedDataDir(loc: ScopedLocations): Promise<void> {
  *
  * `opts.executor` is the hook-execution injection point, forwarded verbatim
  * to every `compositeHandlerFor` / `toolResultCompositeHandler` /
- * `settleHandlerFor` closure registered in step 4. The sole production caller
+ * `settleHandlerFor` closure registered in step 7. The sole production caller
  * -- the extension factory in `index.ts` -- does NOT pass it, so production
  * always runs on the `dispatchHookExec` default; it exists so a test can
  * register the real bridge against a spy and assert on routing without
@@ -880,6 +894,8 @@ async function registerHooksBridgeWith(
       ? createRoutingStateOperations(owner.runtime)
       : TRANSITION_ROUTING_STATE;
   const capturedGeneration = owner.runtime.advanceGeneration();
+  const generationIsCurrent = (): boolean =>
+    owner.runtime.currentGeneration() === capturedGeneration;
   bumpEpoch();
   function bind<Args extends readonly unknown[], Result>(
     callbackForGeneration: RegistrationCallbackFactory<Args, Result>,
@@ -907,7 +923,7 @@ async function registerHooksBridgeWith(
   // cycles; reapOrphans below covers cross-process crash recovery.
   shutdownInMemoryChildren(owner.runtime);
 
-  const hydrated = await hydrateCacheFromDisk(opts, reader, routingState);
+  const hydrated = await hydrateCacheFromDisk(opts, reader, routingState, generationIsCurrent);
   for (const { loc } of hydrated) {
     rebuildRoutingTablesWith(routingState);
     if (owner.kind === "runtime") {
@@ -979,7 +995,16 @@ async function registerHooksBridgeWith(
       );
       return async (event, ctx) => {
         try {
-          await hydrateProjectScopeForCwdWith(reader, ctx.cwd, routingState);
+          await hydrateProjectScopeForCwdWith(
+            reader,
+            ctx.cwd,
+            routingState,
+            generationIsCurrent,
+          );
+          if (!generationIsCurrent()) {
+            return;
+          }
+
           rebuildRoutingTablesWith(routingState);
           if (owner.kind === "runtime") {
             mirrorRuntimeRoutingState(routingState);
@@ -989,6 +1014,9 @@ async function registerHooksBridgeWith(
 
           if (routingState.getRoutingBucket("SessionStart").some((e) => e.scope === "project")) {
             await ensureSharedDataDir(locationsFor("project", ctx.cwd));
+            if (!generationIsCurrent()) {
+              return;
+            }
           }
         } catch (err) {
           hookDebugLog(`session_start lazy project hydrate skipped: ${errorMessage(err)}`);
@@ -996,7 +1024,11 @@ async function registerHooksBridgeWith(
 
         await sessionStartHandler(event, ctx);
 
-        if (owner.kind === "transition" && owner.runtime.currentGeneration() === generation) {
+        if (!generationIsCurrent()) {
+          return;
+        }
+
+        if (owner.kind === "transition") {
           mirrorRuntimePendingContext(owner.runtime);
         }
       };
@@ -1078,7 +1110,14 @@ export function createHooksHydration(
   const routingState = createRoutingStateOperations(runtime);
   return {
     async hydrateProjectScopeForCwd(cwd: string): Promise<void> {
-      await hydrateProjectScopeForCwdWith(reader, cwd, routingState);
+      const capturedGeneration = runtime.currentGeneration();
+      const generationIsCurrent = (): boolean =>
+        runtime.currentGeneration() === capturedGeneration;
+      await hydrateProjectScopeForCwdWith(reader, cwd, routingState, generationIsCurrent);
+      if (!generationIsCurrent()) {
+        return;
+      }
+
       mirrorRuntimeRoutingState(routingState);
     },
     async registerHooksBridge(
@@ -1105,12 +1144,12 @@ export function beforeAgentStartHandlerFor(
   ctx: ExtensionContext,
 ) => Promise<BeforeAgentStartEventResult | undefined> {
   const handler = createBeforeAgentStartHandler(NODE_TRANSITION_RUNTIME, capturedGeneration);
-  return async (event, ctx) => {
+  return (event, ctx) => {
     if (capturedGeneration !== NODE_TRANSITION_RUNTIME.currentGeneration()) {
-      return undefined;
+      return Promise.resolve(undefined);
     }
 
-    const result = await handler(event, ctx);
+    const result = handler(event, ctx);
     clearPendingSessionStartContext();
     return result;
   };
@@ -1118,7 +1157,15 @@ export function beforeAgentStartHandlerFor(
 
 const NODE_HOOKS_HYDRATION: HooksHydration = {
   async hydrateProjectScopeForCwd(cwd: string): Promise<void> {
-    await hydrateProjectScopeForCwdWith(NODE_HOOKS_HYDRATION_READER, cwd, TRANSITION_ROUTING_STATE);
+    const capturedGeneration = NODE_TRANSITION_RUNTIME.currentGeneration();
+    const generationIsCurrent = (): boolean =>
+      NODE_TRANSITION_RUNTIME.currentGeneration() === capturedGeneration;
+    await hydrateProjectScopeForCwdWith(
+      NODE_HOOKS_HYDRATION_READER,
+      cwd,
+      TRANSITION_ROUTING_STATE,
+      generationIsCurrent,
+    );
   },
   async registerHooksBridge(
     pi: ExtensionAPI,

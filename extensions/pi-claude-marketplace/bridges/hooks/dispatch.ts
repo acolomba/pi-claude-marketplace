@@ -175,6 +175,7 @@ async function reduceBucket(
   executor: HookExecutor,
   matcherFires: (entry: RoutingEntry) => boolean,
 ): Promise<ReducedBucket> {
+  const capturedGeneration = runtime.currentGeneration();
   let finalResult: HookExecResult = { kind: "noop" };
   let attributedTo: RoutingEntry | undefined;
   for (const entry of bucket) {
@@ -189,6 +190,10 @@ async function reduceBucket(
     }
 
     const r = await executor(entry, event, ctx, pi, runtime);
+    if (capturedGeneration !== runtime.currentGeneration()) {
+      return { result: { kind: "noop" }, attributedTo: undefined };
+    }
+
     switch (r.kind) {
       case "block":
       case "stop":
@@ -260,6 +265,7 @@ export async function collectBucketOutcomes(
   matcherFires: (entry: RoutingEntry) => boolean,
   executor: HookExecutor = dispatchHookExec,
 ): Promise<BucketOutcome[]> {
+  const capturedGeneration = runtime.currentGeneration();
   const outcomes: BucketOutcome[] = [];
   for (const entry of bucket) {
     if (!matcherFires(entry)) {
@@ -279,6 +285,10 @@ export async function collectBucketOutcomes(
     }
 
     const result = await executor(entry, event, ctx, pi, runtime);
+    if (capturedGeneration !== runtime.currentGeneration()) {
+      return outcomes;
+    }
+
     outcomes.push({ entry, result });
   }
 

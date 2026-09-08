@@ -227,6 +227,18 @@ function createRecordingExecutor(
   };
 }
 
+/** Resolve a deferred hook execution and fail clearly if it never started. */
+function finishDeferredExecution(
+  finish: ((result: HookExecResult) => void) | undefined,
+  result: HookExecResult,
+): void {
+  if (finish === undefined) {
+    throw new Error("the deferred hook executor did not start");
+  }
+
+  finish(result);
+}
+
 describe("compositeHandlerFor", () => {
   test("routes SessionStart context through only the supplied runtime", async () => {
     // arrange
@@ -691,6 +703,56 @@ describe("collectBucketOutcomes", () => {
     // assert
     assert.deepStrictEqual(outcomes, expectedOutcomes);
   });
+
+  test("stops the bucket before a later executor when the generation changes during await", async () => {
+    // arrange
+    const context = createExtensionContext("/workspace/stale-outcome-collection");
+    const bucket = [
+      createRoutingEntry({
+        pluginId: "awaited",
+        claudeEvent: "PreToolUse",
+        rawMatcher: "Bash",
+        declarationIndex: 0,
+      }),
+      createRoutingEntry({
+        pluginId: "must-not-start",
+        claudeEvent: "PreToolUse",
+        rawMatcher: "Bash",
+        declarationIndex: 1,
+      }),
+    ];
+    const calls: string[] = [];
+    let finishExecution: ((result: HookExecResult) => void) | undefined;
+    const executor: HookExecutor = (entry) => {
+      calls.push(entry.pluginId);
+      if (entry.pluginId === "must-not-start") {
+        return Promise.resolve({ kind: "noop" });
+      }
+
+      return new Promise((resolve) => {
+        finishExecution = resolve;
+      });
+    };
+
+    const pending = collectBucketOutcomes(
+      runtime,
+      bucket,
+      createToolCallEvent(),
+      context,
+      undefined,
+      () => true,
+      executor,
+    );
+    runtime.advanceGeneration();
+
+    // act
+    finishDeferredExecution(finishExecution, { kind: "noop" });
+    const outcomes = await pending;
+
+    // assert
+    assert.deepStrictEqual(outcomes, []);
+    assert.deepStrictEqual(calls, ["awaited"]);
+  });
 });
 
 describe("composite dispatch reduction", () => {
@@ -994,7 +1056,10 @@ describe("composite dispatch closure partitions", () => {
     runtime.advanceGeneration();
 
     // act
-    finishExecution?.({ kind: "mutate", updatedInput: { command: "stale command" } });
+    finishDeferredExecution(finishExecution, {
+      kind: "mutate",
+      updatedInput: { command: "stale command" },
+    });
     const output = await pending;
 
     // assert
@@ -1028,11 +1093,13 @@ describe("composite dispatch closure partitions", () => {
     runtime.advanceGeneration();
 
     // act
-    finishExecution?.({ kind: "mutate", additionalContext: "stale context" });
-    const output = await pending;
+    finishDeferredExecution(finishExecution, {
+      kind: "mutate",
+      additionalContext: "stale context",
+    });
+    await pending;
 
     // assert
-    assert.strictEqual(output, undefined);
     assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), []);
   });
 
@@ -1238,7 +1305,7 @@ describe("toolResultCompositeHandler", () => {
     runtime.advanceGeneration();
 
     // act
-    finishExecution?.({ kind: "block", reason: "stale block" });
+    finishDeferredExecution(finishExecution, { kind: "block", reason: "stale block" });
     const output = await pending;
 
     // assert
