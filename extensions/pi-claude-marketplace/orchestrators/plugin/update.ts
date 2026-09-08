@@ -74,10 +74,7 @@ import {
   prepareStageCommands,
 } from "../../bridges/commands/index.ts";
 import { compileIfPredicate } from "../../bridges/hooks/if-field/index.ts";
-import {
-  removeHookConfig,
-  writeHookConfig,
-} from "../../bridges/hooks/index.ts";
+import { removeHookConfig, writeHookConfig } from "../../bridges/hooks/index.ts";
 import {
   abortPreparedMcp,
   commitPreparedMcp,
@@ -2142,7 +2139,6 @@ async function finalizeUpdateRecord(
         invalidConfigWriteBack = true;
       }
     }
-
   });
 
   // Route visibility follows the state guard's durable auto-save. A failed
