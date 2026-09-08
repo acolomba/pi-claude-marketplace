@@ -914,9 +914,7 @@ async function rebuildScopeRoutingTableIsolated(
   hooksRouting: ApplyReconcileOptions["hooksRouting"],
   outcomes: PerEntryOutcome[],
 ): Promise<void> {
-  await runScopeIsolated(scope, outcomes, () =>
-    rebuildScopeRoutingTable(scope, cwd, hooksRouting),
-  );
+  await runScopeIsolated(scope, outcomes, () => rebuildScopeRoutingTable(scope, cwd, hooksRouting));
 }
 
 export function surfacePostCommitWarnings(

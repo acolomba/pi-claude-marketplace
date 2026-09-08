@@ -10,10 +10,7 @@
 // dispatch-exec layer is bridge-internal and intentionally absent here -- it
 // is reached through the injected `HookExecutor` parameter, not this barrel.
 
-export {
-  createHooksHydration,
-  createHooksRouting,
-} from "./event-router.ts";
+export { createHooksHydration, createHooksRouting } from "./event-router.ts";
 
 export type {
   HooksHydration,

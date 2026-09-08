@@ -881,21 +881,16 @@ async function registerHooksBridgeWith(
         if (!generationIsCurrent()) {
           return;
         }
-
       };
     }),
   );
   pi.on(
     "session_shutdown",
-    bind((generation) =>
-      compositeHandlerFor(runtime, "SessionEnd", generation, pi, opts.executor),
-    ),
+    bind((generation) => compositeHandlerFor(runtime, "SessionEnd", generation, pi, opts.executor)),
   );
   pi.on(
     "session_before_compact",
-    bind((generation) =>
-      compositeHandlerFor(runtime, "PreCompact", generation, pi, opts.executor),
-    ),
+    bind((generation) => compositeHandlerFor(runtime, "PreCompact", generation, pi, opts.executor)),
   );
   pi.on(
     "session_compact",
@@ -911,9 +906,7 @@ async function registerHooksBridgeWith(
   );
   pi.on(
     "tool_call",
-    bind((generation) =>
-      compositeHandlerFor(runtime, "PreToolUse", generation, pi, opts.executor),
-    ),
+    bind((generation) => compositeHandlerFor(runtime, "PreToolUse", generation, pi, opts.executor)),
   );
   pi.on(
     "tool_result",
@@ -963,7 +956,6 @@ export function createHooksHydration(
       if (!generationIsCurrent()) {
         return;
       }
-
     },
     async registerHooksBridge(
       pi: ExtensionAPI,

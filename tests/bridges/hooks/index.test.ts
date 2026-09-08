@@ -1,9 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import {
-  createHooksHydration as definingCreateHooksHydration,
-} from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
+import { createHooksHydration as definingCreateHooksHydration } from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
 import {
   createHooksHydration,
   removeHookConfig,
