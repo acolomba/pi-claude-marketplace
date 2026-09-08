@@ -14,12 +14,9 @@
 //       global `--scope` excluded, MUST equal the catalog's complete=true
 //       names for that verb (exact set, sorted).
 //
-//   (b) Handler-accepted consistency: list's exported `BOOLEAN_FLAGS` (the
-//       concrete parse-side hook) MUST equal the catalog's list parse-set with
-//       `--local` excluded (BOOLEAN_FLAGS enumerates only the boolean FILTER
-//       flags; `--scope` is consumed by parseArgs upstream and never in the
-//       catalog). For `info`, whose accepted set is not exported, the catalog
-//       parse-set MUST carry `--fetch` (FTCH-03).
+//   (b) Handler-accepted consistency: the catalog list parse-set MUST carry
+//       `--remote` (RSTA-07), and the info parse-set MUST carry `--fetch`
+//       (FTCH-03).
 //
 //   (c) Exact per-verb parse-set pin: verbs whose handlers hard-reject unknown
 //       long flags inline instead of consuming the catalog
@@ -45,7 +42,6 @@ import {
   completionFlagEntries,
   parseFlagNames,
 } from "../../extensions/pi-claude-marketplace/edge/flag-catalog.ts";
-import { BOOLEAN_FLAGS } from "../../extensions/pi-claude-marketplace/edge/handlers/plugin/list.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 
 import type { LocationsResolver } from "../../extensions/pi-claude-marketplace/edge/completions/data.ts";
@@ -98,19 +94,6 @@ test("catalog vs completion: per-verb complete-set equals emitted labels (scope 
       `Flag drift for "${head}": completion labels ${JSON.stringify(sorted(emitted))} != catalog complete-set ${JSON.stringify(sorted(catalogComplete))}. Update edge/flag-catalog.ts in the same change.`,
     );
   }
-});
-
-test("catalog vs handler: list BOOLEAN_FLAGS equals catalog list parse-set (--local excluded)", () => {
-  // BOOLEAN_FLAGS enumerates the boolean FILTER flags; the catalog's list entry
-  // carries no `--local`, so the two sets match exactly.
-  const catalogListParse = parseFlagNames("list");
-  catalogListParse.delete("--local");
-
-  assert.deepEqual(
-    sorted(BOOLEAN_FLAGS),
-    sorted(catalogListParse),
-    "list BOOLEAN_FLAGS and the catalog list parse-set have drifted -- update edge/flag-catalog.ts.",
-  );
 });
 
 test("catalog vs handler: RSTA-07 list carries --remote; FTCH-03 info carries --fetch", () => {

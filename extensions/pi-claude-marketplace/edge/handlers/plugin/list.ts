@@ -77,6 +77,3 @@ export function makeListHandler(
     });
   });
 }
-
-// Export for potential reuse by completions provider.
-export { BOOLEAN_FLAGS };
