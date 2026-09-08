@@ -60,6 +60,7 @@ import {
   createHooksRouting,
   createHooksRuntime,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
+import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
   applyReconcile as applyReconcileWithRouting,
@@ -77,6 +78,10 @@ import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { retryTree } from "../plugin/scope-tree-inventory.ts";
 
 import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
+import type {
+  HooksRouting,
+  HooksRuntime,
+} from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import type { PerEntryOutcome } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts";
 import type { ReconcileStateReader } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
 import type { ApplyReconcileOptions } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts";
@@ -382,6 +387,34 @@ function pluginRecord(seed: RecordSeed): PluginRecord {
     installedAt: RECORDED_AT,
     updatedAt: RECORDED_AT,
   };
+}
+
+/** Populate one lifecycle owner with an observable project-scope route. */
+async function populateRuntimeRoute(
+  cwd: string,
+  runtime: HooksRuntime,
+  opts: { readonly command: string; readonly marketplace: string; readonly plugin: string },
+): Promise<HooksRouting> {
+  const pluginRoot = path.join(cwd, "runtime-routes", `${opts.marketplace}-${opts.plugin}`);
+  const hooksJsonPath = path.join(pluginRoot, "hooks.json");
+  await writeUnder(
+    hooksJsonPath,
+    JSON.stringify({
+      PreToolUse: [{ hooks: [{ command: opts.command, type: "command" }], matcher: "" }],
+    }),
+  );
+  const hooksRouting = createHooksRouting(runtime);
+  await hooksRouting.readAndCachePluginHooks({
+    cwd,
+    hooksJsonPath,
+    logPrefix: "reconcile-uninstall-owner-test",
+    marketplace: opts.marketplace,
+    plugin: opts.plugin,
+    resolvedSource: asAbsolutePluginRoot(pluginRoot),
+    scope: "project",
+  });
+  hooksRouting.rebuildRoutingTables();
+  return hooksRouting;
 }
 
 function marketplaceRecord(options: {
@@ -1119,11 +1152,28 @@ describe("applyReconcile", () => {
     );
     const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
     const { gitOps, clonedUrls } = createOfflineGitOps();
+    const ownerRuntime = createHooksRuntime();
+    const peerRuntime = createHooksRuntime();
+    const hooksRouting = await populateRuntimeRoute(cwd, ownerRuntime, {
+      command: "echo reconcile-target",
+      marketplace: "mp",
+      plugin: "hello",
+    });
+    await populateRuntimeRoute(cwd, ownerRuntime, {
+      command: "echo reconcile-unrelated",
+      marketplace: "mp",
+      plugin: "other",
+    });
+    await populateRuntimeRoute(cwd, peerRuntime, {
+      command: "echo reconcile-peer",
+      marketplace: "mp",
+      plugin: "hello",
+    });
 
     // act
-    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps });
+    await applyReconcileWithRouting({ ctx, pi, cwd, scope: "project", gitOps, hooksRouting });
     const afterFirst = await loadState(project.extensionRoot);
-    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps });
+    await applyReconcileWithRouting({ ctx, pi, cwd, scope: "project", gitOps, hooksRouting });
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -1142,6 +1192,14 @@ describe("applyReconcile", () => {
       "pi-claude-marketplace/state.json",
     ]);
     assert.deepStrictEqual(clonedUrls(), []);
+    assert.deepStrictEqual(
+      ownerRuntime.getRoutingBucket("PreToolUse").map((entry) => entry.pluginId),
+      ["other"],
+    );
+    assert.deepStrictEqual(
+      peerRuntime.getRoutingBucket("PreToolUse").map((entry) => entry.pluginId),
+      ["hello"],
+    );
     verifyBoundary();
   });
 
