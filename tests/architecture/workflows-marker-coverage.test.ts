@@ -14,6 +14,17 @@
  * informative: reverting a single derivation turns exactly one row of the
  * projected array red, and that row names the file to open.
  *
+ * The case list is BOUND to the tree, not hand-maintained (WR-04). A literal
+ * seven-entry array can only prove the seven sites it already names: an eighth
+ * derivation would render no marker and leave this suite green, which is the
+ * exact failure mode the word EVERY above claims to exclude. The second case
+ * below therefore scans `orchestrators/` for the two shapes a derivation takes
+ * here and asserts the discovered file set equals the case list's, so an
+ * unlisted site is a red row rather than a silent gap. It is the runtime
+ * counterpart of the compile-time totality constructs this codebase reaches for
+ * elsewhere (`satisfies Record<DegradeKind, ...>`, `_ReasonsCoverageProof`);
+ * the sites are files rather than type members, so the binding cannot be a type.
+ *
  * Every case asserts on the RENDERED ROW rather than on an intermediate
  * `Dependency[]`, so all seven prove the same end-to-end claim (D-114-05). Five
  * of the seven derivations are module-private and stay that way: they are
@@ -46,6 +57,8 @@ import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence
 import { saveState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { notify } from "../../extensions/pi-claude-marketplace/shared/notify.ts";
 import { createGitOpsFake } from "../platform/git-ops-fake.ts";
+
+import { filesMatching } from "./source-scan.ts";
 
 import type { ExtensionState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type {
@@ -452,41 +465,46 @@ test("WDEP-04 / SNM-06: every Dependency[] derivation site renders the host-engi
 
   // assert -- ONE assertion over the whole projection, so reverting a single
   // derivation arm turns exactly one row red and that row names its file.
-  assert.deepEqual(observed, [
-    {
-      site: "extensions/pi-claude-marketplace/orchestrators/plugin/install.ts",
-      marked: true,
-      clean: true,
-    },
-    {
-      site: "extensions/pi-claude-marketplace/orchestrators/plugin/list.ts",
-      marked: true,
-      clean: true,
-    },
-    {
-      site: "extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts",
-      marked: true,
-      clean: true,
-    },
-    {
-      site: "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts",
-      marked: true,
-      clean: true,
-    },
-    {
-      site: "extensions/pi-claude-marketplace/orchestrators/plugin/update-row.ts",
-      marked: true,
-      clean: true,
-    },
-    {
-      site: "extensions/pi-claude-marketplace/orchestrators/import/execute.ts",
-      marked: true,
-      clean: true,
-    },
-    {
-      site: "extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts",
-      marked: true,
-      clean: true,
-    },
-  ]);
+  //
+  // The expectation is PROJECTED from the case list rather than spelled a
+  // second time (IN-03): only the two booleans are literal here. A typo in a
+  // duplicated path would have reported two differing paths, which reads as a
+  // rename rather than as the coverage failure it is.
+  assert.deepEqual(
+    observed,
+    SITE_CASES.map(({ site }) => ({ site, marked: true, clean: true })),
+  );
+});
+
+/**
+ * The two spellings a `Dependency[]` derivation takes under `orchestrators/`:
+ * a function whose declared return type is the tuple, and a local mutable
+ * accumulator that is pushed into. Both are anchored so the pattern cannot
+ * match a mere type ANNOTATION -- an interface field spelled
+ * `readonly dependencies: readonly Dependency[];` carries no derivation and
+ * must not turn this gate red, or the first purely-typed change would invite a
+ * suppression instead of a fix.
+ */
+const DERIVATION_SHAPE =
+  /\)\s*:\s*(?:readonly\s+)?Dependency\[\]\s*\{|:\s*Dependency\[\]\s*=\s*\[\s*\]/;
+
+test("WDEP-04: the case list covers every Dependency[] derivation site", async () => {
+  // arrange + act -- discover the sites from the tree rather than trusting the
+  // enumeration above. `filesMatching` strips comments first, so the several
+  // prose mentions of `Dependency[]` in these files' headers do not count as
+  // derivations.
+  const discovered = await filesMatching(
+    "extensions/pi-claude-marketplace/orchestrators",
+    DERIVATION_SHAPE,
+  );
+
+  // assert -- set equality in BOTH directions. An eighth derivation that no
+  // case drives is a red row here even though its own surface renders no
+  // marker; a case whose site no longer derives anything is red too, so a
+  // deleted derivation cannot leave a case asserting against nothing.
+  assert.deepEqual(
+    discovered,
+    [...SITE_CASES].map(({ site }) => site).sort(),
+    "WDEP-04: the Dependency[] derivation sites on disk no longer match SITE_CASES. A site present here and absent there renders no host-engine marker and nothing else would notice; add a case that drives its PUBLIC surface. A site absent here and present there has lost its derivation; retire the case with it.",
+  );
 });

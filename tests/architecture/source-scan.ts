@@ -11,6 +11,11 @@
  * registers cases at its top level registers those cases a SECOND time in the
  * importing file's run, doubling the work and misreporting the count (D-98-09).
  *
+ * A third gate needs the opposite question -- which files DO carry a surface --
+ * and `filesMatching` answers it from the same read-and-strip mechanic, so a
+ * coverage case list can be bound to the tree instead of hand-maintained
+ * (`tests/architecture/workflows-marker-coverage.test.ts`, WR-04).
+ *
  * Every read goes through the `node:fs/promises` API rather than a subprocess
  * line tool (D-98-10). A `grep`-style subprocess treats a file it classifies as
  * binary as unprintable and reports nothing, which would green a gate on a file
@@ -21,7 +26,7 @@
  */
 
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -97,4 +102,41 @@ export async function assertNoForbiddenSurface(
   }
 
   assert.deepEqual(offenders, [], describeViolation(offenders));
+}
+
+/**
+ * Walk every `.ts` file below a repository-relative directory and return the
+ * repo-relative POSIX paths whose comment-stripped source matches `pattern`,
+ * sorted.
+ *
+ * The inverse of `assertNoForbiddenSurface`: that one takes a roster and proves
+ * a surface is absent from it, this one DISCOVERS the roster from a surface's
+ * presence. A coverage gate needs the second shape -- a hand-maintained case
+ * list can only prove the cases it already names, so binding it to a scan is
+ * what makes an unlisted site red instead of invisible.
+ *
+ * `pattern` must not carry the `g` flag: `RegExp.prototype.test` on a global
+ * regex advances `lastIndex` between calls and would skip files.
+ */
+export async function filesMatching(dirRel: string, pattern: RegExp): Promise<string[]> {
+  assert.ok(
+    !pattern.global,
+    `filesMatching: ${String(pattern)} is global; test() would be stateful`,
+  );
+  const names = await readdir(path.join(REPO_ROOT, dirRel), { recursive: true });
+  const matched: string[] = [];
+
+  for (const name of names) {
+    if (!name.endsWith(".ts")) {
+      continue;
+    }
+
+    const rel = path.posix.join(dirRel, name.split(path.sep).join("/"));
+    const src = await readFile(path.join(REPO_ROOT, rel), "utf8");
+    if (pattern.test(stripComments(src))) {
+      matched.push(rel);
+    }
+  }
+
+  return matched.sort();
 }
