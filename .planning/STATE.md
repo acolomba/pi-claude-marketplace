@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 05
 current_phase_name: Injection and Ownership Design
 status: executing
-stopped_at: Completed Phase 05 Wave 3 through 05-09-PLAN.md
-last_updated: "2026-09-08T00:07:36.514Z"
+stopped_at: Completed Phase 05 Wave 4 through 05-10-PLAN.md
+last_updated: "2026-09-08T00:58:28.427Z"
 last_activity: 2026-09-08
-last_activity_desc: Phase 05 Plan 09 complete; one runtime now owns hook hydration and registration generations
-state_head: b8b1a32d15ca1a9f559bf6b8452f22cad31af9bb
+last_activity_desc: Phase 05 Plan 10 complete; runtime owns hook dispatch and settle state
+state_head: c38cb01f3f0fa129d7fb1d5b90a2b2113b7a1d6f
 progress:
   total_phases: 9
   completed_phases: 3
   total_plans: 127
-  completed_plans: 103
+  completed_plans: 104
   percent: 33
 ---
 
@@ -33,9 +33,9 @@ component as a working Pi artifact.
 
 Phase: 05 (Injection and Ownership Design) — EXECUTING
 Next: Execute Phase 5
-Plan: 10 of 33
+Plan: 11 of 33
 Status: Ready to execute
-Last activity: 2026-09-08 — Phase 05 Plan 09 complete; one runtime now owns hook hydration and registration generations
+Last activity: 2026-09-08 — Phase 05 Plan 10 complete; runtime owns hook dispatch and settle state
 
 ## Performance Metrics
 
@@ -284,6 +284,7 @@ Last activity: 2026-09-08 — Phase 05 Plan 09 complete; one runtime now owns ho
 | Phase 05 P08                            | 25min    | 2 tasks | 7 files  |
 | Phase 05 P09                            | 33min    | 2 tasks | 7 files  |
 | Phase 05 P09                            | 37min    | 2 tasks | 7 files  |
+| Phase 05 P10                            | 43 min   | 2 tasks | 8 files  |
 
 ## Accumulated Context
 
@@ -738,7 +739,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed Phase 05 Wave 3 through 05-09-PLAN.md
+**Stopped at:** Completed Phase 05 Wave 4 through 05-10-PLAN.md
 
 Phase 04 completed all seven plans and closed AUTH-01 and TREF-01 through
 TREF-03. Independent verification passed 4/4 with no behavioral or UAT gap;
@@ -752,10 +753,10 @@ composition with generation invalidation.
 **Read beside it:** `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`, the
 Phase 01 terminal evidence ledger, and Phase 5's roadmap criteria.
 
-Last session: 2026-09-08T00:07:36.055Z
+Last session: 2026-09-08T00:58:27.961Z
 
-**Next:** Execute Phase 5 Plan 05-10 while preserving the runtime ownership
-and generation boundaries established by Plan 05-09.
+**Next:** Execute Phase 5 Plan 05-11 by moving async-rewake child and PID
+operation memory into the HooksRuntime.
 
 ## Deferred Verification
 
