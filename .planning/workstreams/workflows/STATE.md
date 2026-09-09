@@ -5,10 +5,10 @@ milestone_name: Workflow Bridge Replay onto main
 current_phase: 117
 current_phase_name: Measured `agent()` failure evidence
 current_plan: 3 of 3 executed
-status: completed
-stopped_at: All nine phases complete and verified; the milestone lifecycle is next
-last_updated: "2026-09-09T20:53:45.025Z"
-state_head: d2582864c3fa3217c8b1fb16f9e957b7b7e34cac
+status: audit passed with tech debt; archive paused
+stopped_at: Milestone audit recorded tech_debt; operator chose to clear debt before the archive
+last_updated: "2026-09-09T21:43:08.616Z"
+state_head: efd29659d70d4f44196928c236737fc388a8c8bf
 progress:
   total_phases: 9
   completed_phases: 9
@@ -16,7 +16,7 @@ progress:
   completed_plans: 39
   percent: 100
 last_activity: 2026-09-09
-last_activity_desc: Phase 117 complete and marked; all nine phases verified and the milestone is ready for its lifecycle
+last_activity_desc: Milestone audit written and committed; archive paused pending tech-debt work
 ---
 
 # Project State
@@ -37,10 +37,45 @@ the gaps the bridge originally shipped with.
 
 Phase: 117 — Measured `agent()` failure evidence
 Plan: 3 of 3 executed (3 plans, 3 waves, 9 tasks)
-Status: All nine phases complete and verified — ready for the milestone lifecycle
+Status: Audit done (`tech_debt`); the archive is paused until the debt is cleared
 
-The replay (109-114) and all three hardening phases (115-117) are done. What
-remains is the milestone lifecycle: audit, complete, cleanup.
+The replay (109-114) and all three hardening phases (115-117) are done, and the
+audit is written and committed at `efd29659`:
+`workflows-replay-MILESTONE-AUDIT.md`. It found no blockers — 46/46 requirements
+satisfied, 9/9 phases verified, cross-phase integration clean, all four E2E flows
+complete — and graded the milestone `tech_debt` on accumulated deferred work.
+
+**The operator chose to clear that debt before archiving.** `complete-milestone`
+and `cleanup` have NOT run. What is owed, in the order the audit lists it:
+
+1. **The one open deferred item** — `docs/messaging-style-guide.md` lines 25-26
+   claim 16 variants and 16 literals; `PLUGIN_STATUSES` (`shared/notify.ts:559`)
+   carries 19. Re-measured at audit time, so the drift has grown since Phase 114
+   filed it. Its union listing (lines 36-54) also still names the retired
+   `PluginPresentMessage` (0 references in `notify.ts`) and omits
+   `partially-installed` and `partially-upgradable`. The fix is re-deriving the
+   whole 19-row listing, not editing a count — line 33 of that same document
+   forbids re-enumerating a count in prose.
+2. **Ten open Broken Windows entries**, all tagged `[workflows-replay]`: #34,
+   #37, #39, #40, #41, #42, #43, #44, #45, #46. #44 is a plain TODO; #41 and #42
+   are the same inert `ENBL-08` case seen from two angles.
+3. **Phases 109-113 carry no SECURITY.md** — `/gsd-secure-phase N` each.
+4. **Phases 109-113 sit at VALIDATION.md `status: draft`** — never reconciled by
+   validate-phase, so `nyquist_compliant` is not authoritative there.
+   `/gsd-validate-phase N` each. Per #2117 this is a coverage TODO, not a
+   compliance failure.
+5. **Four unresolved code-review findings**, each already filed behind a carrier:
+   Phase 110 WR-07 (refiled) and WR-09 (deferred); Phase 112 WR-03 (deferred,
+   and already closed by Phase 113's WLIF-02 — its ledger status wants turning
+   rather than working); Phase 116 WR-03 (skipped because the fix reverses an
+   operator-locked decision — this one wants waiving, not fixing).
+
+Items 3 and 4 track when each capability became active in this workstream rather
+than a phase that skipped its gate.
+
+**Resume the lifecycle with** `/gsd-autonomous`, which will re-audit and route
+again, or go straight to `/gsd-complete-milestone workflows-replay` to accept the
+remaining debt and archive.
 
 Phase 117 closed at 3/3 plans, `npm run check` exit 0 at 5654 unit and 35
 integration, goal verification 5/5, security SECURED at 19/19 with
@@ -58,13 +93,14 @@ published as an OPEN list graded per entry, because the engine's error type
 defaults to non-recoverable when the option is omitted and the code does not
 determine the class.
 
-**Two phases still need re-verification before the lifecycle can run.** Phase 114
-is stale because Phase 117 edited `docs/workflows-compatibility.md`, which its
-verification grades; Phase 115 is stale because Phase 116 appended to
-`.planning/BACKLOG.md`, which criterion 5 grades directly. Both are legitimate
+**The two stale re-verifications are done** (`d2582864`). Phase 114 was stale
+because Phase 117 edited `docs/workflows-compatibility.md`, which its
+verification grades; Phase 115 was stale because Phase 116 appended to
+`.planning/BACKLOG.md`, which criterion 5 grades directly. Both were legitimate
 coverage rather than the digest defect recorded as Broken Windows #39, and both
 were deliberately deferred to this boundary so that 116 and 117 had stopped
-moving the files they grade.
+moving the files they grade. Both re-verified `passed` at their previous scores
+with no gaps closed, none remaining, and no regressions.
 
 Phase 116 closed at 4/4 plans, `npm run check` exit 0 at 5654 unit and 35
 integration, goal verification 4/4, security SECURED at 15/15 with
@@ -565,15 +601,26 @@ _Recorded per phase as the milestone proceeds._
 - [Phase 116]: `116-CONTEXT.md` keeps both statements of the retired claim verbatim, each followed by a note; `REQUIREMENTS.md` and `ROADMAP.md` carry the corrected sentence with no quoted retired wording. — The context is the record of a discussion and may carry history; the other two state current truth, where a quoted retired claim reads as a live one to the next person who greps.
 - [Phase 116]: The phase gate was read line by line, not sampled on its exit code. — `format:check` sits mid-chain and a failure there hides every link after it; fallow additionally prints `✗` on health and dupes while exiting 0, so the glyph is not the verdict (`0 above threshold` is).
 - [Phase 116]: The `ENBL-08` inert-case finding went into `.planning/WINDOWS.md`, not only into a SUMMARY section. — A finding that lives in one phase SUMMARY is invisible at ship time; a ledger entry blocks `/gsd-ship` while it is open.
+- [Milestone close]: The archive takes ALL NINE phases as ONE milestone, `workflows-replay`. — `ROADMAP.md` files them under two headings (`In progress workflows-replay` for 109-114, `Planned workflow-hardening` for 115-117), but `gsd-tools` resolves all nine as one milestone at `phase_count: 9`, and the audit graded them as one set. Splitting them would buy a cosmetic history distinction at the cost of a second audit, a second archive, and manual work against the tooling's own reading. The `workflow-hardening` heading folds into `workflows-replay` when the archive runs.
+- [Milestone close]: The archive is paused until the tech debt is cleared, rather than accepting it at the gate. — The audit found no blockers, so accepting was available and would have closed the milestone today; the operator chose the other side. The debt list lives in Current Position above, not only in the audit file, because a list that lives only in an artifact the next session may not open is a list that does not get worked.
 
 ## Operator Next Steps
 
-- Verify Phase 111 with `/gsd-verify-work 111` — all 4 plans are executed
-- Phase 109 is complete and verified 12/12; 110-114 run in order, each
-  depending on the one before it
-- The hardening phases 115, 116 and 117 are mutually independent; the order
-  above is execution order, not a dependency chain (they were renumbered from
-  the spike branch's 106-108)
-- Phase 117's canary run needs a disposable scratch install of
-  `@quintinshaw/pi-dynamic-workflows` — it can be primed at any point in the
-  milestone
+All nine phases are complete and verified, and the audit is committed. The
+milestone is NOT archived — that step is deliberately paused. What is left is
+debt work, then the archive:
+
+- Re-derive the 19-row `PluginNotificationMessage` listing in
+  `docs/messaging-style-guide.md` and correct its two stale counts (a
+  self-contained docs task against `shared/notify.ts`)
+- Work or waive the ten open `[workflows-replay]` Broken Windows entries; #44 is
+  a plain TODO, #41 and #42 are one inert test case seen twice, and #46 is a
+  substring guard in two live-UAT canaries
+- Run `/gsd-secure-phase N` for 109, 110, 111, 112, 113 — none carries a
+  SECURITY.md
+- Run `/gsd-validate-phase N` for the same five — each sits at VALIDATION.md
+  `status: draft`, so its `nyquist_compliant` value is not authoritative
+- Turn Phase 112's WR-03 ledger status (Phase 113 already closed it) and waive
+  Phase 116's WR-03 (its fix reverses an operator-locked decision)
+- Then `/gsd-complete-milestone workflows-replay`, which takes all nine phases as
+  one milestone per the decision recorded above, followed by `/gsd-cleanup`
