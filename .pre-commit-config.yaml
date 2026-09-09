@@ -48,8 +48,12 @@ repos:
         exclude: ^\.planning/
       - id: alphabetize-codeowners
       - id: fix-spaces
+      # `scripts/revalidation.mjs` both matches and emits the em-dash that
+      # `.planning/` documents carry, and `.planning/` is excluded here, so
+      # rewriting its dash literals to `--` breaks the planning-contract
+      # parser (its RVAL-04 record scan stops matching every row).
       - id: fix-unicode-dashes
-        exclude: ^\.planning/
+        exclude: ^(\.planning/|scripts/revalidation\.mjs$)
       - id: fix-ligatures
         exclude: ^\.planning/
       - id: forbid-bidi-controls
