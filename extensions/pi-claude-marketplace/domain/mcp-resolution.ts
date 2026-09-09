@@ -11,13 +11,6 @@ export interface McpResolution {
   mcpServers: Record<string, unknown>;
 }
 
-interface McpResolutionInput {
-  readonly entry: { readonly mcpServers?: unknown };
-  readonly manifest: { readonly mcpServers?: unknown } | null;
-  readonly pluginRoot: string;
-  readonly resolution: McpResolution;
-}
-
 interface McpResolutionDependencies {
   readonly statKind: StatKindReader;
   readonly readFileText: (path: string) => Promise<string>;
@@ -121,8 +114,16 @@ async function readReferencedMcp(
 
 /** Resolves strict inline, referenced, manifest, or standalone MCP declarations. */
 export async function resolveStrictMcp(
-  input: McpResolutionInput,
-  dependencies: McpResolutionDependencies,
+  input: {
+    readonly entry: { readonly mcpServers?: unknown };
+    readonly manifest: { readonly mcpServers?: unknown } | null;
+    readonly pluginRoot: string;
+    readonly resolution: McpResolution;
+  },
+  dependencies: {
+    readonly statKind: StatKindReader;
+    readonly readFileText: (path: string) => Promise<string>;
+  },
 ): Promise<boolean> {
   const declaredMcp = input.entry.mcpServers ?? input.manifest?.mcpServers;
 
@@ -150,7 +151,12 @@ export async function resolveStrictMcp(
 
 /** Resolves entry-only MCP and reports manifest or standalone conflicts. */
 export async function resolveLooseMcp(
-  input: McpResolutionInput,
+  input: {
+    readonly entry: { readonly mcpServers?: unknown };
+    readonly manifest: { readonly mcpServers?: unknown } | null;
+    readonly pluginRoot: string;
+    readonly resolution: McpResolution;
+  },
   statKind: StatKindReader,
 ): Promise<boolean> {
   const entryMcp = input.entry.mcpServers;

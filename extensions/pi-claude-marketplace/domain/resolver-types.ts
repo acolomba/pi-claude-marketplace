@@ -34,7 +34,7 @@ const DroppedHookSchema = Type.Union([
 
 type AssertTrue<T extends true> = T;
 
-// fallow-ignore-next-line unused-type, private-type-leak -- compile-time drift guard; the export exists so noUnusedLocals treats it as consumed, while AssertTrue is an assertion helper with no caller meaning.
+// fallow-ignore-next-line private-type-leak -- compile-time drift guard; AssertTrue is an assertion helper with no caller meaning.
 export type DroppedHookDriftCheck = AssertTrue<
   DroppedHook extends Type.Static<typeof DroppedHookSchema> ? true : false
 >;
@@ -58,7 +58,7 @@ type DroppedHookArmKeysDrift =
       : never
     : never;
 
-// fallow-ignore-next-line unused-type, private-type-leak -- compile-time key-parity guard; the export exists so noUnusedLocals treats it as consumed, while assertion internals have no caller meaning.
+// fallow-ignore-next-line private-type-leak -- compile-time key-parity guard; assertion internals have no caller meaning.
 export type DroppedHookArmKeysCheck = AssertTrue<
   // fallow-ignore-next-line private-type-leak -- DroppedHookArmKeysDrift is an internal step of this compile-time key-parity guard.
   [true] extends [DroppedHookArmKeysDrift] ? true : false
@@ -97,7 +97,6 @@ const ResolvedPluginUnavailableSchema = Type.Object({
 });
 
 /** Runtime schema for the exact three-arm resolver result union. */
-// fallow-ignore-next-line unused-export -- canonical runtime definition of the resolver result union, consumed through Type.Static and its mirrored owner test.
 export const ResolvedPluginSchema = Type.Union([
   ResolvedPluginInstallableSchema,
   ResolvedPluginPartiallyAvailableSchema,

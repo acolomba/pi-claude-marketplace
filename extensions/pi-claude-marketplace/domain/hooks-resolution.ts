@@ -14,16 +14,6 @@ export interface HooksResolution extends Pick<ComponentPathResolution, "supporte
   droppedHooks?: DroppedHook[];
 }
 
-interface HooksResolutionInput {
-  readonly pluginRoot: string;
-  readonly resolution: HooksResolution;
-}
-
-interface HooksResolutionDependencies {
-  readonly statKind: StatKindReader;
-  readonly readFileText: (path: string) => Promise<string>;
-}
-
 interface ResolvedHooksConfig {
   readonly value: HooksConfig;
   readonly relativePath: string;
@@ -32,7 +22,10 @@ interface ResolvedHooksConfig {
 
 async function readHooksConfig(
   pluginRoot: string,
-  dependencies: HooksResolutionDependencies,
+  dependencies: {
+    readonly statKind: StatKindReader;
+    readonly readFileText: (path: string) => Promise<string>;
+  },
 ): Promise<{ ok: true; value?: ResolvedHooksConfig } | { ok: false; reason: string }> {
   const hooksPath = path.join(pluginRoot, "hooks", "hooks.json");
   if ((await dependencies.statKind(hooksPath)) !== "file") {
@@ -77,8 +70,14 @@ function hasOrphanRewake(config: HooksConfig): boolean {
 
 /** Resolves convention hooks, supportability drops, and orphan rewake metadata. */
 export async function resolveHooks(
-  input: HooksResolutionInput,
-  dependencies: HooksResolutionDependencies,
+  input: {
+    readonly pluginRoot: string;
+    readonly resolution: HooksResolution;
+  },
+  dependencies: {
+    readonly statKind: StatKindReader;
+    readonly readFileText: (path: string) => Promise<string>;
+  },
 ): Promise<boolean> {
   const hooks = await readHooksConfig(input.pluginRoot, dependencies);
   if (!hooks.ok) {
