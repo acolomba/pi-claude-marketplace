@@ -4,19 +4,19 @@ milestone: workflows-replay
 milestone_name: Workflow Bridge Replay onto main
 current_phase: 116
 current_phase_name: Load-time workflow convergence
-current_plan: 0 of 4 executed
+current_plan: 1 of 4 executed
 status: executing
-stopped_at: Phase 116 planned -- 4 plans in 3 waves, plan-checker passed
-last_updated: "2026-09-09T13:17:29.757Z"
-state_head: ec9ac05ef9738df7caf72eb8dec30055f7fd80d0
+stopped_at: Completed 116-01-PLAN.md
+last_updated: "2026-09-09T15:08:58.421Z"
+state_head: 507d376d6873b509a15aac1eb29e6cdf45a98e91
 progress:
   total_phases: 9
   completed_phases: 6
-  total_plans: 32
-  completed_plans: 32
+  total_plans: 36
+  completed_plans: 33
   percent: 67
 last_activity: 2026-09-09
-last_activity_desc: Phase 115 executed and verified; 1 critical security fix landed
+last_activity_desc: Executed plan 116-01; three negative controls run and pasted
 ---
 
 # Project State
@@ -28,7 +28,7 @@ and, after `/reload`, have every supported Claude plugin component appear as a
 working Pi-native artifact — atomically, recoverably, and with soft-dependency
 degradation that never blocks the install.
 
-**Current focus:** Phase 115 — Install-time admission-gate warnings. The replay
+**Current focus:** Phase 116 — Load-time workflow convergence. The replay
 is done: phases 109-114 re-landed the `workflows` bridge on a main that had
 moved under it. What remains is the three-phase hardening milestone that closes
 the gaps the bridge originally shipped with.
@@ -36,8 +36,8 @@ the gaps the bridge originally shipped with.
 ## Current Position
 
 Phase: 116 — Load-time workflow convergence
-Plan: 0 of 4 executed (4 plans, 3 waves, 10 tasks)
-Status: Planned and checked — ready to execute
+Plan: 1 of 4 executed (4 plans, 3 waves, 10 tasks)
+Status: Executing — wave 1 done, 116-02 and 116-03 unblocked
 
 Phase 115 is complete on every gate. The replay milestone (109-114) is complete
 and the first of the three hardening phases has now closed behind it; 116 and 117
@@ -215,7 +215,37 @@ implementation.
 
 ## Session Continuity
 
-**Last session:** 2026-09-09T12:05:00Z
+**Last session:** 2026-09-09T15:08:57Z
+
+**Stopped At:** Completed 116-01-PLAN.md. Three task commits (`f96143d4`,
+`a42a7e04`, `507d376d`); `npm test` 5646/5646 and `npm run test:integration`
+34/34. All three negative controls this plan owed were RUN and their failing
+transcripts are pasted verbatim in `116-01-SUMMARY.md`.
+
+**Resume File:** None
+
+**Next Action:** Plans 116-02 and 116-03 are unblocked (both `depends_on:
+["116-01"]`). 116-04 owns `npm run check` and the per-pair coverage runs; this
+plan deliberately did not run them.
+
+Three things this plan settled that 116-02..04 should not re-derive:
+
+- **The widened scan is bounded to PATH sources.** `resolveRecordedPluginOffline`
+  passes no clone-cache resolver, so `url` / `git-subdir` / `github` records
+  resolve `unavailable` offline. Measured on the cached official marketplace: 49
+  of 172 plugins are path sources. The bound is now stated in
+  `scanForceInstalledBackfills`'s doc comment.
+- **The CONTEXT's population claim is still unmeasured, and narrows against.**
+  No plugin in either cached marketplace carries a `workflows/` component
+  directory at all, so whether the Anthropic-authored workflow plugins are
+  path-source could not be confirmed from this machine. `REQUIREMENTS.md`'s
+  WCONV-01 prose has been corrected to say so rather than carry the claim.
+- **The short-enumeration pattern recurred four more times in one plan.** The
+  research's 7-site prose list was really 12; the plan's 4 projection cases were
+  really 6, plus a 7th in `apply.test.ts` that only `npm test` caught. Every one
+  was found by running a gate, never by re-reading a list.
+
+**Superseded:** 2026-09-09T12:05:00Z
 
 **Stopped At:** Phase 115 complete and marked. All six plans have SUMMARYs; the
 deep code review found 1 critical and 6 warnings and all 7 were fixed; goal
@@ -400,6 +430,7 @@ re-persists `harness-worktree` as a side effect.
 | Phase 112 P01 | 70 min | 3 tasks | 51 files |
 | Phase 112 P02 | 40 min | 3 tasks | 8 files |
 | Phase 112 P04 | 42 min | 3 tasks | 9 files |
+| Phase 116 P01 | 36 min | 3 tasks | 13 files |
 
 ## Decisions
 

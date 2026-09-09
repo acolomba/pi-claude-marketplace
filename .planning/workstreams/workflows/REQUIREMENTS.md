@@ -52,9 +52,9 @@ Only the requirements below are new, and all of them exist because #154 landed.
 
 <!-- Seams: orchestrators/reconcile/ (the supportedSetGrew scan and its early return on cleanly-installed records), tests/orchestrators/reconcile/backfill.test.ts (the three boundary cases that pin the current behavior). -->
 
-- [ ] **WCONV-01**: A user who installed a workflow-bearing plugin before the `workflows` kind was admitted gains its workflow commands on the next load, without running `update` or `reinstall`. Today the scan returns early on any record at `installable: true`, so the population whose install already works is exactly the population that never converges -- and both Anthropic-authored workflow plugins land on that side, because the kind they were missing was invisible rather than unsupported.
+- [x] **WCONV-01**: A user who installed a workflow-bearing plugin before the `workflows` kind was admitted gains its workflow commands on the next load, without running `update` or `reinstall`. The scan used to return early on any record at `installable: true`, so the population whose install already works was exactly the population that never converged: a plugin declaring a kind the extension did not yet support records `installable: true` with that kind simply absent, which is indistinguishable from a clean install. Bounded to path sources -- the load-time re-resolve passes no clone-cache resolver, so a git source resolves unavailable offline (49 of the 172 plugins in the official marketplace are path sources). Whether the Anthropic-authored workflow plugins are path-source is NOT measured; no plugin in either cached marketplace carries a `workflows/` directory.
 - [ ] **WCONV-02**: The self-heal stays one-time. An equal supported set is not growth, and the extension-version stamp bounds the scan to a single pass -- the same two bounds the `installable: false` arm already relies on, rather than new machinery.
-- [ ] **WCONV-03**: A convergence that materializes artifacts says so on its reconcile row instead of healing silently, so a user can tell why new commands appeared after a reload they did not initiate.
+- [x] **WCONV-03**: A convergence that materializes artifacts says so on its reconcile row instead of healing silently, so a user can tell why new commands appeared after a reload they did not initiate.
 
 ### Evidence
 
@@ -120,9 +120,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | WGATE-03 | Phase 115 | Complete |
 | WGATE-04 | Phase 115 | Complete |
 | WGATE-05 | Phase 115 | Complete |
-| WCONV-01 | Phase 116 | Pending |
+| WCONV-01 | Phase 116 | Complete |
 | WCONV-02 | Phase 116 | Pending |
-| WCONV-03 | Phase 116 | Pending |
+| WCONV-03 | Phase 116 | Complete |
 | WEVID-01 | Phase 117 | Pending |
 | WEVID-02 | Phase 117 | Pending |
 | WDOCS-01 | Phase 115 | Complete |

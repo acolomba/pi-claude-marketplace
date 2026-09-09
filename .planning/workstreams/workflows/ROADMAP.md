@@ -636,11 +636,11 @@ Plans:
    `docs/output-catalog.md` against `tests/architecture/catalog-uat.test.ts` —
    while a scan that materialized nothing stays silent.
 
-**Plans**: 4 plans in 3 waves
+**Plans**: 1/4 plans executed in 3 waves
 
 **Wave 1**
 
-- [ ] 116-01-PLAN.md — Widen the load-time scan by deleting one filter, and give a convergence its own closed-set reason token on both render arms
+- [x] 116-01-PLAN.md — Widen the load-time scan by deleting one filter, and give a convergence its own closed-set reason token on both render arms
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -688,5 +688,5 @@ Plans:
 | 113. Update, enable/disable, reconcile | 5/5 | Complete    | 2026-09-06 |
 | 114. Degradation and documentation | 5/5 | Complete    | 2026-09-08 |
 | 115. Install-time admission-gate warnings | 6/6 | Complete    | 2026-09-09 |
-| 116. Load-time workflow convergence | 0/? | Not started | - |
+| 116. Load-time workflow convergence | 1/4 | In Progress | - |
 | 117. Measured `agent()` failure evidence | 0/? | Not started | - |

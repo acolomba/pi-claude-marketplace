@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 3
+open_count: 4
 waived_count: 14
 fixed_count: 22
-total_count: 39
-last_updated: 2026-09-09T13:24:02.268Z
+total_count: 40
+last_updated: 2026-09-09T15:07:24.389Z
 ---
 
 # Broken Windows Ledger
@@ -54,6 +54,7 @@ last_updated: 2026-09-09T13:24:02.268Z
 | 37 | 115 | unmet-truth | extensions/pi-claude-marketplace/shared/path-safety.ts | 13 | [workflows-replay] PathContainmentError interpolates the untrusted resolved child path raw into its message, so escaping a caller's label cannot close the forgery; five bridges share the class and measured 58 assertPathInside call sites of which 15 pass a non-constant label, several manifest-derived (plugin source path, git-subdir path) -- the fix is one line in the shared class, the follow-up audit covers 15 labels | open |  | 2026-09-09T08:38:50.166Z |  |
 | 38 | 115 | unrun-verify | .planning/workstreams/workflows/phases/114-degradation-and-documentation/114-VERIFICATION.md | 1 | [workflows-replay] a VERIFICATION covered_files list naming REQUIREMENTS.md makes its phase permanently un-completable: phase.complete rewrites that file as its final act, so completing the phase invalidates the verification that authorized it. Phase 114 has been stuck at verification:stale since 2026-09-08 for this reason; phase 115 hit it and was cleared by dropping REQUIREMENTS.md and WINDOWS.md from its covered set. Phases 110-113 are immune only because they emit no covered_files at all. Same class for any ledger a later pass owns. | waived | Misattributed evidence, superseded by the corrected entry that follows. The defect itself is real and was observed directly on phase 115: phase.complete rewrote the active REQUIREMENTS.md, a covered file, and flipped that phase's verification from passed to stale. The claim that phase 114 was stuck for the same reason is WRONG -- 114 is stale because six files it genuinely grades (docs/output-catalog.md, docs/workflows-compatibility.md, orchestrators/plugin/install.ts, orchestrators/plugin/shared.ts, tests/architecture/catalog-uat.test.ts, tests/orchestrators/plugin/install.test.ts) were changed by phase 115's work. That is correct staleness needing re-verification, not a digest problem. | 2026-09-09T13:21:34.003Z | 2026-09-09T13:23:49.408Z |
 | 39 | 115 | unrun-verify | .planning/workstreams/workflows/phases/115-install-time-admission-gate-warnings/115-VERIFICATION.md | 1 | [workflows-replay] a VERIFICATION covered_files list that names a file a LATER pass rewrites makes its phase permanently un-completable. Observed directly on phase 115: gsd-tools phase.complete rewrote the active REQUIREMENTS.md, turning six Pending rows to Complete, and that flipped the phase's own verification from passed to stale -- completing a phase invalidates the verification that authorized it, and re-verifying never escapes. Cleared here by dropping REQUIREMENTS.md and WINDOWS.md from the covered set and recomputing via verification fingerprint; BACKLOG.md stays because criterion 5 grades it. Phases 110-113 are immune only because they emit no covered_files at all, so the exposure grows as more verifiers emit one. NOT the reason phase 114 is stale -- see waived entry 38. | open |  | 2026-09-09T13:24:02.268Z |  |
+| 40 | 116 | deviation | docs/output-catalog.md |  | [workflows-replay] catalog state id backfill-partially-installed-no-reasons now under-describes its row: it carries the components-now-supported marker, so it is not brace-less; rename deferred to 116-03 which owns the catalog corpus | open |  | 2026-09-09T15:07:24.389Z |  |
 
 ````json
 [
@@ -523,6 +524,18 @@ last_updated: 2026-09-09T13:24:02.268Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-09-09T13:24:02.268Z",
+    "resolved_at": null
+  },
+  {
+    "id": 40,
+    "kind": "deviation",
+    "phase": "116",
+    "file": "docs/output-catalog.md",
+    "line": null,
+    "description": "[workflows-replay] catalog state id backfill-partially-installed-no-reasons now under-describes its row: it carries the components-now-supported marker, so it is not brace-less; rename deferred to 116-03 which owns the catalog corpus",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-09T15:07:24.389Z",
     "resolved_at": null
   }
 ]

@@ -1,7 +1,7 @@
 {
   "contract": "1.0.0",
   "flavor": "core",
-  "milestone": "workflows-replay — Workflow Bridge Replay onto main",
+  "milestone": "workflows-replay \u2014 Workflow Bridge Replay onto main",
   "phases": [
     {
       "number": "109",
@@ -51,8 +51,8 @@
   ],
   "next": {
     "command": "/gsd:progress --next",
-    "label": "Advance to the next step (plan phase 116)",
-    "reason": "Phase 116 of 9 — needs a plan"
+    "label": "Advance to the next step",
+    "reason": "Phase 116 of 9 \u00b7 67% \u00b7 executing"
   },
-  "updated_at": "2026-09-09T13:17:29.839Z"
+  "updated_at": "2026-09-09T15:07:33.195Z"
 }
