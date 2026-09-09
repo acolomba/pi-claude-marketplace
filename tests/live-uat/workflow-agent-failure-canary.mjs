@@ -23,7 +23,7 @@
 //   PI_CODING_AGENT_DIR=$(pwd)/tmp/pi-uat/wf-agent \
 //   PI_WORKFLOW_ENGINE_ROOT=/tmp/wf-engine/node_modules \
 //     node tests/live-uat/workflow-agent-failure-canary.mjs
-//   rm -rf /tmp/wf-engine
+//   rm -rf /tmp/wf-engine tmp/pi-uat/wf-agent
 //
 // The version pin reproduces the grade `docs/workflows-compatibility.md`
 // publishes for this driver. Dropping it re-measures against whatever is

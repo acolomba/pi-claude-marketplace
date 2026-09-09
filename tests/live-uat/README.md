@@ -77,7 +77,7 @@ npm install --prefix /tmp/wf-engine @quintinshaw/pi-dynamic-workflows@3.10.1
 PI_CODING_AGENT_DIR=$(pwd)/tmp/pi-uat/wf-agent \
 PI_WORKFLOW_ENGINE_ROOT=/tmp/wf-engine/node_modules \
   node tests/live-uat/workflow-agent-failure-canary.mjs
-rm -rf /tmp/wf-engine
+rm -rf /tmp/wf-engine tmp/pi-uat/wf-agent
 ```
 
 The harness reads the engine version out of the engine's own manifest and prints it in every PASS line, so a transcript dates itself. It creates its own empty child directory beneath the sandbox root and removes it in a `finally`, so a failed assertion still cleans up.
