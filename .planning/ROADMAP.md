@@ -484,7 +484,7 @@ Plans:
 **Goal:** Strengthen assertions and simplify confirmed problem modules without weakening contracts.
 **Depends on:** Phase 5
 **Requirements:** TREF-07, TREF-08, TREF-09
-**Plans:** 51/52 plans executed
+**Plans:** 52/52 plans executed
 
 Plans:
 **Wave 1**
@@ -660,7 +660,7 @@ Plans:
 
 **Wave 41** *(blocked on Wave 40 completion)*
 
-- [ ] 06-52-PLAN.md — Close Phase 6 with cross-family structural and full-suite proof
+- [x] 06-52-PLAN.md — Close Phase 6 with cross-family structural and full-suite proof
 
 **Cross-cutting constraints:**
 
@@ -703,6 +703,15 @@ Plans:
    terminal ESLint/Fallow boundary gaps and proves target visitation.
 3. Terminal closed-set and delegated-contract gates exercise their real
    production consumers and any public seams created by approved splits.
+4. Every gate that addresses its targets by a path assembled from segments is
+   discoverable without relying on a literal path appearing in its source, and
+   proves it still resolves each target. A literal-match stale-path scan cannot
+   see a composed reference: `tests/architecture/hooks-lifecycle.test.ts` and
+   `tests/architecture/import-boundaries.test.ts` both kept addressing retired
+   ledger modules through `path.join`, and one direction of the D-11 pair stayed
+   green while matching import paths that could no longer occur. A gate whose
+   target list silently stops resolving is worse than a missing gate, because it
+   reports success.
 
 **Evidence/history:** `GGAT-02`/`AGCOL-01` retains its stable identity and former
 Phase 7 trace, but no dedicated terminal finding supports active implementation.
@@ -760,7 +769,7 @@ baseline, which still includes both pairs; neither is a terminal shortfall.
 | 3. Production Defect Corrections     | 14/14          | Complete    | 2026-09-07 |
 | 4. Hermetic Test Infrastructure      | 7/7            | Complete    | 2026-09-07 |
 | 5. Injection and Ownership Design    | 34/34          | Complete    | 2026-09-08 |
-| 6. Assertion and Module Refinement   | 51/52 | In Progress|  |
+| 6. Assertion and Module Refinement   | 52/52          | Executed    |            |
 | 7. Gate Integrity                    | 0/0            | Not started | —          |
 | 8. Direct Coverage                   | 0/0            | Not started | —          |
 | 9. Final Quality and Backlog Closure | 0/0            | Not started | —          |
