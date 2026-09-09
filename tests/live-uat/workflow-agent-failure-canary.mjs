@@ -102,12 +102,14 @@ function nothingWasMeasured(logs) {
 }
 
 /**
- * Resolve the engine's scratch prefix and read the version out of the engine's
- * OWN manifest. Never hard-code a version here: the grade published downstream
- * must name the version the run actually observed, and a literal can lie after
- * an operator bumps the scratch install.
+ * Resolve the engine's scratch prefix, then read BOTH the version and the entry
+ * point out of the engine's OWN manifest. Never hard-code either: the grade
+ * published downstream must name the version the run actually observed, and a
+ * literal entry path silently bypasses the layout the package declares. A
+ * missing entry is an unmet precondition, so it is routed as one rather than
+ * left to surface as an `ERR_MODULE_NOT_FOUND` stack.
  */
-async function resolveEngineVersion() {
+async function resolveEngine() {
   const root = process.env.PI_WORKFLOW_ENGINE_ROOT;
   if (root === undefined || root.trim() === "") {
     liveEngineRequired(
@@ -128,7 +130,14 @@ async function resolveEngineVersion() {
   if (typeof manifest.version !== "string") {
     liveEngineRequired(`the engine manifest at ${manifestPath} carries no version.`);
   }
-  return { root, version: manifest.version };
+  const entry = path.join(root, ENGINE_PACKAGE, manifest.main ?? "dist/index.js");
+  if (!existsSync(entry)) {
+    liveEngineRequired(
+      `the engine entry point is missing at ${entry}.`,
+      "The scratch install may be incomplete, or the engine changed its published layout.",
+    );
+  }
+  return { entry, version: manifest.version };
 }
 
 /** The only agent-state root this driver will hand to the engine. */
@@ -196,7 +205,7 @@ return { rows: rows.length, survivors: rows.filter(Boolean).length };
 `;
 
 async function main() {
-  const { version } = await resolveEngineVersion();
+  const { entry, version } = await resolveEngine();
   const sandboxRoot = assertSandboxContainment();
 
   console.log(`[wf-agent-canary] engine ${version}`);
@@ -210,12 +219,7 @@ async function main() {
   process.env.PI_CODING_AGENT_DIR = stateDir;
 
   try {
-    const engineEntry = path.join(
-      process.env.PI_WORKFLOW_ENGINE_ROOT,
-      ENGINE_PACKAGE,
-      "dist/index.js",
-    );
-    const { runWorkflow } = await import(pathToFileURL(engineEntry).href);
+    const { runWorkflow } = await import(pathToFileURL(entry).href);
     const drive = (source) => runWorkflow(source, { persistLogs: false, cwd: stateDir });
 
     // A0 -- the measurement precondition, applied to EVERY drive whose verdict
