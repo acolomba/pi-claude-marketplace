@@ -81,19 +81,33 @@ function liveEngineRequired(reason, detail) {
 }
 
 /**
- * The run completed but the failure it exists to observe never happened, so no
- * verdict may be read. This is a routing decision about the MACHINE -- its
- * sandbox resolved a provider -- and deliberately not reported as an engine
- * regression (D-117-05).
+ * The marker is absent, so no verdict may be read. What that absence supports
+ * is exactly "no log line named the marker" -- not, on its own, "the sandbox
+ * resolved a provider". Naming a cause the run never observed sends an operator
+ * to check the wrong thing when a later engine renames its error vocabulary,
+ * which is the drift `WPIN-01` exists to worry about.
+ *
+ * The logs discriminate, so branch on them. An EMPTY array is the shape a
+ * SUCCESSFUL agent call produces, which does support the provider reading; a
+ * NON-EMPTY array without the marker says the engine ran, logged, and used
+ * different words. Either way this is a statement about the machine or the
+ * engine's vocabulary, never an engine regression (D-117-05).
  */
 function nothingWasMeasured(logs) {
+  const ranAndLogged = logs.length > 0;
   console.error(
-    `\n[wf-agent-canary] NOTHING WAS MEASURED: the agent call did not fail.` +
-      `\n  The sandbox resolved a provider, so the induced failure never occurred and no` +
-      `\n  verdict about the engine can be read from this run. This is a statement about` +
-      `\n  this machine, not an engine regression.` +
-      `\n  Expected a log line naming ${INDUCED_FAILURE_MARKER}; observed logs=${JSON.stringify(logs)}`,
+    `\n[wf-agent-canary] NOTHING WAS MEASURED: no log line named ${INDUCED_FAILURE_MARKER}.`,
   );
+  console.error(
+    ranAndLogged
+      ? `  The run produced ${logs.length} log line(s), none naming the marker. Either the` +
+          `\n  induced failure did not occur, or this engine version no longer uses that name.` +
+          `\n  Check the engine's error vocabulary before concluding anything about this machine.`
+      : `  The run produced no logs at all, which is the shape a SUCCESSFUL agent call` +
+          `\n  produces. The sandbox most likely resolved a provider, so the induced failure` +
+          `\n  never occurred and no verdict about the engine can be read from this run.`,
+  );
+  console.error(`  observed logs=${JSON.stringify(logs)}`);
   console.error(
     `\nRe-run with an EMPTY agent-state directory inside tmp/pi-uat that cannot reach` +
       `\nany provider. The absence of credentials is what induces the failure.`,
