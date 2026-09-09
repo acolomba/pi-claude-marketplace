@@ -105,7 +105,6 @@ import { parsePluginSource } from "../../domain/source.ts";
 import { shaVersion } from "../../domain/version.ts";
 import { writePluginConfigEntry } from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
-import { toDisabledRecord } from "../../persistence/state-io.ts";
 import { softDepStatus } from "../../platform/pi-api.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { ConcurrentInstallError, errorMessage, PluginShapeError } from "../../shared/errors.ts";
@@ -132,6 +131,7 @@ import { cascadeUnstagePlugin, crossScopeFlag } from "../marketplace/shared.ts";
 import { discoverGeneratedNames } from "./discover-names.ts";
 import { probeInstallClone } from "./install-clone-probe.ts";
 import { resolveInstallDeclaredEnabled } from "./install-declared-enabled.ts";
+import { composeInstallDisableCascade } from "./install-disable-cascade.ts";
 import {
   INSTALL_CONTEXT,
   classifyEntityShapeError,
@@ -141,7 +141,6 @@ import {
   type InstallMsg,
 } from "./install.messaging.ts";
 import {
-  applyPartialCascadeFold,
   assertNoCrossPluginConflicts,
   cloneMarketplaceRecordForTargetScope,
   removePluginRecord,
@@ -154,7 +153,6 @@ import {
 
 import type { PreparedAgentsStaging } from "../../bridges/agents/index.ts";
 import type { PreparedCommandsStaging } from "../../bridges/commands/index.ts";
-import type { HooksRouting } from "../../bridges/hooks/index.ts";
 import type { PreparedMcpStaging } from "../../bridges/mcp/index.ts";
 import type { PreparedSkillsStaging } from "../../bridges/skills/index.ts";
 import type { PluginEntry } from "../../domain/components/plugin.ts";
@@ -167,9 +165,9 @@ import type { HookSummaryEntry } from "../../shared/concerns/hooks.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
-import type { UnstageOutcome } from "../marketplace/shared.ts";
 import type { InstallPluginOutcome } from "../types.ts";
 import type { InstallCloneCacheSeam } from "./install-clone-probe.ts";
+import type { InstallHooksRouting } from "./install-disable-cascade.ts";
 
 /**
  * Controls how `installPlugin` surfaces notifications.
@@ -300,12 +298,6 @@ export interface InstallPluginOptions {
    */
   readonly authMemo?: Map<string, AuthAttemptResult>;
 }
-
-/** Hooks route effects required by install at its durable-state boundary. */
-export type InstallHooksRouting = Pick<
-  HooksRouting,
-  "readAndCachePluginHooks" | "rebuildRoutingTables" | "removePluginConfigFromCache"
->;
 
 /**
  * Local context type for the 5-phase ledger. Carries every value the
@@ -1220,142 +1212,6 @@ function buildInstallLedgerOptions(
 }
 
 /**
- * Drop the hooks parsed-config cache entry for a plugin whose install landed
- * disabled, and rebuild the routing table in lockstep, so the running process
- * cannot dispatch events to a plugin the user's configuration says is
- * disabled. Wrapped in try/catch: the install itself succeeded, so a cache
- * mutation throw must not escalate it into a failure -- the next `/reload`'s
- * factory-time hydrate rebuilds the cache from state.json (D-59-02).
- *
- * Deliberately NOT the disable verb's helper: this file must not import from
- * `enable-disable.ts` (that module already imports `runInstallLedger` from
- * here, so the reverse edge closes a cycle), and the debug message names the
- * install surface so the log says which command left the routing table stale.
- */
-function dropInstallDisabledHooks(
-  hooksRouting: InstallHooksRouting,
-  scope: Scope,
-  marketplace: string,
-  plugin: string,
-): void {
-  try {
-    hooksRouting.removePluginConfigFromCache(scope, marketplace, plugin);
-    hooksRouting.rebuildRoutingTables();
-  } catch (cacheErr) {
-    hookDebugLog(
-      `install: hooks cache/routing drop failed for install-disabled ${plugin}@${marketplace}: ${errorMessage(cacheErr)} -- this plugin's hooks may keep dispatching in the running process until the next /reload rebuilds the routing table from state.json`,
-    );
-  }
-}
-
-/**
- * DFEN-04 / D-102-01: the disable half of a materialize-then-disable install.
- * Runs INSIDE the caller's `withLockedStateTransaction` closure, after the
- * ledger and before the config write-back, and composes exactly the primitives
- * the `disable` verb composes -- `cascadeUnstagePlugin`, then
- * `applyPartialCascadeFold` on a partial cascade, then `toDisabledRecord` --
- * so the terminal state is byte-identical to an `install` followed by a
- * `disable` by construction rather than by careful re-implementation.
- *
- * It does NOT call `setPluginEnabled`: `proper-lockfile` is `retries: 0` and
- * not re-entrant, so a nested guard on the same scope would self-deadlock.
- *
- * D-102-02: a failed cascade behaves exactly as a failed disable cascade does
- * today -- the dropped artifacts are folded out of the record, `updatedAt`
- * bumps, the hooks cache drops when hooks dropped, and the cause is returned
- * so the caller can SAVE the shrunken record before surfacing the failure. A
- * throw would be wrong: the guard discards a mutated snapshot on throw (ST-7),
- * leaving state.json claiming artifacts the cascade already removed from disk
- * (NFR-3).
- *
- * ENBL-02 / ENBL-18: `toDisabledRecord` is the sole sanctioned producer of the
- * disabled shape, and its `resources: R` passthrough keeps the record's
- * inventory. The map slot is REPLACED rather than mutated in place so the
- * branded return type survives to the assignment.
- */
-async function disableFreshlyInstalledPlugin(args: {
-  readonly state: ExtensionState;
-  readonly scope: Scope;
-  readonly locations: ScopedLocations;
-  readonly marketplace: string;
-  readonly plugin: string;
-}): Promise<
-  | { readonly ok: true; readonly removeRoutes: true }
-  | { readonly ok: false; readonly cause: Error; readonly removeRoutes: boolean }
-> {
-  const { state, locations, marketplace, plugin } = args;
-  const target = locateFreshlyInstalledRecord(state, marketplace, plugin);
-  if (target === undefined) {
-    return {
-      ok: false,
-      cause: new Error(
-        `installPlugin: internal error -- the state phase left no record for plugin "${plugin}" to disable.`,
-      ),
-      removeRoutes: false,
-    };
-  }
-
-  const cascade = await cascadeUnstagePlugin(plugin, marketplace, locations, target.installed);
-  if (isFailedUnstageOutcome(cascade)) {
-    return foldFailedDisableCascade({ ...args, installed: target.installed, cascade });
-  }
-
-  target.mp.plugins[plugin] = toDisabledRecord(target.installed, new Date().toISOString());
-  return { ok: true, removeRoutes: true };
-}
-
-type FailedUnstageOutcome = UnstageOutcome & {
-  readonly ok: false;
-  readonly cause: Error;
-};
-
-/** `cascadeUnstagePlugin` normalizes every `ok: false` result to an Error cause. */
-function isFailedUnstageOutcome(outcome: UnstageOutcome): outcome is FailedUnstageOutcome {
-  return !outcome.ok;
-}
-
-/**
- * Resolve the record the state phase just wrote. Both slots must be present:
- * a marketplace with no plugin entry is the same internal error as no
- * marketplace at all, so the pair is returned together or not at all.
- */
-function locateFreshlyInstalledRecord(
-  state: ExtensionState,
-  marketplace: string,
-  plugin: string,
-): { readonly mp: MarketplaceStateRecord; readonly installed: InstalledPluginRecord } | undefined {
-  const mp = state.marketplaces[marketplace];
-  const installed = mp?.plugins[plugin];
-  if (mp === undefined || installed === undefined) {
-    return undefined;
-  }
-
-  return { mp, installed };
-}
-
-/**
- * D-102-02: fold a failed cascade into the record and hand the cause back. The
- * record keeps whatever the cascade actually removed so the caller can SAVE the
- * shrunken shape rather than let the guard discard it on a throw (ST-7, NFR-3).
- */
-function foldFailedDisableCascade(args: {
-  readonly scope: Scope;
-  readonly marketplace: string;
-  readonly plugin: string;
-  readonly installed: InstalledPluginRecord;
-  readonly cascade: FailedUnstageOutcome;
-}): { readonly ok: false; readonly cause: Error; readonly removeRoutes: boolean } {
-  const { installed, cascade } = args;
-  applyPartialCascadeFold(installed, cascade.dropped);
-  installed.updatedAt = new Date().toISOString();
-  return {
-    ok: false,
-    cause: cascade.cause,
-    removeRoutes: cascade.dropped.hooks.length > 0,
-  };
-}
-
-/**
  * DFEN-05: the effective `enabled` declaration for one plugin key, read across
  * BOTH physical config files of the scope.
  *
@@ -1384,9 +1240,6 @@ function foldFailedDisableCascade(args: {
  * so no abort is owed there, and the arm reads exactly as it did before the
  * sibling parse was threaded.
  */
-type MarketplaceStateRecord = ExtensionState["marketplaces"][string];
-type InstalledPluginRecord = MarketplaceStateRecord["plugins"][string];
-
 /**
  * POST-state-commit side effects and their soft warnings (D-08 / AS-6 /
  * AS-7 / WARN-01). The state record is already committed, so every arm is
@@ -1510,49 +1363,6 @@ function droppedKindRowReasons(installCtx: InstallCtx): readonly ContentReason[]
   return installCtx.resolved.state === "partially-available"
     ? narrowUnsupportedKinds(installCtx.resolved.unsupported)
     : [];
-}
-
-/**
- * OUT-04 / DFEN-04: the install-disabled row. D-102-07 stamps `info` -- the
- * desired state WAS reached, because an install-disabled plugin is the
- * author's declared intent, not a shortfall; severity is the desired-state
- * axis, not a something-is-unusual axis. WARN-01 raises it to `warning` on a
- * frontmatter degrade for the same reason the success row does: a synthesized
- * skill or a neutralized command is a shortfall this ledger run just produced,
- * and the disabled status does not undo it.
- *
- * The reasons brace carries the durable facts alongside the cause, per the
- * governing rule quoted on `PluginDisabledMessage`: render facts that
- * constrain what the user can do next, suppress facts about runtime behavior
- * that is suspended. A dropped component kind and a malformed component are
- * both durable and both constrain the very `enable` this row advertises -- it
- * will produce a degraded install. Only the soft-dep markers belong in the
- * suppressed half, and the `disabled` render arm hard-codes those false
- * (ENBL-15 / D-100-06). In standalone mode `postCommitWarnings` are dropped by
- * D-19-01, so this row is the only surface those facts have.
- *
- * `needsReload: false`: nothing net entered or left Pi's resource view inside
- * the command, since the ledger staged and the cascade unstaged before the
- * process returned. D-102-10's `enableHint` adds the frozen trailer naming the
- * remedy. Row-level `scope` is OMITTED exactly as on the installed row -- the
- * marketplace block carries it. No `dependencies`: the `disabled` arm has none
- * by construction.
- */
-function composeDisabledRow(installCtx: InstallCtx): InstallMsg {
-  return {
-    status: "disabled",
-    name: installCtx.plugin,
-    version: installCtx.version,
-    // The author-declared cause leads: it is why the row exists at all.
-    reasons: [
-      "installs disabled",
-      ...malformedRowReasons(installCtx),
-      ...droppedKindRowReasons(installCtx),
-    ],
-    severity: installCtx.frontmatterDegradations.length > 0 ? "warning" : "info",
-    needsReload: false,
-    enableHint: true,
-  };
 }
 
 function composeInstalledRow(installCtx: InstallCtx, pi: ToolInventory): InstallMsg {
@@ -1814,6 +1624,11 @@ async function installPluginWithTransaction(
 ): Promise<InstallPluginOutcome> {
   const { ctx, pi, scope, cwd, marketplace, plugin } = opts;
   const locations = locationsFor(scope, cwd);
+  const disableCascade = composeInstallDisableCascade({
+    hooksRouting,
+    now: () => new Date().toISOString(),
+    unstagePlugin: cascadeUnstagePlugin,
+  });
 
   // Post-guard composition data. The guard closure populates this on its sole
   // installed result; marketplace/config misses and every throw return before
@@ -1987,7 +1802,7 @@ async function installPluginWithTransaction(
         // `enabled: true`; the disable half runs here, after `runPhases` and
         // before the write-back, and overwrites that value. No seventh phase,
         // no edit to any of the six phase bodies.
-        const disableResult = await disableFreshlyInstalledPlugin({
+        const disableResult = await disableCascade.disableFreshInstall({
           state,
           scope,
           locations,
@@ -2108,7 +1923,7 @@ async function installPluginWithTransaction(
       await tx.save();
 
       if (removeDisabledRoutesAfterSave) {
-        dropInstallDisabledHooks(hooksRouting, scope, marketplace, plugin);
+        disableCascade.dropRoutesAfterSave(scope, marketplace, plugin);
       }
 
       // WR-06 / D-59-02: hooks-bridge parsed-config cache add + routing
@@ -2146,8 +1961,8 @@ async function installPluginWithTransaction(
       // would either re-read a deleted file or -- worse -- register routing
       // entries for a plugin the user's configuration says is disabled, giving
       // live hook dispatch against disabled code that nothing short of the next
-      // hydrate would clear. `disableFreshlyInstalledPlugin` already dropped
-      // the cache entry, which is the correct mutation on that path.
+      // hydrate would clear. The composed disable cascade already dropped the
+      // cache entry, which is the correct mutation on that path.
       if (!disabledInstall.landed && installCtx.resolved.hooksConfigPath !== undefined) {
         try {
           await hooksRouting.readAndCachePluginHooks({
@@ -2315,7 +2130,15 @@ async function installPluginWithTransaction(
           scope,
           plugins: [
             disabledInstall.landed
-              ? composeDisabledRow(installCtx)
+              ? disableCascade.composeDisabledRow({
+                  plugin: installCtx.plugin,
+                  version: installCtx.version,
+                  resolution: {
+                    state: installCtx.resolved.state,
+                    unsupported: installCtx.resolved.unsupported,
+                  },
+                  frontmatterDegradations: installCtx.frontmatterDegradations,
+                })
               : composeInstalledRow(installCtx, pi),
           ],
         },

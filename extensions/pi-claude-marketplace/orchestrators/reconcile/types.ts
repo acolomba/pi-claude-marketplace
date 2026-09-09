@@ -46,7 +46,7 @@ import type { NotificationContext, ToolInventory } from "../../platform/pi-api.t
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { GitOps } from "../marketplace/shared.ts";
-import type { InstallHooksRouting } from "../plugin/install.ts";
+import type { InstallHooksRouting } from "../plugin/install-disable-cascade.ts";
 
 /** Planned addition of a marketplace declared in config but not recorded. */
 export interface PlannedMarketplaceAdd {

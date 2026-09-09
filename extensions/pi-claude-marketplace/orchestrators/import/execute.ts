@@ -2,7 +2,6 @@ import { parsePluginSource, samePlannedSource, sourceLogical } from "../../domai
 import { addMarketplace as defaultAddMarketplace } from "../../orchestrators/marketplace/add.ts";
 import {
   createNodeInstallPlugin,
-  type InstallHooksRouting,
   type InstallPluginOptions,
 } from "../../orchestrators/plugin/install.ts";
 import { loadConfig } from "../../persistence/config-io.ts";
@@ -43,6 +42,7 @@ import type {
   AddMarketplaceOptions,
   AddMarketplaceOutcome,
 } from "../../orchestrators/marketplace/add.ts";
+import type { InstallHooksRouting } from "../../orchestrators/plugin/install-disable-cascade.ts";
 import type { InstallPluginOutcome } from "../../orchestrators/types.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";

@@ -8,7 +8,7 @@ import { notifyUsageError } from "../../../shared/notification-dispatch.ts";
 import { parseArgs } from "../../args.ts";
 
 import type { GitOps } from "../../../orchestrators/marketplace/shared.ts";
-import type { InstallHooksRouting } from "../../../orchestrators/plugin/install.ts";
+import type { InstallHooksRouting } from "../../../orchestrators/plugin/install-disable-cascade.ts";
 import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
 import type { CompletionCache } from "../../../shared/completion-cache.ts";
 

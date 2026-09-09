@@ -61,7 +61,7 @@ import { routeClaudePlugin } from "./router.ts";
 
 import type { SubcommandHandlers } from "./router.ts";
 import type { EdgeDeps } from "./types.ts";
-import type { InstallHooksRouting } from "../orchestrators/plugin/install.ts";
+import type { InstallHooksRouting } from "../orchestrators/plugin/install-disable-cascade.ts";
 import type { UpdatePluginsFn } from "../orchestrators/plugin/update.ts";
 import type { ExtensionAPI } from "../platform/pi-api.ts";
 

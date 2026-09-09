@@ -6,14 +6,15 @@ import { mock, verify, when } from "strong-mock";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 
-import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import type { UnstageOutcome } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type {
   InstallDisableCascadeOwner,
   InstallHooksRouting,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-disable-cascade.ts";
-import type { UnstageOutcome } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
+import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
-type OwnerModule = typeof import("../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-disable-cascade.ts");
+type OwnerModule =
+  typeof import("../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-disable-cascade.ts");
 
 const INSTALLED_AT = "2026-01-01T00:00:00.000Z";
 const UPDATED_AT = "2026-02-02T00:00:00.000Z";
@@ -21,9 +22,8 @@ const UPDATED_AT = "2026-02-02T00:00:00.000Z";
 async function loadOwner(): Promise<OwnerModule> {
   let owner: OwnerModule | undefined;
   await assert.doesNotReject(async () => {
-    owner = await import(
-      "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-disable-cascade.ts"
-    );
+    owner =
+      await import("../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-disable-cascade.ts");
   }, "install-disable-cascade.ts must own the disabled-install contract");
   assert.ok(owner !== undefined);
   return owner;
@@ -69,9 +69,9 @@ function installedState(): ExtensionState {
 
 function hooksRouting(): InstallHooksRouting {
   return {
-    async readAndCachePluginHooks(): Promise<void> {},
-    rebuildRoutingTables(): void {},
-    removePluginConfigFromCache(): void {},
+    readAndCachePluginHooks: () => Promise.resolve(),
+    rebuildRoutingTables: () => undefined,
+    removePluginConfigFromCache: () => undefined,
   };
 }
 
@@ -90,16 +90,18 @@ test("disables a freshly installed record after a clean five-kind cascade", asyn
   // arrange
   const owner = await loadOwner();
   const state = installedState();
-  const cascade = composeOwner(owner, async () => ({
-    ok: true,
-    dropped: {
-      skills: ["skill-a", "skill-b"],
-      commands: ["command-a", "command-b"],
-      agents: ["agent-a", "agent-b"],
-      hooks: ["plugin"],
-      mcpServers: ["server-a", "server-b"],
-    },
-  }));
+  const cascade = composeOwner(owner, () =>
+    Promise.resolve({
+      ok: true,
+      dropped: {
+        skills: ["skill-a", "skill-b"],
+        commands: ["command-a", "command-b"],
+        agents: ["agent-a", "agent-b"],
+        hooks: ["plugin"],
+        mcpServers: ["server-a", "server-b"],
+      },
+    }),
+  );
 
   // act
   const disableOutcome = await cascade.disableFreshInstall({
@@ -139,9 +141,7 @@ test("returns the internal failure without running an unstage when the record is
   const owner = await loadOwner();
   const state = installedState();
   delete state.marketplaces.marketplace?.plugins.plugin;
-  const cascade = composeOwner(owner, async () => {
-    throw new Error("unstage must not run");
-  });
+  const cascade = composeOwner(owner, () => Promise.reject(new Error("unstage must not run")));
 
   // act
   const disableOutcome = await cascade.disableFreshInstall({
@@ -171,17 +171,19 @@ for (const row of [
     const owner = await loadOwner();
     const state = installedState();
     const cause = new Error("agents could not be removed");
-    const cascade = composeOwner(owner, async () => ({
-      ok: false,
-      dropped: {
-        skills: ["skill-a"],
-        commands: ["command-a"],
-        agents: ["agent-a"],
-        hooks: row.hooks,
-        mcpServers: ["server-a"],
-      },
-      cause,
-    }));
+    const cascade = composeOwner(owner, () =>
+      Promise.resolve({
+        ok: false,
+        dropped: {
+          skills: ["skill-a"],
+          commands: ["command-a"],
+          agents: ["agent-a"],
+          hooks: row.hooks,
+          mcpServers: ["server-a"],
+        },
+        cause,
+      }),
+    );
 
     // act
     const disableOutcome = await cascade.disableFreshInstall({
@@ -227,10 +229,11 @@ test("drops cached hooks before rebuilding routes after the saved disable", asyn
   const cascade = owner.composeInstallDisableCascade({
     hooksRouting: routing,
     now: () => UPDATED_AT,
-    unstagePlugin: async () => ({
-      ok: true,
-      dropped: { skills: [], commands: [], agents: [], hooks: [], mcpServers: [] },
-    }),
+    unstagePlugin: () =>
+      Promise.resolve({
+        ok: true,
+        dropped: { skills: [], commands: [], agents: [], hooks: [], mcpServers: [] },
+      }),
   });
 
   // act
@@ -251,26 +254,29 @@ test("keeps a successful install successful when post-save route removal throws"
   const cascade = owner.composeInstallDisableCascade({
     hooksRouting: routing,
     now: () => UPDATED_AT,
-    unstagePlugin: async () => ({
-      ok: true,
-      dropped: { skills: [], commands: [], agents: [], hooks: [], mcpServers: [] },
-    }),
+    unstagePlugin: () =>
+      Promise.resolve({
+        ok: true,
+        dropped: { skills: [], commands: [], agents: [], hooks: [], mcpServers: [] },
+      }),
   });
 
   // act & assert
-  assert.doesNotThrow(() =>
-    cascade.dropRoutesAfterSave("project", "marketplace", "plugin"),
-  );
+  assert.doesNotThrow(() => {
+    cascade.dropRoutesAfterSave("project", "marketplace", "plugin");
+  });
   verify(routing);
 });
 
 test("composes the fresh disabled row with the author reason first", async () => {
   // arrange
   const owner = await loadOwner();
-  const cascade = composeOwner(owner, async () => ({
-    ok: true,
-    dropped: { skills: [], commands: [], agents: [], hooks: [], mcpServers: [] },
-  }));
+  const cascade = composeOwner(owner, () =>
+    Promise.resolve({
+      ok: true,
+      dropped: { skills: [], commands: [], agents: [], hooks: [], mcpServers: [] },
+    }),
+  );
 
   // act
   const disabledRow = cascade.composeDisabledRow({
@@ -295,10 +301,12 @@ test("composes the fresh disabled row with the author reason first", async () =>
 test("composes the degraded disabled row with exact reason order and warning severity", async () => {
   // arrange
   const owner = await loadOwner();
-  const cascade = composeOwner(owner, async () => ({
-    ok: true,
-    dropped: { skills: [], commands: [], agents: [], hooks: [], mcpServers: [] },
-  }));
+  const cascade = composeOwner(owner, () =>
+    Promise.resolve({
+      ok: true,
+      dropped: { skills: [], commands: [], agents: [], hooks: [], mcpServers: [] },
+    }),
+  );
 
   // act
   const disabledRow = cascade.composeDisabledRow({
@@ -313,12 +321,7 @@ test("composes the degraded disabled row with exact reason order and warning sev
     status: "disabled",
     name: "plugin",
     version: "1.2.3",
-    reasons: [
-      "installs disabled",
-      "malformed skill",
-      "malformed command",
-      "unsupported component",
-    ],
+    reasons: ["installs disabled", "malformed skill", "malformed command", "unsupported component"],
     severity: "warning",
     needsReload: false,
     enableHint: true,

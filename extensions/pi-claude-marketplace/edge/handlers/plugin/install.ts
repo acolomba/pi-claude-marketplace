@@ -27,7 +27,7 @@ import { extractLocalFlag } from "../shared.ts";
 
 import { parseMapModelArgs, splitPluginMarketplaceRef } from "./shared.ts";
 
-import type { InstallHooksRouting } from "../../../orchestrators/plugin/install.ts";
+import type { InstallHooksRouting } from "../../../orchestrators/plugin/install-disable-cascade.ts";
 import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
 import type { CompletionCache } from "../../../shared/completion-cache.ts";
 
