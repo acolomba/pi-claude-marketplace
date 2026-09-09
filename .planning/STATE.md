@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 06
 current_phase_name: Assertion and Module Refinement
 status: executing
-stopped_at: Completed 06-49-PLAN.md
-last_updated: "2026-09-09T20:57:50.623Z"
+stopped_at: Completed 06-50-PLAN.md
+last_updated: "2026-09-09T21:13:02.797Z"
 last_activity: 2026-09-08
 last_activity_desc: Phase 06 execution started
-state_head: fbb70f9ad7695071bb278bdcfe870db76e4f1b2c
+state_head: cc2cc2f79e5a344ac4f6bbebf9ee67ac8bbdb769
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 180
-  completed_plans: 177
+  completed_plans: 178
   percent: 11
 ---
 
@@ -33,7 +33,7 @@ component as a working Pi artifact.
 
 Phase: 06 (Assertion and Module Refinement) — EXECUTING
 Next: Discuss Phase 6
-Plan: 50 of 52
+Plan: 51 of 52
 Status: Ready to execute
 Last activity: 2026-09-08 — Phase 06 execution started
 
@@ -353,6 +353,7 @@ Last activity: 2026-09-08 — Phase 06 execution started
 | Phase 06 P47 | 12min | 2 tasks | 3 files |
 | Phase 06 P48 | 23min | 3 tasks | 14 files |
 | Phase 06 P49 | 28min | 2 tasks | 14 files |
+| Phase 06 P50 | 9min | 2 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -867,6 +868,9 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 06]: 06-48: Rotate the generic lifecycle checker to the live list hub/test pair before removing its reinstall fixture.
 - [Phase 06]: Plan 06-49: Keep composeInstalledListRow as the sole installed-inventory projector over validated record, lookup, scope, and filesystem facts.
 - [Phase 06]: Plan 06-49: Move availableRowMessage with its public name into list-candidate-row.ts while the list hub retains filtering, folding, ordering, and dispatch.
+- [Phase 06]: Keep clone identity, installed-inventory fold selection, and canonical name/scope ordering in the pure list-orphan-fold owner.
+- [Phase 06]: Move the complete existing list owner corpus to list-flow.test.ts so every flow branch remains directly covered without weakening exact output assertions.
+- [Phase 06]: Vacate the legacy list.ts pair without a forwarding export; Plan 51 remains responsible for its fail-closed repointing ledger and deletion.
 
 ### Pending Todos
 
@@ -919,7 +923,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 06-49-PLAN.md
+**Stopped at:** Completed 06-50-PLAN.md
 
 Phase 04 completed all seven plans and closed AUTH-01 and TREF-01 through
 TREF-03. Independent verification passed 4/4 with no behavioral or UAT gap;
@@ -937,7 +941,7 @@ independent verification passed 6/6 with zero unverified behaviors.
 **Read beside it:** `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`, the
 Phase 01 terminal evidence ledger, and Phase 5's roadmap criteria.
 
-Last session: 2026-09-09T20:57:50.007Z
+Last session: 2026-09-09T21:13:02.172Z
 
 **Next:** Discuss Phase 06 to define the assertion-strengthening and approved
 module-refinement work before planning.
