@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 06
 current_phase_name: Assertion and Module Refinement
 status: executing
-stopped_at: Completed 06-38-PLAN.md
-last_updated: "2026-09-09T16:24:21.106Z"
+stopped_at: Completed 06-39-PLAN.md
+last_updated: "2026-09-09T17:04:11.201Z"
 last_activity: 2026-09-08
 last_activity_desc: Phase 06 execution started
-state_head: 597ed825961303b63288847c8e3f8a55e86659ec
+state_head: 768fcb515d41af4f88b0245cba52fdcf8d72b427
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 180
-  completed_plans: 166
+  completed_plans: 167
   percent: 11
 ---
 
@@ -33,7 +33,7 @@ component as a working Pi artifact.
 
 Phase: 06 (Assertion and Module Refinement) — EXECUTING
 Next: Discuss Phase 6
-Plan: 39 of 52
+Plan: 40 of 52
 Status: Ready to execute
 Last activity: 2026-09-08 — Phase 06 execution started
 
@@ -342,6 +342,7 @@ Last activity: 2026-09-08 — Phase 06 execution started
 | Phase 06 P36 | 36min | 2 tasks | 21 files |
 | Phase 06 P37 | 3min | 2 tasks | 1 files |
 | Phase 06 P38 | 18min | 3 tasks | 34 files |
+| Phase 06 P39 | 36 min | 2 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -828,6 +829,9 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 06]: The install ledger executor and mutable context are private to install-outcome.ts behind runInstallLedger.
 - [Phase 06]: The single complete install flow and Plan 06-01 exact notification arrays remain in install-flow.test.ts without duplicated cases.
 - [Phase 06]: The generic lifecycle PRE-EDIT fixture advances to the update.ts/update.test.ts pair.
+- [Phase 06]: preparePluginUpdate owns update membership, candidate, clone-probe, version, and disabled-refresh decisions.
+- [Phase 06]: swapPluginUpdate consumes PreparedPluginUpdate and owns bridge staging, rollback, intent marking, finalization, and cleanup.
+- [Phase 06]: UpdatePluginsFn lives with UpdatePluginsOptions in update-preflight.ts; handler and register use the owner directly.
 
 ### Pending Todos
 
@@ -880,7 +884,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 06-38-PLAN.md
+**Stopped at:** Completed 06-39-PLAN.md
 
 Phase 04 completed all seven plans and closed AUTH-01 and TREF-01 through
 TREF-03. Independent verification passed 4/4 with no behavioral or UAT gap;
@@ -898,7 +902,7 @@ independent verification passed 6/6 with zero unverified behaviors.
 **Read beside it:** `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`, the
 Phase 01 terminal evidence ledger, and Phase 5's roadmap criteria.
 
-Last session: 2026-09-09T16:24:20.508Z
+Last session: 2026-09-09T17:04:10.683Z
 
 **Next:** Discuss Phase 06 to define the assertion-strengthening and approved
 module-refinement work before planning.
