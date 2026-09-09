@@ -23,10 +23,7 @@ import {
   materializePluginClone,
   resolvePluginPin,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts";
-import {
-  createNodeInstallPlugin,
-  type InstallCloneCacheSeam,
-} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install.ts";
+import { createNodeInstallPlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install.ts";
 import {
   createNodeReinstallPlugin,
   createNodeReinstallPlugins,
@@ -51,6 +48,7 @@ import type {
   GitAuthBundle,
   GitOps,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
+import type { InstallCloneCacheSeam } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-clone-probe.ts";
 import type {
   ReinstallCloneCacheSeam,
   ReinstallHooksRouting,
