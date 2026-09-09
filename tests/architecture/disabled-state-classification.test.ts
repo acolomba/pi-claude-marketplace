@@ -19,7 +19,7 @@ const PREDICATE_DEFINITION_SITE = "extensions/pi-claude-marketplace/persistence/
 const FORMER_DEFINITION_SITES: readonly string[] = [
   "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts",
   "extensions/pi-claude-marketplace/orchestrators/plugin/plugin-state-classifier.ts",
-  "extensions/pi-claude-marketplace/orchestrators/plugin/update.ts",
+  "extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts",
   "extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts",
 ];
 

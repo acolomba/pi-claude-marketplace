@@ -43,7 +43,7 @@ const RULE_DEFINITION_SITE = "extensions/pi-claude-marketplace/domain/manifest-l
 const ABSENCE_JUDGING_SURFACES: ReadonlyArray<string> = [
   "extensions/pi-claude-marketplace/orchestrators/plugin/list.ts",
   "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts",
-  "extensions/pi-claude-marketplace/orchestrators/plugin/update.ts",
+  "extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts",
 ];
 
 /**
