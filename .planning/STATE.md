@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 06
 current_phase_name: Assertion and Module Refinement
 status: executing
-stopped_at: Completed 06-42-PLAN.md
-last_updated: "2026-09-09T17:54:40.717Z"
+stopped_at: Completed 06-43-PLAN.md
+last_updated: "2026-09-09T18:15:26.906Z"
 last_activity: 2026-09-08
 last_activity_desc: Phase 06 execution started
-state_head: fa8feb6c8d722be157dde271b2222413b5afb810
+state_head: bcb7678fcc80a56706f3c0f5150e22b4736e65e1
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 180
-  completed_plans: 170
+  completed_plans: 171
   percent: 11
 ---
 
@@ -33,7 +33,7 @@ component as a working Pi artifact.
 
 Phase: 06 (Assertion and Module Refinement) — EXECUTING
 Next: Discuss Phase 6
-Plan: 43 of 52
+Plan: 44 of 52
 Status: Ready to execute
 Last activity: 2026-09-08 — Phase 06 execution started
 
@@ -346,6 +346,7 @@ Last activity: 2026-09-08 — Phase 06 execution started
 | Phase 06 P40 | 24min | 2 tasks | 27 files |
 | Phase 06 P41 | 7min | 2 tasks | 1 files |
 | Phase 06 P42 | 7min | 2 tasks | 0 files |
+| Phase 06 P43 | 16min | 3 tasks | 15 files |
 
 ## Accumulated Context
 
@@ -842,6 +843,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 06]: Plan 06-41: Accept verified Plan 39/40 caller and scanner migrations as pre-completed work without duplicate churn.
 - [Phase 06]: Plan 06-42 accepted the seven consumer migrations in 2f0126cb as pre-completed and verified them without duplicate churn.
 - [Phase 06]: Plan 06-42 retained valid update.ts and update.test.ts references for behavior-bearing enumeration and the generic hub ledger until Plan 43.
+- [Phase 06]: Move behavior-bearing update orchestration into update-flow.ts as private implementation details while preserving the established public flow API.
+- [Phase 06]: Rotate the generic hub-ledger fixture to reinstall.ts/reinstall.test.ts before retiring update.ts/update.test.ts.
 
 ### Pending Todos
 
@@ -894,7 +897,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 06-42-PLAN.md
+**Stopped at:** Completed 06-43-PLAN.md
 
 Phase 04 completed all seven plans and closed AUTH-01 and TREF-01 through
 TREF-03. Independent verification passed 4/4 with no behavioral or UAT gap;
@@ -912,7 +915,7 @@ independent verification passed 6/6 with zero unverified behaviors.
 **Read beside it:** `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`, the
 Phase 01 terminal evidence ledger, and Phase 5's roadmap criteria.
 
-Last session: 2026-09-09T17:54:40.099Z
+Last session: 2026-09-09T18:15:26.311Z
 
 **Next:** Discuss Phase 06 to define the assertion-strengthening and approved
 module-refinement work before planning.
