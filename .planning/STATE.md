@@ -4,8 +4,8 @@ milestone: v1.19
 status: Awaiting next milestone
 stopped_at: Milestone v1.19 closed and archived; awaiting the next milestone
 last_updated: "2026-09-08T03:04:31.784Z"
-last_activity: 2026-09-07
-last_activity_desc: Completed quick task 260907-uzb (FMBOM-01 leading-BOM strip)
+last_activity: 2026-09-09
+last_activity_desc: Completed quick task 260909-g1l (UDISP-01 corrections, PMAN-01 filed)
 state_head: 183de9c9e752cc3037409350b714c4bf78ad5135
 milestone_name: Unit Test Refactor
 current_phase: 117
@@ -34,9 +34,10 @@ component as a working Pi artifact.
 Phase: Milestone v1.19 complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-09-07 — Completed quick task 260907-uzb: strip a leading
-UTF-8 BOM at the agents, skills and commands frontmatter read sites (FMBOM-01,
-now CLOSED in BACKLOG.md)
+Last activity: 2026-09-09 — Completed quick task 260909-g1l: corrected the
+UDISP-01 entry (dropped the cross-scope data check, which our per-scope
+dataRoot makes unreachable; pinned the upstream flag table to CLI v2.1.236)
+and filed PMAN-01 for the unread bare `plugin.json`
 
 ## Performance Metrics
 
@@ -421,6 +422,7 @@ None for roadmap creation.
 | 260907-q0h | Fix issue #143: make generated command name separator platform-dependent so Windows installs stop failing with EINVAL | 2026-09-07 | bf53dec0 | [260907-q0h-fix-issue-143-make-generated-command-nam](./quick/260907-q0h-fix-issue-143-make-generated-command-nam/) |
 | 6 | Switch the Windows command name separator from dash to dot (follow-up to 260907-q0h, #143) | 2026-09-08 | 7ce485b1 | — |
 | 260907-uzb | FMBOM-01: strip leading UTF-8 BOM at skill and agent frontmatter read sites | 2026-09-08 | fb54c5d7 | [260907-uzb-fmbom-01-strip-leading-utf-8-bom-at-skil](./quick/260907-uzb-fmbom-01-strip-leading-utf-8-bom-at-skil/) |
+| 260909-g1l | correct UDISP-01 backlog entry and add bare plugin.json manifest-path entry | 2026-09-09 | 9a8f740b | [260909-g1l-correct-udisp-01-backlog-entry-and-add-b](./quick/260909-g1l-correct-udisp-01-backlog-entry-and-add-b/) |
 
 ## Deferred Items
 
