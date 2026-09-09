@@ -131,12 +131,22 @@ async function resolveEngineVersion() {
   return { root, version: manifest.version };
 }
 
+/** The only agent-state root this driver will hand to the engine. */
+const SANDBOX_ROOT = path.resolve(process.cwd(), "tmp", "pi-uat");
+
 /**
  * Refuse to run against anything but the disposable sandbox, BEFORE creating
  * anything and before the engine is imported. Two independent reasons: the
  * engine writes into whatever agent-state directory it is handed, and the
  * operator's real one is where their provider credentials live -- reaching them
  * would both spend money and silently un-measure this driver.
+ *
+ * The comparison is on RESOLVED paths, never on the raw string. A substring
+ * test is a smell test rather than containment: `.../tmp/pi-uat/../../elsewhere`
+ * carries the substring, survives `existsSync`, and names a directory outside
+ * the sandbox -- which is then created and handed to third-party code. The
+ * trailing separator matters for the same reason: a sibling `tmp/pi-uat-backup`
+ * is not a child of `tmp/pi-uat`.
  */
 function assertSandboxContainment() {
   const agentDir = process.env.PI_CODING_AGENT_DIR;
@@ -146,16 +156,17 @@ function assertSandboxContainment() {
       "Run: PI_CODING_AGENT_DIR=$(pwd)/tmp/pi-uat/wf-agent PI_WORKFLOW_ENGINE_ROOT=... node tests/live-uat/workflow-agent-failure-canary.mjs",
     );
   }
-  if (!agentDir.includes(path.join("tmp", "pi-uat"))) {
+  const resolved = path.resolve(agentDir);
+  if (resolved !== SANDBOX_ROOT && !resolved.startsWith(SANDBOX_ROOT + path.sep)) {
     liveEngineRequired(
-      `PI_CODING_AGENT_DIR (${agentDir}) is not the tmp/pi-uat sandbox.`,
+      `PI_CODING_AGENT_DIR (${agentDir} -> ${resolved}) is not inside ${SANDBOX_ROOT}.`,
       "Refusing to hand the engine an agent-state directory outside the disposable sandbox.",
     );
   }
-  if (!existsSync(agentDir)) {
-    liveEngineRequired(`PI_CODING_AGENT_DIR (${agentDir}) does not exist.`);
+  if (!existsSync(resolved)) {
+    liveEngineRequired(`PI_CODING_AGENT_DIR (${agentDir} -> ${resolved}) does not exist.`);
   }
-  return agentDir;
+  return resolved;
 }
 
 /**
