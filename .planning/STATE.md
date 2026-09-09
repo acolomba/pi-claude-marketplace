@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 06
 current_phase_name: Assertion and Module Refinement
 status: executing
-stopped_at: Completed 06-06-PLAN.md
-last_updated: "2026-09-09T05:33:48.851Z"
+stopped_at: Completed 06-07-PLAN.md
+last_updated: "2026-09-09T06:05:59.020Z"
 last_activity: 2026-09-08
 last_activity_desc: Phase 06 execution started
-state_head: 7c60b034a88371331da612409ec985f7cb0d9ec8
+state_head: 2f82372014be25f3799fe288dec7ca7acdedf13c
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 180
-  completed_plans: 134
+  completed_plans: 135
   percent: 11
 ---
 
@@ -33,7 +33,7 @@ component as a working Pi artifact.
 
 Phase: 06 (Assertion and Module Refinement) — EXECUTING
 Next: Discuss Phase 6
-Plan: 7 of 52
+Plan: 8 of 52
 Status: Ready to execute
 Last activity: 2026-09-08 — Phase 06 execution started
 
@@ -314,6 +314,7 @@ Last activity: 2026-09-08 — Phase 06 execution started
 | Phase 06 P04 | 12min | 2 tasks | 5 files |
 | Phase 06 P05 | 21min | 2 tasks | 38 files |
 | Phase 06 P06 | 17 min | 2 tasks | 8 files |
+| Phase 06 P07 | 27min | 2 tasks | 18 files |
 
 ## Accumulated Context
 
@@ -735,6 +736,9 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 06]: component-paths.ts owns relative-path validation and symlink-aware root containment; resolver.ts only supplies filesystem collaborators and composes the result.
 - [Phase 06]: mcp-resolution.ts consumes the component-path containment owner and existing MCP validator directly, preserving domain-to-bridge dependency direction.
 - [Phase 06]: Strict MCP referenced-file reads stay outside the JSON parse catch so real I/O failures retain outer probe classification.
+- [Phase 06]: hooks-resolution.ts owns hook parsing, dropped-hook ordering, and orphan-rewake classification behind narrow filesystem collaborators.
+- [Phase 06]: plugin-resolver.ts is a genuine composition owner; remaining legacy resolver callers migrate directly in Plans 06-08 through 06-11.
+- [Phase 06]: Exported resolver leaves inline narrow parameter shapes rather than exporting implementation-only interfaces.
 
 ### Pending Todos
 
@@ -787,7 +791,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 06-06-PLAN.md
+**Stopped at:** Completed 06-07-PLAN.md
 
 Phase 04 completed all seven plans and closed AUTH-01 and TREF-01 through
 TREF-03. Independent verification passed 4/4 with no behavioral or UAT gap;
@@ -805,7 +809,7 @@ independent verification passed 6/6 with zero unverified behaviors.
 **Read beside it:** `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`, the
 Phase 01 terminal evidence ledger, and Phase 5's roadmap criteria.
 
-Last session: 2026-09-09T05:33:48.308Z
+Last session: 2026-09-09T06:05:58.489Z
 
 **Next:** Discuss Phase 06 to define the assertion-strengthening and approved
 module-refinement work before planning.
