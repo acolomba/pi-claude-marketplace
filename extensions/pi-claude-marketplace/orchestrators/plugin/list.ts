@@ -54,7 +54,7 @@
 
 import { lookupDeclaredPlugin, type ManifestLookup } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest, type MarketplaceManifest } from "../../domain/manifest.ts";
-import { resolveStrict } from "../../domain/resolver.ts";
+import { resolveStrict } from "../../domain/plugin-resolver.ts";
 import { parsePluginSource } from "../../domain/source.ts";
 import { rowClaimsInstallDisabled } from "../../domain/unsupported-components.ts";
 import { loadMergedScopeConfig, type MergedConfig } from "../../persistence/config-merge.ts";

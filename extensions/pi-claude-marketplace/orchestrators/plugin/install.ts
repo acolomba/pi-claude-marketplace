@@ -95,12 +95,12 @@ import {
 import { parseHooksConfig, projectHookSummaryEntries } from "../../domain/components/hooks.ts";
 import { PLUGIN_ENTRY_VALIDATOR } from "../../domain/components/plugin.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
-import { asAbsolutePluginRoot } from "../../domain/plugin-root.ts";
 import {
   requirePartialInstallable,
   requireInstallable,
   resolveStrict,
-} from "../../domain/resolver.ts";
+} from "../../domain/plugin-resolver.ts";
+import { asAbsolutePluginRoot } from "../../domain/plugin-root.ts";
 import { parsePluginSource } from "../../domain/source.ts";
 import { shaVersion } from "../../domain/version.ts";
 import { writePluginConfigEntry } from "../../persistence/config-write-back.ts";
