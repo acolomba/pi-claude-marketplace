@@ -704,7 +704,7 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
     // (and its retry-hint, carried in the cause chain) via a synthetic
     // failed-plugin child whose `cause` drives the depth-5 cause-chain
     // trailer the renderer appends. Mirrors the reinstall synthetic-failed
-    // recipe (orchestrators/plugin/reinstall.ts).
+    // recipe (orchestrators/plugin/reinstall-flow.ts).
     const typedReasons = reasonsFromCascadeError(err);
     const failedRow: PluginFailedMessage = {
       status: "failed",

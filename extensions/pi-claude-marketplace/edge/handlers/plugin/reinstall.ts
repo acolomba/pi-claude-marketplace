@@ -18,8 +18,8 @@ import { extractLocalFlag } from "../shared.ts";
 
 import { splitPluginMarketplaceRef } from "./shared.ts";
 
+import type { ReinstallPluginsFn } from "../../../orchestrators/plugin/reinstall-flow.ts";
 import type { ReinstallPluginsTarget } from "../../../orchestrators/plugin/reinstall-targets.ts";
-import type { ReinstallPluginsFn } from "../../../orchestrators/plugin/reinstall.ts";
 import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
 
 const USAGE =

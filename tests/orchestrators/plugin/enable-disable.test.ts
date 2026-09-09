@@ -26,7 +26,7 @@ import {
   createSetPluginEnabled,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts";
 import { runInstallLedger } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts";
-import { createNodeReinstallPlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts";
+import { createNodeReinstallPlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts";
 import {
   selectDeclaringConfigWriteTarget,
   writeAdoptingConfigEntries,

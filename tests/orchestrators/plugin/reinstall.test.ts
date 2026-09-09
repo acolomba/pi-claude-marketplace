@@ -27,7 +27,10 @@ import { createNodeInstallPlugin } from "../../../extensions/pi-claude-marketpla
 import {
   createNodeReinstallPlugin,
   createNodeReinstallPlugins,
-  createReinstallPlugin,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts";
+import {
+  reinstallPluginsWith,
+  reinstallPluginWithTransaction,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
@@ -51,11 +54,11 @@ import type {
 import type { InstallCloneCacheSeam } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-clone-probe.ts";
 import type { ReinstallCloneCacheSeam } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-clone-probe.ts";
 import type {
-  ReinstallHooksRouting,
   ReinstallPluginDeps,
   ReinstallPluginOptions,
   ReinstallPluginsOptions,
-} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts";
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts";
+import type { ReinstallHooksRouting } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts";
 import type {
   NotificationContext,
   ToolInventory,
@@ -92,8 +95,10 @@ function reinstallPluginWithCache(opts: ReinstallPluginOptions, completionCache:
   return createNodeReinstallPlugin(createHooksRouting(createHooksRuntime()), completionCache)(opts);
 }
 
-test("reinstall exposes its required transaction factory", () => {
-  assert.strictEqual(typeof createReinstallPlugin, "function");
+test("reinstall hub owns transaction and target sequencing", () => {
+  // act & assert
+  assert.strictEqual(typeof reinstallPluginWithTransaction, "function");
+  assert.strictEqual(typeof reinstallPluginsWith, "function");
 });
 
 function toolInfo(name: string): ToolInventoryItem {
@@ -123,7 +128,7 @@ async function withHermeticHome<T>(fn: () => Promise<T>): Promise<T> {
   return withHermeticEnvironment("reinstall-", fn);
 }
 
-interface SeededReinstallAgent {
+export interface SeededReinstallAgent {
   readonly directory?: string;
   readonly sourceName: string;
   readonly frontmatterName?: string;
@@ -131,7 +136,7 @@ interface SeededReinstallAgent {
   readonly body: string;
 }
 
-interface ResourceSet {
+export interface ResourceSet {
   readonly skill?: string;
   readonly command?: string;
   readonly agent?: string;
@@ -175,7 +180,7 @@ function rememberManifestEntry(
   }
 }
 
-async function seedMarketplace(opts: {
+export async function seedMarketplace(opts: {
   readonly cwd: string;
   readonly marketplaceRoot: string;
   readonly marketplaceName?: string;
@@ -259,7 +264,7 @@ async function seedMarketplace(opts: {
   return { pluginRoot, manifestPath };
 }
 
-async function writePluginTree(
+export async function writePluginTree(
   pluginRoot: string,
   pluginName: string,
   resources: ResourceSet,
@@ -362,7 +367,7 @@ async function mergeManifestEntry(
   return writeManifest(marketplaceRoot, marketplaceName, plugins, declarations, agentsByPlugin);
 }
 
-async function writeManifest(
+export async function writeManifest(
   marketplaceRoot: string,
   marketplaceName: string,
   plugins: Record<string, string>,
@@ -429,56 +434,6 @@ test("PRL-06: absent installed record returns skipped and does not mutate state 
         notifications[0]?.message,
         "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello (skipped) {not installed}",
       );
-    } finally {
-      await rm(cwd, { recursive: true, force: true });
-    }
-  });
-});
-
-test("PRL-08/11 happy: success preserves installed version, restages resources, deletes data, and refreshes", async () => {
-  await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-happy-"));
-    try {
-      const locations = locationsFor("project", cwd);
-      const seeded = await seedMarketplace({
-        cwd,
-        marketplaceRoot: path.join(cwd, "mp-src"),
-        resources: { skill: "old skill", command: "old command", agent: "old agent", mcp: true },
-        install: true,
-      });
-      const dataDir = await locations.pluginDataDir("mp", "hello");
-      await mkdir(dataDir, { recursive: true });
-      await writeFile(path.join(dataDir, "state.txt"), "plugin data");
-      await writePluginTree(seeded.pluginRoot, "hello", {
-        skill: "new skill",
-        command: "new command",
-        agent: "new agent",
-        mcp: true,
-      });
-      await writeManifest(path.join(cwd, "mp-src"), "mp", { hello: "9.9.9" });
-      const beforeRecord = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
-        "hello"
-      ];
-      assert.ok(beforeRecord !== undefined);
-
-      const { ctx, pi, notifications } = makeCtx();
-      const outcome = await reinstallDefault(cwd, ctx, pi);
-
-      assert.equal(outcome.partition, "reinstalled");
-      assert.equal(outcome.version, "1.0.0");
-      assert.equal(outcome.resourcesChanged, true);
-      assert.deepEqual(outcome.stagedAgentNames, [`${GENERATED_AGENT_PREFIX}hello-bot`]);
-      assert.deepEqual(outcome.stagedMcpServerNames, ["server1"]);
-      const record = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
-        "hello"
-      ];
-      assert.ok(record !== undefined);
-      assert.equal(record.version, "1.0.0");
-      assert.equal(record.installedAt, beforeRecord.installedAt);
-      assert.match(await readSkill(cwd), /new skill/);
-      await assert.rejects(() => readFile(path.join(dataDir, "state.txt"), "utf8"), /ENOENT/);
-      assert.equal(errorNotifications(notifications).length, 0);
-      assert.match(notifications.at(-1)?.message ?? "", /\/reload to pick up changes$/);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

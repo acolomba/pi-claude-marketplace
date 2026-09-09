@@ -65,17 +65,10 @@ import {
 } from "../../shared/notification-types.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
 import { skipSeverity } from "../../shared/notify-reasons.ts";
-import {
-  type LockedStateTransaction,
-  type LockedStateTransactionDeps,
-} from "../../transaction/with-state-guard.ts";
+import { type LockedStateTransaction } from "../../transaction/with-state-guard.ts";
 import { DEFAULT_CREDENTIAL_OPS } from "../auth-host.ts";
 
 import { discoverGeneratedNames } from "./discover-names.ts";
-import { probeReinstallClone } from "./reinstall-clone-probe.ts";
-import { recordReinstallOutcome, reinstallReasonsFromError } from "./reinstall-record.ts";
-import { REAL_REINSTALL_TRANSACTION } from "./reinstall-replace.ts";
-import { selectReinstallTargets } from "./reinstall-targets.ts";
 import {
   REINSTALL_CONTEXT,
   narrowReasons,
@@ -91,23 +84,24 @@ import {
   surfaceDiscoveryWarnings,
 } from "./shared.ts";
 
+import type {
+  ReinstallPluginFn,
+  ReinstallPluginOptions,
+  ReinstallPluginsOptions,
+} from "./reinstall-flow.ts";
 import type { HooksRouting } from "../../bridges/hooks/index.ts";
 import type { PluginEntry } from "../../domain/components/plugin.ts";
 import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
 import type { GitBackedSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
-import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
+import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
-import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
 import type { ReinstallFailedOutcome, ReinstallPluginOutcome } from "../types.ts";
-import type { ReinstallCloneCacheSeam } from "./reinstall-clone-probe.ts";
-import type {
-  ReinstallMaintenanceInput,
-  ReinstallTransaction,
-  RemoveDataDirFn,
-} from "./reinstall-replace.ts";
-import type { ReinstallPluginsTarget, SelectedReinstallTarget } from "./reinstall-targets.ts";
+import type { probeReinstallClone, ReinstallCloneCacheSeam } from "./reinstall-clone-probe.ts";
+import type { recordReinstallOutcome, reinstallReasonsFromError } from "./reinstall-record.ts";
+import type { ReinstallMaintenanceInput, ReinstallTransaction } from "./reinstall-replace.ts";
+import type { selectReinstallTargets, SelectedReinstallTarget } from "./reinstall-targets.ts";
 
 /** Hook-routing capabilities consumed by committed reinstall finalization. */
 export type ReinstallHooksRouting = Pick<
@@ -115,81 +109,13 @@ export type ReinstallHooksRouting = Pick<
   "readAndCachePluginHooks" | "rebuildRoutingTables" | "removePluginConfigFromCache"
 >;
 
-export interface ReinstallPluginOptions {
-  readonly ctx: NotificationContext;
-  readonly pi: ToolInventory;
-  readonly scope: Scope;
-  readonly cwd: string;
-  readonly marketplace: string;
-  readonly plugin: string;
-  readonly render?: "default" | "none";
-  /**
-   * WB-01 / WB-02: when true, target
-   * `claude-plugins.local.json` instead of `claude-plugins.json`. The base
-   * file is NEVER touched on the --local path; loadConfig's `absent` arm
-   * yields an empty starting shape that saveConfig writes back to the local
-   * path.
-   */
-  readonly local?: boolean;
-  /**
-   * PROV-03 / Q3 injection seam. Defaults to DEFAULT_CREDENTIAL_OPS at use. A
-   * COLD-cache reinstall re-clones and threads a host-keyed bundle so a private
-   * git source authenticates (PROV-03); a WARM cache short-circuits before the
-   * clone so auth is never exercised (offline parity, PURL-07).
-   */
-  readonly credentialOps?: CredentialOps;
-  /** PROV-03 Device Flow HTTP seam; callers can inject a network-free collaborator. */
-  readonly deviceFlowHttp?: DeviceFlowHttp;
-  /**
-   * D-79-02 once-per-host memo. The bulk path (`reinstallPlugins`) shares ONE
-   * memo across its targets so a cold-cache sweep over several private plugins
-   * runs the device flow at most once per host; the standalone single-plugin
-   * caller may omit it (single target -- at most one challenge).
-   */
-  readonly authMemo?: Map<string, AuthAttemptResult>;
-  /** @internal Test-only seams; production callers omit this. */
-  readonly __deps?: ReinstallPluginDeps;
+/** Named leaf owners bound by the public reinstall flow composition root. */
+export interface ReinstallFlowOwners {
+  readonly probeReinstallClone: typeof probeReinstallClone;
+  readonly recordReinstallOutcome: typeof recordReinstallOutcome;
+  readonly reinstallReasonsFromError: typeof reinstallReasonsFromError;
+  readonly selectReinstallTargets: typeof selectReinstallTargets;
 }
-
-export interface ReinstallPluginDeps {
-  readonly stateTransaction?: LockedStateTransactionDeps;
-  readonly removeDataDir?: RemoveDataDirFn;
-  /**
-   * PURL-07 / D-78-02: test-only clone-cache seam override. When undefined
-   * (production), reinstall's recorded-sha probe reaches the real
-   * `materializePluginClone` import; tests inject a mock-backed materialize so
-   * the git-source reinstall path runs without touching the network.
-   */
-  readonly cloneCacheSeam?: ReinstallCloneCacheSeam;
-}
-
-export interface ReinstallPluginsOptions {
-  readonly ctx: NotificationContext;
-  readonly pi: ToolInventory;
-  readonly scope?: Scope;
-  readonly cwd: string;
-  readonly target: ReinstallPluginsTarget;
-  /**
-   * WB-01 / WB-02: when true, target
-   * `claude-plugins.local.json` instead of `claude-plugins.json` for
-   * write-back. The base file is NEVER touched on the --local path.
-   */
-  readonly local?: boolean;
-  /** PROV-03 credential seam (see ReinstallPluginOptions.credentialOps). */
-  readonly credentialOps?: CredentialOps;
-  /** PROV-03 Device Flow HTTP seam (see ReinstallPluginOptions.deviceFlowHttp). */
-  readonly deviceFlowHttp?: DeviceFlowHttp;
-  /** @internal Test-only seams threaded to every per-plugin call. */
-  readonly __deps?: ReinstallPluginDeps;
-}
-
-/** One plugin reinstall bound to a transaction and lifecycle routing owner. */
-export type ReinstallPluginFn = (opts: ReinstallPluginOptions) => Promise<ReinstallPluginOutcome>;
-
-/** Direct/bulk reinstall operation bound to one lifecycle routing owner. */
-export type ReinstallPluginsFn = (
-  opts: ReinstallPluginsOptions,
-) => Promise<readonly ReinstallPluginOutcome[]>;
 
 interface LockedSuccess {
   readonly outcome: ReinstallPluginOutcome;
@@ -219,7 +145,9 @@ interface LockedSuccess {
 // The `reinstallPlugins` enumeration catch detects it via `instanceof` and
 // emits ONE standalone `MarketplaceNotAddedMessage` before any cascade row.
 
-async function reinstallPluginWithTransaction(
+/** Runs one reinstall through the retained transaction and notification sequence. */
+export async function reinstallPluginWithTransaction(
+  owners: ReinstallFlowOwners,
   transaction: ReinstallTransaction,
   hooksRouting: ReinstallHooksRouting,
   completionCache: CompletionCache,
@@ -233,11 +161,11 @@ async function reinstallPluginWithTransaction(
   try {
     locked = await transaction.withLockedStateTransaction(
       locations,
-      (tx) => runLockedReinstall(transaction, hooksRouting, tx, locations, opts),
+      (tx) => runLockedReinstall(owners, transaction, hooksRouting, tx, locations, opts),
       opts.__deps?.stateTransaction,
     );
   } catch (err) {
-    return handleSinglePluginFailure(opts, err as Error, render);
+    return handleSinglePluginFailure(owners, opts, err as Error, render);
   }
 
   if (locked.outcome.partition !== "reinstalled") {
@@ -379,23 +307,6 @@ function maintenanceInput(opts: ReinstallPluginOptions): ReinstallMaintenanceInp
   };
 }
 
-/** Bind one reinstall operation to a required semantic transaction owner. */
-export function createReinstallPlugin(
-  transaction: ReinstallTransaction,
-  hooksRouting: ReinstallHooksRouting,
-  completionCache: CompletionCache,
-): ReinstallPluginFn {
-  return (opts) => reinstallPluginWithTransaction(transaction, hooksRouting, completionCache, opts);
-}
-
-/** Binds one production reinstall to the real transaction and supplied routing owner. */
-export function createNodeReinstallPlugin(
-  hooksRouting: ReinstallHooksRouting,
-  completionCache: CompletionCache,
-): ReinstallPluginFn {
-  return createReinstallPlugin(REAL_REINSTALL_TRANSACTION, hooksRouting, completionCache);
-}
-
 /**
  * handle the single-plugin reinstall failure path. Extracted
  * from `reinstallPlugin` to keep that function's cognitive complexity
@@ -409,12 +320,13 @@ export function createNodeReinstallPlugin(
  * .
  */
 function handleSinglePluginFailure(
+  owners: ReinstallFlowOwners,
   opts: ReinstallPluginOptions,
   err: Error,
   render: "default" | "none",
 ): ReinstallFailedOutcome {
   const { ctx, pi, scope, marketplace, plugin } = opts;
-  const outcome = recordReinstallOutcome({
+  const outcome = owners.recordReinstallOutcome({
     partition: "failed",
     name: plugin,
     marketplace,
@@ -468,7 +380,9 @@ function handleSinglePluginFailure(
   return outcome;
 }
 
-async function reinstallPluginsWith(
+/** Runs target selection, per-plugin reinstalls, and exact cascade rendering. */
+export async function reinstallPluginsWith(
+  owners: ReinstallFlowOwners,
   opts: ReinstallPluginsOptions,
   reinstallPlugin: ReinstallPluginFn,
 ): Promise<readonly ReinstallPluginOutcome[]> {
@@ -478,7 +392,7 @@ async function reinstallPluginsWith(
     readonly targets: readonly SelectedReinstallTarget[];
   };
   try {
-    selection = await selectReinstallTargets({
+    selection = await owners.selectReinstallTargets({
       cwd,
       target: opts.target,
       ...(opts.scope !== undefined && { scope: opts.scope }),
@@ -487,7 +401,7 @@ async function reinstallPluginsWith(
     // Enumeration failures occur before the selector can return, so preserve
     // invocation-form cardinality at this error-projection boundary.
     const cardinality = opts.target.kind === "plugin" ? "single" : "plural";
-    await handleEnumerationFailure(opts, err as Error, cardinality);
+    await handleEnumerationFailure(owners, opts, err as Error, cardinality);
     return [];
   }
 
@@ -533,15 +447,6 @@ async function reinstallPluginsWith(
   renderReinstallPartitionAndNotify(ctx, pi, outcomes, cardinality);
   surfaceReinstallDiscoveryWarnings(ctx, outcomes);
   return Object.freeze(outcomes);
-}
-
-/** Binds direct and bulk production reinstall to one lifecycle routing owner. */
-export function createNodeReinstallPlugins(
-  hooksRouting: ReinstallHooksRouting,
-  completionCache: CompletionCache,
-): ReinstallPluginsFn {
-  const reinstallPlugin = createNodeReinstallPlugin(hooksRouting, completionCache);
-  return (opts) => reinstallPluginsWith(opts, reinstallPlugin);
 }
 
 /**
@@ -597,6 +502,7 @@ function surfaceReinstallDiscoveryWarnings(
  *     (`error`) + no reload-hint are computed by notify().
  */
 async function handleEnumerationFailure(
+  owners: ReinstallFlowOwners,
   opts: ReinstallPluginsOptions,
   err: Error,
   cardinality: "single" | "plural",
@@ -615,7 +521,7 @@ async function handleEnumerationFailure(
     return;
   }
 
-  const typedReasons = reinstallReasonsFromError(err);
+  const typedReasons = owners.reinstallReasonsFromError(err);
   const reasons: readonly ContentReason[] =
     typedReasons ?? narrowReasons([composeErrorWithCauseChain(err)]);
   const causeErr = err;
@@ -657,6 +563,7 @@ async function handleEnumerationFailure(
  * shadow that fallback.
  */
 async function runLockedReinstall(
+  owners: ReinstallFlowOwners,
   transaction: ReinstallTransaction,
   hooksRouting: ReinstallHooksRouting,
   tx: LockedStateTransaction,
@@ -668,7 +575,7 @@ async function runLockedReinstall(
   const oldRecord = mp?.plugins[plugin];
   if (mp === undefined || oldRecord === undefined) {
     return {
-      outcome: recordReinstallOutcome({
+      outcome: owners.recordReinstallOutcome({
         partition: "skipped",
         name: plugin,
         marketplace,
@@ -696,7 +603,7 @@ async function runLockedReinstall(
   // evidence that anything is on disk and must not be read as one.
   if (isRecordedButDisabled(oldRecord)) {
     return {
-      outcome: recordReinstallOutcome({
+      outcome: owners.recordReinstallOutcome({
         partition: "skipped",
         name: plugin,
         marketplace,
@@ -710,7 +617,7 @@ async function runLockedReinstall(
 
   const oldSnapshot = clonePluginRecord(oldRecord);
   const entry = await loadCachedEntry(mp.manifestPath, marketplace, plugin);
-  const installable = await resolveInstallable({
+  const installable = await resolveInstallable(owners, {
     entry,
     marketplaceRoot: mp.marketplaceRoot,
     locations,
@@ -745,7 +652,7 @@ async function runLockedReinstall(
   let invalidConfigWriteBack: boolean;
   let outcome: ReinstallPluginOutcome;
   try {
-    outcome = recordReinstallOutcome({
+    outcome = owners.recordReinstallOutcome({
       partition: "reinstalled",
       name: plugin,
       marketplace,
@@ -856,17 +763,20 @@ async function loadCachedEntry(
 // recorded sha, inject the recorded-sha probe so the git plugin re-materializes
 // offline from the warm cache. A path source (or a git record predating the
 // resolvedSha field) keeps the existing no-callback resolveStrict path.
-async function resolveInstallable(input: {
-  readonly entry: PluginEntry;
-  readonly marketplaceRoot: string;
-  readonly locations: ScopedLocations;
-  readonly recordedSha: string | undefined;
-  readonly seam?: ReinstallCloneCacheSeam;
-  readonly ctx: NotificationContext;
-  readonly credentialOps: CredentialOps;
-  readonly deviceFlowHttp?: DeviceFlowHttp;
-  readonly authMemo?: Map<string, AuthAttemptResult>;
-}): Promise<MaterializablePlugin> {
+async function resolveInstallable(
+  owners: ReinstallFlowOwners,
+  input: {
+    readonly entry: PluginEntry;
+    readonly marketplaceRoot: string;
+    readonly locations: ScopedLocations;
+    readonly recordedSha: string | undefined;
+    readonly seam?: ReinstallCloneCacheSeam;
+    readonly ctx: NotificationContext;
+    readonly credentialOps: CredentialOps;
+    readonly deviceFlowHttp?: DeviceFlowHttp;
+    readonly authMemo?: Map<string, AuthAttemptResult>;
+  },
+): Promise<MaterializablePlugin> {
   const parsedSource = parsePluginSource(input.entry.source);
   const isGitSource =
     parsedSource.kind === "url" ||
@@ -877,7 +787,7 @@ async function resolveInstallable(input: {
   const resolveGitPluginRoot =
     isGitSource && recordedSha !== undefined
       ? (source: GitBackedSource) =>
-          probeReinstallClone({
+          owners.probeReinstallClone({
             source,
             locations: input.locations,
             recordedSha,

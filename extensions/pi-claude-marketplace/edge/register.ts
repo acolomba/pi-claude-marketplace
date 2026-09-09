@@ -32,7 +32,7 @@
 // provider but does NOT emit user-visible messages.
 
 import { makeLocationsResolver } from "../orchestrators/edge-deps.ts";
-import { createNodeReinstallPlugins } from "../orchestrators/plugin/reinstall.ts";
+import { createNodeReinstallPlugins } from "../orchestrators/plugin/reinstall-flow.ts";
 
 import {
   isClaudePluginCommandLine,

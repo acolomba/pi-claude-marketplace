@@ -20,7 +20,7 @@ import { errorMessage } from "../../shared/errors.ts";
 import { EXTENSION_VERSION } from "../../shared/extension-version.ts";
 import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
-import { createNodeReinstallPlugin } from "../plugin/reinstall.ts";
+import { createNodeReinstallPlugin } from "../plugin/reinstall-flow.ts";
 
 import {
   classifyOrchestratorThrow,
@@ -32,7 +32,7 @@ import type { PerEntryOutcome } from "./apply-outcomes.ts";
 import type { ApplyReconcileOptions, ScopeReadResult } from "./types.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { Scope } from "../../shared/types.ts";
-import type { ReinstallPluginFn } from "../plugin/reinstall.ts";
+import type { ReinstallPluginFn } from "../plugin/reinstall-flow.ts";
 
 /**
  * BFILL-01 / BFILL-02 / D-68-03: the load-time backfill step. Runs as a sibling

@@ -104,7 +104,7 @@ import {
   createHooksRuntime,
 } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { makeReinstallHandler as makeReinstallHandlerWithOperation } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/reinstall.ts";
-import { createNodeReinstallPlugins } from "../../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts";
+import { createNodeReinstallPlugins } from "../../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts";
 import { createCompletionCache } from "../../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
 import {
@@ -116,7 +116,7 @@ import {
 import type {
   ReinstallPluginsFn,
   ReinstallPluginsOptions,
-} from "../../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts";
+} from "../../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts";
 import type { ExtensionAPI } from "../../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { Scope } from "../../../../extensions/pi-claude-marketplace/shared/types.ts";
 
