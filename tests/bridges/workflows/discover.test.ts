@@ -33,7 +33,7 @@ const GATED_TEMPLATE_NAME = 'export const meta = { name: `greet${1}`, descriptio
 const CHECK_3_REASON =
   "the engine refuses at its check 3 -- `export const meta = ...` must be the first statement in the script";
 const CHECK_8_REASON =
-  "the engine refuses at its check 8 -- every value inside `meta` must be a plain literal, so no spread, computed key, method, accessor, reserved key name (`__proto__`, `constructor`, `prototype`), array hole, substituted template or computed expression";
+  "the engine refuses at its check 8 -- every value inside `meta` must be a plain literal, so no spread, computed key, key written as anything but an identifier, string or number, method, accessor, reserved key name (`__proto__`, `constructor`, `prototype`), array hole, substituted template or computed expression";
 const UNRUNNABLE_REASON =
   "the engine loads a command only from a literal `meta.name` with a non-empty `meta.description`, and this script declares no readable name";
 

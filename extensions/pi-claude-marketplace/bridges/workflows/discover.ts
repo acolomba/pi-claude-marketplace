@@ -188,8 +188,14 @@ const GATE_REASONS: Record<WorkflowGate, string> = {
     "the engine refuses at its check 5 -- that export must declare `meta` and nothing else",
   "meta-not-named-meta":
     "the engine refuses at its check 6 -- the declared identifier must be `meta`",
+  // The list names every form the check-8 predicates refuse -- read off
+  // `isLiteralProperty`, `isLiteralValue` and `isLiteralArray` in
+  // `domain/workflow-script.ts`, which between them refuse nine. Nothing gates
+  // the correspondence, so an arm added to any of the three has to be added
+  // here by hand, and an author tripping an unnamed one is handed a sentence
+  // listing eight other things and not theirs.
   "meta-not-pure-literal":
-    "the engine refuses at its check 8 -- every value inside `meta` must be a plain literal, so no spread, computed key, method, accessor, reserved key name (`__proto__`, `constructor`, `prototype`), array hole, substituted template or computed expression",
+    "the engine refuses at its check 8 -- every value inside `meta` must be a plain literal, so no spread, computed key, key written as anything but an identifier, string or number, method, accessor, reserved key name (`__proto__`, `constructor`, `prototype`), array hole, substituted template or computed expression",
   "meta-fields-invalid":
     "the engine refuses at its check 9 -- `meta.description` must be a non-empty string, and `meta.model` (a string) and `meta.phases` (an array of objects each carrying a string `title`) must match those shapes wherever they are declared",
 };
