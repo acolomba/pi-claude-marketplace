@@ -918,6 +918,59 @@ describe("commitPreparedSkills", () => {
     assert.strictEqual(targetDirectory, undefined);
   });
 
+  test("commits a source led by a byte-order mark as one unmarked frontmatter block", async (t) => {
+    // arrange
+    // FMBOM-01: a marker makes `rewriteFrontmatterName` take the freshBlock
+    // path, which emits a name-only block and leaves the source block -- with
+    // its `description` -- as body text. The assertions read the COMMITTED
+    // bytes, not a parse result: the installed peer tolerates a leading marker
+    // in its own parser, so a parse-only check would pass without the strip.
+    const { locations, pluginDataDir, pluginRoot, scopeRoot } = await allocateCasePaths(
+      t,
+      "skills-commit-bom-",
+    );
+    const skillsDirectory = path.join(pluginRoot, "skills");
+    const skillDirectory = path.join(skillsDirectory, "reviewer");
+    await mkdir(skillDirectory, { recursive: true });
+    await writeFile(
+      path.join(skillDirectory, "SKILL.md"),
+      "\uFEFF---\nname: source-reviewer\ndescription: Reviews changes\n---\n\nReview carefully.\n",
+    );
+    const resolved = {
+      installable: true,
+      state: "installable",
+      name: "acme",
+      pluginRoot,
+      supported: ["skills"],
+      unsupported: [],
+      notes: [],
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      mcpServers: {},
+      defaultEnabled: true,
+    } satisfies ResolvedPluginInstallable;
+    const targetFile = path.join(locations.skillsTargetDir, "acme-reviewer", "SKILL.md");
+    const expectedBytes = Buffer.from(
+      "---\nname: acme-reviewer\ndescription: Reviews changes\n---\n\nReview carefully.\n",
+    );
+
+    // act
+    const prepared = await prepareStageSkills({
+      locations,
+      cwd: scopeRoot,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      resolved,
+    });
+    const leak = await commitPreparedSkills(prepared);
+    const committedBytes = await readFile(targetFile);
+
+    // assert
+    assert.strictEqual(leak, undefined);
+    assert.deepStrictEqual(committedBytes, expectedBytes);
+  });
+
   test("replaces previous and stale directories with complete staged trees", async (t) => {
     // arrange
     const { locations, pluginDataDir, pluginRoot, scopeRoot } = await allocateCasePaths(
