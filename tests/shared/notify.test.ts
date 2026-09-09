@@ -3,7 +3,6 @@ import { test, type TestContext } from "node:test";
 
 import { ManualRecoveryError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 import {
-  compareByNameThenScope,
   emitContextCascade,
   emitReconcileAppliedContextCascade,
   emitUpdateNoOpCascade,
@@ -4935,44 +4934,6 @@ test("notifyStopHookOverrideCap emits the exact fixed-cap warning", (t) => {
     "warning",
   ]);
 });
-
-for (const { name, left, right, expected } of [
-  {
-    name: "sorts unequal names case-insensitively",
-    left: { name: "alpha", scope: "user" },
-    right: { name: "Beta", scope: "project" },
-    expected: -1,
-  },
-  {
-    name: "keeps equal names and equal scopes stable",
-    left: { name: "Alpha", scope: "project" },
-    right: { name: "alpha", scope: "project" },
-    expected: 0,
-  },
-  {
-    name: "sorts project before user for equal names",
-    left: { name: "alpha", scope: "project" },
-    right: { name: "ALPHA", scope: "user" },
-    expected: -1,
-  },
-  {
-    name: "sorts user after project for equal names",
-    left: { name: "alpha", scope: "user" },
-    right: { name: "ALPHA", scope: "project" },
-    expected: 1,
-  },
-] as const) {
-  test(name, () => {
-    // arrange
-    const expectedOrder = expected;
-
-    // act
-    const order = Math.sign(compareByNameThenScope(left, right));
-
-    // assert
-    assert.equal(order, expectedOrder);
-  });
-}
 
 for (const { name, severity, expected } of [
   {

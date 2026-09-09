@@ -99,6 +99,7 @@ import { shaVersion } from "../../domain/version.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { isRecordedButDisabled, loadState } from "../../persistence/state-io.ts";
 import { softDepStatus } from "../../platform/pi-api.ts";
+import { compareByNameThenScope } from "../../shared/compare-name-scope.ts";
 import {
   CleanupContextError,
   cleanupFailuresFromError,
@@ -127,7 +128,6 @@ import {
   type Plural,
 } from "../../shared/notify-context.ts";
 import { companionSeverity, skipSeverity } from "../../shared/notify-reasons.ts";
-import { compareByNameThenScope } from "../../shared/notify.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 import { withLockedStateTransaction, withStateGuard } from "../../transaction/with-state-guard.ts";
 import { DEFAULT_CREDENTIAL_OPS, buildAuthForHost, hostFromCloneUrl } from "../auth-host.ts";

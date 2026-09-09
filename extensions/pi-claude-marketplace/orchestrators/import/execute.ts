@@ -12,6 +12,7 @@ import {
 } from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState as defaultLoadState, type ExtensionState } from "../../persistence/state-io.ts";
+import { compareByNameThenScope } from "../../shared/compare-name-scope.ts";
 import { ConcurrentInstallError, errorMessage, PluginShapeError } from "../../shared/errors.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import {
@@ -26,7 +27,6 @@ import {
   type MarketplaceRows,
   type Plural,
 } from "../../shared/notify-context.ts";
-import { compareByNameThenScope } from "../../shared/notify.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 
 import { IMPORT_CONTEXT, type ImportMsg } from "./execute.messaging.ts";

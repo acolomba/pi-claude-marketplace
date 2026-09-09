@@ -50,9 +50,9 @@ import {
   isRecordedButDisabled,
   type ExtensionState,
 } from "../../persistence/state-io.ts";
+import { compareByNameThenScope } from "../../shared/compare-name-scope.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
-import { compareByNameThenScope } from "../../shared/notify.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
 import { SCOPES } from "../../shared/types.ts";
 

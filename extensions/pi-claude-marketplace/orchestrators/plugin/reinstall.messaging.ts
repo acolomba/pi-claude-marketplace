@@ -1,3 +1,4 @@
+import { compareByNameThenScope } from "../../shared/compare-name-scope.ts";
 import {
   ICON_INSTALLED,
   ICON_UNINSTALLABLE,
@@ -14,7 +15,6 @@ import {
 } from "../../shared/notification-types.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
 import { malformedReasonsForKinds, skipSeverity } from "../../shared/notify-reasons.ts";
-import { compareByNameThenScope } from "../../shared/notify.ts";
 
 import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";

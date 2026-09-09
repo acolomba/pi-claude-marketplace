@@ -16,7 +16,7 @@
 //
 //   2. The inline scope-rank ternary `=== "user" ? 0 : 1`. The canonical
 //      comparator lives in
-//      `extensions/pi-claude-marketplace/shared/notify.ts::compareByNameThenScope`;
+//      `extensions/pi-claude-marketplace/shared/compare-name-scope.ts::compareByNameThenScope`;
 //      every sort site should call the shared helper rather than re-derive the
 //      rank in-line.
 //
@@ -51,7 +51,7 @@ const ALLOWLIST_FILES: ReadonlySet<string> = new Set([
   // detects), but listed here for documentation completeness; a future
   // refactor that flipped the comparator to `=== "user" ? <low> : <high>`
   // would otherwise trip the guard.
-  "/extensions/pi-claude-marketplace/shared/notify.ts",
+  "/extensions/pi-claude-marketplace/shared/compare-name-scope.ts",
 ]);
 
 const USER_FIRST_LITERAL_RE = /\[\s*"user"\s*,\s*"project"\s*\]/;
@@ -156,7 +156,7 @@ test('260525-cjr B3: no `=== "user" ? <low> : <high>` scope-rank ternary outside
   assert.equal(
     offenders.length,
     0,
-    `Scope-rank drift detected. Use the canonical \`compareByNameThenScope\` from \`extensions/pi-claude-marketplace/shared/notify.ts\` instead of an inline \`scope === "user" ? <low> : <high>\` ternary. Offenders:\n${offenders
+    `Scope-rank drift detected. Use the canonical \`compareByNameThenScope\` from \`extensions/pi-claude-marketplace/shared/compare-name-scope.ts\` instead of an inline \`scope === "user" ? <low> : <high>\` ternary. Offenders:\n${offenders
       .map((o) => `  ${o.file}:${String(o.line)}  ${o.text}`)
       .join("\n")}`,
   );

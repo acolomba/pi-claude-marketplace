@@ -88,6 +88,7 @@ import { asAbsolutePluginRoot } from "../../domain/plugin-root.ts";
 import { parsePluginSource } from "../../domain/source.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { clonePluginRecord, isRecordedButDisabled, loadState } from "../../persistence/state-io.ts";
+import { compareByNameThenScope } from "../../shared/compare-name-scope.ts";
 import {
   composeErrorWithCauseChain,
   errorMessage,
@@ -108,7 +109,6 @@ import {
 } from "../../shared/notification-types.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
 import { skipSeverity } from "../../shared/notify-reasons.ts";
-import { compareByNameThenScope } from "../../shared/notify.ts";
 import {
   withLockedStateTransaction,
   type LockedStateTransaction,

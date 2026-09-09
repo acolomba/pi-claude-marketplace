@@ -30,6 +30,7 @@ import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { parsePluginSource } from "../../domain/source.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
+import { compareByNameThenScope } from "../../shared/compare-name-scope.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
@@ -38,7 +39,6 @@ import {
   type MarketplaceRows,
   type Plural,
 } from "../../shared/notify-context.ts";
-import { compareByNameThenScope } from "../../shared/notify.ts";
 import {
   narrowProbeError,
   narrowResolverNotes,

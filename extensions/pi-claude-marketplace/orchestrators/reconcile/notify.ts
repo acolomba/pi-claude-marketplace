@@ -40,6 +40,7 @@
 // advisory takes precedence.
 
 import { resolveStrict } from "../../domain/plugin-resolver.ts";
+import { compareByNameThenScope } from "../../shared/compare-name-scope.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import {
   type MarketplaceNotificationMessage,
@@ -51,7 +52,6 @@ import {
   type ReconcileAppliedCascadeMessage,
 } from "../../shared/notification-types.ts";
 import { malformedReasonsForKinds } from "../../shared/notify-reasons.ts";
-import { compareByNameThenScope } from "../../shared/notify.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 import { enableRowDependencies } from "../plugin/shared.ts";
 
