@@ -384,7 +384,7 @@ export async function commitPreparedAgents(
 
     // Surface BOTH original err AND rollback leaks AND staging-cleanup leak
     // via appendLeaks (sequential-cause chain; preserves Error.cause for the
-    // depth-5 walker in shared/notify.ts). Use appendLeaks here, NOT
+    // rendering owned by shared/notification-grammar.ts). Use appendLeaks here, NOT
     // ManualRecoveryError -- commit-path leaks are transient IO.
     throw appendLeaks(err, [
       ...rollbackLeaks,
