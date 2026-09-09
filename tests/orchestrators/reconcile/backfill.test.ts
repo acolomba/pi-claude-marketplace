@@ -759,6 +759,15 @@ describe("applyBackfillForScopeIsolated", () => {
   // stamp beside an empty outcome array is a positive observation that the
   // read never happened.
   //
+  // Both records are seeded `installable: false` because that is the only
+  // population whose unresolvable manifest is observable. `installable: true` is
+  // in the scan population too (WCONV-01), but `resolveRecordedPluginOffline`
+  // answers a benign `undefined` for a clean record it cannot resolve -- so a
+  // clean record here would leave an empty outcome array and a landed stamp
+  // whether it was scanned or not, and the pair would be measuring nothing.
+  // Disabled-ness is orthogonal to installability (ENBL-05), so the degraded seed
+  // narrows nothing about the filter under test.
+  //
   // The limit, stated rather than glossed: the observable is the marketplace
   // MANIFEST READ, which is the first statement of the offline re-resolve. It
   // is one step downstream of "the resolver was never called" -- a future
@@ -777,9 +786,9 @@ describe("applyBackfillForScopeIsolated", () => {
         mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
           hello: pluginRecord({
             pluginRoot: path.join(marketplaceRoot, "plugins", "hello"),
-            installable: true,
+            installable: false,
             supported: ["skills"],
-            unsupported: [],
+            unsupported: ["themes"],
             enabled: false,
           }),
         }),
@@ -831,9 +840,9 @@ describe("applyBackfillForScopeIsolated", () => {
         mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
           hello: pluginRecord({
             pluginRoot: path.join(marketplaceRoot, "plugins", "hello"),
-            installable: true,
+            installable: false,
             supported: ["skills"],
-            unsupported: [],
+            unsupported: ["themes"],
           }),
         }),
       },
@@ -860,6 +869,129 @@ describe("applyBackfillForScopeIsolated", () => {
         scope: "project",
         marketplace: "mp",
         plugin: "hello",
+        reason: "unparseable",
+      },
+    ]);
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), seeded);
+    assert.deepStrictEqual(await savedWorkflowEntries(locations), []);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  // WCONV-01 / SC-4: the pair below is the convergence half of the same fixture.
+  // A record recorded `installable: true` carries no shortfall, so a marketplace
+  // manifest it cannot read is a reason to promote nothing, not a failure to
+  // report: no row, and the gate closes. These two cases pin that answer AND pin
+  // that the silence is scoped to that population rather than blanket -- a
+  // degraded sibling under the SAME poisoned manifest still fails loudly and
+  // still holds the gate open (SF-02).
+  test("WCONV-01: converges over a clean record whose manifest cannot be read, emitting nothing", async (t) => {
+    // arrange -- a scope whose marketplace source went unreadable under it. Two
+    // clean records, so a per-record surface would be visible as two rows.
+    const { cwd, locations } = await createHermeticProjectScope(t, "clean-unreadable-manifest");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      hello: { skill: "clean", workflow: true },
+      world: { skill: "clean", workflow: true },
+    });
+    const seeded: ExtensionState = {
+      schemaVersion: 2,
+      lastReconciledExtensionVersion: STALE_STAMP,
+      marketplaces: {
+        mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
+          hello: pluginRecord({
+            pluginRoot: path.join(marketplaceRoot, "plugins", "hello"),
+            installable: true,
+            supported: ["skills"],
+            unsupported: [],
+          }),
+          world: pluginRecord({
+            pluginRoot: path.join(marketplaceRoot, "plugins", "world"),
+            installable: true,
+            supported: ["skills"],
+            unsupported: [],
+          }),
+        }),
+      },
+    };
+    await seedState(locations, seeded);
+    await writeFile(manifestPath, "{ this is not valid json at all", "utf8");
+    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+    const outcomes: PerEntryOutcome[] = [];
+
+    // act
+    await applyBackfillForScopeIsolated(
+      backfillOptions(ctx, pi, cwd, gitOps),
+      "project",
+      readResultFor(seeded, true),
+      outcomes,
+    );
+
+    // assert -- no rows, and the stamp LANDED. The landed stamp is the half that
+    // carries convergence: the gate is closed, so this load is the last one that
+    // reads the dead manifest rather than the first of an unbounded series.
+    assert.deepStrictEqual(outcomes, []);
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), {
+      ...seeded,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+    });
+    assert.deepStrictEqual(await savedWorkflowEntries(locations), []);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("SF-02 / WCONV-01: still fails a degraded record under the same unreadable manifest", async (t) => {
+    // arrange -- the discriminator. One clean record and one partially-installed
+    // record share a poisoned manifest. If the fix silenced the resolve throw for
+    // both populations this would emit zero rows and stamp; if it silenced
+    // neither it would emit two.
+    const { cwd, locations } = await createHermeticProjectScope(t, "mixed-unreadable-manifest");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      hello: { skill: "clean", workflow: true },
+      world: { skill: "clean", workflow: true },
+    });
+    const seeded: ExtensionState = {
+      schemaVersion: 2,
+      lastReconciledExtensionVersion: STALE_STAMP,
+      marketplaces: {
+        mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
+          hello: pluginRecord({
+            pluginRoot: path.join(marketplaceRoot, "plugins", "hello"),
+            installable: true,
+            supported: ["skills"],
+            unsupported: [],
+          }),
+          world: pluginRecord({
+            pluginRoot: path.join(marketplaceRoot, "plugins", "world"),
+            installable: false,
+            supported: ["skills"],
+            unsupported: ["themes"],
+          }),
+        }),
+      },
+    };
+    await seedState(locations, seeded);
+    await writeFile(manifestPath, "{ this is not valid json at all", "utf8");
+    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+    const outcomes: PerEntryOutcome[] = [];
+
+    // act
+    await applyBackfillForScopeIsolated(
+      backfillOptions(ctx, pi, cwd, gitOps),
+      "project",
+      readResultFor(seeded, true),
+      outcomes,
+    );
+
+    // assert -- exactly one row, for the record that had a pending shortfall, and
+    // the stamp withheld so that record retries (SF-02 unchanged).
+    assert.deepStrictEqual(outcomes, [
+      {
+        kind: "plugin-install-failed",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "world",
         reason: "unparseable",
       },
     ]);

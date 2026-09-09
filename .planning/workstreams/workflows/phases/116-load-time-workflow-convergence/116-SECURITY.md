@@ -43,7 +43,7 @@ created: "2026-09-09"
 | T-116-09 | Tampering | the doc-to-fixture byte pairing | low | mitigate | Forward walk (`catalog-uat.test.ts:5663`) and inverse walk (`:5809`), each exercised by control | closed |
 | T-116-10 | Repudiation | the WCONV-01 population sentence | low | mitigate | Corrected at `REQUIREMENTS.md:55` and `ROADMAP.md:75`; no live site asserts the retired claim | closed |
 | T-116-11 | Repudiation | ungated prose counts in the notification modules | low | mitigate | Zero `45-member`/`45-entry` hits remain; six sites read 46, locked at `notify-closed-set-locks.test.ts:62` | closed |
-| T-116-13 | Denial of service | a permanently failing record holding the version gate open | low | accept | Pre-existing mechanism made newly likely by the widening; cost is a repeated offline scan per load, no data loss and no unbounded growth | closed |
+| T-116-13 | Denial of service | a permanently failing record holding the version gate open | low | mitigate | Cost re-measured by the code review (CR-01): a held gate is not an invisible repeated scan, it re-emits a user-visible `⊘ <plugin> (failed)` row per affected record on EVERY load, without end. `resolveRecordedPluginOffline` (`backfill.ts:485-495`) now answers a benign `undefined` for a record recorded `installable: true`, so the records the widened population added can neither emit that row nor hold the gate. Controlled both ways in `backfill.test.ts` ("converges over a clean record whose manifest cannot be read" / "still fails a degraded record under the same unreadable manifest") and at the entry point in `index.test.ts`. Residual: the pre-existing partially-installed case, unchanged by this phase | closed |
 
 *Status: open · closed · open — below high threshold (non-blocking)*
 *Severity: critical > high > medium > low — only open threats at or above workflow.security_block_on count toward threats_open*
@@ -59,7 +59,7 @@ created: "2026-09-09"
 | R-116-02 | T-116-06 | The redaction boundary is unchanged by this phase and the failure arm carries only a closed-set reason | Phase 116 plan set | 2026-09-09 |
 | R-116-03 | T-116-14 | Pre-existing and tracked as `UPCASC-01`; named rather than silently inherited | Phase 116 plan set | 2026-09-09 |
 | R-116-04 | T-116-05 | Pre-existing isolation, already covered from both sides by this suite | Phase 116 plan set | 2026-09-09 |
-| R-116-05 | T-116-13 | A fix would change the retry contract the whole scan rests on; the cost is a repeated offline scan, bounded by the version stamp | Phase 116 plan set | 2026-09-09 |
+| R-116-05 | T-116-13 | **Amended 2026-09-09 after code review CR-01.** The original rationale ("the cost is a repeated offline scan, bounded by the version stamp") was wrong on both halves: the repeated scan emits a `(failed)` row per record per load, and a held gate is by definition NOT bounded by the version stamp. The widening's contribution is now mitigated rather than accepted. What stays accepted is narrower: for a record recorded `installable: false`, a permanently unreadable manifest still holds the gate open and re-emits its row each load. That is the population the SF-02 retry contract was designed for, it predates this phase, and changing it is a redesign of that contract rather than a fix to this one | Phase 116 plan set; amended by code review | 2026-09-09 |
 
 *Accepted risks do not resurface in future audit runs.*
 

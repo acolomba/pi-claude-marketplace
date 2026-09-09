@@ -38,7 +38,7 @@
 
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import https from "node:https";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -482,11 +482,16 @@ async function seedPrompt(root: string, fileName: string): Promise<string> {
  * The version stamp is part of the seed, not decoration: an absent
  * `lastReconciledExtensionVersion` opens the load-time backfill gate, and the
  * scan that follows re-resolves this record against a `marketplaceRoot` no case
- * here creates -- surfacing a failure row and one extra cascade emission. These
- * cases are about PATH plumbing over a steady-state scope, so the seed describes
- * one: a scope already reconciled at the running version.
+ * here creates. Most cases here are about PATH plumbing over a steady-state
+ * scope, so the default seed describes one: a scope already reconciled at the
+ * running version. `stamped: false` leaves the gate OPEN, which is what the
+ * WCONV-01 convergence case below needs.
  */
-async function seedEnabledPlugin(cwd: string, resolvedSource: string): Promise<void> {
+async function seedEnabledPlugin(
+  cwd: string,
+  resolvedSource: string,
+  opts: { readonly stamped?: boolean } = {},
+): Promise<void> {
   const extensionRoot = path.join(cwd, ".pi", "pi-claude-marketplace");
   const marketplaceRoot = path.join(cwd, "mp-src");
   await mkdir(extensionRoot, { recursive: true });
@@ -494,7 +499,7 @@ async function seedEnabledPlugin(cwd: string, resolvedSource: string): Promise<v
     path.join(extensionRoot, "state.json"),
     JSON.stringify({
       schemaVersion: 2,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
+      ...(opts.stamped !== false && { lastReconciledExtensionVersion: EXTENSION_VERSION }),
       marketplaces: {
         mp: {
           name: "mp",
@@ -659,6 +664,45 @@ test("reports the scope whose install state it cannot read once as a reconcile f
 // case written three times under three titles. What separates them is one
 // observable per stage: the PATH the recompute leaves behind, and which of the
 // two lines the reconcile stage emits.
+
+test("converges silently over a recorded plugin whose marketplace source is absent (WCONV-01)", async (t) => {
+  // arrange -- the seed the PATH cases use with the version stamp left OUT, so
+  // the load-time backfill gate is OPEN and the scan reaches this record. Its
+  // `marketplaceRoot` (<cwd>/mp-src) is never created, so the offline re-resolve
+  // throws on the manifest read. The record is recorded `installable: true`, so
+  // that throw is a reason to promote nothing rather than a failure to report.
+  //
+  // This is the only case at the entry-point layer that observes a reconcile
+  // over a record whose marketplace source is gone, and it is the layer that
+  // matters: a `(failed)` row here reaches the user on a reload they did not
+  // initiate.
+  const scope = await createHermeticScope(t, "backfill-absent-source");
+  const resolvedSource = path.join(scope.cwd, "vendored-plugin");
+  await seedEnabledPlugin(scope.cwd, resolvedSource, { stamped: false });
+  // The zero-emission boundary states that nothing may be emitted at all. It is
+  // the weaker of the two observables here: NFR-2 makes `resources_discover`
+  // swallow every throw, including the boundary's own refusal of an unexpected
+  // emission, so the empty array below bounds what reached the user without
+  // bounding what the scan produced. The landed stamp is what carries the claim.
+  const { discover, ctx, notifications, verifyBoundary } = await loadExtension(0, 0);
+  const statePath = path.join(scope.cwd, ".pi", "pi-claude-marketplace", "state.json");
+
+  // act
+  const discovered = await discover(discoverEvent(scope.cwd), ctx);
+
+  // assert
+  assert.deepStrictEqual(discovered, EMPTY_DISCOVERY);
+  assert.deepStrictEqual(notifications, []);
+  // The gate CLOSED. Silence alone would also be produced by a scan that never
+  // ran, and by a scan whose row the boundary refused; the landed stamp is what
+  // makes this load the last one that reads the absent manifest rather than the
+  // first of an unbounded series.
+  const stamped = JSON.parse(await readFile(statePath, "utf8")) as {
+    lastReconciledExtensionVersion?: string;
+  };
+  assert.deepStrictEqual(stamped.lastReconciledExtensionVersion, EXTENSION_VERSION);
+  verifyBoundary();
+});
 
 test("still answers when the deferred project-scope hydrate fails (NFR-2)", async (t) => {
   // arrange

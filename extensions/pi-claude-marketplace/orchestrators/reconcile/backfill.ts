@@ -94,7 +94,8 @@ async function applyBackfillForScope(
 
   // SF-02: a scanned plugin's backfill FAILED -- a
   // genuine `failed` partition, OR a per-plugin manifest-I/O throw caught inside
-  // the scan; not a benign no-growth / concurrent-uninstall. Leave the version
+  // the scan for a record recorded `installable: false`; not a benign no-growth /
+  // concurrent-uninstall / unresolvable-clean-record. Leave the version
   // gate OPEN so the next load retries -- symmetric with the WR-02 self-heal (a
   // THROW from the stamp write also keeps the gate open). Skipping the stamp
   // leaves state.json untouched (RECON-05 mtime invariant preserved).
@@ -212,17 +213,21 @@ function hasForceInstalledPlugin(state: ExtensionState): boolean {
  * SF-02: returns `true` iff at least one scanned plugin's backfill FAILED -- a
  * genuine `failed` partition surfaced by `maybeBackfillPlugin`, OR a THROW out of
  * `maybeBackfillPlugin` (e.g. a corrupt / permission-denied cached marketplace
- * manifest), not a benign no-growth / concurrent-uninstall -- so the caller can
- * keep the version gate OPEN and retry.
+ * manifest read for a record recorded `installable: false`), not a benign
+ * no-growth / concurrent-uninstall -- so the caller can keep the version gate
+ * OPEN and retry. A record recorded `installable: true` never reaches that arm:
+ * `resolveRecordedPluginOffline` answers `undefined` for a clean record it
+ * cannot resolve, so a dead marketplace source cannot hold the gate open once
+ * per recorded plugin, per load, without end (WCONV-01).
  *
  * Per-plugin fault isolation: each `maybeBackfillPlugin` call is wrapped in
- * try/catch. A throw from ONE plugin (SF-02 lets a manifest I/O error propagate)
- * is surfaced as a plugin-scoped `(failed)` row and flips `anyFailure`, then the
- * loop CONTINUES so healthy SIBLING plugins -- including ones under a different,
- * readable marketplace -- are still scanned and promoted. Without this guard a
- * single corrupt manifest would unwind the whole loop into the outer WR-02
- * wrapper's single generic `state.json (failed)` row and block every still-
- * unscanned sibling on every load.
+ * try/catch. A throw from ONE plugin (SF-02 lets a partially-installed record's
+ * manifest I/O error propagate) is surfaced as a plugin-scoped `(failed)` row and
+ * flips `anyFailure`, then the loop CONTINUES so healthy SIBLING plugins --
+ * including ones under a different, readable marketplace -- are still scanned and
+ * promoted. Without this guard a single corrupt manifest would unwind the whole
+ * loop into the outer WR-02 wrapper's single generic `state.json (failed)` row
+ * and block every still-unscanned sibling on every load.
  */
 export async function scanForceInstalledBackfills(
   opts: ApplyReconcileOptions,
@@ -262,7 +267,9 @@ export async function scanForceInstalledBackfills(
  * whether the record is eligible to be looked at.
  *
  * SF-02 lets a genuine manifest I/O error (corrupt / permission-denied cached
- * manifest) propagate out of `maybeBackfillPlugin`. Without this guard that throw
+ * manifest) propagate out of `maybeBackfillPlugin` -- for a record recorded
+ * `installable: false`, the only population that reaches this catch (WCONV-01;
+ * see `resolveRecordedPluginOffline`). Without this guard that throw
  * unwinds the whole scan loop into the outer WR-02 wrapper, coercing the WHOLE
  * scope to a single generic `state.json (failed)` row and skipping promotion of
  * every still-unscanned SIBLING (including healthy ones under other marketplaces).
@@ -344,13 +351,15 @@ async function maybeBackfillPlugin(
   record: StatePluginRecord,
   outcomes: PerEntryOutcome[],
 ): Promise<boolean> {
-  const resolved = await resolveRecordedPluginOffline(mp, plugin);
+  const resolved = await resolveRecordedPluginOffline(mp, plugin, record);
   if (resolved === undefined || resolved.state === "unavailable") {
     // Unresolvable / structurally broken -- cannot backfill (NFR-5 cache-only;
     // a resolve failure is the truthful "skip" default, never a crash). A
-    // manifest-unreadable I/O throw never reaches here -- SF-02 lets it propagate
-    // out of resolveRecordedPluginOffline to the per-plugin catch in
-    // scanForceInstalledBackfills, which surfaces a plugin-scoped (failed) row and
+    // manifest-unreadable I/O throw reaches here as `undefined` only for a
+    // record already recorded `installable: true` (WCONV-01). For a
+    // partially-installed record SF-02 still lets it
+    // propagate out of resolveRecordedPluginOffline to the per-plugin catch in
+    // backfillOnePluginIsolated, which surfaces a plugin-scoped (failed) row and
     // keeps the gate open. A legitimately absent/invalid entry is benign, NOT a
     // failure, so this scan may still close the gate.
     return false;
@@ -436,28 +445,53 @@ async function maybeBackfillPlugin(
 /**
  * BFILL-01 / NFR-5: re-resolve a recorded plugin from its cached marketplace
  * manifest with NO network (resolveStrict). Returns the resolved plugin, or
- * `undefined` ONLY when the entry is legitimately absent from the manifest or
- * fails the per-entry validator -- a benign "not backfillable this load".
+ * `undefined` when this record is not backfillable on this load -- a benign
+ * skip the caller reads as "nothing to promote".
  *
- * SF-02: a genuine I/O throw (manifest unreadable/corrupt) or a resolver throw
- * is NOT swallowed here. It propagates to the per-plugin catch in
- * `scanForceInstalledBackfills`, which surfaces a plugin-scoped `(failed)` row
- * AND keeps the version gate OPEN so the scan self-heals on the next load --
- * rather than being silently indistinguishable from a legitimately-absent entry
- * (which would wrongly close the gate). Per-plugin isolation there means the throw
- * does not unwind the scan past its healthy siblings.
+ * Two shapes answer `undefined`. The entry is legitimately absent from the
+ * manifest or fails the per-entry validator. Or -- WCONV-01 -- the resolve THREW
+ * for a record already recorded `compatibility.installable: true`.
+ *
+ * That second arm is the seam between the two populations this scan walks, and
+ * it is why the throw is classified HERE rather than at the outer catch. A
+ * record recorded `installable: false` names a shortfall it is still carrying,
+ * so a failure to re-resolve it IS a failed promotion: the throw propagates to
+ * the per-plugin catch in `backfillOnePluginIsolated`, which surfaces a
+ * plugin-scoped `(failed)` row and keeps the version gate OPEN so the next load
+ * retries (SF-02). A record recorded `installable: true` names no shortfall at
+ * all; WCONV-01 admits it only so the growth test can see a boundary move the
+ * record itself cannot show. An unresolvable manifest denies that test its
+ * input, which is a reason to promote nothing -- not a failure to report. Report
+ * one and a scope whose marketplace source was deleted puts a `(failed)` row on
+ * the cascade for EVERY recorded plugin under it, on EVERY load, with the gate
+ * held open by a condition no retry can clear (SC-4: a scan that materialized
+ * nothing stays silent).
+ *
+ * The cost, stated rather than glossed: a TRANSIENT resolve failure over a clean
+ * record loses this load's promotion and waits for the extension version to move
+ * again. That is the same bound the version gate imposes on every record the
+ * growth test declines.
  */
 async function resolveRecordedPluginOffline(
   mp: StateMarketplaceRecord,
   plugin: string,
+  record: StatePluginRecord,
 ): Promise<import("../../domain/resolver.ts").ResolvedPlugin | undefined> {
-  const manifest = await loadMarketplaceManifest(mp.manifestPath);
-  const entry = manifest.plugins.find((p) => p.name === plugin);
-  if (entry === undefined || !PLUGIN_ENTRY_VALIDATOR.Check(entry)) {
-    return undefined;
-  }
+  try {
+    const manifest = await loadMarketplaceManifest(mp.manifestPath);
+    const entry = manifest.plugins.find((p) => p.name === plugin);
+    if (entry === undefined || !PLUGIN_ENTRY_VALIDATOR.Check(entry)) {
+      return undefined;
+    }
 
-  return await resolveStrict(entry, { marketplaceRoot: mp.marketplaceRoot });
+    return await resolveStrict(entry, { marketplaceRoot: mp.marketplaceRoot });
+  } catch (err) {
+    if (record.compatibility.installable) {
+      return undefined;
+    }
+
+    throw err;
+  }
 }
 
 /**
