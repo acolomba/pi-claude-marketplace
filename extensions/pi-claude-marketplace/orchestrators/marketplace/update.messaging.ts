@@ -102,7 +102,7 @@ export const UPDATE_CONTEXT = {
 
 /**
  * Map a `PluginUpdateOutcome` to a discriminated `UpdateRowMsg`.
- * The renderer (`renderPluginRow` in shared/notify.ts) owns the icon
+ * The renderer (`renderPluginRow` in shared/notification-grammar.ts) owns the icon
  * dispatch, the version-arrow composition, the reasons-brace composition, and
  * the per-row soft-dep marker injection. The mapper's job is structural --
  * pick the variant that matches the partition and forward the

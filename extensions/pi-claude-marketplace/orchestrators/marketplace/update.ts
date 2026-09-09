@@ -5,7 +5,7 @@
 // Each orchestration emits exactly one `notify(ctx, pi,...)` call with a
 // discriminated `NotificationMessage` payload. Severity, reload-hint,
 // soft-dep marker, and per-row glyph dispatch are owned by the renderer in
-// `shared/notify.ts`.
+// `shared/notification-grammar.ts`.
 //
 // Outcomes -> NotificationMessage payloads:
 //  - autoupdate OFF (manifest-only refresh): UXG-05 distinguishes a no-op from
