@@ -18,9 +18,9 @@ import { assertNoForbiddenSurface } from "./source-scan.ts";
  *   operation", and the membership splits two ways. Most targets are
  *   network-free by contract -- the read surfaces (`list`, plugin `info`,
  *   marketplace `info`), the reconcile pending/planner/projection family,
- *   `reinstall` (cached manifests only), and one file OUTSIDE the orchestrator
- *   layer, the resolver, whose obligation is inherited from the two read
- *   surfaces it answers for. The other three are MUTATING verbs that do reach
+ *   both reinstall owners (cached manifests only), and the resolver, one file
+ *   OUTSIDE the orchestrator layer. The resolver inherits its obligation from
+ *   the two read surfaces it answers for. The other three are MUTATING verbs that do reach
  *   git -- `install-flow.ts` and `fetch.ts` materialize a clone on a cache miss, and
  *   `enable-disable.ts` re-materializes through the install ledger -- and they
  *   qualify because they reach it ONLY through the `clone-cache.ts` seam, by
@@ -80,8 +80,11 @@ const FORBIDDEN_TARGETS: ReadonlyArray<string> = [
   "extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts",
   // PL-3 + NFR-5: list is read-only against state + manifest; no network.
   "extensions/pi-claude-marketplace/orchestrators/plugin/list.ts",
-  // PRL-07: reinstall uses cached manifests only -- which is also why
-  // refreshGitHubClone is one of the gated patterns.
+  // PRL-07: the public reinstall flow and its retained sequencer use cached
+  // manifests only -- which is also why refreshGitHubClone is one of the
+  // gated patterns. Keep both targets until the sequencer moves into the flow
+  // owner so this transition cannot weaken the original gate.
+  "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts",
   "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts",
   // INFO-02 + NFR-5: info is a read-only seam over the local state + on-disk
   // marketplace manifests; no network.
