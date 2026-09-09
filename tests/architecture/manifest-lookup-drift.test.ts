@@ -61,7 +61,7 @@ const NON_ABSENCE_LOOKUPS: ReadonlyArray<{ readonly rel: string; readonly purpos
   {
     rel: "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts",
     purpose:
-      "fetches the entry it is about to REINSTALL from the cached manifest. A miss throws; it renders no absence row.",
+      "the retained reinstall sequencer fetches the entry it is about to REINSTALL from the cached manifest. A miss throws; it renders no absence row.",
   },
   {
     rel: "extensions/pi-claude-marketplace/orchestrators/reconcile/pending.ts",

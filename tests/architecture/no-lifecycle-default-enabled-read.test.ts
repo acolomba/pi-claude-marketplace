@@ -8,8 +8,8 @@ import { assertNoForbiddenSurface } from "./source-scan.ts";
  * Forbidden surface, by file:
  *   - the update flow, preflight, and swap owners
  *     MUST NOT reference `defaultEnabled` or `applyDefaultEnabled`.
- *   - extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts
- *     MUST NOT reference `defaultEnabled` or `applyDefaultEnabled`.
+ *   - the reinstall flow owner and retained sequencer MUST NOT reference
+ *     `defaultEnabled` or `applyDefaultEnabled`.
  *
  * Why these update owners and reinstall: a plugin release that changes the declared field must
  * not move a user who already installed. `defaultEnabled` is third-party
@@ -58,6 +58,7 @@ const FORBIDDEN_TARGETS: ReadonlyArray<string> = [
   "extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts",
   "extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts",
   "extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts",
+  "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts",
   "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts",
 ];
 
