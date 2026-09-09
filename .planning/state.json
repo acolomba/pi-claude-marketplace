@@ -6,32 +6,32 @@
     {
       "number": "1",
       "name": "Live Evidence Revalidation",
-      "status": "complete"
+      "status": "in_progress"
     },
     {
       "number": "2",
       "name": "Containment and Input Safety",
-      "status": "in_progress"
+      "status": "complete"
     },
     {
       "number": "3",
       "name": "Production Defect Corrections",
-      "status": "pending"
+      "status": "complete"
     },
     {
       "number": "4",
       "name": "Hermetic Test Infrastructure",
-      "status": "pending"
+      "status": "complete"
     },
     {
       "number": "5",
       "name": "Injection and Ownership Design",
-      "status": "pending"
+      "status": "complete"
     },
     {
       "number": "6",
       "name": "Assertion and Module Refinement",
-      "status": "pending"
+      "status": "in_progress"
     },
     {
       "number": "7",
@@ -51,8 +51,8 @@
   ],
   "next": {
     "command": "/gsd:progress --next",
-    "label": "Advance to the next step (verify)",
-    "reason": "Phase 2 of 9 · 0% · ready to verify"
+    "label": "Advance to the next step",
+    "reason": "Phase 06 of 9 · 11% · executing"
   },
-  "updated_at": "2026-09-05T22:50:55.797Z"
+  "updated_at": "2026-09-09T21:26:22.360Z"
 }
