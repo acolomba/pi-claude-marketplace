@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 06
 current_phase_name: Assertion and Module Refinement
 status: executing
-stopped_at: Completed 06-36-PLAN.md
-last_updated: "2026-09-09T15:54:05.763Z"
+stopped_at: Completed 06-37-PLAN.md
+last_updated: "2026-09-09T16:00:04.850Z"
 last_activity: 2026-09-08
 last_activity_desc: Phase 06 execution started
-state_head: ba0d0b17d40359cfe62cbcd97d2d7dc503efc5bd
+state_head: 9f51757403850ae9ac9c73015f2ad12e613df595
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 180
-  completed_plans: 164
+  completed_plans: 165
   percent: 11
 ---
 
@@ -33,7 +33,7 @@ component as a working Pi artifact.
 
 Phase: 06 (Assertion and Module Refinement) — EXECUTING
 Next: Discuss Phase 6
-Plan: 37 of 52
+Plan: 38 of 52
 Status: Ready to execute
 Last activity: 2026-09-08 — Phase 06 execution started
 
@@ -340,6 +340,7 @@ Last activity: 2026-09-08 — Phase 06 execution started
 | Phase 06 P30 | 10min | 2 tasks | 5 files |
 | Phase 06 P33 | 20min | 3 tasks | 13 files |
 | Phase 06 P36 | 36min | 2 tasks | 21 files |
+| Phase 06 P37 | 3min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -821,6 +822,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 06]: Plan 06-33 deletes the catalog UAT hub only after a fresh acyclic READY ledger and complete direct repointing.
 - [Phase 06]: install-flow.ts exclusively owns the public install transaction types and factories; install.ts retains only the guard-free ledger.
 - [Phase 06]: install-outcome.ts projects complete readonly ledger facts so the flow never consumes mutable ledger internals.
+- [Phase 06]: Plan 36 already completed every 06-37 caller and gate migration that required a change; Plan 37 verified it without redundant edits.
+- [Phase 06]: The manifest and no-network gates retain install.ts coverage because the live ledger still owns those responsibilities.
 
 ### Pending Todos
 
@@ -873,7 +876,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 06-36-PLAN.md
+**Stopped at:** Completed 06-37-PLAN.md
 
 Phase 04 completed all seven plans and closed AUTH-01 and TREF-01 through
 TREF-03. Independent verification passed 4/4 with no behavioral or UAT gap;
@@ -891,7 +894,7 @@ independent verification passed 6/6 with zero unverified behaviors.
 **Read beside it:** `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`, the
 Phase 01 terminal evidence ledger, and Phase 5's roadmap criteria.
 
-Last session: 2026-09-09T15:53:54.404Z
+Last session: 2026-09-09T16:00:04.280Z
 
 **Next:** Discuss Phase 06 to define the assertion-strengthening and approved
 module-refinement work before planning.
