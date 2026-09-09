@@ -625,87 +625,115 @@ function occurrenceCount(source, token) {
 }
 
 /**
- * @param {{files: ReadonlyMap<string, string>, ownerCount: number, catalogFixtureCount: number, legacyHubs: readonly string[], syncFiles: number, syncCalls: number, requireFiles: number, requireCalls: number}} input
- * @returns {string[]}
+ * @param {ReadonlyMap<string, string>} files
+ * @param {readonly string[]} expected
+ * @param {number} actualCount
+ * @param {string} countLabel
+ * @param {string} missingLabel
  */
-export function validateClosure(input) {
+function validateTrackedInventory(files, expected, actualCount, countLabel, missingLabel) {
   const errors = [];
-  if (input.ownerCount !== OWNER_PAIRS.length) {
-    errors.push(`owner count argument is ${input.ownerCount}; expected ${OWNER_PAIRS.length}`);
+  if (actualCount !== expected.length) {
+    errors.push(`${countLabel} is ${actualCount}; expected ${expected.length}`);
   }
 
-  for (const [source, owner] of OWNER_PAIRS) {
-    if (!input.files.has(source)) {
-      errors.push(`missing source owner: ${source}`);
-    }
-
-    if (!input.files.has(owner)) {
-      errors.push(`missing owner test: ${owner}`);
+  for (const file of expected) {
+    if (!files.has(file)) {
+      errors.push(`${missingLabel}: ${file}`);
     }
   }
 
-  if (input.catalogFixtureCount !== CATALOG_FIXTURES.length) {
-    errors.push(
-      `catalog fixture count argument is ${input.catalogFixtureCount}; expected ${CATALOG_FIXTURES.length}`,
-    );
-  }
+  return errors;
+}
 
-  for (const fixture of CATALOG_FIXTURES) {
-    if (!input.files.has(fixture)) {
-      errors.push(`missing catalog fixture: ${fixture}`);
-    }
-  }
-
-  errors.push(...compareExactSet(input.legacyHubs, LEGACY_HUBS, "legacy hub arguments"));
+/**
+ * @param {ReadonlyMap<string, string>} files
+ * @param {readonly string[]} legacyHubs
+ */
+function validateLegacyInventory(files, legacyHubs) {
+  const errors = compareExactSet(legacyHubs, LEGACY_HUBS, "legacy hub arguments");
   for (const legacy of LEGACY_HUBS) {
-    if (input.files.has(legacy)) {
+    if (files.has(legacy)) {
       errors.push(`legacy hub remains tracked: ${legacy}`);
     }
   }
 
-  const syncEntries = [...input.files].filter(([, source]) =>
-    source.includes("syncBuiltinESMExports("),
-  );
-  const requireEntries = [...input.files].filter(([, source]) => source.includes("createRequire("));
-  const syncCalls = syncEntries.reduce(
-    (total, [, source]) => total + occurrenceCount(source, "syncBuiltinESMExports("),
-    0,
-  );
-  const requireCalls = requireEntries.reduce(
-    (total, [, source]) => total + occurrenceCount(source, "createRequire("),
-    0,
-  );
-  const expectedResiduals = [
-    "tests/bridges/skills/stage.test.ts",
-    "tests/orchestrators/plugin/uninstall.test.ts",
-  ];
-  errors.push(
-    ...compareExactSet(
-      syncEntries.map(([file]) => file),
-      expectedResiduals,
-      "syncBuiltinESMExports residual files",
-    ),
-  );
-  errors.push(
-    ...compareExactSet(
-      requireEntries.map(([file]) => file),
-      expectedResiduals,
-      "createRequire residual files",
-    ),
-  );
-  if (syncEntries.length !== input.syncFiles || syncCalls !== input.syncCalls) {
-    errors.push(
-      `syncBuiltinESMExports census is ${syncEntries.length}/${syncCalls}; expected ${input.syncFiles}/${input.syncCalls}`,
-    );
-  }
+  return errors;
+}
 
-  if (requireEntries.length !== input.requireFiles || requireCalls !== input.requireCalls) {
+/**
+ * @param {ReadonlyMap<string, string>} files
+ * @param {string} token
+ * @param {number} expectedFiles
+ * @param {number} expectedCalls
+ * @param {readonly string[]} expectedResiduals
+ */
+function validateResidualCensus(files, token, expectedFiles, expectedCalls, expectedResiduals) {
+  const entries = [...files].filter(([, source]) => source.includes(token));
+  const calls = entries.reduce((total, [, source]) => total + occurrenceCount(source, token), 0);
+  const errors = compareExactSet(
+    entries.map(([file]) => file),
+    expectedResiduals,
+    `${token.slice(0, -1)} residual files`,
+  );
+  if (entries.length !== expectedFiles || calls !== expectedCalls) {
     errors.push(
-      `createRequire census is ${requireEntries.length}/${requireCalls}; expected ${input.requireFiles}/${input.requireCalls}`,
+      `${token.slice(0, -1)} census is ${entries.length}/${calls}; expected ${expectedFiles}/${expectedCalls}`,
     );
   }
 
   return errors;
+}
+
+/**
+ * @param {{files: ReadonlyMap<string, string>, ownerCount: number, catalogFixtureCount: number, legacyHubs: readonly string[], syncFiles: number, syncCalls: number, requireFiles: number, requireCalls: number}} input
+ * @returns {string[]}
+ */
+export function validateClosure(input) {
+  const expectedResiduals = [
+    "tests/bridges/skills/stage.test.ts",
+    "tests/orchestrators/plugin/uninstall.test.ts",
+  ];
+  const sourceFiles = OWNER_PAIRS.map(([source]) => source);
+  const ownerTests = OWNER_PAIRS.map(([, owner]) => owner);
+  return [
+    ...validateTrackedInventory(
+      input.files,
+      sourceFiles,
+      input.ownerCount,
+      "owner count argument",
+      "missing source owner",
+    ),
+    ...validateTrackedInventory(
+      input.files,
+      ownerTests,
+      OWNER_PAIRS.length,
+      "owner test count",
+      "missing owner test",
+    ),
+    ...validateTrackedInventory(
+      input.files,
+      CATALOG_FIXTURES,
+      input.catalogFixtureCount,
+      "catalog fixture count argument",
+      "missing catalog fixture",
+    ),
+    ...validateLegacyInventory(input.files, input.legacyHubs),
+    ...validateResidualCensus(
+      input.files,
+      "syncBuiltinESMExports(",
+      input.syncFiles,
+      input.syncCalls,
+      expectedResiduals,
+    ),
+    ...validateResidualCensus(
+      input.files,
+      "createRequire(",
+      input.requireFiles,
+      input.requireCalls,
+      expectedResiduals,
+    ),
+  ];
 }
 
 /** @param {readonly CensusRow[]} rows */
