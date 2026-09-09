@@ -21,8 +21,8 @@ import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
  * `/claude:plugin update` (MOD-01). Co-locates update's private status set, its
  * cascade row message shapes, and a render map total over update's OWN statuses
  * (D-10) lifting the matching `renderPluginRow` arm bodies VERBATIM. The shared
- * presentation vocabulary stays central in `shared/notify.ts` (D-11) and is
- * CALLED here, never duplicated.
+ * presentation vocabulary stays central in `shared/notification-grammar.ts`
+ * (D-11) and is CALLED here, never duplicated.
  */
 
 /**

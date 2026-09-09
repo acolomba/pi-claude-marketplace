@@ -1577,8 +1577,9 @@ function appendCleanupFailure(
 //    construction inside `finalizeUpdateRecord`. A future fifth bridge surfaces
 //    here as a TS error.
 //
-// The intent-mark marker is internal-only: shared/notify.ts does not read
-// `compatibility.notes`; the only extension consumer is reinstall.ts
+// The intent-mark marker is internal-only: shared/notification-grammar.ts and
+// shared/notification-summary.ts do not read `compatibility.notes`; the only
+// extension consumer is reinstall.ts
 // (record copy, not rendering), so no notify-rendering test is at risk.
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -2662,10 +2663,10 @@ async function dropPluginCompletionCache(args: ThreePhaseArgs): Promise<void> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Cascade construction (CMC-26). notify()'s content-derived severity and
-// reload-hint drive the dispatch; the renderer in shared/notify.ts owns every
-// rendering concern (icon, version arrow, reasons brace, reload-hint,
-// rollback-partial children).
+// Cascade construction (CMC-26). shared/notification-summary.ts derives
+// content severity and the reload hint before shared/notification-dispatch.ts
+// dispatches; shared/notification-grammar.ts owns every row-rendering concern
+// (icon, version arrow, reasons brace, rollback-partial children).
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface TargetedOutcome {
@@ -3038,8 +3039,8 @@ function notifyDirectFailure(args: NotifyDirectFailureArgs): void {
   const reasons: readonly ContentReason[] = [args.reasonOverride ?? narrowDirectFailReason(cause)];
   // WR-05: row-level `scope` is OMITTED -- it always matched the
   // marketplace block's `scope` at every callsite below, and
-  // `renderScopeBracket` (shared/notify.ts) suppresses the bracket in
-  // that case. Aligning on the omit convention (matching uninstall.ts,
+  // `renderScopeBracket` (shared/notification-grammar.ts) suppresses the
+  // bracket in that case. Aligning on the omit convention (matching uninstall.ts,
   // reinstall.ts, and install.ts's IN-04 commentary at lines 936-944)
   // removes a structural redundancy that diverged from the canonical
   // emission recipe.
@@ -3190,8 +3191,8 @@ function notifyBareFormEnumerateFailure(args: {
  */
 const SYNTHETIC_UPDATE_PLACEHOLDER_NAME = "(update)";
 
-// The renderer (shared/notify.ts) owns version-arrow composition via the
-// PluginUpdatedMessage's required from/to fields.
+// The renderer (shared/notification-grammar.ts) owns version-arrow composition
+// via the PluginUpdatedMessage's required from/to fields.
 
 function isDirectUpdate(args: ThreePhaseArgs): args is DirectThreePhaseArgs {
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-boolean-literal-compare -- keeps Sonar S7735 from flagging an inverted boolean condition at the callsite.
