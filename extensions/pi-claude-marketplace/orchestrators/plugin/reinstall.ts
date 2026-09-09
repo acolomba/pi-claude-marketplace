@@ -46,41 +46,8 @@
 // reconcile-driven INSTALL of the same plugin reports it. Tracked as part of
 // BACKLOG UPCASC-01 (decide the cascade rendering once).
 
-import { readFile, rm } from "node:fs/promises";
-import { homedir } from "node:os";
 import path from "node:path";
 
-import {
-  abortPreparedAgents,
-  finalizeAgentsReplacement,
-  prepareStagePluginAgents,
-  replacePreparedAgents,
-  rollbackAgentsReplacement,
-} from "../../bridges/agents/index.ts";
-import {
-  abortPreparedCommands,
-  finalizeCommandsReplacement,
-  prepareStageCommands,
-  replacePreparedCommands,
-  rollbackCommandsReplacement,
-} from "../../bridges/commands/index.ts";
-import { compileIfPredicate } from "../../bridges/hooks/if-field/index.ts";
-import { removeHookConfig, writeHookConfig } from "../../bridges/hooks/index.ts";
-import {
-  abortPreparedMcp,
-  finalizeMcpReplacement,
-  prepareStageMcpServers,
-  replacePreparedMcp,
-  rollbackMcpReplacement,
-} from "../../bridges/mcp/index.ts";
-import {
-  abortPreparedSkills,
-  finalizeSkillsReplacement,
-  prepareStageSkills,
-  replacePreparedSkills,
-  rollbackSkillsReplacement,
-} from "../../bridges/skills/index.ts";
-import { parseHooksConfig, projectHookSummaryEntries } from "../../domain/components/hooks.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { requirePartialInstallable, resolveStrict } from "../../domain/plugin-resolver.ts";
 import { asAbsolutePluginRoot } from "../../domain/plugin-root.ts";
@@ -89,7 +56,6 @@ import { locationsFor } from "../../persistence/locations.ts";
 import { clonePluginRecord, isRecordedButDisabled } from "../../persistence/state-io.ts";
 import {
   composeErrorWithCauseChain,
-  errorMessage,
   errorWithManualRecovery,
   findManualRecoveryError,
   ManualRecoveryError,
@@ -106,7 +72,6 @@ import {
 import { notifyWithContext } from "../../shared/notify-context.ts";
 import { skipSeverity } from "../../shared/notify-reasons.ts";
 import {
-  withLockedStateTransaction,
   type LockedStateTransaction,
   type LockedStateTransactionDeps,
 } from "../../transaction/with-state-guard.ts";
@@ -114,6 +79,7 @@ import { DEFAULT_CREDENTIAL_OPS } from "../auth-host.ts";
 
 import { discoverGeneratedNames } from "./discover-names.ts";
 import { probeReinstallClone } from "./reinstall-clone-probe.ts";
+import { REAL_REINSTALL_TRANSACTION } from "./reinstall-replace.ts";
 import { selectReinstallTargets } from "./reinstall-targets.ts";
 import {
   REINSTALL_CONTEXT,
@@ -127,15 +93,10 @@ import {
   MarketplaceNotAddedSignal,
   maybeWritePluginConfigBack,
   removePluginRecord,
-  splitStagingWarnings,
   surfaceDiscoveryWarnings,
 } from "./shared.ts";
 
-import type { AgentsReplacement, PreparedAgentsStaging } from "../../bridges/agents/index.ts";
-import type { CommandsReplacement, PreparedCommandsStaging } from "../../bridges/commands/index.ts";
 import type { HooksRouting } from "../../bridges/hooks/index.ts";
-import type { McpReplacement, PreparedMcpStaging } from "../../bridges/mcp/index.ts";
-import type { PreparedSkillsStaging, SkillsReplacement } from "../../bridges/skills/index.ts";
 import type { PluginEntry } from "../../domain/components/plugin.ts";
 import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
 import type { GitBackedSource } from "../../domain/source.ts";
@@ -153,15 +114,14 @@ import type {
   ReinstallReinstalledOutcome,
 } from "../types.ts";
 import type { ReinstallCloneCacheSeam } from "./reinstall-clone-probe.ts";
+import type {
+  ReinstallPreparedHandles,
+  ReinstallTransaction,
+  RemoveDataDirFn,
+} from "./reinstall-replace.ts";
 import type { ReinstallPluginsTarget, SelectedReinstallTarget } from "./reinstall-targets.ts";
 
 export type { ReinstallPluginOutcome } from "../types.ts";
-
-type BridgePhase = "skills" | "commands" | "agents" | "mcp";
-export type RemoveDataDirFn = (
-  path: string,
-  options: { recursive: true; force: true },
-) => Promise<void>;
 
 /** Hook-routing capabilities consumed by committed reinstall finalization. */
 export type ReinstallHooksRouting = Pick<
@@ -245,26 +205,6 @@ export type ReinstallPluginsFn = (
   opts: ReinstallPluginsOptions,
 ) => Promise<readonly ReinstallPluginOutcome[]>;
 
-interface PreparedHandles {
-  readonly skills: PreparedSkillsStaging;
-  readonly commands: PreparedCommandsStaging;
-  readonly agents: PreparedAgentsStaging;
-  readonly mcp: PreparedMcpStaging;
-}
-
-interface PartialPreparedHandles {
-  skills?: PreparedSkillsStaging;
-  commands?: PreparedCommandsStaging;
-  agents?: PreparedAgentsStaging;
-  mcp?: PreparedMcpStaging;
-}
-
-type ReplacementEntry =
-  | { readonly phase: "skills"; readonly handle: SkillsReplacement }
-  | { readonly phase: "commands"; readonly handle: CommandsReplacement }
-  | { readonly phase: "agents"; readonly handle: AgentsReplacement }
-  | { readonly phase: "mcp"; readonly handle: McpReplacement };
-
 interface LockedSuccess {
   readonly outcome: ReinstallPluginOutcome;
   /**
@@ -287,36 +227,11 @@ interface LockedSuccess {
   readonly invalidConfigWriteBack?: boolean;
 }
 
-/** Owns reinstall's semantic prepare, replace, compensation, and commit schedule. */
-export interface ReinstallTransaction {
-  readonly abortPrepared: typeof abortPartialHandles;
-  readonly finalizeReplacements: typeof finalizeReplacements;
-  readonly prepareAll: typeof prepareAllHandles;
-  readonly replaceAll: typeof replaceAll;
-  readonly rollbackReplacements: typeof rollbackReplacements;
-  readonly runPostSuccessMaintenance: typeof runPostSuccessMaintenance;
-  readonly withLockedStateTransaction: typeof withLockedStateTransaction;
-}
-
-const REAL_REINSTALL_TRANSACTION: ReinstallTransaction = {
-  abortPrepared: abortPartialHandles,
-  finalizeReplacements,
-  prepareAll: prepareAllHandles,
-  replaceAll,
-  rollbackReplacements,
-  runPostSuccessMaintenance,
-  withLockedStateTransaction,
-};
-
 // ATTR-03 / D-47-A: the structural marketplace-not-added signal thrown by the
 // reinstall target enumerator is the shared `MarketplaceNotAddedSignal` from
 // `./shared.ts` (one source of truth so `instanceof` agrees with update.ts).
 // The `reinstallPlugins` enumeration catch detects it via `instanceof` and
 // emits ONE standalone `MarketplaceNotAddedMessage` before any cascade row.
-
-const defaultRemoveDataDir: RemoveDataDirFn = async (dataDir) => {
-  await rm(dataDir, { recursive: true, force: true });
-};
 
 async function reinstallPluginWithTransaction(
   transaction: ReinstallTransaction,
@@ -367,7 +282,14 @@ async function reinstallPluginWithTransaction(
   }
 
   const maintenanceWarnings = await transaction.runPostSuccessMaintenance(
-    opts,
+    {
+      scope,
+      marketplace,
+      plugin,
+      ...(opts.__deps?.removeDataDir !== undefined && {
+        removeDataDir: opts.__deps.removeDataDir,
+      }),
+    },
     locations,
     completionCache,
   );
@@ -841,30 +763,16 @@ async function runLockedReinstall(
   );
 
   const pluginDataDir = await locations.pluginDataDir(marketplace, plugin);
-  const handles = await transaction.prepareAll(
-    {
-      locations,
-      cwd,
-      marketplace,
-      plugin,
-      installable,
-      pluginDataDir,
-      oldRecord: oldSnapshot,
-      agentsDirs: generated.agentsDirs,
-    },
-    transaction.abortPrepared,
-  );
-  const { replacements, hookEntries } = await transaction.replaceAll(
-    handles,
-    {
-      locations,
-      cwd,
-      plugin,
-      installable,
-    },
-    transaction.rollbackReplacements,
-    transaction.abortPrepared,
-  );
+  const replacement = await transaction.replaceReinstalledPlugin({
+    locations,
+    cwd,
+    marketplace,
+    plugin,
+    installable,
+    pluginDataDir,
+    oldRecord: oldSnapshot,
+    agentsDirs: generated.agentsDirs,
+  });
 
   let invalidConfigWriteBack: boolean;
   try {
@@ -874,8 +782,8 @@ async function runLockedReinstall(
       plugin,
       oldSnapshot,
       installable,
-      handles,
-      hookEntries,
+      replacement.handles,
+      replacement.hookEntries,
     );
 
     // WB-01 / A7: deep-equal short-circuit preserves RECON-05
@@ -935,17 +843,16 @@ async function runLockedReinstall(
 
     hooksRouting.rebuildRoutingTables();
   } catch (err) {
-    throw errorWithManualRecovery(err, await transaction.rollbackReplacements(replacements));
+    throw errorWithManualRecovery(err, await transaction.rollbackReinstalledPlugin(replacement));
   }
 
-  const staging = splitHandleWarnings(handles);
   const bridgeWarnings = [
-    ...staging.bridge,
-    ...(await transaction.finalizeReplacements(replacements)),
+    ...replacement.bridgeWarnings,
+    ...(await transaction.finalizeReinstalledPlugin(replacement)),
   ];
   return {
-    outcome: successOutcome(scope, marketplace, plugin, oldSnapshot, handles),
-    discoveryWarnings: staging.discovery,
+    outcome: successOutcome(scope, marketplace, plugin, oldSnapshot, replacement.handles),
+    discoveryWarnings: replacement.discoveryWarnings,
     bridgeWarnings,
     ...(invalidConfigWriteBack && { invalidConfigWriteBack: true }),
   };
@@ -1021,191 +928,13 @@ async function resolveInstallable(input: {
   return resolved;
 }
 
-async function prepareAllHandles(
-  input: {
-    readonly locations: ScopedLocations;
-    readonly cwd: string;
-    readonly marketplace: string;
-    readonly plugin: string;
-    readonly installable: MaterializablePlugin;
-    readonly pluginDataDir: string;
-    readonly oldRecord: PluginInstallRecord;
-    readonly agentsDirs: readonly string[];
-  },
-  abortPrepared: typeof abortPartialHandles,
-): Promise<PreparedHandles> {
-  const handles: PartialPreparedHandles = {};
-  try {
-    handles.skills = await prepareStageSkills({
-      locations: input.locations,
-      marketplaceName: input.marketplace,
-      pluginName: input.plugin,
-      pluginRoot: input.installable.pluginRoot,
-      pluginDataDir: input.pluginDataDir,
-      resolved: input.installable,
-      previousSkillNames: input.oldRecord.resources.skills,
-      // SUB-02: project-scope ${CLAUDE_PROJECT_DIR} resolves to the install cwd.
-      cwd: input.cwd,
-    });
-    handles.commands = await prepareStageCommands({
-      locations: input.locations,
-      marketplaceName: input.marketplace,
-      pluginName: input.plugin,
-      pluginRoot: input.installable.pluginRoot,
-      pluginDataDir: input.pluginDataDir,
-      resolved: input.installable,
-      previousCommandNames: input.oldRecord.resources.prompts,
-      // SUB-02: project-scope ${CLAUDE_PROJECT_DIR} resolves to the install cwd.
-      cwd: input.cwd,
-    });
-    handles.agents = await prepareStagePluginAgents({
-      locations: input.locations,
-      marketplaceName: input.marketplace,
-      pluginName: input.plugin,
-      pluginRoot: input.installable.pluginRoot,
-      pluginDataDir: input.pluginDataDir,
-      resolved: input.installable,
-      agentsDirs: input.agentsDirs,
-      knownSkills: handles.skills.result.recorded.map((r) => r.generatedName),
-      // SUB-02: project-scope ${CLAUDE_PROJECT_DIR} resolves to the install cwd.
-      cwd: input.cwd,
-    });
-    handles.mcp = await prepareStageMcpServers({
-      locations: input.locations,
-      cwd: input.cwd,
-      marketplaceName: input.marketplace,
-      pluginName: input.plugin,
-      servers: input.installable.mcpServers,
-      pluginRoot: input.installable.pluginRoot,
-      pluginData: input.pluginDataDir,
-      sourcePath: `${input.installable.pluginRoot}#mcpServers`,
-    });
-  } catch (err) {
-    throw errorWithManualRecovery(err, await abortPrepared(handles));
-  }
-
-  return handles as PreparedHandles;
-}
-
-/**
- * D-100-01 / ENBL-10: returns the rollback ledger AND the hook entries
- * `commitHooks` wrote, because the record composition needs a description of
- * the hooks it materialized and the hooks slot is the only step that has one.
- */
-async function replaceAll(
-  handles: PreparedHandles,
-  hooks: HooksReplaceArgs,
-  rollbackPrepared: typeof rollbackReplacements,
-  abortPrepared: typeof abortPartialHandles,
-): Promise<{
-  readonly replacements: readonly ReplacementEntry[];
-  readonly hookEntries: readonly HookSummaryEntry[] | undefined;
-}> {
-  const replacements: ReplacementEntry[] = [];
-  let hookEntries: readonly HookSummaryEntry[] | undefined;
-  try {
-    const skills = await replacePreparedSkills(handles.skills);
-    replacements.push({ phase: "skills", handle: skills });
-    const commands = await replacePreparedCommands(handles.commands);
-    replacements.push({ phase: "commands", handle: commands });
-    // RINST-01 / D-67-03: reinstall is a pure repair primitive -- overwrite of
-    // collisions and foreign content is UNCONDITIONAL. The agents bridge's
-    // `{ force: true }` gate is always set; there is no command-local `--partial`
-    // option to relay. Containment is unchanged (NFR-10): the overwrite is
-    // scoped to this plugin's own staged agent handles.
-    const agents = await replacePreparedAgents(handles.agents, { force: true });
-    replacements.push({ phase: "agents", handle: agents });
-    // LIFE-01 / D-63-01: 5th cascade slot between agents and mcp. The hooks
-    // bridge has no staging dir per D-63-02; writeHookConfig IS the atomic
-    // write. NOT pushed onto `replacements[]` -- the hooks file STAYS IN
-    // PLACE on a later-step failure (recovery is via the reinstall hint,
-    // not in-process rollback, mirroring update.ts D-03 semantics).
-    //
-    // WR-05: the hooks-removed-then-later-step-failed
-    // window is a known manual-recovery case. When installable.hooksConfigPath
-    // is undefined, commitHooks() calls removeHookConfig() to clean up any
-    // stale subtree from the prior install. If that succeeds and a later
-    // step (mcp replace, state save) THROWS, the catch's
-    // `rollbackReplacements` walk below cannot restore the hooks file --
-    // and since `replacements[]`
-    // has no hooks entry, no in-process restore is possible. The
-    // in-memory state still holds the OLD resources.hooks: [plugin]
-    // slug, the throw routes through errorWithManualRecovery without
-    // saving, and the user-visible row is (manual recovery). On the
-    // next /reload, the dispatcher's routing table is rebuilt from
-    // the still-old state.json and points at a now-deleted hooks file.
-    // The manual-recovery hint directs the user to re-run reinstall,
-    // which re-resolves version B (no hooks) and persists the truthful
-    // state. The same recovery contract applies to update.ts (see
-    // WR-01 documentation there).
-    hookEntries = await commitHooks(hooks);
-    const mcp = await replacePreparedMcp(handles.mcp);
-    replacements.push({ phase: "mcp", handle: mcp });
-  } catch (err) {
-    const leaks = [...(await rollbackPrepared(replacements)), ...(await abortPrepared(handles))];
-    throw errorWithManualRecovery(err, leaks);
-  }
-
-  return { replacements: Object.freeze(replacements), hookEntries };
-}
-
-interface HooksReplaceArgs {
-  readonly locations: ScopedLocations;
-  readonly cwd: string;
-  readonly plugin: string;
-  readonly installable: MaterializablePlugin;
-}
-
-/**
- * LIFE-01 hooks-bridge atomic write/remove during reinstall's replace step.
- * When the resolved plugin advertises hooksConfigPath, re-read + re-parse the
- * on-disk hooks.json (mirroring `install-outcome.ts`'s `hooksPhase` inside
- * `runInstallLedger`) and call writeHookConfig.
- * When the resolved plugin has no hooks, remove any stale subtree (defensive
- * cleanup of an artifact a prior install left behind).
- *
- * D-100-01 / D-100-02 / ENBL-11: returns the supported hook entries it wrote,
- * for the record's `hookEntries`. Returns undefined on the no-hooks branch --
- * that branch removes the stale subtree rather than writing one, so there is
- * nothing to describe.
- */
-async function commitHooks(
-  args: HooksReplaceArgs,
-): Promise<readonly HookSummaryEntry[] | undefined> {
-  const { locations, cwd, plugin, installable } = args;
-  if (installable.hooksConfigPath === undefined) {
-    await removeHookConfig({ locations, pluginName: plugin });
-    return undefined;
-  }
-
-  const raw = await readFile(
-    path.join(installable.pluginRoot, installable.hooksConfigPath),
-    "utf8",
-  );
-  const ifCtx = { homedir: homedir(), cwd, projectRoot: cwd };
-  const parsed = parseHooksConfig(raw, ifCtx, compileIfPredicate);
-  if (!parsed.ok) {
-    throw new Error(`hooks.json re-parse failed: ${parsed.reason}`);
-  }
-
-  await writeHookConfig({
-    locations,
-    pluginName: plugin,
-    pluginRoot: installable.pluginRoot,
-    hooksValue: parsed.value,
-  });
-
-  // `parsed.value` is the supported subset already.
-  return projectHookSummaryEntries(parsed.value);
-}
-
 function updateStateRecord(
   state: ExtensionState,
   marketplace: string,
   plugin: string,
   oldRecord: PluginInstallRecord,
   installable: MaterializablePlugin,
-  handles: PreparedHandles,
+  handles: ReinstallPreparedHandles,
   hookEntries: readonly HookSummaryEntry[] | undefined,
 ): void {
   const mp = state.marketplaces[marketplace];
@@ -1249,7 +978,7 @@ function updateStateRecord(
 }
 
 function resourcesFromHandles(
-  handles: PreparedHandles,
+  handles: ReinstallPreparedHandles,
   plugin?: string,
   installable?: MaterializablePlugin,
 ): PluginInstallRecord["resources"] {
@@ -1276,7 +1005,7 @@ function successOutcome(
   marketplace: string,
   plugin: string,
   oldRecord: PluginInstallRecord,
-  handles: PreparedHandles,
+  handles: ReinstallPreparedHandles,
 ): ReinstallReinstalledOutcome {
   const resources = resourcesFromHandles(handles);
   // WARN-01 / WR-04 / D-86-03: the same per-kind degrade collection
@@ -1325,127 +1054,4 @@ function resourcesChanged(
     oldResources.agents.length > 0 ||
     oldResources.mcpServers.length > 0
   );
-}
-
-function splitHandleWarnings(handles: PreparedHandles): {
-  readonly discovery: readonly string[];
-  readonly bridge: readonly string[];
-} {
-  return splitStagingWarnings({
-    skills: handles.skills.result.warnings,
-    commands: handles.commands.result.warnings,
-    agents: handles.agents.result.warnings,
-    mcp: handles.mcp.result.warnings,
-  });
-}
-
-async function abortPartialHandles(handles: PartialPreparedHandles): Promise<readonly string[]> {
-  const leaks: string[] = [];
-  if (handles.mcp !== undefined) {
-    abortPreparedMcp(handles.mcp);
-  }
-
-  if (handles.agents !== undefined) {
-    pushLeak(leaks, "agents", await abortPreparedAgents(handles.agents));
-  }
-
-  if (handles.commands !== undefined) {
-    pushLeak(leaks, "commands", await abortPreparedCommands(handles.commands));
-  }
-
-  if (handles.skills !== undefined) {
-    pushLeak(leaks, "skills", await abortPreparedSkills(handles.skills));
-  }
-
-  return Object.freeze(leaks);
-}
-
-async function rollbackReplacements(
-  replacements: readonly ReplacementEntry[],
-): Promise<readonly string[]> {
-  const leaks: string[] = [];
-  for (const replacement of [...replacements].reverse()) {
-    for (const leak of await rollbackReplacement(replacement)) {
-      leaks.push(`${replacement.phase}: ${leak}`);
-    }
-  }
-
-  return Object.freeze(leaks);
-}
-
-async function rollbackReplacement(entry: ReplacementEntry): Promise<readonly string[]> {
-  switch (entry.phase) {
-    case "skills":
-      return rollbackSkillsReplacement(entry.handle);
-    case "commands":
-      return rollbackCommandsReplacement(entry.handle);
-    case "agents":
-      return rollbackAgentsReplacement(entry.handle);
-    case "mcp":
-      return rollbackMcpReplacement(entry.handle);
-  }
-}
-
-async function finalizeReplacements(
-  replacements: readonly ReplacementEntry[],
-): Promise<readonly string[]> {
-  const leaks: string[] = [];
-  for (const replacement of replacements) {
-    for (const leak of await finalizeReplacement(replacement)) {
-      leaks.push(`${replacement.phase}: ${leak}`);
-    }
-  }
-
-  return Object.freeze(leaks);
-}
-
-async function finalizeReplacement(entry: ReplacementEntry): Promise<readonly string[]> {
-  switch (entry.phase) {
-    case "skills":
-      return finalizeSkillsReplacement(entry.handle);
-    case "commands":
-      return finalizeCommandsReplacement(entry.handle);
-    case "agents":
-      return finalizeAgentsReplacement(entry.handle);
-    case "mcp":
-      return finalizeMcpReplacement(entry.handle);
-  }
-}
-
-function pushLeak(leaks: string[], phase: BridgePhase, leak: string | undefined): void {
-  if (leak !== undefined) {
-    leaks.push(`${phase}: ${leak}`);
-  }
-}
-
-async function runPostSuccessMaintenance(
-  opts: ReinstallPluginOptions,
-  locations: ScopedLocations,
-  completionCache: CompletionCache,
-): Promise<readonly string[]> {
-  const { scope, marketplace, plugin } = opts;
-  const warnings: string[] = [];
-  try {
-    await completionCache.dropMarketplaceCache(
-      await locations.pluginCacheFile(marketplace),
-      scope,
-      marketplace,
-    );
-  } catch (err) {
-    warnings.push(
-      `Plugin "${plugin}" reinstalled; completion cache refresh deferred: ${errorMessage(err)}`,
-    );
-  }
-
-  const dataDir = await locations.pluginDataDir(marketplace, plugin);
-  const removeDataDir = opts.__deps?.removeDataDir ?? defaultRemoveDataDir;
-  try {
-    await removeDataDir(dataDir, { recursive: true, force: true });
-  } catch (err) {
-    warnings.push(
-      `Plugin "${plugin}" reinstalled; data cleanup deferred at ${dataDir}: ${errorMessage(err)}`,
-    );
-  }
-
-  return Object.freeze(warnings);
 }
