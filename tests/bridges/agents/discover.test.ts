@@ -18,7 +18,7 @@ test("discovers flat markdown agents in source order with complete records", asy
   const helperBytes = Buffer.from(
     "---\r\nname: acme-helper\r\ndescription: Helpful agent\r\ntools: Read, Write\r\n---\r\n\r\nHelp carefully.\r\n",
   );
-  const fallbackBytes = Buffer.from("﻿Plain body\r\n");
+  const fallbackBytes = Buffer.from("\uFEFFPlain body\r\n");
   await writeFile(helperPath, helperBytes);
   await writeFile(fallbackPath, fallbackBytes);
   await writeFile(path.join(agentsDirectory, ".hidden.md"), "---\nname: hidden\n---\n");
@@ -44,7 +44,7 @@ test("discovers flat markdown agents in source order with complete records", asy
         sourcePath: fallbackPath,
         sourceHash: "908a44e1f16dd6260a671a79b5a1c2280db6ba2f9edb78ad004009d4e3258894",
         raw: {},
-        body: "﻿Plain body\r\n",
+        body: "Plain body\r\n",
       },
     ],
     warnings: [],
@@ -291,4 +291,44 @@ test("rejects a source name that elides to an empty generated suffix", async (t)
     () => discoverPluginAgents({ pluginName: "acme", agentsDirs: [directory] }),
     { name: "Error", message: "Name must be a non-empty string." },
   );
+});
+
+test("resolves the frontmatter name of a source led by a byte-order mark", async (t) => {
+  // arrange
+  // FMBOM-01: without the strip the anchored fence match fails, so `sourceName`
+  // falls back to the filename stem and the whole `---` block survives in
+  // `body`, where `convert.ts` emits it verbatim into the generated agent.
+  const directory = await mkdtemp(path.join(tmpdir(), "agent-discover-bom-"));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 3 }));
+  const sourcePath = path.join(directory, "file-stem.md");
+  await writeFile(
+    sourcePath,
+    "\uFEFF---\nname: reviewer\ndescription: Reviews changes\ntools: Read\n---\nReview carefully.\n",
+  );
+  const expectedDiscovery = {
+    discovered: [
+      {
+        sourceName: "reviewer",
+        generatedName: "pi-claude-marketplace-acme-reviewer",
+        sourcePath,
+        sourceHash: "e69c9a6c7c0603ba59e497163b9a88b9a8997753f02ccf6838d4de49d0af620f",
+        raw: {
+          name: "reviewer",
+          description: "Reviews changes",
+          tools: "Read",
+        },
+        body: "Review carefully.\n",
+      },
+    ],
+    warnings: [],
+  };
+
+  // act
+  const discovery = await discoverPluginAgents({
+    pluginName: "acme",
+    agentsDirs: [directory],
+  });
+
+  // assert
+  assert.deepStrictEqual(discovery, expectedDiscovery);
 });
