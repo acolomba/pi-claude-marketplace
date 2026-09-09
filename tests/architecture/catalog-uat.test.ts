@@ -1440,7 +1440,8 @@ const FIXTURES: FixtureMap = {
 
     // CMP-4 / SCOPE-01: the container exists in the scope the install did not
     // target, so the brace carries the cross-scope structural token INSTEAD of
-    // `marketplace not added`. The message field is a BOOLEAN -- notify.ts owns the bytes.
+    // `marketplace not added`. The message field is a BOOLEAN --
+    // notification-grammar.ts owns the bytes.
     // The bare-row state above is the SAME variant with the flag omitted, which
     // is what a miss in both scopes emits.
     "missing-marketplace-not-added-cross-scope": {

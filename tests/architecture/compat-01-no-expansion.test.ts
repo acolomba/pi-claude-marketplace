@@ -21,8 +21,9 @@
  *   exact code point, written as an escape so the pin states the code point
  *   rather than relying on the reader to identify a character by eye. There is
  *   no exported COLLECTION of glyphs, so an EIGHTH glyph export cannot be caught
- *   by comparing a tuple; the export-declaration count in the notify module is
- *   the only way to catch one, and it is the one clause here that scans source.
+ *   by comparing a tuple; the notification grammar owner's export-declaration
+ *   count is the only way to catch one, and it is the one clause here that
+ *   scans source.
  *
  *   Persistence (COMPAT-01) -- the persisted install record's key set is exactly
  *   the eight fields it already had, and neither a manifest-snapshot-shaped key
@@ -344,7 +345,7 @@ test("COMPAT-01: the catalog names each glyph the way the code-point pins above 
   );
 });
 
-test("COMPAT-01: the notify module declares no eighth glyph export", async () => {
+test("COMPAT-01: the notification grammar owner declares no eighth glyph export", async () => {
   // arrange
   // The one clause here that scans source: an eighth glyph export cannot be
   // caught by comparing runtime constants, because the glyphs are seven
