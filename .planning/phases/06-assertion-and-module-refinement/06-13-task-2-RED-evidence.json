@@ -1,0 +1,9 @@
+{
+  "command": "node --test --test-isolation=none --test-reporter=tap tests/shared/compare-name-scope.test.ts",
+  "exitCode": 1,
+  "output": "TAP version 13\n# Subtest: exports the name-first scope comparator from its named owner\nnot ok 1 - exports the name-first scope comparator from its named owner\n  error: Got unwanted rejection: compare-name-scope.ts must own ordering\n  code: ERR_ASSERTION\n  actual: ERR_MODULE_NOT_FOUND\n1..1\n# tests 1\n# suites 0\n# pass 0\n# fail 1",
+  "targetTest": "exports the name-first scope comparator from its named owner",
+  "targetFile": "tests/shared/compare-name-scope.test.ts",
+  "expected": "the named name-first scope comparator owner can be imported",
+  "actual": "ERR_MODULE_NOT_FOUND for extensions/pi-claude-marketplace/shared/compare-name-scope.ts"
+}
