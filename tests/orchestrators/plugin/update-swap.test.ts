@@ -17,7 +17,7 @@ import { createCompletionCache } from "../../../extensions/pi-claude-marketplace
 // The legacy flow suite supplies the real bridge, filesystem, rollback, and
 // state-ledger fixtures while this mirrored owner pair proves they execute
 // through the extracted swap module.
-import { seedPathMarketplace, withHermeticHome } from "./update.test.ts";
+import { seedPathMarketplace, withHermeticHome } from "./update-flow.test.ts";
 
 test("exposes the atomic plugin update swap owner", () => {
   // act and assert
