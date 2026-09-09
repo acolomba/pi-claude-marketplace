@@ -1,7 +1,7 @@
 // domain/components/hooks.ts
 //
 // TypeBox schema for Claude `hooks/hooks.json` files + `parseHooksConfig`
-// discriminated parser. Consumed by `domain/resolver.ts`: a structural parse
+// discriminated parser. Consumed by `domain/plugin-resolver.ts`: a structural parse
 // failure (`{ ok: false }`) resolves `state: "unavailable"` per D-57-04; a
 // successful parse whose partition dropped unsupportable events / matcher groups
 // / handlers resolves `state: "partially-available"` (partially-available) carrying the

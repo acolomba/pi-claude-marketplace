@@ -124,9 +124,9 @@ describe("MF-DEC-01 census", () => {
 });
 
 describe("PRE-EDIT ledger", () => {
-  const hub = "extensions/pi-claude-marketplace/domain/resolver.ts";
-  const legacyTest = "tests/domain/resolver.test.ts";
-  const ledger = `# Resolver PRE-EDIT Ledger
+  const hub = "extensions/pi-claude-marketplace/shared/notify.ts";
+  const legacyTest = "tests/shared/notify.test.ts";
+  const ledger = `# Notification PRE-EDIT Ledger
 
 Status: READY
 Hub: ${hub}
@@ -134,13 +134,13 @@ Legacy test: ${legacyTest}
 
 | Category | Current owner | Destination | Evidence |
 | --- | --- | --- | --- |
-| exported symbol | resolvePlugin | domain/plugin-resolver.ts | tracked |
-| production caller | bridges/commands/stage.ts | domain/plugin-resolver.ts | CodeGraph |
-| source-scanning gate | scripts/test-coverage-direct.mjs | domain/plugin-resolver.ts | tracked |
-| documentation comment | docs/architecture.md | domain/plugin-resolver.ts | tracked |
-| test ownership | tests/domain/resolver.test.ts#resolvePlugin | tests/domain/plugin-resolver.test.ts | exact owner |
-| completeness invariant | resolver closed set | domain/resolver-types.ts | inverse walk |
-| dependency edge | resolver.ts -> source.ts | plugin-resolver.ts -> source.ts | acyclic |
+| exported symbol | notify | shared/notification-dispatch.ts | tracked |
+| production caller | orchestrators/plugin/list.ts | shared/notification-dispatch.ts | CodeGraph |
+| source-scanning gate | scripts/test-coverage-direct.mjs | shared/notification-dispatch.ts | tracked |
+| documentation comment | docs/output-catalog.md | shared/notification-dispatch.ts | tracked |
+| test ownership | tests/shared/notify.test.ts#notify | tests/shared/notification-dispatch.test.ts | exact owner |
+| completeness invariant | notification closed set | shared/notification-types.ts | inverse walk |
+| dependency edge | notify.ts -> notification-types.ts | notification-dispatch.ts -> notification-types.ts | acyclic |
 `;
 
   test("accepts a READY ledger with every repoint category", () => {
@@ -153,8 +153,8 @@ Legacy test: ${legacyTest}
         trackedPaths: new Set([
           hub,
           legacyTest,
-          "extensions/pi-claude-marketplace/domain/plugin-resolver.ts",
-          "tests/domain/plugin-resolver.test.ts",
+          "extensions/pi-claude-marketplace/shared/notification-dispatch.ts",
+          "tests/shared/notification-dispatch.test.ts",
         ]),
       }),
       [],
@@ -176,7 +176,7 @@ Legacy test: ${legacyTest}
       validatePreedit({
         hub,
         legacyTest,
-        ledger: `${ledger}| test ownership | duplicate | tests/domain/plugin-resolver.test.ts | duplicate |\n`,
+        ledger: `${ledger}| test ownership | duplicate | tests/shared/notification-dispatch.test.ts | duplicate |\n`,
         codegraph: hub,
         trackedPaths: new Set([hub, legacyTest]),
       }).join("\n"),
