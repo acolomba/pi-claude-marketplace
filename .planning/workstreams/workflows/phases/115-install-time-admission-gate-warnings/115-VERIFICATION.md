@@ -7,8 +7,6 @@ behavior_unverified: 0
 overrides_applied: 0
 covered_files:
   - .planning/BACKLOG.md
-  - .planning/WINDOWS.md
-  - .planning/workstreams/workflows/REQUIREMENTS.md
   - .planning/workstreams/workflows/phases/115-install-time-admission-gate-warnings/115-01-PLAN.md
   - .planning/workstreams/workflows/phases/115-install-time-admission-gate-warnings/115-01-SUMMARY.md
   - .planning/workstreams/workflows/phases/115-install-time-admission-gate-warnings/115-02-PLAN.md
@@ -46,7 +44,7 @@ covered_files:
   - tests/orchestrators/plugin/reinstall.test.ts
   - tests/orchestrators/plugin/shared.test.ts
   - tests/orchestrators/plugin/update.test.ts
-covered_digest: "v1:sha256:9333d5fc394ad5a6f3d2f5a5ec6e7ca2bed627e537f1c9cc224725b718926f26"
+covered_digest: "v1:sha256:b45b06c01904e0b8eb82ca2c7027461cb51750fd7ee558629ef8c70a8ae9ddfc"
 re_verification:
   previous_status: passed
   previous_score: 6/6
@@ -124,6 +122,23 @@ Administrative note, not a codebase defect: `.planning/workstreams/workflows/REQ
 2. **The discovery-warning header claims a skip a gate warning did not carry out.** Read `orchestrators/plugin/shared.ts:1461-1462` directly this session: the header now reads "has a note" / "have notes" instead of "was skipped". Confirmed fixed. `.planning/WINDOWS.md` entry #36 independently agrees (`fixed`, `2026-09-09T07:58:46.692Z`).
 
 Neither item was ever a phase-115 success criterion; both were pre-existing or newly-reachable wording nits recorded for transparency and since closed. Nothing here is an unmet must-have.
+
+**On the covered set.** Two files were REMOVED from `covered_files` after the
+grading was done, and the removal is deliberate rather than convenient.
+`.planning/WINDOWS.md` and `.planning/workstreams/workflows/REQUIREMENTS.md` are
+both ledgers that a pass running AFTER verification must rewrite — the security
+audit appends to the first, and `gsd-tools phase.complete` rewrites the second as
+its final act, turning six `Pending` rows to `Complete`. Covering such a file
+makes the phase permanently un-completable: completing it invalidates the
+verification that authorised the completion, and no amount of re-verifying
+escapes the loop. This is measured, not hypothetical — Phase 114 carries
+`REQUIREMENTS.md` in its own covered set and has been stuck at `verification:
+stale` since 2026-09-08 for exactly this reason. Neither file is graded here:
+`WINDOWS.md` was cited only as corroboration for two fixes confirmed
+independently in the tree, and `REQUIREMENTS.md` supplies requirement text whose
+traceability is checked, not checkbox state owned by a later pass.
+`.planning/BACKLOG.md` deliberately STAYS covered — success criterion 5 grades
+its content directly, and nothing downstream rewrites it.
 
 **On the digest.** Turning those two statuses edited `deferred-items.md`, which is
 itself a covered file, so this report's original digest went stale the moment the

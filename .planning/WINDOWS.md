@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 2
+open_count: 3
 waived_count: 13
 fixed_count: 22
-total_count: 37
-last_updated: 2026-09-09T08:38:50.166Z
+total_count: 38
+last_updated: 2026-09-09T13:21:34.003Z
 ---
 
 # Broken Windows Ledger
@@ -52,6 +52,7 @@ last_updated: 2026-09-09T08:38:50.166Z
 | 35 | 115 | lint-warning | .planning/HANDOFF.json |  | [workflows-replay] .planning/HANDOFF.json fails prettier, so npm run check stops at format:check before its test steps (pre-existing at 9a1c0180) | fixed |  | 2026-09-09T04:15:17.661Z | 2026-09-09T04:22:45.271Z |
 | 36 | 115 | deviation | extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts | 1453 | [workflows-replay] surfaceDiscoveryWarnings heads a gate warning with '1 declared component was skipped', contradicting the gate line's 'was installed'; newly reachable via D-115-05 | fixed |  | 2026-09-09T04:15:18.020Z | 2026-09-09T07:58:46.692Z |
 | 37 | 115 | unmet-truth | extensions/pi-claude-marketplace/shared/path-safety.ts | 13 | [workflows-replay] PathContainmentError interpolates the untrusted resolved child path raw into its message, so escaping a caller's label cannot close the forgery; five bridges share the class and measured 58 assertPathInside call sites of which 15 pass a non-constant label, several manifest-derived (plugin source path, git-subdir path) -- the fix is one line in the shared class, the follow-up audit covers 15 labels | open |  | 2026-09-09T08:38:50.166Z |  |
+| 38 | 115 | unrun-verify | .planning/workstreams/workflows/phases/114-degradation-and-documentation/114-VERIFICATION.md | 1 | [workflows-replay] a VERIFICATION covered_files list naming REQUIREMENTS.md makes its phase permanently un-completable: phase.complete rewrites that file as its final act, so completing the phase invalidates the verification that authorized it. Phase 114 has been stuck at verification:stale since 2026-09-08 for this reason; phase 115 hit it and was cleared by dropping REQUIREMENTS.md and WINDOWS.md from its covered set. Phases 110-113 are immune only because they emit no covered_files at all. Same class for any ledger a later pass owns. | open |  | 2026-09-09T13:21:34.003Z |  |
 
 ````json
 [
@@ -497,6 +498,18 @@ last_updated: 2026-09-09T08:38:50.166Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-09-09T08:38:50.166Z",
+    "resolved_at": null
+  },
+  {
+    "id": 38,
+    "kind": "unrun-verify",
+    "phase": "115",
+    "file": ".planning/workstreams/workflows/phases/114-degradation-and-documentation/114-VERIFICATION.md",
+    "line": 1,
+    "description": "[workflows-replay] a VERIFICATION covered_files list naming REQUIREMENTS.md makes its phase permanently un-completable: phase.complete rewrites that file as its final act, so completing the phase invalidates the verification that authorized it. Phase 114 has been stuck at verification:stale since 2026-09-08 for this reason; phase 115 hit it and was cleared by dropping REQUIREMENTS.md and WINDOWS.md from its covered set. Phases 110-113 are immune only because they emit no covered_files at all. Same class for any ledger a later pass owns.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-09T13:21:34.003Z",
     "resolved_at": null
   }
 ]

@@ -36,7 +36,7 @@
     {
       "number": "115",
       "name": "Install-time admission-gate warnings",
-      "status": "pending"
+      "status": "complete"
     },
     {
       "number": "116",
@@ -51,8 +51,8 @@
   ],
   "next": {
     "command": "/gsd:progress --next",
-    "label": "Advance to the next step (plan phase 115)",
-    "reason": "Phase 115 of 9 — needs a plan"
+    "label": "Advance to the next step (plan phase 116)",
+    "reason": "Phase 116 of 9 — needs a plan"
   },
-  "updated_at": "2026-09-08T08:48:06.412Z"
+  "updated_at": "2026-09-09T13:17:29.839Z"
 }
