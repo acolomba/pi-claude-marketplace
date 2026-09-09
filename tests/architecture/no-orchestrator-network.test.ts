@@ -108,7 +108,7 @@ const FORBIDDEN_TARGETS: ReadonlyArray<string> = [
   // STRUCTURAL half of the network-free guarantee. The behavioral half can only
   // show that no call happened on the paths a test exercises; it can never show
   // the surface is absent.
-  "extensions/pi-claude-marketplace/domain/resolver.ts",
+  "extensions/pi-claude-marketplace/domain/plugin-resolver.ts",
 ];
 
 const FORBIDDEN_PATTERNS: ReadonlyArray<{ name: string; pattern: RegExp }> = [

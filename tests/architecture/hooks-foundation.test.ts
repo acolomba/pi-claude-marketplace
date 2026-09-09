@@ -22,7 +22,7 @@ import {
 import {
   resolveLoose,
   resolveStrict,
-} from "../../extensions/pi-claude-marketplace/domain/resolver.ts";
+} from "../../extensions/pi-claude-marketplace/domain/plugin-resolver.ts";
 import { STATE_SCHEMA } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
 import type { PluginEntry } from "../../extensions/pi-claude-marketplace/domain/components/plugin.ts";
