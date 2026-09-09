@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 06
 current_phase_name: Assertion and Module Refinement
 status: executing
-stopped_at: Completed 06-13-PLAN.md
-last_updated: "2026-09-09T08:07:55.509Z"
+stopped_at: Completed 06-14-PLAN.md
+last_updated: "2026-09-09T08:42:23.198Z"
 last_activity: 2026-09-08
 last_activity_desc: Phase 06 execution started
-state_head: d759a010edf4ec904edae61b1277fdf15e33027c
+state_head: 163fc6dc6965aceedc85aaffa95aae227f708a79
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 180
-  completed_plans: 141
+  completed_plans: 142
   percent: 11
 ---
 
@@ -33,7 +33,7 @@ component as a working Pi artifact.
 
 Phase: 06 (Assertion and Module Refinement) — EXECUTING
 Next: Discuss Phase 6
-Plan: 14 of 52
+Plan: 15 of 52
 Status: Ready to execute
 Last activity: 2026-09-08 — Phase 06 execution started
 
@@ -321,6 +321,7 @@ Last activity: 2026-09-08 — Phase 06 execution started
 | Phase 06 P11 | 12min | 3 tasks | 7 files |
 | Phase 06 P12 | 29min | 2 tasks | 65 files |
 | Phase 06 P13 | 33min | 2 tasks | 30 files |
+| Phase 06 P14 | 31min | 2 tasks | 48 files |
 
 ## Accumulated Context
 
@@ -757,6 +758,9 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 06]: 06-12: Preserved absolute-path redaction bytes and the defensive no-separator branch in the security leaf.
 - [Phase 06]: Kept notification-info rendering inside notification-grammar.ts to preserve the locked 30-module inventory.
 - [Phase 06]: Moved every grammar and comparator consumer to a direct named-owner import with no compatibility export.
+- [Phase 06]: Summary composition returns an exact notification tuple; only notification-dispatch.ts consumes it at the Pi boundary.
+- [Phase 06]: Structural notification cardinality is producer-selected and never recomputed from rendered row count.
+- [Phase 06]: All live dispatch consumers were repointed atomically without a compatibility facade.
 
 ### Pending Todos
 
@@ -809,7 +813,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 06-13-PLAN.md
+**Stopped at:** Completed 06-14-PLAN.md
 
 Phase 04 completed all seven plans and closed AUTH-01 and TREF-01 through
 TREF-03. Independent verification passed 4/4 with no behavioral or UAT gap;
@@ -827,7 +831,7 @@ independent verification passed 6/6 with zero unverified behaviors.
 **Read beside it:** `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`, the
 Phase 01 terminal evidence ledger, and Phase 5's roadmap criteria.
 
-Last session: 2026-09-09T08:07:54.914Z
+Last session: 2026-09-09T08:42:22.666Z
 
 **Next:** Discuss Phase 06 to define the assertion-strengthening and approved
 module-refinement work before planning.
