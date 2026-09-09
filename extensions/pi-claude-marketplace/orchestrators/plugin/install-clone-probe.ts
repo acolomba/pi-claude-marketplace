@@ -21,7 +21,8 @@ export interface InstallCloneCacheSeam {
   readonly materializeOrRefreshPluginMirror: typeof materializeOrRefreshPluginMirror;
 }
 
-interface InstallCloneProbeOptions {
+/** Inputs required to materialize and classify one install clone. */
+export interface InstallCloneProbeOptions {
   readonly source: GitBackedSource;
   readonly locations: ScopedLocations;
   readonly seam?: InstallCloneCacheSeam;
