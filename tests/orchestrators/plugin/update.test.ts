@@ -53,6 +53,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
+import { createNotificationBoundary } from "../../edge/notification-boundary.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
@@ -8789,7 +8790,7 @@ test("D-141-03: a standalone updatePlugins run surfaces the skills discovery war
       // The collision lives in the NEW version's tree, so the swap reaches it.
       await seedCollidingSkills(seeded.marketplaceRoot);
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(2, 4);
       await updatePlugins({
         ctx,
         pi,
@@ -8798,23 +8799,18 @@ test("D-141-03: a standalone updatePlugins run surfaces the skills discovery war
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
       });
 
-      assert.equal(notifications.length, 2, "the update row plus the diagnostic block");
-      const diagnostic = notifications[1];
-      assert.ok(diagnostic !== undefined);
-      assert.equal(diagnostic.severity, "warning");
-      // The VERB and the plugin name are the whole reason the diagnostic
-      // header is parameterised; assert them, not just the tally clause.
-      assert.ok(
-        diagnostic.message.includes('Plugin "hello" updated; 1 declared component was skipped.'),
-        diagnostic.message,
-      );
-      assert.match(diagnostic.message, /"hello-foo"/);
-      assert.match(diagnostic.message, /ignoring duplicate/);
-      // NFR-9: the absolute skills directory is redacted to its basename.
-      assert.ok(
-        !diagnostic.message.includes(seeded.marketplaceRoot),
-        `absolute path leaked: ${diagnostic.message}`,
-      );
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "● mp [project]\n  ● hello v1.0.0 → v1.0.1 (updated)\n\n/reload to pick up changes",
+        },
+        {
+          message:
+            'Plugin "hello" updated; 1 declared component was skipped.\n\nskill source "hello-foo" in "skills" elides to generated name "hello-foo", already produced by skill source "foo"; ignoring duplicate.',
+          severity: "warning",
+        },
+      ]);
+      verifyBoundary();
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -8877,22 +8873,17 @@ test("D-141-03: an updateSinglePlugin cascade emits no notification and carries 
           target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
         });
 
-        // Positive control: without it this run would also pass if the split
-        // returned nothing at all, which is the regression it must catch.
-        //
-        // Anchored on the row prefix, NOT on the singular "declared component
-        // was skipped" tail: a hygiene leak adds a second line, which flips
-        // the header to the plural "declared components were skipped" and
-        // would trip this control on grammar before the leak assertion below
-        // ever ran -- reporting the wrong failure for the right bug.
-        assert.ok(
-          notifications.some((n) => n.message.includes('Plugin "hello" updated;')),
-          `the discovery half must still reach standalone: ${JSON.stringify(notifications)}`,
-        );
-        assert.ok(
-          !notifications.some((n) => n.message.includes("source description was missing or empty")),
-          `agents warning leaked to standalone: ${JSON.stringify(notifications)}`,
-        );
+        assert.deepStrictEqual(notifications, [
+          {
+            message:
+              "● mp [project]\n  ● hello v1.0.0 → v1.0.1 (updated)\n\n/reload to pick up changes",
+          },
+          {
+            message:
+              'Plugin "hello" updated; 1 declared component was skipped.\n\nskill source "hello-foo" in "skills" elides to generated name "hello-foo", already produced by skill source "foo"; ignoring duplicate.',
+            severity: "warning",
+          },
+        ]);
       } finally {
         await rm(cwd2, { recursive: true, force: true });
       }
@@ -8919,7 +8910,7 @@ test("D-141-03: a bulk update surfaces one diagnostic per updated plugin", async
       await seedCollidingSkills(seeded.marketplaceRoot, "hello");
       await seedCollidingSkills(seeded.marketplaceRoot, "world");
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(3, 4);
       await updatePlugins({
         ctx,
         pi,
@@ -8928,22 +8919,23 @@ test("D-141-03: a bulk update surfaces one diagnostic per updated plugin", async
         target: { kind: "marketplace", marketplace: "mp" },
       });
 
-      // Both plugins reported, so the emitter walks EVERY outcome rather than
-      // stopping at the first.
-      const diagnostics = notifications.filter((n) => n.message.includes("declared component"));
-      assert.equal(diagnostics.length, 2, JSON.stringify(notifications));
-      assert.ok(
-        diagnostics.some((n) =>
-          n.message.includes('Plugin "hello" updated; 1 declared component was skipped.'),
-        ),
-        JSON.stringify(diagnostics),
-      );
-      assert.ok(
-        diagnostics.some((n) =>
-          n.message.includes('Plugin "world" updated; 1 declared component was skipped.'),
-        ),
-        JSON.stringify(diagnostics),
-      );
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "● mp [project]\n  ● hello v1.0.0 → v1.0.1 (updated)\n  ● world v1.0.0 → v1.0.1 (updated)\n\nPlugin update: 2 updated\n\n/reload to pick up changes",
+        },
+        {
+          message:
+            'Plugin "hello" updated; 1 declared component was skipped.\n\nskill source "hello-foo" in "skills" elides to generated name "hello-foo", already produced by skill source "foo"; ignoring duplicate.',
+          severity: "warning",
+        },
+        {
+          message:
+            'Plugin "world" updated; 1 declared component was skipped.\n\nskill source "world-foo" in "skills" elides to generated name "world-foo", already produced by skill source "foo"; ignoring duplicate.',
+          severity: "warning",
+        },
+      ]);
+      verifyBoundary();
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

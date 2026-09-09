@@ -41,6 +41,7 @@ import { createCompletionCache } from "../../../extensions/pi-claude-marketplace
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { SymlinkRefusedError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
+import { createNotificationBoundary } from "../../edge/notification-boundary.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
@@ -6961,26 +6962,20 @@ test("D-141-03: a standalone install surfaces a command discovery warning as a s
       });
       await seedCollidingNestedCommands(path.join(marketplaceRoot, "plugins", "hello"));
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(2, 4);
       await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
 
-      assert.equal(notifications.length, 2, "the install row plus the diagnostic block");
-      const diagnostic = notifications[1];
-      assert.ok(diagnostic !== undefined);
-      assert.equal(diagnostic.severity, "warning");
-      // The VERB and the plugin name are the whole reason the diagnostic
-      // header is parameterised; assert them, not just the tally clause.
-      assert.ok(
-        diagnostic.message.includes('Plugin "hello" installed; 1 declared component was skipped.'),
-        diagnostic.message,
-      );
-      assert.match(diagnostic.message, /"hello:tools:lint"/);
-      assert.match(diagnostic.message, /ignoring duplicate/);
-      // NFR-9: the absolute commands directory is redacted to its basename.
-      assert.ok(
-        !diagnostic.message.includes(marketplaceRoot),
-        `absolute path leaked: ${diagnostic.message}`,
-      );
+      assert.deepStrictEqual(notifications, [
+        {
+          message: "● mp [project]\n  ● hello v0.0.1 (installed)\n\n/reload to pick up changes",
+        },
+        {
+          message:
+            'Plugin "hello" installed; 1 declared component was skipped.\n\ncommand source "tools/lint" in "commands" elides to generated name "hello:tools:lint", already produced by command source "hello-tools/lint"; ignoring duplicate.',
+          severity: "warning",
+        },
+      ]);
+      verifyBoundary();
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -7001,7 +6996,7 @@ test("D-141-03: an orchestrated install carries the same warning on postCommitWa
       });
       await seedCollidingNestedCommands(path.join(marketplaceRoot, "plugins", "hello"));
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(0, 0);
       const outcome = await installPlugin({
         ctx,
         pi,
@@ -7013,12 +7008,13 @@ test("D-141-03: an orchestrated install carries the same warning on postCommitWa
       });
 
       assert.equal(outcome.status, "installed");
-      assert.equal(notifications.length, 0, "orchestrated mode fires no notification of its own");
+      assert.deepStrictEqual(notifications, []);
       const warnings = (outcome as { postCommitWarnings?: readonly string[] }).postCommitWarnings;
       assert.ok(
-        warnings?.some((w) => w.includes('"hello:tools:lint"')),
+        warnings?.some((warning) => warning.includes('"hello:tools:lint"')),
         `expected the discovery warning; got: ${JSON.stringify(warnings)}`,
       );
+      verifyBoundary();
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

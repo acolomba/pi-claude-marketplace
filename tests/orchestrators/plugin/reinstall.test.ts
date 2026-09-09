@@ -41,6 +41,7 @@ import {
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
+import { createNotificationBoundary } from "../../edge/notification-boundary.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
@@ -4838,7 +4839,7 @@ test("D-141-03: a standalone reinstall surfaces a skills discovery warning after
       });
       await seedCollidingSkills(pluginRoot, "hello", ["foo"]);
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(2, 2);
       const outcomes = await reinstallPlugins({
         ctx,
         pi,
@@ -4847,23 +4848,17 @@ test("D-141-03: a standalone reinstall surfaces a skills discovery warning after
       });
 
       assert.equal(outcomes[0]?.partition, "reinstalled");
-      assert.equal(notifications.length, 2, "the reinstall row plus the diagnostic block");
-      const diagnostic = notifications[1];
-      assert.ok(diagnostic !== undefined);
-      assert.equal(diagnostic.severity, "warning");
-      // The VERB and the plugin name are the whole reason the diagnostic
-      // header is parameterised; assert them, not just the tally clause.
-      assert.match(
-        diagnostic.message,
-        /Plugin "hello" reinstalled; 1 declared component was skipped\./,
-      );
-      assert.match(diagnostic.message, /"hello-foo"/);
-      assert.match(diagnostic.message, /ignoring duplicate/);
-      // NFR-9: the absolute skills directory is redacted to its basename.
-      assert.ok(
-        !diagnostic.message.includes(marketplaceRoot),
-        `absolute path leaked: ${diagnostic.message}`,
-      );
+      assert.deepStrictEqual(notifications, [
+        {
+          message: "● mp [project]\n  ● hello v1.0.0 (reinstalled)\n\n/reload to pick up changes",
+        },
+        {
+          message:
+            'Plugin "hello" reinstalled; 1 declared component was skipped.\n\nskill source "hello-foo" in "skills" elides to generated name "hello-foo", already produced by skill source "foo"; ignoring duplicate.',
+          severity: "warning",
+        },
+      ]);
+      verifyBoundary();
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -4894,25 +4889,26 @@ test("D-141-03: a bulk reinstall surfaces one diagnostic per plugin, singular an
       // one-collision fixture leaves dark.
       await seedCollidingSkills(world.pluginRoot, "world", ["foo", "bar"]);
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(3, 2);
       await reinstallPlugins({ ctx, pi, cwd, target: { kind: "all" } });
 
-      const diagnostics = notifications.filter((n) => n.message.includes("declared component"));
-      // Both plugins reported, so the emitter walks EVERY outcome rather than
-      // stopping at the first.
-      assert.equal(diagnostics.length, 2, JSON.stringify(notifications));
-      assert.ok(
-        diagnostics.some((n) =>
-          n.message.includes('Plugin "hello" reinstalled; 1 declared component was skipped.'),
-        ),
-        JSON.stringify(diagnostics),
-      );
-      assert.ok(
-        diagnostics.some((n) =>
-          n.message.includes('Plugin "world" reinstalled; 2 declared components were skipped.'),
-        ),
-        JSON.stringify(diagnostics),
-      );
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "● mp [project]\n  ● hello v1.0.0 (reinstalled)\n  ● world v1.0.0 (reinstalled)\n\nPlugin reinstall: 2 successes\n\n/reload to pick up changes",
+        },
+        {
+          message:
+            'Plugin "hello" reinstalled; 1 declared component was skipped.\n\nskill source "hello-foo" in "skills" elides to generated name "hello-foo", already produced by skill source "foo"; ignoring duplicate.',
+          severity: "warning",
+        },
+        {
+          message:
+            'Plugin "world" reinstalled; 2 declared components were skipped.\n\nskill source "world-bar" in "skills" elides to generated name "world-bar", already produced by skill source "bar"; ignoring duplicate.\nskill source "world-foo" in "skills" elides to generated name "world-foo", already produced by skill source "foo"; ignoring duplicate.',
+          severity: "warning",
+        },
+      ]);
+      verifyBoundary();
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -4931,7 +4927,7 @@ test("D-141-03: an orchestrated reinstall carries the discovery half on notes an
       });
       await seedCollidingSkills(pluginRoot, "hello", ["foo"]);
 
-      const { ctx, pi, notifications } = makeCtx();
+      const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(0, 0);
       const outcome = await reinstallPlugin({
         ctx,
         pi,
@@ -4943,7 +4939,7 @@ test("D-141-03: an orchestrated reinstall carries the discovery half on notes an
       });
 
       assert.equal(outcome.partition, "reinstalled");
-      assert.equal(notifications.length, 0, "render: none emits nothing");
+      assert.deepStrictEqual(notifications, []);
       // The flat `notes` fold reaches orchestrated consumers (reconcile
       // backfill) and MUST keep carrying the discovery half.
       const notes = outcome.partition === "reinstalled" ? (outcome.notes ?? []) : [];
@@ -4956,6 +4952,7 @@ test("D-141-03: an orchestrated reinstall carries the discovery half on notes an
       assert.equal(carried.length, 1, JSON.stringify(carried));
       assert.ok(carried[0]?.includes('"hello-foo"'));
       assert.ok(!carried[0]?.startsWith("warning: "));
+      verifyBoundary();
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -5057,7 +5054,7 @@ test("D-141-03: an agents hygiene warning rides notes in orchestrated mode and n
       });
 
       assert.equal(orchestratedOutcome.partition, "reinstalled");
-      assert.equal(orchestrated.notifications.length, 0, "render: none emits nothing");
+      assert.deepStrictEqual(orchestrated.notifications, []);
       const notes = orchestratedOutcome.notes ?? [];
       assert.ok(
         notes.some((n) => n.includes("source description was missing or empty")),
@@ -5072,16 +5069,16 @@ test("D-141-03: an agents hygiene warning rides notes in orchestrated mode and n
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
       });
 
-      assert.ok(
-        standalone.notifications.some((n) => n.message.includes("declared component was skipped")),
-        `the discovery half must still reach standalone: ${JSON.stringify(standalone.notifications)}`,
-      );
-      assert.ok(
-        !standalone.notifications.some((n) =>
-          n.message.includes("source description was missing or empty"),
-        ),
-        `agents warning leaked to standalone: ${JSON.stringify(standalone.notifications)}`,
-      );
+      assert.deepStrictEqual(standalone.notifications, [
+        {
+          message: "● mp [project]\n  ● hello v1.0.0 (reinstalled)\n\n/reload to pick up changes",
+        },
+        {
+          message:
+            'Plugin "hello" reinstalled; 1 declared component was skipped.\n\nskill source "hello-foo" in "skills" elides to generated name "hello-foo", already produced by skill source "foo"; ignoring duplicate.',
+          severity: "warning",
+        },
+      ]);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
