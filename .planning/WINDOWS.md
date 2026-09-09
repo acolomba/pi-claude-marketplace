@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 1
+open_count: 2
 waived_count: 13
 fixed_count: 22
-total_count: 36
-last_updated: 2026-09-09T07:58:46.692Z
+total_count: 37
+last_updated: 2026-09-09T08:38:50.166Z
 ---
 
 # Broken Windows Ledger
@@ -51,6 +51,7 @@ last_updated: 2026-09-09T07:58:46.692Z
 | 34 | 114 | unmet-truth | docs/workflows-compatibility.md | 23 | [workflows-replay] the compatibility doc cites 15 exact line ranges inside @quintinshaw/pi-dynamic-workflows 3.10.1, a package this repo does not vendor, so no gate can detect that an engine upgrade has moved them; the doc now states the pin explicitly and this entry names it as the subject WPIN-01's machine-checkable re-read has to cover | open |  | 2026-09-08T08:05:03.125Z |  |
 | 35 | 115 | lint-warning | .planning/HANDOFF.json |  | [workflows-replay] .planning/HANDOFF.json fails prettier, so npm run check stops at format:check before its test steps (pre-existing at 9a1c0180) | fixed |  | 2026-09-09T04:15:17.661Z | 2026-09-09T04:22:45.271Z |
 | 36 | 115 | deviation | extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts | 1453 | [workflows-replay] surfaceDiscoveryWarnings heads a gate warning with '1 declared component was skipped', contradicting the gate line's 'was installed'; newly reachable via D-115-05 | fixed |  | 2026-09-09T04:15:18.020Z | 2026-09-09T07:58:46.692Z |
+| 37 | 115 | unmet-truth | extensions/pi-claude-marketplace/shared/path-safety.ts | 13 | [workflows-replay] PathContainmentError interpolates the untrusted resolved child path raw into its message, so escaping a caller's label cannot close the forgery; five bridges share the class and discover.ts is the only 1 of 23 assertPathInside sites passing a non-constant label | open |  | 2026-09-09T08:38:50.166Z |  |
 
 ````json
 [
@@ -485,6 +486,18 @@ last_updated: 2026-09-09T07:58:46.692Z
     "reason": "",
     "recorded_at": "2026-09-09T04:15:18.020Z",
     "resolved_at": "2026-09-09T07:58:46.692Z"
+  },
+  {
+    "id": 37,
+    "kind": "unmet-truth",
+    "phase": "115",
+    "file": "extensions/pi-claude-marketplace/shared/path-safety.ts",
+    "line": 13,
+    "description": "[workflows-replay] PathContainmentError interpolates the untrusted resolved child path raw into its message, so escaping a caller's label cannot close the forgery; five bridges share the class and discover.ts is the only 1 of 23 assertPathInside sites passing a non-constant label",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-09T08:38:50.166Z",
+    "resolved_at": null
   }
 ]
 ````
