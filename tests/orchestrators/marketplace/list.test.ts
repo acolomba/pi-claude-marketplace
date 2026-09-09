@@ -165,7 +165,7 @@ async function withHermeticHome<T>(
   }
 }
 
-test("bare list emits the exact empty notification without creating scope data", async () => {
+test("bare list emits the exact zero-row notification without creating scope data", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
     const boundary = notificationBoundary("empty list", true);
@@ -190,7 +190,7 @@ test("bare list emits the exact empty notification without creating scope data",
   });
 });
 
-test("explicit project list renders one path source as an exact statusless row", async () => {
+test("explicit project list renders the exact one-row path-source notification", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
     const locations = locationsFor("project", cwd);
@@ -389,7 +389,7 @@ test("explicit user list renders only the user scope", async () => {
   });
 });
 
-test("bare list preserves insertion order for every accepted source kind within project then user", async () => {
+test("bare list emits the exact many-row notification in project-then-user insertion order", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
     const projectLocations = locationsFor("project", cwd);
@@ -452,7 +452,7 @@ test("bare list preserves insertion order for every accepted source kind within 
         source: githubSource("https://github.com/acme/delta-user"),
       },
     ]);
-    const boundary = notificationBoundary("ordered list", true);
+    const boundary = notificationBoundary("exact many-row list", true);
     const options = {
       ctx: boundary.ctx,
       cwd,

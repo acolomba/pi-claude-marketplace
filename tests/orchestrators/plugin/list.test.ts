@@ -288,7 +288,7 @@ async function seedMarketplace(opts: SeedMarketplaceOpts): Promise<void> {
 // Empty state (CMC-10 / MSG-ER-1 sentinel)
 // ──────────────────────────────────────────────────────────────────────────
 
-test("CMC-10: empty state ignores an ambient Pi agent directory", async (t) => {
+test("CMC-10: exact zero-row notification ignores an ambient Pi agent directory", async (t) => {
   const ambientAgentDir = await mkdtemp(path.join(tmpdir(), "plug-list-ambient-"));
   const hadAgentDir = Object.hasOwn(process.env, "PI_CODING_AGENT_DIR");
   const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
@@ -328,12 +328,9 @@ test("CMC-10: empty state ignores an ambient Pi agent directory", async (t) => {
     // act
     await listPlugins({ ctx, pi, cwd });
     // assert
-    assert.equal(notifications.length, 1);
-    assert.equal(
-      notifications[0]!.message,
-      ["(no marketplaces)", "", "Plugin list: 0 successes"].join("\n"),
-    );
-    assert.equal(notifications[0]!.severity, undefined);
+    assert.deepStrictEqual(notifications, [
+      { message: "(no marketplaces)\n\nPlugin list: 0 successes" },
+    ]);
 
     verify(ctx);
     verify(pi);
@@ -347,7 +344,7 @@ test("CMC-10: empty state ignores an ambient Pi agent directory", async (t) => {
 // PL-1 filter union semantics (catalog rows reuse the compact-line shape)
 // ──────────────────────────────────────────────────────────────────────────
 
-test("PL-1: no flags = every bucket (installed, available, unavailable)", async () => {
+test("PL-1: no flags emit the exact many-row notification for every bucket", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange
     const userRoot = path.join(home, ".pi", "agent");
@@ -374,8 +371,6 @@ test("PL-1: no flags = every bucket (installed, available, unavailable)", async 
     // act
     await listPlugins({ ctx, pi, cwd, scope: "user" });
     // assert
-    assert.equal(notifications.length, 1);
-    const out = notifications[0]!.message;
     // Per D-16-17 orphan-fold rule the renderer suppresses `[<scope>]`
     // on a plugin row when `p.scope === mp.scope`. Here mp.scope and the
     // installed plugin's scope are both "user", so the bracket is
@@ -385,17 +380,18 @@ test("PL-1: no flags = every bucket (installed, available, unavailable)", async 
     // UAT G-21-01: list-surface inventory row emits no reload-hint
     // trailer; installedRowMessage emits `status: "present"` (list-only)
     // so the trailer is correctly absent.
-    assert.equal(
-      out,
-      [
-        "● mp1 [user]",
-        "  ● alpha v1.0.0 (installed)",
-        "  ○ beta v2.0.0 (available)",
-        "  ⊘ gamma v3.0.0 (unavailable) {unsupported source}",
-        "",
-        "Plugin list: 3 successes",
-      ].join("\n"),
-    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp1 [user]",
+          "  ● alpha v1.0.0 (installed)",
+          "  ○ beta v2.0.0 (available)",
+          "  ⊘ gamma v3.0.0 (unavailable) {unsupported source}",
+          "",
+          "Plugin list: 3 successes",
+        ].join("\n"),
+      },
+    ]);
 
     verify(ctx);
     verify(pi);
@@ -3392,7 +3388,7 @@ test("RSTA-01 / SNM-11: a `remote` row sorts by the marketplace scope when its n
 
 // Manifest-absence cases.
 
-test("plugin list manifest absent: INV-01: an enabled, fully supported record absent from a LOADED manifest renders `{not in manifest}`", async () => {
+test("plugin list manifest absent: INV-01 exact one-row notification retains `{not in manifest}`", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange
     const userRoot = path.join(home, ".pi", "agent");
@@ -3411,16 +3407,16 @@ test("plugin list manifest absent: INV-01: an enabled, fully supported record ab
     // act
     await listPlugins({ ctx, pi, cwd, scope: "user" });
     // assert
-    assert.equal(notifications.length, 1);
-    assert.equal(
-      notifications[0]!.message,
-      [
-        "● mp1 [user]",
-        "  ● alpha v1.0.0 (installed) {not in manifest}",
-        "",
-        "Plugin list: 1 success",
-      ].join("\n"),
-    );
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp1 [user]",
+          "  ● alpha v1.0.0 (installed) {not in manifest}",
+          "",
+          "Plugin list: 1 success",
+        ].join("\n"),
+      },
+    ]);
 
     verify(ctx);
     verify(pi);
