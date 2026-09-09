@@ -4875,6 +4875,213 @@ test("D-141-03: an agents hygiene warning rides notes in orchestrated mode and n
   });
 });
 
+// ──────────────────────────────────────────────────────────────────────────
+// WGATE-01 / D-115-05: the workflows discovery channel on a standalone reinstall
+//
+// The families below are the `WorkflowOutcomeSite` union
+// (`bridges/workflows/discover.ts`) measured member by member, not a shorter
+// list of the interesting ones: `gate`, `skipped`, `refused`,
+// `stem-fallback`, `read` and `inspect`. Every one of them rides the single
+// `handles.workflows.result.warnings` array, so a verb that drops that array
+// drops all six at once.
+//
+// `inspect` cannot share a directory with the other five. It fires when
+// `lstat` fails on an entry `readdir` returned, which needs the directory's
+// execute bit cleared -- and that also stops every sibling in the same
+// directory from being opened. It gets its own case below.
+// ──────────────────────────────────────────────────────────────────────────
+
+/**
+ * One script per family, named so the discovery walk's name sort is the order
+ * the expectations below are written in. `ff-fine.js` is well-formed: it earns
+ * no line, which is what keeps the expected list from passing as a prefix of a
+ * channel that warns about everything.
+ */
+const WORKFLOW_FAMILY_SCRIPTS: readonly { readonly sourceName: string; readonly body: string }[] = [
+  // named + gate: a readable `meta.name`, no description -- the engine's check 9.
+  { sourceName: "aa-gate", body: 'export const meta = { name: "gate" };\n' },
+  // skipped: a helper module with no `meta` at all.
+  { sourceName: "bb-helper", body: "export function helper() {\n  return 1;\n}\n" },
+  // refused: a determinism-blocklist match.
+  {
+    sourceName: "cc-roll",
+    body: 'export const meta = { name: "roll", description: "rolls" };\nMath.random();\n',
+  },
+  // stem-fallback: a `meta` with no name at all, so no command name is readable.
+  {
+    sourceName: "dd-stem",
+    body: 'export const meta = { description: "a helper with no name" };\n',
+  },
+  // ff-fine earns no warning.
+  { sourceName: "ff-fine", body: 'export const meta = { name: "fine", description: "fine" };\n' },
+];
+
+/**
+ * The `read` family's script, written as raw bytes because the reason under
+ * test is the decoder's: `0xff 0xfe` is not valid UTF-8 in any position, which
+ * is deterministic on every platform and is not a permission the test process
+ * might hold. `writeFile` with a string cannot produce it -- every JavaScript
+ * string encodes to valid UTF-8.
+ */
+async function writeUnreadableWorkflowScript(pluginRoot: string): Promise<void> {
+  await writeFile(
+    path.join(pluginRoot, "workflows", "ee-bad.js"),
+    Buffer.from([0x65, 0x78, 0xff, 0xfe, 0x0a]),
+  );
+}
+
+/** The rendered line each family earns, in directory-entry-name order. */
+const EXPECTED_FAMILY_LINES: readonly string[] = [
+  'workflow script "aa-gate.js" in "workflows" was installed but the engine will refuse to load it: the engine refuses at its check 9 -- `meta.description` must be a non-empty string, and `meta.model` (a string) and `meta.phases` (an array of objects each carrying a string `title`) must match those shapes wherever they are declared',
+  'workflow script "bb-helper.js" in "workflows" was not installed: bb-helper.js declares no `meta`, so there is nothing to install',
+  'workflow script "cc-roll.js" in "workflows" was refused: cc-roll.js calls `Math.random`, which the workflow engine refuses as nondeterministic',
+  'workflow script "dd-stem.js" in "workflows" was installed but will not run: the engine loads a command only from a literal `meta.name` with a non-empty `meta.description`, and this script declares no readable name',
+  'workflow script "ee-bad.js" in "workflows" could not be read and was skipped: the file is not valid UTF-8, so its bytes cannot be copied verbatim',
+];
+
+/**
+ * Seed a plugin carrying `workflows`, install it, then run the reinstall a user
+ * reaches -- `reinstallPlugins`, which drives `reinstallPlugin` with
+ * `render: "none"` and renders the cascade itself.
+ *
+ * `mutate` runs after the install and before the reinstall, for a fixture the
+ * seeder's string-bodied entries cannot express.
+ */
+async function standaloneReinstallNotifications(
+  cwd: string,
+  workflows: readonly { readonly sourceName: string; readonly body?: string }[],
+  mutate?: (pluginRoot: string) => Promise<void>,
+): Promise<readonly NotifyRecord[]> {
+  const { pluginRoot } = await seedMarketplace({
+    cwd,
+    marketplaceRoot: path.join(cwd, "mp-src"),
+    resources: { skill: "old skill", workflows },
+    install: true,
+  });
+  if (mutate !== undefined) {
+    await mutate(pluginRoot);
+  }
+
+  const { ctx, pi, notifications } = makeCtx();
+  const outcomes = await reinstallPlugins({
+    ctx,
+    pi,
+    cwd,
+    target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+  });
+  assert.equal(outcomes[0]?.partition, "reinstalled");
+  return notifications;
+}
+
+test("WGATE-01 / D-115-05: a standalone reinstall renders every workflow discovery family", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-workflow-families-"));
+    try {
+      // act
+      const notifications = await standaloneReinstallNotifications(
+        cwd,
+        WORKFLOW_FAMILY_SCRIPTS,
+        writeUnreadableWorkflowScript,
+      );
+
+      // assert -- the reinstall row, then the diagnostic block that qualifies it.
+      assert.equal(notifications.length, 2, JSON.stringify(notifications));
+      const row = notifications[0];
+      const diagnostic = notifications[1];
+      assert.ok(row !== undefined);
+      assert.ok(diagnostic !== undefined);
+      assert.equal(diagnostic.severity, "warning");
+      // Per-family attribution first: a changed phrase names its own line here,
+      // where the whole-message comparison below would only name the block.
+      assert.deepEqual(
+        diagnostic.message.split("\n").filter((line) => line.startsWith("workflow script ")),
+        EXPECTED_FAMILY_LINES,
+      );
+      // Then the whole block, byte for byte -- the header, the blank-line
+      // separator and the line order, none of which the filter above sees.
+      //
+      // The header says every one of the five components "was skipped", which
+      // is false of the two that were installed with a caveat. That sentence is
+      // shared by install, update and reinstall and is asserted here as it
+      // stands; Broken Windows #36 carries the fix.
+      assert.equal(
+        diagnostic.message,
+        `Plugin "hello" reinstalled; 5 declared components were skipped.\n\n${EXPECTED_FAMILY_LINES.join("\n")}`,
+      );
+      // WGATE-03: the row itself states no gate. The channel is a second
+      // notification precisely so the row is free of it.
+      assert.doesNotMatch(row.message, /engine will refuse/);
+      assert.doesNotMatch(row.message, /check 9/);
+      assert.doesNotMatch(row.message, /aa-gate/);
+      // NFR-9: the temporary marketplace root never reaches the user.
+      assert.ok(!diagnostic.message.includes(cwd), diagnostic.message);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WGATE-01 / D-115-05: a standalone reinstall reports a workflow script it could not inspect", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-workflow-inspect-"));
+    let lockedDir: string | undefined;
+    try {
+      // arrange -- clearing the directory's execute bit is what makes the
+      // `lstat` inside it fail while `readdir` still returns the entry, which
+      // is the only shape that reaches the `inspect` site.
+      const notifications = await standaloneReinstallNotifications(
+        cwd,
+        [{ sourceName: "gg-locked" }],
+        async (pluginRoot) => {
+          lockedDir = path.join(pluginRoot, "workflows");
+          await chmod(lockedDir, 0o444);
+        },
+      );
+
+      // assert
+      assert.ok(lockedDir !== undefined);
+      const diagnostic = notifications.find((n) => n.message.includes("could not be inspected"));
+      assert.ok(diagnostic !== undefined, JSON.stringify(notifications));
+      assert.equal(diagnostic.severity, "warning");
+      assert.ok(
+        diagnostic.message.includes(
+          `workflow script "gg-locked.js" in "workflows" could not be inspected and was skipped: EACCES: permission denied, lstat 'gg-locked.js'`,
+        ),
+        diagnostic.message,
+      );
+    } finally {
+      if (lockedDir !== undefined) {
+        // Restored before the removal below, which cannot walk a directory it
+        // may not enter.
+        await chmod(lockedDir, 0o755).catch(() => undefined);
+      }
+
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WGATE-01 / D-115-05: a standalone reinstall of well-formed workflow scripts emits one notification", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-workflow-clean-"));
+    try {
+      // act -- both scripts carry a literal name and a non-empty description,
+      // so no family fires.
+      const notifications = await standaloneReinstallNotifications(cwd, [
+        { sourceName: "greet" },
+        { sourceName: "wave" },
+      ]);
+
+      // assert -- without this case, "the second notification contains X" is
+      // satisfiable by a second notification that is always emitted.
+      assert.equal(notifications.length, 1, JSON.stringify(notifications));
+      assert.doesNotMatch(notifications[0]?.message ?? "", /declared component/);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("a malformed state file renders one bulk enumeration failure without mutating bytes", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-enumeration-failure-"));
