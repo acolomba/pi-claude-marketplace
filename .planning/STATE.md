@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 06
 current_phase_name: Assertion and Module Refinement
 status: executing
-stopped_at: Completed 06-48-PLAN.md
-last_updated: "2026-09-09T20:26:23.732Z"
+stopped_at: Completed 06-49-PLAN.md
+last_updated: "2026-09-09T20:57:50.623Z"
 last_activity: 2026-09-08
 last_activity_desc: Phase 06 execution started
-state_head: cb8f352dc4b0de9ec6dad680055850b960bcfc39
+state_head: fbb70f9ad7695071bb278bdcfe870db76e4f1b2c
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 180
-  completed_plans: 176
+  completed_plans: 177
   percent: 11
 ---
 
@@ -33,7 +33,7 @@ component as a working Pi artifact.
 
 Phase: 06 (Assertion and Module Refinement) — EXECUTING
 Next: Discuss Phase 6
-Plan: 49 of 52
+Plan: 50 of 52
 Status: Ready to execute
 Last activity: 2026-09-08 — Phase 06 execution started
 
@@ -352,6 +352,7 @@ Last activity: 2026-09-08 — Phase 06 execution started
 | Phase 06 P46 | 19min | 2 tasks | 15 files |
 | Phase 06 P47 | 12min | 2 tasks | 3 files |
 | Phase 06 P48 | 23min | 3 tasks | 14 files |
+| Phase 06 P49 | 28min | 2 tasks | 14 files |
 
 ## Accumulated Context
 
@@ -864,6 +865,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 06]: 06-48: Delete reinstall.ts and reinstall.test.ts only after a fresh CodeGraph-backed READY ledger maps every owner and dependency without a cycle.
 - [Phase 06]: 06-48: Make reinstall-flow.ts the sole public and behavior-bearing owner; retain no forwarding facade or compatibility re-export.
 - [Phase 06]: 06-48: Rotate the generic lifecycle checker to the live list hub/test pair before removing its reinstall fixture.
+- [Phase 06]: Plan 06-49: Keep composeInstalledListRow as the sole installed-inventory projector over validated record, lookup, scope, and filesystem facts.
+- [Phase 06]: Plan 06-49: Move availableRowMessage with its public name into list-candidate-row.ts while the list hub retains filtering, folding, ordering, and dispatch.
 
 ### Pending Todos
 
@@ -916,7 +919,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 06-48-PLAN.md
+**Stopped at:** Completed 06-49-PLAN.md
 
 Phase 04 completed all seven plans and closed AUTH-01 and TREF-01 through
 TREF-03. Independent verification passed 4/4 with no behavioral or UAT gap;
@@ -934,7 +937,7 @@ independent verification passed 6/6 with zero unverified behaviors.
 **Read beside it:** `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`, the
 Phase 01 terminal evidence ledger, and Phase 5's roadmap criteria.
 
-Last session: 2026-09-09T20:26:23.139Z
+Last session: 2026-09-09T20:57:50.007Z
 
 **Next:** Discuss Phase 06 to define the assertion-strengthening and approved
 module-refinement work before planning.
