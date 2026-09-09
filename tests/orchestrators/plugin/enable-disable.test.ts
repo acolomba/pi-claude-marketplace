@@ -9,8 +9,7 @@
 // production runtime-bound factory.
 
 import assert from "node:assert/strict";
-import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
-import { createRequire, syncBuiltinESMExports } from "node:module";
+import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { test } from "node:test";
 
@@ -21,11 +20,17 @@ import {
   createHooksRuntime,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
+import { cascadeUnstagePlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import {
   createNodeSetPluginEnabled,
   createSetPluginEnabled,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts";
+import { runInstallLedger } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install.ts";
 import { createNodeReinstallPlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts";
+import {
+  selectDeclaringConfigWriteTarget,
+  writeAdoptingConfigEntries,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts";
 import { createPluginUpdateOperations } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update.ts";
 import { applyReconcile } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
 import { isDeclaredEnabled } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
@@ -35,6 +40,7 @@ import { loadState } from "../../../extensions/pi-claude-marketplace/persistence
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { MarketplaceNotFoundError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { notify } from "../../../extensions/pi-claude-marketplace/shared/notify.ts";
+import { withLockedStateTransaction } from "../../../extensions/pi-claude-marketplace/transaction/with-state-guard.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
 import type {
@@ -42,6 +48,7 @@ import type {
   HooksRuntime,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import type {
+  EnableDisableTransaction,
   EnableDisablePluginOptions,
   EnableDisablePluginOutcome,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts";
@@ -51,8 +58,34 @@ import type {
   ToolInventoryItem,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
-const require = createRequire(import.meta.url);
-const filesystemPromises = require("node:fs/promises") as typeof import("node:fs/promises");
+const REAL_ENABLE_DISABLE_TRANSACTION: EnableDisableTransaction = {
+  cascadeUnstagePlugin,
+  runInstallLedger,
+  selectConfigWriteTarget: selectDeclaringConfigWriteTarget,
+  withLockedStateTransaction,
+  writeConfigEntries: writeAdoptingConfigEntries,
+};
+
+function transactionFailingAfterHookDrop(cause: Error): EnableDisableTransaction {
+  return {
+    ...REAL_ENABLE_DISABLE_TRANSACTION,
+    async cascadeUnstagePlugin(plugin, marketplace, locations) {
+      assert.equal(marketplace, "mp");
+      await rm(path.join(locations.hooksDir, plugin), { recursive: true, force: true });
+      return {
+        ok: false,
+        dropped: {
+          agents: [],
+          commands: [],
+          hooks: [plugin],
+          mcpServers: [],
+          skills: [],
+        },
+        cause,
+      };
+    },
+  };
+}
 
 interface NotifyRecord {
   message: string;
@@ -3092,119 +3125,120 @@ test("a held project lock returns lock-held in orchestrated mode and succeeds af
   });
 });
 
-test("a config-write failure leaves the state bytes unchanged and a standalone retry succeeds", async (t) => {
+test("a config-write failure leaves the state bytes unchanged and a standalone retry succeeds", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
-    const originalMkdir = filesystemPromises.mkdir.bind(filesystemPromises);
-    let mkdirMock: ReturnType<typeof t.mock.method> | undefined;
-    try {
-      // arrange
-      const { configPath, scopeRoot, statePath } = await writeUserState(home, {
-        disabled: false,
-        marketplaceName: "mp",
-        pluginName: "foo",
-      });
-      const beforeState = await readFile(statePath, "utf8");
-      const writeError = Object.assign(new Error("config directory denied"), { code: "EACCES" });
-      let failureValue: Error | string = writeError;
-      let failingDirectory = scopeRoot;
-      mkdirMock = t.mock.method(
-        filesystemPromises,
-        "mkdir",
-        async (...args: Parameters<typeof filesystemPromises.mkdir>) => {
-          if (args[0] === failingDirectory) {
-            return rejectUnknown(failureValue);
-          }
+    // arrange
+    const { configPath, statePath } = await writeUserState(home, {
+      disabled: false,
+      marketplaceName: "mp",
+      pluginName: "foo",
+    });
+    const beforeState = await readFile(statePath, "utf8");
+    const writeError = Object.assign(new Error("config directory denied"), { code: "EACCES" });
+    let configFailure: Error | undefined = writeError;
+    let transactionFailure: Error | string | undefined;
+    const transaction: EnableDisableTransaction = {
+      ...REAL_ENABLE_DISABLE_TRANSACTION,
+      async withLockedStateTransaction(locations, run) {
+        if (transactionFailure !== undefined) {
+          return rejectUnknown(transactionFailure);
+        }
 
-          return originalMkdir(...args);
-        },
-      );
-      syncBuiltinESMExports();
-      const first = makeCtx(cwd);
+        return withLockedStateTransaction(locations, run);
+      },
+      async writeConfigEntries(options) {
+        if (configFailure !== undefined) {
+          throw configFailure;
+        }
 
-      // act
-      const failure = await setPluginEnabled({
-        ctx: first.ctx,
-        cwd,
-        enable: false,
-        marketplace: "mp",
-        pi: makePi(),
-        plugin: "foo",
-        scope: "user",
-      });
-      const afterFailure = await readFile(statePath, "utf8");
-      failingDirectory = locationsFor("user", cwd).extensionRoot;
-      const typedFailure = await setPluginEnabled({
-        ctx: first.ctx,
-        cwd,
-        enable: false,
-        marketplace: "mp",
-        notifications: { mode: "orchestrated" },
-        pi: makePi(),
-        plugin: "foo",
-        scope: "user",
-      });
-      failureValue = "lock directory denied";
-      const nonErrorFailure = await setPluginEnabled({
-        ctx: first.ctx,
-        cwd,
-        enable: false,
-        marketplace: "mp",
-        notifications: { mode: "orchestrated" },
-        pi: makePi(),
-        plugin: "foo",
-        scope: "user",
-      });
-      mkdirMock.mock.restore();
-      mkdirMock = undefined;
-      syncBuiltinESMExports();
-      const second = makeCtx(cwd);
-      const retry = await setPluginEnabled({
-        ctx: second.ctx,
-        cwd,
-        enable: false,
-        marketplace: "mp",
-        pi: makePi(),
-        plugin: "foo",
-        scope: "user",
-      });
+        await writeAdoptingConfigEntries(options);
+      },
+    };
+    const setPluginEnabledForOwner = createSetPluginEnabled(
+      transaction,
+      createHooksRouting(createHooksRuntime()),
+    );
+    const first = makeCtx(cwd);
 
-      // assert
-      assert.equal(failure, undefined);
-      assert.deepStrictEqual(first.notifications, [
-        {
-          message:
-            "A plugin operation has failed.\n\n● mp [user]\n  ⊘ foo (failed)\n    cause: config directory denied",
-          severity: "error",
-        },
-      ]);
-      assert.strictEqual(afterFailure, beforeState);
-      assert.deepStrictEqual(typedFailure, {
-        cause: writeError.message,
-        error: writeError,
-        reason: "permission denied",
-        status: "failed",
-      });
-      assert.deepStrictEqual(nonErrorFailure, {
-        cause: "lock directory denied",
-        error: new Error("lock directory denied"),
-        reason: "unreadable",
-        status: "failed",
-      });
-      assert.equal(retry, undefined);
-      assert.deepStrictEqual(second.notifications, [
-        {
-          message: "● mp [user]\n  ◍ foo v1.2.3 (disabled)\n\n/reload to pick up changes",
-        },
-      ]);
-      assert.deepStrictEqual(await readConfig(configPath), {
-        marketplaces: { mp: { source: "/tmp/dummy-mp" } },
-        plugins: { "foo@mp": { enabled: false } },
-        schemaVersion: 1,
-      });
-    } finally {
-      mkdirMock?.mock.restore();
-      syncBuiltinESMExports();
-    }
+    // act
+    const failure = await setPluginEnabledForOwner({
+      ctx: first.ctx,
+      cwd,
+      enable: false,
+      marketplace: "mp",
+      pi: makePi(),
+      plugin: "foo",
+      scope: "user",
+    });
+    const afterFailure = await readFile(statePath, "utf8");
+    configFailure = undefined;
+    transactionFailure = writeError;
+    const typedFailure = await setPluginEnabledForOwner({
+      ctx: first.ctx,
+      cwd,
+      enable: false,
+      marketplace: "mp",
+      notifications: { mode: "orchestrated" },
+      pi: makePi(),
+      plugin: "foo",
+      scope: "user",
+    });
+    transactionFailure = "lock directory denied";
+    const nonErrorFailure = await setPluginEnabledForOwner({
+      ctx: first.ctx,
+      cwd,
+      enable: false,
+      marketplace: "mp",
+      notifications: { mode: "orchestrated" },
+      pi: makePi(),
+      plugin: "foo",
+      scope: "user",
+    });
+    transactionFailure = undefined;
+    const second = makeCtx(cwd);
+    const retry = await setPluginEnabledForOwner({
+      ctx: second.ctx,
+      cwd,
+      enable: false,
+      marketplace: "mp",
+      pi: makePi(),
+      plugin: "foo",
+      scope: "user",
+    });
+
+    // assert
+    assert.equal(failure, undefined);
+    assert.deepStrictEqual(first.notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n\n● mp [user]\n  ⊘ foo (failed)\n    cause: config directory denied",
+        severity: "error",
+      },
+    ]);
+    assert.strictEqual(afterFailure, beforeState);
+    assert.deepStrictEqual(typedFailure, {
+      cause: writeError.message,
+      error: writeError,
+      reason: "permission denied",
+      status: "failed",
+    });
+    assert.deepStrictEqual(nonErrorFailure, {
+      cause: "lock directory denied",
+      error: new Error("lock directory denied"),
+      reason: "unreadable",
+      status: "failed",
+    });
+    assert.equal(retry, undefined);
+    assert.deepStrictEqual(second.notifications, [
+      {
+        message: "● mp [user]\n  ◍ foo v1.2.3 (disabled)\n\n/reload to pick up changes",
+      },
+    ]);
+    assert.deepStrictEqual(await readConfig(configPath), {
+      marketplaces: { mp: { source: "/tmp/dummy-mp" } },
+      plugins: { "foo@mp": { enabled: false } },
+      schemaVersion: 1,
+    });
   });
 });
 
@@ -3301,301 +3335,259 @@ test("a non-Error state normalization failure is contained as a typed unreadable
   });
 });
 
-test("orchestrated enable normalizes a non-Error manifest read rejection and retries cleanly", async (t) => {
+test("orchestrated enable normalizes a non-Error manifest read rejection and retries cleanly", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
-    const originalReadFile = filesystemPromises.readFile.bind(filesystemPromises);
-    let readMock: ReturnType<typeof t.mock.method> | undefined;
-    try {
-      // arrange
-      const { manifestPath, statePath } = await seedRealDisabledMarketplace(home, {
-        hooksJson: {
-          PreToolUse: [{ hooks: [{ command: "echo retry", type: "command" }], matcher: "" }],
-        },
-        marketplaceName: "mp",
-        pluginName: "foo",
-        version: "1.2.3",
-      });
-      const manifestBytes = await readFile(manifestPath, "utf8");
-      const beforeState = await readFile(statePath, "utf8");
-      const runtime = createHooksRuntime();
-      const hooksRouting = await populateRuntimeRoute(cwd, runtime, { command: "echo before" });
-      const routesBefore = runtime.getRoutingBucket("PreToolUse");
-      const setPluginEnabledForOwner = createNodeSetPluginEnabled(hooksRouting);
-      readMock = t.mock.method(
-        filesystemPromises,
-        "readFile",
-        async (...args: Parameters<typeof filesystemPromises.readFile>) => {
-          if (args[0] === manifestPath) {
-            return rejectUnknown("manifest read denied");
-          }
+    // arrange
+    const { manifestPath, statePath } = await seedRealDisabledMarketplace(home, {
+      hooksJson: {
+        PreToolUse: [{ hooks: [{ command: "echo retry", type: "command" }], matcher: "" }],
+      },
+      marketplaceName: "mp",
+      pluginName: "foo",
+      version: "1.2.3",
+    });
+    const manifestBytes = await readFile(manifestPath, "utf8");
+    const beforeState = await readFile(statePath, "utf8");
+    const runtime = createHooksRuntime();
+    const hooksRouting = await populateRuntimeRoute(cwd, runtime, { command: "echo before" });
+    const routesBefore = runtime.getRoutingBucket("PreToolUse");
+    let rejectManifestRead = true;
+    const transaction: EnableDisableTransaction = {
+      ...REAL_ENABLE_DISABLE_TRANSACTION,
+      runInstallLedger(...args) {
+        if (rejectManifestRead) {
+          return rejectUnknown("manifest read denied");
+        }
 
-          return originalReadFile(...args);
-        },
-      );
-      syncBuiltinESMExports();
-      const { ctx, notifications } = makeCtx(cwd);
+        return runInstallLedger(...args);
+      },
+    };
+    const setPluginEnabledForOwner = createSetPluginEnabled(transaction, hooksRouting);
+    const { ctx, notifications } = makeCtx(cwd);
 
-      // act
-      const failure = await setPluginEnabledForOwner({
-        ctx,
-        cwd,
-        enable: true,
-        marketplace: "mp",
-        notifications: { mode: "orchestrated" },
-        pi: makePi(),
-        plugin: "foo",
-        scope: "user",
-      });
-      const afterFailure = await originalReadFile(statePath, "utf8");
-      const routesAfterFailure = runtime.getRoutingBucket("PreToolUse");
-      readMock.mock.restore();
-      readMock = undefined;
-      syncBuiltinESMExports();
-      await writeFile(manifestPath, `${manifestBytes}\n`, "utf8");
-      const retry = await setPluginEnabledForOwner({
-        ctx,
-        cwd,
-        enable: true,
-        marketplace: "mp",
-        notifications: { mode: "orchestrated" },
-        pi: makePi(),
-        plugin: "foo",
-        scope: "user",
-      });
+    // act
+    const failure = await setPluginEnabledForOwner({
+      ctx,
+      cwd,
+      enable: true,
+      marketplace: "mp",
+      notifications: { mode: "orchestrated" },
+      pi: makePi(),
+      plugin: "foo",
+      scope: "user",
+    });
+    const afterFailure = await readFile(statePath, "utf8");
+    const routesAfterFailure = runtime.getRoutingBucket("PreToolUse");
+    rejectManifestRead = false;
+    await writeFile(manifestPath, `${manifestBytes}\n`, "utf8");
+    const retry = await setPluginEnabledForOwner({
+      ctx,
+      cwd,
+      enable: true,
+      marketplace: "mp",
+      notifications: { mode: "orchestrated" },
+      pi: makePi(),
+      plugin: "foo",
+      scope: "user",
+    });
 
-      // assert
-      assert.deepStrictEqual(failure, {
-        cause: "manifest read denied",
-        error: new Error("manifest read denied"),
-        reason: "unreadable",
-        status: "failed",
-      });
-      assert.strictEqual(afterFailure, beforeState);
-      assert.deepStrictEqual(routesAfterFailure, routesBefore);
-      assert.deepStrictEqual(retry, { name: "foo", status: "enabled", version: "1.2.3" });
-      assert.deepStrictEqual(notifications, []);
-      assert.deepStrictEqual(
-        runtime.getRoutingBucket("PreToolUse").map((entry) => entry.handlerDecl.command),
-        ["echo retry"],
-      );
-    } finally {
-      readMock?.mock.restore();
-      syncBuiltinESMExports();
-    }
+    // assert
+    assert.deepStrictEqual(failure, {
+      cause: "manifest read denied",
+      error: new Error("manifest read denied"),
+      reason: "unreadable",
+      status: "failed",
+    });
+    assert.strictEqual(afterFailure, beforeState);
+    assert.deepStrictEqual(routesAfterFailure, routesBefore);
+    assert.deepStrictEqual(retry, { name: "foo", status: "enabled", version: "1.2.3" });
+    assert.deepStrictEqual(notifications, []);
+    assert.deepStrictEqual(
+      runtime.getRoutingBucket("PreToolUse").map((entry) => entry.handlerDecl.command),
+      ["echo retry"],
+    );
   });
 });
 
-test("orchestrated partial disable folds a removed hook after MCP cleanup fails", async (t) => {
+test("orchestrated partial disable folds a removed hook after MCP cleanup fails", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
-    const originalReadFile = filesystemPromises.readFile.bind(filesystemPromises);
-    let readMock: ReturnType<typeof t.mock.method> | undefined;
-    try {
-      // arrange
-      const { statePath } = await writeUserState(home, {
-        disabled: false,
-        hooksOnly: true,
-        marketplaceName: "mp",
-        pluginName: "foo",
-      });
-      const locations = locationsFor("user", cwd);
-      const state = JSON.parse(await readFile(statePath, "utf8")) as {
-        marketplaces: {
-          mp: { plugins: { foo: { resources: { hooks: string[]; mcpServers: string[] } } } };
-        };
+    // arrange
+    const { statePath } = await writeUserState(home, {
+      disabled: false,
+      hooksOnly: true,
+      marketplaceName: "mp",
+      pluginName: "foo",
+    });
+    const locations = locationsFor("user", cwd);
+    const state = JSON.parse(await readFile(statePath, "utf8")) as {
+      marketplaces: {
+        mp: { plugins: { foo: { resources: { hooks: string[]; mcpServers: string[] } } } };
       };
-      state.marketplaces.mp.plugins.foo.resources.mcpServers = ["server"];
-      await writeFile(statePath, JSON.stringify(state, null, 2), "utf8");
-      await mkdir(path.join(locations.hooksDir, "foo"), { recursive: true });
-      await writeFile(
-        path.join(locations.hooksDir, "foo", "hooks.json"),
-        JSON.stringify({
-          PreToolUse: [{ hooks: [{ command: "echo partial", type: "command" }], matcher: "" }],
-        }),
-      );
-      await writeFile(
-        locations.mcpJsonPath,
-        JSON.stringify({ mcpServers: { server: { command: "node" } } }),
-      );
-      const runtime = createHooksRuntime();
-      const hooksRouting = createHooksRouting(runtime);
-      await hooksRouting.readAndCachePluginHooks({
-        cwd,
-        hooksJsonPath: path.join(locations.hooksDir, "foo", "hooks.json"),
-        logPrefix: "partial-disable-owner-test",
-        marketplace: "mp",
-        plugin: "foo",
-        resolvedSource: asAbsolutePluginRoot(cwd),
-        scope: "user",
-      });
-      hooksRouting.rebuildRoutingTables();
-      assert.deepStrictEqual(
-        runtime.getRoutingBucket("PreToolUse").map((entry) => entry.handlerDecl.command),
-        ["echo partial"],
-      );
-      const setPluginEnabledForOwner = createNodeSetPluginEnabled(hooksRouting);
-      const mcpError = new Error("mcp cleanup denied");
-      readMock = t.mock.method(
-        filesystemPromises,
-        "readFile",
-        async (...args: Parameters<typeof filesystemPromises.readFile>) => {
-          if (args[0] === locations.mcpJsonPath) {
-            throw mcpError;
-          }
+    };
+    state.marketplaces.mp.plugins.foo.resources.mcpServers = ["server"];
+    await writeFile(statePath, JSON.stringify(state, null, 2), "utf8");
+    await mkdir(path.join(locations.hooksDir, "foo"), { recursive: true });
+    await writeFile(
+      path.join(locations.hooksDir, "foo", "hooks.json"),
+      JSON.stringify({
+        PreToolUse: [{ hooks: [{ command: "echo partial", type: "command" }], matcher: "" }],
+      }),
+    );
+    await writeFile(
+      locations.mcpJsonPath,
+      JSON.stringify({ mcpServers: { server: { command: "node" } } }),
+    );
+    const runtime = createHooksRuntime();
+    const hooksRouting = createHooksRouting(runtime);
+    await hooksRouting.readAndCachePluginHooks({
+      cwd,
+      hooksJsonPath: path.join(locations.hooksDir, "foo", "hooks.json"),
+      logPrefix: "partial-disable-owner-test",
+      marketplace: "mp",
+      plugin: "foo",
+      resolvedSource: asAbsolutePluginRoot(cwd),
+      scope: "user",
+    });
+    hooksRouting.rebuildRoutingTables();
+    assert.deepStrictEqual(
+      runtime.getRoutingBucket("PreToolUse").map((entry) => entry.handlerDecl.command),
+      ["echo partial"],
+    );
+    const mcpError = new Error("mcp cleanup denied");
+    const setPluginEnabledForOwner = createSetPluginEnabled(
+      transactionFailingAfterHookDrop(mcpError),
+      hooksRouting,
+    );
+    const { ctx, notifications } = makeCtx(cwd);
 
-          return originalReadFile(...args);
-        },
-      );
-      syncBuiltinESMExports();
-      const { ctx, notifications } = makeCtx(cwd);
+    // act
+    const fallbackOutcome = await setPluginEnabledForOwner({
+      ctx,
+      cwd,
+      enable: false,
+      marketplace: "mp",
+      notifications: { mode: "orchestrated" },
+      pi: makePi(),
+      plugin: "foo",
+      scope: "user",
+    });
+    Object.assign(mcpError, { code: "EACCES" });
+    const classifiedOutcome = await setPluginEnabledForOwner({
+      ctx,
+      cwd,
+      enable: false,
+      marketplace: "mp",
+      notifications: { mode: "orchestrated" },
+      pi: makePi(),
+      plugin: "foo",
+      scope: "user",
+    });
 
-      // act
-      const fallbackOutcome = await setPluginEnabledForOwner({
-        ctx,
-        cwd,
-        enable: false,
-        marketplace: "mp",
-        notifications: { mode: "orchestrated" },
-        pi: makePi(),
-        plugin: "foo",
-        scope: "user",
-      });
-      Object.assign(mcpError, { code: "EACCES" });
-      const classifiedOutcome = await setPluginEnabledForOwner({
-        ctx,
-        cwd,
-        enable: false,
-        marketplace: "mp",
-        notifications: { mode: "orchestrated" },
-        pi: makePi(),
-        plugin: "foo",
-        scope: "user",
-      });
-
-      // assert
-      assert.deepStrictEqual(fallbackOutcome, {
-        cause: mcpError.message,
-        error: mcpError,
-        reason: "unreadable",
-        status: "failed",
-      });
-      assert.deepStrictEqual(classifiedOutcome, {
-        cause: mcpError.message,
-        error: mcpError,
-        reason: "permission denied",
-        status: "failed",
-      });
-      assert.deepStrictEqual(notifications, []);
-      assert.deepStrictEqual(
-        (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.foo?.resources,
-        { agents: [], hooks: [], mcpServers: ["server"], prompts: [], skills: [] },
-      );
-      assert.deepStrictEqual(runtime.getRoutingBucket("PreToolUse"), []);
-      await assert.rejects(stat(path.join(locations.hooksDir, "foo", "hooks.json")), /ENOENT/);
-    } finally {
-      readMock?.mock.restore();
-      syncBuiltinESMExports();
-    }
+    // assert
+    assert.deepStrictEqual(fallbackOutcome, {
+      cause: mcpError.message,
+      error: mcpError,
+      reason: "unreadable",
+      status: "failed",
+    });
+    assert.deepStrictEqual(classifiedOutcome, {
+      cause: mcpError.message,
+      error: mcpError,
+      reason: "permission denied",
+      status: "failed",
+    });
+    assert.deepStrictEqual(notifications, []);
+    assert.deepStrictEqual(
+      (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.foo?.resources,
+      { agents: [], hooks: [], mcpServers: ["server"], prompts: [], skills: [] },
+    );
+    assert.deepStrictEqual(runtime.getRoutingBucket("PreToolUse"), []);
+    await assert.rejects(stat(path.join(locations.hooksDir, "foo", "hooks.json")), /ENOENT/);
   });
 });
 
-test("a partial disable preserves its committed fold when route publication fails", async (t) => {
+test("a partial disable preserves its committed fold when route publication fails", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
-    const originalReadFile = filesystemPromises.readFile.bind(filesystemPromises);
-    let readMock: ReturnType<typeof t.mock.method> | undefined;
-    try {
-      // arrange
-      const { statePath } = await writeUserState(home, {
-        disabled: false,
-        hooksOnly: true,
-        marketplaceName: "mp",
-        pluginName: "foo",
-      });
-      const locations = locationsFor("user", cwd);
-      const state = JSON.parse(await readFile(statePath, "utf8")) as {
-        marketplaces: {
-          mp: { plugins: { foo: { resources: { hooks: string[]; mcpServers: string[] } } } };
-        };
+    // arrange
+    const { statePath } = await writeUserState(home, {
+      disabled: false,
+      hooksOnly: true,
+      marketplaceName: "mp",
+      pluginName: "foo",
+    });
+    const locations = locationsFor("user", cwd);
+    const state = JSON.parse(await readFile(statePath, "utf8")) as {
+      marketplaces: {
+        mp: { plugins: { foo: { resources: { hooks: string[]; mcpServers: string[] } } } };
       };
-      state.marketplaces.mp.plugins.foo.resources.mcpServers = ["server"];
-      await writeFile(statePath, JSON.stringify(state, null, 2), "utf8");
-      await mkdir(path.join(locations.hooksDir, "foo"), { recursive: true });
-      const hooksJsonPath = path.join(locations.hooksDir, "foo", "hooks.json");
-      await writeFile(
-        hooksJsonPath,
-        JSON.stringify({
-          PreToolUse: [{ hooks: [{ command: "echo partial", type: "command" }], matcher: "" }],
-        }),
-      );
-      await writeFile(
-        locations.mcpJsonPath,
-        JSON.stringify({ mcpServers: { server: { command: "node" } } }),
-      );
-      const runtime = createHooksRuntime();
-      const hooksRouting = createHooksRouting(runtime);
-      await hooksRouting.readAndCachePluginHooks({
-        cwd,
-        hooksJsonPath,
-        logPrefix: "partial-disable-routing-failure-test",
-        marketplace: "mp",
-        plugin: "foo",
-        resolvedSource: asAbsolutePluginRoot(cwd),
-        scope: "user",
-      });
-      hooksRouting.rebuildRoutingTables();
-      const failingRouting: HooksRouting = {
-        ...hooksRouting,
-        rebuildRoutingTables(): void {
-          throw new Error("routing rebuild denied");
-        },
-      };
-      const mcpError = new Error("mcp cleanup denied");
-      readMock = t.mock.method(
-        filesystemPromises,
-        "readFile",
-        async (...args: Parameters<typeof filesystemPromises.readFile>) => {
-          if (args[0] === locations.mcpJsonPath) {
-            throw mcpError;
-          }
+    };
+    state.marketplaces.mp.plugins.foo.resources.mcpServers = ["server"];
+    await writeFile(statePath, JSON.stringify(state, null, 2), "utf8");
+    await mkdir(path.join(locations.hooksDir, "foo"), { recursive: true });
+    const hooksJsonPath = path.join(locations.hooksDir, "foo", "hooks.json");
+    await writeFile(
+      hooksJsonPath,
+      JSON.stringify({
+        PreToolUse: [{ hooks: [{ command: "echo partial", type: "command" }], matcher: "" }],
+      }),
+    );
+    await writeFile(
+      locations.mcpJsonPath,
+      JSON.stringify({ mcpServers: { server: { command: "node" } } }),
+    );
+    const runtime = createHooksRuntime();
+    const hooksRouting = createHooksRouting(runtime);
+    await hooksRouting.readAndCachePluginHooks({
+      cwd,
+      hooksJsonPath,
+      logPrefix: "partial-disable-routing-failure-test",
+      marketplace: "mp",
+      plugin: "foo",
+      resolvedSource: asAbsolutePluginRoot(cwd),
+      scope: "user",
+    });
+    hooksRouting.rebuildRoutingTables();
+    const failingRouting: HooksRouting = {
+      ...hooksRouting,
+      rebuildRoutingTables(): void {
+        throw new Error("routing rebuild denied");
+      },
+    };
+    const mcpError = new Error("mcp cleanup denied");
+    const { ctx, notifications } = makeCtx(cwd);
 
-          return originalReadFile(...args);
-        },
-      );
-      syncBuiltinESMExports();
-      const { ctx, notifications } = makeCtx(cwd);
+    // act
+    const outcome = await createSetPluginEnabled(
+      transactionFailingAfterHookDrop(mcpError),
+      failingRouting,
+    )({
+      ctx,
+      cwd,
+      enable: false,
+      marketplace: "mp",
+      notifications: { mode: "orchestrated" },
+      pi: makePi(),
+      plugin: "foo",
+      scope: "user",
+    });
 
-      // act
-      const outcome = await createNodeSetPluginEnabled(failingRouting)({
-        ctx,
-        cwd,
-        enable: false,
-        marketplace: "mp",
-        notifications: { mode: "orchestrated" },
-        pi: makePi(),
-        plugin: "foo",
-        scope: "user",
-      });
-
-      // assert
-      assert.deepStrictEqual(outcome, {
-        cause: mcpError.message,
-        error: mcpError,
-        reason: "unreadable",
-        status: "failed",
-      });
-      assert.deepStrictEqual(notifications, []);
-      assert.deepStrictEqual(
-        (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.foo?.resources,
-        { agents: [], hooks: [], mcpServers: ["server"], prompts: [], skills: [] },
-      );
-      await assert.rejects(stat(hooksJsonPath), /ENOENT/);
-      assert.deepStrictEqual(
-        runtime.getRoutingBucket("PreToolUse").map((entry) => entry.handlerDecl.command),
-        ["echo partial"],
-      );
-    } finally {
-      readMock?.mock.restore();
-      syncBuiltinESMExports();
-    }
+    // assert
+    assert.deepStrictEqual(outcome, {
+      cause: mcpError.message,
+      error: mcpError,
+      reason: "unreadable",
+      status: "failed",
+    });
+    assert.deepStrictEqual(notifications, []);
+    assert.deepStrictEqual(
+      (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.foo?.resources,
+      { agents: [], hooks: [], mcpServers: ["server"], prompts: [], skills: [] },
+    );
+    await assert.rejects(stat(hooksJsonPath), /ENOENT/);
+    assert.deepStrictEqual(
+      runtime.getRoutingBucket("PreToolUse").map((entry) => entry.handlerDecl.command),
+      ["echo partial"],
+    );
   });
 });
 
@@ -3645,149 +3637,133 @@ test("a clean disable remains successful when the hooks cache rebuild throws", a
   });
 });
 
-test("standalone enable exposes ordered rollback partials and retries without duplicate artifacts", async (t) => {
+test("standalone enable exposes ordered rollback partials and retries without duplicate artifacts", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
-    const originalReadFile = filesystemPromises.readFile.bind(filesystemPromises);
-    const originalRm = filesystemPromises.rm.bind(filesystemPromises);
-    let readMock: ReturnType<typeof t.mock.method> | undefined;
-    let rmMock: ReturnType<typeof t.mock.method> | undefined;
-    try {
-      // arrange
-      const { statePath } = await seedRealDisabledMarketplace(home, {
-        hooksJson: {
-          PreToolUse: [{ hooks: [{ command: "echo hook", type: "command" }], matcher: "" }],
-        },
-        marketplaceName: "mp",
-        mcpServers: { server: { command: "node" } },
-        pluginName: "foo",
-        version: "1.2.3",
-      });
-      const locations = locationsFor("user", cwd);
-      const hookTarget = path.join(locations.hooksDir, "foo");
-      const beforeState = await readFile(statePath, "utf8");
-      const runtime = createHooksRuntime();
-      const setPluginEnabledForOwner = createNodeSetPluginEnabled(createHooksRouting(runtime));
-      const mcpFailure = new Error("mcp staging denied");
-      const hookRollbackFailure = new Error("hook rollback denied");
-      readMock = t.mock.method(
-        filesystemPromises,
-        "readFile",
-        async (...args: Parameters<typeof filesystemPromises.readFile>) => {
-          if (args[0] === locations.mcpJsonPath) {
-            throw mcpFailure;
-          }
+    // arrange
+    const { statePath } = await seedRealDisabledMarketplace(home, {
+      hooksJson: {
+        PreToolUse: [{ hooks: [{ command: "echo hook", type: "command" }], matcher: "" }],
+      },
+      marketplaceName: "mp",
+      mcpServers: { server: { command: "node" } },
+      pluginName: "foo",
+      version: "1.2.3",
+    });
+    const locations = locationsFor("user", cwd);
+    const beforeState = await readFile(statePath, "utf8");
+    const runtime = createHooksRuntime();
+    const mcpFailure = new Error("mcp staging denied");
+    const hookRollbackFailure = new Error("hook rollback denied");
+    let failedRuns = 0;
+    const transaction: EnableDisableTransaction = {
+      ...REAL_ENABLE_DISABLE_TRANSACTION,
+      async runInstallLedger(state, ledgerLocations, options, capture) {
+        failedRuns += 1;
+        if (failedRuns === 1) {
+          assert.ok(capture !== undefined);
+          capture.version = "1.2.3";
+          capture.rollbackPartials = [
+            { cause: hookRollbackFailure, msg: hookRollbackFailure.message, phase: "hooks" },
+            { msg: "skill rollback denied", phase: "skills" },
+          ];
+          throw new Error(mcpFailure.message, { cause: mcpFailure });
+        }
 
-          return originalReadFile(...args);
-        },
-      );
-      rmMock = t.mock.method(
-        filesystemPromises,
-        "rm",
-        async (...args: Parameters<typeof filesystemPromises.rm>) => {
-          const target = typeof args[0] === "string" ? args[0] : "";
-          if (target === hookTarget) {
-            throw hookRollbackFailure;
-          }
+        if (failedRuns === 2) {
+          assert.ok(capture !== undefined);
+          capture.version = "1.2.3";
+          capture.rollbackPartials = [{ msg: "skill rollback denied", phase: "skills" }];
+          throw new Error("skill rollback denied");
+        }
 
-          if (target.startsWith(`${locations.skillsTargetDir}${path.sep}`)) {
-            return rejectUnknown("skill rollback denied");
-          }
+        return runInstallLedger(state, ledgerLocations, options, capture);
+      },
+    };
+    const setPluginEnabledForOwner = createSetPluginEnabled(
+      transaction,
+      createHooksRouting(runtime),
+    );
+    const first = makeCtx(cwd);
 
-          return originalRm(...args);
-        },
-      );
-      syncBuiltinESMExports();
-      const first = makeCtx(cwd);
+    // act
+    const failure = await setPluginEnabledForOwner({
+      ctx: first.ctx,
+      cwd,
+      enable: true,
+      marketplace: "mp",
+      pi: makePi(),
+      plugin: "foo",
+      scope: "user",
+    });
+    const afterFailure = await readFile(statePath, "utf8");
+    const routesAfterFailure = runtime.getRoutingBucket("PreToolUse");
+    const typedFailure = await setPluginEnabledForOwner({
+      ctx: first.ctx,
+      cwd,
+      enable: true,
+      marketplace: "mp",
+      notifications: { mode: "orchestrated" },
+      pi: makePi(),
+      plugin: "foo",
+      scope: "user",
+    });
+    const second = makeCtx(cwd);
+    const retry = await setPluginEnabledForOwner({
+      ctx: second.ctx,
+      cwd,
+      enable: true,
+      marketplace: "mp",
+      pi: makePi(["mcp"]),
+      plugin: "foo",
+      scope: "user",
+    });
 
-      // act
-      const failure = await setPluginEnabledForOwner({
-        ctx: first.ctx,
-        cwd,
-        enable: true,
-        marketplace: "mp",
-        pi: makePi(),
-        plugin: "foo",
-        scope: "user",
-      });
-      const afterFailure = await readFile(statePath, "utf8");
-      const routesAfterFailure = runtime.getRoutingBucket("PreToolUse");
-      const typedFailure = await setPluginEnabledForOwner({
-        ctx: first.ctx,
-        cwd,
-        enable: true,
-        marketplace: "mp",
-        notifications: { mode: "orchestrated" },
-        pi: makePi(),
-        plugin: "foo",
-        scope: "user",
-      });
-      readMock.mock.restore();
-      readMock = undefined;
-      rmMock.mock.restore();
-      rmMock = undefined;
-      syncBuiltinESMExports();
-      const second = makeCtx(cwd);
-      const retry = await setPluginEnabledForOwner({
-        ctx: second.ctx,
-        cwd,
-        enable: true,
-        marketplace: "mp",
-        pi: makePi(["mcp"]),
-        plugin: "foo",
-        scope: "user",
-      });
-
-      // assert
-      assert.equal(failure, undefined);
-      assert.strictEqual(afterFailure, beforeState);
-      assert.deepStrictEqual(routesAfterFailure, []);
-      assert.equal(first.notifications.length, 1);
-      assert.equal(first.notifications[0]?.severity, "error");
-      assert.equal(
-        first.notifications[0]?.message,
-        [
-          "A plugin operation has failed.",
-          "",
-          "● mp [user]",
-          "  ⊘ foo v1.2.3 (failed) {rollback partial}",
-          "    cause: mcp staging denied -> mcp staging denied",
-          "    [hooks] (rollback failed)",
-          "      cause: hook rollback denied",
-          "    [skills] (rollback failed)",
-        ].join("\n"),
-      );
-      assert.equal(typedFailure.status, "failed");
-      if (typedFailure.status === "failed") {
-        assert.deepStrictEqual(
-          { cause: typedFailure.cause, reason: typedFailure.reason },
-          { cause: "skill rollback denied", reason: "rollback partial" },
-        );
-      }
-
-      assert.equal(retry, undefined);
-      assert.deepStrictEqual(second.notifications, [
-        {
-          message: "● mp [user]\n  ● foo v1.2.3 (installed)\n\n/reload to pick up changes",
-        },
-      ]);
-      const state = await loadState(locations.extensionRoot);
-      assert.deepStrictEqual(state.marketplaces.mp?.plugins.foo?.resources, {
-        agents: [],
-        hooks: ["foo"],
-        mcpServers: ["server"],
-        prompts: [],
-        skills: ["foo-s1"],
-      });
-      assert.deepStrictEqual(await readdir(locations.skillsTargetDir), ["foo-s1"]);
+    // assert
+    assert.equal(failure, undefined);
+    assert.strictEqual(afterFailure, beforeState);
+    assert.deepStrictEqual(routesAfterFailure, []);
+    assert.equal(first.notifications.length, 1);
+    assert.equal(first.notifications[0]?.severity, "error");
+    assert.equal(
+      first.notifications[0]?.message,
+      [
+        "A plugin operation has failed.",
+        "",
+        "● mp [user]",
+        "  ⊘ foo v1.2.3 (failed) {rollback partial}",
+        "    cause: mcp staging denied -> mcp staging denied",
+        "    [hooks] (rollback failed)",
+        "      cause: hook rollback denied",
+        "    [skills] (rollback failed)",
+      ].join("\n"),
+    );
+    assert.equal(typedFailure.status, "failed");
+    if (typedFailure.status === "failed") {
       assert.deepStrictEqual(
-        runtime.getRoutingBucket("PreToolUse").map((entry) => entry.handlerDecl.command),
-        ["echo hook"],
+        { cause: typedFailure.cause, reason: typedFailure.reason },
+        { cause: "skill rollback denied", reason: "rollback partial" },
       );
-    } finally {
-      readMock?.mock.restore();
-      rmMock?.mock.restore();
-      syncBuiltinESMExports();
     }
+
+    assert.equal(retry, undefined);
+    assert.deepStrictEqual(second.notifications, [
+      {
+        message: "● mp [user]\n  ● foo v1.2.3 (installed)\n\n/reload to pick up changes",
+      },
+    ]);
+    const state = await loadState(locations.extensionRoot);
+    assert.deepStrictEqual(state.marketplaces.mp?.plugins.foo?.resources, {
+      agents: [],
+      hooks: ["foo"],
+      mcpServers: ["server"],
+      prompts: [],
+      skills: ["foo-s1"],
+    });
+    assert.deepStrictEqual(await readdir(locations.skillsTargetDir), ["foo-s1"]);
+    assert.deepStrictEqual(
+      runtime.getRoutingBucket("PreToolUse").map((entry) => entry.handlerDecl.command),
+      ["echo hook"],
+    );
   });
 });
 

@@ -1,15 +1,5 @@
 import assert from "node:assert/strict";
-import fs, {
-  chmod,
-  mkdir,
-  mkdtemp,
-  readFile,
-  readdir,
-  rm,
-  stat,
-  writeFile,
-} from "node:fs/promises";
-import { syncBuiltinESMExports } from "node:module";
+import { chmod, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -59,7 +49,6 @@ import type {
   ExtensionContext,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
-import type { PathLike } from "node:fs";
 
 type ManifestEntry = MarketplaceManifest["plugins"][number];
 type MarketplaceRecord = ExtensionState["marketplaces"][string];
@@ -1261,7 +1250,7 @@ test("reports a successful seam with a still-cold cache as remote", async () => 
   });
 });
 
-test("reports available when the cache becomes visible between fresh probes", async (testContext) => {
+test("reports available when the cache becomes visible between fresh probes", async () => {
   await withWorkspace(async ({ cwd }) => {
     // arrange
     const cloneUrl = "https://example.com/concurrent";
@@ -1276,25 +1265,21 @@ test("reports available when the cache becomes visible between fresh probes", as
     const cloneRoot = await locations.pluginCloneDir(pluginCloneKey(cloneUrl, pin));
     const credentials = createCredentialOpsFake({ boundary: "memory" });
     const boundary = notificationBoundary("concurrent cache visibility");
-    const fileStats = await stat(marketplace.manifestPath);
-    const originalStat = fs.stat;
-    let hideDirectoryKindOnce = false;
-    const statMock = testContext.mock.method(fs, "stat", (target: PathLike) => {
-      if (hideDirectoryKindOnce && path.resolve(String(target)) === cloneRoot) {
-        hideDirectoryKindOnce = false;
-        return Promise.resolve(fileStats);
-      }
-
-      return originalStat(target);
-    });
-    syncBuiltinESMExports();
+    let postFetchProbeCalls = 0;
+    const status: FetchStatus = {
+      makePresenceProbe,
+      probeManifestEntry() {
+        postFetchProbeCalls += 1;
+        return Promise.resolve("unavailable");
+      },
+    };
+    const fetchPluginsWithStatus = createFetchPlugins(status);
     const seam: FetchCloneCacheSeam = {
       materializeOrRefreshPluginMirror() {
         return Promise.reject(new Error("unexpected mirror call"));
       },
       async materializePluginClone() {
         await writePluginTree(cloneRoot, "concurrent", "1.0.0");
-        hideDirectoryKindOnce = true;
         return cloneRoot;
       },
       resolvePluginPin() {
@@ -1303,23 +1288,18 @@ test("reports available when the cache becomes visible between fresh probes", as
     };
 
     // act
-    try {
-      await fetchPlugins({
-        cloneCacheSeam: seam,
-        credentialOps: credentials.credentialOps,
-        ctx: boundary.ctx,
-        cwd,
-        pi: boundary.pi,
-        scope: "project",
-        target: { kind: "plugin", marketplace: "marketplace", plugin: "concurrent" },
-      });
-    } finally {
-      statMock.mock.restore();
-      syncBuiltinESMExports();
-    }
+    await fetchPluginsWithStatus({
+      cloneCacheSeam: seam,
+      credentialOps: credentials.credentialOps,
+      ctx: boundary.ctx,
+      cwd,
+      pi: boundary.pi,
+      scope: "project",
+      target: { kind: "plugin", marketplace: "marketplace", plugin: "concurrent" },
+    });
 
     // assert
-    assert.strictEqual(hideDirectoryKindOnce, false);
+    assert.equal(postFetchProbeCalls, 1);
     assert.deepStrictEqual(boundary.notifications, [
       { message: "● marketplace [project]\n  ○ concurrent (available)" },
     ]);

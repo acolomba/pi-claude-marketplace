@@ -30,7 +30,6 @@
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
 import { mkdir, readFile, readdir, symlink, writeFile } from "node:fs/promises";
-import { syncBuiltinESMExports } from "node:module";
 import path from "node:path";
 import test from "node:test";
 
@@ -82,35 +81,31 @@ async function withFsPromiseFault<T>(
   method: FaultableFsPromiseMethod,
   targetPath: string,
   error: NodeJS.ErrnoException,
-  action: () => Promise<T>,
+  action: (getPluginInfoWithFault: ReturnType<typeof createGetPluginInfo>) => Promise<T>,
 ): Promise<T> {
-  const descriptor = Object.getOwnPropertyDescriptor(fs.promises, method);
-  assert.ok(descriptor !== undefined, `expected fs.promises.${method} descriptor`);
-  const original = fs.promises[method];
   let faultRaised = false;
-
-  Object.defineProperty(fs.promises, method, {
-    ...descriptor,
-    value: async (...args: unknown[]) => {
-      if (args[0] === targetPath) {
+  const reader: PluginInfoReader = {
+    async readTextFile(filePath) {
+      if (method === "readFile" && filePath === targetPath) {
         faultRaised = true;
         throw error;
       }
 
-      const result: unknown = await Reflect.apply(original, fs.promises, args);
-      return result;
+      return readFile(filePath, "utf8");
     },
-  });
-  syncBuiltinESMExports();
+    async listDirectory(directoryPath) {
+      if (method === "readdir" && directoryPath === targetPath) {
+        faultRaised = true;
+        throw error;
+      }
 
-  try {
-    const result = await action();
-    assert.equal(faultRaised, true, `expected ${method} fault for ${targetPath}`);
-    return result;
-  } finally {
-    Object.defineProperty(fs.promises, method, descriptor);
-    syncBuiltinESMExports();
-  }
+      return readdir(directoryPath, { withFileTypes: true });
+    },
+  };
+
+  const result = await action(createGetPluginInfo(reader));
+  assert.equal(faultRaised, true, `expected ${method} fault for ${targetPath}`);
+  return result;
 }
 
 function createCredentialOps() {
@@ -1459,8 +1454,8 @@ test("readdir EACCES on installed plugin's skills dir surfaces `{permission deni
     const { ctx, pi, notifications } = makeCtx();
 
     // act
-    await withFsPromiseFault("readdir", skillsDir, permissionError, async () => {
-      await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "p", scope: "user", cwd });
+    await withFsPromiseFault("readdir", skillsDir, permissionError, async (getInfo) => {
+      await getInfo({ ctx, pi, marketplace: "mp", plugin: "p", scope: "user", cwd });
     });
 
     // assert
@@ -1499,8 +1494,8 @@ test("readdir EACCES on available plugin's skills dir surfaces `{permission deni
     const { ctx, pi, notifications } = makeCtx();
 
     // act
-    await withFsPromiseFault("readdir", skillsDir, permissionError, async () => {
-      await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "p", scope: "user", cwd });
+    await withFsPromiseFault("readdir", skillsDir, permissionError, async (getInfo) => {
+      await getInfo({ ctx, pi, marketplace: "mp", plugin: "p", scope: "user", cwd });
     });
 
     // assert
@@ -2590,8 +2585,8 @@ test("plugin info manifest absent: D-96-03: an unreadable materialized hooks con
     const { ctx, pi, notifications } = makeCtx();
 
     // act
-    await withFsPromiseFault("readFile", file, permissionError, async () => {
-      await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+    await withFsPromiseFault("readFile", file, permissionError, async (getInfo) => {
+      await getInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
     });
 
     // assert
@@ -4547,8 +4542,8 @@ test("INFO-05: composeResolvedComponents throw on the unavailable arm falls back
     const { ctx, pi, notifications } = makeCtx();
 
     // act
-    await withFsPromiseFault("readdir", skillsDir, permissionError, async () => {
-      await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "legacy", scope: "user", cwd });
+    await withFsPromiseFault("readdir", skillsDir, permissionError, async (getInfo) => {
+      await getInfo({ ctx, pi, marketplace: "mp", plugin: "legacy", scope: "user", cwd });
     });
 
     // assert
@@ -4605,8 +4600,8 @@ test("INFO-05: composeResolvedComponents throw on the installed arm falls back t
     const { ctx, pi, notifications } = makeCtx();
 
     // act
-    await withFsPromiseFault("readdir", skillsDir, permissionError, async () => {
-      await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "legacy", scope: "user", cwd });
+    await withFsPromiseFault("readdir", skillsDir, permissionError, async (getInfo) => {
+      await getInfo({ ctx, pi, marketplace: "mp", plugin: "legacy", scope: "user", cwd });
     });
 
     // assert
@@ -6888,8 +6883,8 @@ test("a warm partially available git plugin folds a component read failure exact
     const { ctx, pi, notifications } = makeCtx();
 
     // act
-    await withFsPromiseFault("readdir", skillsDir, permissionError, async () => {
-      await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+    await withFsPromiseFault("readdir", skillsDir, permissionError, async (getInfo) => {
+      await getInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
     });
 
     // assert
@@ -6941,8 +6936,8 @@ test("a warm installable git plugin folds a component read failure to remote exa
     const { ctx, pi, notifications } = makeCtx();
 
     // act
-    await withFsPromiseFault("readdir", skillsDir, permissionError, async () => {
-      await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+    await withFsPromiseFault("readdir", skillsDir, permissionError, async (getInfo) => {
+      await getInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
     });
 
     // assert
