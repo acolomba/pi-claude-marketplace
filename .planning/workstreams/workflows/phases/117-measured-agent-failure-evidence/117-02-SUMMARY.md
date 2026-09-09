@@ -38,7 +38,7 @@ metrics:
 actuals:
   tokens: 3100
   tasks: 3
-  commits: 1
+  commits: 2
 plan_head_before: 954bde78f0b0cf6140f687e9dffd3236041f3133
 ---
 
