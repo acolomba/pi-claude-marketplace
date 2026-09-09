@@ -7,29 +7,15 @@ import test, { type TestContext } from "node:test";
 import * as git from "isomorphic-git";
 
 import { pluginMirrorKey } from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
+import {
+  composeCandidateListRow,
+  type CandidateRow,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/list-candidate-row.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
 import type { ManifestPluginEntry } from "../../../extensions/pi-claude-marketplace/domain/manifest-lookup.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
-import type {
-  PluginAvailableMessage,
-  PluginPartiallyAvailableMessage,
-  PluginRemoteMessage,
-  PluginUnavailableMessage,
-} from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
-
-type FilterBucket =
-  "installed-inventory" | "available" | "partially-available" | "unavailable" | "remote";
-
-interface CandidateRow {
-  readonly message:
-    | PluginAvailableMessage
-    | PluginPartiallyAvailableMessage
-    | PluginRemoteMessage
-    | PluginUnavailableMessage;
-  readonly bucket: FilterBucket;
-}
 
 type ComposeCandidateListRow = (
   manifestEntry: ManifestPluginEntry,
@@ -38,14 +24,7 @@ type ComposeCandidateListRow = (
   declaredEnabled: boolean | undefined,
 ) => Promise<CandidateRow>;
 
-async function loadComposeCandidateListRow(): Promise<ComposeCandidateListRow> {
-  let composeCandidateListRow: ComposeCandidateListRow | undefined;
-  await assert.doesNotReject(async () => {
-    const owner =
-      await import("../../../extensions/pi-claude-marketplace/orchestrators/plugin/list-candidate-row.ts");
-    composeCandidateListRow = owner.composeCandidateListRow;
-  }, "list-candidate-row.ts must own candidate row composition");
-  assert.ok(composeCandidateListRow !== undefined);
+function loadComposeCandidateListRow(): ComposeCandidateListRow {
   return composeCandidateListRow;
 }
 

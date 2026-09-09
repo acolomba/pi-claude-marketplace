@@ -3,51 +3,21 @@ import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
 
+import {
+  composeInstalledListRow,
+  type ComposeInstalledListRowOptions,
+  type InstalledListRow,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/list-installed-row.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
-import type {
-  ManifestLookup,
-  ManifestPluginEntry,
-} from "../../../extensions/pi-claude-marketplace/domain/manifest-lookup.ts";
+import type { ManifestPluginEntry } from "../../../extensions/pi-claude-marketplace/domain/manifest-lookup.ts";
 import type { PluginInstallRecord } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import type {
-  PluginDisabledMessage,
-  PluginInstalledMessage,
-  PluginPartiallyInstalledMessage,
-  PluginPartiallyUpgradableMessage,
-  PluginUpgradableMessage,
-} from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
-import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
-
-type InstalledListRow =
-  | PluginDisabledMessage
-  | PluginInstalledMessage
-  | PluginPartiallyInstalledMessage
-  | PluginPartiallyUpgradableMessage
-  | PluginUpgradableMessage;
-
-interface ComposeInstalledListRowOptions {
-  readonly pluginName: string;
-  readonly pluginScope: Scope;
-  readonly marketplaceScope: Scope;
-  readonly marketplaceRoot: string;
-  readonly record: PluginInstallRecord;
-  readonly lookup: ManifestLookup;
-  readonly cwd: string;
-}
 
 type ComposeInstalledListRow = (
   options: ComposeInstalledListRowOptions,
 ) => Promise<InstalledListRow>;
 
-async function loadComposeInstalledListRow(): Promise<ComposeInstalledListRow> {
-  let composeInstalledListRow: ComposeInstalledListRow | undefined;
-  await assert.doesNotReject(async () => {
-    const owner =
-      await import("../../../extensions/pi-claude-marketplace/orchestrators/plugin/list-installed-row.ts");
-    composeInstalledListRow = owner.composeInstalledListRow;
-  }, "list-installed-row.ts must own installed inventory row composition");
-  assert.ok(composeInstalledListRow !== undefined);
+function loadComposeInstalledListRow(): ComposeInstalledListRow {
   return composeInstalledListRow;
 }
 

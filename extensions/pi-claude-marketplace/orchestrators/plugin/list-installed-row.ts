@@ -19,7 +19,7 @@ import type {
 } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 
-type InstalledListRow =
+export type InstalledListRow =
   | PluginDisabledMessage
   | PluginInstalledMessage
   | PluginPartiallyInstalledMessage
