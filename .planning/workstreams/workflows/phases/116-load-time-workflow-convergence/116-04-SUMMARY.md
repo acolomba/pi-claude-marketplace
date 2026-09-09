@@ -502,3 +502,16 @@ None.
 - **`/gsd-secure-phase`** has §7: five high-severity threats with the case or filter that gates each, and `T-116-SC` discharged mechanically rather than asserted.
 - **Phase 114's verification is now stale**, as `116-CONTEXT.md` anticipated: `docs/output-catalog.md` and `tests/architecture/catalog-uat.test.ts` are in its `covered_files` and both moved (two new states, corpus lock 195 → 197, two re-byted states). 114's re-verification is correctly sequenced after 116 and 117.
 - **Carried, not closed:** the `ENBL-08` inert case (§8, filed to `WINDOWS.md`); the `backfill-partially-installed-no-reasons` catalog state id now under-describes its row (116-01 flagged it, 116-03 declined the rename as churn); the `partially-installed` arm still has no published state pinning its composed order against an absent host engine (116-03, out of scope under D-116-06's fixed state count); and `STATE.md`'s comment-defect bullet naming `backfill.test.ts:320` is stale and should be struck (116-02 measured that the token it names no longer exists anywhere in that file).
+
+## Self-Check: PASSED
+
+- `.../116-04-SUMMARY.md` — FOUND
+- `.../REQUIREMENTS.md`, `.../ROADMAP.md`, `.../116-CONTEXT.md` — FOUND, all three carry the corrected claim
+- `.planning/WINDOWS.md` — FOUND, carries the `ENBL-08` entry (`status: open`)
+- commit `b8965744` — FOUND in `git log --all`
+- commit `e718a65b` (this SUMMARY + state) — FOUND in `git log --all`
+- Neither commit deletes a tracked file (`git diff --diff-filter=D` empty on both)
+- `git rev-list --count 11dc2d47..HEAD` = **2**, matching the frontmatter's
+  measured `commits: 1` at SUMMARY-write time plus this metadata commit
+- `ROADMAP.md:134` — Phase 116's top-level checkbox is still `[ ]`; no
+  requirement checkbox was flipped by this plan
