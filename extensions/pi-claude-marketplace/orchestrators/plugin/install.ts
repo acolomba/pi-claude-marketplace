@@ -1210,9 +1210,16 @@ async function runInstallLedgerBody(
       // not the array.
       c.workflowsPrep = prep;
       c.stagedWorkflowNames = [];
-      // The bridge's array mixes per-file soft-fails with discovery warnings
-      // and is not separable at this site, so it rides `bridgeWarnings` (the
-      // agents-bridge shape) rather than `discoveryWarnings`.
+      // D-141-03 / WGATE-01: the bridge's array joins the DISCOVERY half, and it
+      // joins it HERE rather than through `splitStagingWarnings`, which is the
+      // call `update.ts` already makes for the same array and the same reason.
+      // Every string in it describes the plugin's DECLARED scripts -- which ones
+      // were not installed, which were installed but the engine will refuse to
+      // load -- and that is a fact a standalone user needs, not a hygiene note
+      // only the cascade forwards. `bridgeWarnings` is gated on `orchestrated`,
+      // so a standalone install would render none of it. The shared classifier
+      // stays at four members: a fifth would drag every other consumer of it
+      // into this change.
       //
       // Pushed at the prepare, matching `agentsPhase` -- the other bridge whose
       // WARNINGS come off the prepare rather than off the commit's return, and
@@ -1222,11 +1229,11 @@ async function runInstallLedgerBody(
       // WR-04: the position buys ordering consistency, NOT survival. A phase
       // throw unwinds `runPhases` and the whole `InstallCtx` is discarded, so
       // these warnings are lost on the failure path wherever the push sits.
-      // `bridgeWarnings` has one consumer -- `collectPostCommitWarnings`, run
-      // after the ledger returned and the state record committed -- and it is
-      // not a member of `InstallLedgerSummary`. That is true of every bridge's
-      // warnings alike, not of this one, so it is not repaired here.
-      c.bridgeWarnings.push(...prep.result.warnings);
+      // Both arrays are read by `collectPostCommitWarnings`, run after the
+      // ledger returned and the state record committed, and neither is a member
+      // of `InstallLedgerSummary`. That is true of every bridge's warnings
+      // alike, not of this one, so it is not repaired here.
+      c.discoveryWarnings.push(...prep.result.warnings);
       const leak = await commitPreparedWorkflows(prep, {
         // The whole body is one assignment that cannot throw. The commit
         // invokes this callback on the failure paths too, so anything that
@@ -1652,9 +1659,9 @@ function readDeclaredEnabled(args: {
  * author shipped, and the install row's resource count gives the user no
  * baseline to notice the shortfall. The caller renders the standalone half
  * through `./shared.ts::surfaceDiscoveryWarnings`, which update and
- * reinstall also call (D-141-05). Only the skills and commands bridges feed
- * that array; the agents bridge mixes three kinds of warning onto one result
- * field and rides the hygiene channel instead.
+ * reinstall also call (D-141-05). The skills, commands and workflows bridges
+ * feed that array; the agents bridge mixes three kinds of warning onto one
+ * result field and rides the hygiene channel instead.
  */
 async function collectPostCommitWarnings(
   installCtx: InstallCtx,

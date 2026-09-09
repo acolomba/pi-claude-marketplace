@@ -66,15 +66,21 @@ export interface WorkflowDiscoveryTarget {
 export type WorkflowOutcomeTense = "install" | "preview";
 
 /**
- * WR-09: the five places a soft-fail phrase is composed.
+ * WR-09: the six places a soft-fail phrase is composed.
  *
  * `read` and `inspect` are separate members because they are separate CALL
  * SITES one step apart on the same file: `inspect` is the `lstat` that decides
  * whether the entry is a plain script, and nothing has been read when it fails.
- * The three remaining members are verdict arms and carry the decision layer's
- * own reason verbatim.
+ * `skipped`, `refused` and `stem-fallback` are verdict arms and carry the
+ * decision layer's own reason verbatim.
+ *
+ * WGATE-01: `gate` is the one site that states an ADMITTED fact with no defect
+ * of this bridge's own behind it -- the envelope IS written and the command IS
+ * registered, and the caveat is the host engine's own refusal to load the script
+ * at invocation.
  */
-export type WorkflowOutcomeSite = "skipped" | "refused" | "stem-fallback" | "read" | "inspect";
+export type WorkflowOutcomeSite =
+  "skipped" | "refused" | "stem-fallback" | "read" | "inspect" | "gate";
 
 /** Return shape: `{ discovered, warnings }`. */
 export interface DiscoverPluginWorkflowsResult {

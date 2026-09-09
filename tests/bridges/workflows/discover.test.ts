@@ -712,9 +712,12 @@ test("warns the same way when the declared name is present but not a literal", a
     tense: "install",
   });
 
-  // assert
+  // assert -- WGATE-01: ONE line for the file. The script also declares a
+  // statement before its `meta` export, so the engine stops at its check 3, and
+  // that gate is named inside the unrunnable reason rather than on a second line
+  // repeating the same fact about the same file.
   assert.deepStrictEqual(discovery.warnings, [
-    `workflow script "computed.js" in "${workflowsDir}" was installed but will not run: the engine loads a command only from a literal \`meta.name\` with a non-empty \`meta.description\`, and this script declares no readable name`,
+    `workflow script "computed.js" in "${workflowsDir}" was installed but will not run: the engine loads a command only from a literal \`meta.name\` with a non-empty \`meta.description\`, and this script declares no readable name; the engine refuses at its check 3 -- \`export const meta = ...\` must be the first statement in the script`,
   ]);
   assert.deepStrictEqual(
     discovery.discovered.map((record) => record.verdict),
@@ -724,6 +727,7 @@ test("warns the same way when the declared name is present but not a literal", a
         fileName: "computed.js",
         generatedName: "acme:computed",
         description: "d",
+        gate: "meta-not-first-export",
       },
     ],
   );

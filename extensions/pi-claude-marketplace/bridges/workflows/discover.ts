@@ -46,7 +46,7 @@ import type {
   WorkflowOutcomeSite,
   WorkflowOutcomeTense,
 } from "./types.ts";
-import type { WorkflowVerdict } from "../../domain/workflow-script.ts";
+import type { WorkflowGate, WorkflowVerdict } from "../../domain/workflow-script.ts";
 import type { Dirent } from "node:fs";
 
 /**
@@ -107,9 +107,14 @@ function softFailWarning(
 /**
  * WR-09: what the `install` surface says happened, one phrase per site.
  *
- * Total over the site union, which is the forcing construct: a sixth site
+ * Total over the site union, which is the forcing construct: a further site
  * cannot be composed without an entry here AND in the preview table below, so
  * the two tenses cannot drift apart by omission.
+ *
+ * WGATE-01: the `gate` phrase states the admitted fact BEFORE its caveat, the
+ * way `stem-fallback` does, because the envelope is written and the command is
+ * registered. A phrase shaped like the three soft-fails would report a disposal
+ * that did not happen.
  */
 const INSTALL_OUTCOMES: Record<WorkflowOutcomeSite, string> = {
   skipped: "was not installed",
@@ -117,6 +122,7 @@ const INSTALL_OUTCOMES: Record<WorkflowOutcomeSite, string> = {
   "stem-fallback": "was installed but will not run",
   read: "could not be read and was skipped",
   inspect: "could not be inspected and was skipped",
+  gate: "was installed but the engine will refuse to load it",
 };
 
 /**
@@ -134,6 +140,38 @@ const PREVIEW_OUTCOMES: Record<WorkflowOutcomeSite, string> = {
   "stem-fallback": "would be installed but will not run",
   read: "could not be read",
   inspect: "could not be inspected",
+  gate: "would be installed but the engine will refuse to load it",
+};
+
+/**
+ * WGATE-01: one literal sentence per engine gate, opening with the engine's own
+ * check NUMBER so a reader can cross-reference the numbered table in
+ * `docs/workflows-compatibility.md`, then stating the rule.
+ *
+ * The explicit `Record<WorkflowGate, string>` annotation is the bridge-side
+ * totality lock: a new gate in the domain union cannot compile without a
+ * sentence here.
+ *
+ * No value interpolates ANY script-derived text -- not a file name, not a key
+ * name, not a node type read out of the parsed source. Naming the gate rather
+ * than the offending token is what keeps this line free of the newline-forgery
+ * and bidi-override hazards `forMessage` exists for, and it is also the more
+ * useful sentence: the author needs the rule, which they can act on, rather than
+ * a token they already wrote.
+ */
+const GATE_REASONS: Record<WorkflowGate, string> = {
+  "meta-not-first-export":
+    "the engine refuses at its check 3 -- `export const meta = ...` must be the first statement in the script",
+  "meta-not-const-export":
+    "the engine refuses at its check 4 -- the first export must be a `const` variable declaration",
+  "meta-not-sole-declarator":
+    "the engine refuses at its check 5 -- that export must declare `meta` and nothing else",
+  "meta-not-named-meta":
+    "the engine refuses at its check 6 -- the declared identifier must be `meta`",
+  "meta-not-pure-literal":
+    "the engine refuses at its check 8 -- every value inside `meta` must be a plain literal, so no spread, computed key, method, accessor, reserved key name (`__proto__`, `constructor`, `prototype`), array hole, substituted template or computed expression",
+  "meta-fields-invalid":
+    "the engine refuses at its check 9 -- `meta.description` must be a non-empty string, and `meta.model` (a string) and `meta.phases` (an array of objects each carrying a string `title`) must match those shapes wherever they are declared",
 };
 
 function outcomePhrase(tense: WorkflowOutcomeTense, site: WorkflowOutcomeSite): string {
@@ -221,26 +259,49 @@ function unrunnableWarning(
   fileName: string,
   workflowsDir: string,
   tense: WorkflowOutcomeTense,
+  gate: WorkflowGate | undefined,
 ): string {
   return softFailWarning(
     fileName,
     workflowsDir,
     outcomePhrase(tense, "stem-fallback"),
     "the engine loads a command only from a literal `meta.name` with a non-empty " +
-      "`meta.description`, and this script declares no readable name",
+      "`meta.description`, and this script declares no readable name" +
+      // WGATE-01: ONE LINE PER FILE. A stem-fallback script that also trips a
+      // gate has both facts named inside this one reason, because a second line
+      // would say the same thing about the same file in different words, which
+      // is what makes a warning channel ignorable.
+      (gate === undefined ? "" : `; ${GATE_REASONS[gate]}`),
   );
 }
 
 /**
- * WBRG-03 / WVAL-03: the warning a verdict earns, or `undefined` for the
- * `named` arm alone.
+ * WGATE-01: the engine gate an ADMITTED script would be refused at, as its own
+ * line. Composed through the one `softFailWarning` shape every per-file line
+ * wears, so this line is scannable beside the soft-fails rather than a second
+ * format to learn.
+ */
+function gateWarning(
+  fileName: string,
+  workflowsDir: string,
+  tense: WorkflowOutcomeTense,
+  gate: WorkflowGate,
+): string {
+  return softFailWarning(fileName, workflowsDir, outcomePhrase(tense, "gate"), GATE_REASONS[gate]);
+}
+
+/**
+ * WBRG-03 / WVAL-03 / WGATE-01: the warning a verdict earns, or `undefined` for
+ * a `named` verdict the host engine will load.
  *
  * The `stem-fallback` arm earns a row despite being admitted, because every
  * shape reaching it names a command the engine will refuse to load: WNAM-02
  * falls back to the file stem precisely when no literal `meta.name` was
  * readable, and the engine's own metadata validation admits nothing else. The
- * envelope is still written and the record still returned, so the row is a
- * caveat rather than a refusal.
+ * `named` arm earns one when the script carries a gate, which is the same fact
+ * about a script whose name WAS readable. The envelope is still written and the
+ * record still returned either way, so both rows are caveats rather than
+ * refusals.
  *
  * The verdict's own `reason` is rendered verbatim and never paraphrased. The
  * decision layer is where a raw-text match is attributed to code, to a comment
@@ -263,10 +324,14 @@ function verdictWarning(
   }
 
   if (verdict.outcome === "stem-fallback") {
-    return unrunnableWarning(verdict.fileName, workflowsDir, tense);
+    return unrunnableWarning(verdict.fileName, workflowsDir, tense, verdict.gate);
   }
 
-  return undefined;
+  if (verdict.gate === undefined) {
+    return undefined;
+  }
+
+  return gateWarning(verdict.fileName, workflowsDir, tense, verdict.gate);
 }
 
 /**

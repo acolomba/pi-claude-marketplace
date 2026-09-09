@@ -30,7 +30,53 @@ import { errorMessage, WorkflowNameCollisionError } from "../shared/errors.ts";
 import { assertSafeName, generatedWorkflowName } from "./name.ts";
 
 import type { WorkflowNameCollision } from "../shared/errors.ts";
-import type { Comment, Program, Property, SpreadElement, Token, VariableDeclarator } from "acorn";
+import type {
+  Comment,
+  Program,
+  Property,
+  SpreadElement,
+  Token,
+  VariableDeclaration,
+  VariableDeclarator,
+} from "acorn";
+
+/**
+ * WGATE-01: the host engine's structural admission checks, in the order
+ * `parseWorkflowScript` reaches them -- checks 3, 4, 5, 6, 8 and 9 of
+ * `@quintinshaw/pi-dynamic-workflows` 3.10.1, `src/workflow.ts:1504-1626`.
+ *
+ * Index order IS report order (D-115-04). The engine stops at its first
+ * failure, so a script failing an early check never reaches a later one, and
+ * naming a later gate would describe an object the engine never evaluates.
+ *
+ * The engine's first two checks are absent because this module REFUSES them:
+ * the determinism screen and the parse are the two gates it replicates. Its
+ * "the declarator has an initializer" check is absent because no parseable
+ * script reaches it (D-115-02): `export const meta;` is a `SyntaxError` acorn
+ * rejects, and every non-`const` form fails the `const` check first.
+ *
+ * None of this is an exported engine contract, so the set must be re-checked on
+ * an engine upgrade -- the same standing caveat the vendored determinism
+ * literal carries. An engine gate missing from this tuple costs an author a
+ * warning; it can never cost anyone an install (WGATE-03).
+ */
+const GATE_ORDER = [
+  "meta-not-first-export",
+  "meta-not-const-export",
+  "meta-not-sole-declarator",
+  "meta-not-named-meta",
+  "meta-not-pure-literal",
+  "meta-fields-invalid",
+] as const;
+
+/**
+ * WGATE-01: the closed set of engine gates a script can be warned about.
+ *
+ * Derived FROM `GATE_ORDER` rather than written beside it, so the order and the
+ * union cannot disagree: a new gate is added to the tuple alone, and the total
+ * `GATE_PREDICATES` map then refuses to compile until it has a predicate.
+ */
+export type WorkflowGate = (typeof GATE_ORDER)[number];
 
 /** WNAM-01: the script declared a string-literal `meta.name`. */
 export interface NamedWorkflow {
@@ -39,6 +85,12 @@ export interface NamedWorkflow {
   readonly metaName: string;
   readonly generatedName: string;
   readonly description?: string; // WBRG-01 envelope input; unused by the verdict
+  /**
+   * WGATE-01: the engine gate this script would be refused at, absent when the
+   * engine would load it. Advisory only -- it rides the two ADMITTED arms
+   * precisely because a gate reading may never turn into a refusal (WGATE-03).
+   */
+  readonly gate?: WorkflowGate;
 }
 
 /** WNAM-02: no readable `meta.name`, so the file stem names the command. */
@@ -47,6 +99,8 @@ export interface StemFallbackWorkflow {
   readonly fileName: string;
   readonly generatedName: string;
   readonly description?: string;
+  /** WGATE-01: as on `NamedWorkflow` -- the gate, or absent. */
+  readonly gate?: WorkflowGate;
 }
 
 /** WNAM-03: nothing to install -- the script declares no usable metadata. */
@@ -160,12 +214,17 @@ export function admitWorkflowScript(
 
   const read = readMetaString(meta.elements, "description");
   const description = read.kind === "literal" ? read.value : undefined;
+  // WGATE-01: read the gate AFTER both refusal arms have been settled and
+  // BEFORE either admitted verdict is built. Earlier would mean reading gates
+  // off a script that is about to be refused, and a refusal carries no gate by
+  // type (WGATE-03/WGATE-04).
+  const gate = readEngineGate(parsed.ast, meta.elements);
 
   if (metaName.kind === "no-literal") {
-    return stemFallbackVerdict(pluginName, fileName, description);
+    return stemFallbackVerdict(pluginName, fileName, description, gate);
   }
 
-  return namedVerdict(pluginName, fileName, metaName.value, description);
+  return namedVerdict(pluginName, fileName, metaName.value, description, gate);
 }
 
 /**
@@ -245,6 +304,7 @@ function namedVerdict(
   fileName: string,
   metaName: string,
   description: string | undefined,
+  gate: WorkflowGate | undefined,
 ): NamedWorkflow | RefusedWorkflow {
   const generated = generateOrRefuse(pluginName, fileName, metaName);
 
@@ -258,6 +318,7 @@ function namedVerdict(
     metaName,
     generatedName: generated,
     ...(description === undefined ? {} : { description }),
+    ...(gate === undefined ? {} : { gate }),
   };
 }
 
@@ -283,6 +344,7 @@ function stemFallbackVerdict(
   pluginName: string,
   fileName: string,
   description: string | undefined,
+  gate: WorkflowGate | undefined,
 ): StemFallbackWorkflow | RefusedWorkflow {
   const generated = generateOrRefuse(pluginName, fileName, fileStem(fileName));
 
@@ -295,6 +357,7 @@ function stemFallbackVerdict(
     fileName,
     generatedName: generated,
     ...(description === undefined ? {} : { description }),
+    ...(gate === undefined ? {} : { gate }),
   };
 }
 
@@ -628,17 +691,27 @@ function bindMeta(found: MetaLookup, declarator: VariableDeclarator): MetaLookup
 
 /**
  * The property key as written, for a property whose key IS written -- the bare
- * identifier form and the quoted-string form are the same key. A computed key
- * never reaches here: `readMetaString` settles it before asking, because a key
- * that is not statically knowable is not a missing key but an unknowable one.
+ * identifier form, the quoted-string form and the numeric form, which are the
+ * three the engine's own `propertyKey` reads, and it reads them to the same
+ * text. A computed key never reaches here: `readMetaString` settles it before
+ * asking, because a key that is not statically knowable is not a missing key but
+ * an unknowable one.
+ *
+ * `undefined` answers for a key node the engine refuses outright rather than
+ * reads. A BigInt literal is the reachable one, and it is why the answer is not
+ * simply "the key text": a numeric key resolves to text the engine accepts,
+ * while a BigInt key of the same node type does not.
  */
 function metaPropertyKey(p: Property): string | undefined {
   if (p.key.type === "Identifier") {
     return p.key.name;
   }
 
-  if (p.key.type === "Literal" && typeof p.key.value === "string") {
-    return p.key.value;
+  if (
+    p.key.type === "Literal" &&
+    (typeof p.key.value === "string" || typeof p.key.value === "number")
+  ) {
+    return String(p.key.value);
   }
 
   return undefined;
@@ -741,6 +814,269 @@ function literalString(node: Property["value"]): string | undefined {
   }
 
   return undefined;
+}
+
+/**
+ * WGATE-01: the FIRST engine gate this script would be refused at, or
+ * `undefined` when the engine would load it.
+ *
+ * WGATE-03: the walk is contained HERE, in its own body. It reads untrusted
+ * third-party AST through three mutually-recursive predicates, and
+ * `admitWorkflowScript`'s only external caller does not guard it -- so a throw
+ * escaping this function would fail a whole plugin install rather than cost one
+ * script its warning. One broken file in a twenty-script plugin must not block
+ * the other nineteen, and a gate reading may never block anything at all, so an
+ * unforeseen node shape costs the author a missing warning and nothing more.
+ *
+ * Acorn's own `RangeError` on a pathologically deep literal is already contained
+ * by `parseScript`, so what reaches this catch is the walk's own depth budget or
+ * a node shape the predicates were not written for.
+ */
+function readEngineGate(ast: Program, elements: readonly MetaElement[]): WorkflowGate | undefined {
+  try {
+    const ctx = gateContext(ast, elements);
+
+    return GATE_ORDER.find((gate) => GATE_PREDICATES[gate](ctx));
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * WGATE-01: what every gate predicate reads, derived once per script.
+ *
+ * The structural fields are narrowed HERE rather than inside each predicate, so
+ * a predicate stays one comparison and the narrowing runs over every admitted
+ * script -- the malformed ones included, which is what exercises each of its
+ * arms.
+ *
+ * `elements` are the `meta` object literal's own, as `findMetaObject` returned
+ * them. Nothing deeper is needed: a top-level `const meta` is the only `meta`
+ * binding a parseable module can carry, because a second one is a redeclaration
+ * `SyntaxError`. So once the four structural checks pass, those elements ARE the
+ * first statement's declarator init, and the literal and field checks may read
+ * them without a second lookup (D-115-04).
+ */
+interface GateContext {
+  readonly first: Program["body"][number] | undefined;
+  readonly declaration: VariableDeclaration | undefined;
+  readonly declaratorName: string | undefined;
+  readonly elements: readonly MetaElement[];
+}
+
+function gateContext(ast: Program, elements: readonly MetaElement[]): GateContext {
+  const first = ast.body[0];
+  const exported = first?.type === "ExportNamedDeclaration" ? first.declaration : undefined;
+  const declaration = exported?.type === "VariableDeclaration" ? exported : undefined;
+  const id = declaration?.declarations[0]?.id;
+
+  return {
+    first,
+    declaration,
+    declaratorName: id?.type === "Identifier" ? id.name : undefined,
+    elements,
+  };
+}
+
+/**
+ * WGATE-01: one predicate per gate, each answering "would the engine refuse
+ * HERE?".
+ *
+ * The explicit `Record<WorkflowGate, ...>` annotation is the totality lock: a
+ * seventh member of `GATE_ORDER` cannot compile without an entry here. It is
+ * annotated rather than inferred, and keyed by the union rather than by `string`,
+ * because either of those weakenings would make the map accept an incomplete
+ * set.
+ */
+const GATE_PREDICATES: Record<WorkflowGate, (ctx: GateContext) => boolean> = {
+  "meta-not-first-export": (ctx) => ctx.first?.type !== "ExportNamedDeclaration",
+  "meta-not-const-export": (ctx) => ctx.declaration?.kind !== "const",
+  "meta-not-sole-declarator": (ctx) => ctx.declaration?.declarations.length !== 1,
+  "meta-not-named-meta": (ctx) => ctx.declaratorName !== "meta",
+  "meta-not-pure-literal": (ctx) => !isLiteralObject(ctx.elements, 0),
+  "meta-fields-invalid": (ctx) => metaFieldsFailValidation(ctx.elements),
+};
+
+/**
+ * WGATE-01: how deep into a `meta` literal the gate walk goes before it stops
+ * deciding. A real `meta` nests three levels (`meta.phases[0].title`), so a
+ * literal deeper than this budget is pathological, and declining to judge it
+ * costs the author a warning rather than an install (WGATE-03).
+ *
+ * The budget is enforced by a throw so that the containment catch in
+ * `readEngineGate` is exercised by a real script rather than only inspected.
+ */
+const GATE_WALK_MAX_DEPTH = 32;
+
+/**
+ * The `meta` key names the engine refuses outright, read from its own
+ * `evaluateLiteral` at 3.10.1. An unmeasured reserved name would cost a missing
+ * warning, never a false one, which is the direction WGATE-03 chose -- and like
+ * every other engine figure here, the set must be re-checked on an upgrade.
+ */
+const RESERVED_META_KEYS: ReadonlySet<string> = new Set(["__proto__", "constructor", "prototype"]);
+
+/**
+ * WGATE-01: does the engine's `evaluateLiteral` resolve every value in this
+ * object literal?
+ *
+ * An ALLOW-list, stated in the engine's own terms. The refusal side is eleven
+ * separate throws, and a deny-list of eleven is the enumeration a reader like
+ * this gets wrong; naming the forms that ARE resolvable makes an unforeseen node
+ * type fire the gate rather than slip past it.
+ */
+function isLiteralObject(elements: readonly MetaElement[], depth: number): boolean {
+  return elements.every((element) => isLiteralProperty(element, depth));
+}
+
+/**
+ * One `meta` property the engine resolves: a plain, non-computed, non-method,
+ * `init`-kind property whose key name is not reserved and whose value is itself
+ * resolvable.
+ *
+ * The KEY NODE is a rule of its own. The engine's `propertyKey` reads an
+ * identifier and a string- or number-valued literal and refuses every other key
+ * node, so `{ 1n: "x" }` is refused on its key alone while `{ 1: "x" }` is
+ * admitted. A reader testing only the node type, `computed`, `kind` and `method`
+ * would decide ten of the engine's eleven refusals and read the eleventh
+ * backwards.
+ */
+function isLiteralProperty(element: MetaElement, depth: number): boolean {
+  if (
+    element.type === "SpreadElement" ||
+    element.computed ||
+    element.kind !== "init" ||
+    element.method
+  ) {
+    return false;
+  }
+
+  const key = metaPropertyKey(element);
+
+  if (key === undefined || RESERVED_META_KEYS.has(key)) {
+    return false;
+  }
+
+  return isLiteralValue(element.value, depth);
+}
+
+/**
+ * The value forms the engine resolves: ANY `Literal` -- its `Literal` arm
+ * returns the value with no type test at all, so a regular expression and a
+ * BigInt are both resolvable -- a substitution-free `TemplateLiteral`, an object
+ * or array of resolvable values, and a negative-number unary.
+ */
+function isLiteralValue(node: Property["value"], depth: number): boolean {
+  if (depth > GATE_WALK_MAX_DEPTH) {
+    throw new Error("meta literal nesting exceeds the gate walk budget");
+  }
+
+  if (node.type === "Literal") {
+    return true;
+  }
+
+  if (node.type === "TemplateLiteral") {
+    return node.expressions.length === 0;
+  }
+
+  if (node.type === "ObjectExpression") {
+    return isLiteralObject(node.properties, depth + 1);
+  }
+
+  if (node.type === "ArrayExpression") {
+    return isLiteralArray(node.elements, depth + 1);
+  }
+
+  return isNegativeNumber(node);
+}
+
+/** The one non-literal expression the engine resolves: minus a number literal. */
+function isNegativeNumber(node: Property["value"]): boolean {
+  return (
+    node.type === "UnaryExpression" &&
+    node.operator === "-" &&
+    node.argument.type === "Literal" &&
+    typeof node.argument.value === "number"
+  );
+}
+
+/** An array the engine resolves: no hole, no spread, every element resolvable. */
+function isLiteralArray(
+  elements: readonly (Property["value"] | SpreadElement | null)[],
+  depth: number,
+): boolean {
+  return elements.every(
+    (element) =>
+      element !== null && element.type !== "SpreadElement" && isLiteralValue(element, depth),
+  );
+}
+
+/**
+ * WGATE-01: do the `meta` fields the engine's `validateMeta` inspects fail it?
+ *
+ * The `description`, `model` and `phases` arms only. "meta must be an object" is
+ * already a `meta-not-object-literal` skip and an empty `meta.name` an
+ * `unsafe-name` refusal, neither of which reaches a gate reading; a `meta` with
+ * no readable name at all is reported by the bridge's own stem-fallback caveat.
+ *
+ * `model` and `phases` are judged only when DECLARED, because the engine admits
+ * a `meta` that declares neither.
+ */
+function metaFieldsFailValidation(elements: readonly MetaElement[]): boolean {
+  const description = readMetaString(elements, "description");
+
+  if (description.kind !== "literal" || description.value.trim() === "") {
+    return true;
+  }
+
+  return (
+    !isEngineModel(metaValue(elements, "model")) || !isEnginePhases(metaValue(elements, "phases"))
+  );
+}
+
+/** `meta.model` must resolve to a string when declared. */
+function isEngineModel(node: Property["value"] | undefined): boolean {
+  return node === undefined || literalString(node) !== undefined;
+}
+
+/** `meta.phases` must be an array of objects, each carrying a string `title`. */
+function isEnginePhases(node: Property["value"] | undefined): boolean {
+  if (node === undefined) {
+    return true;
+  }
+
+  if (node.type !== "ArrayExpression") {
+    return false;
+  }
+
+  return node.elements.every(isEnginePhase);
+}
+
+function isEnginePhase(element: Property["value"] | SpreadElement | null): boolean {
+  return (
+    element?.type === "ObjectExpression" &&
+    readMetaString(element.properties, "title").kind === "literal"
+  );
+}
+
+/**
+ * The raw node one `meta` key ends up holding -- in order, LAST WINS, the rule
+ * `readMetaString` applies to the same elements.
+ *
+ * Raw rather than resolved to text, because `validateMeta` asks about a value's
+ * TYPE: a reader that resolved first could not tell an absent key from one
+ * holding a number.
+ */
+function metaValue(elements: readonly MetaElement[], key: string): Property["value"] | undefined {
+  let found: Property["value"] | undefined;
+
+  for (const element of elements) {
+    if (element.type !== "SpreadElement" && metaPropertyKey(element) === key) {
+      found = element.value;
+    }
+  }
+
+  return found;
 }
 
 /**
