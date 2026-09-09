@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 06
 current_phase_name: Assertion and Module Refinement
 status: executing
-stopped_at: Completed 06-22-PLAN.md
-last_updated: "2026-09-09T10:29:02.500Z"
+stopped_at: Completed 06-23-PLAN.md
+last_updated: "2026-09-09T10:47:23.604Z"
 last_activity: 2026-09-08
 last_activity_desc: Phase 06 execution started
-state_head: 7ee70808ffaf77769d488669d581b0e17f0c4a45
+state_head: 116d8916218bf010174e38cca586c998630da221
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 180
-  completed_plans: 150
+  completed_plans: 151
   percent: 11
 ---
 
@@ -33,7 +33,7 @@ component as a working Pi artifact.
 
 Phase: 06 (Assertion and Module Refinement) — EXECUTING
 Next: Discuss Phase 6
-Plan: 23 of 52
+Plan: 24 of 52
 Status: Ready to execute
 Last activity: 2026-09-08 — Phase 06 execution started
 
@@ -330,6 +330,7 @@ Last activity: 2026-09-08 — Phase 06 execution started
 | Phase 06 P18 | 8min | 2 tasks | 0 files |
 | Phase 06 P20 | 14min | 2 tasks | 5 files |
 | Phase 06 P22 | 7min | 2 tasks | 2 files |
+| Phase 06 P23 | 14min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -785,6 +786,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 06]: Keep info.ts cohesive and byte-for-byte unchanged because its notification imports already name direct owners.
 - [Phase 06]: Keep all eight already-direct notification import graphs unchanged; only three explicit legacy-hub prose references required repointing.
 - [Phase 06]: Retain notify-context.ts as the genuine command rendering and dispatch composition owner because it calls notification-dispatch.ts directly and exposes no compatibility facade.
+- [Phase 06]: Keep all seven already-direct runtime import graphs unchanged; Plan 06-14 had completed the executable migration, leaving only stale ownership prose.
+- [Phase 06]: Attribute each structured notification concern to its narrow owner: notification-types.ts, notification-grammar.ts, notify-context.ts, or notification-dispatch.ts.
 
 ### Pending Todos
 
@@ -837,7 +840,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 06-22-PLAN.md
+**Stopped at:** Completed 06-23-PLAN.md
 
 Phase 04 completed all seven plans and closed AUTH-01 and TREF-01 through
 TREF-03. Independent verification passed 4/4 with no behavioral or UAT gap;
@@ -855,7 +858,7 @@ independent verification passed 6/6 with zero unverified behaviors.
 **Read beside it:** `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`, the
 Phase 01 terminal evidence ledger, and Phase 5's roadmap criteria.
 
-Last session: 2026-09-09T10:29:01.873Z
+Last session: 2026-09-09T10:47:22.967Z
 
 **Next:** Discuss Phase 06 to define the assertion-strengthening and approved
 module-refinement work before planning.
