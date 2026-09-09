@@ -377,7 +377,7 @@ Their `/plugins doctor [plugin] [--scope] [--include-adoption]` has safety class
 
 The part worth copying is that remediation is not free text. It is a closed nine-token `action` vocabulary: `run-recovery`, `review-trust`, `provide-configuration`, `reload-runtime`, `refresh-marketplace`, `inspect-source`, `retry-read`, `review-update`, and `trust-project`. Human rendering is one line per finding, in the form `SEVERITY CODE - action`.
 
-We have no `doctor` or `health` command. We have three read-only surfaces instead: `pending`, `list`, and `info`. A registry on our side would reuse the closed status and reason sets that `shared/notify.ts` and `docs/output-catalog.md` already define.
+We have no `doctor` or `health` command. We have three read-only surfaces instead: `pending`, `list`, and `info`. A registry on our side would reuse the closed status and reason sets that `shared/notification-types.ts` and `docs/output-catalog.md` already define.
 
 ### The portable project declaration and sync
 
@@ -595,7 +595,7 @@ The early warning signs are specific: any commit that adds a `commands/` convent
 
 Each item below is a pattern rather than a feature, and each names the seam it would attach to on our side.
 
-- **Notification is independent of automatic-update policy.** A user who never enables automatic updates still learns that an update exists. Seam: the `pending` verb and the notification catalog in `shared/notify.ts`.
+- **Notification is independent of automatic-update policy.** A user who never enables automatic updates still learns that an update exists. Seam: the `pending` verb and the notification types, grammar, summary, and dispatch owners in `shared/notification-types.ts`, `shared/notification-grammar.ts`, `shared/notification-summary.ts`, and `shared/notification-dispatch.ts`.
 - **Preview, then apply, for every policy change and every destructive change.** Their `--preview-only` flag is one code path with two dispositions, not a separate dry-run implementation. Seam: `pending`, which already produces a network-free plan that writes nothing.
 - **A closed remediation-action vocabulary attached to stable diagnostic codes.** The reader gets a code to search for. The reader also gets one of nine actions to take, never free text. Seam: our closed status and reason sets, gated against `docs/output-catalog.md`.
 - **Aliases are exact alternate paths that carry deprecation metadata.** Each alias records `deprecatedSince`, `replacement`, and `removeInMajor`, so removal is scheduled rather than sudden. Seam: `edge/flag-catalog.ts` and the router alias table, which already have a drift test.
@@ -718,7 +718,7 @@ They ship no logger, no telemetry, and no analytics. Their one durable log is `<
 
 We have no `doctor` or `health` command. We have three read-only surfaces. The verb `pending` is a network-free reconcile preview that writes nothing and is byte-identical on repeated runs. It renders `will install`, `will uninstall`, `will enable`, and `will disable` rows, plus `(failed)` rows. Marketplace additions are deliberately absent from it, because they are immediate. The verb `list` shows inventory across both scopes with the filter family, and renders a hash version git-style as `v#<7hex>`. The verb `info` shows the resolved source, the components enumerated from disk, the per-handler `event(matcher) (unsupported)` breakdown for dropped hooks, and the resolver verdict. It is network-free, so a cold clone renders `(remote)` and `components: not resolved` unless the user passes `--fetch`.
 
-Our notification model (`shared/notify.ts`) is the single sanctioned output surface. A direct `ctx.ui.notify` call is forbidden by an ESLint rule and by a grep gate. The grammar is fixed:
+Our notification model has six named owners: closed tuples and unions in `shared/notification-types.ts`; icons, rows, and info rendering in `shared/notification-grammar.ts`; severity, tally, reload, and cascade folding in `shared/notification-summary.ts`; the single sanctioned output surface in `shared/notification-dispatch.ts`; redaction in `shared/redact-absolute-paths.ts`; and stable name/scope ordering in `shared/compare-name-scope.ts`. A direct `ctx.ui.notify` call outside the dispatch owner is forbidden by an ESLint rule and by the `tests/edge/notification-boundary.ts` gate. The grammar is fixed:
 
 ```text
 <glyph> <marketplace> [<scope>] (<status>) <marker>?

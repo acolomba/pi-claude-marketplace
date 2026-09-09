@@ -1,6 +1,6 @@
 # Command Output Catalog
 
-Per-command rendered output for each user-visible state. Catalog v2.0 supersedes the v1.0 grammar (single-plugin one-line carve-out, V1 wrapper-name severity routing, frontmatter-driven closed sets) with the structured-`NotificationMessage` grammar emitted by the Phase 16 `notify(ctx, pi, message)` renderer at `extensions/pi-claude-marketplace/shared/notify.ts`. Every fenced output block in this catalog is byte-equal to what `notify()` emits given a corresponding structured fixture; `tests/architecture/catalog-uat.test.ts` drives that byte-equality as the user-contract gate.
+Per-command rendered output for each user-visible state. Catalog v2.0 supersedes the v1.0 grammar (single-plugin one-line carve-out, V1 wrapper-name severity routing, frontmatter-driven closed sets) with the structured-`NotificationMessage` contract owned by `extensions/pi-claude-marketplace/shared/notification-types.ts`, rendered by `notification-grammar.ts`, folded by `notification-summary.ts`, and emitted by `notification-dispatch.ts`. Redaction remains in `redact-absolute-paths.ts`, and stable name/scope ordering remains in `compare-name-scope.ts`. Every fenced output block in this catalog is byte-equal to what `notify()` emits given a corresponding structured fixture; `tests/architecture/catalog-uat.test.ts` drives that byte-equality as the user-contract gate.
 
 ## Conventions
 
@@ -37,12 +37,12 @@ On THIS list surface (mp.status === undefined) the marker token `<autoupdate>` a
 <icon> <name> [<scope>]? <version-token>? (<status>) {<reasons>}?
 ```
 
-- `<icon>` -- one of `●` / `○` / `⊘` / `⊖` / `◉` / `◌` / `◍` per the effective-state rule above. The seven characters are the seven `ICON_*` constants `shared/notify.ts` exports; the COMPAT-01 gate pins each code point and the export count.
+- `<icon>` -- one of `●` / `○` / `⊘` / `⊖` / `◉` / `◌` / `◍` per the effective-state rule above. The seven characters are the seven `ICON_*` constants `shared/notification-grammar.ts` exports; the COMPAT-01 gate pins each code point and the export count.
 - `<name>` -- the plugin name from `p.name`. The `@<marketplace>` suffix is NEVER emitted on a plugin row in v2; the marketplace is already in the header above.
 - `[<scope>]` -- emitted ONLY in the orphan-fold case (plugin's `scope` field is explicitly set AND differs from the marketplace's scope). Same-scope rows omit the bracket because the header carries it. The `available`, `partially-available`, and `unavailable` variants have no `scope` field at all (SNM-11 carve-out) and never emit the bracket.
 - `<version-token>` -- `v<version>` on most variants when `version` is set; `v<from> → v<to>` on the `updated` variant (required from-/to-fields per D-15-04). A persisted PI-7 hash-version (`hash-<12hex>`) renders as a git-style short SHA `v#<7hex>` -- the `hash-` prefix is stripped and only the first 7 of the 12 hex chars are shown (matching git `--short=7`); e.g. `hash-2ea95f85703d` renders `v#2ea95f8`. Persistence is unchanged (`state.json` keeps the full `hash-<12hex>`, PI-7 intact, no migration); the short form exists only at render time (SNM-35, D-23-04 / D-23-05).
 - `(<status>)` -- the discriminator literal. `(manual recovery)` includes the space verbatim.
-- `{<reasons>}` -- single brace block, comma-space separated, emitted only on the 9 reason-bearing variants and only when the composed reasons list is non-empty. A variant is reason-bearing when its message interface in `shared/notify.ts` declares a `reasons` field; that set is `installed | unavailable | upgradable | failed | skipped | manual recovery | partially-installed | partially-upgradable | partially-available`, listed in `PLUGIN_STATUSES` order. The remaining 10 of the 19 plugin statuses have no `reasons` field and therefore cannot carry a brace. `installed` is the one variant whose `reasons` field is OPTIONAL: the list inventory row stamps it for the durable absence fact (INV-01) and the install cascade stamps it for `orphan rewake` (SURF-05), while every other producer omits it. When the composed list is empty -- no typed reasons and no soft-dependency marker -- `composeReasons` returns the empty string and NO brace is emitted, so the row renders with the status token as its last token.
+- `{<reasons>}` -- single brace block, comma-space separated, emitted only on the 9 reason-bearing variants and only when the composed reasons list is non-empty. A variant is reason-bearing when its message interface in `shared/notification-types.ts` declares a `reasons` field; that set is `installed | unavailable | upgradable | failed | skipped | manual recovery | partially-installed | partially-upgradable | partially-available`, listed in `PLUGIN_STATUSES` order. The remaining 10 of the 19 plugin statuses have no `reasons` field and therefore cannot carry a brace. `installed` is the one variant whose `reasons` field is OPTIONAL: the list inventory row stamps it for the durable absence fact (INV-01) and the install cascade stamps it for `orphan rewake` (SURF-05), while every other producer omits it. When the composed list is empty -- no typed reasons and no soft-dependency marker -- `composeReasons` returns the empty string and NO brace is emitted, so the row renders with the status token as its last token.
 
 ### Conditional plugin-row scope bracket
 
@@ -60,7 +60,7 @@ This 0 / 2 / 4 / 6 ladder is the byte-exact contract `notify()` emits at the `ct
 
 ### Reasons rendering
 
-Reasons render inside a single `{}` block, comma-space separated. Each reason is 1-3 words lowercase, hyphenated where natural (`{up-to-date}`, `{rollback partial}`, `{not in manifest}`). Typed-kind carve-outs render `{lsp}` for `lspServers` and `{workflows}` for `workflows`. HOOK-04 / D-58-02: `{unsupported hooks}` is a normal 2-word reason (no longer a manifest-field carve-out -- under v1.13 the `hooks` component kind is supported, and the reason is sourced through `shared/probe-classifiers.ts::narrowResolverNotes` against `parseHooksConfig` prefix tokens). The 44-member `extensions/pi-claude-marketplace/shared/notify.ts::REASONS` tuple defines the closed set. The typed `workflows` kind maps to the final append-only member, `{workflows}`.
+Reasons render inside a single `{}` block, comma-space separated. Each reason is 1-3 words lowercase, hyphenated where natural (`{up-to-date}`, `{rollback partial}`, `{not in manifest}`). Typed-kind carve-outs render `{lsp}` for `lspServers` and `{workflows}` for `workflows`. HOOK-04 / D-58-02: `{unsupported hooks}` is a normal 2-word reason (no longer a manifest-field carve-out -- under v1.13 the `hooks` component kind is supported, and the reason is sourced through `shared/probe-classifiers.ts::narrowResolverNotes` against `parseHooksConfig` prefix tokens). The 44-member `extensions/pi-claude-marketplace/shared/notification-types.ts::REASONS` tuple defines the closed set. The typed `workflows` kind maps to the final append-only member, `{workflows}`.
 
 Structural `unavailable` rows derive reasons from resolver notes through `narrowResolverNotes`. Partial rows derive typed unsupported kinds through `narrowUnsupportedKinds`. The typed `workflows` kind uses the second path.
 
@@ -101,7 +101,7 @@ The v2 grammar retires several v1-only free-text augmentations that are not expr
 
 The `(no marketplaces)` body sentinel (D-15-09 / D-16-17) IS retained -- it is the structural representation of an empty top-level `marketplaces: []`, emitted by the renderer for the empty list-surface case.
 
-______________________________________________________________________
+---
 
 ## Severity routing
 
@@ -129,7 +129,7 @@ The summary counts the operations that drive the severity, by stamped severity, 
 
 Wording (OUT-02 / D-02): `[A|Some] <subject> operation[s] has/have failed | needs/need attention.` -- `subject` is `plugin` or `marketplace`; `A` for a single row, `Some` for more than one; `operation` / `operations` pluralized by count; `has failed` / `have failed` for error and `needs attention` / `need attention` for warning; terminal period kept. D-03: when a cascade's rows span BOTH plugin and marketplace subjects (load-time `reconcile`, `import`) the subject noun is dropped and all rows are counted uniformly (`[A|Some] operation[s] has/have failed | needs/need attention.`), detected at render time from the live row counts. Examples: `"A plugin operation has failed."`, `"Some plugin operations have failed."`, `"A marketplace operation has failed."`, `"Some operations have failed."` (mixed-subject), `"A plugin operation needs attention."`. The summary is computed structurally from the `NotificationMessage` traversal `computeSeverity` performs -- it is not caller-supplied free text, so it does not violate the "no top-level free text" principle (D-17-09).
 
-______________________________________________________________________
+---
 
 ## Status token reference
 
@@ -167,7 +167,7 @@ Marketplace status tokens (drawn from the 7-member `MARKETPLACE_STATUSES` tuple;
 | `(failed)`  | ⊘    | Marketplace header -- `marketplace add` failure, `marketplace remove` partial, `marketplace update` failure, `marketplace autoupdate` failure. |
 | `(skipped)` | ●    | Marketplace header -- mp-level skip (e.g. `{up-to-date}`); the autoupdate-idempotent reasons render the marker-as-outcome form instead.        |
 
-______________________________________________________________________
+---
 
 ## `/claude:plugin list`
 
@@ -365,7 +365,7 @@ Plugin list: 1 success
 
 Triggered when the state record carries the explicit `enabled: false` marker (ENBL-05: the load-bearing predicate is `persistence/state-io.ts::isRecordedButDisabled`, which reads that boolean alone). Availability (`compatibility.installable`) is an ORTHOGONAL axis and is not part of the marker, so a partially-installed record the user disabled renders this same row -- ENBL-06, and the reason why no `(partially-installed)`-style brace appears on it. The `(disabled)` token is the new closed-set `PluginStatus` token (D-54-01); the row uses the `◍` glyph (D-80-01: reassigned from `◌`, which now marks `(remote)`; shared with `will disable` to match the realized/pending-tense precedent: `●` for `(installed)` / `(will install)`, `○` for `(available)` / `(will uninstall)`). Structurally distinct from `(unavailable)`: the byte form differs (`(disabled)` vs `(unavailable)`). The row carries at most ONE reason, `{not in manifest}`, and it carries that one only in the state below (ENBL-16 / D-100-07, which supersedes INV-04's "never carries a reason brace" clause); every other reason stays off a disabled row. The recorded version pin (ENBL-02) is preserved and rendered in the `v<version>` slot. Severity `info`; no reload-hint (inventory row, not a state-changer). The `/claude:plugin disable` command's fresh cascade reuses this exact row byte form WITH the reload-hint trailer via the `disable-cascade` kind (UAT-03; see [`## /claude:plugin disable`](#claudeplugin-disable-pluginmarketplace)); the fresh-disable site stamps no reason, so that row stays bare.
 
-PL-4: when the manifest entry carries a non-empty `description` field, the renderer emits it on a second line indented four spaces beneath the plugin row. Descriptions longer than 66 characters are truncated to 63 characters and suffixed with `"..."` (landing exactly at column 66). Nine list-surface variants (`installed`, `upgradable`, `available`, `remote`, `partially-available`, `partially-installed`, `partially-upgradable`, `unavailable`, `disabled`) support the description field; the cascade-only variants (`updated`, `reinstalled`, `uninstalled`) do not. The count mirrors a runtime authority rather than a hand-kept list: a variant supports the line exactly when its message interface in `extensions/pi-claude-marketplace/shared/notify.ts` declares `description?`, and the two degraded-inventory variants (`PluginPartiallyInstalledMessage`, `PluginPartiallyUpgradableMessage`) are what last moved it off seven. The renderer emits the description line only when the field is defined and non-empty.
+PL-4: when the manifest entry carries a non-empty `description` field, the renderer emits it on a second line indented four spaces beneath the plugin row. Descriptions longer than 66 characters are truncated to 63 characters and suffixed with `"..."` (landing exactly at column 66). Nine list-surface variants (`installed`, `upgradable`, `available`, `remote`, `partially-available`, `partially-installed`, `partially-upgradable`, `unavailable`, `disabled`) support the description field; the cascade-only variants (`updated`, `reinstalled`, `uninstalled`) do not. The count mirrors a runtime authority rather than a hand-kept list: a variant supports the line exactly when its message interface in `extensions/pi-claude-marketplace/shared/notification-types.ts` declares `description?`, and the two degraded-inventory variants (`PluginPartiallyInstalledMessage`, `PluginPartiallyUpgradableMessage`) are what last moved it off seven. The renderer emits the description line only when the field is defined and non-empty.
 
 ### Disabled inventory row with a description (PL-4)
 
@@ -535,7 +535,7 @@ Plugin list: 1 success
 
 A degraded record that is ALSO absent from a manifest that loaded prepends `not in manifest` to the dropped-component kinds (INV-02). The absence reason comes first because it describes the record's relationship to the marketplace, and the kinds describe the install itself; `narrowUnsupportedKinds` stays the sole producer of the kind tokens. The row keeps the `◉` glyph and the `partially-installed` token -- manifest absence is a separate axis from degradation and never changes the status. Severity `info`; no reload-hint (inventory row).
 
-______________________________________________________________________
+---
 
 ## `/claude:plugin install <plugin>@<marketplace>`
 
@@ -776,7 +776,7 @@ The reservation is deliberate. It is what lets `/claude:plugin enable` re-take t
 
 The refusal is otherwise unexplainable from disk, because the name occupies no file. Thus the conflict line names the owner as disabled: `skill "a-foo" already owned by disabled plugin "alpha"`. An enabled owner keeps the shorter form: `skill "g-foo" already owned by plugin "gamma"`. The remedy is `/claude:plugin uninstall <owner>@<marketplace>`, which removes the record and releases the names. The row form is unchanged -- this text rides the `cause:` trailer of the `failure-runtime-with-cause` state above. Severity `error`; no reload-hint (nothing landed).
 
-______________________________________________________________________
+---
 
 ## `/claude:plugin uninstall <plugin>@<marketplace>`
 
@@ -860,7 +860,7 @@ A plugin operation has failed.
   ⊘ helper (failed) {not installed, marketplace in project scope}
 ```
 
-______________________________________________________________________
+---
 
 ## `/claude:plugin reinstall`
 
@@ -1072,7 +1072,7 @@ A marketplace operation has failed.
 ⊘ ghost-mp (failed) {marketplace not added}
 ```
 
-______________________________________________________________________
+---
 
 ## `/claude:plugin update`
 
@@ -1322,7 +1322,7 @@ A marketplace operation has failed.
 ⊘ ghost-mp (failed) {marketplace not added}
 ```
 
-______________________________________________________________________
+---
 
 ## `/claude:plugin fetch`
 
@@ -1377,7 +1377,7 @@ A plugin operation has failed.
 Plugin fetch: 1 failure, 1 success
 ```
 
-______________________________________________________________________
+---
 
 ## `/claude:plugin import`
 
@@ -1471,7 +1471,7 @@ Import: 4 successes
 
 Per-scope marketplace blocks. OUT-03/D-04: two `added` marketplace rows plus two `installed` plugin rows yield `4 successes`. Reload-hint fires. Severity: info.
 
-______________________________________________________________________
+---
 
 ## `/claude:plugin bootstrap`
 
@@ -1497,7 +1497,7 @@ The bootstrap path is a marketplace add; the marketplace status `added` carries 
 
 When the marketplace already exists, the bootstrap orchestrator renders the marketplace with status `updated` (the marketplace persistence record is touched but no plugins changed). No reload-hint: with no plugin children there is no Pi-visible resource change, so the touch alone does not warrant a `/reload` (SNM-33 / D-22-01). Severity: info. (Alternative implementations may render an empty `(updated)` payload as a no-op; the catalog asserts the structural shape, not the orchestrator's choice between `updated` and emitting nothing.)
 
-______________________________________________________________________
+---
 
 ## `/claude:plugin marketplace list`
 
@@ -1545,7 +1545,7 @@ Marketplace list: 4 successes
 
 Four marketplace blocks joined by one blank line each (D-16-07), followed by the plural tally. Each list-surface header is SUB-BRANCH B (mp.status undefined; details set). `<autoupdate>` appears only when `details.autoupdate === true`. The `details.lastUpdatedAt` field is retained in state but is not rendered (UXG-01). Caller-supplied order is preserved (D-16-06); the catalog uses an alphabetic ordering for readability. No reload-hint, no severity arg.
 
-______________________________________________________________________
+---
 
 ## `/claude:plugin marketplace add <source>`
 
@@ -1661,7 +1661,7 @@ Some operations have failed.
     cause: HTTP Error: 401 Unauthorized
 ```
 
-______________________________________________________________________
+---
 
 ## `/claude:plugin marketplace info <name>`
 
@@ -1792,7 +1792,7 @@ A marketplace operation has failed.
 ⊘ my-mp [user] (failed) {marketplace not added}
 ```
 
-______________________________________________________________________
+---
 
 ## `/claude:plugin info <plugin>@<marketplace>`
 
@@ -1930,7 +1930,7 @@ Some plugin operations need attention.
 
 ### Success -- available single scope
 
-Triggered by `plugin info <plugin>@<marketplace>` against a plugin declared in `marketplace.json` but NOT installed in the requested scope. The status glyph switches to `○` (per `pluginInfoStatusGlyph` in `shared/notify.ts`) and the row reads `(available)`. Components remain rendered for path-source plugins because the marketplace clone is local and the plugin entry's source can be resolved without a fetch. Severity `info` (only the `failed` plugin-info row routes to error).
+Triggered by `plugin info <plugin>@<marketplace>` against a plugin declared in `marketplace.json` but NOT installed in the requested scope. The status glyph switches to `○` (per `pluginInfoStatusGlyph` in `shared/notification-grammar.ts`) and the row reads `(available)`. Components remain rendered for path-source plugins because the marketplace clone is local and the plugin entry's source can be resolved without a fetch. Severity `info` (only the `failed` plugin-info row routes to error).
 
 <!-- catalog-state: available-single-scope -->
 
@@ -2109,7 +2109,7 @@ A marketplace operation has failed.
 ⊘ ghost-mp [user] (failed) {marketplace not added}
 ```
 
-______________________________________________________________________
+---
 
 ## `/claude:plugin pending`
 
@@ -2206,7 +2206,7 @@ A marketplace operation has failed.
 ⊘ claude-plugins.json [project] (failed) {invalid manifest}
 ```
 
-______________________________________________________________________
+---
 
 ## reconcile-applied-cascade
 
@@ -2351,7 +2351,7 @@ The load-time counterpart of the standalone install-disabled row: the user hand-
 Reconcile: 1 success
 ```
 
-______________________________________________________________________
+---
 
 ## `/claude:plugin marketplace remove <name>`
 
@@ -2413,7 +2413,7 @@ A marketplace operation has failed.
 ⊘ ghost-mp (failed) {marketplace not added}
 ```
 
-______________________________________________________________________
+---
 
 ## `/claude:plugin marketplace update [<name>]`
 
@@ -2613,7 +2613,7 @@ A marketplace operation has failed.
 ⊘ ghost-mp (failed) {marketplace not added}
 ```
 
-______________________________________________________________________
+---
 
 ## `/claude:plugin enable <plugin>@<marketplace>`
 
@@ -2778,7 +2778,7 @@ A plugin operation has failed.
 
 Triggered when the target config file (`claude-plugins.json` or, with `--local`, `claude-plugins.local.json`) fails CFG-03 validation (0-byte, malformed JSON, or schema-invalid). The orchestrator aborts BEFORE entering the cascade -- state.json mtime is UNCHANGED. The `cause:` summary cites `path.basename(targetConfigPath)` (the file basename only, never the absolute path; T-53-02-02 information-disclosure mitigation reused from Phase 53). Severity `error`; no reload-hint.
 
-______________________________________________________________________
+---
 
 ## `/claude:plugin disable <plugin>@<marketplace>`
 
@@ -2833,7 +2833,7 @@ A plugin operation has failed.
 
 Triggered when the target config file fails CFG-03 validation. The orchestrator aborts BEFORE entering the cascade -- state.json mtime is UNCHANGED. The `cause:` summary cites `path.basename(targetConfigPath)` (basename only; T-53-02-02 mitigation). Severity `error`.
 
-______________________________________________________________________
+---
 
 ## `/claude:plugin marketplace autoupdate|noautoupdate [<name>]`
 
@@ -2943,7 +2943,7 @@ A marketplace operation has failed.
 
 The blocks above span two ladders. The severity ladder runs fresh → info, benign skipped → info, failed (and the `{marketplace not added}` precondition miss) → error (per D-16-11 + Phase 17.1's mp-level skipped extension, refined by UXG-02 / D-28-06: the two idempotent autoupdate no-ops carry benign reasons -- `already autoupdate` / `already no autoupdate` -- so they compute info, not warning; an mp-level `skipped` with non-benign or missing reasons would still route to warning). The reload-hint ladder is uniform here: every autoupdate flag flip suppresses the trailer (per SNM-33 / D-22-01 / D-22-03). The autoupdate flag lives on a marketplace record, not on any Pi-visible resource, so neither a fresh flip nor an idempotent no-op nor a missing-marketplace `{marketplace not added}` failure contributes to "/reload to pick up changes" -- only a plugin row state change does.
 
-______________________________________________________________________
+---
 
 ## Manual recovery anchors
 
@@ -2963,7 +2963,7 @@ A plugin operation needs attention.
 
 The per-plugin `manual recovery` variant emits the literal `(manual recovery)` token (with the space) as the status discriminator. The `cause?: Error` trailer renders at 4-space indent below the row (D-16-08). Severity: `warning` (manual recovery triggers warning per D-16-11). No reload-hint (manual-recovery is not in the state-changing set).
 
-______________________________________________________________________
+---
 
 ## Empty / no-op surfaces
 
@@ -2978,7 +2978,7 @@ Notes:
 - `(no marketplaces)` is the renderer's sentinel for an empty top-level `marketplaces: []` per D-16-17. No reload-hint, no severity arg.
 - An empty per-marketplace `plugins: []` IS the structural representation of an empty cascade per D-15-08; the renderer does not emit a `(no plugins)` body line under the header.
 
-______________________________________________________________________
+---
 
 ## Usage errors
 
@@ -2994,7 +2994,7 @@ Subcommands: install, uninstall, update, reinstall, list, bootstrap, import, mar
 
 The exact wording is renderer-/orchestrator-specific; the contract is that `notifyUsageError` is called with a structured `UsageErrorMessage` and the renderer emits the two-section body separated by one blank line. The catalog's expected output mirrors the structural shape (`message` block, blank line, `usage` block).
 
-______________________________________________________________________
+---
 
 ## Out-of-band notifications
 
@@ -3028,13 +3028,18 @@ Stop hook override cap reached.
 
 Emitted exactly once by the settle dispatcher (`extensions/pi-claude-marketplace/bridges/hooks/settle.ts`) via `notifyStopHookOverrideCap` when Stop hooks drive 8 consecutive bridge re-entries -- block decisions and `additionalContext` continuations share one consecutive-re-entry counter (D-88-08). The loop protection (STOP-07) suppresses the 8th re-entry so a livelocking hook cannot spin the agent forever, and this warning surfaces the override so the suppression is never silent (D-88-01 transparency). Severity: `warning` (the second arg to `ctx.ui.notify` is the magic string `"warning"`) -- the turn ended (the protection worked) but the plugin's block was overridden. The one-shot latch is per-session: a plain-allow outcome with no re-entry resets the counter and re-arms it (D-88-08), so a fresh 8-re-entry run is required before the warning fires again. The literal example names a mock `ralph-wiggum` plugin; the production string interpolates the blocking plugin's id. The byte form is locked by `tests/architecture/hooks-cap-notify.test.ts` (NOT `catalog-uat.test.ts`, whose driver only knows the structured `notify()` entrypoint -- this seam is a bridge diagnostic, not a `NotificationMessage`).
 
-______________________________________________________________________
+---
 
 ## Cross-references
 
-- [`docs/messaging-style-guide.md`](messaging-style-guide.md) -- v2.0 thin-pointer style guide; binding closed-set authority via `as const` tuples in `shared/notify.ts`.
+- [`docs/messaging-style-guide.md`](messaging-style-guide.md) -- v2.0 thin-pointer style guide; binding closed-set authority via `as const` tuples in `shared/notification-types.ts`.
 - [`docs/adr/v2-001-structured-notify.md`](adr/v2-001-structured-notify.md) -- design rationale for the v1.4 structured `NotificationMessage` model; landed via Phase 17 -- spec + catalog UAT migration.
-- [`extensions/pi-claude-marketplace/shared/notify.ts`](../extensions/pi-claude-marketplace/shared/notify.ts) -- the v2 renderer (`notify(ctx, pi, message)` + `notifyUsageError(ctx, message)`); SOLE site for v2 grammar emission.
+- [`extensions/pi-claude-marketplace/shared/notification-types.ts`](../extensions/pi-claude-marketplace/shared/notification-types.ts) -- closed notification tuples and unions.
+- [`extensions/pi-claude-marketplace/shared/notification-grammar.ts`](../extensions/pi-claude-marketplace/shared/notification-grammar.ts) -- icon, row, header, trailer, and information-body rendering.
+- [`extensions/pi-claude-marketplace/shared/notification-summary.ts`](../extensions/pi-claude-marketplace/shared/notification-summary.ts) -- severity, tally, reload, and cascade-summary folding.
+- [`extensions/pi-claude-marketplace/shared/notification-dispatch.ts`](../extensions/pi-claude-marketplace/shared/notification-dispatch.ts) -- `notify(ctx, pi, message)`, `notifyUsageError(ctx, message)`, diagnostic, hook, and raw entrypoints; SOLE direct Pi output owner.
+- [`extensions/pi-claude-marketplace/shared/redact-absolute-paths.ts`](../extensions/pi-claude-marketplace/shared/redact-absolute-paths.ts) -- notification diagnostic path redaction.
+- [`extensions/pi-claude-marketplace/shared/compare-name-scope.ts`](../extensions/pi-claude-marketplace/shared/compare-name-scope.ts) -- stable name-first, project-before-user ordering.
 - [`extensions/pi-claude-marketplace/shared/notify-reasons.ts`](../extensions/pi-claude-marketplace/shared/notify-reasons.ts) -- compile-time closed-set membership proof: the `_UncoveredReason` / `_ExtraReason` reason-coverage check, plus the per-command `satisfies CommandContext` checks in the `*.messaging.ts` modules.
 - [`tests/architecture/catalog-uat.test.ts`](../tests/architecture/catalog-uat.test.ts) -- user-contract gate; drives this catalog's `<!-- catalog-state: STATE -->` annotated fixtures through `notify()` via mock `ctx` and asserts byte-equality (rewritten in Plan 17-03; until then the V1 catalog UAT byte-mismatches against the v2 catalog -- Pitfall 2 documented in 17-RESEARCH.md).
 - [`docs/prd/pi-claude-marketplace-prd.md`](prd/pi-claude-marketplace-prd.md) §6.12 ES-5 -- the stable user-contract strings origin; the 5 ES-5 markers were superseded by the v1.3 style guide and remain blocked by `tests/architecture/no-legacy-markers.test.ts`.
