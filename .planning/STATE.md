@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 06
 current_phase_name: Assertion and Module Refinement
 status: executing
-stopped_at: Completed 06-08-PLAN.md
-last_updated: "2026-09-09T06:19:47.516Z"
+stopped_at: Completed 06-09-PLAN.md
+last_updated: "2026-09-09T06:29:25.270Z"
 last_activity: 2026-09-08
 last_activity_desc: Phase 06 execution started
-state_head: 1f68834d181704538762ab4215f563a27cfb71e9
+state_head: d8bf4cd97b234e0bb8ab4033c6ce5eb00e3fce1c
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 180
-  completed_plans: 136
+  completed_plans: 137
   percent: 11
 ---
 
@@ -33,7 +33,7 @@ component as a working Pi artifact.
 
 Phase: 06 (Assertion and Module Refinement) — EXECUTING
 Next: Discuss Phase 6
-Plan: 9 of 52
+Plan: 10 of 52
 Status: Ready to execute
 Last activity: 2026-09-08 — Phase 06 execution started
 
@@ -316,6 +316,7 @@ Last activity: 2026-09-08 — Phase 06 execution started
 | Phase 06 P06 | 17 min | 2 tasks | 8 files |
 | Phase 06 P07 | 27min | 2 tasks | 18 files |
 | Phase 06 P08 | 8min | 2 tasks | 2 files |
+| Phase 06 P09 | 6 min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -742,6 +743,7 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 06]: Exported resolver leaves inline narrow parameter shapes rather than exporting implementation-only interfaces.
 - [Phase 06]: Plan 06-08 preserved fetch's lazy resolver load while moving the module path directly to plugin-resolver.ts.
 - [Phase 06]: Plan 06-08 kept info behavior and public APIs unchanged while moving only resolveStrict ownership.
+- [Phase 06]: Plan 06-09: resolver runtime callers import directly from plugin-resolver.ts; already-direct resolver-types.ts consumers stay unchanged.
 
 ### Pending Todos
 
@@ -794,7 +796,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 06-08-PLAN.md
+**Stopped at:** Completed 06-09-PLAN.md
 
 Phase 04 completed all seven plans and closed AUTH-01 and TREF-01 through
 TREF-03. Independent verification passed 4/4 with no behavioral or UAT gap;
@@ -812,7 +814,7 @@ independent verification passed 6/6 with zero unverified behaviors.
 **Read beside it:** `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`, the
 Phase 01 terminal evidence ledger, and Phase 5's roadmap criteria.
 
-Last session: 2026-09-09T06:19:46.912Z
+Last session: 2026-09-09T06:29:24.698Z
 
 **Next:** Discuss Phase 06 to define the assertion-strengthening and approved
 module-refinement work before planning.
