@@ -89,7 +89,7 @@ describe("MF-DEC-01 census", () => {
   });
 
   test("fails closed for duplicate, missing, stale, and unmapped rows", () => {
-    const duplicateIds = [...MF_DEC_01_IDS.slice(0, -1), MF_DEC_01_IDS[0]];
+    const duplicateIds = [...MF_DEC_01_IDS.slice(0, -1), MF_DEC_01_IDS[0]!];
     assert.match(
       validateCensus({
         decision: "MF-DEC-01",
@@ -214,6 +214,11 @@ describe("Phase 6 closure", () => {
     files.set(
       "tests/orchestrators/plugin/uninstall.test.ts",
       `${"syncBuiltinESMExports();\n".repeat(2)}createRequire(import.meta.url);\n`,
+    );
+    files.set("scripts/check-phase-06-hub-ledger.mjs", "syncBuiltinESMExports( createRequire(");
+    files.set(
+      "tests/scripts/check-phase-06-hub-ledger.test.ts",
+      "syncBuiltinESMExports( createRequire(",
     );
     return files;
   }

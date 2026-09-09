@@ -117,6 +117,11 @@ export const LEGACY_HUBS = Object.freeze([
   `${EXTENSION_ROOT}/orchestrators/plugin/list.ts`,
 ]);
 
+const RESIDUAL_CENSUS_IGNORES = new Set([
+  "scripts/check-phase-06-hub-ledger.mjs",
+  "tests/scripts/check-phase-06-hub-ledger.test.ts",
+]);
+
 /** @type {readonly CensusRow[]} */
 export const CENSUS_ROWS = Object.freeze([
   {
@@ -669,7 +674,9 @@ function validateLegacyInventory(files, legacyHubs) {
  * @param {readonly string[]} expectedResiduals
  */
 function validateResidualCensus(files, token, expectedFiles, expectedCalls, expectedResiduals) {
-  const entries = [...files].filter(([, source]) => source.includes(token));
+  const entries = [...files].filter(
+    ([file, source]) => !RESIDUAL_CENSUS_IGNORES.has(file) && source.includes(token),
+  );
   const calls = entries.reduce((total, [, source]) => total + occurrenceCount(source, token), 0);
   const errors = compareExactSet(
     entries.map(([file]) => file),
@@ -795,10 +802,9 @@ function validateCensusDocument(document, expectedRows) {
 function parseArgs(argv) {
   const [mode, ...tokens] = argv;
   const values = new Map();
-  for (let index = 0; index < tokens.length; index += 2) {
+  for (let index = 0; index < tokens.length;) {
     const flag = tokens[index];
-    const value = tokens[index + 1];
-    if (flag === undefined || !flag.startsWith("--") || value === undefined) {
+    if (flag === undefined || !flag.startsWith("--")) {
       throw new Error(`malformed argument near ${flag ?? "<end>"}`);
     }
 
@@ -806,7 +812,18 @@ function parseArgs(argv) {
       throw new Error(`duplicate argument ${flag}`);
     }
 
-    values.set(flag, value);
+    index += 1;
+    const argumentsForFlag = [];
+    while (index < tokens.length && !tokens[index]?.startsWith("--")) {
+      argumentsForFlag.push(tokens[index]);
+      index += 1;
+    }
+
+    if (argumentsForFlag.length === 0) {
+      throw new Error(`malformed argument near ${flag}`);
+    }
+
+    values.set(flag, argumentsForFlag.join(" "));
   }
 
   return { mode, values };

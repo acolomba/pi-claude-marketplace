@@ -525,9 +525,12 @@ async function recordFor(
 function applyAfterSelectedStateRace(
   locations: ScopedLocations,
   competing: ExtensionState | string,
-): (opts: ApplyReconcileOptions) => Promise<void> {
+): (
+  opts: Omit<ApplyReconcileOptions, "completionCache" | "hooksRouting"> &
+    Partial<Pick<ApplyReconcileOptions, "completionCache" | "hooksRouting">>,
+) => Promise<void> {
   let raced = false;
-  return createApplyReconcile({
+  const applySelectedReconcile = createApplyReconcile({
     async loadState(extensionRoot: string): Promise<ExtensionState> {
       const selected = await loadState(extensionRoot);
       if (!raced && extensionRoot === locations.extensionRoot) {
@@ -542,6 +545,12 @@ function applyAfterSelectedStateRace(
       return selected;
     },
   });
+  return (opts) =>
+    applySelectedReconcile({
+      ...opts,
+      completionCache: opts.completionCache ?? createCompletionCache(),
+      hooksRouting: opts.hooksRouting ?? createHooksRouting(createHooksRuntime()),
+    });
 }
 
 /**
