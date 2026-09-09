@@ -25,6 +25,7 @@ import { cascadeUnstagePlugin, crossScopeFlag } from "../marketplace/shared.ts";
 import { probeInstallClone } from "./install-clone-probe.ts";
 import { resolveInstallDeclaredEnabled } from "./install-declared-enabled.ts";
 import { composeInstallDisableCascade } from "./install-disable-cascade.ts";
+import { installedPluginOutcome, runInstallLedger } from "./install-outcome.ts";
 import {
   INSTALL_CONTEXT,
   classifyEntityShapeError,
@@ -32,29 +33,28 @@ import {
   composeInstallFailureMessage,
   formatOrchestratedCause,
 } from "./install.messaging.ts";
-import { installedPluginOutcome, runInstallLedger } from "./install-outcome.ts";
 import {
   selectDeclaringConfigWriteTarget,
   surfaceDiscoveryWarnings,
   writeAdoptingConfigEntries,
 } from "./shared.ts";
 
-import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
-import type { CompletionCache } from "../../shared/completion-cache.ts";
-import type { ContentReason } from "../../shared/notification-types.ts";
-import type { Dependency } from "../../shared/concerns/soft-dep.ts";
-import type { Scope } from "../../shared/types.ts";
-import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
-import type { InstallPluginOutcome } from "../types.ts";
 import type { InstallCloneCacheSeam } from "./install-clone-probe.ts";
 import type { InstallHooksRouting } from "./install-disable-cascade.ts";
-import type { InstallMsg } from "./install.messaging.ts";
 import type {
   InstallFailureCapture,
   InstallLedgerOptions,
   InstallLedgerSummary,
   InstallPluginNotifications,
 } from "./install-outcome.ts";
+import type { InstallMsg } from "./install.messaging.ts";
+import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
+import type { CompletionCache } from "../../shared/completion-cache.ts";
+import type { Dependency } from "../../shared/concerns/soft-dep.ts";
+import type { ContentReason } from "../../shared/notification-types.ts";
+import type { Scope } from "../../shared/types.ts";
+import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
+import type { InstallPluginOutcome } from "../types.ts";
 
 /**
  * Controls how `installPlugin` surfaces notifications.

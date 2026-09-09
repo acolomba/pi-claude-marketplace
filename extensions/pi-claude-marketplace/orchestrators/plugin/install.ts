@@ -102,8 +102,8 @@ import {
 } from "../../domain/plugin-resolver.ts";
 import { parsePluginSource } from "../../domain/source.ts";
 import { shaVersion } from "../../domain/version.ts";
-import { type DegradeKind } from "../../shared/notify-reasons.ts";
 import { ConcurrentInstallError, PluginShapeError } from "../../shared/errors.ts";
+import { type DegradeKind } from "../../shared/notify-reasons.ts";
 import { runPhases, type Phase, type RunPhasesResult } from "../../transaction/phase-ledger.ts";
 import { formatRollbackError } from "../../transaction/rollback.ts";
 import { DEFAULT_CREDENTIAL_OPS } from "../auth-host.ts";
@@ -118,6 +118,11 @@ import {
   resolvePluginVersion,
 } from "./shared.ts";
 
+import type {
+  InstallFailureCapture,
+  InstallLedgerOptions,
+  InstallLedgerTransaction,
+} from "./install-outcome.ts";
 import type { PreparedAgentsStaging } from "../../bridges/agents/index.ts";
 import type { PreparedCommandsStaging } from "../../bridges/commands/index.ts";
 import type { PreparedMcpStaging } from "../../bridges/mcp/index.ts";
@@ -127,11 +132,6 @@ import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { HookSummaryEntry } from "../../shared/concerns/hooks.ts";
-import type {
-  InstallFailureCapture,
-  InstallLedgerOptions,
-  InstallLedgerTransaction,
-} from "./install-outcome.ts";
 
 /**
  * Local context type for the 5-phase ledger. Carries every value the
