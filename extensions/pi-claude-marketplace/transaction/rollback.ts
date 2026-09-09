@@ -4,7 +4,7 @@
 // data; it does NOT compose any user-visible string. The calling
 // orchestrator forwards the `rollbackPartial[]` data into a
 // `PluginFailedMessage.rollbackPartial` payload and the renderer in
-// `shared/notify.ts` emits the `(failed) {rollback partial}` parent line
+// `shared/notification-grammar.ts` emits the `(failed) {rollback partial}` parent line
 // plus its 2-space-indented per-phase children. MSG-RP-1 guards against any
 // re-introduction of a hand-composed literal here.
 //
@@ -22,8 +22,8 @@ import type { RollbackPartial, RunPhasesResult } from "./phase-ledger.ts";
 /**
  * Structured result from {@link formatRollbackError}. Orchestrators
  * destructure this and forward the `rollbackPartials[]` into a
- * `PluginFailedMessage.rollbackPartial` payload consumed by the
- * `notify()` renderer in `shared/notify.ts`.
+ * `PluginFailedMessage.rollbackPartial` payload from
+ * `shared/notification-types.ts`, consumed by `shared/notification-grammar.ts`.
  *
  * `error` is either the original Error (zero-partial fast path and
  * PathContainmentError bypass) or a new Error wrapping the original via
@@ -40,8 +40,8 @@ export interface RollbackErrorResult {
  *
  * The transaction layer does NOT compose the user-visible body -- that
  * responsibility belongs to the calling orchestrator, which routes the
- * payload through the `notify()` path in `shared/notify.ts`. The
- * `transaction/` layer remains presentation-free.
+ * payload through `shared/notify-context.ts` to `shared/notification-dispatch.ts`.
+ * The `transaction/` layer remains presentation-free.
  *
  * - PathContainmentError (and SymlinkRefusedError subclass, D-17):
  *   `{ error: originalError, rollbackPartials: [] }` -- the bypass per
@@ -54,7 +54,7 @@ export interface RollbackErrorResult {
  *   -- ES-4 cause-chain preserved; the orchestrator emits the
  *   `(failed) {rollback partial}` parent + indented per-phase children
  *   by routing the data through a `PluginFailedMessage.rollbackPartial`
- *   payload in `shared/notify.ts` (the renderer owns the byte form).
+ *   payload rendered in `shared/notification-grammar.ts`.
  */
 export function formatRollbackError(
   result: RunPhasesResult,

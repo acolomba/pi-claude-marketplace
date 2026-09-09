@@ -15,7 +15,7 @@
 //
 // Per AS-4 / CMC-17 / MSG-RP-1: this file ships RAW data
 // (RollbackPartial[]); the user-visible body is assembled by the renderer
-// in shared/notify.ts as a `(failed) {rollback partial}` parent line
+// in shared/notification-grammar.ts as a `(failed) {rollback partial}` parent line
 // followed by 2-space-indented per-phase children of the form
 // `[<phase>] (rollback failed)`, using the closed-set CMC-11 token
 // vocabulary.
@@ -44,9 +44,10 @@ export interface Phase<C> {
  * `cause?: Error` preserves the original undo throw's `Error.cause` chain;
  * recording only `msg` (the top-level `errorMessage(undoErr)` text) would
  * drop any deeper cause attached via `new Error(msg, { cause })`. The
- * renderer surfaces it: `shared/notify.ts` maps each RollbackPartial onto a
- * `PluginFailedMessage.rollbackPartial[]` child and walks `cause` with the
- * depth-5 `causeChainTrailer`.
+ * renderer surfaces it: the calling orchestrator maps each RollbackPartial
+ * onto a `PluginFailedMessage.rollbackPartial[]` child from
+ * `shared/notification-types.ts`, and `shared/notification-grammar.ts` walks
+ * `cause` with the depth-5 `causeChainTrailer`.
  *
  * `cause` is the ORIGINAL Error instance (not the message text) so the
  * walker can traverse its own `.cause` chain. Set to `undefined` when
@@ -91,7 +92,7 @@ async function rollbackExecuted<C>(
       }
 
       // Preserve the Error instance (not just its message text) so the
-      // depth-5 `causeChainTrailer` walker in shared/notify.ts can surface
+      // depth-5 `causeChainTrailer` walker in shared/notification-grammar.ts can surface
       // the originating cause to the user. Falls back to `undefined` when
       // the undo throw was not an Error subclass (defensive -- bridges
       // should always throw Errors).
@@ -143,8 +144,8 @@ async function invokeFailingPhaseUndo<C>(
  * call `formatRollbackError(result, result.error!)` from
  * `transaction/rollback.ts` to produce a structured `RollbackErrorResult`
  * (`{ error, rollbackPartials }`); the orchestrator then maps that onto a
- * `PluginFailedMessage` and the renderer in `shared/notify.ts` composes the
- * user-visible body.
+ * `PluginFailedMessage` and the renderer in `shared/notification-grammar.ts`
+ * composes the user-visible body.
  *
  * Exception: PI-14 PathContainmentError thrown from an undo step is
  * re-thrown immediately (state corruption is loud). The caller observes
