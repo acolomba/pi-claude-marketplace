@@ -13,6 +13,7 @@ import {
   type SkippedCause,
   type SkippedWorkflow,
   type StemFallbackWorkflow,
+  type WorkflowGate,
   type WorkflowVerdict,
 } from "../../extensions/pi-claude-marketplace/domain/workflow-script.ts";
 import { WorkflowNameCollisionError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
@@ -92,6 +93,34 @@ interface StemDropRow {
 interface EncodingRow {
   readonly encoding: string;
   readonly source: string;
+}
+
+/**
+ * WGATE-01: the verdict projection the gate cases compare -- the arm the script
+ * settled on, and the engine gate it was read as tripping.
+ *
+ * The gate is asserted by NAME on every row rather than as "some gate is
+ * present": a reader that walked its gates in the wrong order, or fired the
+ * wrong predicate, is green against a presence check.
+ */
+interface GateReading {
+  readonly outcome: WorkflowVerdict["outcome"];
+  readonly gate: WorkflowGate | undefined;
+}
+
+function gateReading(verdict: WorkflowVerdict): GateReading {
+  return {
+    outcome: verdict.outcome,
+    gate:
+      verdict.outcome === "named" || verdict.outcome === "stem-fallback" ? verdict.gate : undefined,
+  };
+}
+
+interface GateRow {
+  readonly shape: string;
+  readonly source: string;
+  readonly outcome: "named" | "stem-fallback";
+  readonly gate: WorkflowGate | undefined;
 }
 
 interface UntrustedTextRow {
@@ -754,6 +783,411 @@ export const meta = { name: "ship" };
 
     // assert
     assert.deepStrictEqual(nonAdmission(verdict), expectedVerdict);
+  });
+
+  // WGATE-01: one case per engine gate, per shape measured against
+  // `@quintinshaw/pi-dynamic-workflows` 3.10.1. Every row asserts the gate NAME:
+  // an assertion that "some gate is present" is green for the wrong gate, and
+  // the gate a reader reports is the whole content of the warning.
+  for (const { shape, source, outcome, gate } of [
+    {
+      shape: "declares a statement before its meta export",
+      source: `const x = 1;\nexport const meta = { name: "ship", description: "d" };\n`,
+      outcome: "named",
+      gate: "meta-not-first-export",
+    },
+    {
+      shape: "never exports its meta at all",
+      source: `const meta = { name: "ship", description: "d" };\n`,
+      outcome: "named",
+      gate: "meta-not-first-export",
+    },
+    {
+      shape: "exports a default before its meta",
+      source: `export default 1;\nexport const meta = { name: "ship", description: "d" };\n`,
+      outcome: "named",
+      gate: "meta-not-first-export",
+    },
+    {
+      shape: "declares its meta with let",
+      source: `export let meta = { name: "ship", description: "d" };\n`,
+      outcome: "named",
+      gate: "meta-not-const-export",
+    },
+    {
+      shape: "declares its meta with var",
+      source: `export var meta = { name: "ship", description: "d" };\n`,
+      outcome: "named",
+      gate: "meta-not-const-export",
+    },
+    {
+      // The export's `declaration` is null here: a bare re-export declares
+      // nothing, which is a distinct arm from `let` and `var`.
+      shape: "re-exports its meta rather than declaring it in the export",
+      source: `export { meta };\nconst meta = { name: "ship", description: "d" };\n`,
+      outcome: "named",
+      gate: "meta-not-const-export",
+    },
+    {
+      shape: "exports a function before its meta",
+      source: `export function help() {}\nexport const meta = { name: "ship", description: "d" };\n`,
+      outcome: "named",
+      gate: "meta-not-const-export",
+    },
+    {
+      shape: "declares a second binding beside its meta",
+      source: `export const meta = { name: "ship", description: "d" }, other = 1;\n`,
+      outcome: "named",
+      gate: "meta-not-sole-declarator",
+    },
+    {
+      shape: "exports something other than meta first",
+      source: `export const other = 1;\nconst meta = { name: "ship", description: "d" };\n`,
+      outcome: "named",
+      gate: "meta-not-named-meta",
+    },
+    {
+      shape: "spreads into a phases entry",
+      source: `export const meta = { name: "ship", description: "d", phases: [{ title: "t", ...rest }] };\n`,
+      outcome: "named",
+      gate: "meta-not-pure-literal",
+    },
+    {
+      shape: "spreads into meta before its name",
+      source: `export const meta = { ...rest, name: "ship", description: "d" };\n`,
+      outcome: "named",
+      gate: "meta-not-pure-literal",
+    },
+    {
+      shape: "declares a method in meta",
+      source: `export const meta = { name: "ship", description: "d", run() {} };\n`,
+      outcome: "named",
+      gate: "meta-not-pure-literal",
+    },
+    {
+      shape: "declares an accessor in meta",
+      source: `export const meta = { name: "ship", description: "d", get later() { return 1; } };\n`,
+      outcome: "named",
+      gate: "meta-not-pure-literal",
+    },
+    {
+      shape: "declares a prototype key in meta",
+      source: `export const meta = { name: "ship", description: "d", prototype: 1 };\n`,
+      outcome: "named",
+      gate: "meta-not-pure-literal",
+    },
+    {
+      shape: "declares a constructor key in meta",
+      source: `export const meta = { name: "ship", description: "d", constructor: 1 };\n`,
+      outcome: "named",
+      gate: "meta-not-pure-literal",
+    },
+    {
+      shape: "declares a __proto__ key in meta",
+      source: `export const meta = { name: "ship", description: "d", "__proto__": 1 };\n`,
+      outcome: "named",
+      gate: "meta-not-pure-literal",
+    },
+    {
+      // The engine's `propertyKey` reads an identifier and a string- or
+      // number-valued literal and refuses every other key node, so this key is
+      // refused while the numeric key in the admitted rows below is not. A
+      // predicate built from node type, `computed`, `kind` and `method` alone
+      // lets this one through.
+      shape: "declares a BigInt-literal key in meta",
+      source: `export const meta = { name: "ship", description: "d", 1n: "x" };\n`,
+      outcome: "named",
+      gate: "meta-not-pure-literal",
+    },
+    {
+      shape: "leaves a hole in its phases array",
+      source: `export const meta = { name: "ship", description: "d", phases: [, { title: "t" }] };\n`,
+      outcome: "named",
+      gate: "meta-not-pure-literal",
+    },
+    {
+      shape: "spreads into its phases array",
+      source: `export const meta = { name: "ship", description: "d", phases: [...rest] };\n`,
+      outcome: "named",
+      gate: "meta-not-pure-literal",
+    },
+    {
+      shape: "reads its model from a binding",
+      source: `export const meta = { name: "ship", description: "d", model: someVar };\n`,
+      outcome: "named",
+      gate: "meta-not-pure-literal",
+    },
+    {
+      // `undefined` is an identifier, so the engine refuses it as a non-literal
+      // node before its `model` type check ever runs.
+      shape: "declares its model as undefined",
+      source: `export const meta = { name: "ship", description: "d", model: undefined };\n`,
+      outcome: "named",
+      gate: "meta-not-pure-literal",
+    },
+    {
+      shape: "computes its model from an expression",
+      source: `export const meta = { name: "ship", description: "d", model: 1 + 1 };\n`,
+      outcome: "named",
+      gate: "meta-not-pure-literal",
+    },
+    {
+      // The one gate row whose verdict is NOT `named`: a substituted template
+      // denies the script a readable name, so the stem names the command AND the
+      // engine refuses the same value at its literal check.
+      shape: "substitutes into its template-literal name",
+      source: "export const meta = { name: `ship-${suffix}`, description: 'd' };\n",
+      outcome: "stem-fallback",
+      gate: "meta-not-pure-literal",
+    },
+    {
+      shape: "declares no description",
+      source: `export const meta = { name: "ship" };\n`,
+      outcome: "named",
+      gate: "meta-fields-invalid",
+    },
+    {
+      shape: "declares a whitespace-only description",
+      source: `export const meta = { name: "ship", description: "   " };\n`,
+      outcome: "named",
+      gate: "meta-fields-invalid",
+    },
+    {
+      shape: "declares a numeric description",
+      source: `export const meta = { name: "ship", description: 5 };\n`,
+      outcome: "named",
+      gate: "meta-fields-invalid",
+    },
+    {
+      shape: "declares a numeric model",
+      source: `export const meta = { name: "ship", description: "d", model: 5 };\n`,
+      outcome: "named",
+      gate: "meta-fields-invalid",
+    },
+    {
+      // A negative-number unary IS resolvable, so this passes the literal check
+      // and fails the field check -- the two are distinct rows on one value.
+      shape: "declares a negative-number model",
+      source: `export const meta = { name: "ship", description: "d", model: -1 };\n`,
+      outcome: "named",
+      gate: "meta-fields-invalid",
+    },
+    {
+      shape: "declares a null model",
+      source: `export const meta = { name: "ship", description: "d", model: null };\n`,
+      outcome: "named",
+      gate: "meta-fields-invalid",
+    },
+    {
+      shape: "declares its phases as an object",
+      source: `export const meta = { name: "ship", description: "d", phases: {} };\n`,
+      outcome: "named",
+      gate: "meta-fields-invalid",
+    },
+    {
+      shape: "declares a phases entry with no title",
+      source: `export const meta = { name: "ship", description: "d", phases: [{}] };\n`,
+      outcome: "named",
+      gate: "meta-fields-invalid",
+    },
+    {
+      shape: "declares a phases entry with a numeric title",
+      source: `export const meta = { name: "ship", description: "d", phases: [{ title: 1 }] };\n`,
+      outcome: "named",
+      gate: "meta-fields-invalid",
+    },
+    {
+      shape: "declares a phases entry that is not an object",
+      source: `export const meta = { name: "ship", description: "d", phases: ["t"] };\n`,
+      outcome: "named",
+      gate: "meta-fields-invalid",
+    },
+    {
+      shape: "declares nothing the engine refuses",
+      source: `export const meta = { name: "ship", description: "d" };\n`,
+      outcome: "named",
+      gate: undefined,
+    },
+    {
+      // The engine's `propertyKey` reads a numeric key to its text and admits
+      // it, so firing here would warn about a script the engine loads.
+      shape: "declares a numeric key in meta",
+      source: `export const meta = { name: "ship", description: "d", 1: "x" };\n`,
+      outcome: "named",
+      gate: undefined,
+    },
+    {
+      shape: "declares a quoted-string key in meta",
+      source: `export const meta = { name: "ship", description: "d", "k-1": "x" };\n`,
+      outcome: "named",
+      gate: undefined,
+    },
+    {
+      // The engine's literal arm returns the node's value with no type test, so
+      // a regular expression resolves like any other literal.
+      shape: "declares a regular-expression value in meta",
+      source: `export const meta = { name: "ship", description: "d", pattern: /x/ };\n`,
+      outcome: "named",
+      gate: undefined,
+    },
+    {
+      shape: "declares a substitution-free template description",
+      source: "export const meta = { name: 'ship', description: `d` };\n",
+      outcome: "named",
+      gate: undefined,
+    },
+    {
+      shape: "declares an empty phases array",
+      source: `export const meta = { name: "ship", description: "d", phases: [] };\n`,
+      outcome: "named",
+      gate: undefined,
+    },
+    {
+      shape: "nests literals inside meta",
+      source: `export const meta = { name: "ship", description: "d", extra: { list: [1, "two", { deep: true }] } };\n`,
+      outcome: "named",
+      gate: undefined,
+    },
+    {
+      shape: "declares a string model and a titled phase",
+      source: `export const meta = { name: "ship", description: "d", model: "m", phases: [{ title: "t" }] };\n`,
+      outcome: "named",
+      gate: undefined,
+    },
+  ] satisfies readonly GateRow[]) {
+    test(`reports ${gate ?? "no gate"} for a script that ${shape}`, () => {
+      // arrange
+      const expectedVerdict = { outcome, gate } satisfies GateReading;
+
+      // act
+      const verdict = admitWorkflowScript("acme", "ship.js", source);
+
+      // assert
+      assert.deepStrictEqual(gateReading(verdict), expectedVerdict);
+    });
+  }
+
+  test("reports the gate the engine stops at, not the last one a script trips", () => {
+    // arrange -- D-115-04: this script trips the FIRST-statement check AND
+    // declares no description. The engine stops at the first, so it never
+    // evaluates the object the field check describes. A reader that reported
+    // every failing gate would pass every other row in this file.
+    const source = `const x = 1;\nexport const meta = { name: "ship" };\n`;
+    const expectedVerdict = {
+      outcome: "named",
+      gate: "meta-not-first-export",
+    } satisfies GateReading;
+
+    // act
+    const verdict = admitWorkflowScript("acme", "ship.js", source);
+
+    // assert
+    assert.deepStrictEqual(gateReading(verdict), expectedVerdict);
+  });
+
+  test("refuses a meta declarator with no initializer as unparseable, with no gate of its own", () => {
+    // arrange -- D-115-02: the engine carries a "declarator has an initializer"
+    // check, and no parseable script can reach it. `export const meta;` is a
+    // SyntaxError acorn rejects outright, and every non-const form is refused
+    // one check earlier, so there is no seventh gate to name.
+    const source = `export const meta;\n`;
+    const expectedVerdict = { outcome: "refused", cause: "unparseable" } satisfies NonAdmission;
+
+    // act
+    const verdict = admitWorkflowScript("acme", "ship.js", source);
+
+    // assert
+    assert.deepStrictEqual(nonAdmission(verdict), expectedVerdict);
+    assert.strictEqual(Object.hasOwn(verdict, "gate"), false);
+  });
+
+  test("leaves the gate field off a script the engine will load", () => {
+    // arrange -- WGATE-03: absent, not present-and-undefined. The field is
+    // spread in only when a gate fired, so a consumer reading it cannot tell an
+    // unread gate from a passed one unless the key itself is missing.
+    const source = `export const meta = { name: "ship", description: "d" };\n`;
+
+    // act
+    const verdict = admitWorkflowScript("acme", "ship.js", source);
+
+    // assert
+    assert.strictEqual(Object.hasOwn(verdict, "gate"), false);
+  });
+
+  for (const { shape, source } of [
+    { shape: "a zero-byte script", source: "" },
+    { shape: "a comment-only script", source: `// nothing to see here\n` },
+  ] satisfies readonly { shape: string; source: string }[]) {
+    test(`keeps ${shape} a no-meta skip carrying no gate`, () => {
+      // arrange -- the parsed body is empty, so there is no meta to read gates
+      // off and no admitted arm to carry one. A skip cannot hold a gate by type;
+      // this pins that it does not hold one in fact either.
+      const expectedVerdict = { outcome: "skipped", cause: "no-meta" } satisfies NonAdmission;
+
+      // act
+      const verdict = admitWorkflowScript("acme", "empty.js", source);
+
+      // assert
+      assert.deepStrictEqual(nonAdmission(verdict), expectedVerdict);
+      assert.strictEqual(Object.hasOwn(verdict, "gate"), false);
+    });
+  }
+
+  test("settles a meta object literal with zero properties as a stem fallback carrying the field gate", () => {
+    // arrange -- the key set IS readable and simply declares nothing, which is
+    // the stem fallback's own arm; the missing description is what the engine
+    // refuses.
+    const source = `export const meta = {};\n`;
+    const expectedVerdict = {
+      outcome: "stem-fallback",
+      gate: "meta-fields-invalid",
+    } satisfies GateReading;
+
+    // act
+    const verdict = admitWorkflowScript("acme", "ship.js", source);
+
+    // assert
+    assert.deepStrictEqual(gateReading(verdict), expectedVerdict);
+  });
+
+  test("gives a gate-warned script the same generated name as the same script without the gate", () => {
+    // arrange -- WGATE-03 at the decision layer: a gate reading adds an advisory
+    // field and changes nothing else about the verdict.
+    const gated = `const x = 1;\nexport const meta = { name: "ship", description: "d" };\n`;
+    const clean = `export const meta = { name: "ship", description: "d" };\n`;
+
+    // act
+    const gatedVerdict = admitWorkflowScript("acme", "ship.js", gated);
+    const cleanVerdict = admitWorkflowScript("acme", "ship.js", clean);
+
+    // assert
+    assert.deepStrictEqual(admission(gatedVerdict), admission(cleanVerdict));
+    assert.deepStrictEqual(gateReading(gatedVerdict), {
+      outcome: "named",
+      gate: "meta-not-first-export",
+    } satisfies GateReading);
+  });
+
+  test("stops deciding rather than throwing when a meta literal nests past the walk budget", () => {
+    // arrange -- WGATE-03: the gate walk recurses over untrusted AST, so it
+    // carries a depth budget and its own containment. This literal hides a
+    // spread the engine WOULD refuse under 40 levels of nesting, which acorn
+    // parses without complaint. The budget stops the walk first, the containment
+    // turns that into NO gate, and the cost is a missed warning rather than a
+    // failed read. A reader without either would report the spread's gate here.
+    const source = `export const meta = { name: "ship", description: "d", deep: ${"{ a: ".repeat(40)}{ ...rest }${" }".repeat(40)} };\n`;
+    const expectedVerdict = {
+      outcome: "named",
+      metaName: "ship",
+      generatedName: "acme:ship",
+    } satisfies Admission;
+
+    // act
+    const verdict = admitWorkflowScript("acme", "ship.js", source);
+
+    // assert
+    assert.deepStrictEqual(admission(verdict), expectedVerdict);
+    assert.strictEqual(Object.hasOwn(verdict, "gate"), false);
   });
 });
 
