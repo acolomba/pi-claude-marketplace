@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 06
 current_phase_name: Assertion and Module Refinement
 status: executing
-stopped_at: Completed 06-17-PLAN.md
-last_updated: "2026-09-09T09:19:54.666Z"
+stopped_at: Completed 06-19-PLAN.md
+last_updated: "2026-09-09T09:35:55.021Z"
 last_activity: 2026-09-08
 last_activity_desc: Phase 06 execution started
-state_head: aa575fe5c76035c13b76a835035668c5a1ce36e6
+state_head: eea9ab9ab1f52fa881a3f6f7b635c96033e16d6c
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 180
-  completed_plans: 145
+  completed_plans: 146
   percent: 11
 ---
 
@@ -33,7 +33,7 @@ component as a working Pi artifact.
 
 Phase: 06 (Assertion and Module Refinement) — EXECUTING
 Next: Discuss Phase 6
-Plan: 18 of 52
+Plan: 19 of 52
 Status: Ready to execute
 Last activity: 2026-09-08 — Phase 06 execution started
 
@@ -325,6 +325,7 @@ Last activity: 2026-09-08 — Phase 06 execution started
 | Phase 06 P15 | 9min | 2 tasks | 3 files |
 | Phase 06 P16 | 9min | 2 tasks | 0 files |
 | Phase 06 P17 | 9min | 2 tasks | 0 files |
+| Phase 06 P19 | 12min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -770,6 +771,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 06]: Treat notify and notifyUsageError as genuine dispatch-owner implementations, not compatibility seams; both render or dispatch directly to the Pi notification context.
 - [Phase 06]: Leave all seven 06-17 consumers byte-for-byte unchanged because Plan 06-14 already migrated every notification symbol to its genuine named owner. — Avoids no-op import churn while retaining complete ownership and behavior proof.
 - [Phase 06]: Keep tools on notification-types.ts and root raw notifications on notification-dispatch.ts. — Each consumer imports only the genuine owner of the symbol it uses.
+- [Phase 06]: Keep all seven already-direct notification import graphs unchanged; only four stale documentation references required repointing.
+- [Phase 06]: Treat notify-context.ts as the genuine command-context composition owner whose dispatch tail imports notification-dispatch.ts directly, not as a compatibility facade.
 
 ### Pending Todos
 
@@ -822,7 +825,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 06-17-PLAN.md
+**Stopped at:** Completed 06-19-PLAN.md
 
 Phase 04 completed all seven plans and closed AUTH-01 and TREF-01 through
 TREF-03. Independent verification passed 4/4 with no behavioral or UAT gap;
@@ -840,7 +843,7 @@ independent verification passed 6/6 with zero unverified behaviors.
 **Read beside it:** `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`, the
 Phase 01 terminal evidence ledger, and Phase 5's roadmap criteria.
 
-Last session: 2026-09-09T09:19:54.052Z
+Last session: 2026-09-09T09:35:54.412Z
 
 **Next:** Discuss Phase 06 to define the assertion-strengthening and approved
 module-refinement work before planning.
