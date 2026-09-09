@@ -48,7 +48,7 @@ import type {
   ExtensionContext,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { CommandContext } from "../../../extensions/pi-claude-marketplace/shared/notify-context.ts";
-import type { PluginSkippedMessage } from "../../../extensions/pi-claude-marketplace/shared/notify.ts";
+import { type PluginSkippedMessage } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 
 type PluginRecord = ExtensionState["marketplaces"][string]["plugins"][string];

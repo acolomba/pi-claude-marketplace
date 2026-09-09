@@ -58,7 +58,7 @@ import type { PlannedPluginInstall, ReconcilePlan } from "./types.ts";
 import type { MergedConfig, ScopeLoadOutcome } from "../../persistence/config-merge.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
-import type { ContentReason } from "../../shared/notify.ts";
+import { type ContentReason } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 
 export interface PendingReconcileOptions {

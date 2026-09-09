@@ -17,11 +17,11 @@ import { malformedReasonsForKinds } from "../../shared/notify-reasons.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
-import type {
-  ContentReason,
-  PluginPartiallyInstalledMessage,
-  PluginUpdatedMessage,
-} from "../../shared/notify.ts";
+import { type ContentReason } from "../../shared/notification-types.ts";
+import {
+  type PluginPartiallyInstalledMessage,
+  type PluginUpdatedMessage,
+} from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { PluginUpdateUpdatedOutcome } from "../types.ts";
 

@@ -5,12 +5,14 @@ import {
   partiallyInstalledRow,
   installedLikeRow,
   pluginRow,
+} from "../../shared/notify.ts";
+import {
   type PluginFailedMessage,
   type PluginPartiallyInstalledMessage,
   type PluginPartiallyUpgradableMessage,
   type PluginSkippedMessage,
   type PluginUpdatedMessage,
-} from "../../shared/notify.ts";
+} from "../../shared/notification-types.ts";
 
 import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
 

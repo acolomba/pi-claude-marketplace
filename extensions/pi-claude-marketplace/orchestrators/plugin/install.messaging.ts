@@ -10,6 +10,8 @@ import {
   renderPartiallyAvailableRow,
   renderUnavailableRow,
   renderVersion,
+} from "../../shared/notify.ts";
+import {
   type ContentReason,
   type PluginDisabledMessage,
   type PluginFailedMessage,
@@ -18,7 +20,7 @@ import {
   type PluginPartiallyInstalledMessage,
   type PluginUnavailableMessage,
   type StatusToken,
-} from "../../shared/notify.ts";
+} from "../../shared/notification-types.ts";
 import { PathContainmentError } from "../../shared/path-safety.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 
@@ -427,7 +429,7 @@ export function classifyEntityShapeError(
 // emitted here.
 // New detection tokens added here MUST also have an entry in
 // `MANIFEST_FIELD_TO_REASON` below mapping them to a member of the closed
-// `Reason` set in `shared/notify.ts::REASONS` so the renderer accepts them.
+// `Reason` set in `shared/notification-types.ts::REASONS` so the renderer accepts them.
 const MANIFEST_FIELD_REASONS: ReadonlySet<string> = new Set(["lspServers"]);
 const MANIFEST_FIELD_NOTE_PREFIX = "contains ";
 

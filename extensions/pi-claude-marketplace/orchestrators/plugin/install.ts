@@ -171,7 +171,7 @@ import type { NotificationContext, ToolInventory } from "../../platform/pi-api.t
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { HookSummaryEntry } from "../../shared/concerns/hooks.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
-import type { ContentReason } from "../../shared/notify.ts";
+import { type ContentReason } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
 import type { UnstageOutcome } from "../marketplace/shared.ts";

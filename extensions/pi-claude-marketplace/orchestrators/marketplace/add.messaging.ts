@@ -16,7 +16,7 @@
 // route through the central header seam.
 
 import type { CommandContext } from "../../shared/notify-context.ts";
-import type { Reason } from "../../shared/notify.ts";
+import { type Reason } from "../../shared/notification-types.ts";
 
 /**
  * D-09 / MOD-01: command-private reasons owned by `marketplace add`. These two

@@ -70,7 +70,7 @@ import {
   type MarketplaceRows,
   type Plural,
 } from "../../shared/notify-context.ts";
-import { isScopeBearingListRow } from "../../shared/notify.ts";
+import { isScopeBearingListRow } from "../../shared/notification-types.ts";
 import {
   narrowProbeError as sharedNarrowProbeError,
   narrowResolverNotes as sharedNarrowResolverNotes,
@@ -84,20 +84,20 @@ import { classifyInstalledRecord, classifyManifestEntry } from "./plugin-state-c
 import type { ResolveContext } from "../../domain/resolver-types.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
-import type {
-  ContentReason,
-  PluginAvailableMessage,
-  PluginDisabledMessage,
-  PluginFailedMessage,
-  PluginPartiallyInstalledMessage,
-  PluginPartiallyUpgradableMessage,
-  PluginInstalledMessage,
-  PluginNotificationMessage,
-  PluginRemoteMessage,
-  PluginUnavailableMessage,
-  PluginPartiallyAvailableMessage,
-  PluginUpgradableMessage,
-} from "../../shared/notify.ts";
+import { type ContentReason } from "../../shared/notification-types.ts";
+import {
+  type PluginAvailableMessage,
+  type PluginDisabledMessage,
+  type PluginFailedMessage,
+  type PluginPartiallyInstalledMessage,
+  type PluginPartiallyUpgradableMessage,
+  type PluginInstalledMessage,
+  type PluginNotificationMessage,
+  type PluginRemoteMessage,
+  type PluginUnavailableMessage,
+  type PluginPartiallyAvailableMessage,
+  type PluginUpgradableMessage,
+} from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 
 /**

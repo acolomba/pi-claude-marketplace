@@ -145,14 +145,14 @@ import type { NotificationContext, ToolInventory } from "../../platform/pi-api.t
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { HookSummaryEntry } from "../../shared/concerns/hooks.ts";
 import type { DegradeKind } from "../../shared/notify-reasons.ts";
-import type {
-  ContentReason,
-  PluginFailedMessage,
-  PluginManualRecoveryMessage,
-  PluginNotificationMessage,
-  PluginReinstalledMessage,
-  PluginSkippedMessage,
-} from "../../shared/notify.ts";
+import { type ContentReason } from "../../shared/notification-types.ts";
+import {
+  type PluginFailedMessage,
+  type PluginManualRecoveryMessage,
+  type PluginNotificationMessage,
+  type PluginReinstalledMessage,
+  type PluginSkippedMessage,
+} from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
 import type {

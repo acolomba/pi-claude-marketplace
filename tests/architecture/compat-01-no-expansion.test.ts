@@ -86,11 +86,13 @@ import {
   ICON_PARTIALLY_INSTALLED,
   ICON_REMOTE,
   ICON_UNINSTALLABLE,
+} from "../../extensions/pi-claude-marketplace/shared/notify.ts";
+import {
   MARKETPLACE_STATUSES,
   PLUGIN_STATUSES,
   REASONS,
   STATUS_TOKENS,
-} from "../../extensions/pi-claude-marketplace/shared/notify.ts";
+} from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
 import { REPO_ROOT, stripComments } from "./source-scan.ts";
 

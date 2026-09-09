@@ -44,7 +44,7 @@ import type {
   ExtensionAPI,
   ExtensionContext,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
-import type { PluginNotificationMessage } from "../../../extensions/pi-claude-marketplace/shared/notify.ts";
+import { type PluginNotificationMessage } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 
 /**

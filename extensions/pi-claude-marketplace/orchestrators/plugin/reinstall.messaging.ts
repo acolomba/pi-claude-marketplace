@@ -7,12 +7,14 @@ import {
   installedLikeRow,
   pluginRow,
   renderVersion,
+} from "../../shared/notify.ts";
+import {
   type ContentReason,
   type PluginFailedMessage,
   type PluginManualRecoveryMessage,
   type PluginReinstalledMessage,
   type PluginSkippedMessage,
-} from "../../shared/notify.ts";
+} from "../../shared/notification-types.ts";
 
 import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";

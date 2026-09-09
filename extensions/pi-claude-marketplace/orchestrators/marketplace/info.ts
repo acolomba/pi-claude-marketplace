@@ -20,11 +20,11 @@ import { crossScopeFlag } from "./shared.ts";
 import type { ParsedSource } from "../../domain/source.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
-import type {
-  ContentReason,
-  MarketplaceInfoMessage,
-  NotificationMessage,
-} from "../../shared/notify.ts";
+import { type ContentReason } from "../../shared/notification-types.ts";
+import {
+  type MarketplaceInfoMessage,
+  type NotificationMessage,
+} from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 
 export interface GetMarketplaceInfoOptions {

@@ -76,12 +76,12 @@ import {
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
-import type {
-  ContentReason,
-  PluginFailedMessage,
-  PluginUninstalledMessage,
-  Reason,
-} from "../../shared/notify.ts";
+import { type ContentReason } from "../../shared/notification-types.ts";
+import {
+  type PluginFailedMessage,
+  type PluginUninstalledMessage,
+  type Reason,
+} from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 
 type RecordedSourceKind = "github" | "url" | "path" | "unknown";

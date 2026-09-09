@@ -1,4 +1,4 @@
-import type { Reason } from "./notify.ts";
+import { type Reason } from "./notification-types.ts";
 import type { SoftDepStatus } from "../platform/pi-api.ts";
 
 /**

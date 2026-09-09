@@ -24,7 +24,7 @@ import type {
   ExtensionAPI,
   ExtensionContext,
 } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
-import type { Severity } from "../../extensions/pi-claude-marketplace/shared/notify.ts";
+import { type Severity } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
 interface CapturedNotification {
   readonly message: string;

@@ -76,7 +76,7 @@ import { RECONCILE_APPLIED_CONTEXT } from "./reconcile.messaging.ts";
 
 import type { PerEntryOutcome } from "./apply-outcomes.ts";
 import type { ApplyReconcileOptions, ReconcilePlan, ScopeReadResult } from "./types.ts";
-import type { Reason } from "../../shared/notify.ts";
+import { type Reason } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 import type {
   EnableDegradationSignals,

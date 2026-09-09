@@ -1,19 +1,20 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import type * as NotificationTypesOwner from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
-
-import type {
-  ContentReason,
-  MarketplaceNotificationMessage,
-  NotificationMessage,
-  PluginInstalledMessage,
-  PluginNotificationMessage,
-  PluginSkippedMessage,
-  Severity,
+import {
+  isScopeBearingListRow,
+  MARKETPLACE_STATUSES,
+  PLUGIN_STATUSES,
+  REASONS,
+  STATUS_TOKENS,
+  type ContentReason,
+  type MarketplaceNotificationMessage,
+  type NotificationMessage,
+  type PluginInstalledMessage,
+  type PluginNotificationMessage,
+  type PluginSkippedMessage,
+  type Severity,
 } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
-
-type OwnerShape = typeof NotificationTypesOwner;
 
 const EXPECTED_REASONS = [
   "up-to-date",
@@ -121,8 +122,6 @@ const EXPECTED_MARKETPLACE_STATUSES = [
   "skipped",
 ] as const;
 
-function preserveDirectOwnerType(_owner: OwnerShape): void {}
-
 function pluginStatusIsExhaustive(message: PluginNotificationMessage): string {
   switch (message.status) {
     case "installed":
@@ -177,6 +176,9 @@ function notificationKindIsExhaustive(message: NotificationMessage): string {
     case "reconcile-applied-cascade":
       return message.kind;
   }
+
+  const exhaustive: never = message;
+  return exhaustive;
 }
 
 const installedMessage = {
@@ -196,7 +198,6 @@ const skippedMessage = {
 const contentReason: ContentReason = "marketplace in user scope";
 const severity: Severity = "warning";
 
-void preserveDirectOwnerType;
 void pluginStatusIsExhaustive;
 void marketplaceStatusIsExhaustive;
 void notificationKindIsExhaustive;
@@ -223,19 +224,11 @@ void ({
 const structuralReason: ContentReason = "marketplace not added";
 void structuralReason;
 
-test("exports the exact notification vocabulary from its named owner", async () => {
-  // arrange
-  let owner: OwnerShape | undefined;
-
-  // act & assert
-  await assert.doesNotReject(async () => {
-    owner = await import("../../extensions/pi-claude-marketplace/shared/notification-types.ts");
-  }, "notification-types.ts is absent");
-  assert.ok(owner !== undefined);
-  assert.deepStrictEqual(owner.REASONS, EXPECTED_REASONS);
-  assert.deepStrictEqual(owner.STATUS_TOKENS, EXPECTED_STATUS_TOKENS);
-  assert.deepStrictEqual(owner.PLUGIN_STATUSES, EXPECTED_PLUGIN_STATUSES);
-  assert.deepStrictEqual(owner.MARKETPLACE_STATUSES, EXPECTED_MARKETPLACE_STATUSES);
+test("exports the exact notification vocabulary from its named owner", () => {
+  assert.deepStrictEqual(REASONS, EXPECTED_REASONS);
+  assert.deepStrictEqual(STATUS_TOKENS, EXPECTED_STATUS_TOKENS);
+  assert.deepStrictEqual(PLUGIN_STATUSES, EXPECTED_PLUGIN_STATUSES);
+  assert.deepStrictEqual(MARKETPLACE_STATUSES, EXPECTED_MARKETPLACE_STATUSES);
 });
 
 for (const { name, row, expected } of [
@@ -271,13 +264,9 @@ for (const { name, row, expected } of [
     expected: false,
   },
 ] as const) {
-  test(name, async () => {
-    // arrange
-    const owner =
-      await import("../../extensions/pi-claude-marketplace/shared/notification-types.ts");
-
+  test(name, () => {
     // act
-    const scopeBearing = owner.isScopeBearingListRow(row);
+    const scopeBearing = isScopeBearingListRow(row);
 
     // assert
     assert.equal(scopeBearing, expected);

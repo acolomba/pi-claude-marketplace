@@ -58,16 +58,16 @@ import type { PendingMsg, ReconcileAppliedMsg } from "./reconcile.messaging.ts";
 import type { PlannedPluginInstall, ReconcilePlan } from "./types.ts";
 import type { MarketplaceManifest } from "../../domain/manifest.ts";
 import type { MarketplaceRows, WithPlugins } from "../../shared/notify-context.ts";
-import type {
-  ContentReason,
-  MarketplaceNotificationMessage,
-  MarketplaceStatus,
-  PluginInstalledMessage,
-  PluginNotificationMessage,
-  PluginPartiallyInstalledMessage,
-  Reason,
-  ReconcileAppliedCascadeMessage,
-} from "../../shared/notify.ts";
+import { type ContentReason } from "../../shared/notification-types.ts";
+import {
+  type MarketplaceNotificationMessage,
+  type MarketplaceStatus,
+  type PluginInstalledMessage,
+  type PluginNotificationMessage,
+  type PluginPartiallyInstalledMessage,
+  type Reason,
+  type ReconcileAppliedCascadeMessage,
+} from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 
 /**

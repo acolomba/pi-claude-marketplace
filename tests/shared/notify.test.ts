@@ -17,19 +17,15 @@ import {
   ICON_REMOTE,
   ICON_UNINSTALLABLE,
   installedLikeRow,
-  isScopeBearingListRow,
   joinTokens,
   makeRawNotifyFn,
-  MARKETPLACE_STATUSES,
   notify,
   notifyAsyncRewakeSummary,
   notifyDiagnostic,
   notifyStopHookOverrideCap,
   notifyUsageError,
   partiallyInstalledRow,
-  PLUGIN_STATUSES,
   pluginRow,
-  REASONS,
   redactAbsolutePaths,
   renderAvailableRow,
   renderDisabledRow,
@@ -39,13 +35,14 @@ import {
   renderUnavailableRow,
   renderUninstalledRow,
   renderVersion,
-  STATUS_TOKENS,
-  type NotificationMessage,
-  type PluginInfoRow,
-  type PluginNotificationMessage,
-  type Reason,
-  type UsageErrorMessage,
 } from "../../extensions/pi-claude-marketplace/shared/notify.ts";
+
+import type {
+  NotificationMessage,
+  PluginInfoRow,
+  Reason,
+  UsageErrorMessage,
+} from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
 interface NotificationContext {
   ui: { notify: ReturnType<TestContext["mock"]["fn"]> };
@@ -4826,17 +4823,6 @@ test("RECON-04: CFG-03 invalid-config row carries BASENAME only (T-55-02-01 info
   );
 });
 
-test("REASONS includes the orphan-rewake public token", () => {
-  // arrange
-  const expectedReason = "orphan rewake";
-
-  // act
-  const includesReason = (REASONS as readonly string[]).includes(expectedReason);
-
-  // assert
-  assert.equal(includesReason, true);
-});
-
 test("SURF-05 / D-63-08: installed row renders `(installed) {orphan rewake}` via the existing reasons brace", (t) => {
   // arrange
   const ctx = createContext(t);
@@ -4869,20 +4855,6 @@ test("SURF-05 / D-63-08: installed row renders `(installed) {orphan rewake}` via
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
     `● official [user]\n  ● helper v1.0.0 (installed) {orphan rewake}\n\n/reload to pick up changes`,
   ]);
-});
-
-test("REASONS keeps malformed component tokens in canonical order", () => {
-  // arrange
-  const flat = REASONS as readonly string[];
-  const expectedReasons = ["malformed mcp", "malformed skill", "malformed command"];
-
-  // act
-  const at = flat.indexOf("malformed mcp");
-  const malformedReasons = flat.slice(at, at + 3);
-
-  // assert
-  assert.notEqual(at, -1, "`malformed mcp` must still be a member");
-  assert.deepEqual(malformedReasons, expectedReasons);
 });
 
 test("CLASS-01 / D-86-01: installed row renders `(installed) {malformed skill}` at warning severity", (t) => {
@@ -4930,39 +4902,9 @@ function neitherLoadedProbe(): Probe {
   return { piSubagentsLoaded: false, piMcpAdapterLoaded: false };
 }
 
-test("closed notification constants preserve exact public values", () => {
+test("notification glyph constants preserve exact public values", () => {
   // arrange
   const expectedGlyphs = ["●", "○", "⊘", "◍", "◌", "◉", "⊖"];
-  const expectedMarketplaceStatuses = [
-    "added",
-    "removed",
-    "updated",
-    "failed",
-    "autoupdate enabled",
-    "autoupdate disabled",
-    "skipped",
-  ];
-  const expectedPluginStatuses = [
-    "installed",
-    "updated",
-    "reinstalled",
-    "uninstalled",
-    "available",
-    "unavailable",
-    "upgradable",
-    "failed",
-    "skipped",
-    "manual recovery",
-    "will install",
-    "will uninstall",
-    "will enable",
-    "will disable",
-    "disabled",
-    "partially-installed",
-    "partially-upgradable",
-    "partially-available",
-    "remote",
-  ];
 
   // act
   const glyphs = [
@@ -4977,35 +4919,6 @@ test("closed notification constants preserve exact public values", () => {
 
   // assert
   assert.deepStrictEqual(glyphs, expectedGlyphs);
-  assert.deepStrictEqual(MARKETPLACE_STATUSES, expectedMarketplaceStatuses);
-  assert.deepStrictEqual(PLUGIN_STATUSES, expectedPluginStatuses);
-  assert.deepStrictEqual(STATUS_TOKENS, [
-    "installed",
-    "updated",
-    "reinstalled",
-    "uninstalled",
-    "added",
-    "removed",
-    "available",
-    "unavailable",
-    "upgradable",
-    "skipped",
-    "failed",
-    "rollback failed",
-    "manual recovery",
-    "no marketplaces",
-    "no plugins",
-    "will install",
-    "will uninstall",
-    "will enable",
-    "will disable",
-    "disabled",
-    "partially-installed",
-    "partially-upgradable",
-    "partially-available",
-    "remote",
-  ]);
-  assert.equal(REASONS.length, 44);
 });
 
 for (const { name, input, expected } of [
@@ -5323,57 +5236,6 @@ for (const { name, row, expected } of [
 
     // assert
     assert.equal(renderedRow, expectedRow);
-  });
-}
-
-for (const { name, row, expected } of [
-  {
-    name: "recognizes an installed list row as scope-bearing",
-    row: {
-      status: "installed",
-      name: "alpha",
-      dependencies: [],
-      severity: "info",
-      needsReload: false,
-    } satisfies PluginNotificationMessage,
-    expected: true,
-  },
-  {
-    name: "recognizes a disabled list row as scope-bearing",
-    row: {
-      status: "disabled",
-      name: "alpha",
-      severity: "info",
-      needsReload: false,
-    } satisfies PluginNotificationMessage,
-    expected: true,
-  },
-  {
-    name: "recognizes an available row as not scope-bearing",
-    row: { status: "available", name: "alpha" } satisfies PluginNotificationMessage,
-    expected: false,
-  },
-  {
-    name: "recognizes a failed row as not list-scope-bearing",
-    row: {
-      status: "failed",
-      name: "alpha",
-      reasons: ["not found"],
-      severity: "error",
-      needsReload: false,
-    } satisfies PluginNotificationMessage,
-    expected: false,
-  },
-] as const) {
-  test(name, () => {
-    // arrange
-    const expectedDecision = expected;
-
-    // act
-    const scopeBearing = isScopeBearingListRow(row);
-
-    // assert
-    assert.equal(scopeBearing, expectedDecision);
   });
 }
 

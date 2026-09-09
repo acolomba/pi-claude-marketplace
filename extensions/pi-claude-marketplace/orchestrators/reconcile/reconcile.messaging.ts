@@ -10,6 +10,8 @@ import {
   pluginRow,
   renderScopeBracket,
   renderVersion,
+} from "../../shared/notify.ts";
+import {
   type PluginDisabledMessage,
   type PluginFailedMessage,
   type PluginInstalledMessage,
@@ -19,7 +21,7 @@ import {
   type PluginWillEnableMessage,
   type PluginWillInstallMessage,
   type PluginWillUninstallMessage,
-} from "../../shared/notify.ts";
+} from "../../shared/notification-types.ts";
 
 import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
 

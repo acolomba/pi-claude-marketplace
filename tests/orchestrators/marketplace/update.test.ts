@@ -46,7 +46,7 @@ import type {
   NotificationContext,
   ToolInventory,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
-import type { Severity } from "../../../extensions/pi-claude-marketplace/shared/notify.ts";
+import { type Severity } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 
 function createUpdateSinglePlugin(): PluginUpdateFn {

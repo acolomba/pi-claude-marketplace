@@ -56,7 +56,7 @@ export const BUCKET_A_EVENTS = [
  * the source of truth lives in exactly one place.
  *
  * SURF-02 / D-63-06: `BucketAEvent` is a structural duplicate of the
- * `ClaudeHookEvent` literal-union declared in `shared/notify.ts`. The
+ * `ClaudeHookEvent` literal-union declared in `shared/concerns/hooks.ts`. The
  * `as const satisfies readonly ClaudeHookEvent[]` assertion above is the
  * single-source-of-truth pin -- adding/removing a value from
  * `BUCKET_A_EVENTS` here without the matching `ClaudeHookEvent` edit (or

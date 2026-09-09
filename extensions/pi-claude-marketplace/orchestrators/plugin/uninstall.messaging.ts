@@ -1,10 +1,8 @@
+import { ICON_UNINSTALLABLE, pluginRow, renderUninstalledRow } from "../../shared/notify.ts";
 import {
-  ICON_UNINSTALLABLE,
-  pluginRow,
-  renderUninstalledRow,
   type PluginFailedMessage,
   type PluginUninstalledMessage,
-} from "../../shared/notify.ts";
+} from "../../shared/notification-types.ts";
 
 import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
 

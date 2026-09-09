@@ -66,12 +66,12 @@ import type { HooksRouting } from "../../bridges/hooks/index.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
-import type {
-  ContentReason,
-  PluginFailedMessage,
-  PluginUninstalledMessage,
-  Reason,
-} from "../../shared/notify.ts";
+import { type ContentReason } from "../../shared/notification-types.ts";
+import {
+  type PluginFailedMessage,
+  type PluginUninstalledMessage,
+  type Reason,
+} from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { UnstageOutcome } from "../marketplace/shared.ts";
 
@@ -189,7 +189,7 @@ const REAL_UNINSTALL_TRANSACTION: UninstallTransaction = {
  * the typed-cause dispatch in `orchestrators/marketplace/remove.ts`:
  * instanceof `AgentsUnstageFailureError` first,
  * `NodeJS.ErrnoException.code` second, permissive fallback last. Closed-set
- * Reasons live in `shared/notify.ts::REASONS`.
+ * Reasons live in `shared/notification-types.ts::REASONS`.
  */
 function narrowCascadeFailure(cause: Error): ContentReason {
   if (cause instanceof StateLockHeldError) {

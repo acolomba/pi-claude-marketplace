@@ -5,13 +5,15 @@ import {
   renderPartiallyAvailableRow,
   renderRemoteRow,
   renderUnavailableRow,
+} from "../../shared/notify.ts";
+import {
   type PluginAvailableMessage,
   type PluginFailedMessage,
   type PluginPartiallyAvailableMessage,
   type PluginRemoteMessage,
   type PluginSkippedMessage,
   type PluginUnavailableMessage,
-} from "../../shared/notify.ts";
+} from "../../shared/notification-types.ts";
 
 import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
 

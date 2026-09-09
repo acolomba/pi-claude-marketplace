@@ -10,6 +10,8 @@ import {
   renderRemoteRow,
   renderUnavailableRow,
   renderVersion,
+} from "../../shared/notify.ts";
+import {
   type PluginAvailableMessage,
   type PluginDisabledMessage,
   type PluginFailedMessage,
@@ -20,7 +22,7 @@ import {
   type PluginRemoteMessage,
   type PluginUnavailableMessage,
   type PluginUpgradableMessage,
-} from "../../shared/notify.ts";
+} from "../../shared/notification-types.ts";
 
 import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
 

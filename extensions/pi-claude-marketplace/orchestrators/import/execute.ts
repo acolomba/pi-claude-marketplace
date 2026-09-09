@@ -39,14 +39,14 @@ import type { InstallPluginOutcome } from "../../orchestrators/types.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
-import type {
-  ContentReason,
-  MarketplaceStatus,
-  PluginFailedMessage,
-  PluginInstalledMessage,
-  PluginSkippedMessage,
-  PluginUnavailableMessage,
-} from "../../shared/notify.ts";
+import { type ContentReason } from "../../shared/notification-types.ts";
+import {
+  type MarketplaceStatus,
+  type PluginFailedMessage,
+  type PluginInstalledMessage,
+  type PluginSkippedMessage,
+  type PluginUnavailableMessage,
+} from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 
 export interface MarketplaceAddedOutcome {

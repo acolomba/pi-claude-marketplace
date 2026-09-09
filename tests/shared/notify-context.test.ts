@@ -21,12 +21,12 @@ import type {
   ExtensionContext,
   SoftDepStatus,
 } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
-import type {
-  PluginAvailableMessage,
-  PluginDisabledMessage,
-  PluginNotificationMessage,
-  Severity,
-} from "../../extensions/pi-claude-marketplace/shared/notify.ts";
+import { type PluginAvailableMessage } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
+import {
+  type PluginDisabledMessage,
+  type PluginNotificationMessage,
+  type Severity,
+} from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 import type { Scope } from "../../extensions/pi-claude-marketplace/shared/types.ts";
 
 type ControlledMessage = PluginAvailableMessage | PluginDisabledMessage;

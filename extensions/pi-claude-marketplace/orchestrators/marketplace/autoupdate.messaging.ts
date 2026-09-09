@@ -18,7 +18,7 @@
 import { ICON_UNINSTALLABLE, pluginRow } from "../../shared/notify.ts";
 
 import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
-import type { PluginFailedMessage } from "../../shared/notify.ts";
+import { type PluginFailedMessage } from "../../shared/notification-types.ts";
 
 /**
  * The single plugin-child-row status either flip command emits: a synthetic

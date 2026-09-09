@@ -10,7 +10,7 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..
  * Scope-fence architecture lints pinning three invariants:
  *
  * SURF-03 (deferred): no synthesis-caveat warning surface ships yet.
- * `shared/notify.ts` must NOT introduce a lossy-synthesis token in
+ * `shared/notification-types.ts` must NOT introduce a lossy-synthesis token in
  * `REASONS`; no `<lossy synthesis>` marker family may appear in any source
  * file; no install-arm warning emission outside the orphan-rewake row.
  *
@@ -20,7 +20,7 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..
  * this test pins the source-level non-additions that would produce such a
  * column.
  *
- * HOOK-04 (prior completion per D-58-01): `shared/notify.ts::REASONS` already
+ * HOOK-04 (prior completion per D-58-01): `shared/notification-types.ts::REASONS` already
  * contains `"unsupported hooks"`, and `MANIFEST_FIELD_REASONS` in
  * `orchestrators/plugin/install.ts` excludes `"hooks"`. This test pins that
  * prior state so a future regression cannot silently re-add `"hooks"` to the
@@ -34,7 +34,7 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..
  * path. A non-existent directory makes its assertion trivially satisfied.
  */
 
-const NOTIFY_REL = "extensions/pi-claude-marketplace/shared/notify.ts";
+const NOTIFICATION_TYPES_REL = "extensions/pi-claude-marketplace/shared/notification-types.ts";
 // The gate follows the MANIFEST_FIELD_REASONS declaration itself -- currently
 // in install.messaging.ts, alongside the rest of install's
 // error-classification family -- rather than pinning a fixed folder.
@@ -96,8 +96,8 @@ async function dirEntries(relPath: string): Promise<readonly string[] | null> {
   }
 }
 
-test("SURF-03: no lossy-synthesis tokens in shared/notify.ts (synthesis-caveat warning surface deferred)", async () => {
-  const source = await readFile(path.join(REPO_ROOT, NOTIFY_REL), "utf8");
+test("SURF-03: no lossy-synthesis tokens in shared/notification-types.ts (synthesis-caveat warning surface deferred)", async () => {
+  const source = await readFile(path.join(REPO_ROOT, NOTIFICATION_TYPES_REL), "utf8");
   const hits: string[] = [];
   for (const token of LOSSY_SYNTHESIS_TOKENS) {
     if (source.includes(token)) {
@@ -108,7 +108,7 @@ test("SURF-03: no lossy-synthesis tokens in shared/notify.ts (synthesis-caveat w
   assert.deepEqual(
     hits,
     [],
-    `SURF-03 violation: synthesis-caveat token(s) ${hits.join(", ")} appeared in ${NOTIFY_REL}. ` +
+    `SURF-03 violation: synthesis-caveat token(s) ${hits.join(", ")} appeared in ${NOTIFICATION_TYPES_REL}. ` +
       `SURF-03 is deferred; ZERO lossy-synthesis surface ships. ` +
       `If you genuinely intend to ship a synthesis warning, do it as a deliberate change with REASONS catalog + byte-UAT in lockstep.`,
   );
@@ -162,11 +162,11 @@ test("SURF-04: no hook-count column on list (perma-forbidden)", async () => {
   );
 });
 
-test('HOOK-04: REASONS contains "unsupported hooks" in shared/notify.ts (D-58-01 prior completion)', async () => {
-  const source = await readFile(path.join(REPO_ROOT, NOTIFY_REL), "utf8");
+test('HOOK-04: REASONS contains "unsupported hooks" in shared/notification-types.ts (D-58-01 prior completion)', async () => {
+  const source = await readFile(path.join(REPO_ROOT, NOTIFICATION_TYPES_REL), "utf8");
   assert.ok(
     source.includes('"unsupported hooks"'),
-    `HOOK-04 regression: token "unsupported hooks" missing from ${NOTIFY_REL}. ` +
+    `HOOK-04 regression: token "unsupported hooks" missing from ${NOTIFICATION_TYPES_REL}. ` +
       `D-58-01 renamed the hooks-degradation REASONS member to "unsupported hooks"; ` +
       `do not revert.`,
   );

@@ -22,12 +22,14 @@ import {
   joinTokens,
   pluginRow,
   renderScopeBracket,
+} from "../../shared/notify.ts";
+import {
   type ContentReason,
   type PluginFailedMessage,
   type PluginPartiallyInstalledMessage,
   type PluginSkippedMessage,
   type PluginUpdatedMessage,
-} from "../../shared/notify.ts";
+} from "../../shared/notification-types.ts";
 import { updatedRowFromOutcome } from "../plugin/update-row.ts";
 
 import type { CommandContext } from "../../shared/notify-context.ts";

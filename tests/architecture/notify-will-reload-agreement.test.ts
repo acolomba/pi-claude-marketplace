@@ -28,10 +28,8 @@
 import assert from "node:assert/strict";
 import test, { mock } from "node:test";
 
-import {
-  notify,
-  type NotificationMessage,
-} from "../../extensions/pi-claude-marketplace/shared/notify.ts";
+import { notify } from "../../extensions/pi-claude-marketplace/shared/notify.ts";
+import { type NotificationMessage } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
 // ---------------------------------------------------------------------------
 // Mock helpers -- mirror the catalog-uat / grammar-invariant harness.

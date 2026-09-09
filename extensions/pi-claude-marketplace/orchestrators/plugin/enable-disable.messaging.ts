@@ -7,13 +7,15 @@ import {
   pluginRow,
   renderDisabledRow,
   renderVersion,
+} from "../../shared/notify.ts";
+import {
   type PluginDisabledMessage,
   type PluginFailedMessage,
   type PluginInstalledMessage,
   type PluginPartiallyInstalledMessage,
   type PluginSkippedMessage,
   type ContentReason,
-} from "../../shared/notify.ts";
+} from "../../shared/notification-types.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 
 import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";

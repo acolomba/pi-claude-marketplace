@@ -80,7 +80,8 @@ import { classifyAutoupdateFlip, crossScopeFlag } from "./shared.ts";
 
 import type { MarketplaceConfigEntry, ScopeConfig } from "../../persistence/config-io.ts";
 import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
-import type { ContentReason, PluginFailedMessage } from "../../shared/notify.ts";
+import { type ContentReason } from "../../shared/notification-types.ts";
+import { type PluginFailedMessage } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 
 /**

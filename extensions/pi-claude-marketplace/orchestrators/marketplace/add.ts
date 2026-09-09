@@ -86,7 +86,8 @@ import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { CredentialOps } from "../../platform/git-credential.ts";
 import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
-import type { ContentReason, Reason } from "../../shared/notify.ts";
+import { type ContentReason } from "../../shared/notification-types.ts";
+import { type Reason } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 
 /**

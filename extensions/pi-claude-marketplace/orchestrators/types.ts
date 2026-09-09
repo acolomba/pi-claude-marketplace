@@ -9,7 +9,7 @@
 
 import type { CleanupFailure } from "../shared/errors.ts";
 import type { DegradeKind } from "../shared/notify-reasons.ts";
-import type { ContentReason } from "../shared/notify.ts";
+import { type ContentReason } from "../shared/notification-types.ts";
 import type { Scope } from "../shared/types.ts";
 import type { LedgerDegradationSignals } from "./plugin/shared.ts";
 
