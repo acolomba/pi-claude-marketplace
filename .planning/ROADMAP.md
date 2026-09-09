@@ -484,7 +484,7 @@ Plans:
 **Goal:** Strengthen assertions and simplify confirmed problem modules without weakening contracts.
 **Depends on:** Phase 5
 **Requirements:** TREF-07, TREF-08, TREF-09
-**Plans:** 11/52 plans executed
+**Plans:** 12/52 plans executed
 
 Plans:
 **Wave 1**
@@ -527,7 +527,7 @@ Plans:
 
 **Wave 10** *(blocked on Wave 9 completion)*
 
-- [ ] 06-12-PLAN.md — Start notification extraction with type and security leaves
+- [x] 06-12-PLAN.md — Start notification extraction with type and security leaves
 
 **Wave 11** *(blocked on Wave 10 completion)*
 
@@ -760,7 +760,7 @@ baseline, which still includes both pairs; neither is a terminal shortfall.
 | 3. Production Defect Corrections     | 14/14          | Complete    | 2026-09-07 |
 | 4. Hermetic Test Infrastructure      | 7/7            | Complete    | 2026-09-07 |
 | 5. Injection and Ownership Design    | 34/34          | Complete    | 2026-09-08 |
-| 6. Assertion and Module Refinement   | 11/52 | In Progress|  |
+| 6. Assertion and Module Refinement   | 12/52 | In Progress|  |
 | 7. Gate Integrity                    | 0/0            | Not started | —          |
 | 8. Direct Coverage                   | 0/0            | Not started | —          |
 | 9. Final Quality and Backlog Closure | 0/0            | Not started | —          |
