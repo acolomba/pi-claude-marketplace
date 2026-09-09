@@ -11,7 +11,7 @@
 //      whatever non-flag positionals remain (must be 0 or 1),
 //   3. delegates to `listPlugins` with the parsed bag.
 
-import { listPlugins } from "../../../orchestrators/plugin/list.ts";
+import { listPlugins } from "../../../orchestrators/plugin/list-flow.ts";
 import { notifyUsageError } from "../../../shared/notification-dispatch.ts";
 import { parseArgs } from "../../args.ts";
 import { parseFlagNames } from "../../flag-catalog.ts";

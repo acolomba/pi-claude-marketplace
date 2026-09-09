@@ -37,7 +37,7 @@ import Type from "typebox";
 
 import { sourceLogical } from "../../domain/source.ts";
 import { loadVisibleMarketplaces } from "../../orchestrators/marketplace/shared.ts";
-import { loadPluginListPayload } from "../../orchestrators/plugin/list.ts";
+import { loadPluginListPayload } from "../../orchestrators/plugin/list-flow.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { isScopeBearingListRow } from "../../shared/notification-types.ts";
 import { type PluginNotificationMessage } from "../../shared/notification-types.ts";
@@ -156,7 +156,7 @@ interface PluginRow {
  * last two of those are reachable only because `loadToolPluginPayload` carries
  * `remote` with `available` and `partial` with `unavailable` -- the tool
  * exposes no parameter of its own for either, and the list orchestrator gates
- * both behind one (`orchestrators/plugin/list.ts::shouldShow`). Fold a
+ * both behind one (`orchestrators/plugin/list-flow.ts::shouldShow`). Fold a
  * fine-grained bucket into a coarse one here without carrying its filter over
  * there and the arm goes dead on the execute path.
  *
@@ -250,7 +250,7 @@ function renderPluginRow(row: PluginRow): string {
  * The tool-side view of the PL-1 filter union: one flag per tool bucket, plus
  * whether the caller narrowed at all.
  *
- * `narrowed` is not a convenience. `orchestrators/plugin/list.ts::filtersPassive`
+ * `narrowed` is not a convenience. `orchestrators/plugin/list-flow.ts::filtersPassive`
  * shows every bucket only when NO filter reaches it, so an all-true bag is a
  * different request from an empty one: it takes the union arms instead, and
  * those admit `remote` and `partially-available` only behind filters this tool

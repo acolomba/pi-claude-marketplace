@@ -40,7 +40,7 @@ import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/sou
 import {
   listPlugins,
   loadPluginListPayload,
-} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/list.ts";
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/list-flow.ts";
 import { saveConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
@@ -52,7 +52,7 @@ import {
 } from "../../edge/handlers/marketplace-seed.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
-import type { ListPluginsOptions } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/list.ts";
+import type { ListPluginsOptions } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/list-flow.ts";
 import type {
   ExtensionAPI,
   ExtensionContext,
@@ -62,13 +62,6 @@ type ListPluginsWithoutConnections = Omit<ListPluginsOptions, "ctx" | "pi">;
 void ({ cwd: "/workspace", scope: "user" } satisfies ListPluginsWithoutConnections);
 // @ts-expect-error list is filesystem/state-only and exposes no Git transport option
 void ({ cwd: "/workspace", gitOps: {} } satisfies ListPluginsWithoutConnections);
-
-test("list-flow owns plugin-list state loading and dispatch", async () => {
-  // act & assert
-  await assert.doesNotReject(async () => {
-    await import("../../../extensions/pi-claude-marketplace/orchestrators/plugin/list-flow.ts");
-  }, "list-flow.ts must own the complete plugin-list command flow");
-});
 
 interface NotifyRecord {
   message: string;

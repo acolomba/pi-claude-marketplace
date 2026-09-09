@@ -52,7 +52,7 @@ import {
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { addMarketplace } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts";
 import { createNodeInstallPlugin } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts";
-import { listPlugins } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/list.ts";
+import { listPlugins } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/list-flow.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 
 import type {

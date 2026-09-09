@@ -41,7 +41,7 @@ const RULE_DEFINITION_SITE = "extensions/pi-claude-marketplace/domain/manifest-l
 
 /** The three surfaces that render an absence claim and must consume the rule. */
 const ABSENCE_JUDGING_SURFACES: ReadonlyArray<string> = [
-  "extensions/pi-claude-marketplace/orchestrators/plugin/list.ts",
+  "extensions/pi-claude-marketplace/orchestrators/plugin/list-flow.ts",
   "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts",
   "extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts",
 ];
