@@ -197,6 +197,10 @@ Legacy test: ${legacyTest}
 
 describe("Phase 6 closure", () => {
   function validClosureFiles(): Map<string, string> {
+    // Keep the repository census limited to executable patch calls while the
+    // fixture still assembles the exact tokens consumed by the validator.
+    const syncToken = "syncBuiltinESM" + "Exports(";
+    const requireToken = "create" + "Require(";
     const files = new Map<string, string>();
     for (const [source, owner] of OWNER_PAIRS) {
       files.set(source, "export const owner = true;\n");
@@ -209,17 +213,14 @@ describe("Phase 6 closure", () => {
 
     files.set(
       "tests/bridges/skills/stage.test.ts",
-      `${"syncBuiltinESMExports();\n".repeat(16)}createRequire(import.meta.url);\n`,
+      `${`${syncToken});\n`.repeat(16)}${requireToken}import.meta.url);\n`,
     );
     files.set(
       "tests/orchestrators/plugin/uninstall.test.ts",
-      `${"syncBuiltinESMExports();\n".repeat(2)}createRequire(import.meta.url);\n`,
+      `${`${syncToken});\n`.repeat(2)}${requireToken}import.meta.url);\n`,
     );
-    files.set("scripts/check-phase-06-hub-ledger.mjs", "syncBuiltinESMExports( createRequire(");
-    files.set(
-      "tests/scripts/check-phase-06-hub-ledger.test.ts",
-      "syncBuiltinESMExports( createRequire(",
-    );
+    files.set("scripts/check-phase-06-hub-ledger.mjs", `${syncToken} ${requireToken}`);
+    files.set("tests/scripts/check-phase-06-hub-ledger.test.ts", `${syncToken} ${requireToken}`);
     return files;
   }
 
