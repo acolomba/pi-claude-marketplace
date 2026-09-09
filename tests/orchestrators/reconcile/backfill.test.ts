@@ -1990,6 +1990,61 @@ describe("scanForceInstalledBackfills", () => {
     verifyBoundary();
   });
 
+  test("WCONV-01: declines to degrade a clean record whose re-resolve is partially-available", async (t) => {
+    // arrange -- growth and degradation in the same re-resolve. The record is
+    // recorded CLEAN (`installable: true`, empty unsupported); the tree it
+    // re-resolves against adds a supported `commands` kind AND an unsupported
+    // `lspServers` one, so the supported set strictly grows while the resolve
+    // answers `partially-available`.
+    //
+    // Promoting it would unstage whatever dropped out of the supported set and
+    // persist `installable: false`, degrading a clean record on a reload the user
+    // did not initiate. `docs/output-catalog.md` states the project's stance on
+    // that transition for the update path; this case pins the same stance here.
+    const { cwd, locations } = await createHermeticProjectScope(t, "clean-degrade-declined");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      hello: { skill: "clean", command: true, lsp: true },
+    });
+    const seeded: ExtensionState = {
+      schemaVersion: 2,
+      lastReconciledExtensionVersion: STALE_STAMP,
+      marketplaces: {
+        mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
+          hello: pluginRecord({
+            pluginRoot: path.join(marketplaceRoot, "plugins", "hello"),
+            installable: true,
+            supported: ["skills"],
+            unsupported: [],
+          }),
+        }),
+      },
+    };
+    await seedState(locations, seeded);
+    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+    const outcomes: PerEntryOutcome[] = [];
+
+    // act
+    const anyFailure = await scanForceInstalledBackfills(
+      backfillOptions(ctx, pi, cwd, gitOps),
+      "project",
+      seeded,
+      outcomes,
+    );
+
+    // assert -- a benign skip, not a failure: no row, the record untouched (still
+    // clean, still naming only `skills`), nothing unstaged, and the gate free to
+    // close. The declined transition is the one the sibling case above PERFORMS
+    // when the same growth resolves `installable`, so this is not the growth test
+    // declining.
+    assert.strictEqual(anyFailure, false);
+    assert.deepStrictEqual(outcomes, []);
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), seeded);
+    assert.deepStrictEqual(await retryTree(locations.scopeRoot), seededScopeTree());
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
   test("NFR-5: skips a git-source record whose supported set grew, and reaches no remote", async (t) => {
     // arrange -- both git-shaped sources the resolver classifies away from
     // `path`: the `owner/repo` shorthand and an `https://` URL. The scan

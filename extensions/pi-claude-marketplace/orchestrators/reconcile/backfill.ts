@@ -369,6 +369,23 @@ async function maybeBackfillPlugin(
     return false;
   }
 
+  // WCONV-01: growth is necessary but not sufficient. The supported set can grow
+  // while the UNSUPPORTED set also moves, so a record recorded `installable:
+  // true` can re-resolve `partially-available` with a strictly larger supported
+  // set. `requirePartialInstallable` admits that resolve (reinstall.ts), then
+  // `replaceAll` unstages every component that dropped out and `updateStateRecord`
+  // persists `installable: false` -- a clean record degraded, working artifacts
+  // removed, on a reload the user did not initiate and with no flag to consent
+  // through. The update path already refuses that transition by name: a clean
+  // record is not admitted to a degrading update without `--partial`, "because
+  // flipping a clean record to degraded is a consent the user has not given"
+  // (docs/output-catalog.md). Take the same stance here. A record already
+  // recorded `installable: false` was installed under that consent, so it keeps
+  // today's behaviour. Benign skip -- no row, and the gate may still close.
+  if (record.compatibility.installable && resolved.state !== "installable") {
+    return false;
+  }
+
   // CR-01: render: "none" self-locking re-materialize. The recorded version is
   // preserved by reinstall (D-68-02).
   const outcome = await reinstallPlugin({
