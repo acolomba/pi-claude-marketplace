@@ -718,10 +718,10 @@ export function requireInstallable(
  * NFR-7). Throw shape mirrors `requireInstallable`; `r.notes` exists on all
  * three arms so `reasons` compiles.
  *
- * BFILL-01: the reinstall primitive (orchestrators/plugin/reinstall.ts) resolves
- * through this gate so it can re-materialize a partially-installed (`partially-available`)
- * plugin in place. The `--partial` install/update flag plumbing lands in a
- * later phase.
+ * BFILL-01: the reinstall flow and its direct clone probe
+ * (orchestrators/plugin/reinstall-clone-probe.ts) resolve through this gate so
+ * they can re-materialize a partially-installed (`partially-available`)
+ * plugin in place. The `--partial` install/update flag plumbing lands later.
  */
 export function requirePartialInstallable(
   r: ResolvedPlugin,

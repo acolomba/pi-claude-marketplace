@@ -8,10 +8,12 @@ import {
   pluginCloneKey,
   pluginMirrorKey,
 } from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
-import { materializePluginClone } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts";
+import {
+  probeReinstallClone,
+  type ReinstallCloneCacheSeam,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-clone-probe.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 
-import type { GitPluginRootResult } from "../../../extensions/pi-claude-marketplace/domain/resolver-types.ts";
 import type { GitBackedSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import type { CredentialOps } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -19,32 +21,6 @@ import type { NotificationContext } from "../../../extensions/pi-claude-marketpl
 
 const SHA = "1111111111111111111111111111111111111111";
 const MIRROR_SHA = "2222222222222222222222222222222222222222";
-
-interface ReinstallCloneCacheSeam {
-  readonly materializePluginClone: typeof materializePluginClone;
-}
-
-type ProbeReinstallClone = (options: {
-  readonly source: GitBackedSource;
-  readonly locations: ScopedLocations;
-  readonly recordedSha: string;
-  readonly seam?: ReinstallCloneCacheSeam;
-  readonly auth: {
-    readonly ctx: NotificationContext;
-    readonly credentialOps: CredentialOps;
-  };
-}) => Promise<GitPluginRootResult>;
-
-async function loadProbeReinstallClone(): Promise<ProbeReinstallClone> {
-  let probeReinstallClone: ProbeReinstallClone | undefined;
-  await assert.doesNotReject(async () => {
-    const owner =
-      await import("../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-clone-probe.ts");
-    probeReinstallClone = owner.probeReinstallClone;
-  }, "reinstall-clone-probe.ts must own reinstall clone probing");
-  assert.ok(probeReinstallClone !== undefined);
-  return probeReinstallClone;
-}
 
 async function freshLocations(testContext: TestContext): Promise<{
   readonly locations: ScopedLocations;
@@ -55,7 +31,7 @@ async function freshLocations(testContext: TestContext): Promise<{
   return { locations: locationsFor("project", root), root };
 }
 
-function auth(): Parameters<ProbeReinstallClone>[0]["auth"] {
+function auth(): Parameters<typeof probeReinstallClone>[0]["auth"] {
   const ctx: NotificationContext = { ui: { notify: () => undefined } };
   const credentialOps: CredentialOps = {
     approve: () => Promise.resolve(),
@@ -72,7 +48,6 @@ async function writeMirrorHead(mirrorRoot: string, sha: string): Promise<void> {
 
 test("uses the production seam for a warm pinned clone", async (testContext) => {
   // arrange
-  const probeReinstallClone = await loadProbeReinstallClone();
   const { locations } = await freshLocations(testContext);
   const cloneUrl = "https://example.com/warm-plugin";
   const cloneRoot = await locations.pluginCloneDir(pluginCloneKey(cloneUrl, SHA));
@@ -97,7 +72,6 @@ test("uses the production seam for a warm pinned clone", async (testContext) => 
 
 test("repairs an unpinned url source from the warm mirror", async (testContext) => {
   // arrange
-  const probeReinstallClone = await loadProbeReinstallClone();
   const { locations } = await freshLocations(testContext);
   const cloneUrl = "https://example.com/warm-mirror";
   const mirrorRoot = await locations.pluginCloneDir(pluginMirrorKey(cloneUrl));
@@ -128,7 +102,6 @@ test("repairs an unpinned url source from the warm mirror", async (testContext) 
 
 test("resolves an unpinned git-subdir inside the warm mirror", async (testContext) => {
   // arrange
-  const probeReinstallClone = await loadProbeReinstallClone();
   const { locations } = await freshLocations(testContext);
   const cloneUrl = "https://example.com/mono";
   const mirrorRoot = await locations.pluginCloneDir(pluginMirrorKey(cloneUrl));
@@ -168,7 +141,6 @@ test("resolves an unpinned git-subdir inside the warm mirror", async (testContex
 
 test("classifies a missing unpinned mirror subdirectory without cloning", async (testContext) => {
   // arrange
-  const probeReinstallClone = await loadProbeReinstallClone();
   const { locations } = await freshLocations(testContext);
   const cloneUrl = "https://example.com/mono";
   const mirrorRoot = await locations.pluginCloneDir(pluginMirrorKey(cloneUrl));
@@ -203,7 +175,6 @@ test("classifies a missing unpinned mirror subdirectory without cloning", async 
 
 test("falls back from an absent unpinned mirror to the recorded sha", async (testContext) => {
   // arrange
-  const probeReinstallClone = await loadProbeReinstallClone();
   const { locations, root } = await freshLocations(testContext);
   const cloneUrl = "https://example.com/cold-mirror";
   const cloneRoot = path.join(root, "recorded-clone");
@@ -237,7 +208,6 @@ test("falls back from an absent unpinned mirror to the recorded sha", async (tes
 
 test("threads provider auth while resolving a pinned git-subdir", async (testContext) => {
   // arrange
-  const probeReinstallClone = await loadProbeReinstallClone();
   const { locations, root } = await freshLocations(testContext);
   const cloneRoot = path.join(root, "github-clone");
   const pluginRoot = path.join(cloneRoot, "plugins", "one");
@@ -278,7 +248,6 @@ test("threads provider auth while resolving a pinned git-subdir", async (testCon
 
 test("classifies a missing pinned git-subdir", async (testContext) => {
   // arrange
-  const probeReinstallClone = await loadProbeReinstallClone();
   const { locations, root } = await freshLocations(testContext);
   const cloneRoot = path.join(root, "pinned-clone");
   await mkdir(cloneRoot, { recursive: true });
@@ -313,7 +282,6 @@ test("classifies a missing pinned git-subdir", async (testContext) => {
 
 test("preserves clone failure attribution", async (testContext) => {
   // arrange
-  const probeReinstallClone = await loadProbeReinstallClone();
   const { locations } = await freshLocations(testContext);
   const cloneFailure = new Error("clone failed after cleanup");
   const source: GitBackedSource = {

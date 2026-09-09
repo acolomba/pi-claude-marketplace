@@ -49,8 +49,8 @@ import type {
   GitOps,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { InstallCloneCacheSeam } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-clone-probe.ts";
+import type { ReinstallCloneCacheSeam } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-clone-probe.ts";
 import type {
-  ReinstallCloneCacheSeam,
   ReinstallHooksRouting,
   ReinstallPluginDeps,
   ReinstallPluginOptions,
