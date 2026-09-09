@@ -926,10 +926,15 @@ const RESERVED_META_KEYS: ReadonlySet<string> = new Set(["__proto__", "construct
  * WGATE-01: does the engine's `evaluateLiteral` resolve every value in this
  * object literal?
  *
- * An ALLOW-list, stated in the engine's own terms. The refusal side is eleven
- * separate throws, and a deny-list of eleven is the enumeration a reader like
- * this gets wrong; naming the forms that ARE resolvable makes an unforeseen node
- * type fire the gate rather than slip past it.
+ * An ALLOW-list, stated in the engine's own terms. The refusal side is a long
+ * list of separate throws, and a deny-list of that shape is the enumeration a
+ * reader like this gets wrong; naming the forms that ARE resolvable makes an
+ * unforeseen node type fire the gate rather than slip past it.
+ *
+ * No total is stated, for the reason `docs/workflows-compatibility.md` gives
+ * for stating none: a count of an unexported engine internal that nothing here
+ * enumerates is a number with no counting rule behind it, and a reader takes it
+ * as measured.
  */
 function isLiteralObject(elements: readonly MetaElement[], depth: number): boolean {
   return elements.every((element) => isLiteralProperty(element, depth));
@@ -944,7 +949,7 @@ function isLiteralObject(elements: readonly MetaElement[], depth: number): boole
  * identifier and a string- or number-valued literal and refuses every other key
  * node, so `{ 1n: "x" }` is refused on its key alone while `{ 1: "x" }` is
  * admitted. A reader testing only the node type, `computed`, `kind` and `method`
- * would decide ten of the engine's eleven refusals and read the eleventh
+ * would decide most of the engine's refusals and read the key-node one
  * backwards.
  */
 function isLiteralProperty(element: MetaElement, depth: number): boolean {
