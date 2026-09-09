@@ -730,7 +730,7 @@ function narrowDirectFailReason(err: Error): ContentReason {
  * produced operator-confusing output (`⊘ (targets) (failed)...` under
  * a marketplace block named `(targets)`).
  *
- * Mirrors the `orchestrators/plugin/reinstall.ts::reinstallPlugins`
+ * Mirrors the `orchestrators/plugin/reinstall-flow.ts` bulk operation
  * bare-form enumeration-failure precedent (line 350: synthetic
  * `"(reinstall)"` marketplace name). Use `"(update)"` here so the
  * parens-wrapped form reads to the operator as "synthetic placeholder
@@ -781,7 +781,7 @@ function notifyBareFormEnumerateFailure(args: {
  * WR-05: synthetic placeholder for the bare-form enumerate-failure path.
  * Held as a module-level constant so a future change has a single edit
  * point. Mirrors the `"(reinstall)"` precedent in
- * `orchestrators/plugin/reinstall.ts`.
+ * `orchestrators/plugin/reinstall-flow.ts`.
  */
 const SYNTHETIC_UPDATE_PLACEHOLDER_NAME = "(update)";
 

@@ -199,7 +199,7 @@ function renderCleanupFailure(failure: CleanupFailure): string {
  * `notes` aggregated outside the notify path. The `notify` renderer trails
  * the cause chain automatically below the plugin row; this helper exists for
  * outcome-aggregation callsites (orchestrators/marketplace/update.ts,
- * orchestrators/plugin/reinstall.ts, orchestrators/plugin/update-flow.ts) that
+ * orchestrators/plugin/reinstall-flow.ts, orchestrators/plugin/update-flow.ts) that
  * need the same text without going through the notify channel.
  *
  * Single canonical implementation here is the source of truth -- if the
@@ -534,7 +534,7 @@ export class PluginUpdatePhase3Error extends Error {
  * manual-recovery anchor is NOT embedded in `.message` -- per
  * MSG-MR-1 / MSG-MR-2 the manual-recovery row is composed by
  * `shared/notification-grammar.ts` before dispatch. Bridges produce STRUCTURED data
- * (`.leaks`); the orchestrator (`orchestrators/plugin/reinstall.ts` reason
+ * (`.leaks`); the orchestrator (`orchestrators/plugin/reinstall-flow.ts` reason
  * narrowing and the cascade-row mapper) type-checks the Error instead of
  * substring-matching the message text. `shared/notification-grammar.ts` reads `.leaks`
  * directly to name the leaked paths on the rendered row (AS-7).
