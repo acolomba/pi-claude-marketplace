@@ -21,7 +21,7 @@ import { assertNoForbiddenSurface } from "./source-scan.ts";
  *   `reinstall` (cached manifests only), and one file OUTSIDE the orchestrator
  *   layer, the resolver, whose obligation is inherited from the two read
  *   surfaces it answers for. The other three are MUTATING verbs that do reach
- *   git -- `install.ts` and `fetch.ts` materialize a clone on a cache miss, and
+ *   git -- `install-flow.ts` and `fetch.ts` materialize a clone on a cache miss, and
  *   `enable-disable.ts` re-materializes through the install ledger -- and they
  *   qualify because they reach it ONLY through the `clone-cache.ts` seam, by
  *   entrypoint name. None of the three is read-only.
@@ -42,7 +42,7 @@ import { assertNoForbiddenSurface } from "./source-scan.ts";
  *
  * Why this test is NOT replaceable by a fallow boundary rule (measured):
  *   Planting `import { clone } from "platform/git.ts"` plus a `clone()` call
- *   in install.ts was observed leaving `npm run fallow` at exit 0, while this
+ *   in install-flow.ts was observed leaving `npm run fallow` at exit 0, while this
  *   test failed. Three reasons, each independent:
  *     1. `orchestrators` -> `platform` is a LEGAL edge -- update.ts,
  *        clone-cache.ts and auth-host.ts all need it -- so an import rule at
@@ -50,10 +50,10 @@ import { assertNoForbiddenSurface } from "./source-scan.ts";
  *     2. Splitting a narrow `orchestrators-network-free` zone out was tried and
  *        produces 26 false violations, because the two halves legitimately
  *        import each other. Allowing them back lets `DEFAULT_GIT_OPS` reach
- *        install.ts through the `marketplace/shared.ts` re-export anyway, so
+ *        install-flow.ts through the `marketplace/shared.ts` re-export anyway, so
  *        the rule would enforce nothing.
  *     3. `platform/git.ts` and `platform/pi-api.ts` share a directory, and
- *        install.ts legitimately imports the latter. Fallow zones are
+ *        install-flow.ts legitimately imports the latter. Fallow zones are
  *        directory-scoped, so they cannot separate the two.
  *   `boundaries.calls.forbidden` catches a CALL; this gate additionally
  *   catches an IMPORT and a bare `gitOps` field declaration, which is the
@@ -65,14 +65,16 @@ import { assertNoForbiddenSurface } from "./source-scan.ts";
  *   the assertion would fail on prose.
  */
 const FORBIDDEN_TARGETS: ReadonlyArray<string> = [
-  // NFR-5 (amended): install.ts carries ZERO git surface of its own. A
+  // NFR-5 (amended): both install owners carry ZERO git surface of their own. A
   // git-source (url / git-subdir / github) clone is delegated to the
-  // clone-cache.ts sibling seam -- a gitOps consumer outside this gate's
-  // candidate set, where the git surface legally lives -- which install
-  // imports by entrypoint name (`materializePluginClone` / `resolvePluginPin`)
-  // and never names `gitOps`. install reads the cached manifest with no
+  // install-clone-probe.ts leaf, which reaches the clone-cache.ts sibling seam
+  // where the git surface legally lives. The flow composes the leaf and the
+  // ledger invokes that injected operation; neither owner names `gitOps`.
+  // The ledger reads the cached manifest with no
   // network sync of its own; the only network touch is the cache-miss clone
-  // inside the seam.
+  // inside the seam. Keep both targets so splitting composition from the
+  // ledger cannot weaken the original gate.
+  "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts",
   "extensions/pi-claude-marketplace/orchestrators/plugin/install.ts",
   // PL-3 + NFR-5: list is read-only against state + manifest; no network.
   "extensions/pi-claude-marketplace/orchestrators/plugin/list.ts",

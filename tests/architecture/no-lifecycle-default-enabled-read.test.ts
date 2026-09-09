@@ -21,7 +21,7 @@ import { assertNoForbiddenSurface } from "./source-scan.ts";
  * why it is defended at the source rather than only in behavior.
  *
  * Exempt files (do NOT add):
- *   - orchestrators/plugin/install.ts reads the field legitimately. That read
+ *   - orchestrators/plugin/install-flow.ts reads the field legitimately. That read
  *     IS DFEN-04, gated by the caller opt-in and by the DFEN-05 precedence rule
  *     (an existing `enabled` value wins and is never overwritten).
  *   - orchestrators/plugin/enable-disable.ts re-materializes from the RECORD on

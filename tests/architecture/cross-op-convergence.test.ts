@@ -50,7 +50,7 @@ import { setMarketplaceAutoupdate } from "../../extensions/pi-claude-marketplace
 import { removeMarketplace } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts";
 import { updateMarketplace } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts";
 import { getPluginInfo } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts";
-import { createNodeInstallPlugin } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/install.ts";
+import { createNodeInstallPlugin } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts";
 import { createNodeReinstallPlugins } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts";
 import { createNodeUninstallPlugin } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
 import { createPluginUpdateOperations } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/update.ts";
