@@ -6,9 +6,9 @@ current_phase: 117
 current_phase_name: Measured `agent()` failure evidence
 current_plan: 3 of 3 executed
 status: completed
-stopped_at: Phase 117 complete — all phases complete
-last_updated: "2026-09-09T20:45:08.501Z"
-state_head: a9b19d1efd2e219151ee7f2f022ad089d0eab6dd
+stopped_at: All nine phases complete and verified; the milestone lifecycle is next
+last_updated: "2026-09-09T20:53:45.025Z"
+state_head: d2582864c3fa3217c8b1fb16f9e957b7b7e34cac
 progress:
   total_phases: 9
   completed_phases: 9
@@ -249,7 +249,7 @@ implementation.
 
 **Last session:** 2026-09-09T16:22:00Z
 
-**Stopped At:** Phase 117 complete and marked, and with it all nine phases. Its
+**Stopped At:** All nine phases complete, verified and marked. Phase 117's
 three plans landed the live canary, the measured rewrite of the compatibility
 doc, and the correction of an archived record that claimed a canary had run when
 it had not. Every tail gate closed: nyquist 0 gaps, security SECURED 19/19 with
@@ -259,10 +259,10 @@ integration.
 
 **Resume File:** None
 
-**Next Action:** the milestone lifecycle — audit, complete, cleanup. Re-verify
-Phases 114 and 115 first: both are legitimately stale because later phases edited
-files their verifications grade, and `all_phases_complete` gates the lifecycle on
-them. Do NOT re-run `npm run check` as a spot-check — it ran green after the fix
+**Next Action:** the milestone lifecycle — audit, complete, cleanup. Phases 114
+and 115 were re-verified at this boundary and both passed (7/7 and 6/6); they had
+gone stale because later phases edited files their verifications grade, which is
+legitimate coverage rather than the digest defect recorded as Broken Windows #39. Do NOT re-run `npm run check` as a spot-check — it ran green after the fix
 pass and no source has moved since.
 
 Four things this plan settled that 116's verification should not re-derive:
