@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 10
+open_count: 11
 waived_count: 14
 fixed_count: 22
-total_count: 46
-last_updated: 2026-09-09T20:11:19.722Z
+total_count: 47
+last_updated: 2026-09-09T22:31:31.534Z
 ---
 
 # Broken Windows Ledger
@@ -61,6 +61,7 @@ last_updated: 2026-09-09T20:11:19.722Z
 | 44 | 116 | todo | extensions/pi-claude-marketplace/orchestrators/reconcile/backfill.ts | 175 | [workflows-replay] scanForceInstalledBackfills and hasForceInstalledPlugin still assert the filter this phase deleted -- hasForceInstalledPlugin's own doc comment now has to open by contradicting its name. Code review WR-03 proposed renaming; skipped because 116-CONTEXT locks 'Names are left alone'. Half that lock's rationale did not survive measurement: the proposed replacements contain no 'force', so partial-vocabulary-guard.test.ts cannot fire on them. The surviving half -- rename is churn beyond what WCONV-01..03 ask for -- is why it stayed skipped. Operator call for a later phase. | open |  | 2026-09-09T17:51:43.533Z |  |
 | 45 | 117 | unrun-verify | .planning/workstreams/workflows/milestones/workflows-phases/105-workflow-degradation-and-documentation/105-VERIFICATION.md | 91 | [workflows-replay] The W1/W2/W3 storage assertions were never driven against a live engine and their driver (tests/live-uat/workflow-storage-canary.mjs) was never re-landed on this branch, so the storage half of the host-engine route has no live coverage here. Re-landing it is a recorded deferred idea (D-117-01), not scope of WEVID-01/WEVID-02/WDOCS-02. | open |  | 2026-09-09T19:27:52.900Z |  |
 | 46 | 117 | unmet-truth | tests/live-uat/stop-canary.mjs |  | [workflows-replay] stop-canary.mjs:193 and manifest-absence-canary.mjs:142 guard PI_CODING_AGENT_DIR with agentDir.includes(path.join("tmp","pi-uat")) — a substring test on the un-normalized value, not containment. A path such as $(pwd)/tmp/pi-uat/../../../somewhere carries the substring, survives existsSync, and is then created and used as agent state outside the sandbox. workflow-agent-failure-canary.mjs was fixed in place (resolve both sides, require a path separator after the root); the two siblings share the pattern and were left alone as out of phase scope. | open |  | 2026-09-09T20:11:19.722Z |  |
+| 47 | 105 | unmet-truth | docs/messaging-style-guide.md | 90 | [workflows-replay] The Computed reload-hint trailer bullet (line 90) says notify() emits the trailer iff a plugin status is in {installed, updated, reinstalled, uninstalled}, or is 'disabled' on a cascade dispatched with the disable-cascade kind. shouldEmitReloadHint does neither: per RLD-02 / RLD-05 / D-07 it OR-reduces the caller-stamped per-row needsReload over the flattened marketplace and plugin rows, with a kind-level short-circuit that returns false for every info surface and for reconcile-applied-cascade (RECON-04) even though those rows stamp needsReload:true. Its own comment says 'no status-token or cascade-kind inference'. The PLUGIN_STATUSES bullet (line 37) repeats the same stale mechanism: 'the reload-hint distinction is carried by the cascade's disable-cascade kind, not by the token'. needsReload occurs 34 times in shared/notify.ts and once in the guide, in the RLD-04 sentence this task added. Left out of MSGDOC-01 scope because it is a mechanism claim rather than an enumeration defect; correcting it needs its own measurement of the needsReload plumbing across the producers that stamp it. | open |  | 2026-09-09T22:31:31.534Z |  |
 
 ````json
 [
@@ -614,6 +615,18 @@ last_updated: 2026-09-09T20:11:19.722Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-09-09T20:11:19.722Z",
+    "resolved_at": null
+  },
+  {
+    "id": 47,
+    "kind": "unmet-truth",
+    "phase": "105",
+    "file": "docs/messaging-style-guide.md",
+    "line": 90,
+    "description": "[workflows-replay] The Computed reload-hint trailer bullet (line 90) says notify() emits the trailer iff a plugin status is in {installed, updated, reinstalled, uninstalled}, or is 'disabled' on a cascade dispatched with the disable-cascade kind. shouldEmitReloadHint does neither: per RLD-02 / RLD-05 / D-07 it OR-reduces the caller-stamped per-row needsReload over the flattened marketplace and plugin rows, with a kind-level short-circuit that returns false for every info surface and for reconcile-applied-cascade (RECON-04) even though those rows stamp needsReload:true. Its own comment says 'no status-token or cascade-kind inference'. The PLUGIN_STATUSES bullet (line 37) repeats the same stale mechanism: 'the reload-hint distinction is carried by the cascade's disable-cascade kind, not by the token'. needsReload occurs 34 times in shared/notify.ts and once in the guide, in the RLD-04 sentence this task added. Left out of MSGDOC-01 scope because it is a mechanism claim rather than an enumeration defect; correcting it needs its own measurement of the needsReload plumbing across the producers that stamp it.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-09T22:31:31.534Z",
     "resolved_at": null
   }
 ]
