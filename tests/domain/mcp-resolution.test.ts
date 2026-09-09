@@ -5,6 +5,7 @@ import path from "node:path";
 import test from "node:test";
 
 import type * as McpResolutionOwner from "../../extensions/pi-claude-marketplace/domain/mcp-resolution.ts";
+import type { StatKindReader } from "../../extensions/pi-claude-marketplace/domain/resolver-types.ts";
 
 type OwnerShape = typeof McpResolutionOwner;
 type FileValue = "dir" | { readonly contents: string };
@@ -17,7 +18,10 @@ function emptyResolution() {
   return { notes: [] as string[], mcpServers: {} as Record<string, unknown> };
 }
 
-function mcpFiles(files: Readonly<Record<string, FileValue>>) {
+function mcpFiles(files: Readonly<Record<string, FileValue>>): {
+  readonly statKind: StatKindReader;
+  readonly readFileText: (candidate: string) => Promise<string>;
+} {
   return {
     statKind(candidate: string) {
       const file = files[candidate];
@@ -83,25 +87,46 @@ test("resolves a strict string reference at inline parity", async () => {
   );
 });
 
-test("uses manifest MCP only when the entry is absent", async () => {
+test("prefers entry MCP and falls back to manifest MCP when the entry is absent", async () => {
   // arrange
   const { resolveStrictMcp } =
     await import("../../extensions/pi-claude-marketplace/domain/mcp-resolution.ts");
-  const resolution = emptyResolution();
+  const entryResolution = emptyResolution();
+  const manifestResolution = emptyResolution();
 
   // act
-  const dirty = await resolveStrictMcp(
+  const entryDirty = await resolveStrictMcp(
     {
       entry: { mcpServers: {} },
       manifest: { mcpServers: { manifest: { command: "python" } } },
       pluginRoot: "/plugins/alpha",
-      resolution,
+      resolution: entryResolution,
+    },
+    mcpFiles({}),
+  );
+  const manifestDirty = await resolveStrictMcp(
+    {
+      entry: {},
+      manifest: { mcpServers: { manifest: { command: "python" } } },
+      pluginRoot: "/plugins/alpha",
+      resolution: manifestResolution,
     },
     mcpFiles({}),
   );
 
   // assert
-  assert.deepStrictEqual({ dirty, resolution }, { dirty: false, resolution: emptyResolution() });
+  assert.deepStrictEqual(
+    { entryDirty, entryResolution, manifestDirty, manifestResolution },
+    {
+      entryDirty: false,
+      entryResolution: emptyResolution(),
+      manifestDirty: false,
+      manifestResolution: {
+        notes: [],
+        mcpServers: { manifest: { command: "python" } },
+      },
+    },
+  );
 });
 
 test("accepts wrapped and unwrapped standalone documents", async () => {
@@ -321,7 +346,35 @@ test("classifies a malformed standalone document with a non-Error rejection", as
     { entry: {}, manifest: null, pluginRoot: "/plugins/alpha", resolution },
     {
       statKind: () => Promise.resolve("file"),
-      readFileText: () => Promise.reject("read failure"),
+      readFileText: () =>
+        new Promise<string>((_resolve, reject) => {
+          Reflect.apply(reject, undefined, ["read failure"]);
+        }),
+    },
+  );
+
+  // assert
+  assert.deepStrictEqual({ dirty, resolution }, {
+    dirty: true,
+    resolution: {
+      notes: ["malformed mcpServers (.mcp.json): read failure"],
+      mcpServers: {},
+    },
+  });
+});
+
+test("classifies a malformed standalone document with an Error rejection", async () => {
+  // arrange
+  const { resolveStrictMcp } =
+    await import("../../extensions/pi-claude-marketplace/domain/mcp-resolution.ts");
+  const resolution = emptyResolution();
+
+  // act
+  const dirty = await resolveStrictMcp(
+    { entry: {}, manifest: null, pluginRoot: "/plugins/alpha", resolution },
+    {
+      statKind: () => Promise.resolve("file"),
+      readFileText: () => Promise.reject(new Error("read failure")),
     },
   );
 
@@ -374,11 +427,11 @@ test("classifies a wrapped malformed map like an inline malformed map", async ()
     {
       referencedDirty: true,
       referencedResolution: {
-        notes: ["malformed mcpServers: Expected object"],
+        notes: ["malformed mcpServers: must be object"],
         mcpServers: {},
       },
       inlineDirty: true,
-      inlineResolution: { notes: ["malformed mcpServers: Expected object"], mcpServers: {} },
+      inlineResolution: { notes: ["malformed mcpServers: must be object"], mcpServers: {} },
     },
   );
 });

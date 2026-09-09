@@ -46,8 +46,12 @@ import {
   type ComponentPathResolution,
 } from "./component-paths.ts";
 import { parseHooksConfig, type DroppedHook, type HooksConfig } from "./components/hooks.ts";
-import { MCP_SERVERS_VALIDATOR } from "./components/mcp.ts";
 import { PLUGIN_MANIFEST_VALIDATOR, type PluginEntry } from "./components/plugin.ts";
+import {
+  resolveLooseMcp,
+  resolveStrictMcp,
+  type McpResolution,
+} from "./mcp-resolution.ts";
 import { assertSafeName } from "./name.ts";
 import {
   parsePluginSource,
@@ -103,7 +107,7 @@ function readFileTextOf(ctx: ResolveContext): (p: string) => Promise<string> {
 // Helpers
 // ──────────────────────────────────────────────────────────────────────────
 
-interface PartialResolution extends ComponentPathResolution {
+interface PartialResolution extends ComponentPathResolution, McpResolution {
   supported: string[];
   unsupported: string[];
   notes: string[];
@@ -472,111 +476,6 @@ async function preflightStages(
   };
 }
 
-async function readStandaloneMcp(
-  ctx: ResolveContext,
-  pluginRoot: string,
-): Promise<{ ok: true; value: unknown } | { ok: false; reason: string }> {
-  const mcpPath = path.join(pluginRoot, ".mcp.json");
-  if ((await statKindOf(ctx)(mcpPath)) !== "file") {
-    return { ok: true, value: undefined };
-  }
-
-  try {
-    const raw = await readFileTextOf(ctx)(mcpPath);
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
-    return { ok: true, value: "mcpServers" in parsed ? parsed.mcpServers : parsed };
-  } catch (err) {
-    return {
-      ok: false,
-      reason: `malformed mcpServers (.mcp.json): ${err instanceof Error ? err.message : String(err)}`,
-    };
-  }
-}
-
-/**
- * MCPR-01 / MCPR-04 / D-01: validate a string `mcpServers` reference path.
- * Mirrors the `validateComponentPath` reject-absolute + resolve +
- * `assertPathInside` pattern, but returns the ABSOLUTE candidate (needed to
- * read the file) and carries no `SupportedPathKind`. `assertPathInside` runs
- * BEFORE any read, so "never reads outside pluginRoot" holds by construction;
- * the D-14 all-symlink refusal lives inside it. All failure reasons use the
- * collision-proof `malformed mcp reference:` prefix so they do not overlap the
- * inline `malformed mcpServers` note.
- */
-async function validateReferencePath(
-  raw: string,
-  pluginRoot: string,
-): Promise<{ ok: true; absPath: string } | { ok: false; reason: string }> {
-  if (path.isAbsolute(raw)) {
-    return {
-      ok: false,
-      reason: `malformed mcp reference: must be relative (got absolute "${raw}")`,
-    };
-  }
-
-  const candidate = path.resolve(pluginRoot, raw);
-
-  try {
-    await assertPathInside(pluginRoot, candidate, "mcpServers reference");
-  } catch (err) {
-    if (err instanceof PathContainmentError) {
-      return { ok: false, reason: `malformed mcp reference: escapes plugin root: "${raw}"` };
-    }
-
-    throw err;
-  }
-
-  return { ok: true, absPath: candidate };
-}
-
-/**
- * MCPR-01 / MCPR-03 / D-04: WRAPPED-ONLY reader for a string `mcpServers`
- * reference. Distinct from the tolerant `readStandaloneMcp` (which accepts an
- * unwrapped superset for the conventional `<pluginRoot>/.mcp.json`): a string
- * reference MUST point at a wrapped `{ "mcpServers": {...} }` file. A missing
- * file / invalid JSON / missing top-level `mcpServers` wrapper / out-of-root
- * escape each degrades the plugin with a `malformed mcp reference:` note.
- */
-async function readReferencedMcp(
-  ctx: ResolveContext,
-  pluginRoot: string,
-  raw: string,
-): Promise<{ ok: true; value: unknown } | { ok: false; reason: string }> {
-  const v = await validateReferencePath(raw, pluginRoot);
-  if (!v.ok) {
-    return v;
-  }
-
-  if ((await statKindOf(ctx)(v.absPath)) !== "file") {
-    return { ok: false, reason: `malformed mcp reference: file not found: "${raw}"` };
-  }
-
-  // WR-03: read the file OUTSIDE the try so a real I/O failure on an
-  // existing-but-unreadable file (EACCES / EPERM) propagates to the outer
-  // probe classifier, which keys on `.code` -> `{permission denied}` /
-  // `{unreadable}`. Only JSON.parse + the wrapper-shape check stay inside the
-  // try labeled with the malformed-reference reason. Mirrors the
-  // `readStandaloneHooks` house pattern; the stat guard above already ruled
-  // out ENOENT, so the malformed-reference file-not-found reason is unchanged.
-  const text = await readFileTextOf(ctx)(v.absPath);
-  try {
-    const parsed = JSON.parse(text) as Record<string, unknown>;
-    if (!("mcpServers" in parsed)) {
-      return {
-        ok: false,
-        reason: `malformed mcp reference: missing top-level "mcpServers": "${raw}"`,
-      };
-    }
-
-    return { ok: true, value: parsed.mcpServers };
-  } catch (err) {
-    return {
-      ok: false,
-      reason: `malformed mcp reference: invalid JSON in "${raw}": ${(err as SyntaxError).message}`,
-    };
-  }
-}
-
 /**
  * HOOK-01 / D-57-04: discover + parse the per-plugin hooks config file.
  *
@@ -604,8 +503,8 @@ async function readReferencedMcp(
  * supportability failures still flow through the structured note path so
  * the catalog layer continues to emit `{unsupported hooks}` for them.
  *
- * Disk I/O is routed through the injected `statKind` + `readFileText`
- * readers, mirroring the `readStandaloneMcp` pattern for testability.
+ * Disk I/O is routed through injected `statKind` + `readFileText` readers,
+ * matching the domain's standalone-config reader pattern for testability.
  */
 async function readStandaloneHooks(
   ctx: ResolveContext,
@@ -755,104 +654,6 @@ async function applyHooksConfig(
   return false;
 }
 
-function applyMcpValue(partial: PartialResolution, mcp: unknown, detail = true): boolean {
-  if (mcp === undefined) {
-    return false;
-  }
-
-  if (MCP_SERVERS_VALIDATOR.Check(mcp)) {
-    partial.mcpServers = mcp;
-    return false;
-  }
-
-  if (detail) {
-    const errorDetail = MCP_SERVERS_VALIDATOR.Errors(mcp)
-      .slice(0, 1)
-      .map((error) => error.message)
-      .join("");
-    partial.notes.push(`malformed mcpServers: ${errorDetail}`);
-  } else {
-    partial.notes.push(`malformed mcpServers`);
-  }
-
-  return true;
-}
-
-async function applyStrictMcp(
-  entry: PluginEntry,
-  manifest: Record<string, unknown> | null,
-  partial: PartialResolution,
-  pluginRoot: string,
-  ctx: ResolveContext,
-): Promise<boolean> {
-  const declaredMcp = (entry as Record<string, unknown>).mcpServers ?? manifest?.mcpServers;
-
-  // MCPR-01 / MCPR-02 / MCPR-04: a string mcpServers is a relative reference
-  // (to pluginRoot) to a wrapped .mcp.json. Read + unwrap it, then hand the map
-  // to the unchanged `applyMcpValue` for inline parity. A reference-resolution
-  // failure (missing / bad JSON / no wrapper / escapes root / absolute) degrades
-  // this plugin with a `malformed mcp reference:` note -> `{malformed mcp}`; a
-  // valid wrapper whose inner map is shape-invalid degrades via applyMcpValue's
-  // `malformed mcpServers` note exactly as an inline map would -> `{unsupported
-  // source}` (dirty-accumulator route either way).
-  if (typeof declaredMcp === "string") {
-    const ref = await readReferencedMcp(ctx, pluginRoot, declaredMcp);
-    if (!ref.ok) {
-      partial.notes.push(ref.reason);
-      return true;
-    }
-
-    return applyMcpValue(partial, ref.value);
-  }
-
-  const mcpResult =
-    declaredMcp === undefined ? await readStandaloneMcp(ctx, pluginRoot) : undefined;
-
-  if (mcpResult?.ok === false) {
-    partial.notes.push(mcpResult.reason);
-    return true;
-  }
-
-  return applyMcpValue(partial, declaredMcp ?? mcpResult?.value);
-}
-
-async function applyLooseMcp(
-  entry: PluginEntry,
-  manifest: Record<string, unknown> | null,
-  partial: PartialResolution,
-  pluginRoot: string,
-  ctx: ResolveContext,
-): Promise<boolean> {
-  const entryMcp = (entry as Record<string, unknown>).mcpServers;
-
-  if (entryMcp === undefined) {
-    const manifestMcp = manifest?.mcpServers;
-    const standaloneExists = (await statKindOf(ctx)(path.join(pluginRoot, ".mcp.json"))) === "file";
-
-    if (manifestMcp === undefined && !standaloneExists) {
-      return false;
-    }
-
-    partial.notes.push(
-      `component declarations conflict: manifest/standalone mcpServers without entry-level declaration`,
-    );
-    return true;
-  }
-
-  // D-03: string `mcpServers` references are a strict-mode feature (MCPR-01);
-  // loose mode does not resolve them (it has no wired production caller). Degrade
-  // this plugin honestly rather than fall through to `applyMcpValue`, which would
-  // mislabel the string as a `malformed mcpServers` inline map. The note carries
-  // no `malformed mcp reference` prefix, so it classifies to `{unsupported
-  // source}` exactly as the pre-existing fall-through did.
-  if (typeof entryMcp === "string") {
-    partial.notes.push(`unsupported mcpServers string reference in loose mode: "${entryMcp}"`);
-    return true;
-  }
-
-  return applyMcpValue(partial, entryMcp, false);
-}
-
 async function addUnsupportedKindNotes(
   entry: PluginEntry,
   manifest: Record<string, unknown> | null,
@@ -897,7 +698,15 @@ export async function resolveStrict(
       ),
     // Step 8 (MM-5): mcpServers union (entry > manifest > standalone .mcp.json).
     applyMcp: (args) =>
-      applyStrictMcp(args.entry, args.manifest, args.partial, args.pluginRoot, args.ctx),
+      resolveStrictMcp(
+        {
+          entry: args.entry,
+          manifest: args.manifest,
+          pluginRoot: args.pluginRoot,
+          resolution: args.partial,
+        },
+        { statKind: statKindOf(args.ctx), readFileText: readFileTextOf(args.ctx) },
+      ),
   });
 }
 
@@ -1047,7 +856,15 @@ export async function resolveLoose(
       }),
     // Step 8 (MM-7 loose mcpServers).
     applyMcp: (args) =>
-      applyLooseMcp(args.entry, args.manifest, args.partial, args.pluginRoot, args.ctx),
+      resolveLooseMcp(
+        {
+          entry: args.entry,
+          manifest: args.manifest,
+          pluginRoot: args.pluginRoot,
+          resolution: args.partial,
+        },
+        statKindOf(args.ctx),
+      ),
   });
 }
 

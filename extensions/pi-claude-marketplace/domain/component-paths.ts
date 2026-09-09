@@ -8,6 +8,34 @@ import type { StatKindReader } from "./resolver-types.ts";
 const COMPONENT_PATH_KINDS = ["skills", "commands", "agents"] as const;
 type ComponentPathKind = (typeof COMPONENT_PATH_KINDS)[number];
 
+/** Resolves a relative component path after enforcing root containment. */
+export async function resolveContainedComponentPath(
+  pluginRoot: string,
+  raw: string,
+  label: string,
+): Promise<
+  | { readonly ok: true; readonly absolutePath: string }
+  | { readonly ok: false; readonly cause: "absolute" | "escape" }
+> {
+  if (path.isAbsolute(raw)) {
+    return { ok: false, cause: "absolute" };
+  }
+
+  const absolutePath = path.resolve(pluginRoot, raw);
+
+  try {
+    await assertPathInside(pluginRoot, absolutePath, label);
+  } catch (error: unknown) {
+    if (error instanceof PathContainmentError) {
+      return { ok: false, cause: "escape" };
+    }
+
+    throw error;
+  }
+
+  return { ok: true, absolutePath };
+}
+
 /** Mutable resolver fields owned by component-path collection. */
 export interface ComponentPathResolution {
   supported: string[];
@@ -46,23 +74,20 @@ async function validateComponentPath(
     };
   }
 
-  if (path.isAbsolute(raw)) {
+  const contained = await resolveContainedComponentPath(
+    pluginRoot,
+    raw,
+    `component path "${kind}"`,
+  );
+  if (!contained.ok && contained.cause === "absolute") {
     return {
       ok: false,
       reason: `component path for "${kind}" must be relative (got absolute "${raw}")`,
     };
   }
 
-  const candidate = path.resolve(pluginRoot, raw);
-
-  try {
-    await assertPathInside(pluginRoot, candidate, `component path "${kind}"`);
-  } catch (error: unknown) {
-    if (error instanceof PathContainmentError) {
-      return { ok: false, reason: `component path for "${kind}" escapes plugin root: "${raw}"` };
-    }
-
-    throw error;
+  if (!contained.ok) {
+    return { ok: false, reason: `component path for "${kind}" escapes plugin root: "${raw}"` };
   }
 
   return { ok: true, relative: raw };
