@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 5
+open_count: 6
 waived_count: 14
 fixed_count: 22
-total_count: 41
-last_updated: 2026-09-09T15:45:15.791Z
+total_count: 42
+last_updated: 2026-09-09T16:21:30.222Z
 ---
 
 # Broken Windows Ledger
@@ -56,6 +56,7 @@ last_updated: 2026-09-09T15:45:15.791Z
 | 39 | 115 | unrun-verify | .planning/workstreams/workflows/phases/115-install-time-admission-gate-warnings/115-VERIFICATION.md | 1 | [workflows-replay] a VERIFICATION covered_files list that names a file a LATER pass rewrites makes its phase permanently un-completable. Observed directly on phase 115: gsd-tools phase.complete rewrote the active REQUIREMENTS.md, turning six Pending rows to Complete, and that flipped the phase's own verification from passed to stale -- completing a phase invalidates the verification that authorized it, and re-verifying never escapes. Cleared here by dropping REQUIREMENTS.md and WINDOWS.md from the covered set and recomputing via verification fingerprint; BACKLOG.md stays because criterion 5 grades it. Phases 110-113 are immune only because they emit no covered_files at all, so the exposure grows as more verifiers emit one. NOT the reason phase 114 is stale -- see waived entry 38. | open |  | 2026-09-09T13:24:02.268Z |  |
 | 40 | 116 | deviation | docs/output-catalog.md |  | [workflows-replay] catalog state id backfill-partially-installed-no-reasons now under-describes its row: it carries the components-now-supported marker, so it is not brace-less; rename deferred to 116-03 which owns the catalog corpus | open |  | 2026-09-09T15:07:24.389Z |  |
 | 41 | 116 | deviation | tests/orchestrators/reconcile/backfill.test.ts | 1445 | [workflows-replay] the ENBL-08 case 'skips a disabled record whose supported set grew' does not gate the filter it names: with isRecordedButDisabled deleted it stays GREEN, because reinstall's own refusal of a disabled record yields a skipped partition and no row either way. Measured 2026-09-09 by deleting the filter (2 of 34 cases redden, and this is not one of them). It correctly pins the second layer, but its title claims the first. Rename or re-aim; 116-02 added the measured-zero pair that does gate the filter. | open |  | 2026-09-09T15:45:15.791Z |  |
+| 42 | 116 | unmet-truth | tests/orchestrators/reconcile/backfill.test.ts |  | [workflows-replay] ENBL-08: skips a disabled record whose supported set grew stays GREEN when the isRecordedButDisabled filter it names is deleted -- reinstall's own refusal produces the same missing row, so the case gates the second layer, not the filter in its title. Measured in 116-02's control: 2 of 34 cases redden and this is not one of them. | open |  | 2026-09-09T16:21:30.222Z |  |
 
 ````json
 [
@@ -549,6 +550,18 @@ last_updated: 2026-09-09T15:45:15.791Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-09-09T15:45:15.791Z",
+    "resolved_at": null
+  },
+  {
+    "id": 42,
+    "kind": "unmet-truth",
+    "phase": "116",
+    "file": "tests/orchestrators/reconcile/backfill.test.ts",
+    "line": null,
+    "description": "[workflows-replay] ENBL-08: skips a disabled record whose supported set grew stays GREEN when the isRecordedButDisabled filter it names is deleted -- reinstall's own refusal produces the same missing row, so the case gates the second layer, not the filter in its title. Measured in 116-02's control: 2 of 34 cases redden and this is not one of them.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-09T16:21:30.222Z",
     "resolved_at": null
   }
 ]

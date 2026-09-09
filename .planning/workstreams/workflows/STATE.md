@@ -4,19 +4,19 @@ milestone: workflows-replay
 milestone_name: Workflow Bridge Replay onto main
 current_phase: 116
 current_phase_name: Load-time workflow convergence
-current_plan: 3 of 4 executed
+current_plan: 4 of 4 executed
 status: executing
-stopped_at: Completed 116-03-PLAN.md
-last_updated: "2026-09-09T16:15:00.000Z"
-state_head: ad17e6ad1f31de304feee727f16e6f09a0fb99b2
+stopped_at: Completed 116-04-PLAN.md
+last_updated: "2026-09-09T16:22:00.000Z"
+state_head: b89657440db428f0cd18d9764b551de21081045b
 progress:
   total_phases: 9
   completed_phases: 7
   total_plans: 36
-  completed_plans: 35
+  completed_plans: 36
   percent: 78
 last_activity: 2026-09-09
-last_activity_desc: Executed plan 116-03; the byte-change control run and pasted
+last_activity_desc: Executed plan 116-04; the phase gate green and the population claim measured
 ---
 
 # Project State
@@ -36,8 +36,9 @@ the gaps the bridge originally shipped with.
 ## Current Position
 
 Phase: 116 — Load-time workflow convergence
-Plan: 3 of 4 executed (4 plans, 3 waves, 10 tasks)
-Status: Executing — wave 2 done (116-02 and 116-03); 116-04 closes the phase
+Plan: 4 of 4 executed (4 plans, 3 waves, 10 tasks)
+Status: Execution complete — all three waves done; `npm run check` green at
+5650 unit + 35 integration; verification not yet run
 
 Phase 115 is complete on every gate. The replay milestone (109-114) is complete
 and the first of the three hardening phases has now closed behind it; 116 and 117
@@ -94,7 +95,7 @@ probe-purity gate instead.
 ## Progress
 
 **Phases Complete:** 7/9 verified (Phases 109-114 replay, 115-117 hardening)
-**Current Plan:** 0/4 executed
+**Current Plan:** 4/4 executed
 
 ```text
 [========--] 78%
@@ -109,7 +110,7 @@ probe-purity gate instead.
 | 113 | Update, enable/disable, reconcile | Complete (5/5 plans, verified 9/9) |
 | 114 | Degradation and documentation | Complete (5/5 plans, verified 7/7) |
 | 115 | Install-time admission-gate warnings | Complete (6/6 plans, verified 6/6, secured 30/30, nyquist 0 gaps) |
-| 116 | Load-time workflow convergence | 2/4 plans executed (3 waves), checker passed (hardening) |
+| 116 | Load-time workflow convergence | 4/4 plans executed (3 waves), full gate green; verification pending (hardening) |
 | 117 | Measured `agent()` failure evidence | Not started (hardening) |
 
 **Why one run covers both milestones.** GSD scopes a milestone by parsing a
@@ -215,7 +216,51 @@ implementation.
 
 ## Session Continuity
 
-**Last session:** 2026-09-09T15:08:57Z
+**Last session:** 2026-09-09T16:22:00Z
+
+**Stopped At:** Completed 116-04-PLAN.md, and with it Phase 116's execution.
+One task commit (`b8965744`) plus this SUMMARY. The phase gate ran ONCE, here,
+as `<execution_ordering>` required: `npm run check` exit 0 over nine chain
+links — 5650/5650 unit, 35/35 integration, zero `✖` in 7370 log lines. The
+reconcile backfill pair is at branches 61/61, functions 13/13, lines 477/477
+run alone.
+
+**Resume File:** None
+
+**Next Action:** `/gsd-verify-work 116`, then `/gsd-secure-phase 116`, then
+Phase 117. Do NOT re-run `npm run check` as a spot-check — it ran once, in
+116-04, and `116-04-SUMMARY.md` §2 records every link's output.
+
+Four things this plan settled that 116's verification should not re-derive:
+
+- **The population claim is measured and half-closed, not inherited.**
+  `code-modernization` IS a path source (`"./plugins/code-modernization"` in the
+  cached `claude-plugins-official` manifest at clone `1a2f18b0`, upstream commit
+  2026-05-12). `claude-security` is ABSENT under that name, so its source kind
+  is unmeasured — not guessed. No entry in either cached marketplace declares a
+  `workflows/` directory, so the named population has no member reachable from
+  this machine. All three sites now carry the bound instead: the offline
+  re-resolve passes no clone-cache resolver, so only path-source records
+  converge.
+- **All four owed negative controls exist as verbatim transcripts**, located in
+  `116-04-SUMMARY.md` §4 by file and line. Control 3 (the token's rendered bytes
+  changed without touching the closed set) went RED, in its strongest form: the
+  swap was to `up-to-date`, another legal member, so one transcript shows 18/18
+  membership assertions green against a byte gate reporting `[BYTE MISMATCH]`.
+  The pairing is not membership-only.
+- **The check chain has NINE links, not the seven the plan named** —
+  `test:corresponding`, `test:corresponding:negative` and
+  `test:coverage:direct:negative` are three meta-gates, not two. The
+  short-enumeration pattern, in the plan's own description of the gate it owns.
+  That makes SIX recurrences in this milestone and FOUR inside this phase.
+- **One open window is FILED, not just narrated.** `ENBL-08: skips a disabled
+  record whose supported set grew` stays green when the `isRecordedButDisabled`
+  filter it names is deleted — reinstall's own refusal produces the same
+  missing row. It gates the second layer, not its title. Recorded in
+  `.planning/WINDOWS.md` as `unmet-truth`, phase 116, so it reaches the ship
+  gate.
+
+**Superseded:** 2026-09-09T15:08:57Z
 
 **Stopped At:** Completed 116-01-PLAN.md. Three task commits (`f96143d4`,
 `a42a7e04`, `507d376d`); `npm test` 5646/5646 and `npm run test:integration`
@@ -435,6 +480,9 @@ re-persists `harness-worktree` as a side effect.
 | Phase 112 P02 | 40 min | 3 tasks | 8 files |
 | Phase 112 P04 | 42 min | 3 tasks | 9 files |
 | Phase 116 P01 | 36 min | 3 tasks | 13 files |
+| Phase 116 P02 | 26 min | 3 tasks | 2 files |
+| Phase 116 P03 | 25 min | 2 tasks | 3 files |
+| Phase 116 P04 | 14 min | 2 tasks | 4 files |
 
 ## Decisions
 
@@ -479,6 +527,10 @@ _Recorded per phase as the milestone proceeds._
 - [Phase 112]: The workflows unstage throw is placed AFTER `dropped.workflows` is assigned. — A cascade that fails part-way must still report the envelopes it did remove, and the partial-failure return is the only channel that carries them.
 - [Phase 112]: The planned containment-refusal case for the cascade was dropped rather than written. — `assertSafeName` throws a plain `Error` for a path separator, so such a name lands in the bridge's per-name failure array, not as `PathContainmentError`; the containment class is already pinned at the install ledger where `assertPathInside` is actually reachable.
 - [Phase 112]: `createProjectScope` and `projectCase` relocate `HOME` rather than a new per-case helper being added. — `workflowsSavedDir` is rooted at `os.homedir()` and honors no override, so every cascade test now reaches the real user's saved workflows unless the bundle is built after the assignment.
+- [Phase 116]: The population claim is reported half-closed rather than rounded to either side. — `code-modernization` measured as a path source and `claude-security` is absent from the cache under that name; calling the pair "unmeasured" would discard a real measurement, and inferring `claude-security` from the adjacent `security-guidance` would be the exact inheritance the task exists to stop.
+- [Phase 116]: `116-CONTEXT.md` keeps both statements of the retired claim verbatim, each followed by a note; `REQUIREMENTS.md` and `ROADMAP.md` carry the corrected sentence with no quoted retired wording. — The context is the record of a discussion and may carry history; the other two state current truth, where a quoted retired claim reads as a live one to the next person who greps.
+- [Phase 116]: The phase gate was read line by line, not sampled on its exit code. — `format:check` sits mid-chain and a failure there hides every link after it; fallow additionally prints `✗` on health and dupes while exiting 0, so the glyph is not the verdict (`0 above threshold` is).
+- [Phase 116]: The `ENBL-08` inert-case finding went into `.planning/WINDOWS.md`, not only into a SUMMARY section. — A finding that lives in one phase SUMMARY is invisible at ship time; a ledger entry blocks `/gsd-ship` while it is open.
 
 ## Operator Next Steps
 

@@ -641,7 +641,7 @@ Plans:
    `docs/output-catalog.md` against `tests/architecture/catalog-uat.test.ts` —
    while a scan that materialized nothing stays silent.
 
-**Plans**: 1/4 plans executed in 3 waves
+**Plans**: 4/4 plans executed in 3 waves
 
 **Wave 1**
 
@@ -654,7 +654,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 116-04-PLAN.md — Re-measure the inherited population claim and take the phase through `npm run check`
+- [x] 116-04-PLAN.md — Re-measure the inherited population claim and take the phase through `npm run check`
 
 ### Phase 117: Measured `agent()` failure evidence
 
