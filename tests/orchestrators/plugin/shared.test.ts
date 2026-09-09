@@ -37,6 +37,7 @@ import {
   CrossPluginConflictError,
   MarketplaceNotFoundError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import { type PluginSkippedMessage } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
 import type { PluginEntry } from "../../../extensions/pi-claude-marketplace/domain/components/plugin.ts";
 import type { MaterializablePlugin } from "../../../extensions/pi-claude-marketplace/domain/resolver-types.ts";
@@ -48,7 +49,6 @@ import type {
   ExtensionContext,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { CommandContext } from "../../../extensions/pi-claude-marketplace/shared/notify-context.ts";
-import { type PluginSkippedMessage } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 
 type PluginRecord = ExtensionState["marketplaces"][string]["plugins"][string];

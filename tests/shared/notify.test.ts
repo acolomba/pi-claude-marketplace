@@ -26,7 +26,6 @@ import {
   notifyUsageError,
   partiallyInstalledRow,
   pluginRow,
-  redactAbsolutePaths,
   renderAvailableRow,
   renderDisabledRow,
   renderPartiallyAvailableRow,
@@ -4921,40 +4920,6 @@ test("notification glyph constants preserve exact public values", () => {
   assert.deepStrictEqual(glyphs, expectedGlyphs);
 });
 
-for (const { name, input, expected } of [
-  {
-    name: "redacts a POSIX absolute path to its basename",
-    input: "invalid /srv/private/state/config.json detail",
-    expected: "invalid config.json detail",
-  },
-  {
-    name: "redacts a Windows drive path to its basename",
-    input: String.raw`invalid C:\\Users\\alice\\secret.json detail`,
-    expected: "invalid secret.json detail",
-  },
-  {
-    name: "redacts an extended UNC path to its basename",
-    input: String.raw`invalid \\?\UNC\server\share\secret.json detail`,
-    expected: "invalid secret.json detail",
-  },
-  {
-    name: "preserves a single-segment JSON pointer",
-    input: "invalid /schemaVersion detail",
-    expected: "invalid /schemaVersion detail",
-  },
-] as const) {
-  test(name, () => {
-    // arrange
-    const expectedText = expected;
-
-    // act
-    const text = redactAbsolutePaths(input);
-
-    // assert
-    assert.equal(text, expectedText);
-  });
-}
-
 for (const { name, parts, expected } of [
   { name: "joins non-empty tokens with one space", parts: ["a", "b"], expected: "a b" },
   { name: "drops empty token slots", parts: ["a", "", "b", ""], expected: "a b" },
@@ -6125,18 +6090,6 @@ test("reload-hint computation rejects a discriminator changed after narrowing", 
       message: "Unexpected value: [object Object]",
     },
   );
-});
-
-test("path redaction preserves a matched token when no separator can be selected", (t) => {
-  // arrange
-  t.mock.method(String.prototype, "lastIndexOf", () => -1);
-
-  // act
-  const redacted = redactAbsolutePaths("/root/secret.txt");
-  t.mock.restoreAll();
-
-  // assert
-  assert.equal(redacted, "/root/secret.txt");
 });
 
 test("a list-surface marketplace with autoupdate disabled omits the marker", (t) => {

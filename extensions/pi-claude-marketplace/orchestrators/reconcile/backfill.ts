@@ -18,7 +18,7 @@ import { locationsFor } from "../../persistence/locations.ts";
 import { isRecordedButDisabled } from "../../persistence/state-io.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { EXTENSION_VERSION } from "../../shared/extension-version.ts";
-import { redactAbsolutePaths } from "../../shared/notify.ts";
+import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
 import { createNodeReinstallPlugin } from "../plugin/reinstall.ts";
 

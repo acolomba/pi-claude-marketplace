@@ -66,10 +66,12 @@ import { isRecordedButDisabled, toDisabledRecord } from "../../persistence/state
 import { softDepStatus } from "../../platform/pi-api.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage, StateLockHeldError } from "../../shared/errors.ts";
+import { type ContentReason } from "../../shared/notification-types.ts";
+import { type PluginFailedMessage, type Reason } from "../../shared/notification-types.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
 import { companionSeverity, malformedReasonsForKinds } from "../../shared/notify-reasons.ts";
-import { redactAbsolutePaths } from "../../shared/notify.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
+import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 import { cascadeUnstagePlugin } from "../marketplace/shared.ts";
 
@@ -102,8 +104,6 @@ import type { HooksRouting } from "../../bridges/hooks/index.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { DisabledPluginRecord, ExtensionState } from "../../persistence/state-io.ts";
 import type { NotificationContext, SoftDepStatus, ToolInventory } from "../../platform/pi-api.ts";
-import { type ContentReason } from "../../shared/notification-types.ts";
-import { type PluginFailedMessage, type Reason } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { RollbackPartial } from "../../transaction/phase-ledger.ts";
 import type { UnstageOutcome } from "../marketplace/shared.ts";

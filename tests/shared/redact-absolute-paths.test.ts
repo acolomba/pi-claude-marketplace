@@ -1,15 +1,10 @@
 import assert from "node:assert/strict";
 import { test, type TestContext } from "node:test";
 
-type RedactorOwner =
-  typeof import("../../extensions/pi-claude-marketplace/shared/redact-absolute-paths.ts");
+import { redactAbsolutePaths } from "../../extensions/pi-claude-marketplace/shared/redact-absolute-paths.ts";
 
-async function loadOwner(): Promise<RedactorOwner> {
-  return await import("../../extensions/pi-claude-marketplace/shared/redact-absolute-paths.ts");
-}
-
-test("exports absolute-path redaction from its named owner", async () => {
-  await assert.doesNotReject(loadOwner, "redact-absolute-paths.ts is absent");
+test("exports absolute-path redaction from its named owner", () => {
+  assert.equal(typeof redactAbsolutePaths, "function");
 });
 
 for (const { name, input, expected } of [
@@ -44,17 +39,14 @@ for (const { name, input, expected } of [
     expected: "from a.json to b.json",
   },
 ] as const) {
-  test(name, async () => {
-    const { redactAbsolutePaths } = await loadOwner();
-
+  test(name, () => {
     const text = redactAbsolutePaths(input);
 
     assert.equal(text, expected);
   });
 }
 
-test("repeated redaction is idempotent", async () => {
-  const { redactAbsolutePaths } = await loadOwner();
+test("repeated redaction is idempotent", () => {
   const input = String.raw`from /srv/private/a.json to C:\Users\alice\b.json`;
 
   const once = redactAbsolutePaths(input);
@@ -63,8 +55,7 @@ test("repeated redaction is idempotent", async () => {
   assert.equal(twice, once);
 });
 
-test("preserves a matched token when no separator can be selected", async (t: TestContext) => {
-  const { redactAbsolutePaths } = await loadOwner();
+test("preserves a matched token when no separator can be selected", (t: TestContext) => {
   t.mock.method(String.prototype, "lastIndexOf", () => -1);
 
   const redacted = redactAbsolutePaths("/root/secret.txt");

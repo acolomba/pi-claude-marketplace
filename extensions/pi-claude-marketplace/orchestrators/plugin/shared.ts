@@ -29,8 +29,11 @@ import {
   errorMessage,
   MarketplaceNotFoundError,
 } from "../../shared/errors.ts";
+import { type ContentReason } from "../../shared/notification-types.ts";
+import { type PluginSkippedMessage } from "../../shared/notification-types.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
-import { notify, notifyDiagnostic, redactAbsolutePaths } from "../../shared/notify.ts";
+import { notify, notifyDiagnostic } from "../../shared/notify.ts";
+import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import { crossScopeFlag, marketplaceInOtherScope } from "../marketplace/shared.ts";
 
 import type { PluginEntry } from "../../domain/components/plugin.ts";
@@ -46,8 +49,6 @@ import type { NotificationContext, ToolInventory } from "../../platform/pi-api.t
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type { CommandContext } from "../../shared/notify-context.ts";
 import type { DegradeKind } from "../../shared/notify-reasons.ts";
-import { type ContentReason } from "../../shared/notification-types.ts";
-import { type PluginSkippedMessage } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 
 /**

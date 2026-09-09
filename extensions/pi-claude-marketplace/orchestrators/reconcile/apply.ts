@@ -54,8 +54,10 @@ import { migrateFirstRunConfig } from "../../persistence/migrate-config.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { pathExists } from "../../shared/fs-utils.ts";
+import { type Reason } from "../../shared/notification-types.ts";
 import { notifyReconcileAppliedWithContext } from "../../shared/notify-context.ts";
-import { notifyDiagnostic, redactAbsolutePaths } from "../../shared/notify.ts";
+import { notifyDiagnostic } from "../../shared/notify.ts";
+import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 import { addMarketplace } from "../marketplace/add.ts";
 import { removeMarketplace } from "../marketplace/remove.ts";
@@ -76,7 +78,6 @@ import { RECONCILE_APPLIED_CONTEXT } from "./reconcile.messaging.ts";
 
 import type { PerEntryOutcome } from "./apply-outcomes.ts";
 import type { ApplyReconcileOptions, ReconcilePlan, ScopeReadResult } from "./types.ts";
-import { type Reason } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 import type {
   EnableDegradationSignals,
