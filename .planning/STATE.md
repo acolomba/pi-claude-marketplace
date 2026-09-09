@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 06
 current_phase_name: Assertion and Module Refinement
 status: executing
-stopped_at: Completed 06-14-PLAN.md
-last_updated: "2026-09-09T08:42:23.198Z"
+stopped_at: Completed 06-15-PLAN.md
+last_updated: "2026-09-09T08:54:22.022Z"
 last_activity: 2026-09-08
 last_activity_desc: Phase 06 execution started
-state_head: 163fc6dc6965aceedc85aaffa95aae227f708a79
+state_head: d055346a98fcec003ac48064f42caaf4c3bd420e
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 180
-  completed_plans: 142
+  completed_plans: 143
   percent: 11
 ---
 
@@ -33,7 +33,7 @@ component as a working Pi artifact.
 
 Phase: 06 (Assertion and Module Refinement) — EXECUTING
 Next: Discuss Phase 6
-Plan: 15 of 52
+Plan: 16 of 52
 Status: Ready to execute
 Last activity: 2026-09-08 — Phase 06 execution started
 
@@ -322,6 +322,7 @@ Last activity: 2026-09-08 — Phase 06 execution started
 | Phase 06 P12 | 29min | 2 tasks | 65 files |
 | Phase 06 P13 | 33min | 2 tasks | 30 files |
 | Phase 06 P14 | 31min | 2 tasks | 48 files |
+| Phase 06 P15 | 9min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -761,6 +762,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 06]: Summary composition returns an exact notification tuple; only notification-dispatch.ts consumes it at the Pi boundary.
 - [Phase 06]: Structural notification cardinality is producer-selected and never recomputed from rendered row count.
 - [Phase 06]: All live dispatch consumers were repointed atomically without a compatibility facade.
+- [Phase 06]: Keep every 06-14 direct dispatch import unchanged; do not create churn in already-correct callers.
+- [Phase 06]: Point authentication callback documentation to makeRawNotifyFn and error rendering documentation to notification-grammar.ts.
 
 ### Pending Todos
 
@@ -813,7 +816,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 06-14-PLAN.md
+**Stopped at:** Completed 06-15-PLAN.md
 
 Phase 04 completed all seven plans and closed AUTH-01 and TREF-01 through
 TREF-03. Independent verification passed 4/4 with no behavioral or UAT gap;
@@ -831,7 +834,7 @@ independent verification passed 6/6 with zero unverified behaviors.
 **Read beside it:** `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`, the
 Phase 01 terminal evidence ledger, and Phase 5's roadmap criteria.
 
-Last session: 2026-09-09T08:42:22.666Z
+Last session: 2026-09-09T08:54:21.406Z
 
 **Next:** Discuss Phase 06 to define the assertion-strengthening and approved
 module-refinement work before planning.
