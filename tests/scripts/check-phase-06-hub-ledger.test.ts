@@ -1,7 +1,52 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import {
+// @ts-expect-error The production validator is intentionally a directly executable .mjs CLI.
+import * as hubLedgerModule from "../../scripts/check-phase-06-hub-ledger.mjs";
+
+interface CensusRow {
+  readonly id: string;
+  readonly sourcePath: string;
+  readonly symbol: string;
+  readonly ownerTest: string;
+  readonly graph: string;
+  readonly route: "phase-06" | "phase-08" | "retained" | "already-removed";
+  readonly evidence: string;
+}
+
+interface HubLedgerApi {
+  readonly CATALOG_FIXTURES: readonly string[];
+  readonly CENSUS_ROWS: readonly CensusRow[];
+  readonly LEGACY_HUBS: readonly string[];
+  readonly MF_DEC_01_IDS: readonly string[];
+  readonly OWNER_PAIRS: readonly (readonly [string, string])[];
+  readonly validateCensus: (input: {
+    readonly decision: string;
+    readonly source: unknown;
+    readonly codegraph: string;
+    readonly rows: readonly CensusRow[];
+    readonly trackedPaths: ReadonlySet<string>;
+  }) => string[];
+  readonly validatePreedit: (input: {
+    readonly hub: string;
+    readonly legacyTest: string;
+    readonly ledger: string;
+    readonly codegraph: string;
+    readonly trackedPaths: ReadonlySet<string>;
+  }) => string[];
+  readonly validateClosure: (input: {
+    readonly files: ReadonlyMap<string, string>;
+    readonly ownerCount: number;
+    readonly catalogFixtureCount: number;
+    readonly legacyHubs: readonly string[];
+    readonly syncFiles: number;
+    readonly syncCalls: number;
+    readonly requireFiles: number;
+    readonly requireCalls: number;
+  }) => string[];
+}
+
+const {
   CATALOG_FIXTURES,
   CENSUS_ROWS,
   LEGACY_HUBS,
@@ -10,7 +55,7 @@ import {
   validateCensus,
   validateClosure,
   validatePreedit,
-} from "../../scripts/check-phase-06-hub-ledger.mjs";
+} = hubLedgerModule as HubLedgerApi;
 
 function decisionSource(ids: readonly string[] = MF_DEC_01_IDS): unknown {
   return {
@@ -157,9 +202,11 @@ describe("Phase 6 closure", () => {
       files.set(source, "export const owner = true;\n");
       files.set(owner, "test('owner', () => {});\n");
     }
+
     for (const fixture of CATALOG_FIXTURES) {
       files.set(fixture, "export const fixture = {};\n");
     }
+
     files.set(
       "tests/bridges/skills/stage.test.ts",
       `${"syncBuiltinESMExports();\n".repeat(16)}createRequire(import.meta.url);\n`,
