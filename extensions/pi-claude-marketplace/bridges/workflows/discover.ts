@@ -303,6 +303,12 @@ function gateWarning(
  * record still returned either way, so both rows are caveats rather than
  * refusals.
  *
+ * ONE LINE PER FILE, stated here because it is a rule and not an accident of
+ * arm ordering: a `stem-fallback` script that ALSO carries a gate has both facts
+ * named inside the single reason `unrunnableWarning` composes, never on a second
+ * line beside it. Two lines saying the same thing about the same file in
+ * different words is what teaches a reader to skip the channel.
+ *
  * The verdict's own `reason` is rendered verbatim and never paraphrased. The
  * decision layer is where a raw-text match is attributed to code, to a comment
  * or to a literal, and restating that here would reintroduce the misattribution

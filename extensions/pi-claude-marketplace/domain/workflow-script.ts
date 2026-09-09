@@ -336,9 +336,12 @@ function namedVerdict(
  * load would mean replicating its structural rules here, which the module header
  * declines for the good reason that an engine upgrade may drop them; and the
  * `description` half cannot be judged from `meta.name` alone anyway. Telling the
- * user belongs to the bridge that writes the envelope, which owns the
- * `warnings[]` channel for a script staged with a caveat. Tracked there as a
- * roadmap criterion so the arm does not stay a silent dead-command factory.
+ * user belongs to the bridge that writes the envelope, and it does:
+ * `bridges/workflows/discover.ts::unrunnableWarning` composes one `warnings[]`
+ * line for every script reaching this arm, in the caller's tense, and names the
+ * engine gate inside that same line when the verdict's `gate` field carries one
+ * (WGATE-01). So the arm reports itself rather than registering a dead command
+ * in silence.
  */
 function stemFallbackVerdict(
   pluginName: string,
@@ -445,10 +448,13 @@ function generateOrRefuse(
  * never matched against directly -- every scan goes through the per-call clone
  * `determinismScanner` builds, so no call can leave state behind for the next.
  *
- * This is the ONLY engine gate replicated. `parseWorkflowScript` carries further
- * structural rules, but they are unexported internals of a 0.x package, and
- * copying them would make our install refuse scripts for reasons an engine
- * upgrade may drop.
+ * This is ONE of the two engine gates replicated; the parse is the other, and
+ * `docs/workflows-compatibility.md` carries the count. `parseWorkflowScript`
+ * holds further structural rules, and at 3.10.1 they are unexported internals
+ * with no exported contract of any kind -- which is why this module WARNS on the
+ * ones it can name (`readEngineGate`) instead of refusing on them. A spurious
+ * warning is something a reader can ignore; a spurious refusal is a blocked
+ * install that only an extension release can clear (WGATE-03).
  */
 const DETERMINISM_BLOCKLIST = /\bDate\s*\.\s*now\b|\bMath\s*\.\s*random\b|\bnew\s+Date\s*\(\s*\)/;
 
