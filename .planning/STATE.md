@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 06
 current_phase_name: Assertion and Module Refinement
 status: executing
-stopped_at: Completed 06-25-PLAN.md
-last_updated: "2026-09-09T11:09:25.858Z"
+stopped_at: Completed 06-26-PLAN.md
+last_updated: "2026-09-09T11:20:06.703Z"
 last_activity: 2026-09-08
 last_activity_desc: Phase 06 execution started
-state_head: f12c3ec4d1a6b9d8c697385f9d6d921f012a7100
+state_head: 1d87e09663d64608d838d07c684d9bb84a3182dc
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 180
-  completed_plans: 153
+  completed_plans: 154
   percent: 11
 ---
 
@@ -33,7 +33,7 @@ component as a working Pi artifact.
 
 Phase: 06 (Assertion and Module Refinement) — EXECUTING
 Next: Discuss Phase 6
-Plan: 26 of 52
+Plan: 27 of 52
 Status: Ready to execute
 Last activity: 2026-09-08 — Phase 06 execution started
 
@@ -333,6 +333,7 @@ Last activity: 2026-09-08 — Phase 06 execution started
 | Phase 06 P23 | 14min | 2 tasks | 7 files |
 | Phase 06 P24 | 9min | 2 tasks | 2 files |
 | Phase 06 P25 | 9min | 2 tasks | 3 files |
+| Phase 06 P26 | 7 min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -794,6 +795,9 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 06]: Attribute catalog rendering bytes and the closed glyph export census to notification-grammar.ts, while notification-dispatch.ts remains the sole Pi output owner.
 - [Phase 06]: 06-25: Attribute reload policy and its independently mirrored trailer literal to notification-summary.ts while retaining notification-dispatch.ts as the sole observable output owner.
 - [Phase 06]: 06-25: Keep the four already-direct scoped files byte-identical and avoid empty process-only commits.
+- [Phase 06]: Keep the seven already-direct executable tests byte-identical, including captured arrays and protected uninstall fixtures/assertions.
+- [Phase 06]: Retire the process-only notify marker case without duplicating it in a genuine direct-owner test.
+- [Phase 06]: Retain the content-free legacy test until Plan 06-27 atomically deletes it with notify.ts; accept one documented correspondence transient.
 
 ### Pending Todos
 
@@ -846,7 +850,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 06-25-PLAN.md
+**Stopped at:** Completed 06-26-PLAN.md
 
 Phase 04 completed all seven plans and closed AUTH-01 and TREF-01 through
 TREF-03. Independent verification passed 4/4 with no behavioral or UAT gap;
@@ -864,7 +868,7 @@ independent verification passed 6/6 with zero unverified behaviors.
 **Read beside it:** `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`, the
 Phase 01 terminal evidence ledger, and Phase 5's roadmap criteria.
 
-Last session: 2026-09-09T11:09:25.220Z
+Last session: 2026-09-09T11:20:06.117Z
 
 **Next:** Discuss Phase 06 to define the assertion-strengthening and approved
 module-refinement work before planning.
