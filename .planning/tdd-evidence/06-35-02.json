@@ -1,0 +1,10 @@
+{
+  "taskId": "06-35-02",
+  "command": "node --test --test-isolation=none --test-reporter=tap tests/orchestrators/plugin/install-outcome.test.ts",
+  "exitCode": 1,
+  "output": "TAP version 13\n# Subtest: returns the marketplace-absent discriminant without mutating state\nnot ok 1 - returns the marketplace-absent discriminant without mutating state\n  error: Got unwanted rejection: install-outcome.ts must own the public install ledger outcome\n  code: ERR_ASSERTION\n  actual: ERR_MODULE_NOT_FOUND\n1..4\n# tests 4\n# pass 0\n# fail 4",
+  "targetTest": "returns the marketplace-absent discriminant without mutating state",
+  "targetFile": "tests/orchestrators/plugin/install-outcome.test.ts",
+  "expected": "The install-outcome owner module exists and supplies runInstallLedger.",
+  "actual": "The direct owner module does not exist, so its import is rejected."
+}
