@@ -76,13 +76,13 @@ test("loadCatalogExamples parses all 190 independent catalog tuples", async () =
   assert.deepStrictEqual(examples[0], {
     section: "/claude:plugin list",
     state: "empty",
-    expected: "No marketplaces configured.",
+    expected: "(no marketplaces)\n\nPlugin list: 0 successes",
   });
   assert.deepStrictEqual(examples.at(-1), {
     section: "manual-recovery-anchors",
-    state: "usage-error",
+    state: "per-plugin-manual-recovery",
     expected:
-      "Usage: /claude:plugin <subcommand>\nSubcommands: list | install | uninstall | reinstall | update | fetch | enable | disable | info | marketplace | pending | import | bootstrap",
+      "A plugin operation needs attention.\n\n● official [user]\n  ⊘ helper v1.0.0 (manual recovery) {unreadable}\n    cause: bridge: agent staging conflict",
   });
 });
 
@@ -97,17 +97,16 @@ test("loadCatalogExamples rejects a fenced output with no state marker", () => {
   );
 });
 
-test("loadCatalogExamples rejects a state marker with no recognized section", () => {
-  const catalog = ["## Conventions", "<!-- catalog-state: empty -->", "```text", "output", "```"].join(
-    "\n",
-  );
+test("loadCatalogExamples ignores annotated examples outside recognized sections", () => {
+  const catalog = [
+    "## Conventions",
+    "<!-- catalog-state: empty -->",
+    "```text",
+    "output",
+    "```",
+  ].join("\n");
 
-  assert.throws(
-    () => loadCatalogExamples(catalog),
-    new Error(
-      'Catalog parse error at line 2: catalog-state marker "empty" has no recognized section.',
-    ),
-  );
+  assert.deepStrictEqual(loadCatalogExamples(catalog), []);
 });
 
 test("loadCatalogExamples rejects duplicate section and state tuples", () => {
