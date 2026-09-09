@@ -375,17 +375,19 @@ Run this only in each family's final deletion plan, after all old-path reference
 |---|-------|---------|---------------|
 | — | None. Recommendations are derived from locked decisions, terminal ledger evidence, current source/configuration, focused test runs, and official Node.js documentation. | — | — |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Does any final hub export map reveal a cycle too broad for one atomic move?**
    - What we know: D-06-12 explicitly anticipates this case and authorizes a smaller genuine leaf, not a forwarding seam. [VERIFIED: .planning/phases/06-assertion-and-module-refinement/06-CONTEXT.md:37-38]
    - What's unclear: The exact cycle can only be known after each preceding leaf move changes the import graph.
    - Recommendation: Put a pre-task export/caller/graph checkpoint in each final deletion plan; if it fails, replan a smaller leaf before editing.
+   - Resolution: Tasks `06-11-02`/`06-11-03`, `06-27-03`, `06-33-02`/`06-33-03`, `06-38-02`/`06-38-03`, `06-43-02`/`06-43-03`, `06-48-02`/`06-48-03`, and `06-51-02`/`06-51-03` make a fresh CodeGraph export/caller/dependency ledger a fail-closed PRE-EDIT condition for each hub deletion. An unmapped or duplicate owner, stale caller, missing owner pair, completeness gap, or dependency cycle blocks editing and invokes D-06-12's smaller-genuine-leaf replanning rule.
 
 2. **Which MF-DEC-01 artificial cases remain after prior phases' implementation drift?**
    - What we know: MF-DEC-01 routes prototype, validator-singleton, getter-sequence, and related shared-process surgery to Phase 6, but routes the two production index-loop rewrites to Phase 8. [VERIFIED: .planning/phases/01-live-evidence-revalidation/01-REVALIDATION.json:88725-88788]
    - What's unclear: Some earlier phases may have removed individual cases since the terminal ledger snapshot.
    - Recommendation: Begin the TREF-08 plan with a fresh CodeGraph-assisted census keyed by all 24 MF-DEC-01 IDs; schedule only surviving Phase 6-routed cases and explicitly leave `ER-F19` for Phase 8.
+   - Resolution: Task `06-02-01` creates and runs the deterministic CodeGraph-backed 24-ID census before Tasks `06-02-02`, `06-02-03`, `06-03-*`, and `06-04-*` may remove surviving Phase 6 cases; its gate requires exactly one disposition for every ID and preserves `ER-F19` for Phase 8.
 
 ## Environment Availability
 

@@ -484,50 +484,61 @@ Plans:
 **Goal:** Strengthen assertions and simplify confirmed problem modules without weakening contracts.
 **Depends on:** Phase 5
 **Requirements:** TREF-07, TREF-08, TREF-09
-**Plans:** 41 plans
+**Plans:** 52 plans
 
 Plans:
-- [ ] 06-01-PLAN.md — Freeze exact structural cardinality, tallies, caveats, and lifecycle notification arrays
-- [ ] 06-02-PLAN.md — Remove bridge, reconcile, and path-safety shared-process patches
-- [ ] 06-03-PLAN.md — Remove plugin owner-test shared-process patches
-- [ ] 06-04-PLAN.md — Close patch removal with the exact protected residual census
-- [ ] 06-05-PLAN.md — Extract resolver type and unsupported-component policy owners
-- [ ] 06-06-PLAN.md — Extract component-path and MCP resolution owners
-- [ ] 06-07-PLAN.md — Extract hooks and public plugin resolver owners
-- [ ] 06-08-PLAN.md — Migrate production resolver callers
-- [ ] 06-09-PLAN.md — Repoint resolver tests/docs/gates and delete the legacy hub
-- [ ] 06-10-PLAN.md — Extract notification types and redaction owners
-- [ ] 06-11-PLAN.md — Extract exact notification grammar and canonical comparator
-- [ ] 06-12-PLAN.md — Extract summary/cardinality folding and sole dispatch
-- [ ] 06-13-PLAN.md — Migrate bridge and edge notification callers
-- [ ] 06-14-PLAN.md — Migrate remaining edge and marketplace notification callers
-- [ ] 06-15-PLAN.md — Migrate marketplace and plugin notification callers
-- [ ] 06-16-PLAN.md — Migrate lifecycle and reconcile notification callers
-- [ ] 06-17-PLAN.md — Migrate platform, transaction, and architecture notification references
-- [ ] 06-18-PLAN.md — Migrate remaining notification tests and boundaries
-- [ ] 06-19-PLAN.md — Repoint notification docs/lint and delete the legacy hub
-- [ ] 06-20-PLAN.md — Extract catalog parser, fixture contracts, and MockPi
-- [ ] 06-21-PLAN.md — Extract catalog fixture surfaces 1-5
-- [ ] 06-22-PLAN.md — Extract catalog fixture surfaces 6-10
-- [ ] 06-23-PLAN.md — Extract catalog fixture surfaces 11-15
-- [ ] 06-24-PLAN.md — Extract catalog fixture surfaces 16-20
-- [ ] 06-25-PLAN.md — Assemble inverse catalog contract and delete the legacy hub
-- [ ] 06-26-PLAN.md — Extract install clone-probe and declared-enabled owners
-- [ ] 06-27-PLAN.md — Extract install disable-cascade and outcome owners
-- [ ] 06-28-PLAN.md — Extract install flow and migrate gates/integration callers
-- [ ] 06-29-PLAN.md — Complete install ledger and delete the legacy hub
-- [ ] 06-30-PLAN.md — Extract update preflight and swap owners
-- [ ] 06-31-PLAN.md — Extract update cascade and flow owners
-- [ ] 06-32-PLAN.md — Migrate update docs, gates, and integration callers
-- [ ] 06-33-PLAN.md — Complete update ledger and delete the legacy hub
-- [ ] 06-34-PLAN.md — Extract reinstall target and clone-probe owners
-- [ ] 06-35-PLAN.md — Extract reinstall replacement and record owners
-- [ ] 06-36-PLAN.md — Extract reinstall flow and migrate gates/integration callers
-- [ ] 06-37-PLAN.md — Complete reinstall ledger and delete the legacy hub
-- [ ] 06-38-PLAN.md — Extract list installed-row and candidate-row owners
-- [ ] 06-39-PLAN.md — Extract list orphan-fold and flow owners
-- [ ] 06-40-PLAN.md — Complete list ledger and delete the legacy hub
-- [ ] 06-41-PLAN.md — Run structural censuses and the final repository integration gate
+- [ ] 06-01-PLAN.md — Strengthen observable assertions before any ownership move
+- [ ] 06-02-PLAN.md — Remove the authorized bridge/reconcile/path builtin patches while preserving public outcomes
+- [ ] 06-03-PLAN.md — Remove authorized shared-process patches from plugin owner tests after their assertions are strengthened
+- [ ] 06-04-PLAN.md — Close authorized global-patch removal with the exact residual census
+- [ ] 06-05-PLAN.md — Begin leaf-first resolver extraction with type and closed-policy owners
+- [ ] 06-06-PLAN.md — Extract resolver filesystem/path and MCP responsibilities into direct-tested leaves
+- [ ] 06-07-PLAN.md — Complete resolver behavior extraction before bulk caller migration
+- [ ] 06-08-PLAN.md — Migrate all remaining production resolver callers in bounded groups
+- [ ] 06-09-PLAN.md — Migrate all remaining production resolver callers in bounded groups
+- [ ] 06-10-PLAN.md — Finish resolver ownership, including the authorized import-only stage exception, and delete the legacy hub/test
+- [ ] 06-11-PLAN.md — Finish resolver ownership, including the authorized import-only stage exception, and delete the legacy hub/test
+- [ ] 06-12-PLAN.md — Start notification extraction with type and security leaves
+- [ ] 06-13-PLAN.md — Extract deterministic notification grammar and sorting leaves
+- [ ] 06-14-PLAN.md — Extract summary folding and notification dispatch after grammar stabilizes
+- [ ] 06-15-PLAN.md — Repoint a bounded notification caller group to the six named owners
+- [ ] 06-16-PLAN.md — Repoint a bounded notification caller group to the six named owners
+- [ ] 06-17-PLAN.md — Repoint a bounded notification caller group to the six named owners
+- [ ] 06-18-PLAN.md — Repoint a bounded notification caller group to the six named owners
+- [ ] 06-19-PLAN.md — Continue bounded notification caller migration
+- [ ] 06-20-PLAN.md — Continue bounded notification caller migration
+- [ ] 06-21-PLAN.md — Continue bounded notification caller migration
+- [ ] 06-22-PLAN.md — Continue bounded notification caller migration
+- [ ] 06-23-PLAN.md — Continue bounded notification caller migration
+- [ ] 06-24-PLAN.md — Continue bounded notification caller migration
+- [ ] 06-25-PLAN.md — Continue bounded notification caller migration
+- [ ] 06-26-PLAN.md — Continue bounded notification caller migration
+- [ ] 06-27-PLAN.md — Finalize notification ownership and delete the legacy hub/test
+- [ ] 06-28-PLAN.md — Extract catalog test infrastructure only after notification stability
+- [ ] 06-29-PLAN.md — Split five disjoint command-surface fixture slices
+- [ ] 06-30-PLAN.md — Split five disjoint command-surface fixture slices
+- [ ] 06-31-PLAN.md — Split five disjoint command-surface fixture slices
+- [ ] 06-32-PLAN.md — Split five disjoint command-surface fixture slices
+- [ ] 06-33-PLAN.md — Assemble the final catalog contract and delete the legacy catalog hub
+- [ ] 06-34-PLAN.md — Advance the install-family ownership move in locked command order
+- [ ] 06-35-PLAN.md — Advance the install-family ownership move in locked command order
+- [ ] 06-36-PLAN.md — Advance the install-family ownership move in locked command order
+- [ ] 06-37-PLAN.md — Advance the install-family ownership move in locked command order
+- [ ] 06-38-PLAN.md — Advance the install-family ownership move in locked command order
+- [ ] 06-39-PLAN.md — Advance the update family in the locked command sequence
+- [ ] 06-40-PLAN.md — Advance the update family in the locked command sequence
+- [ ] 06-41-PLAN.md — Advance the update family in the locked command sequence
+- [ ] 06-42-PLAN.md — Advance the update family in the locked command sequence
+- [ ] 06-43-PLAN.md — Advance the update family in the locked command sequence
+- [ ] 06-44-PLAN.md — Advance reinstall in the locked command sequence
+- [ ] 06-45-PLAN.md — Advance reinstall in the locked command sequence
+- [ ] 06-46-PLAN.md — Advance reinstall in the locked command sequence
+- [ ] 06-47-PLAN.md — Advance reinstall in the locked command sequence
+- [ ] 06-48-PLAN.md — Advance reinstall in the locked command sequence
+- [ ] 06-49-PLAN.md — Advance plugin list last in the locked command sequence
+- [ ] 06-50-PLAN.md — Advance plugin list last in the locked command sequence
+- [ ] 06-51-PLAN.md — Advance plugin list last in the locked command sequence
+- [ ] 06-52-PLAN.md — Close Phase 6 with cross-family structural and full-suite proof
 
 **Success Criteria**:
 
