@@ -1,4 +1,11 @@
 import {
+  ICON_INSTALLED,
+  ICON_UNINSTALLABLE,
+  installedLikeRow,
+  pluginRow,
+  renderVersion,
+} from "../../shared/notification-grammar.ts";
+import {
   type ContentReason,
   type PluginFailedMessage,
   type PluginManualRecoveryMessage,
@@ -7,14 +14,7 @@ import {
 } from "../../shared/notification-types.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
 import { malformedReasonsForKinds, skipSeverity } from "../../shared/notify-reasons.ts";
-import {
-  compareByNameThenScope,
-  ICON_INSTALLED,
-  ICON_UNINSTALLABLE,
-  installedLikeRow,
-  pluginRow,
-  renderVersion,
-} from "../../shared/notify.ts";
+import { compareByNameThenScope } from "../../shared/notify.ts";
 
 import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";

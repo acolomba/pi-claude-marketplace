@@ -1,18 +1,18 @@
 import {
+  ICON_UNINSTALLABLE,
+  composeVersionArrow,
+  partiallyInstalledRow,
+  installedLikeRow,
+  pluginRow,
+  ICON_INSTALLED,
+} from "../../shared/notification-grammar.ts";
+import {
   type PluginFailedMessage,
   type PluginPartiallyInstalledMessage,
   type PluginPartiallyUpgradableMessage,
   type PluginSkippedMessage,
   type PluginUpdatedMessage,
 } from "../../shared/notification-types.ts";
-import {
-  ICON_INSTALLED,
-  ICON_UNINSTALLABLE,
-  composeVersionArrow,
-  partiallyInstalledRow,
-  installedLikeRow,
-  pluginRow,
-} from "../../shared/notify.ts";
 
 import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
 

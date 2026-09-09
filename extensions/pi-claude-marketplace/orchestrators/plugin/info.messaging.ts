@@ -1,5 +1,5 @@
+import { pluginRow, ICON_UNINSTALLABLE } from "../../shared/notification-grammar.ts";
 import { type PluginSkippedMessage } from "../../shared/notification-types.ts";
-import { ICON_UNINSTALLABLE, pluginRow } from "../../shared/notify.ts";
 
 import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
 

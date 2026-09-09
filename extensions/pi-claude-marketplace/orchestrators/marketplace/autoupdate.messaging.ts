@@ -15,8 +15,8 @@
 // flip cause, which dispatches through the command render map below (lifted
 // verbatim from the central `renderPluginRow` `failed` arm).
 
+import { pluginRow, ICON_UNINSTALLABLE } from "../../shared/notification-grammar.ts";
 import { type PluginFailedMessage } from "../../shared/notification-types.ts";
-import { ICON_UNINSTALLABLE, pluginRow } from "../../shared/notify.ts";
 
 import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
 

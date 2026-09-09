@@ -1,5 +1,14 @@
 import { isErrnoException, PluginShapeError } from "../../shared/errors.ts";
 import {
+  ICON_UNINSTALLABLE,
+  installedLikeRow,
+  partiallyInstalledRow,
+  pluginRow,
+  renderDisabledRow,
+  renderVersion,
+  ICON_INSTALLED,
+} from "../../shared/notification-grammar.ts";
+import {
   type PluginDisabledMessage,
   type PluginFailedMessage,
   type PluginInstalledMessage,
@@ -7,15 +16,6 @@ import {
   type PluginSkippedMessage,
   type ContentReason,
 } from "../../shared/notification-types.ts";
-import {
-  ICON_INSTALLED,
-  ICON_UNINSTALLABLE,
-  installedLikeRow,
-  partiallyInstalledRow,
-  pluginRow,
-  renderDisabledRow,
-  renderVersion,
-} from "../../shared/notify.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 
 import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";

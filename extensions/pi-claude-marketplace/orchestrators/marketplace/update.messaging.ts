@@ -13,15 +13,6 @@
 // byte-identical.
 
 import {
-  type ContentReason,
-  type PluginFailedMessage,
-  type PluginPartiallyInstalledMessage,
-  type PluginSkippedMessage,
-  type PluginUpdatedMessage,
-} from "../../shared/notification-types.ts";
-import { skipSeverity } from "../../shared/notify-reasons.ts";
-import {
-  ICON_INSTALLED,
   ICON_UNINSTALLABLE,
   composeReasons,
   composeVersionArrow,
@@ -29,7 +20,16 @@ import {
   joinTokens,
   pluginRow,
   renderScopeBracket,
-} from "../../shared/notify.ts";
+  ICON_INSTALLED,
+} from "../../shared/notification-grammar.ts";
+import {
+  type ContentReason,
+  type PluginFailedMessage,
+  type PluginPartiallyInstalledMessage,
+  type PluginSkippedMessage,
+  type PluginUpdatedMessage,
+} from "../../shared/notification-types.ts";
+import { skipSeverity } from "../../shared/notify-reasons.ts";
 import { updatedRowFromOutcome } from "../plugin/update-row.ts";
 
 import type { CommandContext } from "../../shared/notify-context.ts";

@@ -13,9 +13,13 @@
 // shared row helpers the central `renderPluginRow` `uninstalled` / `failed` arms
 // call, so dispatch is byte-identical.
 
+import {
+  pluginRow,
+  renderUninstalledRow,
+  ICON_UNINSTALLABLE,
+} from "../../shared/notification-grammar.ts";
 import { type PluginFailedMessage } from "../../shared/notification-types.ts";
 import { type PluginUninstalledMessage, type Reason } from "../../shared/notification-types.ts";
-import { ICON_UNINSTALLABLE, pluginRow, renderUninstalledRow } from "../../shared/notify.ts";
 
 import type { CommandContext } from "../../shared/notify-context.ts";
 
