@@ -1,14 +1,14 @@
 import {
+  emitContextCascade,
+  emitReconcileAppliedContextCascade,
+  emitUpdateNoOpCascade,
+} from "./notification-summary.ts";
+import {
   type CascadeNotificationMessage,
   type MarketplaceNotificationMessage,
   type PluginNotificationMessage,
   type ReconcileAppliedCascadeMessage,
 } from "./notification-types.ts";
-import {
-  emitContextCascade,
-  emitReconcileAppliedContextCascade,
-  emitUpdateNoOpCascade,
-} from "./notify.ts";
 
 import type { Scope } from "./types.ts";
 import type { NotificationContext, SoftDepStatus, ToolInventory } from "../platform/pi-api.ts";
@@ -21,7 +21,7 @@ import type { NotificationContext, SoftDepStatus, ToolInventory } from "../platf
  * and the `notifyWithContext` entry point that dispatches the per-row body
  * through `context.render[status]` while routing the composed cascade through
  * the shared severity/summary/reload + single `ctx.ui.notify` seam in
- * `notify.ts` (`emitContextCascade`).
+ * `notification-summary.ts` (`emitContextCascade`).
  *
  * The legacy `notify(ctx, pi, message)` in `notify.ts` keeps serving
  * not-yet-migrated call sites (it still drives the central renderPluginRow /

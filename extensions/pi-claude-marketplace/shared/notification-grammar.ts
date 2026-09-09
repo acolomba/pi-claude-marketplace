@@ -27,7 +27,7 @@ import type {
 } from "./notification-types.ts";
 import type { Scope } from "./types.ts";
 
-/** Exact notification grammar. Dispatch and severity policy remain in notify.ts. */
+/** Exact notification grammar. Severity and summary policy live in notification-summary.ts. */
 
 // ---------------------------------------------------------------------------
 // Grammar rendering helpers -- file-private.
