@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 06
 current_phase_name: Assertion and Module Refinement
 status: executing
-stopped_at: Completed 06-04-PLAN.md
-last_updated: "2026-09-09T04:42:01.839Z"
+stopped_at: Completed 06-05-PLAN.md
+last_updated: "2026-09-09T05:12:52.089Z"
 last_activity: 2026-09-08
 last_activity_desc: Phase 06 execution started
-state_head: 00dba1ed582e0f8b15c8904302290ffb6f2a9d3c
+state_head: f8bbbcb0cbb7d3469dab54eb1384c12d85c07f74
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 180
-  completed_plans: 132
+  completed_plans: 133
   percent: 11
 ---
 
@@ -33,7 +33,7 @@ component as a working Pi artifact.
 
 Phase: 06 (Assertion and Module Refinement) — EXECUTING
 Next: Discuss Phase 6
-Plan: 5 of 52
+Plan: 6 of 52
 Status: Ready to execute
 Last activity: 2026-09-08 — Phase 06 execution started
 
@@ -312,6 +312,7 @@ Last activity: 2026-09-08 — Phase 06 execution started
 | Phase 06 P02 | 30min | 3 tasks | 8 files |
 | Phase 06 P03 | 30min | 2 tasks | 5 files |
 | Phase 06 P04 | 12min | 2 tasks | 5 files |
+| Phase 06 P05 | 21min | 2 tasks | 38 files |
 
 ## Accumulated Context
 
@@ -727,6 +728,9 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 06]: Index and import tests use case-owned path/state outcomes instead of shared builtin mutation. — Public registration, persisted bytes, notifications, and recovery remain exact without primitive interception.
 - [Phase 06]: Scope inventory captures a direct readdir import before protected owner mocks are armed. — The helper remains independent without createRequire while protected stage and uninstall exclusions stay unchanged.
 - [Phase 06]: Raw patch census counts executable source sites, not validator fixture literals. — Runtime fixture assembly preserves the closure test while making the required 2/18 and 2/2 census deterministic.
+- [Phase 06]: All resolver type consumers import resolver-types.ts directly; resolver.ts exposes no compatibility type or schema facade.
+- [Phase 06]: Unsupported-component discovery receives StatKindReader directly, keeping filesystem implementation ownership in the resolver while the closed policy remains a leaf.
+- [Phase 06]: Exact tuple and row-precedence assertions moved to the unsupported-components owner; resolver tests retain only composed resolver behavior.
 
 ### Pending Todos
 
@@ -779,7 +783,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 06-04-PLAN.md
+**Stopped at:** Completed 06-05-PLAN.md
 
 Phase 04 completed all seven plans and closed AUTH-01 and TREF-01 through
 TREF-03. Independent verification passed 4/4 with no behavioral or UAT gap;
@@ -797,7 +801,7 @@ independent verification passed 6/6 with zero unverified behaviors.
 **Read beside it:** `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`, the
 Phase 01 terminal evidence ledger, and Phase 5's roadmap criteria.
 
-Last session: 2026-09-09T04:42:01.314Z
+Last session: 2026-09-09T05:12:51.512Z
 
 **Next:** Discuss Phase 06 to define the assertion-strengthening and approved
 module-refinement work before planning.

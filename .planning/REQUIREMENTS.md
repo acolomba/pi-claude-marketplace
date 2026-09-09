@@ -70,7 +70,7 @@ component as a working Pi artifact.
 - [x] **TREF-08**: Global prototype and builtin-module patching and dishonest
       dense-index cases are removed through real case-owned state or narrow
       production-owned ports without ignore pragmas.
-- [ ] **TREF-09**: After Phase 2 and 3 prerequisites, the approved resolver,
+- [x] **TREF-09**: After Phase 2 and 3 prerequisites, the approved resolver,
       notify, install, update, reinstall, list, and catalog splits land at named
       seams with paired tests, one end-to-end proof per flow, and the four-part gate,
       documentation, ownership, and completeness checklist; uninstall and the
@@ -172,7 +172,7 @@ Roadmap creation assigns each requirement to exactly one phase.
 | TREF-06     | Phase 5                             | Complete      |
 | TREF-07     | Phase 6                             | Complete |
 | TREF-08     | Phase 6                             | Complete |
-| TREF-09     | Phase 6                             | Pending       |
+| TREF-09     | Phase 6                             | Complete |
 | GGAT-01     | Phase 7                             | Pending       |
 | GGAT-02     | Evidence/history (formerly Phase 7) | Evidence only |
 | GGAT-03     | Phase 7                             | Pending       |
