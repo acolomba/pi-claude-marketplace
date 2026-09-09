@@ -39,7 +39,7 @@
 // orchestrator detects emptiness BEFORE calling this projection so the
 // advisory takes precedence.
 
-import { resolveStrict } from "../../domain/resolver.ts";
+import { resolveStrict } from "../../domain/plugin-resolver.ts";
 import { malformedReasonsForKinds } from "../../shared/notify-reasons.ts";
 import { compareByNameThenScope } from "../../shared/notify.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";

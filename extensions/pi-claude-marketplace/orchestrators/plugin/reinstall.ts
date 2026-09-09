@@ -83,8 +83,8 @@ import {
 import { pluginMirrorKey } from "../../domain/clone-key.ts";
 import { parseHooksConfig, projectHookSummaryEntries } from "../../domain/components/hooks.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
+import { requirePartialInstallable, resolveStrict } from "../../domain/plugin-resolver.ts";
 import { asAbsolutePluginRoot } from "../../domain/plugin-root.ts";
-import { requirePartialInstallable, resolveStrict } from "../../domain/resolver.ts";
 import { parsePluginSource } from "../../domain/source.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { clonePluginRecord, isRecordedButDisabled, loadState } from "../../persistence/state-io.ts";

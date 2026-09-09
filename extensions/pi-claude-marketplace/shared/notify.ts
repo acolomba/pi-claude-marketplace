@@ -150,7 +150,7 @@ export const REASONS = [
   // family is admitted at the schema layer (HOOK-06 / EXEC-05) but produces
   // no runtime effect; this REASONS member surfaces the config bug as
   // `(installed) {orphan rewake}` on the install-cascade row. Detection
-  // lives in `domain/resolver.ts::applyHooksConfig`; install row composition
+  // lives in `domain/hooks-resolution.ts::resolveHooks`; install row composition
   // reads `resolved.orphanRewake` and pushes this token into `reasons[]`.
   // One row per plugin regardless of N orphan handlers.
   "orphan rewake",
