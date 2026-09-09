@@ -27,38 +27,15 @@ import {
 } from "../../extensions/pi-claude-marketplace/shared/notify.ts";
 
 test("OUT-08: REASONS is the closed 46-entry reason set", () => {
-  // D-76-08: +1 for the `authentication required` failure-class member (32 -> 33).
-  // PURL-06: +1 for the `dangling reference` failure-class member (33 -> 34).
-  // MCPR-03 / D-02: +1 for the malformed mcp failure-class member (34 -> 35).
-  // CLASS-01 / D-86-01: +2 for the per-kind `malformed skill` / `malformed
-  // command` failure-class members (35 -> 37).
-  // D-90-05: +1 for the `unsupported component` member -- the truthful marker
-  // for a dropped non-carve-out component kind (37 -> 38).
-  // OUT-01 / DFEN-04: +1 for the `installs disabled` member -- the marker for an
-  // install that landed disabled on the plugin's own declaration (38 -> 39).
-  // CMP-4 / SCOPE-01: +1 for `marketplace not added to user scope` -- the SECOND
-  // structural marketplace-absent marker, replacing `marketplace not added` on the row when
-  // the container was found in the scope the command did not target (39 -> 40),
-  // +1 for its project-target sibling `marketplace not added to project scope`
-  // (40 -> 41).
-  // SCOPE-01 / D-01: +2 for the `marketplace in user scope` /
-  // `marketplace in project scope` CONTENT pair -- the cross-scope qualifier an
-  // absent-target lifecycle row joins to `not installed` so the
-  // container-is-one-scope-over miss stops rendering byte-identically to the
-  // container-is-here miss (41 -> 43).
-  // WDET-04 / D-106-04: +1 for the dedicated final `workflows` member
-  // (43 -> 44).
-  // WINV-03 / D-109-01: -1 for the retired workflows member (44 -> 43).
-  // WLIF-06: +1 for the `stale workflow command` member -- the marker a retiring
-  // verb stamps when a removed workflow's command stays registered until a
-  // reload (43 -> 44).
-  // WDEP-04: +1 for the `requires pi-dynamic-workflows` member -- the third
-  // soft-dep marker, for a row that staged a workflow in a session with no host
-  // workflow engine (44 -> 45).
-  // WCONV-03: +1 for the `components now supported` member -- the load-time
-  // convergence marker a re-materialized record's row carries, so a reload the
-  // user did not initiate stops rendering byte-identically to a fresh install
-  // (45 -> 46).
+  // The set is append-only and its declared order is catalog-stable, so this
+  // length is a tripwire: an additive drift has to be a deliberate bump made
+  // here, in the same edit as the member. The MEMBERSHIP is pinned separately by
+  // enumeration in `compat-01-no-expansion.test.ts`, and each member's own
+  // rationale lives beside its literal in `notify.ts`.
+  //
+  // No changelog of past counts lives here. Git holds that history, a comment is
+  // not a gate, and a count restated far from this assertion is a claim nothing
+  // turns red for.
   assert.equal(REASONS.length, 46);
 });
 

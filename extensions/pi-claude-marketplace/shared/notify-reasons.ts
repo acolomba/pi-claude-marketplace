@@ -4,36 +4,23 @@ import type { SoftDepStatus } from "../platform/pi-api.ts";
 /**
  * shared/notify-reasons.ts -- the topic-grouped organization of the closed
  * reasons set (D-09). The byte-critical runtime tuple `REASONS` stays declared
- * in `notify.ts` as the SINGLE source of catalog truth (OUT-08: the 46-entry
- * membership AND order must stay byte-identical for catalog stability); this
+ * in `notify.ts` as the SINGLE source of catalog truth (OUT-08: its membership
+ * AND order must stay byte-identical for catalog stability); this
  * module reorganizes that closed set into shared topic-grouped enums + a
  * structural completeness proof WITHOUT recomposing the `REASONS` tuple (which
  * would risk reordering). The topic groups below are typed views over the same
  * closed `Reason` literals, so a command module can reference an
  * intent-meaningful group (e.g. the failure-class reasons) instead of the flat
- * 46-entry set.
+ * set.
  *
- * D-90-05 is what moved the count from 37 to 38: `"unsupported component"`
- * joined the set as the truthful marker for a dropped component kind that has
- * no carve-out of its own. OUT-01 / D-102-05 moved it from 38 to 39:
- * `"installs disabled"` joined as the marker for an install that landed
- * disabled because the plugin's own `defaultEnabled` declaration said so, and
- * brought the fourth topic group with it (D-102-06). `COMPAT-01` pins the
- * membership by enumeration and `notify-closed-set-locks.test.ts` pins the
- * length, so the tuple itself cannot drift. Neither gate reads a comment: the
- * counts in the two sentences above, in `notify.ts`'s own tuple doc and in that
- * lock test's title are prose, so nothing turns red when they fall behind. The
- * change that grows the set is what moves them, in the same edit. CMP-4 /
- * SCOPE-01 added two structural scope reasons (39 to 41).
- * SCOPE-01 / D-01 added two content scope reasons (41 to 43). WDET-04 /
- * D-106-04 appended the dedicated `workflows` reason (43 to 44). WINV-03 /
- * D-109-01 reverses that term (44 to 43). WLIF-06 appends `stale workflow
- * command`, the marker for a retired workflow command the host cannot
- * unregister until a reload (43 to 44). WDEP-04 appends
- * `requires pi-dynamic-workflows`, the third soft-dep marker, for a row that
- * staged a workflow in a session with no host workflow engine (44 to 45).
- * WCONV-03 appends `components now supported`, the load-time convergence marker
- * a re-materialized record's row carries (45 to 46).
+ * The set is APPEND-ONLY: a new token joins at the tail, existing entries never
+ * move, and the declared order is catalog-stable because a rendered brace
+ * follows array order. `COMPAT-01` pins the membership by enumeration and
+ * `notify-closed-set-locks.test.ts` pins the length, so the tuple cannot drift
+ * unnoticed, and every member whose presence needs an argument carries its own
+ * decision ID beside its literal in `notify.ts`. No running count of the set
+ * lives in prose here: neither gate reads a comment, so a number written here
+ * would be the one claim about this set that nothing turns red for.
  *
  * The idempotent group keeps an `as const` tuple because `skipSeverity` needs
  * a runtime `Set` to test against; the unsupported and failure groups are
