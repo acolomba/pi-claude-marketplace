@@ -1,9 +1,9 @@
 ---
 phase: "06"
 slug: "assertion-and-module-refinement"
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: validated
+nyquist_compliant: true
+wave_0_complete: true
 created: "2026-09-08"
 ---
 
@@ -300,25 +300,65 @@ closed. Phase 6 extended the same drift to `TREF-07`, `TREF-08`, and `TREF-09` w
 marked those requirements complete. No Phase 6 plan ran the full suite, so the pre-existing red went
 unobserved for 51 plans — a sampling gap this validation contract's per-wave rate did not close.
 
-#### Closure status
+#### Closure status — resolved, gate green
 
-`npm run check` does not exit zero, so the Plan 06-52 acceptance criterion is unmet and the
-sign-off below stays unchecked. F2 is Phase 6 work left incomplete. F1 and F3 are outside the Phase 6
-boundary: F1 is an untracked working-tree file, and F3 is a planning-artifact contract sealed before
-this phase. All three are reported for a separately-scoped decision rather than repaired inside this
-validation plan, which is authorized to modify this file only.
+The red run above is retained as the record of what the gate caught. All three findings were then
+repaired under a separate scope decision, and `npm run check` re-run to completion:
+
+| Stage | Result |
+|---|---|
+| `typecheck` / `lint` / `fallow` / `format:check` | pass |
+| `test:corresponding` / `:negative` / `test:coverage:direct:negative` | pass |
+| `npm test` | **5881 / 5881**, 0 fail |
+| `test:integration` | **32 / 32**, 0 fail |
+| `npm run check` | **exit 0** |
+
+Repairs, each committed on its own:
+
+- **F1** — `.mcp.json` reformatted. Untracked working-tree file; `prettier` globs the filesystem
+  rather than the index, so an untracked file can redden `format:check`.
+- **F2** — `hooks-lifecycle.test.ts` repointed at `reinstall-flow.ts`; the D-11 `PLUGIN_LEDGERS`
+  list repointed at the `install-flow` / `update-flow` / `reinstall-flow` entry points. The list
+  feeds **both** directions of D-11, and the marketplace-side scan had gone silently inert —
+  green while matching import paths that can no longer exist. Both directions were re-verified by
+  planting an offending import and confirming each scan fails, then restoring the planted files
+  byte-identically. A pre-repair scan confirmed no real offender was being masked: every
+  plugin-to-marketplace import resolves to `marketplace/shared.ts` apart from the documented
+  `bootstrap.ts` composer exemption, and every marketplace-to-plugin import resolves to one of the
+  three sanctioned leaf composers.
+- **F3** — `TREF-04`..`TREF-06` sealed `Complete` (their phase verified every must-have);
+  `TREF-07`..`TREF-09` returned to `Pending` in `REQUIREMENTS.md`, because this phase's
+  verification is still open and `Complete` was premature on both sides. These flip to `Complete`
+  when this phase's verification seals, not before; marking them earlier re-reddens `RVAL-04`,
+  correctly.
+
+Two conditions surfaced that are **not** repaired here and carry forward:
+
+1. `scripts/revalidation.mjs` needed a `fix-unicode-dashes` exemption in `.pre-commit-config.yaml`.
+   Its dash literals both match and emit the em-dash that `.planning/` documents carry, and
+   `.planning/` is already exempt from that hook; rewriting them to `--` stops the record scan
+   matching any row. The six affected lines are unchanged from the pre-repair tree, so
+   `pre-commit --all-files` was already red on this file before this plan ran.
+2. The zero-stale-path scan in `06-52-01` passes but is **coverage-limited**: it matches literal
+   paths, so it cannot see a retired path assembled from segments at runtime. That blind spot is
+   precisely what let F2 survive to the integration gate. Gates that address their targets by
+   composed path need a discovery mechanism that does not depend on a literal appearing in the
+   source — carried to `GGAT-01`/`GGAT-03`/`GGAT-04` as evidence, not closed here.
 
 ## Validation Sign-Off
 
-- [ ] Every final task has an `<automated>` command or creates its paired test in the same task.
-- [ ] Every runnable `<automated>` command has an adjacent observable `<fails_when>` condition.
-- [ ] Sampling continuity: no three consecutive tasks lack an automated verification command.
-- [ ] Wave 0 creates every missing owner pair and catalog test before it is used as evidence.
-- [ ] No watch-mode flags are present.
-- [ ] Focused feedback latency remains below 30 seconds.
-- [ ] Every new production source passes direct-pair coverage.
-- [ ] Every final hub deletion passes its zero-stale-path and four-part repointing checks.
-- [ ] `npm run check` and the exact residual patch census pass at closure.
-- [ ] `nyquist_compliant: true` is set only after all rows map to final task IDs and pass.
+- [x] Every final task has an `<automated>` command or creates its paired test in the same task.
+- [x] Every runnable `<automated>` command has an adjacent observable `<fails_when>` condition.
+- [x] Sampling continuity: no three consecutive tasks lack an automated verification command.
+- [x] Wave 0 creates every missing owner pair and catalog test before it is used as evidence.
+- [x] No watch-mode flags are present.
+- [x] Focused feedback latency remains below 30 seconds.
+- [x] Every new production source passes direct-pair coverage.
+- [x] Every final hub deletion passes its zero-stale-path and four-part repointing checks —
+      the checks pass, with the literal-match coverage limit recorded under Closure status.
+- [x] `npm run check` and the exact residual patch census pass at closure.
+- [x] `nyquist_compliant: true` is set only after all rows map to final task IDs and pass.
 
-**Approval:** pending
+**Approval:** validated — full gate exits zero at 5881 unit plus 32 integration tests, with the
+30-owner, 20-fixture, seven-retired-hub and residual-patch censuses each independently green. Two
+carried-forward conditions are named under Closure status and neither blocks this phase.
