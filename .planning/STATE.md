@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 06
 current_phase_name: Assertion and Module Refinement
 status: executing
-stopped_at: Completed 06-46-PLAN.md
-last_updated: "2026-09-09T19:44:25.975Z"
+stopped_at: Completed 06-47-PLAN.md
+last_updated: "2026-09-09T19:59:23.594Z"
 last_activity: 2026-09-08
 last_activity_desc: Phase 06 execution started
-state_head: 28764585766a664a97672e9d235a4dd4de3a4727
+state_head: c3f7b80767a7ffd6e452e1a2c71fcbb28128817c
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 180
-  completed_plans: 174
+  completed_plans: 175
   percent: 11
 ---
 
@@ -33,7 +33,7 @@ component as a working Pi artifact.
 
 Phase: 06 (Assertion and Module Refinement) — EXECUTING
 Next: Discuss Phase 6
-Plan: 47 of 52
+Plan: 48 of 52
 Status: Ready to execute
 Last activity: 2026-09-08 — Phase 06 execution started
 
@@ -350,6 +350,7 @@ Last activity: 2026-09-08 — Phase 06 execution started
 | Phase 06 P44 | 28 min | 2 tasks | 10 files |
 | Phase 06 P45 | 30 min | 2 tasks | 8 files |
 | Phase 06 P46 | 19min | 2 tasks | 15 files |
+| Phase 06 P47 | 12min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -857,6 +858,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 06]: Make reinstall-flow.ts the exclusive owner of public reinstall options, dependency contracts, function types, and factory exports.
 - [Phase 06]: Expose a typed ReinstallFlowOwners bundle and real sequencing functions from reinstall.ts instead of a compatibility re-export or forwarding facade.
 - [Phase 06]: Migrate every live public factory and type caller atomically with the owner move.
+- [Phase 06]: Gate both reinstall-flow.ts and the retained reinstall.ts sequencer during the ownership transition so no temporary coverage gap exists.
+- [Phase 06]: Keep the manifest raw-lookup exemption on reinstall.ts until the lookup itself moves; unused exemptions weaken the scanner and fail its stale-entry proof.
 
 ### Pending Todos
 
@@ -909,7 +912,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 06-46-PLAN.md
+**Stopped at:** Completed 06-47-PLAN.md
 
 Phase 04 completed all seven plans and closed AUTH-01 and TREF-01 through
 TREF-03. Independent verification passed 4/4 with no behavioral or UAT gap;
@@ -927,7 +930,7 @@ independent verification passed 6/6 with zero unverified behaviors.
 **Read beside it:** `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`, the
 Phase 01 terminal evidence ledger, and Phase 5's roadmap criteria.
 
-Last session: 2026-09-09T19:44:25.352Z
+Last session: 2026-09-09T19:59:23.022Z
 
 **Next:** Discuss Phase 06 to define the assertion-strengthening and approved
 module-refinement work before planning.
