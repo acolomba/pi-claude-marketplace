@@ -19,7 +19,7 @@
  * Gate discipline: this module lives in the orchestrator tier but MUST NOT
  * name `gitOps` / `DEFAULT_GIT_OPS` or import `platform/git.ts` as a VALUE --
  * only `import type` from platform/git.ts is permitted -- so consumers
- * (install.ts) that import it stay clean under the no-orchestrator-network
+ * (install-outcome.ts) that import it stay clean under the no-orchestrator-network
  * gate. It imports the provider registry (domain), the Device Flow engine
  * (domain), the raw notify seam (shared), and credential/auth types, and
  * re-exports the `DEFAULT_CREDENTIAL_OPS` value (platform/git-credential.ts).
@@ -39,7 +39,7 @@ import type { NotificationContext } from "../platform/pi-api.ts";
 import type { GitAuthBundle } from "./marketplace/shared.ts";
 
 // Re-export the credential/auth surface the network-gated plugin orchestrators
-// (install.ts / reinstall.ts) need. Those files MUST NOT import from
+// (install-outcome.ts / reinstall.ts) need. Those files MUST NOT import from
 // `platform/git.ts` or `platform/git-credential.ts` directly -- the
 // no-orchestrator-network gate greps for any `platform/git` import, even
 // type-only -- so this gate-clean module is their single sanctioned re-export

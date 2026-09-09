@@ -665,7 +665,7 @@ function reasonsFromCascadeError(err: unknown): readonly ContentReason[] | undef
  * (a declined or failed Device Flow), and network errno -- delegates to
  * `classifyGitTransportFailure` (`shared/git-failure-classifiers.ts`)
  * instead of a hand-rolled copy, so `update` cannot drift out of sync with
- * `install.ts`/`fetch.ts` (plugin), which already delegate to it.
+ * `install-outcome.ts`/`fetch.ts` (plugin), which already delegate to it.
  */
 function transportReason(err: Error): ContentReason | undefined {
   let bearer: NodeJS.ErrnoException | undefined;

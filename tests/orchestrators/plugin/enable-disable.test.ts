@@ -1377,7 +1377,7 @@ test("WARN-01 / D-86-03: enable of a plugin whose skill frontmatter is unparseab
     // assert
     assert.equal(notifications.length, 1);
     // WARN-01: a degraded component is carried out but short of ideal, so the
-    // row takes the same info -> warning raise install.ts::successSeverity
+    // row takes the same info -> warning raise as install-flow.ts
     // applies. Distinct from the SEV-03 info stance for DROPPED kinds, where
     // the shortfall predates the enable.
     assert.equal(notifications[0]!.severity, "warning");

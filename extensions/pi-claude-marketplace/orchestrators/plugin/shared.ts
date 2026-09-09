@@ -58,9 +58,9 @@ import type { Scope } from "../../shared/types.ts";
  * bridges, so a signal one row names and the other omits is a row that
  * contradicts its own ledger.
  *
- * The shape lives here, in the module `install.ts` and `enable-disable.ts` BOTH
+ * The shape lives here because `install-flow.ts` and `enable-disable.ts` BOTH
  * already import, rather than in either of them: `enable-disable.ts` imports
- * `runInstallLedger` from `install.ts`, so declaring it there and importing it
+ * `runInstallLedger` from `install-outcome.ts`, so declaring it there and importing it
  * back would close a module cycle (IN-07 / D-98-01).
  *
  * Consumed by `freshEnableRow` (standalone enable), `enabledRowFromOutcome` and
@@ -89,7 +89,7 @@ export interface LedgerDegradationSignals {
    * WARN-01 / D-86-03: the component kinds whose source frontmatter could not
    * be parsed and installed in degraded form. Each kind contributes one
    * `{malformed skill}` / `{malformed command}` token AND raises the row from
-   * `info` to `warning` -- the same raise `install.ts::composeInstalledRow`
+   * `info` to `warning` -- the same raise `install-flow.ts::composeInstalledRow`
    * applies, because a degraded component is carried out but short of ideal
    * whichever verb materialized it.
    */
@@ -111,7 +111,7 @@ export interface LedgerDegradationSignals {
 
 /**
  * SEV-01 / D-98-02: derive the closed-set `Dependency[]` an enable row declares
- * from the ledger's staged-count signals -- the same derivation `install.ts`
+ * from the ledger's staged-count signals -- the same derivation `install-flow.ts`
  * runs off `installCtx.stagedAgentNames` / `stagedMcpServerNames` for the same
  * ledger run. Shared by the standalone enable row and the reconcile enable
  * projection so the two row composers cannot drift.
@@ -606,7 +606,7 @@ function readableConfig(result: ConfigLoadResult): ScopeConfig | undefined {
  * creates a file.
  *
  * This is the WRITE-side counterpart of the READ-side rule
- * `install.ts::readDeclaredEnabled` states -- the local file wins by IDENTITY,
+ * `install-declared-enabled.ts` states -- the local file wins by IDENTITY,
  * not by precedence. `targetIsLocal` reports the selection's locality so
  * callers reading across both files do not re-derive it by comparing paths.
  *
@@ -1373,7 +1373,7 @@ export async function emitMarketplaceNotAddedSignal(args: {
  * that drift (and so `sonarjs/no-identical-functions` and `fallow dupes` have
  * nothing to find).
  *
- * `install.ts` does NOT call this. Its ledger phases push each bridge's
+ * `install-outcome.ts` does NOT call this. Its ledger phases push each bridge's
  * warnings onto the right array inline, one push per phase, because each
  * phase already holds exactly one bridge's result. It shares the RENDERER
  * below, not this classifier -- so two of the three verbs share the

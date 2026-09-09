@@ -26,7 +26,7 @@
 // orchestrators/marketplace/shared.ts ONLY (NOT from add.ts/remove.ts/etc).
 //
 // NFR-5 (no network): this file MUST NOT import platform/git or DEFAULT_GIT_OPS.
-// The architectural source-grep test gates install.ts + list.ts;
+// The architectural source-grep test gates both install owners + list.ts;
 // uninstall.ts is implicitly clean by construction (no git surface).
 //
 // PU-6 (legacy state migration): handled by persistence/migrate.ts at load

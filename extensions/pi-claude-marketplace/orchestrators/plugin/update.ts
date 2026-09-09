@@ -1585,7 +1585,7 @@ function appendCleanupFailure(
 
 const UPDATE_IN_PROGRESS_NOTE = "update-in-progress";
 
-// D-63-01: hooks slot lands between agents and mcp -- mirrors install.ts
+// D-63-01: hooks slot lands between agents and mcp -- mirrors install-outcome.ts
 // runPhases literal-array order.
 const PHASE3_FAILURE_PHASES = ["skills", "commands", "agents", "hooks", "mcp"] as const;
 type Phase3Phase = (typeof PHASE3_FAILURE_PHASES)[number];
@@ -3041,7 +3041,7 @@ function notifyDirectFailure(args: NotifyDirectFailureArgs): void {
   // marketplace block's `scope` at every callsite below, and
   // `renderScopeBracket` (shared/notification-grammar.ts) suppresses the
   // bracket in that case. Aligning on the omit convention (matching uninstall.ts,
-  // reinstall.ts, and install.ts's IN-04 commentary at lines 936-944)
+  // reinstall.ts, and install-outcome.ts's IN-04 commentary)
   // removes a structural redundancy that diverged from the canonical
   // emission recipe.
   const failedRow: PluginFailedMessage = {
@@ -3157,7 +3157,7 @@ function notifyBareFormEnumerateFailure(args: {
   // WR-05: row-level `scope` is OMITTED -- the marketplace block carries
   // the same scope, and `renderScopeBracket` suppresses the per-row
   // bracket in that case. Matches the omit convention used by
-  // uninstall.ts / reinstall.ts / install.ts (IN-04).
+  // uninstall.ts / reinstall.ts / install-outcome.ts (IN-04).
   const failedRow: PluginFailedMessage = {
     status: "failed",
     name: SYNTHETIC_UPDATE_PLACEHOLDER_NAME,

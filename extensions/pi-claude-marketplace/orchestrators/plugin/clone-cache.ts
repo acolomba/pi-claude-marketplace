@@ -2,7 +2,7 @@
 //
 // PURL-02 / PURL-04 / D-77-03..06: the plugin clone-cache seam.
 //
-// install.ts is forbidden the git surface by the `no-orchestrator-network`
+// install-outcome.ts is forbidden the git surface by the `no-orchestrator-network`
 // architecture gate (NFR-5). The clone lives HERE, in a sibling seam install
 // calls by name; this file imports DEFAULT_GIT_OPS from marketplace/shared.ts
 // (the same re-export update.ts uses) and is legally allowed the git surface
@@ -538,7 +538,7 @@ export async function resolvePluginPin(args: {
 // PURL-03 / NFR-10 / D-77-03: `resolveGitSubdirRoot` lives in shared/fs-utils.ts
 // so the network-free presence probe can share it without pulling this seam's git
 // surface. Re-exported here under the same name so the update / reinstall
-// import sites need no change. `install.ts` calls this file's
+// import sites need no change. `install-clone-probe.ts` calls this file's
 // `resolveGitPluginRootWithSubdir`, which wraps it, rather than importing it directly.
 export { resolveGitSubdirRoot } from "../../shared/fs-utils.ts";
 

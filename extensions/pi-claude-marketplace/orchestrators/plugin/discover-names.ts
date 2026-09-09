@@ -1,7 +1,7 @@
 // extensions/pi-claude-marketplace/orchestrators/plugin/discover-names.ts
 //
 // Shared helper for plugin orchestrators that need the set of generated
-// names a plugin would produce when staged. `install.ts`, `update.ts` and
+// names a plugin would produce when staged. `install-outcome.ts`, `update.ts` and
 // `reinstall.ts` all use it for the same two purposes: wiring the
 // agents-knownSkills validator and building cross-plugin conflict inputs.
 //
@@ -39,7 +39,7 @@ function resolvedAgentsDirs(resolved: MaterializablePlugin): readonly string[] {
  * this function drops them on purpose.
  *
  * Every caller runs the same walk again during staging, and that pass is the
- * one that reports: `install.ts` folds each `prepareStage*` result onto
+ * one that reports: `install-outcome.ts` folds each `prepareStage*` result onto
  * `discoveryWarnings` and `reinstall.ts` aggregates the same four results in
  * `collectStagingWarnings`. Reporting here as well would print every warning
  * twice for one install.

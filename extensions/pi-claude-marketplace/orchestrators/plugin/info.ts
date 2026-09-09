@@ -153,7 +153,7 @@ export interface PluginInfoReader {
  * is a FORBIDDEN_TARGET for the git surface (no-orchestrator-network gate), so
  * the fetch-materialize flows through the sibling `clone-cache.ts` seam by name
  * -- info NEVER references the git ops directly. Mirrors
- * `install.ts::InstallCloneCacheSeam`. Production leaves it undefined and info
+ * `install-clone-probe.ts::InstallCloneCacheSeam`. Production leaves it undefined and info
  * uses the real imports (which default to the real git backend internally).
  */
 export interface InfoCloneCacheSeam {
@@ -1497,7 +1497,7 @@ type GitProbe = (source: GitBackedSource) => Promise<GitPluginRootResult>;
  * the mirror refresh IS the consented fetch, so it hits the network on every
  * run). A materialize throw PROPAGATES so the row builder's existing
  * try/catch degrades to `components: not resolved` (D-81-04). Mirrors
- * `install.ts::makeInstallCloneProbe`; the pinned/unpinned fork lives inside the
+ * `install-clone-probe.ts::probeInstallClone`; the pinned/unpinned fork lives inside the
  * callback so info still names no git surface (it reaches the seam only by name).
  */
 function makeFetchProbe(locations: ScopedLocations, fetchCtx: InfoFetchContext): GitProbe {

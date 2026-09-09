@@ -413,7 +413,7 @@ They install a plugin whole. Partial plugin installation is on their explicit no
 
 ### Structurally enforced offline guarantees
 
-Our offline promise is enforced by a test, not by convention. `tests/architecture/no-orchestrator-network.test.ts` greps `install.ts`, `list.ts`, `reinstall.ts`, `info.ts`, `fetch.ts`, `enable-disable.ts`, `marketplace/info.ts`, and all three reconcile files for `platform/git`, `DEFAULT_GIT_OPS`, `gitOps`, and `refreshGitHubClone`. Only `update.ts` is exempt. All git access flows through the `clone-cache.ts` seam by entrypoint name. Their equivalent guarantee is a property of the code, not a gate that fails the build.
+Our offline promise is enforced by a test, not by convention. `tests/architecture/no-orchestrator-network.test.ts` greps `install-flow.ts`, `install-outcome.ts`, `list.ts`, `reinstall.ts`, `info.ts`, `fetch.ts`, `enable-disable.ts`, `marketplace/info.ts`, and all three reconcile files for `platform/git`, `DEFAULT_GIT_OPS`, `gitOps`, and `refreshGitHubClone`. Only `update.ts` is exempt. All git access flows through the `clone-cache.ts` seam by entrypoint name. Their equivalent guarantee is a property of the code, not a gate that fails the build.
 
 ### Hook coverage depth
 
@@ -691,7 +691,7 @@ Our version strings are `hash-<12hex>`, a SHA-256 over a deterministic walk with
 
 Our autoupdate is opt-in and off by default, and it lives in `claude-plugins.json` rather than in state. There is no timer, no interval, and no session-start update run. The flag is consumed only by `marketplace update`. When autoupdate is off, change detection is a conservative manifest content compare with `JSON.stringify` before and after.
 
-Our offline guarantee is a grep gate. `tests/architecture/no-orchestrator-network.test.ts` scans `install.ts`, `list.ts`, `reinstall.ts`, `info.ts`, `fetch.ts`, `enable-disable.ts`, `marketplace/info.ts`, and all three reconcile files for `platform/git`, `DEFAULT_GIT_OPS`, `gitOps`, and `refreshGitHubClone`. Only `update.ts` is exempt, and git access flows through the `clone-cache.ts` seam by entrypoint name.
+Our offline guarantee is a grep gate. `tests/architecture/no-orchestrator-network.test.ts` scans `install-flow.ts`, `install-outcome.ts`, `list.ts`, `reinstall.ts`, `info.ts`, `fetch.ts`, `enable-disable.ts`, `marketplace/info.ts`, and all three reconcile files for `platform/git`, `DEFAULT_GIT_OPS`, `gitOps`, and `refreshGitHubClone`. Only `update.ts` is exempt, and git access flows through the `clone-cache.ts` seam by entrypoint name.
 
 Our git surface lives in `platform/git.ts`, the only file that imports `isomorphic-git`. It exposes `clone`, `fetch`, `checkout`, `resolveRef`, `resolveRemoteRef` (through `listServerRefs`, with no clone), `forceUpdateRef`, `currentBranch`, `listBranches`, and `listRemotes`. It does not expose sparse checkout, shallow or `depth` clones, or submodules. A marketplace refresh is `fetch`, then `forceUpdateRef`, then `checkout`, and never `pull`.
 

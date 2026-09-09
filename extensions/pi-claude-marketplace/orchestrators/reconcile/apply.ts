@@ -852,7 +852,7 @@ async function applyReconcileWithReader(
   // (warning severity) preserves the operator's ability to remediate
   // without contaminating the cascade body. This is the only sanctioned
   // exception to RECON-04's "single notify per applyReconcile" rule;
-  // `install.ts::installPlugin` owns the orchestrated-mode collection
+  // `install-flow.ts::installPlugin` owns the orchestrated-mode collection
   // path that feeds it.
   surfacePostCommitWarnings(opts, outcomes);
 }

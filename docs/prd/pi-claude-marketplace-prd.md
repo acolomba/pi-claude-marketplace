@@ -938,7 +938,7 @@ flowchart TB
   end
 
   subgraph plugin [plugin/]
-    pl_inst[install.ts]
+    pl_inst[install-flow.ts + install-outcome.ts]
     pl_uninst[uninstall.ts]
     pl_upd[update.ts]
     pl_res[resolve.ts]

@@ -10,7 +10,7 @@
 //
 // Locking model: exactly ONE per-scope lock owns the
 // whole critical section. The enable branch calls `runInstallLedger` (the
-// guard-FREE ledger body exported by install.ts) against THIS transaction's
+// guard-FREE ledger body exported by install-outcome.ts) against THIS transaction's
 // state snapshot -- calling `installPlugin` here would nest a second
 // `withStateGuard` on the same `stateLockFile`, and `proper-lockfile`
 // (`retries: 0`) is not re-entrant, so every fresh enable would self-deadlock
@@ -330,7 +330,7 @@ async function runEnableBranch(
     // ENBL-07 / FSTAT-07 / D-66-04 / SURF-05 / WARN-01: thread the LIVE
     // degradation signals out of the ledger. The enable branch runs the SAME
     // `runInstallLedger` over the SAME bridges as `install`, so all three
-    // signals `install.ts` composes off its own ledger context are carried on
+    // signals `install-flow.ts` composes off the ledger summary are carried on
     // the returned summary and all three are read here -- a row that named only
     // one of them would contradict the ledger that produced it just as surely
     // as an `(installed)` row over a `partially-available` resolution does.
@@ -1320,7 +1320,7 @@ function dispatchOutcome(args: {
  * (NREG-01).
  *
  * SURF-05 / WARN-01: the row also carries the ledger's other two degradation
- * signals in `install.ts`'s emit order -- `{orphan rewake}` first, then the
+ * signals in `install-flow.ts`'s emit order -- `{orphan rewake}` first, then the
  * per-kind `{malformed skill}` / `{malformed command}` tokens, then the dropped
  * kinds -- so the brace stays byte-comparable across the two verbs that share
  * the ledger.
@@ -1331,7 +1331,7 @@ function dispatchOutcome(args: {
  * state was reached, the same stance the `install --partial` success row and
  * the still-degraded `plugin-backfilled` arm take. A MALFORMED component is a
  * different fact: it is a degrade the ledger just produced, not a pre-existing
- * shortfall, so it takes the same `warning` raise `install.ts::composeInstalledRow`
+ * shortfall, so it takes the same `warning` raise `install-flow.ts::composeInstalledRow`
  * applies (WARN-01 / D-86-03) on whichever verb materialized it.
  *
  * SEV-01 / D-98-02: a MISSING companion is the second, independent raise. The
@@ -1350,7 +1350,7 @@ function freshEnableRow(
     ...(outcome.orphanRewake === true ? (["orphan rewake"] as const) : []),
     ...malformed,
   ];
-  // SEV-01: the enable row derives the SAME dependency list `install.ts` derives
+  // SEV-01: the enable row derives the SAME dependency list `install-flow.ts` derives
   // for the same ledger run, so the `{requires pi-...}` markers fire on a
   // re-enable exactly as on an install.
   const dependencies = enableRowDependencies(outcome);

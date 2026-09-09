@@ -66,7 +66,7 @@ type InstallStatus =
 /**
  * Entity-shaped non-cascade error line (MSG-NC-1 / CMC-34) -- internal
  * classified-error return shape for `classifyEntityShapeError` and the
- * install.ts error-routing path. It lives here beside `InstallMsg` because
+ * install-flow.ts error-routing path. It lives here beside `InstallMsg` because
  * it is a message-row shape: `composeInstallFailureMessage` consumes it and
  * returns `InstallMsg`.
  *
@@ -190,7 +190,7 @@ function composeNotInstallableMessage(
 // ───────────────────────────────────────────────────────────────────────────
 // Error classification and failure-row composition.
 //
-// This family lived in install.ts and was reached through four `__test_*`
+// This family lived in the legacy install hub and was reached through four `__test_*`
 // re-exports. `EntityErrorRow` above already moved here on the grounds that it
 // is a message-row shape; the functions that produce and consume it belong on
 // the same side of that line. The orchestrator now calls them across a public

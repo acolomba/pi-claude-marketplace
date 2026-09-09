@@ -374,9 +374,9 @@ export type PluginUpdateFn = (
 ) => Promise<PluginUpdateOutcome>;
 
 // ───────────────────────────────────────────────────────────────────────────
-// It moved here from install.ts to join its three siblings. Leaving it in the
+// It moved here from the install flow owner to join its three siblings. Leaving it in the
 // orchestrator meant install.messaging.ts could not name the type its own
-// failure classifier returns without importing back into install.ts, which
+// failure classifier returns without importing back into install-flow.ts, which
 // would close a cycle (FLOW-09).
 // ───────────────────────────────────────────────────────────────────────────
 

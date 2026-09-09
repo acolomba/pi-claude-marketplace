@@ -1115,11 +1115,11 @@ async function runLockedReinstall(
     // state.json now matches in-memory state, and the next `/reload`'s
     // factory-time hydrate (D-59-03) rebuilds the cache from disk.
     // Synchronous + zero disk I/O per DISP-02; the readFile/parse path
-    // is the same defensive shape `install.ts` uses (failures route
+    // is the same defensive shape `install-outcome.ts` uses (failures route
     // through the hooks helper's debug log and the next `/reload` rehydrates).
     //
     // WR-03: post-`tx.save()` cache+routing mutations are non-fatal --
-    // mirrors install.ts's WR-02. A throw here would surface as
+    // mirrors install-flow.ts's WR-02. A throw here would surface as
     // `(manual recovery)` while state.json already persisted the new
     // record (state divergence). `/reload`'s factory-time hydrate
     // (D-59-03) rebuilds the cache from state.json. Failures route
@@ -1441,7 +1441,7 @@ interface HooksReplaceArgs {
 /**
  * LIFE-01 hooks-bridge atomic write/remove during reinstall's replace step.
  * When the resolved plugin advertises hooksConfigPath, re-read + re-parse the
- * on-disk hooks.json (mirroring `install.ts`'s `hooksPhase` inside
+ * on-disk hooks.json (mirroring `install-outcome.ts`'s `hooksPhase` inside
  * `runInstallLedger`) and call writeHookConfig.
  * When the resolved plugin has no hooks, remove any stale subtree (defensive
  * cleanup of an artifact a prior install left behind).
@@ -1540,7 +1540,7 @@ function resourcesFromHandles(
     prompts: handles.commands.result.recorded.map((r) => r.generatedName),
     agents: handles.agents.result.recorded.map((r) => r.generatedName),
     mcpServers: handles.mcp.result.recorded.map((r) => r.generatedName),
-    // HOOK-02 / D-57-01: additive required field. WR-03: mirror install.ts
+    // HOOK-02 / D-57-01: additive required field. WR-03: mirror install-flow.ts
     // -- when the resolver advertises a hooks config, record the plugin's
     // id as the slug so `rebuildRoutingTables`' state walk (gated on
     // `resources.hooks.length > 0`) visits this plugin and pulls its
@@ -1562,7 +1562,7 @@ function successOutcome(
 ): ReinstallReinstalledOutcome {
   const resources = resourcesFromHandles(handles);
   // WARN-01 / WR-04 / D-86-03: the same per-kind degrade collection
-  // `install.ts` makes off its ledger context, read here off the prepared
+  // `install-flow.ts` makes off its ledger summary, read here off the prepared
   // handles the bridges returned. Skill before command by collection order,
   // matching the install emit order.
   const degradedKinds = Array.from(
