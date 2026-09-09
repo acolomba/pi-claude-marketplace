@@ -131,6 +131,7 @@ import { cascadeUnstagePlugin, crossScopeFlag } from "../marketplace/shared.ts";
 
 import { discoverGeneratedNames } from "./discover-names.ts";
 import { probeInstallClone } from "./install-clone-probe.ts";
+import { resolveInstallDeclaredEnabled } from "./install-declared-enabled.ts";
 import {
   INSTALL_CONTEXT,
   classifyEntityShapeError,
@@ -158,7 +159,6 @@ import type { PreparedMcpStaging } from "../../bridges/mcp/index.ts";
 import type { PreparedSkillsStaging } from "../../bridges/skills/index.ts";
 import type { PluginEntry } from "../../domain/components/plugin.ts";
 import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
-import type { ScopeConfig } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
@@ -1384,42 +1384,8 @@ function foldFailedDisableCascade(args: {
  * so no abort is owed there, and the arm reads exactly as it did before the
  * sibling parse was threaded.
  */
-type PluginConfigMap = ScopeConfig["plugins"];
-type PluginConfigEntry = NonNullable<PluginConfigMap>[string];
 type MarketplaceStateRecord = ExtensionState["marketplaces"][string];
 type InstalledPluginRecord = MarketplaceStateRecord["plugins"][string];
-
-/**
- * Sort the two parsed configs into the local-then-base pair the identity rule
- * consumes. `targetIsLocal` names which of the two the CALLER is holding, so
- * the sibling takes the other slot.
- */
-function declaringPluginMaps(args: {
-  readonly current: ScopeConfig;
-  readonly sibling: ScopeConfig | undefined;
-  readonly targetIsLocal: boolean;
-}): { readonly local: PluginConfigMap; readonly base: PluginConfigMap } {
-  const siblingPlugins = args.sibling?.plugins;
-
-  return args.targetIsLocal
-    ? { local: args.current.plugins, base: siblingPlugins }
-    : { local: siblingPlugins, base: args.current.plugins };
-}
-
-function entryFor(plugins: PluginConfigMap, key: string): PluginConfigEntry | undefined {
-  return plugins?.[key];
-}
-
-function readDeclaredEnabled(args: {
-  readonly current: ScopeConfig;
-  readonly sibling: ScopeConfig | undefined;
-  readonly targetIsLocal: boolean;
-  readonly key: string;
-}): boolean | undefined {
-  const { local, base } = declaringPluginMaps(args);
-
-  return (entryFor(local, args.key) ?? entryFor(base, args.key))?.enabled;
-}
 
 /**
  * POST-state-commit side effects and their soft warnings (D-08 / AS-6 /
@@ -2005,7 +1971,7 @@ async function installPluginWithTransaction(
       // here. CFG-02: the read spans both files because a local entry replaces
       // the base entry wholesale whatever the write target is; `current` stays
       // the TARGET file and steers the write arms below and nothing else.
-      const declaredEnabled = readDeclaredEnabled({
+      const declaredEnabled = resolveInstallDeclaredEnabled({
         current,
         sibling,
         targetIsLocal,
