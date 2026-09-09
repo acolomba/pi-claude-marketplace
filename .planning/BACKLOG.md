@@ -2119,7 +2119,74 @@ Code seams: `domain/components/hook-events.ts` (`BUCKET_A_EVENTS`,
 (observation narrowing), `bridges/hooks/timeout.ts`, and one
 `pi.on("model_select", ...)` registration in `bridges/hooks/event-router.ts`.
 
-## FMBOM-01: a UTF-8 BOM silently discards skill and agent frontmatter -- IMPORTANT
+## ~~FMBOM-01: a UTF-8 BOM silently discards skill and agent frontmatter~~ -- CLOSED
+
+**CLOSED 2026-09-07** by `8058d530` (agents), `b256b719` (skills) and
+`fb54c5d7` (commands) on `features/fmbom-01`. The fix is the one this entry
+specified -- strip a single leading BOM at the read sites -- delivered as a
+shared `stripBom` helper (`shared/bom.ts`) called from three sites.
+
+`shared/` is the helper's only legal home: fallow's zone boundaries forbid
+`bridges-agents`, `bridges-skills` and `bridges-commands` from importing one
+another, and all three need it.
+
+**Two corrections to the report below, both established by reading the code and
+running the installed peer, not from the changelog.**
+
+1. **A third bridge was exposed and this entry never named it: commands.**
+   `bridges/commands/stage.ts` has the identical read-parse-writeback shape.
+   A BOM makes the PARSE-01 gate RETURN rather than throw, so no CMD-01
+   degrade fires, and the marker reaches the staged artifact -- where a peer
+   at the `>=0.80.5` floor drops the frontmatter at load time. Same defect
+   class, same one-line fix, fixed here alongside the two this entry names.
+
+2. **The skills half is not caused by Pi's parser, and does not depend on the
+   peer version at all.** This entry attributes it to
+   `normalized.startsWith("---")` inside Pi's parser. The actual cause is OUR
+   OWN `content.startsWith("---")` in `rewriteFrontmatterName`
+   (`bridges/skills/rewrite-frontmatter.ts:67`): a marker makes that false, so
+   the rewrite takes the `freshBlock()` path and buries the source block in
+   the body. The SKILL-03 backstop then parses that RESULT, finds the
+   generated `name`, and passes. Reproducible on the current peer, which is
+   **0.84.4** -- upstream has since fixed their own parser, so this entry's
+   0.84.2 transcript no longer reproduces. The item stood anyway: the declared
+   floor is `>=0.80.5`, so every peer in `0.80.5..0.84.2` still has it broken.
+
+That second correction has a testing consequence worth carrying forward: on the
+installed peer, a test that stages a BOM'd source and asserts on a PARSE of the
+result passes with the fix reverted and proves nothing. The skills and commands
+cases therefore read the committed file back and assert on whole bytes. Every
+new case was confirmed red with its production strip reverted.
+
+**Deliberately NOT done.**
+
+- **No peer floor bump.** This entry already argued it buys half a fix; the
+  read-site strip makes it unnecessary outright. See [FLOOR-01], which does not
+  count this item toward its justification.
+- **No wrapper at `platform/pi-api.ts:38`.** PARSE-01 exists so our staging
+  gates mirror Pi's loaders byte-for-byte. A stripping wrapper would make the
+  gate accept bytes an in-floor Pi loader still rejects -- the mirror would stop
+  mirroring. It also cannot fix the corruption, since skills and commands write
+  `content` back out and the STAGED bytes are what Pi loads.
+- **No hashing change.** `sourceHash` (raw bytes) and
+  `domain/version.ts::normalizeBytes` both already normalize the marker away,
+  so nothing in the version layer notices that an existing install needs
+  re-staging. **Operator-facing consequence:** after this fix, an
+  already-installed BOM'd plugin lands in `update`'s `unchanged` partition and
+  renders `(skipped) {up-to-date}`. Repairing it requires
+  `/claude:plugin reinstall`. Changing hashing semantics is a separate decision
+  with its own blast radius; operator decided 2026-09-07 to record the
+  consequence rather than file it.
+- **Exactly ONE marker is stripped** -- never a loop, never a global regex.
+  Stripping repeatedly would let a doubled marker smuggle a fence past a
+  `startsWith` guard; a doubled marker still fails closed to the
+  no-frontmatter path, pinned by its own test case.
+
+Adjacent, untouched: a BOM on `plugin.json` / `marketplace.json` would make
+`JSON.parse` throw. Different defect -- loud, not silent.
+
+Original report follows.
+
 
 Surfaced by the upstream release review covering 2026-08-18..2026-08-25 and
 re-verified against the installed peer on 2026-09-01. Marked IMPORTANT: this

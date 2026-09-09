@@ -36,6 +36,8 @@
 // normalization so a multi-line provenance value cannot be misread as a new
 // frontmatter key by pi-subagents' line-based parser.
 
+import { stripBom } from "../../shared/bom.ts";
+
 import { GENERATED_AGENT_MARKER } from "./marker.ts";
 
 import type { RawAgentFrontmatter } from "./types.ts";
@@ -103,8 +105,17 @@ export interface ParsedFrontmatter {
  * value wins -- dash items beneath it are ignored (D-82-03). Known
  * limitation: an item containing a literal comma splits into two tokens
  * downstream.
+ *
+ * FMBOM-01: a leading U+FEFF is stripped first. The open-fence match below is
+ * anchored, so a marker at index 0 would send the whole file down the
+ * no-frontmatter arm -- `raw` empty, `sourceName` falling back to the filename
+ * stem, and the source `---` block left in `body`, which `convert.ts` emits
+ * verbatim into the generated agent. Stripping here cleans `raw` and `body`
+ * together, which is what the emit path consumes.
  */
-export function parseFrontmatter(text: string): ParsedFrontmatter {
+export function parseFrontmatter(rawText: string): ParsedFrontmatter {
+  const text = stripBom(rawText);
+
   // Frontmatter must start with `---` on its own line at the very top.
   // Accept `---\n` or `---\r\n` and also a bare `---` followed by EOF.
   const startMatch = /^---\r?\n/.exec(text);
