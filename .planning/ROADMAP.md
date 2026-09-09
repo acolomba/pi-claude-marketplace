@@ -487,58 +487,192 @@ Plans:
 **Plans:** 52 plans
 
 Plans:
+**Wave 1**
+
 - [ ] 06-01-PLAN.md — Strengthen observable assertions before any ownership move
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 06-02-PLAN.md — Remove the authorized bridge/reconcile/path builtin patches while preserving public outcomes
 - [ ] 06-03-PLAN.md — Remove authorized shared-process patches from plugin owner tests after their assertions are strengthened
 - [ ] 06-04-PLAN.md — Close authorized global-patch removal with the exact residual census
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 06-05-PLAN.md — Begin leaf-first resolver extraction with type and closed-policy owners
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
 - [ ] 06-06-PLAN.md — Extract resolver filesystem/path and MCP responsibilities into direct-tested leaves
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
 - [ ] 06-07-PLAN.md — Complete resolver behavior extraction before bulk caller migration
+
+**Wave 6** *(blocked on Wave 5 completion)*
+
 - [ ] 06-08-PLAN.md — Migrate all remaining production resolver callers in bounded groups
+
+**Wave 7** *(blocked on Wave 6 completion)*
+
 - [ ] 06-09-PLAN.md — Migrate all remaining production resolver callers in bounded groups
+
+**Wave 8** *(blocked on Wave 7 completion)*
+
 - [ ] 06-10-PLAN.md — Repoint resolver documentation, gates, and non-protected bridge tests
+
+**Wave 9** *(blocked on Wave 8 completion)*
+
 - [ ] 06-11-PLAN.md — Finish resolver ownership, including the authorized import-only stage exception, and delete the legacy hub/test
+
+**Wave 10** *(blocked on Wave 9 completion)*
+
 - [ ] 06-12-PLAN.md — Start notification extraction with type and security leaves
+
+**Wave 11** *(blocked on Wave 10 completion)*
+
 - [ ] 06-13-PLAN.md — Extract deterministic notification grammar and sorting leaves
+
+**Wave 12** *(blocked on Wave 11 completion)*
+
 - [ ] 06-14-PLAN.md — Extract summary folding and notification dispatch after grammar stabilizes
+
+**Wave 13** *(blocked on Wave 12 completion)*
+
 - [ ] 06-15-PLAN.md — Repoint a bounded notification caller group to the six named owners
-- [ ] 06-16-PLAN.md — Repoint a bounded notification caller group to the six named owners
 - [ ] 06-17-PLAN.md — Repoint a bounded notification caller group to the six named owners
-- [ ] 06-18-PLAN.md — Repoint a bounded notification caller group to the six named owners
 - [ ] 06-19-PLAN.md — Continue bounded notification caller migration
-- [ ] 06-20-PLAN.md — Continue bounded notification caller migration
 - [ ] 06-21-PLAN.md — Continue bounded notification caller migration
+
+**Wave 14** *(blocked on Wave 13 completion)*
+
+- [ ] 06-16-PLAN.md — Repoint a bounded notification caller group to the six named owners
+- [ ] 06-18-PLAN.md — Repoint a bounded notification caller group to the six named owners
+- [ ] 06-20-PLAN.md — Continue bounded notification caller migration
 - [ ] 06-22-PLAN.md — Continue bounded notification caller migration
+
+**Wave 15** *(blocked on Wave 14 completion)*
+
 - [ ] 06-23-PLAN.md — Continue bounded notification caller migration
+
+**Wave 16** *(blocked on Wave 15 completion)*
+
 - [ ] 06-24-PLAN.md — Continue bounded notification caller migration
+
+**Wave 17** *(blocked on Wave 16 completion)*
+
 - [ ] 06-25-PLAN.md — Continue bounded notification caller migration
+
+**Wave 18** *(blocked on Wave 17 completion)*
+
 - [ ] 06-26-PLAN.md — Continue bounded notification caller migration
+
+**Wave 19** *(blocked on Wave 18 completion)*
+
 - [ ] 06-27-PLAN.md — Finalize notification ownership and delete the legacy hub/test
+
+**Wave 20** *(blocked on Wave 19 completion)*
+
 - [ ] 06-28-PLAN.md — Extract catalog test infrastructure only after notification stability
+
+**Wave 21** *(blocked on Wave 20 completion)*
+
 - [ ] 06-29-PLAN.md — Split five disjoint command-surface fixture slices
 - [ ] 06-30-PLAN.md — Split five disjoint command-surface fixture slices
 - [ ] 06-31-PLAN.md — Split five disjoint command-surface fixture slices
 - [ ] 06-32-PLAN.md — Split five disjoint command-surface fixture slices
+
+**Wave 22** *(blocked on Wave 21 completion)*
+
 - [ ] 06-33-PLAN.md — Assemble the final catalog contract and delete the legacy catalog hub
+
+**Wave 23** *(blocked on Wave 22 completion)*
+
 - [ ] 06-34-PLAN.md — Advance the install-family ownership move in locked command order
+
+**Wave 24** *(blocked on Wave 23 completion)*
+
 - [ ] 06-35-PLAN.md — Advance the install-family ownership move in locked command order
+
+**Wave 25** *(blocked on Wave 24 completion)*
+
 - [ ] 06-36-PLAN.md — Advance the install-family ownership move in locked command order
+
+**Wave 26** *(blocked on Wave 25 completion)*
+
 - [ ] 06-37-PLAN.md — Advance the install-family ownership move in locked command order
+
+**Wave 27** *(blocked on Wave 26 completion)*
+
 - [ ] 06-38-PLAN.md — Advance the install-family ownership move in locked command order
+
+**Wave 28** *(blocked on Wave 27 completion)*
+
 - [ ] 06-39-PLAN.md — Advance the update family in the locked command sequence
+
+**Wave 29** *(blocked on Wave 28 completion)*
+
 - [ ] 06-40-PLAN.md — Advance the update family in the locked command sequence
+
+**Wave 30** *(blocked on Wave 29 completion)*
+
 - [ ] 06-41-PLAN.md — Advance the update family in the locked command sequence
+
+**Wave 31** *(blocked on Wave 30 completion)*
+
 - [ ] 06-42-PLAN.md — Advance the update family in the locked command sequence
+
+**Wave 32** *(blocked on Wave 31 completion)*
+
 - [ ] 06-43-PLAN.md — Advance the update family in the locked command sequence
+
+**Wave 33** *(blocked on Wave 32 completion)*
+
 - [ ] 06-44-PLAN.md — Advance reinstall in the locked command sequence
+
+**Wave 34** *(blocked on Wave 33 completion)*
+
 - [ ] 06-45-PLAN.md — Advance reinstall in the locked command sequence
+
+**Wave 35** *(blocked on Wave 34 completion)*
+
 - [ ] 06-46-PLAN.md — Advance reinstall in the locked command sequence
+
+**Wave 36** *(blocked on Wave 35 completion)*
+
 - [ ] 06-47-PLAN.md — Advance reinstall in the locked command sequence
+
+**Wave 37** *(blocked on Wave 36 completion)*
+
 - [ ] 06-48-PLAN.md — Advance reinstall in the locked command sequence
+
+**Wave 38** *(blocked on Wave 37 completion)*
+
 - [ ] 06-49-PLAN.md — Advance plugin list last in the locked command sequence
+
+**Wave 39** *(blocked on Wave 38 completion)*
+
 - [ ] 06-50-PLAN.md — Advance plugin list last in the locked command sequence
+
+**Wave 40** *(blocked on Wave 39 completion)*
+
 - [ ] 06-51-PLAN.md — Advance plugin list last in the locked command sequence
+
+**Wave 41** *(blocked on Wave 40 completion)*
+
 - [ ] 06-52-PLAN.md — Close Phase 6 with cross-family structural and full-suite proof
+
+**Cross-cutting constraints:**
+
+- All production consumers import resolver symbols from their genuine named owners without adapters (D-06-02, D-06-11, D-06-14).
+- Edge and bridge consumers preserve exact output while importing only genuine owners.
+- Remaining edge and marketplace consumers preserve behavior under direct notification ownership.
+- All listed notification callers preserve exact types, bytes, redaction, order, and severity while importing direct owners (D-06-02, D-06-11).
+- Five command surfaces retain every exact catalog state in independent typed fixture modules (D-06-04, D-06-08).
+- Install responsibilities move leaf-first into five named direct-tested owners while exact state, rollback, disabled cascade, and notifications remain unchanged (D-06-02, D-06-09, D-06-10).
+- update responsibilities move to named direct-tested owners while transaction, state, path, ordering, and exact notifications remain unchanged (D-06-02, D-06-09, D-06-10).
+- reinstall moves to named direct-tested owners with exact transaction/state/path/order/notification contracts (D-06-02, D-06-09, D-06-10).
+- List responsibilities move to four direct-tested owners while zero/one/many cardinality, stable order, orphan folding, and exact bytes remain unchanged (D-06-03, D-06-09).
 
 **Success Criteria**:
 
