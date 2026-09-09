@@ -1,0 +1,10 @@
+{
+  "taskId": "06-45-02",
+  "command": "node --test --test-isolation=none --test-reporter=tap tests/orchestrators/plugin/reinstall-record.test.ts",
+  "exitCode": 1,
+  "output": "TAP version 13\n# Subtest: exports the reinstall record and outcome owner\nnot ok 1 - exports the reinstall record and outcome owner\n  error: Got unwanted rejection: reinstall-record.ts must own record mutation and outcome composition\n  code: ERR_ASSERTION\n1..1\n# tests 1\n# pass 0\n# fail 1",
+  "targetTest": "exports the reinstall record and outcome owner",
+  "targetFile": "tests/orchestrators/plugin/reinstall-record.test.ts",
+  "expected": "the named reinstall-record owner exports recordReinstallOutcome",
+  "actual": "the target assertion rejects because reinstall-record.ts does not exist"
+}
