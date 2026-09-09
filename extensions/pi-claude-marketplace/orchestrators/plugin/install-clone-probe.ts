@@ -46,9 +46,7 @@ const REAL_INSTALL_CLONE_CACHE_SEAM: InstallCloneCacheSeam = {
  * escaping subdirectories cannot leak a stale sha into the install record, and
  * clone failures retain their original thrown value.
  */
-export async function probeInstallClone(
-  options: InstallCloneProbeOptions,
-): Promise<{
+export async function probeInstallClone(options: InstallCloneProbeOptions): Promise<{
   readonly result: GitPluginRootResult;
   readonly resolvedSha: string | undefined;
 }> {

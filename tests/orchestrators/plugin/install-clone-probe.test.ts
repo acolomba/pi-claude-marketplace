@@ -4,107 +4,90 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
 
-import type { GitPluginRootResult } from "../../../extensions/pi-claude-marketplace/domain/resolver-types.ts";
+import { pluginCloneKey } from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
+import {
+  probeInstallClone,
+  type InstallCloneCacheSeam,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-clone-probe.ts";
+import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+
 import type { GitBackedSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
-import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
-import type { NotificationContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type {
   AuthAttemptResult,
   CredentialOps,
   DeviceFlowHttp,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
-import type {
-  materializeOrRefreshPluginMirror,
-  materializePluginClone,
-  resolvePluginPin,
-} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts";
-
-interface InstallCloneCacheSeam {
-  readonly resolvePluginPin: typeof resolvePluginPin;
-  readonly materializePluginClone: typeof materializePluginClone;
-  readonly materializeOrRefreshPluginMirror: typeof materializeOrRefreshPluginMirror;
-}
-
-interface InstallCloneProbeOptions {
-  readonly source: GitBackedSource;
-  readonly seam: InstallCloneCacheSeam;
-  readonly locations: ScopedLocations;
-  readonly auth: {
-    readonly ctx: NotificationContext;
-    readonly credentialOps: CredentialOps;
-    readonly deviceFlowHttp?: DeviceFlowHttp;
-    readonly authMemo?: Map<string, AuthAttemptResult>;
-  };
-}
-
-type ProbeInstallClone = (
-  options: InstallCloneProbeOptions,
-) => Promise<{
-  readonly result: GitPluginRootResult;
-  readonly resolvedSha: string | undefined;
-}>;
+import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import type { NotificationContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
 const SHA = "1111111111111111111111111111111111111111";
-
-async function loadProbeInstallClone(): Promise<ProbeInstallClone> {
-  let probeInstallClone: ProbeInstallClone | undefined;
-  await assert.doesNotReject(async () => {
-    const owner = await import(
-      "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-clone-probe.ts"
-    );
-    probeInstallClone = owner.probeInstallClone;
-  }, "install-clone-probe.ts must own install clone classification");
-  assert.ok(probeInstallClone !== undefined);
-  return probeInstallClone;
-}
 
 async function freshLocations(
   testContext: TestContext,
 ): Promise<{ readonly locations: ScopedLocations; readonly root: string }> {
   const root = await mkdtemp(path.join(tmpdir(), "install-clone-probe-"));
   testContext.after(() => rm(root, { recursive: true, force: true }));
-  const { locationsFor } = await import(
-    "../../../extensions/pi-claude-marketplace/persistence/locations.ts"
-  );
   return { locations: locationsFor("project", root), root };
 }
 
-function auth(): InstallCloneProbeOptions["auth"] {
-  const ctx: NotificationContext = { ui: { notify() {} } };
+function auth(): Parameters<typeof probeInstallClone>[0]["auth"] {
+  const ctx: NotificationContext = { ui: { notify: () => undefined } };
   const credentialOps: CredentialOps = {
-    async approve() {},
-    async fill() {
-      return null;
-    },
-    async reject() {},
+    approve: () => Promise.resolve(),
+    fill: () => Promise.resolve(null),
+    reject: () => Promise.resolve(),
   };
   return { ctx, credentialOps };
 }
 
+test("uses the production seam for a warm pinned clone", async (testContext) => {
+  // arrange
+  const { locations } = await freshLocations(testContext);
+  const cloneUrl = "https://example.com/warm-plugin";
+  const cloneRoot = await locations.pluginCloneDir(pluginCloneKey(cloneUrl, SHA));
+  await mkdir(cloneRoot, { recursive: true });
+  const source: GitBackedSource = {
+    kind: "url",
+    raw: cloneUrl,
+    url: cloneUrl,
+    sha: SHA,
+  };
+
+  // act
+  const outcome = await probeInstallClone({ source, locations, auth: auth() });
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    result: { kind: "materialized", pluginRoot: cloneRoot, resolvedSha: SHA },
+    resolvedSha: SHA,
+  });
+});
+
 test("returns a materialized pinned cache result and its resolved sha", async (testContext) => {
   // arrange
-  const probeInstallClone = await loadProbeInstallClone();
   const { locations, root } = await freshLocations(testContext);
   const cloneRoot = path.join(root, "pinned-clone");
   await mkdir(cloneRoot, { recursive: true });
   const source: GitBackedSource = {
-    kind: "url",
-    raw: "https://example.com/plugin",
-    url: "https://example.com/plugin",
+    kind: "github",
+    raw: "owner/repo",
+    owner: "owner",
+    repo: "repo",
     sha: SHA,
   };
   const calls: string[] = [];
   const seam: InstallCloneCacheSeam = {
-    async resolvePluginPin() {
+    resolvePluginPin() {
       calls.push("resolve");
-      return { cloneUrl: "https://example.com/plugin", pin: SHA };
+      return Promise.resolve({ cloneUrl: "https://github.com/owner/repo", pin: SHA });
     },
-    async materializePluginClone() {
+    materializePluginClone(options) {
       calls.push("materialize");
-      return cloneRoot;
+      assert.ok(options.auth !== undefined);
+      return Promise.resolve(cloneRoot);
     },
-    async materializeOrRefreshPluginMirror() {
-      throw new Error("unexpected mirror materialization");
+    materializeOrRefreshPluginMirror() {
+      return Promise.reject(new Error("unexpected mirror materialization"));
     },
   };
 
@@ -121,7 +104,6 @@ test("returns a materialized pinned cache result and its resolved sha", async (t
 
 test("returns a refreshed unpinned mirror result with ref and auth", async (testContext) => {
   // arrange
-  const probeInstallClone = await loadProbeInstallClone();
   const { locations, root } = await freshLocations(testContext);
   const mirrorRoot = path.join(root, "mirror-clone");
   await mkdir(mirrorRoot, { recursive: true });
@@ -134,25 +116,25 @@ test("returns a refreshed unpinned mirror result with ref and auth", async (test
   };
   const authMemo = new Map<string, AuthAttemptResult>();
   const deviceFlowHttp: DeviceFlowHttp = {
-    async requestCode() {
-      throw new Error("device flow must stay lazy");
+    requestCode() {
+      return Promise.reject(new Error("device flow must stay lazy"));
     },
-    async pollToken() {
-      throw new Error("device flow must stay lazy");
+    pollToken() {
+      return Promise.reject(new Error("device flow must stay lazy"));
     },
   };
   const seam: InstallCloneCacheSeam = {
-    async resolvePluginPin() {
-      throw new Error("unexpected pin resolution");
+    resolvePluginPin() {
+      return Promise.reject(new Error("unexpected pin resolution"));
     },
-    async materializePluginClone() {
-      throw new Error("unexpected pinned materialization");
+    materializePluginClone() {
+      return Promise.reject(new Error("unexpected pinned materialization"));
     },
-    async materializeOrRefreshPluginMirror(options) {
+    materializeOrRefreshPluginMirror(options) {
       assert.strictEqual(options.cloneUrl, "https://github.com/owner/repo");
       assert.strictEqual(options.ref, "main");
       assert.ok(options.auth !== undefined);
-      return { pluginRoot: mirrorRoot, resolvedSha: SHA };
+      return Promise.resolve({ pluginRoot: mirrorRoot, resolvedSha: SHA });
     },
   };
 
@@ -173,7 +155,6 @@ test("returns a refreshed unpinned mirror result with ref and auth", async (test
 
 test("returns a missing-subdir result without exposing the resolved sha", async (testContext) => {
   // arrange
-  const probeInstallClone = await loadProbeInstallClone();
   const { locations, root } = await freshLocations(testContext);
   const cloneRoot = path.join(root, "missing-subdir-clone");
   await mkdir(cloneRoot, { recursive: true });
@@ -185,16 +166,16 @@ test("returns a missing-subdir result without exposing the resolved sha", async 
     sha: SHA,
   };
   const seam: InstallCloneCacheSeam = {
-    async resolvePluginPin() {
-      return { cloneUrl: "https://example.com/mono", pin: SHA, ref: "main" };
+    resolvePluginPin() {
+      return Promise.resolve({ cloneUrl: "https://example.com/mono", pin: SHA, ref: "main" });
     },
-    async materializePluginClone(options) {
+    materializePluginClone(options) {
       assert.strictEqual(options.ref, "main");
       assert.strictEqual(options.auth, undefined);
-      return cloneRoot;
+      return Promise.resolve(cloneRoot);
     },
-    async materializeOrRefreshPluginMirror() {
-      throw new Error("unexpected mirror materialization");
+    materializeOrRefreshPluginMirror() {
+      return Promise.reject(new Error("unexpected mirror materialization"));
     },
   };
 
@@ -213,7 +194,6 @@ test("returns a missing-subdir result without exposing the resolved sha", async 
 
 test("returns an escaping-subdir result without exposing the mirror sha", async (testContext) => {
   // arrange
-  const probeInstallClone = await loadProbeInstallClone();
   const { locations, root } = await freshLocations(testContext);
   const mirrorRoot = path.join(root, "escaping-subdir-clone");
   await mkdir(mirrorRoot, { recursive: true });
@@ -224,14 +204,14 @@ test("returns an escaping-subdir result without exposing the mirror sha", async 
     path: "../escape",
   };
   const seam: InstallCloneCacheSeam = {
-    async resolvePluginPin() {
-      throw new Error("unexpected pin resolution");
+    resolvePluginPin() {
+      return Promise.reject(new Error("unexpected pin resolution"));
     },
-    async materializePluginClone() {
-      throw new Error("unexpected pinned materialization");
+    materializePluginClone() {
+      return Promise.reject(new Error("unexpected pinned materialization"));
     },
-    async materializeOrRefreshPluginMirror() {
-      return { pluginRoot: mirrorRoot, resolvedSha: SHA };
+    materializeOrRefreshPluginMirror() {
+      return Promise.resolve({ pluginRoot: mirrorRoot, resolvedSha: SHA });
     },
   };
 
@@ -250,7 +230,6 @@ test("returns an escaping-subdir result without exposing the mirror sha", async 
 
 test("propagates a pinned clone failure unchanged", async (testContext) => {
   // arrange
-  const probeInstallClone = await loadProbeInstallClone();
   const { locations } = await freshLocations(testContext);
   const cloneFailure = new Error("clone failed after cleanup");
   const source: GitBackedSource = {
@@ -260,14 +239,14 @@ test("propagates a pinned clone failure unchanged", async (testContext) => {
     sha: SHA,
   };
   const seam: InstallCloneCacheSeam = {
-    async resolvePluginPin() {
-      return { cloneUrl: "https://example.com/plugin", pin: SHA };
+    resolvePluginPin() {
+      return Promise.resolve({ cloneUrl: "https://example.com/plugin", pin: SHA });
     },
-    async materializePluginClone() {
-      throw cloneFailure;
+    materializePluginClone() {
+      return Promise.reject(cloneFailure);
     },
-    async materializeOrRefreshPluginMirror() {
-      throw new Error("unexpected mirror materialization");
+    materializeOrRefreshPluginMirror() {
+      return Promise.reject(new Error("unexpected mirror materialization"));
     },
   };
 
