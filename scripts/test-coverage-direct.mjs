@@ -149,7 +149,7 @@ function changedPaths() {
 // The test roots that hold no corresponding tests, mirroring the correspondence gate's set of the
 // same name. A test under one of these has no production pair by design, so mapping it would name a
 // module that was never meant to exist.
-const nonCorrespondingRoots = new Set(["architecture", "e2e", "integration"]);
+const nonCorrespondingRoots = new Set(["architecture", "e2e", "integration", "scripts"]);
 
 /**
  * Whether the path is a structural supplement -- a suite owning a contract and its fake rather than
