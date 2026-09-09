@@ -21,3 +21,33 @@ a count in prose", which is the rule the stale counts on lines 25-26 break.
 
 Fixing it is a self-contained docs task against
 `extensions/pi-claude-marketplace/shared/notify.ts`.
+
+## Closure, 2026-09-09
+
+**Fixed** as quick task `260909-ox9` (commits `5f3cd340`, `5073e497`), not
+waived. Recorded `closed` here rather than left `open`, for the reason
+`WDOCS-01` exists: a record that advertises completed work as outstanding is
+itself the defect.
+
+The three claims above were all still true at closure time — re-measured, the
+tuple carried 19 members against the stated 16, and `PluginPresentMessage` had
+0 references in `shared/notify.ts`. What changed is the shape of the fix. The
+listing was **deleted, not corrected**: it duplicated a nineteen-arm union
+inside the section that opens by promising to point at definitions rather than
+duplicate them, and it was the copy that rotted. A source pointer plus a
+status-by-field table replaced it, and
+`tests/architecture/messaging-guide-doc-pins.test.ts` (MSGDOC-01, 5 cases) binds
+that table to the imported `PLUGIN_STATUSES` tuple, so a twentieth status turns
+a case red instead of falsifying prose.
+
+Four further false claims in the same section were found while re-deriving and
+corrected in the same commits: the `reasons` partition (stated 8 + 6 + 5, and a
+compile error that does not occur — `PluginUninstalledMessage.reasons?` exists;
+actually 8 + 7 + 4), the reason-bearing variant count (stated 5, measured 15),
+the no-scope family size (stated three members, actually four — `remote` also
+has no `scope`), and the retired inventory token still named as live.
+
+One claim was deliberately NOT fixed here and carries a carrier instead: the
+reload-hint MECHANISM description is also stale, and it is a behavior claim
+needing its own measurement of the `needsReload` plumbing rather than an
+enumeration defect. Filed as Broken Windows entry 47.

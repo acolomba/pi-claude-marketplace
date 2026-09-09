@@ -7,8 +7,8 @@ current_phase_name: Measured `agent()` failure evidence
 current_plan: 3 of 3 executed
 status: audit passed with tech debt; archive paused
 stopped_at: Milestone audit recorded tech_debt; operator chose to clear debt before the archive
-last_updated: "2026-09-09T21:43:08.616Z"
-state_head: efd29659d70d4f44196928c236737fc388a8c8bf
+last_updated: "2026-09-09T22:47:00.000Z"
+state_head: a39ba7a49f09681b245cdb32e677016044f19ada
 progress:
   total_phases: 9
   completed_phases: 9
@@ -16,7 +16,7 @@ progress:
   completed_plans: 39
   percent: 100
 last_activity: 2026-09-09
-last_activity_desc: Milestone audit written and committed; archive paused pending tech-debt work
+last_activity_desc: Closed the last open deferred item and bound the messaging guide to its source
 ---
 
 # Project State
@@ -48,17 +48,18 @@ complete — and graded the milestone `tech_debt` on accumulated deferred work.
 **The operator chose to clear that debt before archiving.** `complete-milestone`
 and `cleanup` have NOT run. What is owed, in the order the audit lists it:
 
-1. **The one open deferred item** — `docs/messaging-style-guide.md` lines 25-26
-   claim 16 variants and 16 literals; `PLUGIN_STATUSES` (`shared/notify.ts:559`)
-   carries 19. Re-measured at audit time, so the drift has grown since Phase 114
-   filed it. Its union listing (lines 36-54) also still names the retired
-   `PluginPresentMessage` (0 references in `notify.ts`) and omits
-   `partially-installed` and `partially-upgradable`. The fix is re-deriving the
-   whole 19-row listing, not editing a count — line 33 of that same document
-   forbids re-enumerating a count in prose.
-2. **Ten open Broken Windows entries**, all tagged `[workflows-replay]`: #34,
-   #37, #39, #40, #41, #42, #43, #44, #45, #46. #44 is a plain TODO; #41 and #42
-   are the same inert `ENBL-08` case seen from two angles.
+1. ~~The one open deferred item~~ — **DONE** (`5f3cd340`, `5073e497`), quick
+   task `260909-ox9`. The union listing was deleted rather than corrected, and
+   what replaced it is bound to source by
+   `tests/architecture/messaging-guide-doc-pins.test.ts` (MSGDOC-01, 5 cases).
+   Four further false claims in the surviving block were found and corrected on
+   the way; one more — a stale statement of the reload-hint MECHANISM, not an
+   enumeration defect — became ledger entry 47, so item 2 below grew by one.
+2. **Eleven open Broken Windows entries**, all tagged `[workflows-replay]`:
+   #34, #37, #39, #40, #41, #42, #43, #44, #45, #46, #47. #44 is a plain TODO;
+   #41 and #42 are the same inert `ENBL-08` case seen from two angles; #47 is
+   the reload-hint mechanism claim the quick task above deliberately did not
+   fix inline.
 3. **Phases 109-113 carry no SECURITY.md** — `/gsd-secure-phase N` each.
 4. **Phases 109-113 sit at VALIDATION.md `status: draft`** — never reconciled by
    validate-phase, so `nyquist_compliant` is not authoritative there.
@@ -198,6 +199,24 @@ workstream would matter, and 106-108 are free here. They are left unused
 anyway, because the spike branch's own records plan the hardening milestone as
 "Phases 106-108" — reusing those numbers for the replay would make every such
 reference ambiguous when the two branches are read side by side.
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260909-ox9 | Re-derive the stale `PluginNotificationMessage` enumeration in the messaging style guide | 2026-09-09 | `a39ba7a4` | [260909-ox9-re-derive-the-stale-pluginnotificationme](./quick/260909-ox9-re-derive-the-stale-pluginnotificationme/) |
+
+Closes the last open deferred item filed by the degradation-and-documentation
+phase. The union listing was deleted rather than corrected — it was the second
+copy of a nineteen-arm union sitting inside the section that promises to point
+at definitions rather than duplicate them, and it was the copy that rotted. Its
+replacement is a source pointer plus a status-by-field table that
+`tests/architecture/messaging-guide-doc-pins.test.ts` binds to the imported
+`PLUGIN_STATUSES` tuple, so a twentieth status turns a case red instead of
+quietly falsifying prose. Four further false claims in the surviving block were
+found and corrected during the work; a fifth, a stale statement of the
+reload-hint MECHANISM, was filed as ledger entry 47 because correcting it needs
+its own measurement of the `needsReload` plumbing.
 
 ## Replay Ground Truth
 
@@ -610,9 +629,9 @@ All nine phases are complete and verified, and the audit is committed. The
 milestone is NOT archived — that step is deliberately paused. What is left is
 debt work, then the archive:
 
-- Re-derive the 19-row `PluginNotificationMessage` listing in
-  `docs/messaging-style-guide.md` and correct its two stale counts (a
-  self-contained docs task against `shared/notify.ts`)
+- ~~Re-derive the `PluginNotificationMessage` listing~~ — done as quick task
+  `260909-ox9`; the listing is gone and its replacement is gated by
+  `tests/architecture/messaging-guide-doc-pins.test.ts`
 - Work or waive the ten open `[workflows-replay]` Broken Windows entries; #44 is
   a plain TODO, #41 and #42 are one inert test case seen twice, and #46 is a
   substring guard in two live-UAT canaries
