@@ -4,9 +4,9 @@ milestone: workflows-replay
 milestone_name: Workflow Bridge Replay onto main
 current_phase: 117
 current_phase_name: Measured `agent()` failure evidence
-current_plan: Not started
-status: planning
-stopped_at: Phase 116 complete, ready to plan Phase 117
+current_plan: 0 of 3 executed
+status: executing
+stopped_at: Phase 117 planned -- 3 plans in 3 waves, plan-checker passed
 last_updated: "2026-09-09T18:00:03.720Z"
 state_head: 61f84ce970d4539a37c8e40ae67aac5b7276cfae
 progress:
@@ -36,8 +36,8 @@ the gaps the bridge originally shipped with.
 ## Current Position
 
 Phase: 117 — Measured `agent()` failure evidence
-Plan: Not started
-Status: Ready to plan
+Plan: 0 of 3 executed (3 plans, 3 waves, 9 tasks)
+Status: Planned and checked — ready to execute
 
 Phases 115 and 116 are both complete on every gate. The replay milestone
 (109-114) is done and two of the three hardening phases have closed behind it;
@@ -119,7 +119,7 @@ probe-purity gate instead.
 | 114 | Degradation and documentation | Complete (5/5 plans, verified 7/7) |
 | 115 | Install-time admission-gate warnings | Complete (6/6 plans, verified 6/6, secured 30/30, nyquist 0 gaps) |
 | 116 | Load-time workflow convergence | Complete (4/4 plans, verified 4/4, secured 15/15, nyquist 0 gaps) |
-| 117 | Measured `agent()` failure evidence | Not started (hardening) |
+| 117 | Measured `agent()` failure evidence | Planned (3 plans / 3 waves), checker passed (hardening) |
 
 **Why one run covers both milestones.** GSD scopes a milestone by parsing a
 `vN.N` version out of STATE's `milestone:` field

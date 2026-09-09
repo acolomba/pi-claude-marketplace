@@ -680,7 +680,19 @@ Plans:
 5. `105-VERIFICATION.md` no longer records the live canary as `UNRUN` while its
    own frontmatter and status line record it closed; the current record wins.
 
-**Plans**: TBD
+**Plans**: 3 plans in 3 waves
+
+**Wave 1**
+
+- [ ] 117-01-PLAN.md — Create the live-UAT canary, drive a real engine's `agent()` failure, and prove the driver can go red
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 117-02-PLAN.md — Rewrite the `agent()` section at its measured grade, with the census published only under its counting rule
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 117-03-PLAN.md — Correct the archived record and the stale live pointers, then take the phase through its gate
 
 ## Progress
 
@@ -694,4 +706,4 @@ Plans:
 | 114. Degradation and documentation | 5/5 | Complete    | 2026-09-08 |
 | 115. Install-time admission-gate warnings | 6/6 | Complete    | 2026-09-09 |
 | 116. Load-time workflow convergence | 4/4 | Complete    | 2026-09-09 |
-| 117. Measured `agent()` failure evidence | 0/? | Not started | - |
+| 117. Measured `agent()` failure evidence | 0/3 | Planned | - |
