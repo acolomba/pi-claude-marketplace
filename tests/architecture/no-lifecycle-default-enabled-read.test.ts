@@ -6,12 +6,12 @@ import { assertNoForbiddenSurface } from "./source-scan.ts";
  * DFEN-07 architectural surface guard (D-103-08, D-103-09).
  *
  * Forbidden surface, by file:
- *   - extensions/pi-claude-marketplace/orchestrators/plugin/update.ts
+ *   - the update flow, preflight, and swap owners
  *     MUST NOT reference `defaultEnabled` or `applyDefaultEnabled`.
  *   - extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts
  *     MUST NOT reference `defaultEnabled` or `applyDefaultEnabled`.
  *
- * Why these two targets: a plugin release that changes the declared field must
+ * Why these update owners and reinstall: a plugin release that changes the declared field must
  * not move a user who already installed. `defaultEnabled` is third-party
  * content -- a lifecycle verb that re-consulted it would turn the field into a
  * remote switch over code that is already on disk. Both verbs re-materialize
@@ -56,6 +56,8 @@ import { assertNoForbiddenSurface } from "./source-scan.ts";
  */
 const FORBIDDEN_TARGETS: ReadonlyArray<string> = [
   "extensions/pi-claude-marketplace/orchestrators/plugin/update.ts",
+  "extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts",
+  "extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts",
   "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts",
 ];
 
