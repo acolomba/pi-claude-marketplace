@@ -4,6 +4,8 @@ import test from "node:test";
 import { Compile } from "typebox/compile";
 
 import type {
+  DroppedHookArmKeysCheck,
+  DroppedHookDriftCheck,
   GitPluginRootResult,
   MaterializablePlugin,
   ResolveContext,
@@ -21,9 +23,8 @@ test("exports the exact three-arm resolver schema", async () => {
 
   // act & assert
   await assert.doesNotReject(async () => {
-    const { ResolvedPluginSchema } = await import(
-      "../../extensions/pi-claude-marketplace/domain/resolver-types.ts"
-    );
+    const { ResolvedPluginSchema } =
+      await import("../../extensions/pi-claude-marketplace/domain/resolver-types.ts");
     const validator = Compile(ResolvedPluginSchema);
     checkedStates = [
       validator.Check({
@@ -63,9 +64,21 @@ test("exports the exact three-arm resolver schema", async () => {
         pluginRoot: "/must-not-leak",
         notes: ["source missing"],
       }),
+      validator.Check({
+        state: "unknown",
+        installable: false,
+        name: "alpha",
+        notes: ["source missing"],
+      }),
+      validator.Check({
+        state: "installable",
+        installable: false,
+        name: "alpha",
+        notes: ["source missing"],
+      }),
     ];
   });
-  assert.deepStrictEqual(checkedStates, [true, true, true, false]);
+  assert.deepStrictEqual(checkedStates, [true, true, true, true, false, false]);
 });
 
 declare const resolvedPluginContract: ResolvedPlugin;
@@ -81,6 +94,11 @@ function proveExactDiscriminants(): void {
   void (installablePluginContract.state satisfies "installable");
   void (partiallyAvailablePluginContract.state satisfies "partially-available");
   void (unavailablePluginContract.state satisfies "unavailable");
+}
+
+function proveDroppedHookSchemaParity(): void {
+  void (true satisfies DroppedHookDriftCheck);
+  void (true satisfies DroppedHookArmKeysCheck);
 }
 
 function consumeInstallable(): string {
@@ -148,6 +166,7 @@ const resolveContextContract = {
 } satisfies ResolveContext;
 
 void proveExactDiscriminants;
+void proveDroppedHookSchemaParity;
 void consumeInstallable;
 void consumePartiallyAvailable;
 void narrowOnMaterializability;

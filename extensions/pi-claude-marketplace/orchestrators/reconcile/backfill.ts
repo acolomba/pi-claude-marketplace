@@ -448,7 +448,7 @@ async function maybeBackfillPlugin(
 async function resolveRecordedPluginOffline(
   mp: StateMarketplaceRecord,
   plugin: string,
-): Promise<import("../../domain/resolver.ts").ResolvedPlugin | undefined> {
+): Promise<import("../../domain/resolver-types.ts").ResolvedPlugin | undefined> {
   const manifest = await loadMarketplaceManifest(mp.manifestPath);
   const entry = manifest.plugins.find((p) => p.name === plugin);
   if (entry === undefined || !PLUGIN_ENTRY_VALIDATOR.Check(entry)) {

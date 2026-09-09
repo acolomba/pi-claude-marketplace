@@ -6,7 +6,7 @@ import test from "node:test";
 
 import { discoverGeneratedNames } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/discover-names.ts";
 
-import type { MaterializablePlugin } from "../../../extensions/pi-claude-marketplace/domain/resolver.ts";
+import type { MaterializablePlugin } from "../../../extensions/pi-claude-marketplace/domain/resolver-types.ts";
 import type { TestContext } from "node:test";
 
 async function createPluginRoot(t: TestContext, prefix: string): Promise<string> {

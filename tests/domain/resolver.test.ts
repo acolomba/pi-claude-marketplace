@@ -11,19 +11,18 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import {
-  type GitPluginRootResult,
-  type MaterializablePlugin,
-  type ResolveContext,
-  type ResolvedPlugin,
-  type ResolvedPluginInstallable,
-  type ResolvedPluginPartiallyAvailable,
-  type ResolvedPluginUnavailable,
   rowClaimsInstallDisabled,
   resolveLoose,
   requirePartialInstallable,
   requireInstallable,
   resolveStrict,
 } from "../../extensions/pi-claude-marketplace/domain/resolver.ts";
+import type {
+  GitPluginRootResult,
+  ResolveContext,
+  ResolvedPlugin,
+  ResolvedPluginUnavailable,
+} from "../../extensions/pi-claude-marketplace/domain/resolver-types.ts";
 import { PluginShapeError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 
 import type { PluginEntry } from "../../extensions/pi-claude-marketplace/domain/components/plugin.ts";
@@ -3827,61 +3826,7 @@ test("requireInstallable classifies an update of the partial true arm", async ()
 });
 
 declare const resolvedPluginContract: ResolvedPlugin;
-declare const installablePluginContract: ResolvedPluginInstallable;
-declare const partiallyAvailablePluginContract: ResolvedPluginPartiallyAvailable;
 declare const unavailablePluginContract: ResolvedPluginUnavailable;
-declare const materializable: MaterializablePlugin;
-
-function proveExactDiscriminants(): void {
-  void (installablePluginContract.installable satisfies true);
-  void (partiallyAvailablePluginContract.installable satisfies true);
-  void (unavailablePluginContract.installable satisfies false);
-  void (installablePluginContract.state satisfies "installable");
-  void (partiallyAvailablePluginContract.state satisfies "partially-available");
-  void (unavailablePluginContract.state satisfies "unavailable");
-}
-
-// ──────────────────────────────────────────────────────────────────────────
-// Positive narrowing: pluginRoot is readable on installable + unsupported
-// (D-64-06: `unsupported` is the force-degradable arm and keeps pluginRoot).
-// ──────────────────────────────────────────────────────────────────────────
-
-function consumeInstallable(): string {
-  return installablePluginContract.pluginRoot;
-}
-
-function consumeUnsupported(): string {
-  return partiallyAvailablePluginContract.pluginRoot;
-}
-
-function narrowOnMaterializability(): string | undefined {
-  if (resolvedPluginContract.installable) {
-    return resolvedPluginContract.pluginRoot;
-  }
-
-  return undefined;
-}
-
-// ──────────────────────────────────────────────────────────────────────────
-// NEGATIVE narrowing -- the load-bearing NFR-7 assertions (D-64-05).
-// ──────────────────────────────────────────────────────────────────────────
-
-function consumeUnavailable(): void {
-  // @ts-expect-error -- NFR-7: pluginRoot must NOT be accessible on the unavailable variant.
-  void unavailablePluginContract.pluginRoot;
-}
-
-function narrowOnMaterializabilityNegative(): void {
-  if (!resolvedPluginContract.installable) {
-    // @ts-expect-error -- the false arm cannot expose pluginRoot.
-    void resolvedPluginContract.pluginRoot;
-  }
-}
-
-// ──────────────────────────────────────────────────────────────────────────
-// RSTATE-04 / D-64-04: requirePartialInstallable narrows to
-// installable | unsupported and can NEVER admit the unavailable arm.
-// ──────────────────────────────────────────────────────────────────────────
 
 function gateNarrowsForce(): string {
   requirePartialInstallable(resolvedPluginContract);
@@ -3894,56 +3839,5 @@ function gateExcludesUnavailable(): void {
   const bad: ResolvedPluginUnavailable = resolvedPluginContract;
   void bad;
 }
-
-// ──────────────────────────────────────────────────────────────────────────
-// NFR-7 / FORCE-05: MaterializablePlugin admits installable + unsupported and
-// EXCLUDES the unavailable arm. The force install/update holders widen to this
-// union; the negative assertion proves no widened holder can ever carry an
-// `unavailable` plugin (and therefore can never read `pluginRoot` off one).
-// ──────────────────────────────────────────────────────────────────────────
-
-function materializableAdmitsInstallable(): MaterializablePlugin {
-  return installablePluginContract;
-}
-
-function materializableAdmitsUnsupported(): MaterializablePlugin {
-  return partiallyAvailablePluginContract;
-}
-
-function materializableExposesPluginRoot(): string {
-  return materializable.pluginRoot; // OK -- both arms carry pluginRoot (NFR-7).
-}
-
-function materializableExcludesUnavailable(): void {
-  // @ts-expect-error -- NFR-7 / FORCE-05: the unavailable arm is not assignable to MaterializablePlugin.
-  const bad: MaterializablePlugin = unavailablePluginContract;
-  void bad;
-}
-
-function materializableExposesDefaultEnabled(): boolean {
-  // DFEN-03: readable off the union with no narrowing, which is exactly what
-  // the install path does once it widens `resolved` to MaterializablePlugin.
-  return materializable.defaultEnabled;
-}
-
-function unavailableHasNoDefaultEnabled(): void {
-  // @ts-expect-error -- D-64-05: the arm that cannot be installed carries no install-time enablement answer.
-  void unavailablePluginContract.defaultEnabled;
-}
-
-// Reference the helpers so tsc doesn't flag them as unused (they're not
-// exported -- keeping them tree-shake-safe).
-void proveExactDiscriminants;
-void consumeInstallable;
-void consumeUnsupported;
-void narrowOnMaterializability;
-void consumeUnavailable;
-void narrowOnMaterializabilityNegative;
 void gateNarrowsForce;
 void gateExcludesUnavailable;
-void materializableAdmitsInstallable;
-void materializableAdmitsUnsupported;
-void materializableExposesPluginRoot;
-void materializableExcludesUnavailable;
-void materializableExposesDefaultEnabled;
-void unavailableHasNoDefaultEnabled;

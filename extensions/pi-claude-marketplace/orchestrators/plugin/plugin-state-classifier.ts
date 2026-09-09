@@ -16,7 +16,7 @@
 
 import { isRecordedButDisabled } from "../../persistence/state-io.ts";
 
-import type { ResolvedPlugin } from "../../domain/resolver.ts";
+import type { ResolvedPlugin } from "../../domain/resolver-types.ts";
 
 /**
  * The finer installed-inventory states the classifier derives from a persisted

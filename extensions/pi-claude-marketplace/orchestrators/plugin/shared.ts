@@ -34,7 +34,7 @@ import { notify, notifyDiagnostic, redactAbsolutePaths } from "../../shared/noti
 import { crossScopeFlag, marketplaceInOtherScope } from "../marketplace/shared.ts";
 
 import type { PluginEntry } from "../../domain/components/plugin.ts";
-import type { MaterializablePlugin } from "../../domain/resolver.ts";
+import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
 import type {
   ConfigLoadResult,
   PluginConfigEntry,

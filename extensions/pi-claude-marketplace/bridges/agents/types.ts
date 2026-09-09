@@ -15,7 +15,7 @@
 // The line-based parser in frontmatter.ts only emits string values for the
 // known fields; consumers narrow as needed.
 
-import type { MaterializablePlugin } from "../../domain/resolver.ts";
+import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
 import type { AgentsIndexEntry } from "../../persistence/agents-index-schema.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 

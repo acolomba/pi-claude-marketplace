@@ -36,7 +36,7 @@ import {
   type GitOps,
 } from "../marketplace/shared.ts";
 
-import type { GitPluginRootResult } from "../../domain/resolver.ts";
+import type { GitPluginRootResult } from "../../domain/resolver-types.ts";
 import type {
   GitBackedSource,
   GitHubSource,

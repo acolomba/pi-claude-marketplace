@@ -38,14 +38,13 @@ import {
 } from "../../domain/components/hooks.ts";
 import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest, type MarketplaceManifest } from "../../domain/manifest.ts";
-import {
-  resolveStrict,
-  rowClaimsInstallDisabled,
-  type GitPluginRootResult,
-  type ResolveContext,
-  type ResolvedPluginUnavailable,
-  type ResolvedPluginPartiallyAvailable,
-} from "../../domain/resolver.ts";
+import { resolveStrict, rowClaimsInstallDisabled } from "../../domain/resolver.ts";
+import type {
+  GitPluginRootResult,
+  ResolveContext,
+  ResolvedPluginUnavailable,
+  ResolvedPluginPartiallyAvailable,
+} from "../../domain/resolver-types.ts";
 import {
   parsePluginSource,
   type GitBackedSource,

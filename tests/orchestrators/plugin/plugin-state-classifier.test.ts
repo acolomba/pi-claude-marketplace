@@ -10,7 +10,7 @@ import {
   type UpgradeCandidate,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/plugin-state-classifier.ts";
 
-import type { ResolvedPlugin } from "../../../extensions/pi-claude-marketplace/domain/resolver.ts";
+import type { ResolvedPlugin } from "../../../extensions/pi-claude-marketplace/domain/resolver-types.ts";
 
 void ("partially-installed-upgradable" satisfies InstalledClassification);
 void ("remote" satisfies ManifestEntryClassification);

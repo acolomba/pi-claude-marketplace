@@ -18,12 +18,12 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 
 import { canonicalCloneUrl, pluginCloneKey, pluginMirrorKey } from "../../domain/clone-key.ts";
-import {
-  resolveStrict,
-  type GitPluginRootResult,
-  type ResolveContext,
-  type ResolvedPlugin,
-} from "../../domain/resolver.ts";
+import { resolveStrict } from "../../domain/resolver.ts";
+import type {
+  GitPluginRootResult,
+  ResolveContext,
+  ResolvedPlugin,
+} from "../../domain/resolver-types.ts";
 import {
   parsePluginSource,
   type GitHubSource,

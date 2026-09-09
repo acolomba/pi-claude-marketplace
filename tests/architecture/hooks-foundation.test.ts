@@ -20,13 +20,15 @@ import {
   HOOKS_VALIDATOR,
 } from "../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
 import {
-  type ResolveContext,
-  type ResolvedPluginUnavailable,
   SUPPORTED_COMPONENT_KINDS,
   UNSUPPORTED_COMPONENT_KINDS,
   resolveLoose,
   resolveStrict,
 } from "../../extensions/pi-claude-marketplace/domain/resolver.ts";
+import type {
+  ResolveContext,
+  ResolvedPluginUnavailable,
+} from "../../extensions/pi-claude-marketplace/domain/resolver-types.ts";
 import { STATE_SCHEMA } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
 import type { PluginEntry } from "../../extensions/pi-claude-marketplace/domain/components/plugin.ts";

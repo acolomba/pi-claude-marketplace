@@ -37,8 +37,6 @@ import { readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 
-import Type from "typebox";
-
 import { PluginShapeError } from "../shared/errors.ts";
 import { PathContainmentError, assertPathInside } from "../shared/path-safety.ts";
 
@@ -46,6 +44,15 @@ import { parseHooksConfig, type DroppedHook, type HooksConfig } from "./componen
 import { MCP_SERVERS_VALIDATOR } from "./components/mcp.ts";
 import { PLUGIN_MANIFEST_VALIDATOR, type PluginEntry } from "./components/plugin.ts";
 import { assertSafeName } from "./name.ts";
+import type {
+  ResolveContext,
+  ResolvedPlugin,
+  ResolvedPluginInstallable,
+  ResolvedPluginPartiallyAvailable,
+  ResolvedPluginUnavailable,
+  StatKind,
+  StatKindReader,
+} from "./resolver-types.ts";
 import {
   parsePluginSource,
   type GitHubSource,
@@ -54,257 +61,6 @@ import {
   type ParsedSource,
   type UrlSource,
 } from "./source.ts";
-
-// ──────────────────────────────────────────────────────────────────────────
-// Schema + types
-// ──────────────────────────────────────────────────────────────────────────
-
-// D-07 (COMP-01): array-per-kind shape. The resolver UNIONs declared
-// (entry > manifest order) + implicit-by-convention paths with first-wins
-// dedup; the array semantics let `componentPaths.skills` carry both the
-// declared `custom/skills` and the conventional `skills` simultaneously.
-// This is additive rather than PR-4 short-circuit semantics.
-const ComponentPathsSchema = Type.Object({
-  skills: Type.Array(Type.String()),
-  commands: Type.Array(Type.String()),
-  agents: Type.Array(Type.String()),
-});
-
-const McpServersFieldSchema = Type.Record(Type.String(), Type.Unknown());
-
-// D-71-03 / PHOOK-02: the supportability-dropped hook events / matcher groups /
-// handlers carried on the installable + partially-available arms for the `info`
-// enumeration (D-71-05). Mirrors the `DroppedHook` union in
-// `domain/components/hooks.ts`; `event` is typed as a plain string here (rather
-// than the narrower `BucketAEvent`) because the resolver arm only carries the
-// enumeration for downstream rendering, not re-validation.
-const DroppedHookSchema = Type.Union([
-  Type.Object({ kind: Type.Literal("event"), event: Type.String() }),
-  Type.Object({
-    kind: Type.Literal("group"),
-    event: Type.String(),
-    matcher: Type.String(),
-    cond: Type.Union([
-      Type.Literal("regex"),
-      Type.Literal("unmapped-tool"),
-      Type.Literal("no-matcher-support"),
-      Type.Literal("closed-set"),
-    ]),
-  }),
-  Type.Object({
-    kind: Type.Literal("handler"),
-    event: Type.String(),
-    matcher: Type.String(),
-    handlerType: Type.String(),
-  }),
-]);
-
-// TD-2: compile-time drift guard. `DroppedHookSchema` hand-redeclares the
-// `DroppedHook` union from `domain/components/hooks.ts`; this assertion fails
-// `npm run check` if the two diverge. Direction: `DroppedHook` (narrower --
-// `event: BucketAEvent` on the group/handler arms) must stay assignable to the
-// schema's static type (wider -- `event: string`). The reverse never holds
-// because the schema intentionally widens `event`, so this is the only direction
-// that compiles today.
-//
-// This `extends` alone CATCHES: a schema-side required-field addition to an
-// existing arm (the source arm then lacks that field -> not assignable), a
-// schema-side enum NARROWING (e.g. dropping a `cond` literal -> the wider source
-// `cond` is no longer assignable), and a source-side NEW arm (a union member with
-// no schema counterpart is not assignable to the schema union). It does NOT catch
-// a schema-side EXTRA arm (the schema union merely widens; `DroppedHook` stays
-// assignable to it) nor a source-side additive FIELD on an existing arm (excess
-// properties stay assignable). The per-kind key-parity guard below closes the
-// source-side-field gap.
-type _AssertTrue<T extends true> = T;
-// Exported so `noUnusedLocals` treats this compile-time drift guard as consumed
-// without a runtime `void`; the alias is never imported.
-// fallow-ignore-next-line unused-type, private-type-leak -- compile-time drift guard; the export exists so `noUnusedLocals` treats it as consumed (dropping it fails typecheck with TS6196), and it is never imported by design. `_AssertTrue` is the assertion helper itself and has no meaning to a caller, so exporting it would widen the surface for nothing.
-export type _DroppedHookDriftCheck = _AssertTrue<
-  DroppedHook extends Type.Static<typeof DroppedHookSchema> ? true : false
->;
-
-// TD-2 (strengthening): per-kind KEY parity. For each `kind`, the source arm and
-// the schema arm must carry EXACTLY the same field names -- checked in both
-// directions with tuple-wrapped `keyof` to defeat union distribution. This closes
-// the two gaps the `extends` above misses: a source-side additive field and a
-// schema-side extra arm both change the key set of some arm. Because it compares
-// KEY names only (not value types), the intentional `event` widening
-// (`BucketAEvent` vs `string`) is invisible to it -- no fight. A mismatched arm
-// yields `false`; the nested check below then collapses to `never`, so the
-// tuple-wrapped `_AssertTrue` check below (`[true] extends [never]` -> `false`)
-// fails `npm run check`. (`false` -- not `never` -- on mismatch so the `extends
-// true` chaining stays sound: `never extends true` would spuriously pass.)
-type _DroppedHookArmKeysMatch<K extends DroppedHook["kind"]> = [
-  keyof Extract<DroppedHook, { kind: K }>,
-] extends [keyof Extract<Type.Static<typeof DroppedHookSchema>, { kind: K }>]
-  ? [keyof Extract<Type.Static<typeof DroppedHookSchema>, { kind: K }>] extends [
-      keyof Extract<DroppedHook, { kind: K }>,
-    ]
-    ? true
-    : false
-  : false;
-type _DroppedHookArmKeysDrift =
-  _DroppedHookArmKeysMatch<"event"> extends true
-    ? _DroppedHookArmKeysMatch<"group"> extends true
-      ? _DroppedHookArmKeysMatch<"handler"> extends true
-        ? true
-        : never
-      : never
-    : never;
-// Exported for the same `noUnusedLocals` reason as `_DroppedHookDriftCheck`.
-// fallow-ignore-next-line unused-type, private-type-leak -- compile-time key-parity guard; same `noUnusedLocals` contract as _DroppedHookDriftCheck above, and `_AssertTrue` / `_DroppedHookArmKeysDrift` are assertion internals no caller can use.
-export type _DroppedHookArmKeysCheck = _AssertTrue<
-  // fallow-ignore-next-line private-type-leak -- `_DroppedHookArmKeysDrift` is an internal step of this compile-time key-parity guard; it has no caller-facing meaning.
-  [true] extends [_DroppedHookArmKeysDrift] ? true : false
->;
-
-// The field set shared by the two materializable arms -- `installable`
-// and the partially-available (D-64-06). Both carry `pluginRoot`
-// plus the full component payload; only the `state` discriminant differs.
-// Extracted into one bag and spread into both schemas so the two arms stay
-// token-identical by construction (spreading `state` first keeps the literal
-// discriminant on each arm; TypeBox key order does not affect the static type).
-const MATERIALIZABLE_FIELDS = {
-  installable: Type.Literal(true),
-  name: Type.String(),
-  // pluginRoot is present on installable + partially-available only (NFR-7); D-64-06
-  // lets a partial install degrade past the unsupported parts, so both arms
-  // expose it.
-  pluginRoot: Type.String(),
-  supported: Type.Array(Type.String()),
-  unsupported: Type.Array(Type.String()),
-  notes: Type.Array(Type.String()),
-  componentPaths: ComponentPathsSchema,
-  mcpServers: McpServersFieldSchema,
-  // HOOK-01: relative path of the discovered hooks/hooks.json when the
-  // convention-file probe found a parseable file. Undefined when no hooks
-  // file exists on disk or when parse failed.
-  hooksConfigPath: Type.Optional(Type.String()),
-  // SURF-05 / D-63-08: true iff the parsed hooks.json contains at least one
-  // handler declaring `rewakeMessage` or `rewakeSummary` WITHOUT
-  // `asyncRewake: true`. One-per-plugin invariant (the existing REASONS
-  // render dedupes naturally). Install row composition reads this flag and
-  // pushes `"orphan rewake"` into `reasons[]`; the resolver only provides
-  // the source data and does NOT emit any user-facing surface itself.
-  orphanRewake: Type.Optional(Type.Boolean()),
-  // D-71-03 / PHOOK-02: the supportability-dropped hook handlers, present when
-  // the hooks.json parsed but at least one event / matcher group / handler was
-  // unsupportable. Threaded for the `info` enumeration (D-71-05). Absent when
-  // no hooks.json exists, the parse failed structurally, or nothing dropped.
-  droppedHooks: Type.Optional(Type.Array(DroppedHookSchema)),
-  // DFEN-02 / DFEN-03: the resolved install-time enablement. NON-optional,
-  // unlike the three fields above -- they are optional because absence is
-  // meaningful, whereas this one always has an answer once the entry and the
-  // manifest have been read. Keeping it required is what stops every consumer
-  // from re-deriving the rule behind a `?? true` fallback.
-  defaultEnabled: Type.Boolean(),
-} as const;
-
-const ResolvedPluginInstallableSchema = Type.Object({
-  state: Type.Literal("installable"),
-  ...MATERIALIZABLE_FIELDS,
-});
-
-// D-64-06: the partially-available arm. Shape-identical to `installable` (carries
-// `pluginRoot` + the full component payload) so the partial-install path
-// (a later phase) and the info-surface unsupported-row enumeration can read
-// the same fields; only the `state` tag differs. The declared/discovered
-// unsupported component kinds live in `unsupported[]` with their `contains
-// <kind>` markers in `notes[]`.
-const ResolvedPluginPartiallyAvailableSchema = Type.Object({
-  state: Type.Literal("partially-available"),
-  ...MATERIALIZABLE_FIELDS,
-});
-
-// D-64-05: the minimal structural-defect arm. Carries ONLY `state`, `name`,
-// and the structural `notes`. `pluginRoot` is intentionally absent (NFR-7,
-// compile-enforced -- force can never reach the filesystem root of a
-// structurally-broken plugin); the component lists / `componentPaths` /
-// `mcpServers` / `hooksConfigPath` / `orphanRewake` are dropped because they
-// cannot be reliably enumerated once the manifest/structure is broken.
-const ResolvedPluginUnavailableSchema = Type.Object({
-  state: Type.Literal("unavailable"),
-  installable: Type.Literal(false),
-  name: Type.String(),
-  notes: Type.Array(Type.String()), // structural reasons
-  // pluginRoot intentionally absent -- NFR-7 enforces non-readability
-});
-
-/**
- * Literal-tagged variants ARE the discriminator. NO options arg.
- *
- * The suppression below is deliberate: this typebox schema IS the canonical
- * runtime definition of the NFR-7 discriminated union and composes the three
- * arm schemas; it is consumed through `Type.Static`. Un-exporting it instead
- * trips `@typescript-eslint/no-unused-vars` ("only used as a type"), and
- * deleting it would orphan all three arm schemas, so the export is the only
- * form both gates accept.
- */
-// fallow-ignore-next-line unused-export -- canonical runtime definition of the NFR-7 discriminated union, consumed through `Type.Static`; un-exporting it trips `@typescript-eslint/no-unused-vars` ("only used as a type") and deleting it orphans all three arm schemas, so the export is the only form both gates accept.
-export const ResolvedPluginSchema = Type.Union([
-  ResolvedPluginInstallableSchema,
-  ResolvedPluginPartiallyAvailableSchema,
-  ResolvedPluginUnavailableSchema,
-]);
-
-export type ResolvedPluginInstallable = Type.Static<typeof ResolvedPluginInstallableSchema>;
-export type ResolvedPluginPartiallyAvailable = Type.Static<
-  typeof ResolvedPluginPartiallyAvailableSchema
->;
-export type ResolvedPluginUnavailable = Type.Static<typeof ResolvedPluginUnavailableSchema>;
-export type ResolvedPlugin = Type.Static<typeof ResolvedPluginSchema>;
-
-// NFR-7: the materializable union. It names exactly the two arms that
-// carry `pluginRoot` + the full component payload -- `installable` and the
-// partially-available (D-64-06) -- and EXCLUDES `unavailable`, so
-// no consumer that widens a holder to this union can read `pluginRoot` off a
-// structurally-broken plugin. This is exactly the type `requirePartialInstallable`
-// narrows to, and the type the partial install/update holders accept.
-export type MaterializablePlugin = ResolvedPluginInstallable | ResolvedPluginPartiallyAvailable;
-export type StatKind = "file" | "dir" | null;
-export type StatKindReader = (p: string) => Promise<StatKind>;
-
-// PURL-01 / PURL-03: the result of the injected git-source pluginRoot policy.
-// A discriminated union whose ONLY `pluginRoot`-bearing arm is `materialized`,
-// mirroring the NFR-7 discipline of the ResolvedPlugin union: a not-cached /
-// escaping / missing-subdir outcome cannot leak a pluginRoot.
-//   - materialized:   the clone (and, for git-subdir, its contained subdir) is
-//                     present on disk; `pluginRoot` is safe to read and the
-//                     resolved commit sha is carried for version recording.
-//   - not-cached:     no clone materialized (e.g. an info probe of a
-//                     recorded-but-evicted plugin); resolves `unavailable`.
-//                     Read surfaces (list / info) inject the fs-only presence
-//                     probe from git-source-probe.ts, so this arm resolves
-//                     without network.
-//   - escapes:        the git-subdir path escaped the clone root (NFR-10). The
-//                     containment check is the callback's job (it holds the
-//                     clone root); the escape surfaces here with a detail note.
-//   - missing-subdir: the git-subdir path is absent under the clone root.
-export type GitPluginRootResult =
-  | { readonly kind: "materialized"; readonly pluginRoot: string; readonly resolvedSha: string }
-  | { readonly kind: "not-cached" }
-  | { readonly kind: "escapes"; readonly detail: string }
-  | { readonly kind: "missing-subdir"; readonly detail: string };
-
-// ──────────────────────────────────────────────────────────────────────────
-// Context (injectable for tests)
-// ──────────────────────────────────────────────────────────────────────────
-
-export interface ResolveContext {
-  readonly marketplaceRoot: string;
-  readonly readFileText?: (p: string) => Promise<string>;
-  readonly statKind?: StatKindReader;
-  // PURL-01 / D-11 / D-13: the git-source pluginRoot policy. Absent => git
-  // sources (url / git-subdir / github) resolve `unavailable`. Read surfaces
-  // (list / info) inject the fs-only presence probe from git-source-probe.ts,
-  // so they resolve git sources without network; install injects the
-  // clone-materializing callback. The domain never imports the platform/git
-  // surface; the orchestrator that owns it injects this callback.
-  readonly resolveGitPluginRoot?: (
-    source: UrlSource | GitSubdirSource | GitHubSource,
-  ) => Promise<GitPluginRootResult>;
-}
 
 async function defaultStatKind(p: string): Promise<StatKind> {
   try {

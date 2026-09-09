@@ -19,7 +19,7 @@ import { discoverPluginAgents } from "../../bridges/agents/index.ts";
 import { discoverPluginCommands } from "../../bridges/commands/index.ts";
 import { discoverPluginSkills } from "../../bridges/skills/index.ts";
 
-import type { MaterializablePlugin } from "../../domain/resolver.ts";
+import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
 
 export interface DiscoveredGeneratedNames {
   readonly skills: readonly string[];

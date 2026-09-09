@@ -137,7 +137,7 @@ import type { HooksRouting } from "../../bridges/hooks/index.ts";
 import type { McpReplacement, PreparedMcpStaging } from "../../bridges/mcp/index.ts";
 import type { PreparedSkillsStaging, SkillsReplacement } from "../../bridges/skills/index.ts";
 import type { PluginEntry } from "../../domain/components/plugin.ts";
-import type { GitPluginRootResult, MaterializablePlugin } from "../../domain/resolver.ts";
+import type { GitPluginRootResult, MaterializablePlugin } from "../../domain/resolver-types.ts";
 import type { GitHubSource, GitSubdirSource, UrlSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState, PluginInstallRecord } from "../../persistence/state-io.ts";
