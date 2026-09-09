@@ -74,6 +74,14 @@ A new top-level `tests/` directory reddens
 - [ ] An architecture assertion for WGATE-02: `domain/workflow-script.ts` contains exactly one
       `parse(` call site. `tests/architecture/source-scan.ts`'s `assertNoForbiddenSurface` is the
       right primitive. Does not exist today.
+      **PLANNED:** this gap is closed by `115-02-PLAN.md` Task 2, which creates
+      `tests/architecture/workflows-single-parse.test.ts` — the count case (one bare `parse` call
+      in the comment-stripped module) plus the evaluator-surface case over
+      `domain/workflow-script.ts` and `bridges/workflows/`, each proven by a planted violation.
+      The same task also carries the WGATE-03 containment case, which pins `readEngineGate`'s
+      `try`/`catch` in source rather than only in a SUMMARY transcript. The `File exists?` column
+      above still reads `❌ Wave 0` because the file genuinely does not exist yet; planned is not
+      written.
 - [ ] Everything else: **no gaps.** Every other target file exists and already has a paired suite.
 
 ---
