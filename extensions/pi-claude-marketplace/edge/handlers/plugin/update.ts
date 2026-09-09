@@ -17,8 +17,10 @@ import { extractLocalFlag } from "../shared.ts";
 
 import { parseMapModelArgs, splitPluginMarketplaceRef } from "./shared.ts";
 
-import type { UpdatePluginsTarget } from "../../../orchestrators/plugin/update-preflight.ts";
-import type { UpdatePluginsFn } from "../../../orchestrators/plugin/update.ts";
+import type {
+  UpdatePluginsFn,
+  UpdatePluginsTarget,
+} from "../../../orchestrators/plugin/update-preflight.ts";
 import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
 
 const USAGE =

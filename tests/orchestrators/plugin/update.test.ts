@@ -348,7 +348,7 @@ function capturingUpdateSeam(gitOps: GitOps): {
   return { seam, captured };
 }
 
-async function withHermeticHome<T>(fn: () => Promise<T>): Promise<T> {
+export async function withHermeticHome<T>(fn: () => Promise<T>): Promise<T> {
   return withHermeticEnvironment("update-", fn);
 }
 
@@ -520,7 +520,7 @@ async function seedUpdateAgents(
  * The plugins map carries entries we control; tests then mutate the
  * on-disk manifest between calls to simulate version bumps / removals.
  */
-async function seedPathMarketplace(opts: {
+export async function seedPathMarketplace(opts: {
   cwd: string;
   marketplaceRoot: string;
   marketplaceName: string;
