@@ -731,6 +731,124 @@ describe("applyBackfillForScopeIsolated", () => {
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
   });
+
+  // ENBL-08 / D-116-03: the pair below measures "a disabled record is never
+  // scanned" rather than inferring it from a missing row. The manifest the
+  // record resolves through is made unparseable, which turns any read of it
+  // into a throw the scan cannot swallow: a scanned record surfaces a
+  // plugin-scoped failure row AND holds the version gate open, so a landed
+  // stamp beside an empty outcome array is a positive observation that the
+  // read never happened.
+  //
+  // The limit, stated rather than glossed: the observable is the marketplace
+  // MANIFEST READ, which is the first statement of the offline re-resolve. It
+  // is one step downstream of "the resolver was never called" -- a future
+  // change that read the manifest before the disabled filter would keep this
+  // pair honest about the read while no longer bounding the resolve.
+  test("ENBL-08 / D-116-03: leaves a disabled record's poisoned manifest unread, so the stamp lands", async (t) => {
+    // arrange
+    const { cwd, locations } = await createHermeticProjectScope(t, "disabled-unread-manifest");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      hello: { skill: "clean", workflow: true },
+    });
+    const seeded: ExtensionState = {
+      schemaVersion: 2,
+      lastReconciledExtensionVersion: STALE_STAMP,
+      marketplaces: {
+        mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
+          hello: pluginRecord({
+            pluginRoot: path.join(marketplaceRoot, "plugins", "hello"),
+            installable: true,
+            supported: ["skills"],
+            unsupported: [],
+            enabled: false,
+          }),
+        }),
+      },
+    };
+    await seedState(locations, seeded);
+    // The poison is laid AFTER the seed so the record still names a manifest
+    // path that exists; only its contents are unreadable. The manifest cache
+    // cannot mask it either -- a stat failure there is a pure miss and the
+    // loader's error propagates verbatim.
+    await writeFile(manifestPath, "{ this is not valid json at all", "utf8");
+    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+    const outcomes: PerEntryOutcome[] = [];
+
+    // act
+    await applyBackfillForScopeIsolated(
+      backfillOptions(ctx, pi, cwd, gitOps),
+      "project",
+      readResultFor(seeded, true),
+      outcomes,
+    );
+
+    // assert -- both halves. The empty array alone would be an absence; the
+    // landed stamp is what makes it a measurement, because a record that WAS
+    // scanned would have thrown, pushed a failure row and held the gate open.
+    assert.deepStrictEqual(outcomes, []);
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), {
+      ...seeded,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+    });
+    assert.deepStrictEqual(await savedWorkflowEntries(locations), []);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("ENBL-08 / D-116-03: reads the same poisoned manifest when the record is enabled, and holds the gate open", async (t) => {
+    // arrange -- the twin of the case above in every respect but the disabled
+    // flag, so the poison is proved VISIBLE rather than assumed. Without this
+    // half the measured zero could be measuring an inert fixture.
+    const { cwd, locations } = await createHermeticProjectScope(t, "enabled-unread-manifest");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      hello: { skill: "clean", workflow: true },
+    });
+    const seeded: ExtensionState = {
+      schemaVersion: 2,
+      lastReconciledExtensionVersion: STALE_STAMP,
+      marketplaces: {
+        mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
+          hello: pluginRecord({
+            pluginRoot: path.join(marketplaceRoot, "plugins", "hello"),
+            installable: true,
+            supported: ["skills"],
+            unsupported: [],
+          }),
+        }),
+      },
+    };
+    await seedState(locations, seeded);
+    await writeFile(manifestPath, "{ this is not valid json at all", "utf8");
+    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+    const outcomes: PerEntryOutcome[] = [];
+
+    // act
+    await applyBackfillForScopeIsolated(
+      backfillOptions(ctx, pi, cwd, gitOps),
+      "project",
+      readResultFor(seeded, true),
+      outcomes,
+    );
+
+    // assert -- the read happened: a failure row, and the stamp withheld so the
+    // scope retries next load.
+    assert.deepStrictEqual(outcomes, [
+      {
+        kind: "plugin-install-failed",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "hello",
+        reason: "unparseable",
+      },
+    ]);
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), seeded);
+    assert.deepStrictEqual(await savedWorkflowEntries(locations), []);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
 });
 
 // `runScopeIsolated` is a pure wrapper over a caller-supplied operation: it
