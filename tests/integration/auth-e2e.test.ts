@@ -8,7 +8,7 @@
  *     -> onAuth / onAuthFailure closures
  *       -> initiateDeviceFlow (domain/github-auth.ts)
  *         -> CredentialOps (tests/platform/credential-ops-fake.ts)
- *         -> notifyFn (shared/notify.ts makeRawNotifyFn)
+ *         -> notifyFn (shared/notification-dispatch.ts makeRawNotifyFn)
  *
  * Tests:
  *   AUTH-01 -- fill-miss triggers Device Flow; token stored via approve
@@ -27,7 +27,7 @@ import {
   buildAuthCallbacks,
   type OnAuthRequiredFn,
 } from "../../extensions/pi-claude-marketplace/platform/git.ts";
-import { makeRawNotifyFn } from "../../extensions/pi-claude-marketplace/shared/notify.ts";
+import { makeRawNotifyFn } from "../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
 import { createDeviceFlowFake } from "../domain/device-flow-fake.ts";
 import { createCredentialOpsFake } from "../platform/credential-ops-fake.ts";
 

@@ -3,8 +3,8 @@
 // AP-3 dispatch + Usage emission.
 //
 // Direct Pi notify calls are replaced with notifyUsageError(ctx, message,
-// usageBlock) from shared/notify.ts. ESLint BLOCK A (eslint.config.js)
-// forbids direct notify on the Pi context outside of shared/notify.ts; the
+// usageBlock) from shared/notification-dispatch.ts. ESLint BLOCK A (eslint.config.js)
+// forbids direct notify on the Pi context outside of shared/notification-dispatch.ts; the
 // notify-discipline grep gate further enforces zero direct calls in this
 // file by asserting the literal Pi-context notify expression does not
 // appear.
@@ -19,7 +19,7 @@
 // `register.ts` builds the `SubcommandHandlers` record from `EdgeDeps` and
 // passes it in.
 
-import { notifyUsageError } from "../shared/notify.ts";
+import { notifyUsageError } from "../shared/notification-dispatch.ts";
 
 import type { ExtensionCommandContext } from "../platform/pi-api.ts";
 

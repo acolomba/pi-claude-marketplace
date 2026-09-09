@@ -41,12 +41,12 @@ import { fileURLToPath } from "node:url";
 
 import { LIST_CONTEXT } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/list.messaging.ts";
 import { UPDATE_CONTEXT } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/update.messaging.ts";
+import { notify } from "../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
 import { type NotificationMessage } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 import {
   notifyUpdateNoOpWithContext,
   notifyWithContext,
 } from "../../extensions/pi-claude-marketplace/shared/notify-context.ts";
-import { notify } from "../../extensions/pi-claude-marketplace/shared/notify.ts";
 import { narrowUnsupportedKinds } from "../../extensions/pi-claude-marketplace/shared/probe-classifiers.ts";
 
 // ---------------------------------------------------------------------------
@@ -283,7 +283,7 @@ type FixtureMap = Readonly<Record<string, Readonly<Record<string, CatalogFixture
 //     prefix. Info-severity fixtures (no `expectedSeverity`) carry NO summary
 //     line.
 //   - Plugin variants honor the discriminated-union carve-outs in
-//     `shared/notify.ts` (required vs absent reasons /
+//     `shared/notification-dispatch.ts` (required vs absent reasons /
 //     dependencies / scope / version / cause / rollbackPartial fields).
 // ---------------------------------------------------------------------------
 

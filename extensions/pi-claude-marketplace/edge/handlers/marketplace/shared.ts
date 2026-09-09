@@ -10,7 +10,7 @@
 // Argument-parsing failures route through `notifyUsageError`; the orchestrator
 // owns per-scope projection / fan-out / the conditional `{marketplace not added}` forms.
 
-import { notifyUsageError } from "../../../shared/notify.ts";
+import { notifyUsageError } from "../../../shared/notification-dispatch.ts";
 import { parseCommandArgs } from "../../args-schema.ts";
 import { extractLocalFlag } from "../shared.ts";
 

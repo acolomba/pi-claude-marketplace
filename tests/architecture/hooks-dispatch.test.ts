@@ -45,7 +45,7 @@ test("OBS-01 limits extension no-console overrides to the documented files", asy
   const expectedPaths = [
     "extensions/pi-claude-marketplace/persistence/migrate.ts",
     "extensions/pi-claude-marketplace/shared/debug-log.ts",
-    "extensions/pi-claude-marketplace/shared/notify.ts",
+    "extensions/pi-claude-marketplace/shared/notification-dispatch.ts",
   ];
 
   // act

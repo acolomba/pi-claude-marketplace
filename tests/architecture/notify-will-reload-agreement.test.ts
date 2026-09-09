@@ -17,7 +17,7 @@
  * rendered cascade MUST NOT contain the trailer.
  *
  * The reload-deferral oracle (`shouldEmitReloadHint`) and the trailer literal
- * (`RELOAD_HINT_TRAILER`) are module-private in `shared/notify.ts`, so the
+ * (`RELOAD_HINT_TRAILER`) are module-private in `shared/notification-dispatch.ts`, so the
  * assertion observes the oracle through its only public effect: the trailer's
  * presence in the rendered `notify()` output (WILL-02 leaves the seam to
  * discretion). This file is green on the current (pre-retirement) tree -- it
@@ -28,8 +28,8 @@
 import assert from "node:assert/strict";
 import test, { mock } from "node:test";
 
+import { notify } from "../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
 import { type NotificationMessage } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
-import { notify } from "../../extensions/pi-claude-marketplace/shared/notify.ts";
 
 // ---------------------------------------------------------------------------
 // Mock helpers -- mirror the catalog-uat / grammar-invariant harness.
@@ -58,7 +58,7 @@ function piWithBothLoaded(): MockPi {
   };
 }
 
-// The trailer literal mirrors `RELOAD_HINT_TRAILER` in shared/notify.ts; that
+// The trailer literal mirrors `RELOAD_HINT_TRAILER` in shared/notification-dispatch.ts; that
 // constant is module-private, so the agreement is observed via its rendered
 // substring (the same seam tests/architecture/notify-grammar-invariant.test.ts
 // uses).

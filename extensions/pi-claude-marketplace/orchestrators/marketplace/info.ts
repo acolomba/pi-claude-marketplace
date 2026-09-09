@@ -11,12 +11,12 @@
 // hide behind a healthy other-scope render.
 
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
+import { notify } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import {
   type MarketplaceInfoMessage,
   type NotificationMessage,
 } from "../../shared/notification-types.ts";
-import { notify } from "../../shared/notify.ts";
 import { narrowProbeError } from "../../shared/probe-classifiers.ts";
 import { collectMarketplaceRecordsByScope } from "../scope-fanout.ts";
 

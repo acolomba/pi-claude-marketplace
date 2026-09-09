@@ -2,7 +2,7 @@ import {
   emitContextCascade,
   emitReconcileAppliedContextCascade,
   emitUpdateNoOpCascade,
-} from "./notification-summary.ts";
+} from "./notification-dispatch.ts";
 import {
   type CascadeNotificationMessage,
   type MarketplaceNotificationMessage,

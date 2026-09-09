@@ -15,7 +15,7 @@
 // guard.
 
 import { pendingReconcile } from "../../../orchestrators/reconcile/pending.ts";
-import { notifyUsageError } from "../../../shared/notify.ts";
+import { notifyUsageError } from "../../../shared/notification-dispatch.ts";
 import { parseArgs } from "../../args.ts";
 
 import { withParsedArgs } from "./shared.ts";

@@ -2,11 +2,13 @@ import assert from "node:assert/strict";
 import { test, type TestContext } from "node:test";
 
 import {
-  composeTally,
   emitContextCascade,
   emitReconcileAppliedContextCascade,
   emitUpdateNoOpCascade,
   emitWithSummary,
+} from "../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
+import {
+  composeTally,
   foldTallyAndHint,
   isInfoKind,
   shouldEmitReloadHint,

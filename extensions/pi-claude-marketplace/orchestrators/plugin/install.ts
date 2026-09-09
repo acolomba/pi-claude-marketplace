@@ -64,7 +64,7 @@
 // domain/, transaction/, persistence/, shared/, AND from
 // orchestrators/marketplace/shared.ts (named exports only -- no add.ts /
 // remove.ts / update.ts cycle). User-visible output flows through
-// shared/notify.ts; this file holds no rendering imports.
+// shared/notification-dispatch.ts; this file holds no rendering imports.
 
 import { mkdir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -109,6 +109,7 @@ import { toDisabledRecord } from "../../persistence/state-io.ts";
 import { softDepStatus } from "../../platform/pi-api.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { ConcurrentInstallError, errorMessage, PluginShapeError } from "../../shared/errors.ts";
+import { notify } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
 import {
@@ -116,7 +117,6 @@ import {
   malformedReasonsForKinds,
   type DegradeKind,
 } from "../../shared/notify-reasons.ts";
-import { notify } from "../../shared/notify.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 import {
   runPhases,
@@ -2500,7 +2500,7 @@ export function createNodeInstallPlugin(
 
 // D-19-03 / CMC-17 / MSG-RP-1: the PluginFailedMessage.rollbackPartial
 // field (SNM-09 + SNM-10) is the structural rollback-partial channel; the
-// renderer at shared/notify.ts::composeRollbackPartialLines drives all
+// renderer at shared/notification-dispatch.ts::composeRollbackPartialLines drives all
 // indentation (4-space rollback-child row + 6-space per-phase cause-chain
 // trailer). The transaction/phase-ledger.ts RollbackPartial exposes the
 // typed cause?: Error, threaded directly into the field. Error identity,

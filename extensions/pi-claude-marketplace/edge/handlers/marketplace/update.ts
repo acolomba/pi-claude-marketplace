@@ -14,7 +14,7 @@ import {
   updateAllMarketplaces,
   updateMarketplace,
 } from "../../../orchestrators/marketplace/update.ts";
-import { notifyUsageError } from "../../../shared/notify.ts";
+import { notifyUsageError } from "../../../shared/notification-dispatch.ts";
 import { parseCommandArgs } from "../../args-schema.ts";
 
 import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";

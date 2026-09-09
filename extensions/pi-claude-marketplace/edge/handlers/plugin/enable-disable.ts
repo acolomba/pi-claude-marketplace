@@ -15,7 +15,7 @@
 
 import { createNodeSetPluginEnabled } from "../../../orchestrators/plugin/enable-disable.ts";
 import { errorMessage } from "../../../shared/errors.ts";
-import { notify } from "../../../shared/notify.ts";
+import { notify } from "../../../shared/notification-dispatch.ts";
 // Shared scanner; see edge/handlers/shared.ts.
 import { extractLocalFlag } from "../shared.ts";
 

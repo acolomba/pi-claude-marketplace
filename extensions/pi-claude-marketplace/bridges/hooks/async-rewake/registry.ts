@@ -30,7 +30,7 @@
 // IL-2 EXEMPTION (T-62-09): the single sanctioned runtime notify call
 // in the entire `bridges/hooks/async-rewake/` subtree is the
 // `rewakeSummary` surface inside `onChildExit`, routed through
-// `notifyAsyncRewakeSummary` in `shared/notify.ts` so the eslint
+// `notifyAsyncRewakeSummary` in `shared/notification-dispatch.ts` so the eslint
 // `no-restricted-syntax` ctx.ui.notify gate stays GREEN here.
 // Runtime notify is otherwise forbidden in bridge code; the exemption
 // exists because `rewakeSummary` is the upstream-mandated UI status
@@ -43,7 +43,7 @@ import { readFile } from "node:fs/promises";
 
 import { hookDebugLog } from "../../../shared/debug-log.ts";
 import { errorMessage } from "../../../shared/errors.ts";
-import { notifyAsyncRewakeSummary } from "../../../shared/notify.ts";
+import { notifyAsyncRewakeSummary } from "../../../shared/notification-dispatch.ts";
 import { installTimerLadder, type TimerLadder } from "../exec-timer.ts";
 import { prepareHookEnv } from "../hook-env.ts";
 import { translate as translatePostCompact } from "../payloads/post-compact.ts";
@@ -423,7 +423,7 @@ function finalizeChild(
 
   // IL-2 EXEMPTION (T-62-09): `rewakeSummary` is the single sanctioned
   // runtime notify call originating from `bridges/hooks/async-rewake/`,
-  // routed through the canonical `shared/notify.ts` seam. Fires
+  // routed through the canonical `shared/notification-dispatch.ts` seam. Fires
   // independently of exit code -- it is the upstream-mandated UI
   // status surface, not a success-only signal.
   if (entry.rewakeSummary !== undefined) {

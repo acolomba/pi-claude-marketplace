@@ -8,7 +8,7 @@
 // the positional/scope shape and delegates.
 
 import { getPluginInfo } from "../../../orchestrators/plugin/info.ts";
-import { notifyUsageError } from "../../../shared/notify.ts";
+import { notifyUsageError } from "../../../shared/notification-dispatch.ts";
 import { parseArgs } from "../../args.ts";
 import { parseFlagNames } from "../../flag-catalog.ts";
 

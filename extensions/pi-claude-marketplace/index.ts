@@ -16,7 +16,7 @@ import { loadState } from "./persistence/state-io.ts";
 import { createCompletionCache } from "./shared/completion-cache.ts";
 import { hookDebugLog } from "./shared/debug-log.ts";
 import { errorMessage } from "./shared/errors.ts";
-import { makeRawNotifyFn } from "./shared/notify.ts";
+import { makeRawNotifyFn } from "./shared/notification-dispatch.ts";
 import { applySessionEnv } from "./shared/session-env.ts";
 
 import type {

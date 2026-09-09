@@ -51,6 +51,7 @@ import { isRecordedButDisabled, type ExtensionState } from "../../persistence/st
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage, isErrnoException } from "../../shared/errors.ts";
 import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
+import { notify } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import {
   type NotificationMessage,
@@ -62,7 +63,6 @@ import {
   type MarketplaceRows,
   type Plural,
 } from "../../shared/notify-context.ts";
-import { notify } from "../../shared/notify.ts";
 import { PathContainmentError, assertPathInside } from "../../shared/path-safety.ts";
 import {
   narrowProbeError,

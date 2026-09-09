@@ -30,7 +30,7 @@
 
 import { findProviderForHost } from "../domain/auth-registry.ts";
 import { initiateDeviceFlow } from "../domain/github-auth.ts";
-import { makeRawNotifyFn } from "../shared/notify.ts";
+import { makeRawNotifyFn } from "../shared/notification-dispatch.ts";
 
 import type { DeviceFlowHttp } from "../domain/github-auth.ts";
 import type { CredentialOps } from "../platform/git-credential.ts";

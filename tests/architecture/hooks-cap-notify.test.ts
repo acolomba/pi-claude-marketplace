@@ -20,7 +20,7 @@ import path from "node:path";
 import test, { mock } from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { notifyStopHookOverrideCap } from "../../extensions/pi-claude-marketplace/shared/notify.ts";
+import { notifyStopHookOverrideCap } from "../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
 
 import type { ExtensionContext } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 

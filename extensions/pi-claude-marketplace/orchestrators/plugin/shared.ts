@@ -29,10 +29,10 @@ import {
   errorMessage,
   MarketplaceNotFoundError,
 } from "../../shared/errors.ts";
+import { notify, notifyDiagnostic } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import { type PluginSkippedMessage } from "../../shared/notification-types.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
-import { notify, notifyDiagnostic } from "../../shared/notify.ts";
 import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import { crossScopeFlag, marketplaceInOtherScope } from "../marketplace/shared.ts";
 

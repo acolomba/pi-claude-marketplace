@@ -11,7 +11,7 @@
 // The boolean `--map-model` opt-in (AG-7) requires the raw `parseArgs` +
 // manual positional scan pattern from `list.ts`.
 
-import { notifyUsageError } from "../../../shared/notify.ts";
+import { notifyUsageError } from "../../../shared/notification-dispatch.ts";
 import { passThroughFlagNames } from "../../flag-catalog.ts";
 import { extractLocalFlag } from "../shared.ts";
 

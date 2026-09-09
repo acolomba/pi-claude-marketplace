@@ -19,7 +19,7 @@
 // outcome -- matching how `--scope` is consumed by the downstream parser
 // itself.
 
-import { notifyUsageError } from "../../shared/notify.ts";
+import { notifyUsageError } from "../../shared/notification-dispatch.ts";
 import { SCOPE_TARGET_FLAG } from "../flag-catalog.ts";
 
 import type { ExtensionCommandContext } from "../../platform/pi-api.ts";

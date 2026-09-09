@@ -1,18 +1,11 @@
-import { softDepStatus } from "../platform/pi-api.ts";
-
 import { assertNever } from "./errors.ts";
-import { composePluginLinesWith, renderMpHeader } from "./notification-grammar.ts";
 
 import type {
   CascadeNotificationMessage,
   MarketplaceNotificationMessage,
   NotificationMessage,
-  PluginNotificationMessage,
-  ReconcileAppliedCascadeMessage,
   Severity,
 } from "./notification-types.ts";
-import type { Scope } from "./types.ts";
-import type { NotificationContext, SoftDepStatus, ToolInventory } from "../platform/pi-api.ts";
 
 /** Severity, tally, reload, and cascade-summary folding for notifications. */
 
@@ -122,7 +115,7 @@ export const RELOAD_HINT_TRAILER = "/reload to pick up changes";
  * (which collapses a `tally {count: 0}` override to `""`), so the summary line
  * never vanishes.
  */
-const UPDATE_NO_OP_HEADLINE = "Plugin update: nothing to update";
+export const UPDATE_NO_OP_HEADLINE = "Plugin update: nothing to update";
 
 /**
  * SEV-03: the desired-state tri-state contract every producer stamps on a row:
@@ -612,8 +605,8 @@ export function shouldEmitReloadHint(message: NotificationMessage): boolean {
 }
 
 /**
- * GRAM-04: the single summary-emission seam shared by the standalone arm
- * (`dispatchInfoMessage`) and the cascade arm of `notify()`. Computing the
+ * GRAM-04: the single summary-composition seam shared by the standalone arm
+ * and the cascade arm of the dispatcher. Computing the
  * severity and prepending the summary in ONE place is the structural
  * anti-divergence guarantee -- no caller can re-introduce a summary-less
  * error/warning emission like the v1.10 standalone-arm defect.
@@ -621,160 +614,18 @@ export function shouldEmitReloadHint(message: NotificationMessage): boolean {
  * GRAM-01: at error/warning severity the summary is prepended as its own
  * block, separated from the body by `\n\n` (never a single `\n`, which would
  * re-glue the host `Error:` / `Warning:` label onto the detail row). At info
- * severity the body is emitted unchanged (no summary -- the operation-count
- * semantics do not apply to read-only results). IL-2: exactly one
- * `ctx.ui.notify` call per invocation.
+ * severity the body is returned unchanged (no summary -- the operation-count
+ * semantics do not apply to read-only results). The dispatch owner consumes
+ * this exact tuple and performs the single Pi notification call.
  */
-export function emitWithSummary(
-  ctx: NotificationContext,
+export function composeWithSummary(
   message: NotificationMessage,
   body: string,
-): void {
+): readonly [message: string] | readonly [message: string, severity: "warning" | "error"] {
   const severity = computeSeverity(message);
   if (severity === undefined) {
-    ctx.ui.notify(body);
-  } else {
-    ctx.ui.notify(`${buildSummaryLine(message, severity)}\n\n${body}`, severity);
+    return [body];
   }
-}
 
-/**
- * D-02 adapter seam shared by both context-cascade emitters: compose and emit a
- * cascade exactly like the cascade arm of `notify()` above, but dispatch each
- * per-plugin row body through a caller-supplied `renderPluginRowBody` instead of
- * the central `renderPluginRow` switch. The `notifyWithContext` entry point in
- * `shared/notify-context.ts` passes `(row, probe, mpScope) =>
- * context.render[row.status](row, probe, mpScope)` so the per-row bytes come
- * from the command's own render map, while the marketplace header, description
- * lines, cause-chain trailers, rollback-partial lines, the empty
- * `(no marketplaces)` sentinel, and the severity/summary `emitWithSummary` seam
- * all stay byte-identical to the legacy path. Each render map reproduces the
- * EXACT bytes of the central switch arm it lifts, so this dispatch yields output
- * byte-identical to `notify()` for every migrated command (proven by that
- * command's catalog-uat run).
- *
- * SEV-02 / RLD-02: severity and the reload-hint come from the rows' caller-
- * stamped `severity` / `needsReload` -- `emitWithSummary` -> `computeSeverity`
- * MAX-reduces the stamped severities, and the `hint` arg is the caller's
- * reload-hint decision (the reconcile applied-cascade passes `""`, the plain
- * cascade passes the OR-reduced `shouldEmitReloadHint` trailer). The single
- * soft-dep probe (`softDepStatus(pi)`) and the single `ctx.ui.notify` call
- * (IL-2, via `emitWithSummary`) discipline is preserved.
- */
-function emitCascadeWith(
-  ctx: NotificationContext,
-  pi: ToolInventory,
-  message: CascadeNotificationMessage | ReconcileAppliedCascadeMessage,
-  renderPluginRowBody: (
-    p: PluginNotificationMessage,
-    probe: SoftDepStatus,
-    mpScope: Scope,
-  ) => string,
-  hint: string,
-): void {
-  const probe = softDepStatus(pi);
-
-  const blocks = message.marketplaces.map((mp) => {
-    const lines: string[] = [renderMpHeader(mp, probe)];
-    for (const p of mp.plugins) {
-      lines.push(...composePluginLinesWith(p, probe, mp.scope, renderPluginRowBody));
-    }
-
-    return lines.join("\n");
-  });
-  const body = blocks.length === 0 ? "(no marketplaces)" : blocks.join("\n\n");
-
-  // OUT-03 / OUT-04 / D-04: trailing per-operation tally for plural cascades,
-  // placed between the body and the reload-hint trailer.
-  const tally = composeTally(message);
-  const withTally = foldTallyAndHint(body, tally, hint);
-
-  emitWithSummary(ctx, message, withTally);
-}
-
-/**
- * The state-change context-cascade emitter (the `notifyWithContext` seam). The
- * reload-hint is the OR-reduce of the rows' caller-stamped `needsReload`
- * (`shouldEmitReloadHint`, RLD-02).
- */
-export function emitContextCascade(
-  ctx: NotificationContext,
-  pi: ToolInventory,
-  message: CascadeNotificationMessage,
-  renderPluginRowBody: (
-    p: PluginNotificationMessage,
-    probe: SoftDepStatus,
-    mpScope: Scope,
-  ) => string,
-): void {
-  const hint = shouldEmitReloadHint(message) ? RELOAD_HINT_TRAILER : "";
-  emitCascadeWith(ctx, pi, message, renderPluginRowBody, hint);
-}
-
-/**
- * UGRM-01 / UGRM-02: the never-silent no-op emitter for a bulk `update` that
- * realized ZERO transitions (0 updated, 0 failures, 0 warnings). Renders the
- * surviving cascade body (if any) via the caller's render map, then folds the
- * hard-coded `Plugin update: nothing to update` headline in the SAME tally slot
- * the normal path uses -- so the line can NEVER vanish (a `tally {count: 0}`
- * override would collapse to `""` in `composeTally`; this owns the headline
- * instead). Two cases, both at info severity with NO reload-hint:
- *   (a) Empty cascade (all up-to-date): no body -> emit ONLY the headline (NOT
- *       the `(no marketplaces)` sentinel).
- *   (b) Non-empty cascade (e.g. a benign `(partially-upgradable)` decline): render
- *       the body, then the headline below it.
- * IL-2: exactly one `ctx.ui.notify` call via `emitWithSummary` (which emits the
- * body unchanged at info severity -- no summary prefix).
- */
-export function emitUpdateNoOpCascade(
-  ctx: NotificationContext,
-  pi: ToolInventory,
-  message: CascadeNotificationMessage,
-  renderPluginRowBody: (
-    p: PluginNotificationMessage,
-    probe: SoftDepStatus,
-    mpScope: Scope,
-  ) => string,
-): void {
-  const probe = softDepStatus(pi);
-
-  const blocks = message.marketplaces.map((mp) => {
-    const lines: string[] = [renderMpHeader(mp, probe)];
-    for (const p of mp.plugins) {
-      lines.push(...composePluginLinesWith(p, probe, mp.scope, renderPluginRowBody));
-    }
-
-    return lines.join("\n");
-  });
-  // Empty cascade -> "" (NOT the `(no marketplaces)` sentinel): the no-op
-  // headline alone is the never-silent output.
-  const body = blocks.join("\n\n");
-
-  // Fold the fixed headline into the tally slot (`{body}\n\n{headline}` when a
-  // body survives; just `{headline}` when empty). No reload-hint -- nothing
-  // changed on disk.
-  const withHeadline = foldTallyAndHint(body, UPDATE_NO_OP_HEADLINE, "");
-
-  emitWithSummary(ctx, message, withHeadline);
-}
-
-/**
- * RECON-04 / D-02 adapter seam: emit the `reconcile-applied-cascade` standalone
- * envelope through the shared cascade emitter. Like `dispatchInfoMessage`'s
- * standalone applied-cascade arm, NO reload-hint trailer is appended (a
- * load-time applied cascade is a standalone info kind, not a state-change
- * cascade), so the `hint` arg is `""` -- matching the legacy applied-cascade
- * byte form exactly (OUT-03 / OUT-04 / OUT-06 / D-03 / D-04).
- */
-export function emitReconcileAppliedContextCascade(
-  ctx: NotificationContext,
-  pi: ToolInventory,
-  message: ReconcileAppliedCascadeMessage,
-  renderPluginRowBody: (
-    p: PluginNotificationMessage,
-    probe: SoftDepStatus,
-    mpScope: Scope,
-  ) => string,
-): void {
-  emitCascadeWith(ctx, pi, message, renderPluginRowBody, "");
+  return [`${buildSummaryLine(message, severity)}\n\n${body}`, severity];
 }

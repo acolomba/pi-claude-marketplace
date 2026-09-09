@@ -32,7 +32,7 @@
 // on the flip surface, for byte-form parity with the marketplace-list surface
 // header. Fresh flips render the bare marker; idempotent flips render the
 // marker + the `{already autoupdate}` / `{already no autoupdate}` brace. The
-// renderer (shared/notify.ts) owns the byte composition; per CLAUDE.md IL-2
+// renderer (shared/notification-dispatch.ts) owns the byte composition; per CLAUDE.md IL-2
 // all output still flows through notify(). The `autoupdate enabled` /
 // `autoupdate disabled` / `skipped` MarketplaceStatus discriminators carry the
 // outcome; the REASONS members are `already autoupdate` / `already no
@@ -66,6 +66,7 @@ import { loadConfig } from "../../persistence/config-io.ts";
 import { writeBatchedConfigEntries } from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { MarketplaceNotFoundError, StateLockHeldError } from "../../shared/errors.ts";
+import { notify } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import { type PluginFailedMessage } from "../../shared/notification-types.ts";
 import {
@@ -74,7 +75,6 @@ import {
   type Plural,
   type Single,
 } from "../../shared/notify-context.ts";
-import { notify } from "../../shared/notify.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 
 import { AUTOUPDATE_CONTEXT, NOAUTOUPDATE_CONTEXT } from "./autoupdate.messaging.ts";

@@ -16,12 +16,12 @@
 // (orchestrator layer) is part of the user-contract surface.
 //
 // BLOCK A: zero direct ctx.ui.notify calls -- all user-visible messages route
-// through shared/notify.ts wrappers (notifyUsageError).
+// through shared/notification-dispatch.ts wrappers (notifyUsageError).
 // BLOCK C: no imports from persistence/, domain/, bridges/, transaction/,
 // platform/. Only orchestrators/, shared/, edge/ (sibling) imports.
 
 import { createNodeInstallPlugin } from "../../../orchestrators/plugin/install.ts";
-import { notifyUsageError } from "../../../shared/notify.ts";
+import { notifyUsageError } from "../../../shared/notification-dispatch.ts";
 import { passThroughFlagNames } from "../../flag-catalog.ts";
 import { extractLocalFlag } from "../shared.ts";
 

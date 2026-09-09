@@ -27,8 +27,8 @@
 import assert from "node:assert/strict";
 import test, { mock } from "node:test";
 
+import { notify } from "../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
 import { type NotificationMessage } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
-import { notify } from "../../extensions/pi-claude-marketplace/shared/notify.ts";
 
 // ---------------------------------------------------------------------------
 // Mock helpers -- mirror the catalog-uat harness (makeCtx + piWith*Loaded).

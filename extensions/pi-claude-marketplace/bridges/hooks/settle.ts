@@ -16,7 +16,7 @@
 
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
-import { notifyStopHookOverrideCap } from "../../shared/notify.ts";
+import { notifyStopHookOverrideCap } from "../../shared/notification-dispatch.ts";
 
 import { collectBucketOutcomes, matcherFiresOnClosedSetValue } from "./dispatch.ts";
 import { classifyStopFailure } from "./payloads/stop-failure.ts";
