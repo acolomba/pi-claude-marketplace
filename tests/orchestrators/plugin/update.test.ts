@@ -6709,8 +6709,8 @@ const SHA_NEW = "2222222222222222222222222222222222222222";
 
 /**
  * Bind the clone-cache seam entrypoints to a mock gitOps so update's git-source
- * path materializes without touching the network. Mirrors install.test.ts's
- * seamWith.
+ * path materializes without touching the network. Mirrors the direct clone
+ * seam owned by install-clone-probe.test.ts.
  */
 function seamWith(gitOps: GitOps): UpdateCloneCacheSeam {
   return {
