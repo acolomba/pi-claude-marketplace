@@ -58,11 +58,7 @@ import { loadMergedScopeConfig, type MergedConfig } from "../../persistence/conf
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState, type ExtensionState } from "../../persistence/state-io.ts";
 import { errorMessage } from "../../shared/errors.ts";
-import { isScopeBearingListRow } from "../../shared/notification-types.ts";
-import {
-  type PluginFailedMessage,
-  type PluginNotificationMessage,
-} from "../../shared/notification-types.ts";
+import { type PluginFailedMessage } from "../../shared/notification-types.ts";
 import {
   notifyWithContext,
   type MarketplaceRows,
@@ -72,6 +68,12 @@ import { narrowProbeError as sharedNarrowProbeError } from "../../shared/probe-c
 
 import { availableRowMessage, type FilterBucket } from "./list-candidate-row.ts";
 import { composeInstalledListRow } from "./list-installed-row.ts";
+import {
+  foldOrphanListRows,
+  isOrphanMarketplaceClone,
+  orderPluginListBlocks,
+  type OrphanFold,
+} from "./list-orphan-fold.ts";
 import { LIST_CONTEXT, type ListMsg } from "./list.messaging.ts";
 
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
@@ -452,35 +454,12 @@ async function loadMarketplaceManifestSoftly(
  * (docs/output-catalog.md:184-196) and the `same-plugin-both-scopes`
  * state (lines 168-182).
  */
-function isCloneOfUserMarketplace(
-  projectMp: ExtensionState["marketplaces"][string] | undefined,
-  userMp: ExtensionState["marketplaces"][string] | undefined,
-): projectMp is ExtensionState["marketplaces"][string] {
-  if (projectMp === undefined || userMp === undefined) {
-    return false;
-  }
-
-  // Identity by marketplaceRoot: the install orchestrator copies this from
-  // the source marketplace verbatim, so a project-scope clone of a user
-  // marketplace always has the same on-disk root.
-  return projectMp.marketplaceRoot === userMp.marketplaceRoot;
-}
-
 interface BuiltMarketplace {
   readonly mp: MarketplaceRows<ListMsg>;
   readonly emitScope: Scope;
 }
 
-/** The project-scope rows folded under a user-scope marketplace header. */
-interface OrphanFold {
-  readonly folded: readonly ListMsg[];
-  readonly foldedNames: ReadonlySet<string>;
-}
-
 const EMPTY_ORPHAN_FOLD: OrphanFold = { folded: [], foldedNames: new Set() };
-
-/** Project-before-user rank shared by both alphabetical presentation sorts. */
-const SCOPE_SORT_RANK: Readonly<Record<Scope, number>> = { project: 0, user: 1 };
 
 /**
  * D-13-17 / D-13-18 orphan fold: carry the project-scope installed rows under
@@ -534,19 +513,7 @@ async function computeOrphanFold(
     scopedManifest: projectScopedManifest,
     pluginScopeConfig: projectConfig,
   });
-  const folded = projectSideRows.filter(
-    (r) =>
-      r.status === "installed" ||
-      r.status === "upgradable" ||
-      r.status === "disabled" ||
-      r.status === "partially-installed" ||
-      r.status === "partially-upgradable",
-  );
-  // The folded names let the user-scope manifest's available-bucket
-  // enumeration skip them, so the catalog `project-orphan-folded` state shows
-  // a single `● alpha [project] ... (installed)` row and no duplicate
-  // `○ alpha (available)` row under the same header.
-  return { folded, foldedNames: new Set(folded.map((r) => r.name)) };
+  return foldOrphanListRows(projectSideRows);
 }
 
 async function buildMarketplaceMessage(args: {
@@ -668,7 +635,7 @@ export async function loadPluginListPayload(
     // user-scope record (same marketplaceRoot), DO NOT emit a separate
     // project-scope block. The project-scope plugins fold under the
     // user-scope header below.
-    if (isCloneOfUserMarketplace(mpRecord, userMp)) {
+    if (isOrphanMarketplaceClone(mpRecord, userMp)) {
       continue;
     }
 
@@ -693,7 +660,7 @@ export async function loadPluginListPayload(
     // Fold orphan project plugins iff the matching project-scope record
     // is a clone (per D-13-17 semantics) and exists.
     const projectMp = projectState.marketplaces[mpName];
-    const { folded, foldedNames } = isCloneOfUserMarketplace(projectMp, mpRecord)
+    const { folded, foldedNames } = isOrphanMarketplaceClone(projectMp, mpRecord)
       ? await computeOrphanFold(opts, mpName, projectMp, projectMerged)
       : EMPTY_ORPHAN_FOLD;
 
@@ -722,67 +689,7 @@ export async function loadPluginListPayload(
   // (CMC-03). : notify does NOT sort -- the caller owns iteration
   // order. Name primary case-insensitive, scope secondary
   // project-before-user.
-  const sortedBlocks = [...filtered].sort((a, b) => compareMpForSort(a.mp, b.mp));
-  return sortedBlocks.map(({ mp }) => ({
-    ...mp,
-    plugins: sortPluginsInBlock(mp.scope, mp.plugins),
-  }));
-}
-
-/**
- * MSG-GR-3 marketplace-block comparator. Name primary
- * (case-insensitive base sensitivity), scope secondary
- * (project-before-user). Marketplaces always carry both `name` and
- * `scope` (the field is required on `MarketplaceNotificationMessage`).
- */
-function compareMpForSort(a: MarketplaceRows<ListMsg>, b: MarketplaceRows<ListMsg>): number {
-  const byName = a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
-  if (byName !== 0) {
-    return byName;
-  }
-
-  return SCOPE_SORT_RANK[a.scope] - SCOPE_SORT_RANK[b.scope];
-}
-
-/**
- * MSG-GR-3 in-block plugin sort. Name primary (case-insensitive base
- * sensitivity), scope secondary (project-before-user). Plugin rows in
- * `PluginAvailableMessage` / `PluginUnavailableMessage` variants do not
- * carry a `scope` field by construction (SNM-11); for sort purposes those
- * rows are treated as belonging to the owning marketplace's scope, which
- * yields a deterministic ordering against orphan-folded rows that DO
- * carry an explicit cross-scope `scope`.
- */
-function sortPluginsInBlock<M extends PluginNotificationMessage>(
-  marketplaceScope: Scope,
-  plugins: readonly M[],
-): readonly M[] {
-  if (plugins.length === 0) {
-    return plugins;
-  }
-
-  // SNM-11 / D-13-18: the fold reads the row's own `scope` when it has one, so
-  // a cross-scope orphan-folded row keeps its scope instead of being silently
-  // overwritten with `marketplaceScope`. RLD-04: the list orchestrator
-  // emits the steady-state inventory row as `installed` (with
-  // `needsReload: false`); the same `installed` token also carries the cascade
-  // transition. The body
-  // `return p.scope ?? marketplaceScope` preserves the cross-scope orphan-fold
-  // scope on a `PluginInstalledMessage` (SNM-11 / D-13-18) instead of silently
-  // overwriting it with `marketplaceScope`.
-  const scopeOf = (p: PluginNotificationMessage): Scope =>
-    isScopeBearingListRow(p) ? (p.scope ?? marketplaceScope) : marketplaceScope;
-
-  return [...plugins].sort((a, b) => {
-    const byName = a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
-    if (byName !== 0) {
-      return byName;
-    }
-
-    const aScope = scopeOf(a);
-    const bScope = scopeOf(b);
-    return SCOPE_SORT_RANK[aScope] - SCOPE_SORT_RANK[bScope];
-  });
+  return orderPluginListBlocks(filtered.map(({ mp }) => mp));
 }
 
 /**
