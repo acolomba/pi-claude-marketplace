@@ -6,7 +6,9 @@ import type * as UnsupportedComponentsOwner from "../../extensions/pi-claude-mar
 
 type OwnerShape = typeof UnsupportedComponentsOwner;
 
-function preserveDirectOwnerType(_owner: OwnerShape): void {}
+function preserveDirectOwnerType(owner: OwnerShape): void {
+  void owner;
+}
 
 void preserveDirectOwnerType;
 
@@ -94,9 +96,9 @@ test("collectUnsupportedKinds reads direct and experimental declarations in tupl
   const manifest = { outputStyles: [], settings: false, workflows: {} };
 
   // act
-  const kinds = await collectUnsupportedKinds(entry, manifest, "/plugins/alpha", async () => {
-    throw new Error("declarations must not probe conventions");
-  });
+  const kinds = await collectUnsupportedKinds(entry, manifest, "/plugins/alpha", () =>
+    Promise.reject(new Error("declarations must not probe conventions")),
+  );
 
   // assert
   assert.deepStrictEqual(kinds, [
@@ -126,9 +128,9 @@ test("collectUnsupportedKinds detects every filesystem convention", async () => 
   ]);
 
   // act
-  const kinds = await collectUnsupportedKinds({}, null, pluginRoot, async (candidate) => {
-    return statKinds.get(candidate) ?? null;
-  });
+  const kinds = await collectUnsupportedKinds({}, null, pluginRoot, (candidate) =>
+    Promise.resolve(statKinds.get(candidate) ?? null),
+  );
 
   // assert
   assert.deepStrictEqual(kinds, [
@@ -150,7 +152,7 @@ test("collectUnsupportedKinds ignores absent, null-experimental, and mismatched 
   // act
   const results = await Promise.all(
     records.map((entry) =>
-      collectUnsupportedKinds(entry, null, "/plugins/alpha", async () => "file"),
+      collectUnsupportedKinds(entry, null, "/plugins/alpha", () => Promise.resolve("file")),
     ),
   );
 

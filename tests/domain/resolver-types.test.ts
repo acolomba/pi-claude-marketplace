@@ -153,7 +153,7 @@ function unavailableHasNoDefaultEnabled(): void {
 }
 
 const statKindContract: StatKind = "dir";
-const statKindReaderContract: StatKindReader = async () => statKindContract;
+const statKindReaderContract: StatKindReader = () => Promise.resolve(statKindContract);
 const gitPluginRootContract = {
   kind: "materialized",
   pluginRoot: "/plugins/alpha",
@@ -162,7 +162,7 @@ const gitPluginRootContract = {
 const resolveContextContract = {
   marketplaceRoot: "/marketplaces/main",
   statKind: statKindReaderContract,
-  resolveGitPluginRoot: async () => gitPluginRootContract,
+  resolveGitPluginRoot: () => Promise.resolve(gitPluginRootContract),
 } satisfies ResolveContext;
 
 void proveExactDiscriminants;

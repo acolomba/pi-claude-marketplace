@@ -11,21 +11,20 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import {
-  rowClaimsInstallDisabled,
   resolveLoose,
   requirePartialInstallable,
   requireInstallable,
   resolveStrict,
 } from "../../extensions/pi-claude-marketplace/domain/resolver.ts";
+import { PluginShapeError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
+
+import type { PluginEntry } from "../../extensions/pi-claude-marketplace/domain/components/plugin.ts";
 import type {
   GitPluginRootResult,
   ResolveContext,
   ResolvedPlugin,
   ResolvedPluginUnavailable,
 } from "../../extensions/pi-claude-marketplace/domain/resolver-types.ts";
-import { PluginShapeError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
-
-import type { PluginEntry } from "../../extensions/pi-claude-marketplace/domain/components/plugin.ts";
 
 /**
  * Build an in-memory ResolveContext. `files` maps absolute paths to either:
@@ -2609,69 +2608,6 @@ test("COMP-01 entry > manifest declared order; first-wins dedup across both", as
   }
 });
 
-for (const { defaultEnabled, installsDisabled } of [
-  { defaultEnabled: false, installsDisabled: true },
-  { defaultEnabled: true, installsDisabled: false },
-  { defaultEnabled: undefined, installsDisabled: false },
-] as const) {
-  test(`rowClaimsInstallDisabled treats entry default ${String(defaultEnabled)} as ${String(installsDisabled)}`, () => {
-    // arrange
-    const entry: PluginEntry = {
-      name: "alpha",
-      source: "./alpha",
-      ...(defaultEnabled !== undefined && { defaultEnabled }),
-    };
-
-    // act
-    const claimedDisabled = rowClaimsInstallDisabled(entry, undefined);
-
-    // assert
-    assert.strictEqual(claimedDisabled, installsDisabled);
-  });
-}
-
-test("rowClaimsInstallDisabled treats an invalid entry default as silent", () => {
-  // arrange
-  const entry: PluginEntry = { name: "alpha", source: "./alpha" };
-  Object.defineProperty(entry, "defaultEnabled", { value: "false" });
-
-  // act
-  const claimedDisabled = rowClaimsInstallDisabled(entry, undefined);
-
-  // assert
-  assert.strictEqual(claimedDisabled, false);
-});
-
-for (const { declaredEnabled, installsDisabled } of [
-  { declaredEnabled: undefined, installsDisabled: true },
-  { declaredEnabled: true, installsDisabled: false },
-  { declaredEnabled: false, installsDisabled: false },
-] as const) {
-  test(`rowClaimsInstallDisabled gives a user declaration ${String(declaredEnabled)} precedence over an entry default`, () => {
-    // arrange
-    const entry: PluginEntry = { name: "alpha", source: "./alpha", defaultEnabled: false };
-
-    // act
-    const claimedDisabled = rowClaimsInstallDisabled(entry, declaredEnabled);
-
-    // assert
-    assert.strictEqual(claimedDisabled, installsDisabled);
-  });
-}
-
-for (const declaredEnabled of [undefined, true, false] as const) {
-  test(`rowClaimsInstallDisabled keeps a silent entry silent for user declaration ${String(declaredEnabled)}`, () => {
-    // arrange
-    const entry: PluginEntry = { name: "alpha", source: "./alpha" };
-
-    // act
-    const claimedDisabled = rowClaimsInstallDisabled(entry, declaredEnabled);
-
-    // assert
-    assert.strictEqual(claimedDisabled, false);
-  });
-}
-
 test("MM-6 entry.skills declared -> installable with skills", async () => {
   // arrange
   const localRoot = pathUnderMarketplace("./local");
@@ -3826,7 +3762,6 @@ test("requireInstallable classifies an update of the partial true arm", async ()
 });
 
 declare const resolvedPluginContract: ResolvedPlugin;
-declare const unavailablePluginContract: ResolvedPluginUnavailable;
 
 function gateNarrowsForce(): string {
   requirePartialInstallable(resolvedPluginContract);
@@ -3839,5 +3774,6 @@ function gateExcludesUnavailable(): void {
   const bad: ResolvedPluginUnavailable = resolvedPluginContract;
   void bad;
 }
+
 void gateNarrowsForce;
 void gateExcludesUnavailable;

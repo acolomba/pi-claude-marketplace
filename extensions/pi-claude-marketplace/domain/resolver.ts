@@ -44,6 +44,16 @@ import { parseHooksConfig, type DroppedHook, type HooksConfig } from "./componen
 import { MCP_SERVERS_VALIDATOR } from "./components/mcp.ts";
 import { PLUGIN_MANIFEST_VALIDATOR, type PluginEntry } from "./components/plugin.ts";
 import { assertSafeName } from "./name.ts";
+import {
+  parsePluginSource,
+  type GitHubSource,
+  type GitSubdirSource,
+  type PathSource,
+  type ParsedSource,
+  type UrlSource,
+} from "./source.ts";
+import { collectUnsupportedKinds } from "./unsupported-components.ts";
+
 import type {
   ResolveContext,
   ResolvedPlugin,
@@ -53,14 +63,6 @@ import type {
   StatKind,
   StatKindReader,
 } from "./resolver-types.ts";
-import {
-  parsePluginSource,
-  type GitHubSource,
-  type GitSubdirSource,
-  type PathSource,
-  type ParsedSource,
-  type UrlSource,
-} from "./source.ts";
 
 async function defaultStatKind(p: string): Promise<StatKind> {
   try {
@@ -97,15 +99,6 @@ function readFileTextOf(ctx: ResolveContext): (p: string) => Promise<string> {
 // ──────────────────────────────────────────────────────────────────────────
 
 /**
- * HOOK-01: the PUBLIC closed set of supported component kinds. Downstream
- * consumers (surface renderers, OBS/SURF tests) read this tuple as the
- * authoritative supported-kind list. `hooks` is admitted here even though
- * the path-validation loop iterates a narrower subset
- * (`SUPPORTED_COMPONENT_PATH_KINDS`) -- the hooks-config discovery path
- * is a convention file, not a component-path field.
- */
-export const SUPPORTED_COMPONENT_KINDS = ["skills", "commands", "agents", "hooks"] as const;
-/**
  * HOOK-01: the PRIVATE subset of supported kinds that carry per-entry
  * component-path semantics (entry/manifest declares a relative dir; the
  * resolver validates each path and adds it to `componentPaths.<kind>`).
@@ -115,49 +108,6 @@ export const SUPPORTED_COMPONENT_KINDS = ["skills", "commands", "agents", "hooks
  */
 const SUPPORTED_COMPONENT_PATH_KINDS = ["skills", "commands", "agents"] as const;
 type SupportedPathKind = (typeof SUPPORTED_COMPONENT_PATH_KINDS)[number];
-
-/**
- * PR-3: a declaration or matching convention for these kinds selects the
- * `partially-available` arm and adds the note `contains <kind>`. A normal
- * install rejects that arm. With `--partial`, the install admits its supported
- * components.
- *
- * SECURITY (T-02-25): The list is closed. A new kind upstream that's neither
- * in SUPPORTED_COMPONENT_KINDS nor in this list would be silently ignored.
- * Re-audit when Claude Code adds new component kinds.
- *
- * D-90-06: `bin` is intentionally NOT in this list. A plugin's
- * `<pluginRoot>/bin` is runtime-honored via the PENV-01 PATH ledger (it is
- * appended to PATH for every enabled installed record), so a bin-shipping
- * plugin installs by default at Claude Code parity rather than being detected
- * and dropped. `bin` carries no staged component-path semantics, so it is
- * likewise absent from SUPPORTED_COMPONENT_KINDS.
- */
-export const UNSUPPORTED_COMPONENT_KINDS = [
-  "lspServers",
-  "monitors",
-  "themes",
-  "outputStyles",
-  "channels",
-  "userConfig",
-  "settings",
-  "workflows",
-] as const;
-type UnsupportedKind = (typeof UNSUPPORTED_COMPONENT_KINDS)[number];
-
-const UNSUPPORTED_COMPONENT_CONVENTIONS: Partial<
-  Record<
-    UnsupportedKind,
-    readonly { readonly relativePath: string; readonly kind: "file" | "dir" }[]
-  >
-> = {
-  lspServers: [{ relativePath: ".lsp.json", kind: "file" }],
-  monitors: [{ relativePath: path.join("monitors", "monitors.json"), kind: "file" }],
-  themes: [{ relativePath: "themes", kind: "dir" }],
-  outputStyles: [{ relativePath: "output-styles", kind: "dir" }],
-  settings: [{ relativePath: "settings.json", kind: "file" }],
-  workflows: [{ relativePath: "workflows", kind: "dir" }],
-};
 
 interface PartialResolution {
   supported: string[];
@@ -261,77 +211,6 @@ function partiallyAvailable(
   };
 }
 
-function nestedExperimentalValue(
-  record: Record<string, unknown> | null | undefined,
-  key: string,
-): unknown {
-  const experimental = record?.experimental;
-  if (typeof experimental !== "object" || experimental === null) {
-    return undefined;
-  }
-
-  return (experimental as Record<string, unknown>)[key];
-}
-
-function declaresUnsupportedKind(
-  kind: UnsupportedKind,
-  entry: Record<string, unknown>,
-  manifest: Record<string, unknown> | null,
-): boolean {
-  if (entry[kind] !== undefined || manifest?.[kind] !== undefined) {
-    return true;
-  }
-
-  // Current Claude Code schema declares these experimental components under
-  // `experimental.*`, while older manifests may still use top-level fields.
-  if (kind === "themes" || kind === "monitors") {
-    return (
-      nestedExperimentalValue(entry, kind) !== undefined ||
-      nestedExperimentalValue(manifest, kind) !== undefined
-    );
-  }
-
-  return false;
-}
-
-async function hasUnsupportedConvention(
-  ctx: ResolveContext,
-  pluginRoot: string,
-  kind: UnsupportedKind,
-): Promise<boolean> {
-  for (const convention of UNSUPPORTED_COMPONENT_CONVENTIONS[kind] ?? []) {
-    if (
-      (await statKindOf(ctx)(path.join(pluginRoot, convention.relativePath))) === convention.kind
-    ) {
-      return true;
-    }
-  }
-
-  return false;
-}
-
-async function collectUnsupportedKinds(
-  entry: Record<string, unknown>,
-  manifest: Record<string, unknown> | null,
-  pluginRoot: string,
-  ctx: ResolveContext,
-): Promise<UnsupportedKind[]> {
-  const found: UnsupportedKind[] = [];
-
-  for (const kind of UNSUPPORTED_COMPONENT_KINDS) {
-    if (declaresUnsupportedKind(kind, entry, manifest)) {
-      found.push(kind);
-      continue;
-    }
-
-    if (await hasUnsupportedConvention(ctx, pluginRoot, kind)) {
-      found.push(kind);
-    }
-  }
-
-  return found;
-}
-
 // PURL-01 / D-77-01: the four installable source kinds return undefined. `path`
 // derives its pluginRoot from marketplaceRoot; `url` / `git-subdir` / `github`
 // derive theirs from the injected `resolveGitPluginRoot` callback. `npm` stays
@@ -405,77 +284,6 @@ async function readManifest(
       reason: `malformed plugin.json: ${err instanceof Error ? err.message : String(err)}`,
     };
   }
-}
-
-/**
- * OUT-02 / OUT-03 / OUT-05 / DOC-02: the MANIFEST-side half of the read surfaces'
- * answer to "would installing this leave it disabled". The other half is the
- * user's own config declaration, which outranks this one -- `rowClaimsInstallDisabled`
- * below composes the two and is what the surfaces actually call. This is the
- * canonical home of the entry-only argument; call sites cite it rather than
- * restate it. `docs/plugin-enablement.md` is the durable home of the full
- * argument, including the precedence table this half belongs to.
- *
- * `list` and `info` source their manifest-side answer from the marketplace
- * ENTRY and nothing else -- never from the plugin's own `plugin.json`, not even
- * where a warm clone makes it readable with no network at all. The entry is the
- * one source readable for EVERY plugin regardless of clone state, which is what
- * lets an unfetched `(remote)` row carry the claim, and it is what makes the
- * same plugin render identically warm and cold. Where the entry is silent, the
- * surfaces DECLINE to claim; that is the answer, not a gap. OUT-05: closing the
- * gap the other way would require a fetch these surfaces may not make.
- *
- * The strict comparison against the `false` literal IS the rule, not a
- * shorthand for it. `!entry.defaultEnabled` is true for an ABSENT field and
- * would claim on every silent entry; `entry.defaultEnabled !== true` is true
- * for a non-boolean, which OUT-05 / DOC-02 rules silent. Only the strict comparison
- * says "a literal `false`, and nothing else, is a declaration".
- *
- * A non-boolean smuggled past PLUGIN_ENTRY_VALIDATOR therefore degrades to
- * SILENT, with deliberately no error path -- the mirror of the degradation
- * `resolveDefaultEnabled` below applies at its own `typeof` narrows.
- *
- * OUT-05 / DOC-02: this is a SEPARATE function rather than an exported
- * `resolveDefaultEnabled` called with a null manifest. The one-parameter
- * signature is the containment mechanism: there is no second parameter a later
- * caller could feed a plugin manifest through, so no call site can reopen the
- * warm/cold asymmetry. An exported two-source function invites exactly that.
- *
- * The name leads with the SOURCE rather than taking an `is*` prefix because the
- * source is the load-bearing fact: a reader at the call site needs to know WHICH
- * declaration was consulted, not merely that a boolean came back.
- */
-function entryDeclaresInstallDisabled(entry: PluginEntry): boolean {
-  return entry.defaultEnabled === false;
-}
-
-/**
- * OUT-02 / OUT-03 / DFEN-04 / DFEN-05: the WHOLE rule behind the read surfaces'
- * `{installs disabled}` claim, in one place because `list` and `info` must not
- * be able to answer it differently.
- *
- * The row predicts an install, so it models the install path's precedence and
- * not a shorter one. `install` gates the disable on the user having stated NO
- * `enabled` opinion for the `<plugin>@<marketplace>` key, because an explicit
- * declaration wins in EITHER direction and is never overwritten
- * (install.ts::readDeclaredEnabled). Only where the user is silent does the
- * marketplace entry answer, via `entryDeclaresInstallDisabled` above.
- *
- * Dropping the `declaredEnabled` conjunct is the failure this function exists
- * to prevent: a config saying `enabled: true` over an entry saying
- * `defaultEnabled: false` installs ENABLED, so a row claiming otherwise states
- * a falsehood on the one surface built to inform the install decision.
- *
- * `declaredEnabled` arrives as a resolved `boolean | undefined` rather than as
- * a config object, so this stays a pure domain predicate with no persistence
- * dependency: `undefined` means "the user stated nothing", which is the only
- * distinction the rule draws.
- */
-export function rowClaimsInstallDisabled(
-  entry: PluginEntry,
-  declaredEnabled: boolean | undefined,
-): boolean {
-  return declaredEnabled === undefined && entryDeclaresInstallDisabled(entry);
 }
 
 /**
@@ -1238,7 +1046,7 @@ async function addUnsupportedKindNotes(
   partial: PartialResolution,
 ): Promise<boolean> {
   let dirty = false;
-  for (const kind of await collectUnsupportedKinds(entry, manifest, pluginRoot, ctx)) {
+  for (const kind of await collectUnsupportedKinds(entry, manifest, pluginRoot, statKindOf(ctx))) {
     partial.notes.push(`contains ${kind}`);
     partial.unsupported.push(kind);
     dirty = true;

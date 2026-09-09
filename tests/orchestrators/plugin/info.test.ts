@@ -5958,7 +5958,7 @@ test("OUT-05 / DOC-02: a SILENT entry over a warm clone that declares `defaultEn
     //    lines and everything else staying put.
     //
     // 2. The marketplace entry is the only MANIFEST-side source these surfaces
-    //    read -- `domain/resolver.ts::entryDeclaresInstallDisabled` carries the
+    //    read -- `domain/unsupported-components.ts::entryDeclaresInstallDisabled` carries the
     //    argument for why, and `rowClaimsInstallDisabled` beside it carries the
     //    other half of the rule (the user's config opinion is weighed first).
     //

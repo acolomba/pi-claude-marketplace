@@ -20,8 +20,6 @@ import {
   HOOKS_VALIDATOR,
 } from "../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
 import {
-  SUPPORTED_COMPONENT_KINDS,
-  UNSUPPORTED_COMPONENT_KINDS,
   resolveLoose,
   resolveStrict,
 } from "../../extensions/pi-claude-marketplace/domain/resolver.ts";
@@ -191,25 +189,6 @@ test("HOOK-03: HOOKS_VALIDATOR.Check accepts unknown fields at handler, entry, a
     HOOKS_VALIDATOR.Check(topExt),
     true,
     "top-level unknown event key must pass (D-57-02)",
-  );
-});
-
-// ──────────────────────────────────────────────────────────────────────────
-// Block 4: HOOK-01 -- SUPPORTED includes hooks, UNSUPPORTED excludes hooks.
-// ──────────────────────────────────────────────────────────────────────────
-
-test("HOOK-01: SUPPORTED_COMPONENT_KINDS is the closed 4-tuple [skills,commands,agents,hooks]", () => {
-  assert.deepEqual(
-    [...SUPPORTED_COMPONENT_KINDS],
-    ["skills", "commands", "agents", "hooks"],
-    "SUPPORTED_COMPONENT_KINDS is a public closed-set contract -- shape and order are locked",
-  );
-});
-
-test("HOOK-01: UNSUPPORTED_COMPONENT_KINDS does NOT contain 'hooks'", () => {
-  assert.ok(
-    !(UNSUPPORTED_COMPONENT_KINDS as readonly string[]).includes("hooks"),
-    `UNSUPPORTED_COMPONENT_KINDS must NOT contain "hooks": ${UNSUPPORTED_COMPONENT_KINDS.join(",")}`,
   );
 });
 

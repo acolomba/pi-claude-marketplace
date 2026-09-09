@@ -54,9 +54,10 @@
 
 import { lookupDeclaredPlugin, type ManifestLookup } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest, type MarketplaceManifest } from "../../domain/manifest.ts";
-import { resolveStrict, rowClaimsInstallDisabled } from "../../domain/resolver.ts";
+import { resolveStrict } from "../../domain/resolver.ts";
 import type { ResolveContext } from "../../domain/resolver-types.ts";
 import { parsePluginSource } from "../../domain/source.ts";
+import { rowClaimsInstallDisabled } from "../../domain/unsupported-components.ts";
 import { loadMergedScopeConfig, type MergedConfig } from "../../persistence/config-merge.ts";
 import { locationsFor, type ScopedLocations } from "../../persistence/locations.ts";
 import {

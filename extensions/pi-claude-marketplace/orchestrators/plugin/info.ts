@@ -38,7 +38,7 @@ import {
 } from "../../domain/components/hooks.ts";
 import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest, type MarketplaceManifest } from "../../domain/manifest.ts";
-import { resolveStrict, rowClaimsInstallDisabled } from "../../domain/resolver.ts";
+import { resolveStrict } from "../../domain/resolver.ts";
 import type {
   GitPluginRootResult,
   ResolveContext,
@@ -51,6 +51,7 @@ import {
   type ParsedSource,
   type PathSource,
 } from "../../domain/source.ts";
+import { rowClaimsInstallDisabled } from "../../domain/unsupported-components.ts";
 import { locationsFor, type ScopedLocations } from "../../persistence/locations.ts";
 import { isRecordedButDisabled, type ExtensionState } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";

@@ -854,7 +854,7 @@ export interface PluginDisabledMessage extends TransitionMessageBase {
  * and `PluginDisabledMessage`. It admits exactly ONE member: `installs
  * disabled`, the author-declared install-time-state token. This row describes a
  * NOT-INSTALLED candidate, so the token states what an install WOULD do rather
- * than what one did; `domain/resolver.ts::rowClaimsInstallDisabled` owns which
+ * than what one did; `domain/unsupported-components.ts::rowClaimsInstallDisabled` owns which
  * declarations decide that. Which reasons a surface stamps is an ORCHESTRATOR
  * decision (D-95-01) -- the render path holds no allowlist, which is what makes
  * this an addition rather than a widening of the render contract. Absent
