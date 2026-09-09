@@ -16,7 +16,9 @@
 // `PluginManualRecoveryMessage` entries rather than emitted separately.
 // D-141-03 / D-141-05: the four bridges' staging warnings are split, not
 // folded flat. The skills and commands halves are DISCOVERY warnings and
-// reach both modes. The agents and mcp halves are hygiene warnings and stay
+// reach both modes, and so does the workflows prepare's own array, which is
+// appended to that half at the call site rather than through the shared
+// classifier (WGATE-01). The agents and mcp halves are hygiene warnings and stay
 // orchestrated-only beside the maintenance warnings, because
 // MarketplaceNotificationMessage has no field for one and a standalone user
 // has nothing to do about it (D-19-01, unchanged). The underlying side
@@ -298,8 +300,9 @@ type ReplacementEntry =
 interface LockedSuccess {
   readonly outcome: ReinstallPluginOutcome;
   /**
-   * D-141-03: the skills and commands halves of the staging warnings. These
-   * reach BOTH modes -- mirrors install's two-array `InstallCtx` shape.
+   * D-141-03 / WGATE-01: the skills and commands halves of the staging
+   * warnings, plus the workflows prepare's own array. These reach BOTH modes --
+   * mirrors install's two-array `InstallCtx` shape.
    */
   readonly discoveryWarnings: readonly string[];
   /**
@@ -1053,19 +1056,22 @@ async function runLockedReinstall(
   const staging = splitHandleWarnings(handles);
   const bridgeWarnings = [
     ...staging.bridge,
-    // WLIF-01: the workflow prepare's warnings are appended HERE rather than
-    // through `splitStagingWarnings`. That classifier is shared with the update
-    // verb, so a required new member on it would change a file this work does
-    // not otherwise touch. The array mixes per-file soft-fails with discovery
-    // warnings and is not separable at this site, so it rides the bridge half
-    // -- the same choice the install ledger makes.
-    ...handles.workflows.result.warnings,
     ...workflowsCommitLeaks,
     ...(await finalizeReplacements(replacements)),
   ];
   return {
     outcome: successOutcome(scope, marketplace, plugin, oldSnapshot, handles, placedWorkflowNames),
-    discoveryWarnings: staging.discovery,
+    // D-141-03 / WGATE-01: the workflow prepare's warnings join the DISCOVERY
+    // half, and they join it HERE rather than through `splitStagingWarnings`,
+    // which is the call `update.ts` already makes for the same array and the
+    // same reason. Every string in it describes the plugin's DECLARED scripts
+    // -- which ones were not installed, which were installed but the engine
+    // will refuse to load -- and that is a fact a standalone user needs, not a
+    // hygiene note only the cascade forwards. `bridgeWarnings` is gated on
+    // `orchestrated`, so a standalone reinstall would render none of it. The
+    // shared classifier stays at four members: a fifth would drag every other
+    // consumer of it into this change.
+    discoveryWarnings: [...staging.discovery, ...handles.workflows.result.warnings],
     bridgeWarnings,
     ...(invalidConfigWriteBack && { invalidConfigWriteBack: true }),
   };
