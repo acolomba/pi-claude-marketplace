@@ -1,7 +1,7 @@
 {
   "contract": "1.0.0",
   "flavor": "core",
-  "milestone": "workflows-replay \u2014 Workflow Bridge Replay onto main",
+  "milestone": "workflows-replay — Workflow Bridge Replay onto main",
   "phases": [
     {
       "number": "109",
@@ -41,7 +41,7 @@
     {
       "number": "116",
       "name": "Load-time workflow convergence",
-      "status": "pending"
+      "status": "complete"
     },
     {
       "number": "117",
@@ -51,8 +51,8 @@
   ],
   "next": {
     "command": "/gsd:progress --next",
-    "label": "Advance to the next step",
-    "reason": "Phase 116 of 9 \u00b7 67% \u00b7 executing"
+    "label": "Advance to the next step (plan phase 117)",
+    "reason": "Phase 117 of 9 — needs a plan"
   },
-  "updated_at": "2026-09-09T15:07:33.195Z"
+  "updated_at": "2026-09-09T18:00:03.787Z"
 }
