@@ -1,0 +1,10 @@
+{
+  "taskId": "06-39-02",
+  "command": "node --test --test-isolation=none --test-reporter=tap tests/orchestrators/plugin/update-swap.test.ts",
+  "exitCode": 1,
+  "output": "TAP version 13\n# Subtest: exposes the atomic plugin update swap owner\nnot ok 1 - exposes the atomic plugin update swap owner\n  error: Got unwanted rejection: update-swap.ts must own atomic plugin replacement\n  code: ERR_ASSERTION\n  actual: ERR_MODULE_NOT_FOUND\n1..1\n# tests 1\n# pass 0\n# fail 1",
+  "targetTest": "exposes the atomic plugin update swap owner",
+  "targetFile": "tests/orchestrators/plugin/update-swap.test.ts",
+  "expected": "the named update-swap owner can be imported",
+  "actual": "ERR_MODULE_NOT_FOUND for extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts"
+}
