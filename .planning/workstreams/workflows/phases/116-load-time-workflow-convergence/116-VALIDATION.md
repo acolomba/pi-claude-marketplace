@@ -3,9 +3,9 @@ phase: "116"
 slug: "load-time-workflow-convergence"
 # status lifecycle: draft (seeded by plan-phase) → validated (set by validate-phase §6)
 # audit-milestone §5.5 distinguishes NOT-VALIDATED (draft) from PARTIAL (validated + nyquist_compliant: false) (#2117)
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: validated
+nyquist_compliant: true
+wave_0_complete: true
 created: "2026-09-09"
 ---
 
@@ -114,13 +114,73 @@ were checked.
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] All four negative controls run, transcripts pasted into the SUMMARY
-- [ ] The three silently-green amendment sites checked by inspection and recorded
-- [ ] The path-source population claim re-measured and the prose corrected or confirmed
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags
+- [x] All four negative controls run, transcripts pasted into the SUMMARY
+- [x] The three silently-green amendment sites checked by inspection and recorded
+- [x] The path-source population claim re-measured and the prose corrected or confirmed
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** validated 2026-09-09 — nyquist-compliant, 0 gaps
+
+---
+
+## Validation Audit 2026-09-09
+
+| Metric | Count |
+|--------|-------|
+| Gaps found | 0 |
+| Resolved | 0 |
+| Escalated | 0 |
+
+No auditor was spawned: the map had no gap left to fill. Wave 0 was already
+recorded as gapless when this file was seeded, and every mapped behavior now has
+a real case. Measured by locating each case and running every mapped suite
+together: **141 pass, 0 fail** across `backfill.test.ts`,
+`workflow-kind-inversion.test.ts`, `catalog-uat.test.ts`,
+`notify-closed-set-locks.test.ts`, `compat-01-no-expansion.test.ts` and
+`reconcile/notify.test.ts`.
+
+| Map row | Case that closes it |
+|---|---|
+| WCONV-01 promotion | `backfill.test.ts:1769` |
+| git-source skipped, no remote reached | `backfill.test.ts:1861` — first git-source coverage this suite has had |
+| one-time on bytes, inode and mtime | `backfill.test.ts:471` (unit) and `workflow-kind-inversion.test.ts:384` (integration) |
+| equal set scanned but not materialized | `backfill.test.ts:513` |
+| disabled record never scanned, as a measured zero | `backfill.test.ts:767` |
+| token is a closed-set member at the new length | three sites read 46 in `notify-closed-set-locks.test.ts` |
+| token renders byte-exactly on both arms | four `backfill-*` catalog states in `docs/output-catalog.md` |
+| projection stamps both arms | `reconcile/notify.test.ts`, green |
+| silence when nothing grew | `backfill.test.ts:513` and its siblings |
+
+**All four negative controls were run, and independently re-run.** The phase's own
+roll-call (plan 116-04) verified each is a verbatim failing transcript rather than
+a description, by grepping for real `AssertionError` / `ℹ fail N` / `error TS`
+markers. The security audit then re-ran four mutation classes of its own and every
+reported count matched. Control 3 went red in its strongest form — the token was
+swapped for `up-to-date`, another *legal, unmodified* member of `REASONS`, so the
+closed set was untouched and only the rendered bytes moved. Membership and
+rendering are two separate gates; the pairing did not need strengthening.
+
+**The three silently-green amendment sites were checked, and a fourth was found.**
+`docs/output-catalog.md:63` carried a stale "The 45-member `…::REASONS` tuple"
+sentence outside every fenced block. Phase 114 had gated that exact site with
+`grep -c '45-member'` — a check correct exactly once. Corrected.
+
+**The Manual-Only row graduated.** The population claim was recorded as
+reviewer-read because it is a fact about upstream repositories rather than this
+tree. It was measured anyway: `code-modernization` IS a path source in the cached
+`claude-plugins-official` manifest — the side the retired claim asserted —
+while `claude-security` is absent under that name. Census reproduced
+independently at path 49 / url 83 / git-subdir 38 / github 2 = 172. Zero plugins
+in either cache carry a `workflows/` directory at all, so the named population has
+no member reachable from this machine. The prose was corrected at all three sites
+rather than carried forward.
+
+**One guard is recorded as inert rather than trusted.** `ENBL-08: skips a disabled
+record whose supported set grew` stays GREEN when the filter it names is deleted,
+because reinstall's refusal produces a `skipped` partition either way. It gates the
+second layer, not the first. It is carried as an open window; the new measured-zero
+case at `:767` is what actually gates the filter.
