@@ -291,7 +291,18 @@ async function main() {
         `and the run completes (engine ${version})`,
     );
   } finally {
-    await rm(stateDir, { recursive: true, force: true });
+    // `force: true` suppresses ENOENT and nothing else. A file handle or a
+    // subagent process still holding the directory rejects with EBUSY/EPERM,
+    // and an unhandled rejection here REPLACES the in-flight AssertionError or
+    // CanaryExit -- so the operator reads a filesystem error instead of the
+    // verdict, and a CanaryExit that had already printed its reason picks up a
+    // second, unrelated stack because the epilogue's suppression no longer
+    // matches. Report the cleanup failure and let the original error stand.
+    await rm(stateDir, { recursive: true, force: true }).catch((err) => {
+      console.error(
+        `[wf-agent-canary] cleanup failed for ${stateDir}: ${String(err?.message ?? err)}`,
+      );
+    });
   }
 }
 
