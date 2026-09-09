@@ -35,3 +35,13 @@
   disposal separately from those that describe an admitted-with-caveat script, or
   neutralise the header ("... 1 declared component needs attention."). Either way it
   moves rendered bytes and needs the catalog updated in the same change.
+  **Measured by plan 115-04, still open:** the header is NOT reachable from the
+  `info` surface and appears in NO catalog state, so the catalog state 115-04 adds
+  cannot publish the contradiction and does not. `surfaceDiscoveryWarnings` has three
+  call sites (`install.ts:2561`, `update.ts:503`, `reinstall.ts:610`) and none is in
+  `info.ts`; `grep "declared component" docs/output-catalog.md` finds only an
+  unrelated line. Cost of the fix, measured: 14 sites -- the two header branches in
+  `shared.ts` plus 12 assertions across `shared.test.ts` (2), `install.test.ts` (1),
+  `reinstall.test.ts` (4) and `update.test.ts` (5). No catalog state has to move with
+  it, which makes the fix cheaper than 115-01 estimated, but it is still a cross-verb
+  rendering change outside 115-04's file list.
