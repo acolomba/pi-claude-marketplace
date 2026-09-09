@@ -21,7 +21,13 @@ function loadComposeInstalledListRow(): ComposeInstalledListRow {
   return composeInstalledListRow;
 }
 
-function pluginRecord(overrides: Partial<PluginInstallRecord> = {}): PluginInstallRecord {
+interface PluginRecordOverrides {
+  readonly compatibility?: PluginInstallRecord["compatibility"];
+  readonly enabled?: boolean;
+  readonly resources?: PluginInstallRecord["resources"];
+}
+
+function pluginRecord(overrides: PluginRecordOverrides = {}): PluginInstallRecord {
   return {
     version: "1.0.0",
     resolvedSource: "/plugin",
@@ -34,7 +40,13 @@ function pluginRecord(overrides: Partial<PluginInstallRecord> = {}): PluginInsta
   };
 }
 
-function manifestEntry(overrides: Partial<ManifestPluginEntry> = {}): ManifestPluginEntry {
+interface ManifestEntryOverrides {
+  readonly lspServers?: ManifestPluginEntry["lspServers"];
+  readonly name?: string;
+  readonly version?: string;
+}
+
+function manifestEntry(overrides: ManifestEntryOverrides = {}): ManifestPluginEntry {
   return {
     name: "alpha",
     source: "./alpha",
