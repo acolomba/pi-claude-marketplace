@@ -10736,13 +10736,20 @@ test("WGATE-03: a script whose meta carries shapes the gate predicates never exp
     script: hostileMetaScript,
   });
   assert.deepStrictEqual(run.recordedWorkflows, ["hello:greet"]);
-  // T-115-03: one line for the file, never a list of every failing shape. The
-  // diagnostic is `<header>\n\n<lines>`, so the lines are what follows the
-  // first blank line.
+  // T-115-03: one line for the file, never a list of every failing shape.
+  //
+  // The WHOLE diagnostic is compared, header and blank-line separator
+  // included. Counting the lines after the first `\n\n` does not check this:
+  // a block holding no `\n\n` at all leaves `slice(1)` empty, joins to "",
+  // and `"".split("\n").length` is 1, so the count passes having inspected
+  // nothing.
   assert.strictEqual(run.notifications.length, 2);
   const diagnostic = run.notifications[1]?.message;
   assert.ok(diagnostic !== undefined);
-  assert.deepStrictEqual(diagnostic.split("\n\n").slice(1).join("\n\n").split("\n").length, 1);
+  assert.strictEqual(
+    diagnostic,
+    'Plugin "hello" installed; 1 declared component has a note.\n\nworkflow script "greet.js" in "workflows" was installed but the engine will refuse to load it: the engine refuses at its check 8 -- every value inside `meta` must be a plain literal, so no spread, computed key, key written as anything but an identifier, string or number, method, accessor, reserved key name (`__proto__`, `constructor`, `prototype`), array hole, substituted template or computed expression',
+  );
 });
 
 /**
