@@ -47,6 +47,7 @@ import test, { type TestContext } from "node:test";
 import { It, when } from "strong-mock";
 
 import claudeMarketplaceExtension from "../extensions/pi-claude-marketplace/index.ts";
+import { EXTENSION_VERSION } from "../extensions/pi-claude-marketplace/shared/extension-version.ts";
 
 import { createNotificationBoundary } from "./edge/notification-boundary.ts";
 
@@ -475,7 +476,16 @@ async function seedPrompt(root: string, fileName: string): Promise<string> {
   return promptPath;
 }
 
-/** Record one enabled project-scope plugin whose binaries live under `root`. */
+/**
+ * Record one enabled project-scope plugin whose binaries live under `root`.
+ *
+ * The version stamp is part of the seed, not decoration: an absent
+ * `lastReconciledExtensionVersion` opens the load-time backfill gate, and the
+ * scan that follows re-resolves this record against a `marketplaceRoot` no case
+ * here creates -- surfacing a failure row and one extra cascade emission. These
+ * cases are about PATH plumbing over a steady-state scope, so the seed describes
+ * one: a scope already reconciled at the running version.
+ */
 async function seedEnabledPlugin(cwd: string, resolvedSource: string): Promise<void> {
   const extensionRoot = path.join(cwd, ".pi", "pi-claude-marketplace");
   const marketplaceRoot = path.join(cwd, "mp-src");
@@ -484,6 +494,7 @@ async function seedEnabledPlugin(cwd: string, resolvedSource: string): Promise<v
     path.join(extensionRoot, "state.json"),
     JSON.stringify({
       schemaVersion: 2,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: {
           name: "mp",

@@ -1566,6 +1566,98 @@ describe("scanForceInstalledBackfills", () => {
     verifyBoundary();
   });
 
+  test("WCONV-01: promotes a cleanly-installed record whose supported set grew", async (t) => {
+    // arrange -- the shape a plugin leaves behind when it declares a component
+    // kind the extension did not support at install time: the kind is simply
+    // absent from BOTH halves of `compatibility`, so the record reads exactly
+    // like a clean install and only the growth test can see the boundary move.
+    const { cwd, locations } = await createHermeticProjectScope(t, "clean-growth");
+    t.mock.timers.enable({ apis: ["Date"], now: new Date(REMATERIALIZED_AT) });
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      hello: { skill: "clean", workflow: true },
+    });
+    const pluginRoot = path.join(marketplaceRoot, "plugins", "hello");
+    const seeded: ExtensionState = {
+      schemaVersion: 2,
+      lastReconciledExtensionVersion: STALE_STAMP,
+      marketplaces: {
+        mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
+          hello: pluginRecord({
+            pluginRoot,
+            installable: true,
+            supported: ["skills"],
+            unsupported: [],
+          }),
+        }),
+      },
+    };
+    await seedState(locations, seeded);
+    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+    const outcomes: PerEntryOutcome[] = [];
+
+    // act
+    const anyFailure = await scanForceInstalledBackfills(
+      backfillOptions(ctx, pi, cwd, gitOps),
+      "project",
+      seeded,
+      outcomes,
+    );
+
+    // assert -- one promotion row, the grown set persisted with the workflow
+    // command named, and the envelope in the host engine's saved directory:
+    // the commands exist after this load with nothing run by the user.
+    assert.strictEqual(anyFailure, false);
+    assert.deepStrictEqual(outcomes, [
+      {
+        kind: "plugin-backfilled",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "hello",
+        version: "1.0.0",
+        dependencies: [],
+        installable: true,
+        unsupported: [],
+      },
+    ]);
+    assert.deepStrictEqual(await savedWorkflowEntries(locations), ["hello:greet.json"]);
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), {
+      schemaVersion: 2,
+      lastReconciledExtensionVersion: STALE_STAMP,
+      marketplaces: {
+        mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
+          hello: {
+            version: "1.0.0",
+            resolvedSource: pluginRoot,
+            compatibility: {
+              installable: true,
+              notes: [],
+              supported: ["skills", "workflows"],
+              unsupported: [],
+            },
+            resources: {
+              skills: ["hello-tool"],
+              prompts: [],
+              agents: [],
+              mcpServers: [],
+              hooks: [],
+              workflows: ["hello:greet"],
+            },
+            enabled: true,
+            // D-68-02: the promotion re-materializes at the recorded version, so
+            // both the version and the original install time survive it.
+            installedAt: RECORDED_AT,
+            updatedAt: REMATERIALIZED_AT,
+          },
+        }),
+      },
+    });
+    // NFR-5: the whole promotion ran off the cached manifest and the local
+    // clone, so the counting fake saw no remote at all.
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
   test("SF-01: surfaces the pre-narrowed reason when the re-materialize reports one", async (t) => {
     // arrange
     const { cwd, locations } = await createHermeticProjectScope(t, "narrowed-failure");
