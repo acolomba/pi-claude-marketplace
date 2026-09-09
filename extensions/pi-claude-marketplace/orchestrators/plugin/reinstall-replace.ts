@@ -84,6 +84,8 @@ export interface ReinstallReplacement {
   readonly hookEntries: readonly HookSummaryEntry[] | undefined;
   readonly discoveryWarnings: readonly string[];
   readonly bridgeWarnings: readonly string[];
+  /** @internal Operations retained so compensation uses the same transaction owner. */
+  readonly operations: ReinstallReplaceOperations;
 }
 
 /** Inputs required to stage and atomically replace every reinstall bridge. */
@@ -96,6 +98,34 @@ export interface ReplaceReinstalledPluginInput {
   readonly pluginDataDir: string;
   readonly oldRecord: PluginInstallRecord;
   readonly agentsDirs: readonly string[];
+  /** @internal Test-only bridge operations; production callers omit this. */
+  readonly __operations?: ReinstallReplaceOperations;
+}
+
+/** Physical bridge operations consumed by the atomic replacement schedule. */
+export interface ReinstallReplaceOperations {
+  readonly abortPreparedAgents: typeof abortPreparedAgents;
+  readonly abortPreparedCommands: typeof abortPreparedCommands;
+  readonly abortPreparedMcp: typeof abortPreparedMcp;
+  readonly abortPreparedSkills: typeof abortPreparedSkills;
+  readonly finalizeAgentsReplacement: typeof finalizeAgentsReplacement;
+  readonly finalizeCommandsReplacement: typeof finalizeCommandsReplacement;
+  readonly finalizeMcpReplacement: typeof finalizeMcpReplacement;
+  readonly finalizeSkillsReplacement: typeof finalizeSkillsReplacement;
+  readonly prepareStagePluginAgents: typeof prepareStagePluginAgents;
+  readonly prepareStageCommands: typeof prepareStageCommands;
+  readonly prepareStageMcpServers: typeof prepareStageMcpServers;
+  readonly prepareStageSkills: typeof prepareStageSkills;
+  readonly removeHookConfig: typeof removeHookConfig;
+  readonly replacePreparedAgents: typeof replacePreparedAgents;
+  readonly replacePreparedCommands: typeof replacePreparedCommands;
+  readonly replacePreparedMcp: typeof replacePreparedMcp;
+  readonly replacePreparedSkills: typeof replacePreparedSkills;
+  readonly rollbackAgentsReplacement: typeof rollbackAgentsReplacement;
+  readonly rollbackCommandsReplacement: typeof rollbackCommandsReplacement;
+  readonly rollbackMcpReplacement: typeof rollbackMcpReplacement;
+  readonly rollbackSkillsReplacement: typeof rollbackSkillsReplacement;
+  readonly writeHookConfig: typeof writeHookConfig;
 }
 
 /** Inputs required for best-effort maintenance after a committed reinstall. */
@@ -124,6 +154,31 @@ export const REAL_REINSTALL_TRANSACTION: ReinstallTransaction = {
   withLockedStateTransaction,
 };
 
+const REAL_REINSTALL_REPLACE_OPERATIONS: ReinstallReplaceOperations = {
+  abortPreparedAgents,
+  abortPreparedCommands,
+  abortPreparedMcp,
+  abortPreparedSkills,
+  finalizeAgentsReplacement,
+  finalizeCommandsReplacement,
+  finalizeMcpReplacement,
+  finalizeSkillsReplacement,
+  prepareStagePluginAgents,
+  prepareStageCommands,
+  prepareStageMcpServers,
+  prepareStageSkills,
+  removeHookConfig,
+  replacePreparedAgents,
+  replacePreparedCommands,
+  replacePreparedMcp,
+  replacePreparedSkills,
+  rollbackAgentsReplacement,
+  rollbackCommandsReplacement,
+  rollbackMcpReplacement,
+  rollbackSkillsReplacement,
+  writeHookConfig,
+};
+
 const defaultRemoveDataDir: RemoveDataDirFn = async (dataDir) => {
   await rm(dataDir, { recursive: true, force: true });
 };
@@ -132,13 +187,18 @@ const defaultRemoveDataDir: RemoveDataDirFn = async (dataDir) => {
 export async function replaceReinstalledPlugin(
   input: ReplaceReinstalledPluginInput,
 ): Promise<ReinstallReplacement> {
-  const handles = await prepareAllHandles(input);
-  const { replacements, hookEntries } = await replaceAll(handles, {
-    locations: input.locations,
-    cwd: input.cwd,
-    plugin: input.plugin,
-    installable: input.installable,
-  });
+  const operations = input.__operations ?? REAL_REINSTALL_REPLACE_OPERATIONS;
+  const handles = await prepareAllHandles(input, operations);
+  const { replacements, hookEntries } = await replaceAll(
+    handles,
+    {
+      locations: input.locations,
+      cwd: input.cwd,
+      plugin: input.plugin,
+      installable: input.installable,
+    },
+    operations,
+  );
   const warnings = splitHandleWarnings(handles);
   return {
     handles,
@@ -146,6 +206,7 @@ export async function replaceReinstalledPlugin(
     hookEntries,
     discoveryWarnings: warnings.discovery,
     bridgeWarnings: warnings.bridge,
+    operations,
   };
 }
 
@@ -153,14 +214,14 @@ export async function replaceReinstalledPlugin(
 export async function rollbackReinstalledPlugin(
   replacement: ReinstallReplacement,
 ): Promise<readonly string[]> {
-  return rollbackReplacements(replacement.replacements);
+  return rollbackReplacements(replacement.replacements, replacement.operations);
 }
 
 /** Remove bridge backups after the state transaction commits. */
 export async function finalizeReinstalledPlugin(
   replacement: ReinstallReplacement,
 ): Promise<readonly string[]> {
-  return finalizeReplacements(replacement.replacements);
+  return finalizeReplacements(replacement.replacements, replacement.operations);
 }
 
 /** Run non-fatal cache and data-directory cleanup after commit. */
@@ -198,10 +259,11 @@ export async function runPostSuccessMaintenance(
 
 async function prepareAllHandles(
   input: ReplaceReinstalledPluginInput,
+  operations: ReinstallReplaceOperations,
 ): Promise<ReinstallPreparedHandles> {
   const handles: PartialPreparedHandles = {};
   try {
-    handles.skills = await prepareStageSkills({
+    handles.skills = await operations.prepareStageSkills({
       locations: input.locations,
       marketplaceName: input.marketplace,
       pluginName: input.plugin,
@@ -211,7 +273,7 @@ async function prepareAllHandles(
       previousSkillNames: input.oldRecord.resources.skills,
       cwd: input.cwd,
     });
-    handles.commands = await prepareStageCommands({
+    handles.commands = await operations.prepareStageCommands({
       locations: input.locations,
       marketplaceName: input.marketplace,
       pluginName: input.plugin,
@@ -221,7 +283,7 @@ async function prepareAllHandles(
       previousCommandNames: input.oldRecord.resources.prompts,
       cwd: input.cwd,
     });
-    handles.agents = await prepareStagePluginAgents({
+    handles.agents = await operations.prepareStagePluginAgents({
       locations: input.locations,
       marketplaceName: input.marketplace,
       pluginName: input.plugin,
@@ -232,7 +294,7 @@ async function prepareAllHandles(
       knownSkills: handles.skills.result.recorded.map((record) => record.generatedName),
       cwd: input.cwd,
     });
-    handles.mcp = await prepareStageMcpServers({
+    handles.mcp = await operations.prepareStageMcpServers({
       locations: input.locations,
       cwd: input.cwd,
       marketplaceName: input.marketplace,
@@ -243,7 +305,7 @@ async function prepareAllHandles(
       sourcePath: `${input.installable.pluginRoot}#mcpServers`,
     });
   } catch (error) {
-    throw errorWithManualRecovery(error, await abortPartialHandles(handles));
+    throw errorWithManualRecovery(error, await abortPartialHandles(handles, operations));
   }
 
   return handles as ReinstallPreparedHandles;
@@ -252,6 +314,7 @@ async function prepareAllHandles(
 async function replaceAll(
   handles: ReinstallPreparedHandles,
   hooks: HooksReplaceArgs,
+  operations: ReinstallReplaceOperations,
 ): Promise<{
   readonly replacements: readonly ReplacementEntry[];
   readonly hookEntries: readonly HookSummaryEntry[] | undefined;
@@ -259,19 +322,19 @@ async function replaceAll(
   const replacements: ReplacementEntry[] = [];
   let hookEntries: readonly HookSummaryEntry[] | undefined;
   try {
-    const skills = await replacePreparedSkills(handles.skills);
+    const skills = await operations.replacePreparedSkills(handles.skills);
     replacements.push({ phase: "skills", handle: skills });
-    const commands = await replacePreparedCommands(handles.commands);
+    const commands = await operations.replacePreparedCommands(handles.commands);
     replacements.push({ phase: "commands", handle: commands });
-    const agents = await replacePreparedAgents(handles.agents, { force: true });
+    const agents = await operations.replacePreparedAgents(handles.agents, { force: true });
     replacements.push({ phase: "agents", handle: agents });
-    hookEntries = await commitHooks(hooks);
-    const mcp = await replacePreparedMcp(handles.mcp);
+    hookEntries = await commitHooks(hooks, operations);
+    const mcp = await operations.replacePreparedMcp(handles.mcp);
     replacements.push({ phase: "mcp", handle: mcp });
   } catch (error) {
     const leaks = [
-      ...(await rollbackReplacements(replacements)),
-      ...(await abortPartialHandles(handles)),
+      ...(await rollbackReplacements(replacements, operations)),
+      ...(await abortPartialHandles(handles, operations)),
     ];
     throw errorWithManualRecovery(error, leaks);
   }
@@ -288,10 +351,11 @@ interface HooksReplaceArgs {
 
 async function commitHooks(
   args: HooksReplaceArgs,
+  operations: ReinstallReplaceOperations,
 ): Promise<readonly HookSummaryEntry[] | undefined> {
   const { locations, cwd, plugin, installable } = args;
   if (installable.hooksConfigPath === undefined) {
-    await removeHookConfig({ locations, pluginName: plugin });
+    await operations.removeHookConfig({ locations, pluginName: plugin });
     return undefined;
   }
 
@@ -308,7 +372,7 @@ async function commitHooks(
     throw new Error(`hooks.json re-parse failed: ${parsed.reason}`);
   }
 
-  await writeHookConfig({
+  await operations.writeHookConfig({
     locations,
     pluginName: plugin,
     pluginRoot: installable.pluginRoot,
@@ -329,22 +393,25 @@ function splitHandleWarnings(handles: ReinstallPreparedHandles): {
   });
 }
 
-async function abortPartialHandles(handles: PartialPreparedHandles): Promise<readonly string[]> {
+async function abortPartialHandles(
+  handles: PartialPreparedHandles,
+  operations: ReinstallReplaceOperations,
+): Promise<readonly string[]> {
   const leaks: string[] = [];
   if (handles.mcp !== undefined) {
-    abortPreparedMcp(handles.mcp);
+    operations.abortPreparedMcp(handles.mcp);
   }
 
   if (handles.agents !== undefined) {
-    pushLeak(leaks, "agents", await abortPreparedAgents(handles.agents));
+    pushLeak(leaks, "agents", await operations.abortPreparedAgents(handles.agents));
   }
 
   if (handles.commands !== undefined) {
-    pushLeak(leaks, "commands", await abortPreparedCommands(handles.commands));
+    pushLeak(leaks, "commands", await operations.abortPreparedCommands(handles.commands));
   }
 
   if (handles.skills !== undefined) {
-    pushLeak(leaks, "skills", await abortPreparedSkills(handles.skills));
+    pushLeak(leaks, "skills", await operations.abortPreparedSkills(handles.skills));
   }
 
   return Object.freeze(leaks);
@@ -352,10 +419,11 @@ async function abortPartialHandles(handles: PartialPreparedHandles): Promise<rea
 
 async function rollbackReplacements(
   replacements: readonly ReplacementEntry[],
+  operations: ReinstallReplaceOperations,
 ): Promise<readonly string[]> {
   const leaks: string[] = [];
   for (const replacement of [...replacements].reverse()) {
-    for (const leak of await rollbackReplacement(replacement)) {
+    for (const leak of await rollbackReplacement(replacement, operations)) {
       leaks.push(`${replacement.phase}: ${leak}`);
     }
   }
@@ -363,25 +431,29 @@ async function rollbackReplacements(
   return Object.freeze(leaks);
 }
 
-async function rollbackReplacement(entry: ReplacementEntry): Promise<readonly string[]> {
+async function rollbackReplacement(
+  entry: ReplacementEntry,
+  operations: ReinstallReplaceOperations,
+): Promise<readonly string[]> {
   switch (entry.phase) {
     case "skills":
-      return rollbackSkillsReplacement(entry.handle);
+      return operations.rollbackSkillsReplacement(entry.handle);
     case "commands":
-      return rollbackCommandsReplacement(entry.handle);
+      return operations.rollbackCommandsReplacement(entry.handle);
     case "agents":
-      return rollbackAgentsReplacement(entry.handle);
+      return operations.rollbackAgentsReplacement(entry.handle);
     case "mcp":
-      return rollbackMcpReplacement(entry.handle);
+      return operations.rollbackMcpReplacement(entry.handle);
   }
 }
 
 async function finalizeReplacements(
   replacements: readonly ReplacementEntry[],
+  operations: ReinstallReplaceOperations,
 ): Promise<readonly string[]> {
   const leaks: string[] = [];
   for (const replacement of replacements) {
-    for (const leak of await finalizeReplacement(replacement)) {
+    for (const leak of await finalizeReplacement(replacement, operations)) {
       leaks.push(`${replacement.phase}: ${leak}`);
     }
   }
@@ -389,16 +461,19 @@ async function finalizeReplacements(
   return Object.freeze(leaks);
 }
 
-async function finalizeReplacement(entry: ReplacementEntry): Promise<readonly string[]> {
+async function finalizeReplacement(
+  entry: ReplacementEntry,
+  operations: ReinstallReplaceOperations,
+): Promise<readonly string[]> {
   switch (entry.phase) {
     case "skills":
-      return finalizeSkillsReplacement(entry.handle);
+      return operations.finalizeSkillsReplacement(entry.handle);
     case "commands":
-      return finalizeCommandsReplacement(entry.handle);
+      return operations.finalizeCommandsReplacement(entry.handle);
     case "agents":
-      return finalizeAgentsReplacement(entry.handle);
+      return operations.finalizeAgentsReplacement(entry.handle);
     case "mcp":
-      return finalizeMcpReplacement(entry.handle);
+      return operations.finalizeMcpReplacement(entry.handle);
   }
 }
 
