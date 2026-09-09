@@ -36,7 +36,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import test, { mock } from "node:test";
+import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { LIST_CONTEXT } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/list.messaging.ts";
@@ -50,72 +50,19 @@ import {
 import { narrowUnsupportedKinds } from "../../extensions/pi-claude-marketplace/shared/probe-classifiers.ts";
 
 import { loadCatalogExamples, type CatalogExample } from "./catalog-uat/catalog-parser.ts";
+import {
+  makeCtx,
+  piWithBothLoaded,
+  piWithMcpLoaded,
+  piWithNothingLoaded,
+  verifyPi,
+  type CapturedNotification,
+} from "./catalog-uat/mock-pi.ts";
+
+import type { CatalogFixture, FixtureMap } from "./catalog-uat/fixture-types.ts";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const CATALOG_PATH = path.join(REPO_ROOT, "docs/output-catalog.md");
-
-// ---------------------------------------------------------------------------
-// Mock helpers.
-// ---------------------------------------------------------------------------
-
-interface MockCtx {
-  ui: { notify: ReturnType<typeof mock.fn> };
-}
-
-function makeCtx(): MockCtx {
-  return { ui: { notify: mock.fn() } };
-}
-
-interface MockTool {
-  name?: string;
-  sourceInfo?: { source?: string };
-}
-
-interface MockPi {
-  getAllTools: () => MockTool[];
-}
-
-/** Probe reports both pi-subagents and pi-mcp-adapter loaded -- no soft-dep markers fire. */
-function piWithBothLoaded(): MockPi {
-  return {
-    getAllTools: () => [{ name: "subagent" }, { name: "mcp" }],
-  };
-}
-
-/** Probe reports pi-mcp-adapter loaded, pi-subagents NOT loaded -- {requires pi-subagents} fires on dep-bearing rows declaring agents. */
-function piWithMcpLoaded(): MockPi {
-  return {
-    getAllTools: () => [{ name: "mcp" }],
-  };
-}
-
-/** Probe reports nothing loaded -- both soft-dep markers fire when the row declares the dep. */
-function piWithNothingLoaded(): MockPi {
-  return {
-    getAllTools: () => [],
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Fixture map shape (D-17-05).
-// ---------------------------------------------------------------------------
-
-interface CatalogFixture {
-  readonly message: NotificationMessage;
-  readonly pi: MockPi;
-  readonly expectedSeverity?: "warning" | "error";
-  // UGRM-01/UGRM-02: an optional emit override for catalog states whose
-  // user-visible output is produced by the ORCHESTRATOR, not by `notify()`. The
-  // bulk-`update` never-silent no-op headline (`all-up-to-date-noop`,
-  // `skip-partially-upgradable-bulk`) is emitted via `emitUpdateNoOpCascade` -- the
-  // `notify()` renderer alone (with a `tally {count: 0}` override) would collapse
-  // the headline to `""`. When `emit` is present the driver calls it instead of
-  // `notify()`, then byte-pairs the resulting `ctx.ui.notify` call against the
-  // catalog block exactly as it does for the renderer path.
-  readonly emit?: (ctx: MockCtx, pi: MockPi) => void;
-}
-
-type FixtureMap = Readonly<Record<string, Readonly<Record<string, CatalogFixture>>>>;
 
 // ---------------------------------------------------------------------------
 // FIXTURES -- one entry per `(section, state)` tuple parsed from the
@@ -692,8 +639,8 @@ const FIXTURES: FixtureMap = {
       message: { marketplaces: AVAILABLE_INSTALLS_DISABLED_ROWS },
       emit: (ctx, pi) => {
         notifyWithContext(
-          ctx as never,
-          pi as never,
+          ctx,
+          pi,
           LIST_CONTEXT,
           AVAILABLE_INSTALLS_DISABLED_ROWS,
           undefined,
@@ -767,8 +714,8 @@ const FIXTURES: FixtureMap = {
       message: { marketplaces: REMOTE_INSTALLS_DISABLED_ROWS },
       emit: (ctx, pi) => {
         notifyWithContext(
-          ctx as never,
-          pi as never,
+          ctx,
+          pi,
           LIST_CONTEXT,
           REMOTE_INSTALLS_DISABLED_ROWS,
           undefined,
@@ -1999,7 +1946,7 @@ const FIXTURES: FixtureMap = {
         marketplaces: [],
       },
       emit: (ctx, pi) => {
-        notifyUpdateNoOpWithContext(ctx as never, pi as never, UPDATE_CONTEXT, [], "plural");
+        notifyUpdateNoOpWithContext(ctx, pi, UPDATE_CONTEXT, [], "plural");
       },
     },
 
@@ -2327,8 +2274,8 @@ const FIXTURES: FixtureMap = {
       },
       emit: (ctx, pi) => {
         notifyUpdateNoOpWithContext(
-          ctx as never,
-          pi as never,
+          ctx,
+          pi,
           UPDATE_CONTEXT,
           [
             {
@@ -5179,10 +5126,10 @@ interface Failure {
 function checkSeverityArg(
   example: CatalogExample,
   expectedSeverity: string | undefined,
-  callArgs: [string, string?],
+  notification: CapturedNotification,
 ): Failure | undefined {
   if (expectedSeverity !== undefined) {
-    if (callArgs.length === 2 && callArgs[1] === expectedSeverity) {
+    if (notification.argumentCount === 2 && notification.severity === expectedSeverity) {
       return undefined;
     }
 
@@ -5191,11 +5138,11 @@ function checkSeverityArg(
       state: example.state,
       kind: "severity-mismatch",
       expected: expectedSeverity,
-      actual: callArgs[1] ?? "(info / no 2nd arg)",
+      actual: notification.severity ?? "(info / no 2nd arg)",
     };
   }
 
-  if (callArgs.length === 1) {
+  if (notification.argumentCount === 1) {
     return undefined;
   }
 
@@ -5204,28 +5151,26 @@ function checkSeverityArg(
     state: example.state,
     kind: "severity-mismatch",
     expected: "(info / no 2nd arg)",
-    actual: callArgs[1] ?? "?",
+    actual: notification.severity ?? "explicit undefined",
   };
 }
 
 /**
- * Render one catalog example through `notify()` against a FRESH mock ctx and
- * compare the emitted bytes and severity arg. A fresh ctx per example is
- * required because `mock.fn()` accumulates calls across invocations, so
- * reusing one would leak state between fixtures.
+ * Render one catalog example through `notify()` against a fresh strict mock
+ * boundary and compare the emitted bytes and severity argument.
  */
 function checkCatalogExample(example: CatalogExample): Failure[] {
-  const fixture = FIXTURES[example.section]?.[example.state];
+  const fixture: CatalogFixture | undefined = FIXTURES[example.section]?.[example.state];
   if (fixture === undefined) {
     return [{ section: example.section, state: example.state, kind: "missing-fixture" }];
   }
 
-  const ctx = makeCtx();
+  const boundary = makeCtx();
   // UGRM-01 / UGRM-02: orchestrator-emitted no-op states route through the
   // fixture's `emit` override (`emitUpdateNoOpCascade`); every other state
   // drives the `notify()` renderer directly.
   if (fixture.emit !== undefined) {
-    fixture.emit(ctx, fixture.pi);
+    fixture.emit(boundary.ctx, fixture.pi);
   } else {
     const message =
       example.section === "/claude:plugin list" && "marketplaces" in fixture.message
@@ -5235,18 +5180,16 @@ function checkCatalogExample(example: CatalogExample): Failure[] {
             cardinality: "plural" as const,
           }
         : fixture.message;
-    notify(ctx as never, fixture.pi, message);
+    notify(boundary.ctx, fixture.pi, message);
   }
 
-  assert.equal(
-    ctx.ui.notify.mock.calls.length,
-    1,
-    `notify() must call ctx.ui.notify exactly once per invocation (section=${example.section} state=${example.state})`,
-  );
+  boundary.verifyContext();
+  verifyPi(fixture.pi);
 
-  const callArgs = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
+  const notification = boundary.notifications[0];
+  assert.ok(notification, "the strict catalog boundary must capture its required notification");
   const failures: Failure[] = [];
-  const actual = callArgs[0];
+  const actual = notification.message;
   if (actual !== example.expected) {
     failures.push({
       section: example.section,
@@ -5257,7 +5200,7 @@ function checkCatalogExample(example: CatalogExample): Failure[] {
     });
   }
 
-  const severityFailure = checkSeverityArg(example, fixture.expectedSeverity, callArgs);
+  const severityFailure = checkSeverityArg(example, fixture.expectedSeverity, notification);
   if (severityFailure !== undefined) {
     failures.push(severityFailure);
   }
@@ -5328,8 +5271,9 @@ test("XSURF-03: update-decline partially-upgradable reason brace === list partia
   const reasons = narrowUnsupportedKinds(kinds);
 
   // The list-inventory row (no partialHint -> no trailer).
-  const listCtx = makeCtx();
-  notify(listCtx as never, piWithBothLoaded(), {
+  const listBoundary = makeCtx();
+  const listPi = piWithBothLoaded();
+  notify(listBoundary.ctx, listPi, {
     marketplaces: [
       {
         name: "mp",
@@ -5340,8 +5284,9 @@ test("XSURF-03: update-decline partially-upgradable reason brace === list partia
   });
 
   // The update-decline row (partialHint -> update trailer + warning severity).
-  const declineCtx = makeCtx();
-  notify(declineCtx as never, piWithBothLoaded(), {
+  const declineBoundary = makeCtx();
+  const declinePi = piWithBothLoaded();
+  notify(declineBoundary.ctx, declinePi, {
     label: "Plugin update",
     cardinality: "single",
     marketplaces: [
@@ -5369,8 +5314,12 @@ test("XSURF-03: update-decline partially-upgradable reason brace === list partia
     return m[1]!;
   };
 
-  const listBody = listCtx.ui.notify.mock.calls[0]!.arguments[0] as string;
-  const declineBody = declineCtx.ui.notify.mock.calls[0]!.arguments[0] as string;
+  listBoundary.verifyContext();
+  verifyPi(listPi);
+  declineBoundary.verifyContext();
+  verifyPi(declinePi);
+  const listBody = listBoundary.notifications[0]?.message ?? "";
+  const declineBody = declineBoundary.notifications[0]?.message ?? "";
 
   assert.equal(
     extractBrace(declineBody),
@@ -5385,8 +5334,9 @@ test("UGRM-02 scope discipline: a non-update bulk cascade keeps `N successes` (n
   // `(skipped) {up-to-date}` row are the three at-desired-state successes. The
   // update-scoped UGRM-02 override must NOT leak into other ops -- this proves
   // install / reinstall / marketplace / import keep `N success(es)`.
-  const ctx = makeCtx();
-  notify(ctx as never, piWithBothLoaded(), {
+  const boundary = makeCtx();
+  const pi = piWithBothLoaded();
+  notify(boundary.ctx, pi, {
     label: "Plugin reinstall",
     cardinality: "plural",
     marketplaces: [
@@ -5422,7 +5372,9 @@ test("UGRM-02 scope discipline: a non-update bulk cascade keeps `N successes` (n
     ],
   });
 
-  const body = ctx.ui.notify.mock.calls[0]!.arguments[0] as string;
+  boundary.verifyContext();
+  verifyPi(pi);
+  const body = boundary.notifications[0]?.message ?? "";
   assert.match(
     body,
     /Plugin reinstall: 3 successes/,
