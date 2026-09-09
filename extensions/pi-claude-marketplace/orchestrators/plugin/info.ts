@@ -39,12 +39,6 @@ import {
 import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest, type MarketplaceManifest } from "../../domain/manifest.ts";
 import { resolveStrict } from "../../domain/resolver.ts";
-import type {
-  GitPluginRootResult,
-  ResolveContext,
-  ResolvedPluginUnavailable,
-  ResolvedPluginPartiallyAvailable,
-} from "../../domain/resolver-types.ts";
 import {
   parsePluginSource,
   type GitBackedSource,
@@ -83,6 +77,12 @@ import {
 import { makePresenceProbe } from "./git-source-probe.ts";
 import { PLUGIN_INFO_CONTEXT, type PluginInfoCascadeMsg } from "./info.messaging.ts";
 
+import type {
+  GitPluginRootResult,
+  ResolveContext,
+  ResolvedPluginUnavailable,
+  ResolvedPluginPartiallyAvailable,
+} from "../../domain/resolver-types.ts";
 import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
 import type { HookSummaryEntry } from "../../shared/concerns/hooks.ts";
 import type {

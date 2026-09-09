@@ -23,13 +23,13 @@ import {
   resolveLoose,
   resolveStrict,
 } from "../../extensions/pi-claude-marketplace/domain/resolver.ts";
+import { STATE_SCHEMA } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+
+import type { PluginEntry } from "../../extensions/pi-claude-marketplace/domain/components/plugin.ts";
 import type {
   ResolveContext,
   ResolvedPluginUnavailable,
 } from "../../extensions/pi-claude-marketplace/domain/resolver-types.ts";
-import { STATE_SCHEMA } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-
-import type { PluginEntry } from "../../extensions/pi-claude-marketplace/domain/components/plugin.ts";
 
 // ──────────────────────────────────────────────────────────────────────────
 // Block 1: ENBL-02 -- STATE_SCHEMA.schemaVersion is Union(Literal(1), Literal(2))

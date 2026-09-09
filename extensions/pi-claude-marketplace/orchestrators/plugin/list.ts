@@ -55,7 +55,6 @@
 import { lookupDeclaredPlugin, type ManifestLookup } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest, type MarketplaceManifest } from "../../domain/manifest.ts";
 import { resolveStrict } from "../../domain/resolver.ts";
-import type { ResolveContext } from "../../domain/resolver-types.ts";
 import { parsePluginSource } from "../../domain/source.ts";
 import { rowClaimsInstallDisabled } from "../../domain/unsupported-components.ts";
 import { loadMergedScopeConfig, type MergedConfig } from "../../persistence/config-merge.ts";
@@ -82,6 +81,7 @@ import { makePresenceProbe } from "./git-source-probe.ts";
 import { LIST_CONTEXT, type ListMsg } from "./list.messaging.ts";
 import { classifyInstalledRecord, classifyManifestEntry } from "./plugin-state-classifier.ts";
 
+import type { ResolveContext } from "../../domain/resolver-types.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type {
