@@ -18,9 +18,9 @@ provides:
 affects: [06-assertion-and-module-refinement, bridge-tests, reconcile-tests, path-safety-tests]
 
 actuals:
-  tokens: 22477
+  tokens: 23930
   tasks: 3
-  commits: 6
+  commits: 7
 plan_head_before: 92d511289e2d302f76eac0822a91f74d465b0530
 
 tech-stack:
@@ -36,6 +36,10 @@ key-files:
     - tests/scripts/check-phase-06-hub-ledger.test.ts
     - .planning/phases/06-assertion-and-module-refinement/06-MF-DEC-01-CENSUS.md
   modified:
+    - package.json
+    - scripts/check-corresponding-tests.mjs
+    - scripts/check-corresponding-tests.negative.mjs
+    - scripts/test-coverage-direct.mjs
     - tests/bridges/commands/discover.test.ts
     - tests/bridges/hooks/event-router.test.ts
     - tests/bridges/skills/unstage.test.ts
@@ -46,6 +50,7 @@ key-decisions:
   - "The MF-DEC-01 census is bound to exactly 24 resolved finding IDs and explicit current routes; ER-F19 remains reserved for Phase 8."
   - "Bridge lifecycle proofs use case-owned state plus existing readers, executors, runtimes, and public results; no test-only production export is added."
   - "Irreproducible builtin timing cases are removed only where an existing production port or direct owner retains the same public failure or convergence contract."
+  - "Repository-script owners under tests/scripts run in both unit globs but remain outside the extension source-to-test correspondence namespace."
 
 requirements-completed: [TREF-08]
 
@@ -78,6 +83,17 @@ coverage:
         status: pass
       - kind: quality
         ref: "npm run typecheck && npm run fallow"
+        status: pass
+    human_judgment: false
+  - id: D4
+    description: "The ledger verifier owner is reached by both unit-suite globs without being misclassified as an extension-module correspondence pair."
+    requirement: TREF-08
+    verification:
+      - kind: architecture
+        ref: "node --test tests/architecture/unit-suite-glob-completeness.test.ts"
+        status: pass
+      - kind: quality
+        ref: "npm run test:corresponding"
         status: pass
     human_judgment: false
 
@@ -115,6 +131,7 @@ Each task and its verification fixes were committed atomically:
 4. **Verification fix: Split closure validation into focused health-gate helpers** - `f502044f` (refactor)
 5. **Task 3: Remove reconcile and path builtin mutation** - `84a889b5` (test)
 6. **Verification fix: Harden closure arguments, residual scope, and race-helper types** - `26476f9c` (fix)
+7. **Post-merge integration fix: Include repository-script owners in unit gates** - `504cddab` (fix)
 
 ## Files Created/Modified
 
@@ -126,6 +143,10 @@ Each task and its verification fixes were committed atomically:
 - `tests/bridges/skills/unstage.test.ts` - Retains exact ENOENT, failure-identity, removal-target, and partial-tree outcomes through the remover port.
 - `tests/orchestrators/reconcile/apply.test.ts` - Drives selected-state races through the existing state reader and real child reconciliation.
 - `tests/shared/path-safety.test.ts` - Uses real temporary trees and the existing inspector port for path walk and filesystem failures.
+- `package.json` - Includes `tests/scripts` in the normal and coverage unit-suite brace globs.
+- `scripts/check-corresponding-tests.mjs` - Classifies repository-script owners outside the mirrored extension-module namespace.
+- `scripts/check-corresponding-tests.negative.mjs` - Proves that a `tests/scripts` owner is accepted without weakening extension pairing.
+- `scripts/test-coverage-direct.mjs` - Mirrors the non-corresponding root classification for changed-path coverage selection.
 
 ## Decisions Made
 
@@ -133,6 +154,7 @@ Each task and its verification fixes were committed atomically:
 - Closure scanning ignores the verifier and its direct owner so their token literals cannot pollute the production residual-patch census. Its CLI accepts the multi-root spelling already specified by the Phase 6 closure plan.
 - Existing narrow ports are the deterministic boundary for otherwise irreproducible timing or filesystem faults. Public result assertions remain authoritative; collaborator calls are supporting evidence only.
 - Cases that existed solely to patch an internal builtin timing point were removed when the equivalent public outcome remains covered through a production-owned port or the operation's direct owner.
+- `tests/scripts` is a first-class unit-suite root but not an extension-module correspondence root; this keeps the verifier executable in both unit modes without inventing a nonexistent `extensions/.../scripts` source path.
 
 ## TDD Gate Compliance
 
@@ -149,6 +171,8 @@ Each task and its verification fixes were committed atomically:
 - Prettier checks passed for all plan artifacts.
 - `npm run fallow` passed dead-code, health, and duplication enforcement.
 - A prohibited-token scan found no `syncBuiltinESMExports`, `createRequire`, prototype mutation, or direct `fs` mock patching in the five refined owner suites.
+- The unit-suite glob completeness guard and corresponding-test negative controls passed after adding `tests/scripts` to both unit globs.
+- `npm test` discovered and passed the ledger verifier owner. Every other suite passed except the separately known stale Phase 1 revalidation suite.
 
 ## Deviations from Plan
 
@@ -170,9 +194,19 @@ Each task and its verification fixes were committed atomically:
 - **Files modified:** `scripts/check-phase-06-hub-ledger.mjs`, `tests/scripts/check-phase-06-hub-ledger.test.ts`, `tests/orchestrators/reconcile/apply.test.ts`
 - **Commit:** `26476f9c`
 
+**3. [Rule 3 - Blocking] Added the new repository-script owner to every unit discovery gate**
+
+- **Found during:** Wave 2 post-merge verification
+- **Issue:** Both unit brace globs omitted `tests/scripts`, and the correspondence gate treated its direct script owner as a missing extension mirror.
+- **Fix:** Added the alphabetized `scripts` alternative to `test` and `test:coverage:unit`, classified repository-script tests as non-corresponding in both mirrored selectors, and added a negative-control fixture.
+- **Files modified:** `package.json`, `scripts/check-corresponding-tests.mjs`, `scripts/check-corresponding-tests.negative.mjs`, `scripts/test-coverage-direct.mjs`
+- **Commit:** `504cddab`
+
 ## Issues Encountered
 
 The previously known Phase 1 sealed-route drift in `tests/architecture/revalidation.test.ts` is outside this plan's verification scope. This plan did not modify, run around, or conceal it, and it did not affect any specified gate.
+
+The first full-suite run also met a sandbox-only `EPERM` while creating a Unix-domain socket in `tests/orchestrators/marketplace/add.test.ts`. Re-running that owner outside the sandbox passed all 63 cases; no repository change was required.
 
 ## User Setup Required
 
@@ -180,7 +214,7 @@ None - no external service configuration required.
 
 ## Next Phase Readiness
 
-All scoped shared-process patches are gone, the two authorized residual owners remain unchanged, and the fail-closed ledger is ready for later Phase 6 pre-edit and closure checks. No blockers remain.
+All scoped shared-process patches are gone, the two authorized residual owners remain unchanged, and the fail-closed ledger is exercised by both unit-suite entry points. No blockers remain.
 
 ---
 
@@ -189,4 +223,4 @@ _Completed: 2026-09-09_
 
 ## Self-Check: PASSED
 
-The summary, all eight plan artifacts, the persisted plan-head ledger, and all six recorded task or verification-fix commits exist. The measured pre-metadata commit count is six.
+The summary, all twelve plan artifacts, the persisted plan-head ledger, and all seven plan-scoped task or verification-fix commits exist. The post-merge fix preserves every later Phase 6 commit.
