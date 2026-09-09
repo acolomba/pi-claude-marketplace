@@ -1,30 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { resolveInstallDeclaredEnabled } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-declared-enabled.ts";
+
 import type { ScopeConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
-
-interface ResolveInstallDeclaredEnabledOptions {
-  readonly current: ScopeConfig;
-  readonly sibling: ScopeConfig | undefined;
-  readonly targetIsLocal: boolean;
-  readonly key: string;
-}
-
-type ResolveInstallDeclaredEnabled = (
-  options: ResolveInstallDeclaredEnabledOptions,
-) => boolean | undefined;
-
-async function loadResolveInstallDeclaredEnabled(): Promise<ResolveInstallDeclaredEnabled> {
-  let resolveInstallDeclaredEnabled: ResolveInstallDeclaredEnabled | undefined;
-  await assert.doesNotReject(async () => {
-    const owner = await import(
-      "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-declared-enabled.ts"
-    );
-    resolveInstallDeclaredEnabled = owner.resolveInstallDeclaredEnabled;
-  }, "install-declared-enabled.ts must own tri-state config selection");
-  assert.ok(resolveInstallDeclaredEnabled !== undefined);
-  return resolveInstallDeclaredEnabled;
-}
 
 interface DeclaredEnabledCase {
   readonly title: string;
@@ -75,17 +54,17 @@ const CASES: readonly DeclaredEnabledCase[] = [
 ];
 
 for (const row of CASES) {
-  test(row.title, async () => {
+  test(row.title, () => {
     // arrange
-    const resolveInstallDeclaredEnabled = await loadResolveInstallDeclaredEnabled();
-
-    // act
-    const declaredEnabled = resolveInstallDeclaredEnabled({
+    const options = {
       current: row.current,
       sibling: row.sibling,
       targetIsLocal: row.targetIsLocal,
       key: KEY,
-    });
+    };
+
+    // act
+    const declaredEnabled = resolveInstallDeclaredEnabled(options);
 
     // assert
     assert.strictEqual(declaredEnabled, row.expected);
