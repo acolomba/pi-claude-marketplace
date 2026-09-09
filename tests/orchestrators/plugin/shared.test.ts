@@ -1995,7 +1995,7 @@ describe("surfaceDiscoveryWarnings", () => {
       .once();
     when(() => {
       ui.notify(
-        'Plugin "alpha" installed; 1 declared component was skipped.\n\nCould not read alpha-skill',
+        'Plugin "alpha" installed; 1 declared component has a note.\n\nCould not read alpha-skill',
         "warning",
       );
     })
@@ -2023,7 +2023,7 @@ describe("surfaceDiscoveryWarnings", () => {
       .once();
     when(() => {
       ui.notify(
-        'Plugin "alpha" updated; 2 declared components were skipped.\n\nfirst warning\nsecond warning',
+        'Plugin "alpha" updated; 2 declared components have notes.\n\nfirst warning\nsecond warning',
         "warning",
       );
     })

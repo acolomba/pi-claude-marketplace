@@ -1434,6 +1434,14 @@ export function splitStagingWarnings(warnings: {
  * NFR-9: a discovery warning embeds the absolute component directory it
  * walked, so it goes through `redactAbsolutePaths` before it reaches the
  * user, exactly as the reconcile composer does.
+ *
+ * WGATE-01: the header counts the lines and states nothing about what became
+ * of the components they name. It cannot: two of the families routed into this
+ * array report a component that WAS materialized -- a workflow script the host
+ * engine will refuse to load, and one that installs under a name it does not
+ * declare -- so a header claiming a disposal would contradict the lines
+ * directly beneath it. "Note" is the word the read-only `info` surface already
+ * prints for the same facts, so the two surfaces name them the same way.
  */
 export function surfaceDiscoveryWarnings(
   ctx: ExtensionContext,
@@ -1450,8 +1458,8 @@ export function surfaceDiscoveryWarnings(
   const lines = args.warnings.map((w) => redactAbsolutePaths(w));
   const header =
     lines.length === 1
-      ? `Plugin "${args.plugin}" ${args.verb}; 1 declared component was skipped.`
-      : `Plugin "${args.plugin}" ${args.verb}; ${lines.length.toString()} declared components were skipped.`;
+      ? `Plugin "${args.plugin}" ${args.verb}; 1 declared component has a note.`
+      : `Plugin "${args.plugin}" ${args.verb}; ${lines.length.toString()} declared components have notes.`;
   notifyDiagnostic(ctx, header, lines);
 }
 

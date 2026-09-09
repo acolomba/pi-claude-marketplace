@@ -6760,7 +6760,7 @@ test("D-141-03: a standalone install surfaces a command discovery warning as a s
       // The VERB and the plugin name are the whole reason the diagnostic
       // header is parameterised; assert them, not just the tally clause.
       assert.ok(
-        diagnostic.message.includes('Plugin "hello" installed; 1 declared component was skipped.'),
+        diagnostic.message.includes('Plugin "hello" installed; 1 declared component has a note.'),
         diagnostic.message,
       );
       assert.match(diagnostic.message, /"hello:tools:lint"/);
@@ -10912,13 +10912,13 @@ test("WGATE-01 / D-115-05: a standalone install renders every workflow discovery
       // Then the whole block, byte for byte -- the header, the blank-line
       // separator and the line order, none of which the filter above sees.
       //
-      // The header says all five components "were skipped", which is false of
-      // the two that were installed with a caveat. That sentence is shared by
-      // install, update and reinstall and is asserted here as it stands;
-      // Broken Windows #36 carries the fix.
+      // The header counts the lines and claims no disposal, because two of the
+      // five components below it WERE installed -- one that the host engine
+      // will refuse to load, and one that runs under a name it does not
+      // declare. It is shared by install, update and reinstall.
       assert.equal(
         diagnostic.message,
-        `Plugin "hello" installed; 5 declared components were skipped.\n\n${EXPECTED_DISCOVERY_FAMILY_LINES.join("\n")}`,
+        `Plugin "hello" installed; 5 declared components have notes.\n\n${EXPECTED_DISCOVERY_FAMILY_LINES.join("\n")}`,
       );
       // NFR-9: the temporary marketplace root never reaches the user.
       assert.ok(!diagnostic.message.includes(cwd), diagnostic.message);

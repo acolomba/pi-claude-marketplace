@@ -4642,7 +4642,7 @@ test("D-141-03: a standalone reinstall surfaces a skills discovery warning after
       // header is parameterised; assert them, not just the tally clause.
       assert.match(
         diagnostic.message,
-        /Plugin "hello" reinstalled; 1 declared component was skipped\./,
+        /Plugin "hello" reinstalled; 1 declared component has a note\./,
       );
       assert.match(diagnostic.message, /"hello-foo"/);
       assert.match(diagnostic.message, /ignoring duplicate/);
@@ -4690,13 +4690,13 @@ test("D-141-03: a bulk reinstall surfaces one diagnostic per plugin, singular an
       assert.equal(diagnostics.length, 2, JSON.stringify(notifications));
       assert.ok(
         diagnostics.some((n) =>
-          n.message.includes('Plugin "hello" reinstalled; 1 declared component was skipped.'),
+          n.message.includes('Plugin "hello" reinstalled; 1 declared component has a note.'),
         ),
         JSON.stringify(diagnostics),
       );
       assert.ok(
         diagnostics.some((n) =>
-          n.message.includes('Plugin "world" reinstalled; 2 declared components were skipped.'),
+          n.message.includes('Plugin "world" reinstalled; 2 declared components have notes.'),
         ),
         JSON.stringify(diagnostics),
       );
@@ -4860,7 +4860,7 @@ test("D-141-03: an agents hygiene warning rides notes in orchestrated mode and n
       });
 
       assert.ok(
-        standalone.notifications.some((n) => n.message.includes("declared component was skipped")),
+        standalone.notifications.some((n) => n.message.includes("declared component has a note")),
         `the discovery half must still reach standalone: ${JSON.stringify(standalone.notifications)}`,
       );
       assert.ok(
@@ -5000,13 +5000,13 @@ test("WGATE-01 / D-115-05: a standalone reinstall renders every workflow discove
       // Then the whole block, byte for byte -- the header, the blank-line
       // separator and the line order, none of which the filter above sees.
       //
-      // The header says every one of the five components "was skipped", which
-      // is false of the two that were installed with a caveat. That sentence is
-      // shared by install, update and reinstall and is asserted here as it
-      // stands; Broken Windows #36 carries the fix.
+      // The header counts the lines and claims no disposal, because two of the
+      // five components below it WERE installed -- one that the host engine
+      // will refuse to load, and one that runs under a name it does not
+      // declare. It is shared by install, update and reinstall.
       assert.equal(
         diagnostic.message,
-        `Plugin "hello" reinstalled; 5 declared components were skipped.\n\n${EXPECTED_FAMILY_LINES.join("\n")}`,
+        `Plugin "hello" reinstalled; 5 declared components have notes.\n\n${EXPECTED_FAMILY_LINES.join("\n")}`,
       );
       // WGATE-03: the row itself states no gate. The channel is a second
       // notification precisely so the row is free of it.

@@ -8344,7 +8344,7 @@ test("D-141-03: a standalone updatePlugins run surfaces the skills discovery war
       // The VERB and the plugin name are the whole reason the diagnostic
       // header is parameterised; assert them, not just the tally clause.
       assert.ok(
-        diagnostic.message.includes('Plugin "hello" updated; 1 declared component was skipped.'),
+        diagnostic.message.includes('Plugin "hello" updated; 1 declared component has a note.'),
         diagnostic.message,
       );
       assert.match(diagnostic.message, /"hello-foo"/);
@@ -8420,10 +8420,10 @@ test("D-141-03: an updateSinglePlugin cascade emits no notification and carries 
         // returned nothing at all, which is the regression it must catch.
         //
         // Anchored on the row prefix, NOT on the singular "declared component
-        // was skipped" tail: a hygiene leak adds a second line, which flips
-        // the header to the plural "declared components were skipped" and
-        // would trip this control on grammar before the leak assertion below
-        // ever ran -- reporting the wrong failure for the right bug.
+        // has a note" tail: a hygiene leak adds a second line, which flips the
+        // header to the plural "declared components have notes" and would trip
+        // this control on grammar before the leak assertion below ever ran --
+        // reporting the wrong failure for the right bug.
         assert.ok(
           notifications.some((n) => n.message.includes('Plugin "hello" updated;')),
           `the discovery half must still reach standalone: ${JSON.stringify(notifications)}`,
@@ -8473,13 +8473,13 @@ test("D-141-03: a bulk update surfaces one diagnostic per updated plugin", async
       assert.equal(diagnostics.length, 2, JSON.stringify(notifications));
       assert.ok(
         diagnostics.some((n) =>
-          n.message.includes('Plugin "hello" updated; 1 declared component was skipped.'),
+          n.message.includes('Plugin "hello" updated; 1 declared component has a note.'),
         ),
         JSON.stringify(diagnostics),
       );
       assert.ok(
         diagnostics.some((n) =>
-          n.message.includes('Plugin "world" updated; 1 declared component was skipped.'),
+          n.message.includes('Plugin "world" updated; 1 declared component has a note.'),
         ),
         JSON.stringify(diagnostics),
       );
@@ -8754,7 +8754,7 @@ test("WLIF-02: a workflow version B cannot admit reaches the standalone diagnost
       assert.equal(diagnostics.length, 1, JSON.stringify(notifications));
       assert.match(
         diagnostics[0]?.message ?? "",
-        /Plugin "hello" updated; 1 declared component was skipped\./,
+        /Plugin "hello" updated; 1 declared component has a note\./,
       );
       assert.match(diagnostics[0]?.message ?? "", /workflow script "broken\.js"/);
       assert.match(diagnostics[0]?.message ?? "", /was not installed/);
