@@ -4,19 +4,19 @@ milestone: workflows-replay
 milestone_name: Workflow Bridge Replay onto main
 current_phase: 116
 current_phase_name: Load-time workflow convergence
-current_plan: 1 of 4 executed
+current_plan: 2 of 4 executed
 status: executing
-stopped_at: Completed 116-01-PLAN.md
-last_updated: "2026-09-09T15:08:58.421Z"
-state_head: 507d376d6873b509a15aac1eb29e6cdf45a98e91
+stopped_at: Completed 116-02-PLAN.md
+last_updated: "2026-09-09T15:45:00.000Z"
+state_head: 932f8c2d8ebf5d3e56cb22019979a579c123bc0d
 progress:
   total_phases: 9
-  completed_phases: 6
+  completed_phases: 7
   total_plans: 36
-  completed_plans: 33
-  percent: 67
+  completed_plans: 34
+  percent: 78
 last_activity: 2026-09-09
-last_activity_desc: Executed plan 116-01; three negative controls run and pasted
+last_activity_desc: Executed plan 116-02; four negative controls run and pasted
 ---
 
 # Project State
@@ -36,8 +36,8 @@ the gaps the bridge originally shipped with.
 ## Current Position
 
 Phase: 116 — Load-time workflow convergence
-Plan: 1 of 4 executed (4 plans, 3 waves, 10 tasks)
-Status: Executing — wave 1 done, 116-02 and 116-03 unblocked
+Plan: 2 of 4 executed (4 plans, 3 waves, 10 tasks)
+Status: Executing — 116-02 done; 116-03 is the rest of wave 2, then 116-04
 
 Phase 115 is complete on every gate. The replay milestone (109-114) is complete
 and the first of the three hardening phases has now closed behind it; 116 and 117
@@ -109,7 +109,7 @@ probe-purity gate instead.
 | 113 | Update, enable/disable, reconcile | Complete (5/5 plans, verified 9/9) |
 | 114 | Degradation and documentation | Complete (5/5 plans, verified 7/7) |
 | 115 | Install-time admission-gate warnings | Complete (6/6 plans, verified 6/6, secured 30/30, nyquist 0 gaps) |
-| 116 | Load-time workflow convergence | Planned (4 plans / 3 waves), checker passed (hardening) |
+| 116 | Load-time workflow convergence | 2/4 plans executed (3 waves), checker passed (hardening) |
 | 117 | Measured `agent()` failure evidence | Not started (hardening) |
 
 **Why one run covers both milestones.** GSD scopes a milestone by parsing a
@@ -380,10 +380,14 @@ re-persists `harness-worktree` as a side effect.
   `features/workflows-spike` and open the PR — nothing is pushed yet and no PR
   exists. This milestone's phases can land on the same branch first.
 
-- **A pre-existing bare planning-artifact token** sits at
-  `tests/orchestrators/reconcile/backfill.test.ts:320` (commit `c695bdab3`).
-  Phase 116 edits that file, so the token is now in reach — clean it there
-  rather than leaving it.
+- **The bare planning-artifact token claim against
+  `tests/orchestrators/reconcile/backfill.test.ts` is CLOSED, and it was
+  stale.** The token was real at `c695bdab3` (`// Pitfall 4 / D-68-03: …`) but
+  the file was rewritten since; a grep for the whole forbidden token class now
+  returns nothing. What the file actually carried was an orphaned doc comment,
+  separated from `seededScopeTree` when a sibling helper was inserted between
+  them. That has been moved back onto its function. Re-measured and recorded in
+  `116-02-SUMMARY.md`.
 
 - **The `node_modules` cleanup hazard does not apply on this worktree.** It did
   on `.worktrees/workflows-spike`, where `node_modules` was a symlink ignored
