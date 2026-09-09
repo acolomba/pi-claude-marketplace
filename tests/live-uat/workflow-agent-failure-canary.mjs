@@ -218,17 +218,21 @@ async function main() {
     const { runWorkflow } = await import(pathToFileURL(engineEntry).href);
     const drive = (source) => runWorkflow(source, { persistLogs: false, cwd: stateDir });
 
-    // ---- A0 + A1: a recoverable failure, induced by the absence of credentials.
-    const recoverable = await drive(agentCallScript(`agent("ping")`));
-
-    // A0 -- the measurement precondition, asserted BEFORE any verdict is read.
+    // A0 -- the measurement precondition, applied to EVERY drive whose verdict
+    // depends on the induced absence, and always BEFORE that verdict is read.
     // This single binding is the driver's plantable seam: replacing it with an
     // empty array reproduces exactly what a SUCCESSFUL agent call produces, and
     // is how this control is proven to fire rather than merely written.
-    const observedLogs = recoverable.logs;
-    if (!observedLogs.some((line) => line.includes(INDUCED_FAILURE_MARKER))) {
-      nothingWasMeasured(observedLogs);
-    }
+    const requireInducedFailure = (run) => {
+      const observedLogs = run.logs;
+      if (!observedLogs.some((line) => line.includes(INDUCED_FAILURE_MARKER))) {
+        nothingWasMeasured(observedLogs);
+      }
+      return run;
+    };
+
+    // ---- A0 + A1: a recoverable failure, induced by the absence of credentials.
+    const recoverable = requireInducedFailure(await drive(agentCallScript(`agent("ping")`)));
     pass(`A0: the agent call failed as induced, so this run measured something (engine ${version})`);
 
     // A1 -- the measurement. Compare through `structuredClone`: the engine runs
@@ -266,7 +270,13 @@ async function main() {
     // every call fails recoverably, and the run COMPLETES -- which is itself
     // part of the observation, because the published claim is that this pattern
     // aborts here and it does not (D-117-04).
-    const fanOut = await drive(FAN_OUT_SCRIPT);
+    //
+    // This is a SEPARATE drive, so it needs A0's precondition in its own right:
+    // three calls that SUCCEED return `{ rows: 3, survivors: 3 }`, and without
+    // the gate the harness would report "the fan-out pattern did not drop its
+    // failed items" -- blaming the engine for a property of the machine, which
+    // is the exact mis-attribution this control exists to prevent (D-117-05).
+    const fanOut = requireInducedFailure(await drive(FAN_OUT_SCRIPT));
     assert.deepEqual(
       structuredClone(fanOut.result),
       { rows: 3, survivors: 0 },
