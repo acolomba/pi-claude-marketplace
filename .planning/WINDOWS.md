@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 9
+open_count: 10
 waived_count: 14
 fixed_count: 22
-total_count: 45
-last_updated: 2026-09-09T19:27:52.900Z
+total_count: 46
+last_updated: 2026-09-09T20:11:19.722Z
 ---
 
 # Broken Windows Ledger
@@ -60,6 +60,7 @@ last_updated: 2026-09-09T19:27:52.900Z
 | 43 | 116 | unmet-truth | tests/orchestrators/reconcile/backfill.test.ts | 557 | [workflows-replay] two ungated line-number citations drifted and were caught only by the security audit re-reading the sites: T-116-02's mitigation and 116-04-SUMMARY section 7 cite the WR-01 control at backfill.test.ts:529, but 529 is inside the D-68-03/WCONV-02 case and the control is at :557; WINDOWS entry 41 cites :1445 for the ENBL-08 case, which is at :1582. Same class as the compatibility doc's ungated engine line citations (entry 34) -- a line number in prose that no gate reads rots silently. | open |  | 2026-09-09T16:39:28.798Z |  |
 | 44 | 116 | todo | extensions/pi-claude-marketplace/orchestrators/reconcile/backfill.ts | 175 | [workflows-replay] scanForceInstalledBackfills and hasForceInstalledPlugin still assert the filter this phase deleted -- hasForceInstalledPlugin's own doc comment now has to open by contradicting its name. Code review WR-03 proposed renaming; skipped because 116-CONTEXT locks 'Names are left alone'. Half that lock's rationale did not survive measurement: the proposed replacements contain no 'force', so partial-vocabulary-guard.test.ts cannot fire on them. The surviving half -- rename is churn beyond what WCONV-01..03 ask for -- is why it stayed skipped. Operator call for a later phase. | open |  | 2026-09-09T17:51:43.533Z |  |
 | 45 | 117 | unrun-verify | .planning/workstreams/workflows/milestones/workflows-phases/105-workflow-degradation-and-documentation/105-VERIFICATION.md | 91 | [workflows-replay] The W1/W2/W3 storage assertions were never driven against a live engine and their driver (tests/live-uat/workflow-storage-canary.mjs) was never re-landed on this branch, so the storage half of the host-engine route has no live coverage here. Re-landing it is a recorded deferred idea (D-117-01), not scope of WEVID-01/WEVID-02/WDOCS-02. | open |  | 2026-09-09T19:27:52.900Z |  |
+| 46 | 117 | unmet-truth | tests/live-uat/stop-canary.mjs |  | [workflows-replay] stop-canary.mjs:193 and manifest-absence-canary.mjs:142 guard PI_CODING_AGENT_DIR with agentDir.includes(path.join("tmp","pi-uat")) — a substring test on the un-normalized value, not containment. A path such as $(pwd)/tmp/pi-uat/../../../somewhere carries the substring, survives existsSync, and is then created and used as agent state outside the sandbox. workflow-agent-failure-canary.mjs was fixed in place (resolve both sides, require a path separator after the root); the two siblings share the pattern and were left alone as out of phase scope. | open |  | 2026-09-09T20:11:19.722Z |  |
 
 ````json
 [
@@ -601,6 +602,18 @@ last_updated: 2026-09-09T19:27:52.900Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-09-09T19:27:52.900Z",
+    "resolved_at": null
+  },
+  {
+    "id": 46,
+    "kind": "unmet-truth",
+    "phase": "117",
+    "file": "tests/live-uat/stop-canary.mjs",
+    "line": null,
+    "description": "[workflows-replay] stop-canary.mjs:193 and manifest-absence-canary.mjs:142 guard PI_CODING_AGENT_DIR with agentDir.includes(path.join(\"tmp\",\"pi-uat\")) — a substring test on the un-normalized value, not containment. A path such as $(pwd)/tmp/pi-uat/../../../somewhere carries the substring, survives existsSync, and is then created and used as agent state outside the sandbox. workflow-agent-failure-canary.mjs was fixed in place (resolve both sides, require a path separator after the root); the two siblings share the pattern and were left alone as out of phase scope.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-09T20:11:19.722Z",
     "resolved_at": null
   }
 ]
