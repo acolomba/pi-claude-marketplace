@@ -143,6 +143,12 @@ together: **141 pass, 0 fail** across `backfill.test.ts`,
 `notify-closed-set-locks.test.ts`, `compat-01-no-expansion.test.ts` and
 `reconcile/notify.test.ts`.
 
+**Re-measured after the code-review fix pass: 144 pass, 0 fail** across the same
+six suites. The fix pass added four cases (two behavioral controls for CR-01 and
+CR-02, plus their siblings), so the figure above is the pre-fix measurement and
+this one is current. Neither map row changed — the additions sit on top of a map
+that was already complete, so the gap count stays 0.
+
 | Map row | Case that closes it |
 |---|---|
 | WCONV-01 promotion | `backfill.test.ts:1769` |
