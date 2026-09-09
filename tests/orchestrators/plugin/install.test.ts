@@ -37,10 +37,10 @@ import {
   createInstallPlugin,
   createNodeInstallPlugin,
   runInstallLedger,
-  type InstallCloneCacheSeam,
   type InstallHooksRouting,
   type InstallTransaction,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install.ts";
+import type { InstallCloneCacheSeam } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-clone-probe.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   loadState,

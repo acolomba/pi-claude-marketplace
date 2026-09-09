@@ -126,17 +126,11 @@ import {
 } from "../../transaction/phase-ledger.ts";
 import { formatRollbackError } from "../../transaction/rollback.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
-import { DEFAULT_CREDENTIAL_OPS, buildCloneAuth } from "../auth-host.ts";
+import { DEFAULT_CREDENTIAL_OPS } from "../auth-host.ts";
 import { cascadeUnstagePlugin, crossScopeFlag } from "../marketplace/shared.ts";
 
-import {
-  canonicalCloneUrl,
-  materializeOrRefreshPluginMirror,
-  materializePluginClone,
-  resolveGitPluginRootWithSubdir,
-  resolvePluginPin,
-} from "./clone-cache.ts";
 import { discoverGeneratedNames } from "./discover-names.ts";
+import { probeInstallClone } from "./install-clone-probe.ts";
 import {
   INSTALL_CONTEXT,
   classifyEntityShapeError,
@@ -163,8 +157,7 @@ import type { HooksRouting } from "../../bridges/hooks/index.ts";
 import type { PreparedMcpStaging } from "../../bridges/mcp/index.ts";
 import type { PreparedSkillsStaging } from "../../bridges/skills/index.ts";
 import type { PluginEntry } from "../../domain/components/plugin.ts";
-import type { GitPluginRootResult, MaterializablePlugin } from "../../domain/resolver-types.ts";
-import type { GitBackedSource } from "../../domain/source.ts";
+import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
 import type { ScopeConfig } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
@@ -176,6 +169,7 @@ import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
 import type { UnstageOutcome } from "../marketplace/shared.ts";
 import type { InstallPluginOutcome } from "../types.ts";
+import type { InstallCloneCacheSeam } from "./install-clone-probe.ts";
 
 /**
  * Controls how `installPlugin` surfaces notifications.
@@ -402,28 +396,6 @@ async function loadCachedMarketplaceManifest(
 }
 
 /**
- * Injected clone-cache seam. install.ts is forbidden the git surface by the
- * `no-orchestrator-network` gate (NFR-5), so the git-source clone flows through
- * the sibling `clone-cache.ts` seam by name -- install NEVER references the git
- * ops directly. This bundle lets a caller (tests) substitute the seam
- * entrypoints (each pre-bound to a mock git backend) without install ever
- * naming the git surface; production leaves it undefined and install uses the
- * real `resolvePluginPin` / `materializePluginClone` imports (which default to
- * the real git backend internally).
- */
-export interface InstallCloneCacheSeam {
-  readonly resolvePluginPin: typeof resolvePluginPin;
-  readonly materializePluginClone: typeof materializePluginClone;
-  /**
-   * MIRR-01/MIRR-03 / D-79.1-01: the mirror seam for an UNPINNED git source
-   * (`source.sha === undefined`). Routes to the single mutable
-   * `plugin-clones/<urlhash12>/` mirror instead of the per-sha immutable cache;
-   * refreshes it in place and returns the mirror root + resolved HEAD sha.
-   */
-  readonly materializeOrRefreshPluginMirror: typeof materializeOrRefreshPluginMirror;
-}
-
-/**
  * Options bundle for the guard-free install ledger body
  * (`runInstallLedger`). Carries only the data the ledger itself consumes --
  * no `ctx` / `pi` / `notifications` (the ledger never notifies; emission is
@@ -538,93 +510,6 @@ const REAL_INSTALL_TRANSACTION: InstallTransaction = {
   runPhases: (...args) => runPhases(...args),
   withLockedStateTransaction: (...args) => withLockedStateTransaction(...args),
 };
-
-/**
- * PURL-01..04 / PURL-09 / D-77-01..06: build the clone-materializing
- * `resolveGitPluginRoot` callback plus a getter for the resolved sha it
- * captured.
- *
- * The resolver stays network-free (shared with list/info); install injects THIS
- * policy so a git source (url / git-subdir / github) clones once into the
- * source-addressed `plugin-clones/<key>/` cache at its pinned/resolved sha and
- * returns the clone-anchored pluginRoot. The full sha is captured as a
- * side-channel because the resolver's `ResolvedPlugin` schema cannot carry it;
- * install reads `resolvedSha()` AFTER the resolve for the `sha-<12hex>` version
- * (D-77-01) and the full-sha state field (D-77-02).
- *
- * git-subdir containment (PURL-03 / NFR-10) is enforced HERE, anchored to the
- * clone root (not marketplaceRoot): an escaping subdir returns `escapes`, an
- * absent subdir returns `missing-subdir`, both surfaced by the resolver as
- * `unavailable` (fail-clean). The clone flows through the sibling
- * `clone-cache.ts` seam by name; install never references the git surface
- * (no-orchestrator-network gate, NFR-5).
- */
-function makeInstallCloneProbe(
-  seam: InstallCloneCacheSeam,
-  locations: ScopedLocations,
-  auth: {
-    ctx: NotificationContext;
-    credentialOps: CredentialOps;
-    deviceFlowHttp?: DeviceFlowHttp;
-    authMemo?: Map<string, AuthAttemptResult>;
-  },
-): {
-  probe: (source: GitBackedSource) => Promise<GitPluginRootResult>;
-  resolvedSha: () => string | undefined;
-} {
-  let captured: string | undefined;
-
-  // MIRR-01/MIRR-03 / D-79.1-01: an UNPINNED source (no manifest sha, incl.
-  // ref-only moving pointers) is backed by the single mutable mirror clone at
-  // `plugin-clones/<urlhash12>/`, not the per-sha immutable cache. The fork
-  // lives INSIDE the probe callback so install.ts still names no git surface;
-  // it reaches the mirror seam only by name.
-  const probeUnpinned = async (gitSource: GitBackedSource): Promise<GitPluginRootResult> => {
-    const cloneUrl = canonicalCloneUrl(gitSource);
-    const authBundle = buildCloneAuth(cloneUrl, gitSource.kind, auth);
-    const { pluginRoot: mirrorRoot, resolvedSha } = await seam.materializeOrRefreshPluginMirror({
-      locations,
-      cloneUrl,
-      ...(gitSource.ref !== undefined && { ref: gitSource.ref }),
-      ...(authBundle !== undefined && { auth: authBundle }),
-    });
-
-    const result = await resolveGitPluginRootWithSubdir(gitSource, mirrorRoot, resolvedSha);
-    // Capture the resolved HEAD sha AFTER a successful materialize so a failed
-    // mirror op does not leave a stale sha for the version/state record.
-    if (result.kind === "materialized") {
-      captured = resolvedSha;
-    }
-
-    return result;
-  };
-
-  const probePinned = async (gitSource: GitBackedSource): Promise<GitPluginRootResult> => {
-    const { cloneUrl, pin, ref } = await seam.resolvePluginPin({ source: gitSource });
-    const authBundle = buildCloneAuth(cloneUrl, gitSource.kind, auth);
-    const cloneRoot = await seam.materializePluginClone({
-      locations,
-      cloneUrl,
-      pin,
-      ...(ref !== undefined && { ref }),
-      ...(authBundle !== undefined && { auth: authBundle }),
-    });
-
-    const result = await resolveGitPluginRootWithSubdir(gitSource, cloneRoot, pin);
-    // Capture the pin AFTER a successful materialize so a failed clone does not
-    // leave a stale sha for the version/state record.
-    if (result.kind === "materialized") {
-      captured = pin;
-    }
-
-    return result;
-  };
-
-  const probe = (gitSource: GitBackedSource): Promise<GitPluginRootResult> =>
-    gitSource.sha === undefined ? probeUnpinned(gitSource) : probePinned(gitSource);
-
-  return { probe, resolvedSha: () => captured };
-}
 
 /**
  * PI-7 / D-77-01 / PURL-09: derive the recorded plugin version.
@@ -748,27 +633,28 @@ async function preflightInstallResolve(
   // clones once into the cache and returns the clone-anchored pluginRoot.
   // The full sha is read AFTER the resolve for the sha-<12hex> version
   // (D-77-01) and the full-sha state field (D-77-02).
-  const clone = makeInstallCloneProbe(
-    opts.cloneCacheSeam ?? {
-      resolvePluginPin,
-      materializePluginClone,
-      materializeOrRefreshPluginMirror,
-    },
-    locations,
-    {
-      ctx: opts.ctx,
-      credentialOps: opts.credentialOps ?? DEFAULT_CREDENTIAL_OPS,
-      ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
-      ...(opts.authMemo !== undefined && { authMemo: opts.authMemo }),
-    },
-  );
+  let resolvedSha: string | undefined;
 
   // PI-4: resolveStrict + gate. Per D-04 the strict resolver consumes the
   // array-shape componentPaths (D-07 / COMP-01) and either returns an
   // installable variant or surfaces disqualification notes.
   const resolved = await resolveStrict(entry, {
     marketplaceRoot: sourceMp.marketplaceRoot,
-    resolveGitPluginRoot: clone.probe,
+    resolveGitPluginRoot: async (gitSource) => {
+      const clone = await probeInstallClone({
+        source: gitSource,
+        locations,
+        ...(opts.cloneCacheSeam !== undefined && { seam: opts.cloneCacheSeam }),
+        auth: {
+          ctx: opts.ctx,
+          credentialOps: opts.credentialOps ?? DEFAULT_CREDENTIAL_OPS,
+          ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
+          ...(opts.authMemo !== undefined && { authMemo: opts.authMemo }),
+        },
+      });
+      resolvedSha = clone.resolvedSha;
+      return clone.result;
+    },
   });
   // D-65-03 / FORCE-01/03/05: `--partial` widens the gate to admit the
   // partially-available arm; the default gate still blocks it. Both gates
@@ -785,7 +671,7 @@ async function preflightInstallResolve(
   // The `partially-available` arm carries only supported kinds in
   // componentPaths, so the shared materialize phases degrade it naturally
   // (D-65-02, no partial branch).
-  return { kind: "ready", entry, installable: resolved, resolvedSha: clone.resolvedSha() };
+  return { kind: "ready", entry, installable: resolved, resolvedSha };
 }
 
 /**
