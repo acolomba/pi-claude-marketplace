@@ -131,7 +131,7 @@ it rides in Phase 115 simply because that is the phase whose own backlog entry
 once.
 
 - [x] **Phase 115: Install-time admission-gate warnings** — the six unreplicated engine checks become per-script warnings read off the parse already in hand, never refusals; the published contract and the backlog catch up (WGATE-01..05, WDOCS-01 — prunes the stale `WFLW-01` entry) (completed 2026-09-09)
-- [ ] **Phase 116: Load-time workflow convergence** — a cleanly-installed record whose supported set grew converges on the next load, once, and says so on its row (WCONV-01..03)
+- [x] **Phase 116: Load-time workflow convergence** — a cleanly-installed record whose supported set grew converges on the next load, once, and says so on its row (WCONV-01..03) (completed 2026-09-09)
 - [ ] **Phase 117: Measured `agent()` failure evidence** — the live canary drives the host engine's `agent()` failure path with a negative control, and the doc restates the divergence at the grade it was actually measured to (WEVID-01, WEVID-02, WDOCS-02)
 
 <details>
@@ -693,5 +693,5 @@ Plans:
 | 113. Update, enable/disable, reconcile | 5/5 | Complete    | 2026-09-06 |
 | 114. Degradation and documentation | 5/5 | Complete    | 2026-09-08 |
 | 115. Install-time admission-gate warnings | 6/6 | Complete    | 2026-09-09 |
-| 116. Load-time workflow convergence | 3/4 | In Progress | - |
+| 116. Load-time workflow convergence | 4/4 | Complete    | 2026-09-09 |
 | 117. Measured `agent()` failure evidence | 0/? | Not started | - |

@@ -2,19 +2,19 @@
 gsd_state_version: "1.0"
 milestone: workflows-replay
 milestone_name: Workflow Bridge Replay onto main
-current_phase: 116
-current_phase_name: Load-time workflow convergence
-current_plan: 4 of 4 executed
-status: executing
-stopped_at: Completed 116-04-PLAN.md
-last_updated: "2026-09-09T16:22:00.000Z"
-state_head: b89657440db428f0cd18d9764b551de21081045b
+current_phase: 117
+current_phase_name: Measured `agent()` failure evidence
+current_plan: Not started
+status: planning
+stopped_at: Phase 116 complete, ready to plan Phase 117
+last_updated: "2026-09-09T18:00:03.720Z"
+state_head: 61f84ce970d4539a37c8e40ae67aac5b7276cfae
 progress:
   total_phases: 9
-  completed_phases: 7
+  completed_phases: 8
   total_plans: 36
   completed_plans: 36
-  percent: 78
+  percent: 89
 last_activity: 2026-09-09
 last_activity_desc: Executed plan 116-04; the phase gate green and the population claim measured
 ---
@@ -35,14 +35,22 @@ the gaps the bridge originally shipped with.
 
 ## Current Position
 
-Phase: 116 — Load-time workflow convergence
-Plan: 4 of 4 executed (4 plans, 3 waves, 10 tasks)
-Status: Execution complete — all three waves done; `npm run check` green at
-5650 unit + 35 integration; verification not yet run
+Phase: 117 — Measured `agent()` failure evidence
+Plan: Not started
+Status: Ready to plan
 
-Phase 115 is complete on every gate. The replay milestone (109-114) is complete
-and the first of the three hardening phases has now closed behind it; 116 and 117
-remain.
+Phases 115 and 116 are both complete on every gate. The replay milestone
+(109-114) is done and two of the three hardening phases have closed behind it;
+only 117 remains.
+
+Phase 116 closed at 4/4 plans, `npm run check` exit 0 at 5654 unit and 35
+integration, goal verification 4/4, security SECURED at 15/15 with
+`threats_open: 0`, and the nyquist gate validated with zero gaps. Its deep code
+review found 2 criticals and 9 warnings; 10 of 11 were fixed and the one skipped
+is filed. Both criticals collided with a success criterion rather than with mere
+code quality — an unreadable manifest emitting a permanent per-load failure row,
+and a clean record flippable to degraded without consent — and both fixes were
+re-derived from source at verification rather than accepted from the report.
 
 Phase 115 closed at 6/6 plans, a deep code review of 1 critical and 6 warnings
 with all 7 fixed, goal verification 6/6, security SECURED at 30/30 threats closed
@@ -94,11 +102,11 @@ probe-purity gate instead.
 
 ## Progress
 
-**Phases Complete:** 7/9 verified (Phases 109-114 replay, 115-117 hardening)
-**Current Plan:** 4/4 executed
+**Phases Complete:** 8/9 verified (Phases 109-114 replay, 115-117 hardening)
+**Current Plan:** Not started
 
 ```text
-[========--] 78%
+[=========-] 89%
 ```
 
 | Phase | Name | Status |
@@ -110,7 +118,7 @@ probe-purity gate instead.
 | 113 | Update, enable/disable, reconcile | Complete (5/5 plans, verified 9/9) |
 | 114 | Degradation and documentation | Complete (5/5 plans, verified 7/7) |
 | 115 | Install-time admission-gate warnings | Complete (6/6 plans, verified 6/6, secured 30/30, nyquist 0 gaps) |
-| 116 | Load-time workflow convergence | 4/4 plans executed (3 waves), full gate green; verification pending (hardening) |
+| 116 | Load-time workflow convergence | Complete (4/4 plans, verified 4/4, secured 15/15, nyquist 0 gaps) |
 | 117 | Measured `agent()` failure evidence | Not started (hardening) |
 
 **Why one run covers both milestones.** GSD scopes a milestone by parsing a
@@ -218,18 +226,18 @@ implementation.
 
 **Last session:** 2026-09-09T16:22:00Z
 
-**Stopped At:** Completed 116-04-PLAN.md, and with it Phase 116's execution.
-One task commit (`b8965744`) plus this SUMMARY. The phase gate ran ONCE, here,
-as `<execution_ordering>` required: `npm run check` exit 0 over nine chain
-links — 5650/5650 unit, 35/35 integration, zero `✖` in 7370 log lines. The
-reconcile backfill pair is at branches 61/61, functions 13/13, lines 477/477
-run alone.
+**Stopped At:** Phase 116 complete and marked. Four plans across three waves,
+then every tail gate: nyquist validated with 0 gaps, security SECURED 15/15 with
+`threats_open: 0`, a deep code review (2 critical + 9 warnings, 10 fixed, 1
+filed), and goal verification 4/4. `npm run check` is exit 0 at 5654 unit and 35
+integration after the fix pass. The reconcile backfill pair is at branches 61/61,
+functions 13/13, lines 477/477 run alone.
 
 **Resume File:** None
 
-**Next Action:** `/gsd-verify-work 116`, then `/gsd-secure-phase 116`, then
-Phase 117. Do NOT re-run `npm run check` as a spot-check — it ran once, in
-116-04, and `116-04-SUMMARY.md` §2 records every link's output.
+**Next Action:** Phase 117 (Measured `agent()` failure evidence, WEVID-01..02,
+WDOCS-02), then the milestone lifecycle. Do NOT re-run `npm run check` as a
+spot-check — it ran green after the fix pass and no source has moved since.
 
 Four things this plan settled that 116's verification should not re-derive:
 
