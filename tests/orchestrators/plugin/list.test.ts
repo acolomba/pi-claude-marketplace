@@ -379,7 +379,7 @@ test("PL-1: no flags emit the exact many-row notification for every bucket", asy
     // SNM-11: `available` / `unavailable` rows never carry a `scope`
     // field by construction, so their brackets are always absent.
     // UAT G-21-01: list-surface inventory row emits no reload-hint
-    // trailer; installedRowMessage emits `status: "present"` (list-only)
+    // trailer; composeInstalledListRow emits the steady-state installed row.
     // so the trailer is correctly absent.
     assert.deepStrictEqual(notifications, [
       {
@@ -1162,7 +1162,7 @@ test("T-80-08 / D-78-04: an INSTALLED git plugin with a missing clone stays `(in
     await listPlugins({ ctx, pi, cwd, scope: "user" });
     // assert
     const out = notifications[0]!.message;
-    // The installed path (installedRowMessage) never renders `(remote)` -- the
+    // The installed path (composeInstalledListRow) never renders `(remote)` -- the
     // `remote` derivation lives only on the not-installed availableRowMessage
     // path. A cold clone does not regress the row (D-78-04 degrade preserved).
     assert.match(out, /● gitplug v1\.0\.0 \(installed\)/, out);

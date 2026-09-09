@@ -1018,7 +1018,7 @@ const DISABLED_ROW_REASONS: ReadonlySet<ContentReason> = new Set<ContentReason>(
  * hidden until the plugin is re-enabled, at which point the enabled row reports
  * them again.
  *
- * Parity with `list.ts::disabledReasonsField` holds for every input the list
+ * Parity with `list-installed-row.ts::composeInstalledListRow` holds for every input the list
  * surface can express: that builder reads the record alone and runs no probe,
  * so manifest absence is the only reason it ever HAS. This surface additionally
  * reads disk, so it can name a read failure the list surface never learns
@@ -1191,7 +1191,7 @@ async function buildStateOnlyInstalledRow(
     // read marker LAST. `composeReasons` joins in array order, and
     // `narrowUnsupportedKinds` stays the sole producer of the kind tokens --
     // this wraps its output rather than replacing it (the same ordering rule
-    // `list.ts::partiallyInstalledReasons` implements).
+    // `list-installed-row.ts::composeInstalledListRow` implements).
     reasons: [
       "not in manifest",
       ...narrowUnsupportedKinds(record.compatibility.unsupported),

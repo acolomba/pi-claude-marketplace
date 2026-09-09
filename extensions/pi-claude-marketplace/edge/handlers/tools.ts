@@ -380,7 +380,7 @@ function pluginScopeOrFallback(
  *
  * The two arm groups differ only in whether `reasons` is declared optional on
  * the variant, not in whether the row may carry one. Every optional arm has a
- * producer: `disabled` takes `{not in manifest}` from `disabledReasonsField`
+ * producer: `disabled` takes `{not in manifest}` from `composeInstalledListRow`
  * (ENBL-16 / D-100-07), and `available` and `remote` take `{installs disabled}`
  * from `installsDisabledField` (OUT-02 / OUT-05).
  *
