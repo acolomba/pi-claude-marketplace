@@ -60,7 +60,7 @@ Only the requirements below are new, and all of them exist because #154 landed.
 
 <!-- Seams: tests/live-uat/workflow-storage-canary.mjs (the standing live driver), docs/workflows-compatibility.md (script-semantics section and its evidence-grade labels). -->
 
-- [ ] **WEVID-01**: The live-UAT canary drives the host engine's `agent()` failure path and asserts the observed behavior, with a negative control proving the assertion can fail. This is currently the weakest link in the compatibility chain and the one that matters most: it decides whether a script degrades or dies.
+- [x] **WEVID-01**: The live-UAT canary drives the host engine's `agent()` failure path and asserts the observed behavior, with a negative control proving the assertion can fail. This is currently the weakest link in the compatibility chain and the one that matters most: it decides whether a script degrades or dies.
 - [ ] **WEVID-02**: `docs/workflows-compatibility.md` restates the `agent()` divergence at its measured grade, and names the concrete consequence for the upstream `pipeline(...)` + `.filter(Boolean)` pattern -- which six of the seven real Anthropic workflow scripts use, twelve times in total.
 
 ### Documentation Hygiene
@@ -123,7 +123,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | WCONV-01 | Phase 116 | Complete |
 | WCONV-02 | Phase 116 | Complete |
 | WCONV-03 | Phase 116 | Complete |
-| WEVID-01 | Phase 117 | Pending |
+| WEVID-01 | Phase 117 | Complete |
 | WEVID-02 | Phase 117 | Pending |
 | WDOCS-01 | Phase 115 | Complete |
 | WDOCS-02 | Phase 117 | Pending |

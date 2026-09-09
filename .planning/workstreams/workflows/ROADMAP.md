@@ -684,7 +684,7 @@ Plans:
 
 **Wave 1**
 
-- [ ] 117-01-PLAN.md — Create the live-UAT canary, drive a real engine's `agent()` failure, and prove the driver can go red
+- [x] 117-01-PLAN.md — Create the live-UAT canary, drive a real engine's `agent()` failure, and prove the driver can go red
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -706,4 +706,4 @@ Plans:
 | 114. Degradation and documentation | 5/5 | Complete    | 2026-09-08 |
 | 115. Install-time admission-gate warnings | 6/6 | Complete    | 2026-09-09 |
 | 116. Load-time workflow convergence | 4/4 | Complete    | 2026-09-09 |
-| 117. Measured `agent()` failure evidence | 0/3 | Planned | - |
+| 117. Measured `agent()` failure evidence | 1/3 | In progress | - |
