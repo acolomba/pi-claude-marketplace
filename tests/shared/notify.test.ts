@@ -1,9 +1,5 @@
-import assert from "node:assert/strict";
-import test from "node:test";
-
-import * as legacyNotify from "../../extensions/pi-claude-marketplace/shared/notify.ts";
-
-test("legacy notification hub exposes no compatibility facade", () => {
-  // act & assert
-  assert.deepStrictEqual(Object.keys(legacyNotify), []);
-});
+/**
+ * Notification behavior is covered by the six mirrored direct-owner tests.
+ * This file stays content-free until its paired migration marker is deleted.
+ */
+export {};
