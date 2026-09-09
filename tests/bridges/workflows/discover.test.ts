@@ -23,6 +23,19 @@ const NONLITERAL_NAME =
 const NO_META = "export function help() {\n  return 1;\n}\n";
 const NONDETERMINISTIC =
   'export const meta = { name: "roll", description: "rolls" };\nexport function run() {\n  return Math.random();\n}\n';
+// A readable literal name, so the verdict is `named` -- but a statement stands
+// before the `meta` export, so the engine stops at its check 3.
+const GATED_NAMED =
+  'const helper = 1;\nexport const meta = { name: "greet", description: "greets" };\n';
+// A substituted template name: unreadable, so the verdict is `stem-fallback`,
+// and not a plain literal either, so the engine stops at its check 8.
+const GATED_TEMPLATE_NAME = 'export const meta = { name: `greet${1}`, description: "d" };\n';
+const CHECK_3_REASON =
+  "the engine refuses at its check 3 -- `export const meta = ...` must be the first statement in the script";
+const CHECK_8_REASON =
+  "the engine refuses at its check 8 -- every value inside `meta` must be a plain literal, so no spread, computed key, method, accessor, reserved key name (`__proto__`, `constructor`, `prototype`), array hole, substituted template or computed expression";
+const UNRUNNABLE_REASON =
+  "the engine loads a command only from a literal `meta.name` with a non-empty `meta.description`, and this script declares no readable name";
 
 async function createPluginRoot(t: TestContext, prefix: string): Promise<string> {
   const pluginRoot = await mkdtemp(path.join(tmpdir(), prefix));
@@ -891,4 +904,197 @@ test("leaves an admitted script unwarned in the preview tense", async (t) => {
 
   // assert
   assert.deepStrictEqual(discovery.warnings, []);
+});
+
+// ---------------------------------------------------------------------------
+// WGATE-01: the bridge-side shape of the gate line.
+//
+// One warned file earns exactly ONE line, in either tense, and a file that
+// trips nothing earns none. The count is the assertion: a channel that says the
+// same thing about the same file twice is a channel readers learn to skip.
+// ---------------------------------------------------------------------------
+
+test("WGATE-01: warns once for a gate-tripping script and leaves its well-formed siblings unwarned", async (t) => {
+  // arrange
+  const pluginRoot = await createPluginRoot(t, "workflow-discover-gate-siblings-");
+  const workflowsDir = path.join(pluginRoot, "workflows");
+  await mkdir(workflowsDir);
+  await writeFile(path.join(workflowsDir, "gated.js"), GATED_NAMED);
+  await writeFile(path.join(workflowsDir, "shout.js"), NAMED_SHOUT);
+  await writeFile(path.join(workflowsDir, "wave.js"), NAMED_WAVE);
+  const resolved = resolvedPlugin(pluginRoot, ["workflows"]);
+
+  // act
+  const discovery = await discoverPluginWorkflows({
+    pluginName: "acme",
+    resolved,
+    tense: "install",
+  });
+
+  // assert -- the LENGTH carries WGATE-01's second clause. "no sibling name
+  // appears" is also green for an empty array, which would be green for the
+  // wrong reason, so the whole array is compared and the two sibling names are
+  // then checked against the joined text.
+  assert.deepStrictEqual(discovery.warnings, [
+    `workflow script "gated.js" in "${workflowsDir}" was installed but the engine will refuse to load it: ${CHECK_3_REASON}`,
+  ]);
+  assert.strictEqual(discovery.warnings.join("\n").includes("shout.js"), false);
+  assert.strictEqual(discovery.warnings.join("\n").includes("wave.js"), false);
+  assert.deepStrictEqual(
+    discovery.discovered.map((record) => record.verdict),
+    [
+      {
+        outcome: "named",
+        fileName: "gated.js",
+        metaName: "greet",
+        generatedName: "acme:greet",
+        description: "greets",
+        gate: "meta-not-first-export",
+      },
+      {
+        outcome: "named",
+        fileName: "shout.js",
+        metaName: "shout",
+        generatedName: "acme:shout",
+        description: "shouts",
+      },
+      {
+        outcome: "named",
+        fileName: "wave.js",
+        metaName: "wave",
+        generatedName: "acme:wave",
+        description: "waves",
+      },
+    ],
+  );
+});
+
+test("WGATE-01: states one gate line in both tenses, differing only in the outcome phrase", async (t) => {
+  // arrange -- ONE fixture, read twice, so a tense that drifts is a diff
+  // between two assertions over the same bytes rather than two independently
+  // passing cases.
+  const pluginRoot = await createPluginRoot(t, "workflow-discover-gate-tenses-");
+  const workflowsDir = path.join(pluginRoot, "workflows");
+  await mkdir(workflowsDir);
+  await writeFile(path.join(workflowsDir, "gated.js"), GATED_NAMED);
+  const resolved = resolvedPlugin(pluginRoot, ["workflows"]);
+  const subject = `workflow script "gated.js" in "${workflowsDir}"`;
+
+  // act
+  const installed = await discoverPluginWorkflows({
+    pluginName: "acme",
+    resolved,
+    tense: "install",
+  });
+  const previewed = await discoverPluginWorkflows({
+    pluginName: "acme",
+    resolved,
+    tense: "preview",
+  });
+
+  // assert -- the subject and the reason are shared bindings, so only the
+  // outcome phrase may differ between the two expected strings.
+  assert.deepStrictEqual(installed.warnings, [
+    `${subject} was installed but the engine will refuse to load it: ${CHECK_3_REASON}`,
+  ]);
+  assert.deepStrictEqual(previewed.warnings, [
+    `${subject} would be installed but the engine will refuse to load it: ${CHECK_3_REASON}`,
+  ]);
+});
+
+test("WGATE-01: warns once, naming the engine check, for a stem-fallback script whose name is a substituted template", async (t) => {
+  // arrange
+  const pluginRoot = await createPluginRoot(t, "workflow-discover-gate-template-");
+  const workflowsDir = path.join(pluginRoot, "workflows");
+  const templateScript = path.join(workflowsDir, "greeter.js");
+  await mkdir(workflowsDir);
+  await writeFile(templateScript, GATED_TEMPLATE_NAME);
+  const resolved = resolvedPlugin(pluginRoot, ["workflows"]);
+
+  // act
+  const discovery = await discoverPluginWorkflows({
+    pluginName: "acme",
+    resolved,
+    tense: "install",
+  });
+
+  // assert -- ONE line, and it still names the check. "One line" satisfied by
+  // dropping the gate name would lose the whole content of the warning, so the
+  // reason tail is part of the compared value rather than a separate presence
+  // check.
+  assert.deepStrictEqual(discovery.warnings, [
+    `workflow script "greeter.js" in "${workflowsDir}" was installed but will not run: ${UNRUNNABLE_REASON}; ${CHECK_8_REASON}`,
+  ]);
+  assert.deepStrictEqual(discovery.discovered, [
+    {
+      verdict: {
+        outcome: "stem-fallback",
+        fileName: "greeter.js",
+        generatedName: "acme:greeter",
+        description: "d",
+        gate: "meta-not-pure-literal",
+      },
+      scriptFile: templateScript,
+      source: GATED_TEMPLATE_NAME,
+    },
+  ]);
+});
+
+test("WGATE-01: warns once per affected file in scan order across a mixed directory", async (t) => {
+  // arrange -- three affected files of three different kinds. An expected array
+  // longer than the number of affected files is the doubling this contract
+  // exists to forbid.
+  const pluginRoot = await createPluginRoot(t, "workflow-discover-gate-mixed-");
+  const workflowsDir = path.join(pluginRoot, "workflows");
+  await mkdir(workflowsDir);
+  await writeFile(path.join(workflowsDir, "roll.js"), NONDETERMINISTIC);
+  await writeFile(path.join(workflowsDir, "gated.js"), GATED_NAMED);
+  await writeFile(path.join(workflowsDir, "helper.js"), NO_META);
+  const resolved = resolvedPlugin(pluginRoot, ["workflows"]);
+
+  // act
+  const discovery = await discoverPluginWorkflows({
+    pluginName: "acme",
+    resolved,
+    tense: "install",
+  });
+
+  // assert -- one line per file, each naming its own file, in the entry order
+  // the scan sorts by rather than the write order above.
+  assert.deepStrictEqual(discovery.warnings, [
+    `workflow script "gated.js" in "${workflowsDir}" was installed but the engine will refuse to load it: ${CHECK_3_REASON}`,
+    `workflow script "helper.js" in "${workflowsDir}" was not installed: helper.js declares no \`meta\`, so there is nothing to install`,
+    `workflow script "roll.js" in "${workflowsDir}" was refused: roll.js calls \`Math.random\`, which the workflow engine refuses as nondeterministic`,
+  ]);
+});
+
+test("WGATE-03: returns a frozen warning array and accumulates nothing across two discovery passes", async (t) => {
+  // arrange
+  const pluginRoot = await createPluginRoot(t, "workflow-discover-gate-rerun-");
+  const workflowsDir = path.join(pluginRoot, "workflows");
+  await mkdir(workflowsDir);
+  await writeFile(path.join(workflowsDir, "gated.js"), GATED_NAMED);
+  await writeFile(path.join(workflowsDir, "helper.js"), NO_META);
+  const resolved = resolvedPlugin(pluginRoot, ["workflows"]);
+
+  // act -- the same unchanged directory, twice.
+  const first = await discoverPluginWorkflows({
+    pluginName: "acme",
+    resolved,
+    tense: "install",
+  });
+  const second = await discoverPluginWorkflows({
+    pluginName: "acme",
+    resolved,
+    tense: "install",
+  });
+
+  // assert -- a fresh array per call. A `seenPaths` set or a warnings array
+  // hoisted out of the call would make the second pass shorter or longer than
+  // the first; comparing whole values decides both directions at once.
+  assert.strictEqual(Object.isFrozen(first.warnings), true);
+  assert.strictEqual(Object.isFrozen(first.discovered), true);
+  assert.strictEqual(second.warnings.length, first.warnings.length);
+  assert.deepStrictEqual(second.warnings, [...first.warnings]);
+  assert.deepStrictEqual(second.discovered, [...first.discovered]);
 });
