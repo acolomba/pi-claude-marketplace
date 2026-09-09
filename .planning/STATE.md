@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 06
 current_phase_name: Assertion and Module Refinement
 status: executing
-stopped_at: Completed 06-02-PLAN.md
-last_updated: "2026-09-09T03:54:17.014Z"
+stopped_at: Completed 06-03-PLAN.md
+last_updated: "2026-09-09T04:26:32.829Z"
 last_activity: 2026-09-08
 last_activity_desc: Phase 06 execution started
-state_head: 26476f9c33b4df76a58b37914b890deebc1c5670
+state_head: fb75cee02c89107aac3f4955b2234bcec7c2ce16
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 180
-  completed_plans: 130
+  completed_plans: 131
   percent: 11
 ---
 
@@ -33,7 +33,7 @@ component as a working Pi artifact.
 
 Phase: 06 (Assertion and Module Refinement) — EXECUTING
 Next: Discuss Phase 6
-Plan: 3 of 52
+Plan: 4 of 52
 Status: Ready to execute
 Last activity: 2026-09-08 — Phase 06 execution started
 
@@ -310,6 +310,7 @@ Last activity: 2026-09-08 — Phase 06 execution started
 | Phase 05 P34                            | 26min    | 3 tasks | 1 files  |
 | Phase 06 P01 | 13min | 2 tasks | 6 files |
 | Phase 06 P02 | 30min | 3 tasks | 8 files |
+| Phase 06 P03 | 30min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -720,6 +721,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 06]: The MF-DEC-01 census is bound to exactly 24 resolved finding IDs and explicit current routes; ER-F19 remains reserved for Phase 8.
 - [Phase 06]: Bridge lifecycle proofs use case-owned state plus existing readers, executors, runtimes, and public results; no test-only production export is added.
 - [Phase 06]: Irreproducible builtin timing cases are removed only where an existing production port or direct owner retains the same public failure or convergence contract.
+- [Phase 06]: Install schedule evidence observes a case-owned InstallTransaction phase ledger instead of Node's shared filesystem module.
+- [Phase 06]: Reinstall lifecycle faults use existing persistence, cache, data, and routing ports or real case-owned filesystem state.
 
 ### Pending Todos
 
@@ -772,7 +775,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 06-02-PLAN.md
+**Stopped at:** Completed 06-03-PLAN.md
 
 Phase 04 completed all seven plans and closed AUTH-01 and TREF-01 through
 TREF-03. Independent verification passed 4/4 with no behavioral or UAT gap;
@@ -790,7 +793,7 @@ independent verification passed 6/6 with zero unverified behaviors.
 **Read beside it:** `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`, the
 Phase 01 terminal evidence ledger, and Phase 5's roadmap criteria.
 
-Last session: 2026-09-09T03:54:16.488Z
+Last session: 2026-09-09T04:26:32.282Z
 
 **Next:** Discuss Phase 06 to define the assertion-strengthening and approved
 module-refinement work before planning.
