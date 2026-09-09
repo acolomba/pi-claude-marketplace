@@ -1,20 +1,16 @@
 ---
 gsd_state_version: "1.0"
-milestone: v1.19
-status: Awaiting next milestone
-stopped_at: Milestone v1.19 closed and archived; awaiting the next milestone
-last_updated: "2026-09-08T03:04:31.784Z"
+milestone: v1.20
+milestone_name: transitive-dependencies
+status: planning
+last_updated: "2026-09-09T17:08:12.988Z"
 last_activity: 2026-09-09
-last_activity_desc: Completed quick task 260909-g1l (UDISP-01 corrections, PMAN-01 filed)
-state_head: 183de9c9e752cc3037409350b714c4bf78ad5135
-milestone_name: Unit Test Refactor
-current_phase: 117
-current_phase_name: Extension Entry and Final Gate
 progress:
-  total_phases: 10
-  completed_phases: 10
-  total_plans: 220
-  completed_plans: 220
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -31,13 +27,10 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: Milestone v1.19 complete
+Phase: Not started (defining requirements)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-09-09 — Completed quick task 260909-g1l: corrected the
-UDISP-01 entry (dropped the cross-scope data check, which our per-scope
-dataRoot makes unreachable; pinned the upstream flag table to CLI v2.1.236)
-and filed PMAN-01 for the unread bare `plugin.json`
+Status: Defining requirements
+Last activity: 2026-09-09 — Milestone v1.20 started
 
 ## Performance Metrics
 

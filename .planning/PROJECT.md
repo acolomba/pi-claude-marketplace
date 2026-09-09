@@ -10,6 +10,25 @@
 
 A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artifact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install.
 
+## Current Milestone: v1.20 transitive-dependencies -- Dependency Provenance, Manifest Fallback and Uninstall Flags (branch: features/manifest, started 2026-09-09)
+
+**Goal:** Record how each installed plugin got there, so `uninstall --prune` can
+remove the ones nothing needs any more -- and close the two adjacent gaps that
+land on the same surfaces.
+
+**Target features:**
+
+- Read a bare `<pluginRoot>/plugin.json` as well as the wrapped
+  `.claude-plugin/plugin.json`, at both call sites that hardcode the wrapped path.
+- Collapse `"./skills/"` and `"skills"` to one component path, so the fallback
+  does not enumerate the same directory twice.
+- Render object-shaped `{name, version, marketplace}` dependencies instead of
+  dropping them, on every surface that shows dependencies.
+- Record install provenance per plugin -- explicit or transitive -- in
+  `state.json`.
+- Remove no-longer-needed transitive plugins with `uninstall --prune`.
+- Keep a plugin's data directory with `uninstall --keep-data`.
+
 ## Previous Milestone: v1.19 Unit Test Refactor (branch: features/unit-test-refactor, shipped 2026-09-04, no npm release)
 
 **Goal:** Each production TypeScript module has a clear corresponding test that
@@ -577,6 +596,8 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
+
+_Last updated: 2026-09-09 when milestone v1.20 transitive-dependencies started. Scope is three coupled items: the unread bare `plugin.json` (PMAN-01), dependency support with transitive-install provenance behind `--prune` (PDEP-01 plus new scope), and a `--keep-data` opt-out on uninstall (UDISP-01). Items two and three both land on `plugin uninstall`, which is why they share a milestone -- the flag surface is designed once. MIGR-01 is deliberately out of scope; the provenance field depends only on its unresolved stale-state guard question, not on the `migrate.ts` deletion. Prior updates follow._
 
 _Last updated: 2026-09-04 after the v1.19 Unit Test Refactor milestone closed. All 204 of 204 source-test pairs are complete and the corresponding-test gate reports zero violations. The retained all-pair result records 190 complete, 7 accepted D-116-01a single-branch shortfalls, and 7 type-only rows, and is regenerable by a report-only command that gates nothing. Phase 117 changed no production file; `tests/helpers/` no longer exists. The five gate scripts, previously declared and invoked by nothing, now run — three inside `npm run check`, two on a documented cadence. Closing gates: `npm test` 5,144 across 295 suites with 0 failures on BOTH Node v22.22.2 and v26.8.1, `test:integration` 31/31, typecheck, lint and fallow clean. Ten of ten phases verified and `nyquist_compliant: true`; 48 of 48 requirements satisfied; one accepted operator override on Success Criterion 4. Prior updates follow._
 *Last updated: 2026-08-29 after milestone workflows-detection shipped (Phase 106, 4 plans, 6/6 requirements, audit passed with 5/5 integration seams, 4/4 flows, 0 open threats, and terminal UI 24/24). The resolver now detects opaque workflow declarations and the literal `workflows/` directory, reports one `{workflows}` reason, rejects normal installation, and admits supported components with `--partial`. Workflow files remain source-only. Prior updates follow.*
