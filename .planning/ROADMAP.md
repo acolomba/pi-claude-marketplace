@@ -484,12 +484,12 @@ Plans:
 **Goal:** Strengthen assertions and simplify confirmed problem modules without weakening contracts.
 **Depends on:** Phase 5
 **Requirements:** TREF-07, TREF-08, TREF-09
-**Plans:** 52 plans
+**Plans:** 1/52 plans executed
 
 Plans:
 **Wave 1**
 
-- [ ] 06-01-PLAN.md — Strengthen observable assertions before any ownership move
+- [x] 06-01-PLAN.md — Strengthen observable assertions before any ownership move
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -760,7 +760,7 @@ baseline, which still includes both pairs; neither is a terminal shortfall.
 | 3. Production Defect Corrections     | 14/14          | Complete    | 2026-09-07 |
 | 4. Hermetic Test Infrastructure      | 7/7            | Complete    | 2026-09-07 |
 | 5. Injection and Ownership Design    | 34/34          | Complete    | 2026-09-08 |
-| 6. Assertion and Module Refinement   | 0/0            | Not started | —          |
+| 6. Assertion and Module Refinement   | 1/52 | In Progress|  |
 | 7. Gate Integrity                    | 0/0            | Not started | —          |
 | 8. Direct Coverage                   | 0/0            | Not started | —          |
 | 9. Final Quality and Backlog Closure | 0/0            | Not started | —          |

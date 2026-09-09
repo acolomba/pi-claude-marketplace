@@ -64,7 +64,7 @@ component as a working Pi artifact.
 - [x] **TREF-06**: Tests exercise public contracts, and terminal test-only
       exports, reset hooks, and test-shaped branches follow the trace-preserving
       removal disposition.
-- [ ] **TREF-07**: Observable assertions use complete exact outcomes, including
+- [x] **TREF-07**: Observable assertions use complete exact outcomes, including
       structural single/plural cardinality and visible plural tallies, while
       documented caveats remain protected.
 - [ ] **TREF-08**: Global prototype and builtin-module patching and dishonest
@@ -170,7 +170,7 @@ Roadmap creation assigns each requirement to exactly one phase.
 | TREF-04     | Phase 5                             | Complete      |
 | TREF-05     | Phase 5                             | Complete      |
 | TREF-06     | Phase 5                             | Complete      |
-| TREF-07     | Phase 6                             | Pending       |
+| TREF-07     | Phase 6                             | Complete |
 | TREF-08     | Phase 6                             | Pending       |
 | TREF-09     | Phase 6                             | Pending       |
 | GGAT-01     | Phase 7                             | Pending       |
