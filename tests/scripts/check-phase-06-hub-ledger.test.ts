@@ -124,9 +124,9 @@ describe("MF-DEC-01 census", () => {
 });
 
 describe("PRE-EDIT ledger", () => {
-  const hub = "extensions/pi-claude-marketplace/shared/notify.ts";
-  const legacyTest = "tests/shared/notify.test.ts";
-  const ledger = `# Notification PRE-EDIT Ledger
+  const hub = "tests/architecture/catalog-uat.test.ts";
+  const legacyTest = hub;
+  const ledger = `# Catalog PRE-EDIT Ledger
 
 Status: READY
 Hub: ${hub}
@@ -134,13 +134,13 @@ Legacy test: ${legacyTest}
 
 | Category | Current owner | Destination | Evidence |
 | --- | --- | --- | --- |
-| exported symbol | notify | shared/notification-dispatch.ts | tracked |
-| production caller | orchestrators/plugin/list.ts | shared/notification-dispatch.ts | CodeGraph |
-| source-scanning gate | scripts/test-coverage-direct.mjs | shared/notification-dispatch.ts | tracked |
-| documentation comment | docs/output-catalog.md | shared/notification-dispatch.ts | tracked |
-| test ownership | tests/shared/notify.test.ts#notify | tests/shared/notification-dispatch.test.ts | exact owner |
-| completeness invariant | notification closed set | shared/notification-types.ts | inverse walk |
-| dependency edge | notify.ts -> notification-types.ts | notification-dispatch.ts -> notification-types.ts | acyclic |
+| exported symbol | catalog parser | catalog-uat/catalog-parser.ts | tracked |
+| production caller | catalog contract driver | catalog-uat/catalog-contract.test.ts | CodeGraph |
+| source-scanning gate | scripts/check-phase-06-hub-ledger.mjs | catalog-uat/catalog-contract.test.ts | tracked |
+| documentation comment | docs/output-catalog.md | catalog-uat/catalog-contract.test.ts | tracked |
+| test ownership | catalog-uat.test.ts#driver | catalog-uat/catalog-contract.test.ts | exact owner |
+| completeness invariant | 20 command surfaces | catalog-uat/fixtures/*.ts | inverse walk |
+| dependency edge | catalog-uat.test.ts -> output-catalog.md | catalog-contract.test.ts -> catalog-parser.ts | acyclic |
 `;
 
   test("accepts a READY ledger with every repoint category", () => {
@@ -153,8 +153,8 @@ Legacy test: ${legacyTest}
         trackedPaths: new Set([
           hub,
           legacyTest,
-          "extensions/pi-claude-marketplace/shared/notification-dispatch.ts",
-          "tests/shared/notification-dispatch.test.ts",
+          "tests/architecture/catalog-uat/catalog-parser.ts",
+          "tests/architecture/catalog-uat/catalog-contract.test.ts",
         ]),
       }),
       [],
@@ -176,7 +176,7 @@ Legacy test: ${legacyTest}
       validatePreedit({
         hub,
         legacyTest,
-        ledger: `${ledger}| test ownership | duplicate | tests/shared/notification-dispatch.test.ts | duplicate |\n`,
+        ledger: `${ledger}| test ownership | duplicate | catalog-uat/catalog-contract.test.ts | duplicate |\n`,
         codegraph: hub,
         trackedPaths: new Set([hub, legacyTest]),
       }).join("\n"),

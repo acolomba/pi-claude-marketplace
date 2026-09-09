@@ -108,7 +108,6 @@ export const CATALOG_FIXTURES = Object.freeze(
 
 /** @type {readonly string[]} */
 export const LEGACY_HUBS = Object.freeze([
-  `${EXTENSION_ROOT}/shared/notify.ts`,
   "tests/architecture/catalog-uat.test.ts",
   `${EXTENSION_ROOT}/orchestrators/plugin/install.ts`,
   `${EXTENSION_ROOT}/orchestrators/plugin/update.ts`,
@@ -345,23 +344,23 @@ export const CENSUS_ROWS = Object.freeze([
   },
   {
     id: "SNA-F007",
-    sourcePath: `${EXTENSION_ROOT}/shared/notify.ts`,
+    sourcePath: `${EXTENSION_ROOT}/shared/notification-types.ts`,
     symbol: "notification discriminant narrowing",
-    ownerTest: "tests/shared/notify.test.ts",
-    graph: "typed notification message -> renderer -> exact output bytes",
+    ownerTest: "tests/shared/notification-types.test.ts",
+    graph: "typed notification message -> closed union -> exact owner assertions",
     route: "phase-06",
     evidence:
-      "Replacement: delete the stateful discriminant getter; direct exact-output owners cover every legitimate message variant.",
+      "Replacement: the closed notification unions and exhaustive discriminant proofs live in the direct notification-types owner pair.",
   },
   {
     id: "SNC-F023",
-    sourcePath: `${EXTENSION_ROOT}/shared/notify.ts`,
+    sourcePath: `${EXTENSION_ROOT}/shared/notification-grammar.ts`,
     symbol: "notification exhaustive renderer defaults",
-    ownerTest: "tests/shared/notify.test.ts",
-    graph: "closed message union -> grammar/summary/dispatch -> Pi notification",
+    ownerTest: "tests/shared/notification-grammar.test.ts",
+    graph: "closed message union -> exhaustive grammar -> exact output bytes",
     route: "phase-06",
     evidence:
-      "Replacement: remove prototype/getter surgery while retaining compiler exhaustiveness and independently authored exact output cases.",
+      "Replacement: exhaustive renderer switches and independently authored exact output cases live in the direct notification-grammar owner pair.",
   },
 ]);
 
