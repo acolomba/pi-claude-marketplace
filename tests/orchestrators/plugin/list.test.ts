@@ -1162,7 +1162,7 @@ test("T-80-08 / D-78-04: an INSTALLED git plugin with a missing clone stays `(in
     // assert
     const out = notifications[0]!.message;
     // The installed path (composeInstalledListRow) never renders `(remote)` -- the
-    // `remote` derivation lives only on the not-installed composeCandidateListRow
+    // `remote` derivation lives only on the not-installed availableRowMessage
     // path. A cold clone does not regress the row (D-78-04 degrade preserved).
     assert.match(out, /● gitplug v1\.0\.0 \(installed\)/, out);
     assert.equal(out.includes("(remote)"), false, out);

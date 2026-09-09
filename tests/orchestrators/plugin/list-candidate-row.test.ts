@@ -8,7 +8,7 @@ import * as git from "isomorphic-git";
 
 import { pluginMirrorKey } from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
 import {
-  composeCandidateListRow,
+  availableRowMessage,
   type CandidateRow,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/list-candidate-row.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -25,7 +25,7 @@ type ComposeCandidateListRow = (
 ) => Promise<CandidateRow>;
 
 function loadComposeCandidateListRow(): ComposeCandidateListRow {
-  return composeCandidateListRow;
+  return availableRowMessage;
 }
 
 async function candidateEnvironment(testContext: TestContext): Promise<{

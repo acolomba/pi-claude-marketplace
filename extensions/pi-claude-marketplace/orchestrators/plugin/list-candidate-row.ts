@@ -158,7 +158,7 @@ function probeFailureRow(manifestEntry: ManifestPluginEntry, probeErr: unknown):
  * Git sources with no cached clone remain `remote`; warm and path sources use
  * the resolver's exact three-way state. Probe failures become per-row reasons.
  */
-export async function composeCandidateListRow(
+export async function availableRowMessage(
   manifestEntry: ManifestPluginEntry,
   marketplaceRoot: string,
   locations: ScopedLocations,

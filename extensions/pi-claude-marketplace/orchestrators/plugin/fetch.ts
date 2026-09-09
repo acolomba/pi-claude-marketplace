@@ -440,7 +440,7 @@ function skippedUpToDate(entry: ManifestEntry): FetchMsg {
  * now-warm tree (never a pre-materialize probe). The classification maps 1:1
  * onto the fetch row status: `remote` (still unmaterialized), `available`,
  * `partially-available` (carries the dropped-kind reasons), `unavailable`
- * (carries the structural reasons). Mirrors `list`'s `composeCandidateListRow`.
+ * (carries the structural reasons). Mirrors `list-candidate-row`'s `availableRowMessage`.
  */
 async function freshRow(
   entry: ManifestEntry,

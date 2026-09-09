@@ -70,7 +70,7 @@ import {
 } from "../../shared/notify-context.ts";
 import { narrowProbeError as sharedNarrowProbeError } from "../../shared/probe-classifiers.ts";
 
-import { composeCandidateListRow, type FilterBucket } from "./list-candidate-row.ts";
+import { availableRowMessage, type FilterBucket } from "./list-candidate-row.ts";
 import { composeInstalledListRow } from "./list-installed-row.ts";
 import { LIST_CONTEXT, type ListMsg } from "./list.messaging.ts";
 
@@ -299,7 +299,7 @@ async function enumerateMarketplacePlugins(args: {
   scopedManifest: ScopedManifest;
   /**
    * DFEN-04: the PLUGIN scope's merged base+local config view. Candidate rows
-   * read the user's `enabled` opinion out of it -- see `composeCandidateListRow`.
+   * read the user's `enabled` opinion out of it -- see `availableRowMessage`.
    */
   pluginScopeConfig: MergedConfig;
   excludeFromAvailable?: ReadonlySet<string> | undefined;
@@ -361,7 +361,7 @@ async function enumerateMarketplacePlugins(args: {
     // DFEN-04 / D-01: the config key is the flat `<plugin>@<marketplace>` form,
     // and the merged view resolves base-vs-local by the same identity rule
     // `install` applies (a local entry replaces the base entry wholesale).
-    const { message: row, bucket } = await composeCandidateListRow(
+    const { message: row, bucket } = await availableRowMessage(
       manifestEntry,
       mpRecord.marketplaceRoot,
       locationsFor(pluginScope, opts.cwd),
