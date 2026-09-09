@@ -172,7 +172,7 @@ const INVOKERS: Record<string, Invoker> = {
       ...(mode === "explicit" && { scope: "project" as const }),
     });
   },
-  // reinstall (marketplace target). reinstall.test.ts ATTR-03.
+  // reinstall (marketplace target). reinstall-flow.test.ts ATTR-03.
   reinstall: async ({ ctx, pi, cwd, mode }) => {
     await createReinstallPlugins()({
       ctx,

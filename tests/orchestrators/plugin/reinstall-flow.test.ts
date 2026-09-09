@@ -52,11 +52,11 @@ import type {
 import type { InstallCloneCacheSeam } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-clone-probe.ts";
 import type { ReinstallCloneCacheSeam } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-clone-probe.ts";
 import type {
+  ReinstallHooksRouting,
   ReinstallPluginDeps,
   ReinstallPluginOptions,
   ReinstallPluginsOptions,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts";
-import type { ReinstallHooksRouting } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts";
 import type {
   NotificationContext,
   ToolInventory,
@@ -136,7 +136,7 @@ async function withHermeticHome<T>(fn: () => Promise<T>): Promise<T> {
   return withHermeticEnvironment("reinstall-", fn);
 }
 
-export interface SeededReinstallAgent {
+interface SeededReinstallAgent {
   readonly directory?: string;
   readonly sourceName: string;
   readonly frontmatterName?: string;
@@ -144,7 +144,7 @@ export interface SeededReinstallAgent {
   readonly body: string;
 }
 
-export interface ResourceSet {
+interface ResourceSet {
   readonly skill?: string;
   readonly command?: string;
   readonly agent?: string;
@@ -188,7 +188,7 @@ function rememberManifestEntry(
   }
 }
 
-export async function seedMarketplace(opts: {
+async function seedMarketplace(opts: {
   readonly cwd: string;
   readonly marketplaceRoot: string;
   readonly marketplaceName?: string;
@@ -272,7 +272,7 @@ export async function seedMarketplace(opts: {
   return { pluginRoot, manifestPath };
 }
 
-export async function writePluginTree(
+async function writePluginTree(
   pluginRoot: string,
   pluginName: string,
   resources: ResourceSet,
@@ -375,7 +375,7 @@ async function mergeManifestEntry(
   return writeManifest(marketplaceRoot, marketplaceName, plugins, declarations, agentsByPlugin);
 }
 
-export async function writeManifest(
+async function writeManifest(
   marketplaceRoot: string,
   marketplaceName: string,
   plugins: Record<string, string>,

@@ -80,12 +80,11 @@ const FORBIDDEN_TARGETS: ReadonlyArray<string> = [
   "extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts",
   // PL-3 + NFR-5: list is read-only against state + manifest; no network.
   "extensions/pi-claude-marketplace/orchestrators/plugin/list.ts",
-  // PRL-07: the public reinstall flow and its retained sequencer use cached
-  // manifests only -- which is also why refreshGitHubClone is one of the
-  // gated patterns. Keep both targets until the sequencer moves into the flow
-  // owner so this transition cannot weaken the original gate.
+  // PRL-07: the public reinstall flow uses cached manifests only -- which is
+  // also why refreshGitHubClone is one of the gated patterns. The flow owner
+  // contains the complete sequencing body, so this one target guards the full
+  // operation without a retired compatibility path.
   "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts",
-  "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts",
   // INFO-02 + NFR-5: info is a read-only seam over the local state + on-disk
   // marketplace manifests; no network.
   "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts",

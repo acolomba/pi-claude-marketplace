@@ -59,7 +59,6 @@ const FORBIDDEN_TARGETS: ReadonlyArray<string> = [
   "extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts",
   "extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts",
   "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts",
-  "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts",
 ];
 
 const FORBIDDEN_PATTERNS: ReadonlyArray<{ name: string; pattern: RegExp }> = [

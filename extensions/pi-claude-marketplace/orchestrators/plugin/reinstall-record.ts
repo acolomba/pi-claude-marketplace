@@ -49,6 +49,11 @@ export type RecordReinstallOutcomeInput =
   RecordReinstalledOutcomeInput | RecordSkippedOutcomeInput | RecordFailedOutcomeInput;
 
 /** Persist a successful reinstall or compose an exact non-success outcome. */
+export function recordReinstallOutcome(
+  input: RecordReinstalledOutcomeInput,
+): ReinstallReinstalledOutcome;
+export function recordReinstallOutcome(input: RecordSkippedOutcomeInput): ReinstallSkippedOutcome;
+export function recordReinstallOutcome(input: RecordFailedOutcomeInput): ReinstallFailedOutcome;
 export function recordReinstallOutcome(input: RecordReinstallOutcomeInput): ReinstallPluginOutcome {
   switch (input.partition) {
     case "skipped":

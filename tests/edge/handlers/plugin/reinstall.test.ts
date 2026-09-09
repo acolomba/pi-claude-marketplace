@@ -90,7 +90,7 @@
 // diagnostics owned by tests/edge/args.test.ts, none restates the retired
 // vocabulary guard owned by tests/architecture/partial-vocabulary-guard.test.ts,
 // and none re-derives the reinstall workflow's own row grammar, which
-// tests/orchestrators/plugin/reinstall.test.ts owns.
+// tests/orchestrators/plugin/reinstall-flow.test.ts owns.
 
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
