@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 06
 current_phase_name: Assertion and Module Refinement
 status: executing
-stopped_at: Completed 06-01-PLAN.md
-last_updated: "2026-09-09T03:18:13.129Z"
+stopped_at: Completed 06-02-PLAN.md
+last_updated: "2026-09-09T03:54:17.014Z"
 last_activity: 2026-09-08
 last_activity_desc: Phase 06 execution started
-state_head: 71dffcd732cc55de02444b01b4c2d29568097a1c
+state_head: 26476f9c33b4df76a58b37914b890deebc1c5670
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 180
-  completed_plans: 129
+  completed_plans: 130
   percent: 11
 ---
 
@@ -33,7 +33,7 @@ component as a working Pi artifact.
 
 Phase: 06 (Assertion and Module Refinement) — EXECUTING
 Next: Discuss Phase 6
-Plan: 2 of 52
+Plan: 3 of 52
 Status: Ready to execute
 Last activity: 2026-09-08 — Phase 06 execution started
 
@@ -309,6 +309,7 @@ Last activity: 2026-09-08 — Phase 06 execution started
 | Phase 05 P32                            | 22min    | 2 tasks | 2 files  |
 | Phase 05 P34                            | 26min    | 3 tasks | 1 files  |
 | Phase 06 P01 | 13min | 2 tasks | 6 files |
+| Phase 06 P02 | 30min | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -716,6 +717,9 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 05]: Preserve the exact sole Fallow complexity suppression until the planned Phase 01-71 refactor. — Fallow reports zero above threshold and Phase 5 added no suppression or implementation repair.
 - [Phase 06]: Structural invocation form remains authoritative when identical row counts require different single/plural output.
 - [Phase 06]: Lifecycle output contracts compare complete ordered notification arrays and severity behind explicitly sized strict doubles.
+- [Phase 06]: The MF-DEC-01 census is bound to exactly 24 resolved finding IDs and explicit current routes; ER-F19 remains reserved for Phase 8.
+- [Phase 06]: Bridge lifecycle proofs use case-owned state plus existing readers, executors, runtimes, and public results; no test-only production export is added.
+- [Phase 06]: Irreproducible builtin timing cases are removed only where an existing production port or direct owner retains the same public failure or convergence contract.
 
 ### Pending Todos
 
@@ -768,7 +772,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 06-01-PLAN.md
+**Stopped at:** Completed 06-02-PLAN.md
 
 Phase 04 completed all seven plans and closed AUTH-01 and TREF-01 through
 TREF-03. Independent verification passed 4/4 with no behavioral or UAT gap;
@@ -786,7 +790,7 @@ independent verification passed 6/6 with zero unverified behaviors.
 **Read beside it:** `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`, the
 Phase 01 terminal evidence ledger, and Phase 5's roadmap criteria.
 
-Last session: 2026-09-09T03:18:12.590Z
+Last session: 2026-09-09T03:54:16.488Z
 
 **Next:** Discuss Phase 06 to define the assertion-strengthening and approved
 module-refinement work before planning.
