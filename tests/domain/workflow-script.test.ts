@@ -123,6 +123,37 @@ interface GateRow {
   readonly gate: WorkflowGate | undefined;
 }
 
+/**
+ * WGATE-04: the refusal projection, `reason` INCLUDED.
+ *
+ * The `NonAdmission` projection above drops the reason on purpose, because
+ * discriminating a verdict by its text is what the tagged union exists to
+ * remove. These cases are the exception that proves the text itself: the two
+ * refusal paths keep their existing bytes, so the bytes are the assertion.
+ */
+interface Refusal {
+  readonly outcome: WorkflowVerdict["outcome"];
+  readonly cause: SkippedCause | RefusedCause | undefined;
+  readonly reason: string | undefined;
+}
+
+function refusal(verdict: WorkflowVerdict): Refusal {
+  const settled = verdict.outcome === "skipped" || verdict.outcome === "refused";
+
+  return {
+    outcome: verdict.outcome,
+    cause: settled ? verdict.cause : undefined,
+    reason: settled ? verdict.reason : undefined,
+  };
+}
+
+interface RefusalTextRow {
+  readonly placement: string;
+  readonly source: string;
+  readonly cause: RefusedCause;
+  readonly reason: string;
+}
+
 interface UntrustedTextRow {
   readonly threat: string;
   readonly fileName: string;
@@ -1188,6 +1219,115 @@ export const meta = { name: "ship" };
     // assert
     assert.deepStrictEqual(admission(verdict), expectedVerdict);
     assert.strictEqual(Object.hasOwn(verdict, "gate"), false);
+  });
+
+  // WGATE-04: the refusal paths' REASON BYTES, pinned against the text the
+  // reason builders produce today. "Unchanged" is only checkable against a
+  // recorded baseline, so each row carries the whole sentence rather than a
+  // substring or a pattern that would stay green through a rewrite.
+  for (const { placement, source, cause, reason } of [
+    {
+      placement: "in executable code",
+      source: `export const meta = { name: "ship", description: "d" };\nconst stamped = Date.now();\n`,
+      cause: "determinism-code",
+      reason: "clock.js calls `Date.now`, which the workflow engine refuses as nondeterministic",
+    },
+    {
+      placement: "in a comment",
+      source: `// resume safety: no Date.now anywhere\nexport const meta = { name: "ship", description: "d" };\n`,
+      cause: "determinism-comment",
+      reason:
+        "clock.js mentions `Date.now` in a comment; the engine screens raw text and refuses the script anyway, so reword the comment to make it load",
+    },
+    {
+      placement: "in a string literal",
+      source: `const note = "Math.random is banned here";\nexport const meta = { name: "ship", description: "d" };\n`,
+      cause: "determinism-string",
+      reason:
+        "clock.js mentions `Math.random` inside a string, template or regular-expression literal; the engine screens raw text and refuses the script anyway",
+    },
+    {
+      // The matched text spans the comment's end, so the escaping form is part
+      // of the pinned bytes: an unescaped newline here would forge a line in a
+      // rendered warning block.
+      placement: "across the comment-to-code boundary",
+      source: `// trailing new\nDate();\nexport const meta = { name: "ship", description: "d" };\n`,
+      cause: "determinism-split",
+      reason:
+        "clock.js matches `new\\u{a}Date()` across the boundary between quoted-or-commented text and code, so nothing is invoked; the engine screens raw text and refuses the script anyway, so the matching text must change to make it load",
+    },
+  ] satisfies readonly RefusalTextRow[]) {
+    test(`WGATE-04: keeps the refusal reason for a blocklist match ${placement}`, () => {
+      // arrange
+      const expectedVerdict = { outcome: "refused", cause, reason } satisfies Refusal;
+
+      // act
+      const verdict = admitWorkflowScript("acme", "clock.js", source);
+
+      // assert
+      assert.deepStrictEqual(refusal(verdict), expectedVerdict);
+    });
+  }
+
+  test("WGATE-04: refuses a script that is both unparseable and gate-tripping as unparseable alone", () => {
+    // arrange -- an unbalanced brace after a statement that would trip the
+    // first-statement check, over a meta declaring no description that would
+    // trip the field check. There is no tree to read a gate off, so attaching
+    // one would be inventing a finding; the absent field is also what fails if a
+    // gate read is ever hoisted above this arm.
+    const source = `const x = 1;\nexport const meta = { name: "ship"\n`;
+    const expectedVerdict = {
+      outcome: "refused",
+      cause: "unparseable",
+      reason: "broken.js is not parseable JavaScript, so no name can be read from it",
+    } satisfies Refusal;
+
+    // act
+    const verdict = admitWorkflowScript("acme", "broken.js", source);
+
+    // assert
+    assert.deepStrictEqual(refusal(verdict), expectedVerdict);
+    assert.strictEqual(Object.hasOwn(verdict, "gate"), false);
+  });
+
+  test("WGATE-04: refuses a script that is both nondeterministic and gate-tripping on the blocklist alone", () => {
+    // arrange -- the timestamp is the first statement, so this script would trip
+    // the first-statement check, and its meta declares no description, so it
+    // would trip the field check too. The blocklist refusal is settled first and
+    // carries no gate.
+    const source = `const stamped = Date.now();\nexport const meta = { name: "ship" };\n`;
+    const expectedVerdict = {
+      outcome: "refused",
+      cause: "determinism-code",
+      reason: "clock.js calls `Date.now`, which the workflow engine refuses as nondeterministic",
+    } satisfies Refusal;
+
+    // act
+    const verdict = admitWorkflowScript("acme", "clock.js", source);
+
+    // assert
+    assert.deepStrictEqual(refusal(verdict), expectedVerdict);
+    assert.strictEqual(Object.hasOwn(verdict, "gate"), false);
+  });
+
+  test("WGATE-04: keeps the whole escaped refusal reason for a file name carrying a newline", () => {
+    // arrange -- the escaping form is pinned as BYTES rather than as "contains an
+    // escape": a rewrite that moved the escape, dropped the trailing one, or
+    // switched notation would pass a substring check.
+    const fileName = "ok.js\nInstalled 5 workflows\n";
+    const source = `export const meta = { name: "ship"\n`;
+    const expectedVerdict = {
+      outcome: "refused",
+      cause: "unparseable",
+      reason:
+        "ok.js\\u{a}Installed 5 workflows\\u{a} is not parseable JavaScript, so no name can be read from it",
+    } satisfies Refusal;
+
+    // act
+    const verdict = admitWorkflowScript("acme", fileName, source);
+
+    // assert
+    assert.deepStrictEqual(refusal(verdict), expectedVerdict);
   });
 });
 
