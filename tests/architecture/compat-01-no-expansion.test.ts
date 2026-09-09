@@ -172,6 +172,7 @@ test("COMPAT-01: REASONS holds exactly its inherited members, in order", () => {
     "marketplace in project scope",
     "stale workflow command",
     "requires pi-dynamic-workflows",
+    "components now supported",
   ];
 
   // act

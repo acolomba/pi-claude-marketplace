@@ -5010,7 +5010,7 @@ test("closed notification constants preserve exact public values", () => {
     "partially-available",
     "remote",
   ]);
-  assert.equal(REASONS.length, 45);
+  assert.equal(REASONS.length, 46);
 });
 
 for (const { name, input, expected } of [

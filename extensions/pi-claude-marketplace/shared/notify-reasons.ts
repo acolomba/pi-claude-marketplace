@@ -4,14 +4,14 @@ import type { SoftDepStatus } from "../platform/pi-api.ts";
 /**
  * shared/notify-reasons.ts -- the topic-grouped organization of the closed
  * reasons set (D-09). The byte-critical runtime tuple `REASONS` stays declared
- * in `notify.ts` as the SINGLE source of catalog truth (OUT-08: the 45-entry
+ * in `notify.ts` as the SINGLE source of catalog truth (OUT-08: the 46-entry
  * membership AND order must stay byte-identical for catalog stability); this
  * module reorganizes that closed set into shared topic-grouped enums + a
  * structural completeness proof WITHOUT recomposing the `REASONS` tuple (which
  * would risk reordering). The topic groups below are typed views over the same
  * closed `Reason` literals, so a command module can reference an
  * intent-meaningful group (e.g. the failure-class reasons) instead of the flat
- * 45-entry set.
+ * 46-entry set.
  *
  * D-90-05 is what moved the count from 37 to 38: `"unsupported component"`
  * joined the set as the truthful marker for a dropped component kind that has
@@ -29,6 +29,8 @@ import type { SoftDepStatus } from "../platform/pi-api.ts";
  * unregister until a reload (43 to 44). WDEP-04 appends
  * `requires pi-dynamic-workflows`, the third soft-dep marker, for a row that
  * staged a workflow in a session with no host workflow engine (44 to 45).
+ * WCONV-03 appends `components now supported`, the load-time convergence marker
+ * a re-materialized record's row carries (45 to 46).
  *
  * The idempotent group keeps an `as const` tuple because `skipSeverity` needs
  * a runtime `Set` to test against; the unsupported and failure groups are
@@ -276,7 +278,13 @@ type CommandPrivateReason =
   // the failure exit instead. Named here for the proof rather than promoted to
   // a shared topic group. Like the cross-scope pair above, it IS a
   // `ContentReason`.
-  | "stale workflow command";
+  | "stale workflow command"
+  // WCONV-03: the load-time convergence marker. The reconcile backfill
+  // projection places it on both arms of a re-materialized record's row, so a
+  // user can attribute new commands to a reload they did not initiate. Owned by
+  // that one projection rather than shared across topic groups, so it is named
+  // here for the proof. Like its neighbour above, it IS a `ContentReason`.
+  | "components now supported";
 
 /**
  * OUT-08 completeness proof: the union of the four shared topic groups + the
