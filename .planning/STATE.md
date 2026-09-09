@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 06
 current_phase_name: Assertion and Module Refinement
 status: executing
-stopped_at: Completed 06-19-PLAN.md
-last_updated: "2026-09-09T09:35:55.021Z"
+stopped_at: Completed 06-21-PLAN.md
+last_updated: "2026-09-09T09:51:13.254Z"
 last_activity: 2026-09-08
 last_activity_desc: Phase 06 execution started
-state_head: eea9ab9ab1f52fa881a3f6f7b635c96033e16d6c
+state_head: 04be21fa03e6e6dd8a6cdf457a879f07c49b9cc7
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 180
-  completed_plans: 146
+  completed_plans: 147
   percent: 11
 ---
 
@@ -33,7 +33,7 @@ component as a working Pi artifact.
 
 Phase: 06 (Assertion and Module Refinement) — EXECUTING
 Next: Discuss Phase 6
-Plan: 19 of 52
+Plan: 20 of 52
 Status: Ready to execute
 Last activity: 2026-09-08 — Phase 06 execution started
 
@@ -326,6 +326,7 @@ Last activity: 2026-09-08 — Phase 06 execution started
 | Phase 06 P16 | 9min | 2 tasks | 0 files |
 | Phase 06 P17 | 9min | 2 tasks | 0 files |
 | Phase 06 P19 | 12min | 2 tasks | 4 files |
+| Phase 06 P21 | 12min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -773,6 +774,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 06]: Keep tools on notification-types.ts and root raw notifications on notification-dispatch.ts. — Each consumer imports only the genuine owner of the symbol it uses.
 - [Phase 06]: Keep all seven already-direct notification import graphs unchanged; only four stale documentation references required repointing.
 - [Phase 06]: Treat notify-context.ts as the genuine command-context composition owner whose dispatch tail imports notification-dispatch.ts directly, not as a compatibility facade.
+- [Phase 06]: Keep all seven already-direct notification import graphs unchanged; only six stale documentation references required repointing. — Avoid import churn after Plan 06-14 completed the atomic caller migration.
+- [Phase 06]: Preserve uninstall as a cohesive transaction; its only 06-21 change is one stale-path prose correction in uninstall.messaging.ts. — Honor the user-authorized uninstall exception and keep all observable behavior unchanged.
 
 ### Pending Todos
 
@@ -825,7 +828,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 06-19-PLAN.md
+**Stopped at:** Completed 06-21-PLAN.md
 
 Phase 04 completed all seven plans and closed AUTH-01 and TREF-01 through
 TREF-03. Independent verification passed 4/4 with no behavioral or UAT gap;
@@ -843,7 +846,7 @@ independent verification passed 6/6 with zero unverified behaviors.
 **Read beside it:** `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`, the
 Phase 01 terminal evidence ledger, and Phase 5's roadmap criteria.
 
-Last session: 2026-09-09T09:35:54.412Z
+Last session: 2026-09-09T09:51:12.631Z
 
 **Next:** Discuss Phase 06 to define the assertion-strengthening and approved
 module-refinement work before planning.
