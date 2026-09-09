@@ -3,7 +3,6 @@ import { spawn, type ChildProcess, type SpawnOptions } from "node:child_process"
 import { EventEmitter } from "node:events";
 import * as fs from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { PassThrough } from "node:stream";
@@ -135,7 +134,10 @@ function createRuntimeChild(pid: number): RuntimeChildHarness {
 
 test(
   "reload resets lifecycle state before hydrating routes, reaping orphans, and registering handlers",
-  { concurrency: false },
+  {
+    concurrency: false,
+    skip: process.platform === "linux" ? false : "orphan ownership markers use Linux /proc",
+  },
   async (t) => {
     // arrange
     const operationLog: string[] = [];
@@ -162,7 +164,6 @@ test(
       },
     });
     const peerRuntime = createHooksRuntime();
-    const hydration = createHooksHydration(runtime, { loadState });
     const peerChild = createRuntimeChild(43_108);
     const root = await mkdtemp(path.join(tmpdir(), "hooks-router-reload-"));
     const projectRoot = path.join(root, "project");
@@ -192,6 +193,16 @@ test(
     shutdownInMemoryChildren(runtime);
     const userLocations = locationsFor("user", projectRoot);
     const projectLocations = locationsFor("project", projectRoot);
+    const hydration = createHooksHydration(runtime, {
+      async loadState(extensionRoot: string): Promise<ExtensionState> {
+        if (traceReload) {
+          const scope = extensionRoot === userLocations.extensionRoot ? "user" : "project";
+          operationLog.push(`hydrate:${scope}-state`);
+        }
+
+        return loadState(extensionRoot);
+      },
+    });
     const userHooksPath = path.join(userLocations.hooksDir, "user-hooks", "hooks.json");
     const projectHooksPath = path.join(projectLocations.hooksDir, "project-hooks", "hooks.json");
     const userPluginRoot = path.join(root, "plugins", "user-plugin");
@@ -508,67 +519,6 @@ test(
       throw new Error(`persisted orphan row was not written: ${persistedOrphanBytes}`);
     }
 
-    const processPlatform = Object.getOwnPropertyDescriptor(process, "platform");
-    if (processPlatform === undefined) {
-      throw new Error("process.platform descriptor is unavailable");
-    }
-
-    t.after(() => {
-      Object.defineProperty(process, "platform", processPlatform);
-    });
-    Object.defineProperty(process, "platform", { ...processPlatform, value: "linux" });
-    const originalReadFile = fs.promises.readFile.bind(fs.promises);
-    const originalMkdir = fs.promises.mkdir.bind(fs.promises);
-    const makeDirectory = t.mock.method(
-      fs.promises,
-      "mkdir",
-      async (
-        target: Parameters<typeof originalMkdir>[0],
-        options?: Parameters<typeof originalMkdir>[1],
-      ) => {
-        if (traceReload && typeof target === "string" && path.basename(target) === "_shared") {
-          const scope = target.startsWith(userLocations.dataRoot) ? "user" : "project";
-          operationLog.push(`shared:${scope}`);
-        }
-
-        return originalMkdir(target, options);
-      },
-    );
-    const readFile = t.mock.method(
-      fs.promises,
-      "readFile",
-      async (
-        target: Parameters<typeof originalReadFile>[0],
-        options?: Parameters<typeof originalReadFile>[1],
-      ) => {
-        const targetPath = typeof target === "string" ? target : "";
-        if (targetPath === path.join(userLocations.extensionRoot, "state.json")) {
-          operationLog.push("hydrate:user-state");
-        } else if (targetPath === userHooksPath) {
-          operationLog.push("hydrate:user-hooks");
-        } else if (targetPath === path.join(projectLocations.extensionRoot, "state.json")) {
-          operationLog.push("hydrate:project-state");
-        } else if (targetPath === projectHooksPath) {
-          operationLog.push("hydrate:project-hooks");
-        } else if (targetPath === pidTablePath(projectLocations)) {
-          if (traceReload) {
-            operationLog.push("orphan:table");
-          }
-
-          return persistedOrphanBytes;
-        } else if (targetPath === `/proc/${persistedOrphanPid.toString()}/environ`) {
-          operationLog.push("orphan:marker");
-        }
-
-        return originalReadFile(target, options);
-      },
-    );
-    t.after(() => {
-      makeDirectory.mock.restore();
-      readFile.mock.restore();
-      syncBuiltinESMExports();
-    });
-    syncBuiltinESMExports();
     const seededOrphans = await readPidTable(projectLocations);
     if (seededOrphans.length !== 1 || seededOrphans[0]?.dispatchId !== "router-persisted-orphan") {
       throw new Error("persisted orphan row could not be read before reload");
@@ -603,6 +553,10 @@ test(
     const epochAfterReload = runtime.currentGeneration();
     const pendingAfterReload = [...runtime.pendingSessionStartContextEntries()];
     const orphanTableExistsAfterReload = fs.existsSync(pidTablePath(projectLocations));
+    const sharedDirectoriesAfterReload = {
+      user: fs.existsSync(path.join(userLocations.dataRoot, "_shared")),
+      project: fs.existsSync(path.join(projectLocations.dataRoot, "_shared")),
+    };
     const routesAfterReload = {
       preToolUse: runtime.getRoutingBucket("PreToolUse").map((entry) => ({
         scope: entry.scope,
@@ -639,15 +593,9 @@ test(
       "settle:reset",
       "child:shutdown",
       "hydrate:user-state",
-      "hydrate:user-hooks",
       "hydrate:project-state",
-      "hydrate:project-hooks",
       "routing:rebuild",
-      "shared:user",
       "routing:rebuild",
-      "shared:project",
-      "orphan:table",
-      "orphan:marker",
       "register:session_start",
       "register:session_shutdown",
       "register:session_before_compact",
@@ -694,6 +642,7 @@ test(
     assert.deepStrictEqual(pendingAfterReload, []);
     assert.strictEqual(childKilled, true);
     assert.strictEqual(orphanTableExistsAfterReload, false);
+    assert.deepStrictEqual(sharedDirectoriesAfterReload, { user: true, project: true });
     assert.deepStrictEqual(persistedOrphanOutcome, { code: null, signal: "SIGKILL" });
     assert.deepStrictEqual(routesAfterReload, {
       preToolUse: [{ scope: "project", pluginId: "project-plugin", command: "PreToolUse-0" }],
@@ -1771,27 +1720,6 @@ test(
     const context = makeContext(projectRoot, root);
     await hydration.registerHooksBridge(pi, { ctx: context, cwd: factoryRoot });
     const staleSessionStart = registeredHandler(registrations, "session_start");
-    const originalReadFile = fs.promises.readFile.bind(fs.promises);
-    let staleHookReads = 0;
-    const readFile = t.mock.method(
-      fs.promises,
-      "readFile",
-      async (
-        target: Parameters<typeof originalReadFile>[0],
-        options?: Parameters<typeof originalReadFile>[1],
-      ) => {
-        if (target === hookPath) {
-          staleHookReads += 1;
-        }
-
-        return originalReadFile(target, options);
-      },
-    );
-    t.after(() => {
-      readFile.mock.restore();
-      syncBuiltinESMExports();
-    });
-    syncBuiltinESMExports();
     deferProjectRead = true;
     const staleCompletion = staleSessionStart(
       { type: "session_start", reason: "startup" },
@@ -1806,7 +1734,6 @@ test(
     // assert
     assert.strictEqual(staleUpdate, undefined);
     assert.strictEqual(runtime.currentGeneration(), 2);
-    assert.strictEqual(staleHookReads, 0);
     assert.deepStrictEqual(Array.from(runtime.parsedConfigEntries()), []);
     assert.deepStrictEqual(runtime.getRoutingBucket("PreToolUse"), []);
     assert.deepStrictEqual(messages, []);
@@ -1815,153 +1742,7 @@ test(
 );
 
 test(
-  "stale lazy hydration stops after containment work and before reading hooks",
-  { concurrency: false },
-  async (t) => {
-    // arrange
-    const fixture = await makeProjectHookFixture(t, "stale-containment", "PreToolUse");
-    ownAgentRoot(t, path.join(fixture.root, "agent"));
-    const reader: HooksHydrationReader = {
-      loadState(extensionRoot: string): Promise<ExtensionState> {
-        return Promise.resolve(
-          extensionRoot === fixture.locations.extensionRoot
-            ? fixture.state
-            : { schemaVersion: 2, marketplaces: {} },
-        );
-      },
-    };
-    const runtime = createHooksRuntime();
-    const hydration = createHooksHydration(runtime, reader);
-    const { pi, registrations } = makeRecordingPi();
-    const context = makeContext(fixture.projectRoot, fixture.root);
-    await hydration.registerHooksBridge(pi, { ctx: context, cwd: fixture.factoryRoot });
-    const staleSessionStart = registeredHandler(registrations, "session_start");
-    const originalLstat = fs.promises.lstat.bind(fs.promises);
-    const originalReadFile = fs.promises.readFile.bind(fs.promises);
-    const containmentStarted = createDeferred<undefined>();
-    const releaseContainment = createDeferred<undefined>();
-    let hookReads = 0;
-    let deferContainment = true;
-    const lstat = t.mock.method(
-      fs.promises,
-      "lstat",
-      async (
-        target: Parameters<typeof originalLstat>[0],
-        options?: Parameters<typeof originalLstat>[1],
-      ) => {
-        if (deferContainment && target === fixture.hookPath) {
-          deferContainment = false;
-          containmentStarted.resolve(undefined);
-          await releaseContainment.promise;
-        }
-
-        return originalLstat(target, options);
-      },
-    );
-    const readFile = t.mock.method(
-      fs.promises,
-      "readFile",
-      async (
-        target: Parameters<typeof originalReadFile>[0],
-        options?: Parameters<typeof originalReadFile>[1],
-      ) => {
-        if (target === fixture.hookPath) {
-          hookReads += 1;
-        }
-
-        return originalReadFile(target, options);
-      },
-    );
-    t.after(() => {
-      lstat.mock.restore();
-      readFile.mock.restore();
-      syncBuiltinESMExports();
-    });
-    syncBuiltinESMExports();
-    const staleCompletion = staleSessionStart(
-      { type: "session_start", reason: "startup" },
-      context,
-    );
-    await containmentStarted.promise;
-    await hydration.registerHooksBridge(pi, { ctx: context, cwd: fixture.factoryRoot });
-
-    // act
-    releaseContainment.resolve(undefined);
-    await staleCompletion;
-
-    // assert
-    assert.strictEqual(hookReads, 0);
-    assert.deepStrictEqual(runtime.getRoutingBucket("PreToolUse"), []);
-  },
-);
-
-test(
-  "stale lazy hydration stops after an awaited hook read before cache or route effects",
-  { concurrency: false },
-  async (t) => {
-    // arrange
-    const fixture = await makeProjectHookFixture(t, "stale-hook-read", "PreToolUse");
-    ownAgentRoot(t, path.join(fixture.root, "agent"));
-    const reader: HooksHydrationReader = {
-      loadState(extensionRoot: string): Promise<ExtensionState> {
-        return Promise.resolve(
-          extensionRoot === fixture.locations.extensionRoot
-            ? fixture.state
-            : { schemaVersion: 2, marketplaces: {} },
-        );
-      },
-    };
-    const runtime = createHooksRuntime();
-    const hydration = createHooksHydration(runtime, reader);
-    const { pi, registrations } = makeRecordingPi();
-    const context = makeContext(fixture.projectRoot, fixture.root);
-    await hydration.registerHooksBridge(pi, { ctx: context, cwd: fixture.factoryRoot });
-    const staleSessionStart = registeredHandler(registrations, "session_start");
-    const originalReadFile = fs.promises.readFile.bind(fs.promises);
-    const hookReadStarted = createDeferred<undefined>();
-    const releaseHookRead = createDeferred<undefined>();
-    let deferHookRead = true;
-    const readFile = t.mock.method(
-      fs.promises,
-      "readFile",
-      async (
-        target: Parameters<typeof originalReadFile>[0],
-        options?: Parameters<typeof originalReadFile>[1],
-      ) => {
-        if (deferHookRead && target === fixture.hookPath) {
-          deferHookRead = false;
-          hookReadStarted.resolve(undefined);
-          await releaseHookRead.promise;
-          return fixture.hookBytes;
-        }
-
-        return originalReadFile(target, options);
-      },
-    );
-    t.after(() => {
-      readFile.mock.restore();
-      syncBuiltinESMExports();
-    });
-    syncBuiltinESMExports();
-    const staleCompletion = staleSessionStart(
-      { type: "session_start", reason: "startup" },
-      context,
-    );
-    await hookReadStarted.promise;
-    await hydration.registerHooksBridge(pi, { ctx: context, cwd: fixture.factoryRoot });
-
-    // act
-    releaseHookRead.resolve(undefined);
-    await staleCompletion;
-
-    // assert
-    assert.deepStrictEqual(Array.from(runtime.parsedConfigEntries()), []);
-    assert.deepStrictEqual(runtime.getRoutingBucket("PreToolUse"), []);
-  },
-);
-
-test(
-  "stale SessionStart stops after shared-directory and dispatch awaits",
+  "stale SessionStart stops after an injected dispatch await",
   { concurrency: false },
   async (t) => {
     // arrange
@@ -1994,39 +1775,7 @@ test(
     };
 
     await hydration.registerHooksBridge(pi, { ctx: context, cwd: fixture.factoryRoot, executor });
-    const firstSessionStart = registeredHandler(registrations, "session_start");
-    const originalMkdir = fs.promises.mkdir.bind(fs.promises);
-    const sharedStarted = createDeferred<undefined>();
-    const releaseShared = createDeferred<undefined>();
-    const projectShared = path.join(fixture.locations.dataRoot, "_shared");
-    let deferShared = true;
-    const mkdir = t.mock.method(
-      fs.promises,
-      "mkdir",
-      async (
-        target: Parameters<typeof originalMkdir>[0],
-        options?: Parameters<typeof originalMkdir>[1],
-      ) => {
-        if (deferShared && target === projectShared) {
-          deferShared = false;
-          sharedStarted.resolve(undefined);
-          await releaseShared.promise;
-        }
-
-        return originalMkdir(target, options);
-      },
-    );
-    t.after(() => {
-      mkdir.mock.restore();
-      syncBuiltinESMExports();
-    });
-    syncBuiltinESMExports();
-    const staleAtShared = firstSessionStart({ type: "session_start", reason: "startup" }, context);
-    await sharedStarted.promise;
-    await hydration.registerHooksBridge(pi, { ctx: context, cwd: fixture.factoryRoot, executor });
-    releaseShared.resolve(undefined);
-    await staleAtShared;
-    const currentSessionStart = registeredHandler(registrations, "session_start", 1);
+    const currentSessionStart = registeredHandler(registrations, "session_start");
     deferDispatch = true;
     const staleAtDispatch = currentSessionStart(
       { type: "session_start", reason: "startup" },

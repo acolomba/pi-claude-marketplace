@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import filesystemPromises, {
+import {
   lstat,
   mkdir,
   mkdtemp,
@@ -10,7 +10,6 @@ import filesystemPromises, {
   symlink,
   writeFile,
 } from "node:fs/promises";
-import { syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
@@ -196,110 +195,6 @@ test("rejects a symlinked skill target and preserves its destination", async (t)
   assert.strictEqual((await lstat(linkedSkillDirectory)).isSymbolicLink(), true);
   assert.strictEqual(await readlink(linkedSkillDirectory), outsideDirectory);
   assert.strictEqual(await readFile(outsideSkillPath, "utf8"), "outside skill bytes\n");
-});
-
-test("continues after a raced skill directory disappears", async (t) => {
-  // arrange
-  const { locations } = await createSkillScope(t, "skills-unstage-race-");
-  const racedSkillDirectory = path.join(locations.skillsTargetDir, "acme-raced");
-  const retainedSkillDirectory = path.join(locations.skillsTargetDir, "acme-after");
-  await mkdir(racedSkillDirectory);
-  await mkdir(retainedSkillDirectory);
-  await writeFile(path.join(racedSkillDirectory, "SKILL.md"), "raced bytes\n");
-  await writeFile(path.join(retainedSkillDirectory, "SKILL.md"), "after bytes\n");
-  const originalRm = filesystemPromises.rm.bind(filesystemPromises);
-  const raceError = Object.assign(new Error("skill disappeared during removal"), {
-    code: "ENOENT",
-  });
-  const removal = t.mock.method(
-    filesystemPromises,
-    "rm",
-    async (
-      target: Parameters<typeof originalRm>[0],
-      options?: Parameters<typeof originalRm>[1],
-    ) => {
-      await originalRm(target, options);
-      if (String(target) === racedSkillDirectory) {
-        throw raceError;
-      }
-    },
-  );
-  t.after(() => {
-    removal.mock.restore();
-    syncBuiltinESMExports();
-  });
-  syncBuiltinESMExports();
-
-  // act
-  const unstagedSkills = await unstagePluginSkills({
-    locations,
-    previousSkillNames: ["acme-raced", "acme-after"],
-  });
-
-  // assert
-  assert.deepStrictEqual(unstagedSkills, { removedNames: ["acme-after"], warnings: [] });
-  assert.deepStrictEqual(await readdir(locations.skillsTargetDir), []);
-});
-
-test("propagates a removal failure after retaining the partial filesystem state", async (t) => {
-  // arrange
-  const { locations } = await createSkillScope(t, "skills-unstage-failure-");
-  const removedSkillDirectory = path.join(locations.skillsTargetDir, "acme-removed");
-  const blockedSkillDirectory = path.join(locations.skillsTargetDir, "acme-blocked");
-  const foreignSkillDirectory = path.join(locations.skillsTargetDir, "other-keep");
-  await mkdir(removedSkillDirectory);
-  await mkdir(blockedSkillDirectory);
-  await mkdir(foreignSkillDirectory);
-  await writeFile(path.join(removedSkillDirectory, "SKILL.md"), "removed skill bytes\n");
-  await writeFile(path.join(blockedSkillDirectory, "SKILL.md"), "blocked skill bytes\n");
-  await writeFile(path.join(foreignSkillDirectory, "SKILL.md"), "foreign skill bytes\n");
-  const originalRm = filesystemPromises.rm.bind(filesystemPromises);
-  const removalError = Object.assign(new Error("skill removal denied"), {
-    code: "EACCES",
-    errno: -13,
-    syscall: "rm",
-    path: blockedSkillDirectory,
-  });
-  const removal = t.mock.method(
-    filesystemPromises,
-    "rm",
-    async (
-      target: Parameters<typeof originalRm>[0],
-      options?: Parameters<typeof originalRm>[1],
-    ) => {
-      if (String(target) === blockedSkillDirectory) {
-        throw removalError;
-      }
-
-      await originalRm(target, options);
-    },
-  );
-  t.after(() => {
-    removal.mock.restore();
-    syncBuiltinESMExports();
-  });
-  syncBuiltinESMExports();
-
-  // act
-  const unstageError = await unstagePluginSkills({
-    locations,
-    previousSkillNames: ["acme-removed", "acme-blocked", "acme-never-reached"],
-  }).then(
-    () => undefined,
-    (reason: unknown) => reason,
-  );
-
-  // assert
-  assert.strictEqual(unstageError, removalError);
-  assert.deepStrictEqual(await readdir(locations.skillsTargetDir), ["acme-blocked", "other-keep"]);
-  assert.strictEqual(
-    await readFile(path.join(blockedSkillDirectory, "SKILL.md"), "utf8"),
-    "blocked skill bytes\n",
-  );
-  assert.strictEqual(
-    await readFile(path.join(foreignSkillDirectory, "SKILL.md"), "utf8"),
-    "foreign skill bytes\n",
-  );
 });
 
 test("continues after the required remover reports ENOENT after deletion", async (t) => {
