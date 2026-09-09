@@ -484,7 +484,7 @@ Plans:
 **Goal:** Strengthen assertions and simplify confirmed problem modules without weakening contracts.
 **Depends on:** Phase 5
 **Requirements:** TREF-07, TREF-08, TREF-09
-**Plans:** 30/52 plans executed
+**Plans:** 33/52 plans executed
 
 Plans:
 **Wave 1**
@@ -579,12 +579,12 @@ Plans:
 
 - [x] 06-29-PLAN.md — Split five disjoint command-surface fixture slices
 - [x] 06-30-PLAN.md — Split five disjoint command-surface fixture slices
-- [ ] 06-31-PLAN.md — Split five disjoint command-surface fixture slices
-- [ ] 06-32-PLAN.md — Split five disjoint command-surface fixture slices
+- [x] 06-31-PLAN.md — Split five disjoint command-surface fixture slices
+- [x] 06-32-PLAN.md — Split five disjoint command-surface fixture slices
 
 **Wave 22** *(blocked on Wave 21 completion)*
 
-- [ ] 06-33-PLAN.md — Assemble the final catalog contract and delete the legacy catalog hub
+- [x] 06-33-PLAN.md — Assemble the final catalog contract and delete the legacy catalog hub
 
 **Wave 23** *(blocked on Wave 22 completion)*
 
@@ -760,7 +760,7 @@ baseline, which still includes both pairs; neither is a terminal shortfall.
 | 3. Production Defect Corrections     | 14/14          | Complete    | 2026-09-07 |
 | 4. Hermetic Test Infrastructure      | 7/7            | Complete    | 2026-09-07 |
 | 5. Injection and Ownership Design    | 34/34          | Complete    | 2026-09-08 |
-| 6. Assertion and Module Refinement   | 30/52 | In Progress|  |
+| 6. Assertion and Module Refinement   | 33/52 | In Progress|  |
 | 7. Gate Integrity                    | 0/0            | Not started | —          |
 | 8. Direct Coverage                   | 0/0            | Not started | —          |
 | 9. Final Quality and Backlog Closure | 0/0            | Not started | —          |
