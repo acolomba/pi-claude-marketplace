@@ -2449,6 +2449,32 @@ The degenerate case: a backfill `(partially-installed)` row whose re-resolved dr
 Reconcile: 1 success
 ```
 
+### Load-time backfill -- the fully promoted arm carries the convergence marker alone (WCONV-03)
+
+The arm the convergence marker exists for: the extension's supported component set grew, so a recorded plugin re-resolved clean and was re-materialized in place at load time, without the user running any command. The row reuses the `●` `(installed)` byte form a fresh install renders, and the marker in the brace is the ONLY thing that separates the two -- which is why `backfilledRowFromOutcome` places it unconditionally on this arm (WCONV-03 / D-69-04). Without it, the commands that appeared after a reload nobody initiated could not be attributed to anything the user could name. The probe reports every companion loaded, so no soft-dep marker fires and this state isolates the marker. The marketplace was already added, so its header is the bare always-marketplace-header form (no status token). SEV-03 / A3 / D-68-04: a benign promotion is not a new degradation, so the row stays `info`; the `Run /reload` trailer is structurally excluded (RECON-04) and the trailing tally counts the row as one success.
+
+<!-- catalog-state: backfill-installed -->
+
+```text
+● local-mp [user]
+  ● hello v1.0.0 (installed) {components now supported}
+
+Reconcile: 1 success
+```
+
+### Load-time backfill -- fully promoted in a session with no host workflow engine (WCONV-03 / WDEP-04)
+
+The same promotion in the session the real population most likely renders it in first: the plugin declares `workflows`, the host workflow engine is not loaded, and both tokens land in ONE brace. The order is contractual, and these bytes are where it is pinned for a backfilled row: the convergence marker comes FIRST because the projection writes it into `reasons[]` as the caller, and `requires pi-dynamic-workflows` comes LAST because `composeReasons` appends the soft-dep markers after every caller-placed reason (MSG-GR-4 / D-16-15). Severity stays `info` rather than the `warning` the standalone install row stamps for the same marker: this projection raises only on a malformed-frontmatter degrade its own re-materialization produced, so the SEV-01 companion raise does not fire here -- the same stance the sibling load-time enable row takes.
+
+<!-- catalog-state: backfill-installed-workflow-engine-absent -->
+
+```text
+● local-mp [user]
+  ● hello v1.0.0 (installed) {components now supported, requires pi-dynamic-workflows}
+
+Reconcile: 1 success
+```
+
 ### Load-time enable whose companion extension is unloaded (WR-06)
 
 The load-time reconcile re-enabled a config-declared-enabled disabled record, and the ledger staged at least one agent. The projected row derives its `dependencies` from the ledger's staged counts through the SAME seam the standalone `enable` row uses, so the `{requires pi-subagents}` marker fires here too -- it no longer depends on which surface drove the enable. Severity stays `info`: this projection applies the companion raise on NEITHER of its two arms (the sibling `plugin-installed` arm carries the marker at `info` as well), so the two arms of one file agree. The standalone `enable` verb, whose severity rule is the SEV-01 composition, DOES raise -- the marker is the shared fact, the severity stance is per surface.

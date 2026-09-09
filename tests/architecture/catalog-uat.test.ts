@@ -5409,6 +5409,70 @@ const FIXTURES: FixtureMap = {
       },
     },
 
+    // WCONV-03 / D-69-04: the FULLY PROMOTED arm -- a record whose supported set
+    // grew re-resolved clean, so the row takes the `installed` byte form a fresh
+    // install renders and the convergence marker is the only thing separating
+    // the two. Probe with every companion loaded, so no soft-dep marker fires
+    // and this state isolates the marker. SEV-03 / A3: a benign promotion stays
+    // info -- no expectedSeverity.
+    "backfill-installed": {
+      pi: piWithAllLoaded(),
+      message: {
+        kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "local-mp",
+            scope: "user",
+            plugins: [
+              {
+                status: "installed",
+                name: "hello",
+                version: "1.0.0",
+                dependencies: [],
+                reasons: ["components now supported"],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // WCONV-03 / WDEP-04 / D-16-15: the same fully promoted row in a session
+    // with no host workflow engine -- the real population's likely first render.
+    // Two tokens, ONE brace, and the composed order is what this state pins: the
+    // convergence marker is caller-placed and leads, the soft-dep marker is
+    // appended by `composeReasons` and trails. Severity stays info: this
+    // projection applies no companion raise on either arm.
+    "backfill-installed-workflow-engine-absent": {
+      pi: piWithoutWorkflowEngine(),
+      message: {
+        kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "local-mp",
+            scope: "user",
+            plugins: [
+              {
+                status: "installed",
+                name: "hello",
+                version: "1.0.0",
+                dependencies: ["workflows"],
+                reasons: ["components now supported"],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     // WR-06 / SEV-01: the projected enable row derives `dependencies` from the
     // ledger's staged counts, so the soft-dep marker fires on the load-time
     // surface too. Severity stays `info` -- this projection applies the
@@ -5600,14 +5664,14 @@ test("catalog UAT: every <!-- catalog-state: --> annotation pairs byte-equal wit
   const catalog = await readFile(CATALOG_PATH, "utf8");
   const examples = loadCatalogExamples(catalog);
 
-  // Exact count, not a floor: 195 is the number of annotated examples in
+  // Exact count, not a floor: 197 is the number of annotated examples in
   // docs/output-catalog.md, and it is what stops a `loadCatalogExamples`
   // refactor from silently parsing a fraction of the corpus. Update it
   // deliberately when catalog examples are added or removed.
   assert.equal(
     examples.length,
-    195,
-    `Expected exactly 195 annotated catalog examples; found ${examples.length}. Check that the discriminator comments in docs/output-catalog.md were not lost, and update this count when examples are added.`,
+    197,
+    `Expected exactly 197 annotated catalog examples; found ${examples.length}. Check that the discriminator comments in docs/output-catalog.md were not lost, and update this count when examples are added.`,
   );
 
   const failures: Failure[] = [];
