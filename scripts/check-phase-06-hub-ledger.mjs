@@ -106,10 +106,21 @@ export const CATALOG_FIXTURES = Object.freeze(
   ].map((stem) => `tests/architecture/catalog-uat/fixtures/${stem}.ts`),
 );
 
-/** @type {readonly string[]} */
-const RETIRED_LIST_HUB = [EXTENSION_ROOT, "orchestrators", "plugin", "list.ts"].join("/");
+/** @param {readonly string[]} segments */
+function retiredPath(...segments) {
+  return segments.join("/");
+}
 
-export const LEGACY_HUBS = Object.freeze([RETIRED_LIST_HUB]);
+/** @type {readonly string[]} */
+export const LEGACY_HUBS = Object.freeze([
+  retiredPath(EXTENSION_ROOT, "domain", "resolver.ts"),
+  retiredPath(EXTENSION_ROOT, "shared", "notify.ts"),
+  retiredPath("tests", "architecture", "catalog-uat.test.ts"),
+  retiredPath(EXTENSION_ROOT, "orchestrators", "plugin", "install.ts"),
+  retiredPath(EXTENSION_ROOT, "orchestrators", "plugin", "update.ts"),
+  retiredPath(EXTENSION_ROOT, "orchestrators", "plugin", "reinstall.ts"),
+  retiredPath(EXTENSION_ROOT, "orchestrators", "plugin", "list.ts"),
+]);
 
 const RESIDUAL_CENSUS_IGNORES = new Set([
   "scripts/check-phase-06-hub-ledger.mjs",

@@ -196,6 +196,18 @@ Legacy test: ${legacyTest}
 });
 
 describe("Phase 6 closure", () => {
+  test("tracks the exact seven retired hubs independently from PRE-EDIT fixtures", () => {
+    assert.deepStrictEqual(LEGACY_HUBS, [
+      ["extensions/pi-claude-marketplace", "domain", "resolver.ts"].join("/"),
+      ["extensions/pi-claude-marketplace", "shared", "notify.ts"].join("/"),
+      ["tests", "architecture", "catalog-uat.test.ts"].join("/"),
+      ["extensions/pi-claude-marketplace", "orchestrators", "plugin", "install.ts"].join("/"),
+      ["extensions/pi-claude-marketplace", "orchestrators", "plugin", "update.ts"].join("/"),
+      ["extensions/pi-claude-marketplace", "orchestrators", "plugin", "reinstall.ts"].join("/"),
+      ["extensions/pi-claude-marketplace", "orchestrators", "plugin", "list.ts"].join("/"),
+    ]);
+  });
+
   function validClosureFiles(): Map<string, string> {
     // Keep the repository census limited to executable patch calls while the
     // fixture still assembles the exact tokens consumed by the validator.
@@ -224,7 +236,7 @@ describe("Phase 6 closure", () => {
     return files;
   }
 
-  test("accepts 30 owner pairs, 20 fixtures, absent hubs, and the exact residual census", () => {
+  test("accepts 30 owner pairs, 20 fixtures, seven absent hubs, and the exact residual census", () => {
     assert.deepStrictEqual(
       validateClosure({
         files: validClosureFiles(),
