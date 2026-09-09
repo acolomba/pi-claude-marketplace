@@ -20,8 +20,11 @@ import type { SoftDepStatus } from "../platform/pi-api.ts";
  * disabled because the plugin's own `defaultEnabled` declaration said so, and
  * brought the fourth topic group with it (D-102-06). `COMPAT-01` pins the
  * membership by enumeration and `notify-closed-set-locks.test.ts` pins the
- * length, so the two sentences above cannot drift from the tuple again without
- * a red test. CMP-4 / SCOPE-01 added two structural scope reasons (39 to 41).
+ * length, so the tuple itself cannot drift. Neither gate reads a comment: the
+ * counts in the two sentences above, in `notify.ts`'s own tuple doc and in that
+ * lock test's title are prose, so nothing turns red when they fall behind. The
+ * change that grows the set is what moves them, in the same edit. CMP-4 /
+ * SCOPE-01 added two structural scope reasons (39 to 41).
  * SCOPE-01 / D-01 added two content scope reasons (41 to 43). WDET-04 /
  * D-106-04 appended the dedicated `workflows` reason (43 to 44). WINV-03 /
  * D-109-01 reverses that term (44 to 43). WLIF-06 appends `stale workflow
