@@ -4,19 +4,19 @@ milestone: workflows-replay
 milestone_name: Workflow Bridge Replay onto main
 current_phase: 116
 current_phase_name: Load-time workflow convergence
-current_plan: 2 of 4 executed
+current_plan: 3 of 4 executed
 status: executing
-stopped_at: Completed 116-02-PLAN.md
-last_updated: "2026-09-09T15:45:00.000Z"
-state_head: 932f8c2d8ebf5d3e56cb22019979a579c123bc0d
+stopped_at: Completed 116-03-PLAN.md
+last_updated: "2026-09-09T16:15:00.000Z"
+state_head: ad17e6ad1f31de304feee727f16e6f09a0fb99b2
 progress:
   total_phases: 9
   completed_phases: 7
   total_plans: 36
-  completed_plans: 34
+  completed_plans: 35
   percent: 78
 last_activity: 2026-09-09
-last_activity_desc: Executed plan 116-02; four negative controls run and pasted
+last_activity_desc: Executed plan 116-03; the byte-change control run and pasted
 ---
 
 # Project State
@@ -36,8 +36,8 @@ the gaps the bridge originally shipped with.
 ## Current Position
 
 Phase: 116 — Load-time workflow convergence
-Plan: 2 of 4 executed (4 plans, 3 waves, 10 tasks)
-Status: Executing — 116-02 done; 116-03 is the rest of wave 2, then 116-04
+Plan: 3 of 4 executed (4 plans, 3 waves, 10 tasks)
+Status: Executing — wave 2 done (116-02 and 116-03); 116-04 closes the phase
 
 Phase 115 is complete on every gate. The replay milestone (109-114) is complete
 and the first of the three hardening phases has now closed behind it; 116 and 117

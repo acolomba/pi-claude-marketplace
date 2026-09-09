@@ -645,7 +645,7 @@ Plans:
 **Wave 2** *(blocked on Wave 1 completion)*
 
 - [x] 116-02-PLAN.md — Pin what the widened scan must not touch, and prove the self-heal fires once on bytes, inode and mtime
-- [ ] 116-03-PLAN.md — Publish the fully-promoted arm's bytes as catalog states, and correct the three counts no gate reads
+- [x] 116-03-PLAN.md — Publish the fully-promoted arm's bytes as catalog states, and correct the three counts no gate reads
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -688,5 +688,5 @@ Plans:
 | 113. Update, enable/disable, reconcile | 5/5 | Complete    | 2026-09-06 |
 | 114. Degradation and documentation | 5/5 | Complete    | 2026-09-08 |
 | 115. Install-time admission-gate warnings | 6/6 | Complete    | 2026-09-09 |
-| 116. Load-time workflow convergence | 2/4 | In Progress | - |
+| 116. Load-time workflow convergence | 3/4 | In Progress | - |
 | 117. Measured `agent()` failure evidence | 0/? | Not started | - |
