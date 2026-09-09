@@ -46,13 +46,13 @@
     {
       "number": "117",
       "name": "Measured `agent()` failure evidence",
-      "status": "pending"
+      "status": "complete"
     }
   ],
   "next": {
-    "command": "/gsd:progress --next",
-    "label": "Advance to the next step (plan phase 117)",
-    "reason": "Phase 117 of 9 — needs a plan"
+    "command": "/gsd:new-milestone",
+    "label": "Start a new milestone",
+    "reason": "All phases complete — start a new milestone"
   },
-  "updated_at": "2026-09-09T18:00:03.787Z"
+  "updated_at": "2026-09-09T20:45:08.563Z"
 }

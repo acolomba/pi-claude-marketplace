@@ -80,7 +80,7 @@ Only the requirements below are new, and all of them exist because #154 landed.
 <!-- Seams: .planning/BACKLOG.md (the trailing <!-- Pruned --> convention), .planning/workstreams/workflows/milestones/workflows-phases/105-*/105-VERIFICATION.md. -->
 
 - [x] **WDOCS-01**: `WFLW-01` is pruned from `.planning/BACKLOG.md` under the file's existing pruned-footer convention, naming the milestone that closed it, so the backlog stops advertising shipped work as open.
-- [ ] **WDOCS-02**: `105-VERIFICATION.md` no longer contradicts itself. Its evidence table records the live canary as `UNRUN` while its own frontmatter and status line recorded it closed on 2026-08-16. The `UNRUN` side is the true one and the closure claim was the over-claim, settled from inside the record by the entry's own reason-for-human field; the closure wording goes and every site that asserted it says so.
+- [x] **WDOCS-02**: `105-VERIFICATION.md` no longer contradicts itself. Its evidence table records the live canary as `UNRUN` while its own frontmatter and status line recorded it closed on 2026-08-16. The `UNRUN` side is the true one and the closure claim was the over-claim, settled from inside the record by the entry's own reason-for-human field; the closure wording goes and every site that asserted it says so.
 
 > **WDOCS-02 disambiguation, 2026-09-09 (D-117-03, D-117-07).** The sentence above
 > previously ended "the current record wins and the stale wording goes", which does not
@@ -146,7 +146,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | WEVID-01 | Phase 117 | Complete |
 | WEVID-02 | Phase 117 | Complete |
 | WDOCS-01 | Phase 115 | Complete |
-| WDOCS-02 | Phase 117 | Pending |
+| WDOCS-02 | Phase 117 | Complete |
 
 **Coverage:**
 
