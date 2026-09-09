@@ -164,6 +164,44 @@ rather than carrying it forward on inheritance. This is the milestone's
 "assume the enumeration is short until measured" rule applied to a population
 instead of a count.
 
+**Measured 2026-09-09, and the claim is half confirmable and half unmeasurable.**
+Read: `~/.pi/agent/pi-claude-marketplace/sources/claude-plugins-official/.claude-plugin/marketplace.json`,
+the cached clone of the Anthropic-owned `claude-plugins-official` marketplace at
+revision `1a2f18b05cf5652fd25403e8d229fc884fb84103` (upstream commit dated
+2026-05-12), plus the only other cached marketplace, `open-code-review` (1 entry,
+a path source).
+
+| Named plugin | Manifest entry at the cached revision | Source kind | Converges through this scan? |
+|---|---|---|---|
+| `code-modernization` | `"./plugins/code-modernization"` | `path` | **yes** |
+| `claude-security` | **absent under that name** | unmeasured | unknown |
+
+The source-kind census over all 172 entries: `path` 49, `url` 83, `git-subdir`
+38, `github` 2. So 49 of 172 (28.5%) can converge at load time, and the bound the
+research derived is real: `resolveRecordedPluginOffline` passes no clone-cache
+resolver, so `url`, `git-subdir` and `github` records all resolve `unavailable`
+and never reach the growth test.
+
+Two facts keep this from closing the question:
+
+- `claude-security` has no entry at this revision. The nearest names are
+  `security-guidance` (a path source) and `42crunch-api-security-testing` (a
+  third-party `git-subdir`); neither is the plugin the evidence base names, and
+  guessing which one it became would be exactly the inheritance this paragraph
+  forbids.
+- **No entry in either cached marketplace declares a `workflows/` component
+  directory, and none of the 35 materialized plugin directories carries one** --
+  `code-modernization`'s own tree holds `agents/` and `commands/` only. The cache
+  is pinned at a 2026-05-12 upstream commit, four months behind today, so this
+  is a statement about one machine's cache and not a falsification of the
+  upstream claim.
+
+What the three sites now carry is therefore the bound, not the population: this
+scan converges path-source records only, one named plugin measures as a path
+source, the other is unmeasured, and every success criterion of this phase stays
+satisfiable either way. The bound decides which records can converge, not whether
+the convergence works.
+
 ### Claude's Discretion
 
 Token spelling, the exact wording of the amended D-68-03 comment, test names,
@@ -226,6 +264,14 @@ The population WCONV-01 names is concrete: both Anthropic-authored workflow
 plugins land on the `installable: true` side, because the kind they were
 missing was invisible rather than unsupported. A case built on that shape is
 worth more than a synthetic one.
+
+> **Superseded by the 2026-09-09 measurement recorded under Decisions above.**
+> The idea as stated during discussion is left verbatim because this file is the
+> record of that discussion. What was actually measured: `code-modernization` is
+> a path source, `claude-security` is not present at the cached revision, and the
+> scan converges path-source records only. The synthetic case the plan built
+> instead seeds exactly that shape, so the idea's point survives its population
+> claim.
 
 </specifics>
 

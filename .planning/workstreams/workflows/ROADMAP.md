@@ -71,9 +71,14 @@ Anthropic-authored plugins that carry a `workflows/` directory:
 - **The population whose install already works is exactly the population that
   never converges.** The load-time self-heal returns early on any record at
   `installable: true`, so a plugin installed before the `workflows` kind was
-  admitted never gains its workflow commands — and both Anthropic-authored
-  workflow plugins land on that side, because the kind they were missing was
-  invisible rather than unsupported.
+  admitted never gains its workflow commands. The scan is bounded to path
+  sources: the load-time re-resolve passes no clone-cache resolver, so a git
+  source resolves `unavailable` offline and only path-source records converge
+  through it. Measured 2026-09-09 against the cached official marketplace,
+  `code-modernization` is a path source and `claude-security` is not present at
+  that revision, so its source kind is unmeasured. Every success criterion of
+  the convergence phase holds either way — the bound decides which records can
+  converge, not whether the convergence works.
 
 - **The claim that decides whether a script degrades or dies is a source read.**
   `agent()` on failure is the load-bearing divergence from Claude Code, and it
