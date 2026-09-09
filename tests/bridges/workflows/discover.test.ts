@@ -447,6 +447,62 @@ test("warns about a script that declares no metadata and still records the verdi
   assert.deepStrictEqual(discovery, expectedDiscovery);
 });
 
+/**
+ * A file name shaped to look like a whole second warning if it reaches the
+ * rendered line unescaped. `notifyDiagnostic` joins these warnings on "\n" and
+ * renders them uninspected, so a newline inside one is byte-indistinguishable
+ * from the separator between two.
+ *
+ * The escaped twin is written out independently rather than computed, so the
+ * case compares against a literal the production escape did not produce.
+ */
+const FORGING_FILE_NAME =
+  'ok.js\nworkflow script "forged.js" in "workflows" was not installed: nothing\n.js';
+const ESCAPED_FILE_NAME =
+  'ok.js\\u{a}workflow script "forged.js" in "workflows" was not installed: nothing\\u{a}.js';
+
+test("escapes a newline in the file name and in the directory so neither forges an output line", async (t) => {
+  // arrange -- both spans are plugin-controlled: a POSIX file name may carry a
+  // newline, and every directory segment below the plugin root is named by the
+  // manifest. The verdict `reason` beside them is escaped by the decision
+  // layer already, so this case pins the two the bridge itself composes.
+  const pluginRoot = await createPluginRoot(t, "workflow-discover-forgery-");
+  const workflowsDir = path.join(pluginRoot, "work\nflows");
+  const scriptFile = path.join(workflowsDir, FORGING_FILE_NAME);
+  await mkdir(workflowsDir);
+  await writeFile(scriptFile, NO_META);
+  const resolved = resolvedPlugin(pluginRoot, ["work\nflows"]);
+  const escapedDir = `${pluginRoot}${path.sep}work\\u{a}flows`;
+  const expectedDiscovery: DiscoverPluginWorkflowsResult = {
+    discovered: [
+      {
+        verdict: {
+          outcome: "skipped",
+          fileName: FORGING_FILE_NAME,
+          reason: `${ESCAPED_FILE_NAME} declares no \`meta\`, so there is nothing to install`,
+          cause: "no-meta",
+        },
+        scriptFile,
+        source: NO_META,
+      },
+    ],
+    warnings: [
+      `workflow script "${ESCAPED_FILE_NAME}" in "${escapedDir}" was not installed: ${ESCAPED_FILE_NAME} declares no \`meta\`, so there is nothing to install`,
+    ],
+  };
+
+  // act
+  const discovery = await discoverPluginWorkflows({
+    pluginName: "acme",
+    resolved,
+    tense: "install",
+  });
+
+  // assert -- the WHOLE result, so a single warning holding one raw newline
+  // fails here rather than being counted as two well-formed lines.
+  assert.deepStrictEqual(discovery, expectedDiscovery);
+});
+
 test("warns about a refused script and renders the verdict reason unparaphrased", async (t) => {
   // arrange
   const pluginRoot = await createPluginRoot(t, "workflow-discover-refused-");

@@ -1088,6 +1088,12 @@ function metaValue(elements: readonly MetaElement[], key: string): Property["val
 /**
  * Render untrusted plugin text safely inside a one-line notification.
  *
+ * Exported because the workflows bridge composes the SAME rendered line around
+ * the reasons this module returns, from the same untrusted tree, so it must
+ * escape by the same rule. A second escaping scheme one layer up would defend
+ * the same text twice under two definitions of "safe", and the one they
+ * disagreed about is the one that would get through.
+ *
  * Three things reach a `reason` from third-party content: the file NAME, the
  * blocklist text that MATCHED, and the detail of a name refusal, which quotes
  * the declared `meta.name` back. Each carries a distinct hazard. A POSIX file
@@ -1110,7 +1116,7 @@ function metaValue(elements: readonly MetaElement[], key: string): Property["val
  * `Number` folds `codePointAt`'s out-of-range `undefined` -- impossible for a
  * matched character -- without adding a branch no input can take.
  */
-function forMessage(text: string): string {
+export function forMessage(text: string): string {
   return text.replaceAll(
     /[\p{Cc}\p{Cf}]/gu,
     (character) => `\\u{${Number(character.codePointAt(0)).toString(16)}}`,

@@ -34,7 +34,11 @@
 import { lstat, readFile } from "node:fs/promises";
 import path from "node:path";
 
-import { admitWorkflowScript, WORKFLOW_SCRIPT_EXTENSIONS } from "../../domain/workflow-script.ts";
+import {
+  admitWorkflowScript,
+  forMessage,
+  WORKFLOW_SCRIPT_EXTENSIONS,
+} from "../../domain/workflow-script.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { readDirEntriesTolerant } from "../../shared/fs-utils.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
@@ -94,6 +98,22 @@ async function isWorkflowScriptFile(
  * names the FILE and the containing DIRECTORY, so a user reading it can find
  * the script without cross-referencing anything, and then renders the reason
  * it was handed rather than composing a new one.
+ *
+ * Every untrusted span goes through `forMessage`, at the point it enters the
+ * string, which is the rule the decision layer states. Three of the four
+ * arguments carry plugin-controlled text: the file name, which a POSIX
+ * filesystem lets carry a newline or a bidi override; the directory, whose
+ * every segment below the plugin root is named by the plugin; and the reason,
+ * which is an escaped decision-layer sentence on some paths but a raw
+ * `errorMessage(err)` on the two IO paths, and an errno message quotes the
+ * offending path back verbatim. `notifyDiagnostic` joins these lines on "\n"
+ * and renders them uninspected, so an unescaped newline anywhere in here is a
+ * forged line the reader cannot tell from a real one.
+ *
+ * `forMessage` is idempotent -- its output holds no `\p{Cc}` or `\p{Cf}` -- so
+ * an already-escaped reason passes through unchanged rather than double-
+ * escaped. `outcome` is the only argument left raw: it is never anything but
+ * a literal out of one of the two tense tables above.
  */
 function softFailWarning(
   fileName: string,
@@ -101,7 +121,7 @@ function softFailWarning(
   outcome: string,
   reason: string,
 ): string {
-  return `workflow script "${fileName}" in "${workflowsDir}" ${outcome}: ${reason}`;
+  return `workflow script "${forMessage(fileName)}" in "${forMessage(workflowsDir)}" ${outcome}: ${forMessage(reason)}`;
 }
 
 /**
