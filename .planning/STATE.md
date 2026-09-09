@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 06
 current_phase_name: Assertion and Module Refinement
 status: executing
-stopped_at: Completed 06-27-PLAN.md
-last_updated: "2026-09-09T11:47:58.912Z"
+stopped_at: Completed 06-28-PLAN.md
+last_updated: "2026-09-09T12:08:30.942Z"
 last_activity: 2026-09-08
 last_activity_desc: Phase 06 execution started
-state_head: b3ff889b153c644fe7d0c9253a6780d6899dc816
+state_head: 11245841a99b8dd85c02c200697c67668225ad4e
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 180
-  completed_plans: 155
+  completed_plans: 156
   percent: 11
 ---
 
@@ -33,7 +33,7 @@ component as a working Pi artifact.
 
 Phase: 06 (Assertion and Module Refinement) — EXECUTING
 Next: Discuss Phase 6
-Plan: 28 of 52
+Plan: 29 of 52
 Status: Ready to execute
 Last activity: 2026-09-08 — Phase 06 execution started
 
@@ -335,6 +335,7 @@ Last activity: 2026-09-08 — Phase 06 execution started
 | Phase 06 P25 | 9min | 2 tasks | 3 files |
 | Phase 06 P26 | 7 min | 2 tasks | 1 files |
 | Phase 06 P27 | 13min | 3 tasks | 12 files |
+| Phase 06 P28 | 16 min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -802,6 +803,9 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 06]: Retire notify.ts without a compatibility facade only after a fresh CodeGraph trace and a complete READY PREEDIT ledger.
 - [Phase 06]: Assign notification responsibilities to exactly six genuine owners with mirrored direct tests.
 - [Phase 06]: Rotate the generic PREEDIT checker fixture to the catalog UAT hub retained through Plan 06-32 and deleted by Plan 06-33.
+- [Phase 06]: Recognize exactly the existing 20 catalog surfaces while leaving documented out-of-band annotations outside the catalog-driver contract.
+- [Phase 06]: Reject malformed catalog tuple boundaries with stable line-numbered diagnostics instead of silently skipping or overwriting state.
+- [Phase 06]: Keep catalog parsing, fixture contracts, and strict Pi helpers test-only and independent from producer owner tests.
 
 ### Pending Todos
 
@@ -854,7 +858,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 06-27-PLAN.md
+**Stopped at:** Completed 06-28-PLAN.md
 
 Phase 04 completed all seven plans and closed AUTH-01 and TREF-01 through
 TREF-03. Independent verification passed 4/4 with no behavioral or UAT gap;
@@ -872,7 +876,7 @@ independent verification passed 6/6 with zero unverified behaviors.
 **Read beside it:** `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`, the
 Phase 01 terminal evidence ledger, and Phase 5's roadmap criteria.
 
-Last session: 2026-09-09T11:47:58.303Z
+Last session: 2026-09-09T12:08:30.343Z
 
 **Next:** Discuss Phase 06 to define the assertion-strengthening and approved
 module-refinement work before planning.

@@ -127,7 +127,7 @@ None. The created and modified files contain no placeholder, TODO, FIXME, skippe
 
 ## Threat Flags
 
-None. All new files are test-only. The parser fails closed on tampered marker boundaries, and captured output remains limited to the existing redacted public notification boundary.
+None. All new files are test-only. The parser rejects tampered marker boundaries, and captured output remains limited to the existing redacted public notification boundary.
 
 ## User Setup Required
 
