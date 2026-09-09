@@ -9,7 +9,7 @@
 //   - extensions/pi-claude-marketplace/orchestrators/marketplace/info.ts
 //   - extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts
 //   - extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts
-//   - extensions/pi-claude-marketplace/orchestrators/plugin/list.ts
+//   - extensions/pi-claude-marketplace/orchestrators/plugin/list-flow.ts
 //   - extensions/pi-claude-marketplace/orchestrators/plugin/info.ts
 //
 // Note on marketplace/shared.ts: that file holds the autoupdate FLIP logic.

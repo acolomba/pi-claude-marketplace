@@ -490,7 +490,7 @@ const EMPTY_ORPHAN_FOLD: OrphanFold = { folded: [], foldedNames: new Set() };
  * `partially-installed` / `partially-upgradable` rows are recorded-installed
  * inventory and join for the same reason. Regressions:
  * tests/integration/fold-adoption.test.ts and the "CR-01 / G-21-01
- * fold-carryover" case in tests/orchestrators/plugin/list.test.ts.
+ * fold-carryover" case in tests/orchestrators/plugin/list-flow.test.ts.
  */
 async function computeOrphanFold(
   opts: ListPluginsOptions,
@@ -731,7 +731,7 @@ export async function listPlugins(opts: ListPluginsOptions): Promise<void> {
     // member by construction.
     const marketplaces: Plural<MarketplaceRows<ListMsg>> = await loadPluginListPayload(opts);
     // notify call mirrors the recipe at
-    // orchestrators/plugin/uninstall.ts; list.ts substitutes the
+    // orchestrators/plugin/uninstall.ts; list-flow.ts substitutes the
     // list-surface plugin variants (available / unavailable / upgradable
     // / installed) per D-19-02. Severity (info; omitted 2nd arg) and
     // the `/reload to pick up changes` trailer are computed by the cascade

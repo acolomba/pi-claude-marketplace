@@ -39,7 +39,7 @@ const NOTIFICATION_TYPES_REL = "extensions/pi-claude-marketplace/shared/notifica
 // in install.messaging.ts, alongside the rest of install's
 // error-classification family -- rather than pinning a fixed folder.
 const INSTALL_REL = "extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts";
-const LIST_ORCH_REL = "extensions/pi-claude-marketplace/orchestrators/plugin/list.ts";
+const LIST_ORCH_REL = "extensions/pi-claude-marketplace/orchestrators/plugin/list-flow.ts";
 const LIST_EDGE_REL = "extensions/pi-claude-marketplace/edge/handlers/plugin/list.ts";
 const PLUGIN_EDGE_DIR_REL = "extensions/pi-claude-marketplace/edge/handlers/plugin";
 const PLUGIN_COMMANDS_DIR_REL = "extensions/pi-claude-marketplace/commands/plugin";

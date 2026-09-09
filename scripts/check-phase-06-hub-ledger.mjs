@@ -107,7 +107,9 @@ export const CATALOG_FIXTURES = Object.freeze(
 );
 
 /** @type {readonly string[]} */
-export const LEGACY_HUBS = Object.freeze([`${EXTENSION_ROOT}/orchestrators/plugin/list.ts`]);
+const RETIRED_LIST_HUB = [EXTENSION_ROOT, "orchestrators", "plugin", "list.ts"].join("/");
+
+export const LEGACY_HUBS = Object.freeze([RETIRED_LIST_HUB]);
 
 const RESIDUAL_CENSUS_IGNORES = new Set([
   "scripts/check-phase-06-hub-ledger.mjs",

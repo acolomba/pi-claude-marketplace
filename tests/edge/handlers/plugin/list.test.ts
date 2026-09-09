@@ -46,7 +46,7 @@
 // observed instead as the ROW SET the single emission carries, projected to the
 // marketplace header plus each row's name, version and status token and compared
 // as ONE whole value. The projection deliberately drops the glyph and the reason
-// trailer: the rendered body belongs to tests/orchestrators/plugin/list.test.ts,
+// trailer: the rendered body belongs to tests/orchestrators/plugin/list-flow.test.ts,
 // and re-deriving it here would restate a fact another pair owns at full direct
 // coverage.
 //
@@ -92,7 +92,7 @@
 // tests/edge/flag-catalog.test.ts, none restates the tokenizer diagnostics owned
 // by tests/edge/args.test.ts, none restates the shared prelude owned by
 // tests/edge/handlers/plugin/shared.test.ts, and none re-derives the list
-// outcome owned by tests/orchestrators/plugin/list.test.ts.
+// outcome owned by tests/orchestrators/plugin/list-flow.test.ts.
 
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";

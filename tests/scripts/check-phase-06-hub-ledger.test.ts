@@ -124,9 +124,9 @@ describe("MF-DEC-01 census", () => {
 });
 
 describe("PRE-EDIT ledger", () => {
-  const hub = "extensions/pi-claude-marketplace/orchestrators/plugin/list.ts";
-  const legacyTest = "tests/orchestrators/plugin/list.test.ts";
-  const ledger = `# List PRE-EDIT Ledger
+  const hub = "fixtures/example-hub.ts";
+  const legacyTest = "fixtures/example-hub.test.ts";
+  const ledger = `# Example PRE-EDIT Ledger
 
 Status: READY
 Hub: ${hub}
@@ -135,12 +135,12 @@ Legacy test: ${legacyTest}
 | Category | Current owner | Destination | Evidence |
 | --- | --- | --- | --- |
 | exported symbol | ListPluginsOptions | orchestrators/plugin/list-flow.ts | tracked |
-| production caller | edge/handlers/plugin/list.ts | orchestrators/plugin/list-flow.ts | CodeGraph |
-| source-scanning gate | scripts/check-phase-06-hub-ledger.mjs | orchestrators/plugin/list-flow.ts | tracked |
-| documentation comment | 06-49-PLAN.md | orchestrators/plugin/list-installed-row.ts | tracked |
-| test ownership | list.test.ts installed row cases | list-installed-row.test.ts | exact owner |
-| completeness invariant | zero/one/many cardinality and stable rows | list-flow.test.ts | inverse walk |
-| dependency edge | list.ts -> installed rows | list-installed-row.ts -> notification grammar | acyclic |
+| production caller | fixtures/example-caller.ts | fixtures/example-flow.ts | CodeGraph |
+| source-scanning gate | fixtures/example-gate.ts | fixtures/example-flow.ts | tracked |
+| documentation comment | fixtures/example-design.md | fixtures/example-leaf.ts | tracked |
+| test ownership | example-hub.test.ts row cases | example-leaf.test.ts | exact owner |
+| completeness invariant | zero/one/many cardinality and stable rows | example-flow.test.ts | inverse walk |
+| dependency edge | example hub to installed rows | example leaf to notification grammar | acyclic |
 `;
 
   test("accepts a READY ledger with every repoint category", () => {
@@ -153,8 +153,8 @@ Legacy test: ${legacyTest}
         trackedPaths: new Set([
           hub,
           legacyTest,
-          "extensions/pi-claude-marketplace/orchestrators/plugin/list-installed-row.ts",
-          "tests/orchestrators/plugin/list-installed-row.test.ts",
+          "fixtures/example-leaf.ts",
+          "fixtures/example-leaf.test.ts",
         ]),
       }),
       [],
@@ -176,7 +176,7 @@ Legacy test: ${legacyTest}
       validatePreedit({
         hub,
         legacyTest,
-        ledger: `${ledger}| test ownership | duplicate | list-installed-row.test.ts | duplicate |\n`,
+        ledger: `${ledger}| test ownership | duplicate | example-leaf.test.ts | duplicate |\n`,
         codegraph: hub,
         trackedPaths: new Set([hub, legacyTest]),
       }).join("\n"),

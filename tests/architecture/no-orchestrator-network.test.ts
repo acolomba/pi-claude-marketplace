@@ -79,7 +79,7 @@ const FORBIDDEN_TARGETS: ReadonlyArray<string> = [
   "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts",
   "extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts",
   // PL-3 + NFR-5: list is read-only against state + manifest; no network.
-  "extensions/pi-claude-marketplace/orchestrators/plugin/list.ts",
+  "extensions/pi-claude-marketplace/orchestrators/plugin/list-flow.ts",
   // PRL-07: the public reinstall flow uses cached manifests only -- which is
   // also why refreshGitHubClone is one of the gated patterns. The flow owner
   // contains the complete sequencing body, so this one target guards the full

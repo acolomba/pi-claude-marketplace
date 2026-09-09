@@ -7,7 +7,7 @@
 // tree, so the tool body runs rather than merely being installed.
 //
 // The list-surface status vocabulary these tools project is owned by
-// `tests/orchestrators/plugin/list.test.ts`; every expected status here is a
+// `tests/orchestrators/plugin/list-flow.test.ts`; every expected status here is a
 // written-out literal, never a value this suite derives by re-running the
 // production classification it is checking.
 //
