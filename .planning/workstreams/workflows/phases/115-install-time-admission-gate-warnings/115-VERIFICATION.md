@@ -131,9 +131,12 @@ audit appends to the first, and `gsd-tools phase.complete` rewrites the second a
 its final act, turning six `Pending` rows to `Complete`. Covering such a file
 makes the phase permanently un-completable: completing it invalidates the
 verification that authorised the completion, and no amount of re-verifying
-escapes the loop. This is measured, not hypothetical — Phase 114 carries
-`REQUIREMENTS.md` in its own covered set and has been stuck at `verification:
-stale` since 2026-09-08 for exactly this reason. Neither file is graded here:
+escapes the loop. This is measured, not hypothetical — it was observed directly
+on this phase: `phase.complete` turned six `Pending` rows to `Complete`, and that
+edit alone flipped this report from `passed` to `stale`. (Phase 114 is also stale,
+but NOT for this reason — six files it genuinely grades were changed by Phase 115's
+own work, which is correct staleness needing re-verification. An earlier draft of
+this note cited 114 as evidence here and was wrong.) Neither file is graded here:
 `WINDOWS.md` was cited only as corroboration for two fixes confirmed
 independently in the tree, and `REQUIREMENTS.md` supplies requirement text whose
 traceability is checked, not checkbox state owned by a later pass.
