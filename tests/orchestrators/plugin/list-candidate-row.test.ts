@@ -24,8 +24,8 @@ type ComposeCandidateListRow = (
   declaredEnabled: boolean | undefined,
 ) => Promise<CandidateRow>;
 
-function loadComposeCandidateListRow(): ComposeCandidateListRow {
-  return availableRowMessage;
+function loadComposeCandidateListRow(): Promise<ComposeCandidateListRow> {
+  return Promise.resolve(availableRowMessage);
 }
 
 async function candidateEnvironment(testContext: TestContext): Promise<{

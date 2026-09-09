@@ -17,8 +17,8 @@ type ComposeInstalledListRow = (
   options: ComposeInstalledListRowOptions,
 ) => Promise<InstalledListRow>;
 
-function loadComposeInstalledListRow(): ComposeInstalledListRow {
-  return composeInstalledListRow;
+function loadComposeInstalledListRow(): Promise<ComposeInstalledListRow> {
+  return Promise.resolve(composeInstalledListRow);
 }
 
 interface PluginRecordOverrides {
