@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 06
 current_phase_name: Assertion and Module Refinement
 status: executing
-stopped_at: Completed 06-29-PLAN.md
-last_updated: "2026-09-09T12:24:12.965Z"
+stopped_at: Completed 06-30-PLAN.md
+last_updated: "2026-09-09T12:37:56.103Z"
 last_activity: 2026-09-08
 last_activity_desc: Phase 06 execution started
-state_head: 3071d9d128cf5c568aeca51bebe697c43da5b97e
+state_head: "0bdfd07b5f3ab232b8be8bbb3511fbcaca31bb1d"
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 180
-  completed_plans: 157
+  completed_plans: 158
   percent: 11
 ---
 
@@ -33,7 +33,7 @@ component as a working Pi artifact.
 
 Phase: 06 (Assertion and Module Refinement) — EXECUTING
 Next: Discuss Phase 6
-Plan: 30 of 52
+Plan: 31 of 52
 Status: Ready to execute
 Last activity: 2026-09-08 — Phase 06 execution started
 
@@ -337,6 +337,7 @@ Last activity: 2026-09-08 — Phase 06 execution started
 | Phase 06 P27 | 13min | 3 tasks | 12 files |
 | Phase 06 P28 | 16 min | 2 tasks | 5 files |
 | Phase 06 P29 | 12min | 2 tasks | 5 files |
+| Phase 06 P30 | 10min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -810,6 +811,9 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 06]: Plan 06-29 gives each extracted catalog fixture module exactly one typed command-section map. — Single-section ownership keeps the five Wave 21 slices disjoint and makes inverse completeness explicit.
 - [Phase 06]: Plan 06-29 keeps list and update command-specific emit seams local to their fixture owners. — Those seams exercise real command rendering for states the generic notification dispatcher does not own.
 - [Phase 06]: Plan 06-29 leaves the shared catalog driver unchanged for Plan 06-33. — The downstream serialized plan owns atomic driver repointing and hub deletion across all 20 fixture slices.
+- [Phase 06]: Plan 06-30 gives each fetch/import/bootstrap/marketplace-list/marketplace-add fixture module one typed command-section map. — Single-section ownership makes the Wave 21 slices disjoint and inverse completeness explicit.
+- [Phase 06]: Plan 06-30 leaves the shared catalog driver and 06-29 fixture maps unchanged for Plan 06-33. — The serialized downstream plan owns atomic driver repointing and final hub deletion.
+- [Phase 06]: Plan 06-30 keeps all ten Wave 21 unused fixture exports unsuppressed. — Plan 06-33 is their designated consumer; suppressions would hide an incomplete caller migration.
 
 ### Pending Todos
 
@@ -862,7 +866,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 06-29-PLAN.md
+**Stopped at:** Completed 06-30-PLAN.md
 
 Phase 04 completed all seven plans and closed AUTH-01 and TREF-01 through
 TREF-03. Independent verification passed 4/4 with no behavioral or UAT gap;
@@ -880,7 +884,7 @@ independent verification passed 6/6 with zero unverified behaviors.
 **Read beside it:** `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`, the
 Phase 01 terminal evidence ledger, and Phase 5's roadmap criteria.
 
-Last session: 2026-09-09T12:24:12.354Z
+Last session: 2026-09-09T12:37:55.498Z
 
 **Next:** Discuss Phase 06 to define the assertion-strengthening and approved
 module-refinement work before planning.
