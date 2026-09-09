@@ -349,6 +349,7 @@ test("admits a partial candidate only with explicit partial permission", async (
 
   // assert
   assert.ok("partition" in strictOutcome);
+  assert.strictEqual(strictOutcome.partition, "skipped");
   assert.deepStrictEqual(strictOutcome.reasons, ["unsupported component"]);
   assert.strictEqual(strictOutcome.partialUpgradable, true);
   assert.ok(!("partition" in partialOutcome));

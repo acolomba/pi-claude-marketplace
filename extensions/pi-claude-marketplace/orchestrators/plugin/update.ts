@@ -110,6 +110,7 @@ import type {
   ThreePhaseArgs,
   UpdateHooksRouting,
   UpdatePhase3Failure,
+  UpdatePhase3FailedOutcome,
   UpdateRunOutcome,
 } from "./update-swap.ts";
 import type { ParsedSource } from "../../domain/source.ts";
@@ -611,7 +612,11 @@ function reasonsFromTypedError(err: unknown): readonly ContentReason[] {
 
 async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<UpdateRunOutcome> {
   const preflight = await preparePluginUpdate(args);
-  return "partition" in preflight ? preflight : swapPluginUpdate(args, preflight);
+  if ("partition" in preflight) {
+    return preflight as UpdateRunOutcome;
+  }
+
+  return swapPluginUpdate(args, preflight);
 }
 
 interface TargetedOutcome {

@@ -95,7 +95,7 @@ export interface PreparePluginUpdateOptions {
   readonly credentialOps?: CredentialOps;
   readonly deviceFlowHttp?: DeviceFlowHttp;
   readonly authMemo?: Map<string, AuthAttemptResult>;
-  readonly cleanupClones: (locations: ScopedLocations) => Promise<void>;
+  readonly cleanupClones: (locations: ScopedLocations) => Promise<unknown>;
 }
 
 type PluginStateRecord = PreparedPluginUpdate["record"];

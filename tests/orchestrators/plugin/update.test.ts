@@ -483,12 +483,12 @@ function makeDisabledPartialPluginRecord(version: string): PluginRecord {
   };
 }
 
-interface SeededPathMp {
+export interface SeededPathMp {
   marketplaceRoot: string;
   manifestPath: string;
 }
 
-interface SeededUpdateAgent {
+export interface SeededUpdateAgent {
   readonly directory?: string;
   readonly sourceName: string;
   readonly frontmatterName?: string;

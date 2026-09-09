@@ -150,7 +150,7 @@ export interface ThreePhaseArgsBase {
   readonly credentialOps?: CredentialOps;
   readonly deviceFlowHttp?: DeviceFlowHttp;
   readonly authMemo?: Map<string, AuthAttemptResult>;
-  readonly cleanupClones: (locations: ScopedLocations) => Promise<void>;
+  readonly cleanupClones: (locations: ScopedLocations) => Promise<unknown>;
 }
 
 /** Direct update replacement owns user notification context. */
@@ -183,9 +183,9 @@ export interface UpdatePhase3Failure extends Omit<Phase3Failure, "cause"> {
   readonly cause: Error;
 }
 
-type NonFailedUpdateOutcome = Exclude<PluginUpdateOutcome, PluginUpdateFailedOutcome>;
+export type NonFailedUpdateOutcome = Exclude<PluginUpdateOutcome, PluginUpdateFailedOutcome>;
 
-interface DirectRenderableFailedOutcome extends Omit<
+export interface DirectRenderableFailedOutcome extends Omit<
   PluginUpdateFailedOutcome,
   "cause" | "fromVersion" | "phaseFailures" | "reasons" | "toVersion"
 > {
@@ -196,7 +196,7 @@ interface DirectRenderableFailedOutcome extends Omit<
   readonly toVersion?: never;
 }
 
-interface UpdatePhase3FailedOutcome extends Omit<
+export interface UpdatePhase3FailedOutcome extends Omit<
   PluginUpdateFailedOutcome,
   "cause" | "fromVersion" | "phaseFailures" | "reasons"
 > {
