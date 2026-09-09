@@ -18,12 +18,18 @@
 // scratch prefix named by `PI_WORKFLOW_ENGINE_ROOT`:
 //
 //   mkdir -p /tmp/wf-engine
-//   npm install --prefix /tmp/wf-engine @quintinshaw/pi-dynamic-workflows
+//   npm install --prefix /tmp/wf-engine @quintinshaw/pi-dynamic-workflows@3.10.1
 //   mkdir -p tmp/pi-uat/wf-agent
 //   PI_CODING_AGENT_DIR=$(pwd)/tmp/pi-uat/wf-agent \
 //   PI_WORKFLOW_ENGINE_ROOT=/tmp/wf-engine/node_modules \
 //     node tests/live-uat/workflow-agent-failure-canary.mjs
 //   rm -rf /tmp/wf-engine
+//
+// The version pin reproduces the grade `docs/workflows-compatibility.md`
+// publishes for this driver. Dropping it re-measures against whatever is
+// current, which is a legitimate thing to do but is a different measurement --
+// the version the run observed is read from the engine's own manifest and
+// printed in every PASS line, so a transcript names which one it was.
 //
 // It needs NO provider credentials, and that is the whole trick (D-117-05): the
 // failure inducer is an ABSENCE. Pointed at an empty agent-state directory the
