@@ -1899,7 +1899,7 @@ async function installPluginWithTransaction(
       // happen fresh under the lock the write also holds.
       //
       // `targetIsLocal` comes back from the selector rather than being
-      // re-derived here: `readDeclaredEnabled` picks the effective ENTRY by
+      // re-derived here: `resolveInstallDeclaredEnabled` picks the effective ENTRY by
       // physical-file IDENTITY before it reads that entry's `enabled` field, so
       // labelling the selected file with the caller's flag instead of with its
       // own identity swaps which of `current` and the sibling is treated as the
