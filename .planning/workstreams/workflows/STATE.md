@@ -4,10 +4,10 @@ milestone: workflows-replay
 milestone_name: Workflow Bridge Replay onto main
 current_phase: 117
 current_phase_name: Measured `agent()` failure evidence
-current_plan: 1 of 3 executed
+current_plan: 2 of 3 executed
 status: executing
-stopped_at: Completed 117-01-PLAN.md -- the live-UAT canary measured and both controls run
-last_updated: "2026-09-09T19:15:00.000Z"
+stopped_at: Completed 117-02-PLAN.md -- the agent() section restated at runtime-measured grade
+last_updated: "2026-09-09T19:25:00.000Z"
 state_head: 61f84ce970d4539a37c8e40ae67aac5b7276cfae
 progress:
   total_phases: 9
@@ -16,7 +16,7 @@ progress:
   completed_plans: 36
   percent: 89
 last_activity: 2026-09-09
-last_activity_desc: Executed plan 117-01; the engine's agent() failure measured at 3.10.1 and the published claim refuted
+last_activity_desc: Executed plan 117-02; the compatibility doc's agent() section now states the measured split at runtime-measured 3.10.1
 ---
 
 # Project State
@@ -36,8 +36,8 @@ the gaps the bridge originally shipped with.
 ## Current Position
 
 Phase: 117 — Measured `agent()` failure evidence
-Plan: 1 of 3 executed (3 plans, 3 waves, 9 tasks)
-Status: Executing — 117-01 complete, 117-02 and 117-03 remain
+Plan: 2 of 3 executed (3 plans, 3 waves, 9 tasks)
+Status: Executing — 117-01 and 117-02 complete, 117-03 remains
 
 Phases 115 and 116 are both complete on every gate. The replay milestone
 (109-114) is done and two of the three hardening phases have closed behind it;

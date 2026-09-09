@@ -688,7 +688,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 117-02-PLAN.md — Rewrite the `agent()` section at its measured grade, with the census published only under its counting rule
+- [x] 117-02-PLAN.md — Rewrite the `agent()` section at its measured grade, with the census published only under its counting rule
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -706,4 +706,4 @@ Plans:
 | 114. Degradation and documentation | 5/5 | Complete    | 2026-09-08 |
 | 115. Install-time admission-gate warnings | 6/6 | Complete    | 2026-09-09 |
 | 116. Load-time workflow convergence | 4/4 | Complete    | 2026-09-09 |
-| 117. Measured `agent()` failure evidence | 1/3 | In progress | - |
+| 117. Measured `agent()` failure evidence | 2/3 | In progress | - |
