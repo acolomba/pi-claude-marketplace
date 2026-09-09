@@ -173,6 +173,17 @@ try {
 `;
 }
 
+/**
+ * The upstream fan-out pattern, in the shape a plugin author copies: fan three
+ * items out through the engine's own pipeline helper, each item calling
+ * `agent()`, then filter the result for truthiness. Reports the row count and
+ * the survivor count so the observable is two scalars.
+ */
+const FAN_OUT_SCRIPT = `export const meta = { name: "agent-fanout-canary", description: "fan three failing agent() calls out" };
+const rows = await pipeline(["a", "b", "c"], (item) => agent("ping " + item));
+return { rows: rows.length, survivors: rows.filter(Boolean).length };
+`;
+
 async function main() {
   const { version } = await resolveEngineVersion();
   const sandboxRoot = assertSandboxContainment();
@@ -220,6 +231,40 @@ async function main() {
       `A1: a recoverable agent() failure did not produce the expected observable at engine ${version}.`,
     );
     pass(`A1: a recoverable agent() failure resolves to null (engine ${version})`);
+
+    // ---- A2: the differential control, and what makes this driver non-vacuous.
+    // Same driver, same engine, same sandbox, ONE option apart: a model
+    // specification that resolves to nothing. Two assertions in one run that
+    // disagree with each other by design prove the machinery discriminates
+    // rather than reporting whatever it sees. This is the only place an error
+    // code may be asserted -- naming it is what makes the control specific
+    // rather than "something threw" -- while the verdict above stays on the
+    // observable (D-117-01). It is always on, never behind a flag: a control
+    // that lives only in a written record rots.
+    const nonRecoverable = await drive(
+      agentCallScript(`agent("ping", { model: "nosuchprovider/nosuchmodel" })`),
+    );
+    assert.deepEqual(
+      structuredClone(nonRecoverable.result),
+      { kind: "rejected", code: "MODEL_NOT_FOUND", recoverable: false },
+      `A2: a non-recoverable agent() failure did not reject at engine ${version}.`,
+    );
+    pass(`A2: a non-recoverable agent() failure rejects MODEL_NOT_FOUND (engine ${version})`);
+
+    // ---- A3: the pattern a plugin author actually copies. Three items fan out,
+    // every call fails recoverably, and the run COMPLETES -- which is itself
+    // part of the observation, because the published claim is that this pattern
+    // aborts here and it does not (D-117-04).
+    const fanOut = await drive(FAN_OUT_SCRIPT);
+    assert.deepEqual(
+      structuredClone(fanOut.result),
+      { rows: 3, survivors: 0 },
+      `A3: the fan-out pattern did not drop its failed items and complete at engine ${version}.`,
+    );
+    pass(
+      `A3: three fanned-out failures return 3 rows, 0 survive the truthiness filter, ` +
+        `and the run completes (engine ${version})`,
+    );
   } finally {
     await rm(stateDir, { recursive: true, force: true });
   }
