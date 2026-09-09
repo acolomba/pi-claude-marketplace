@@ -8,8 +8,9 @@
 // secondary project-before-user per MSG-GR-3), and constructs the concrete
 // per-status `MarketplaceNotificationMessage` arm for each block.
 //
-// Pure: no I/O. The function NEVER calls `ctx.ui.notify` or any seam in
-// `shared/notify.ts` beyond importing the types and the comparator.
+// Pure: no I/O. The function NEVER calls the `notification-dispatch.ts`
+// owner; it imports only notification types and the stable name/scope
+// comparator from their named shared owners.
 //
 // Token mapping (pending-tense set):
 //
