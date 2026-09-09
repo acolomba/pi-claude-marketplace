@@ -240,6 +240,24 @@ async function mtimeMsOf(target: string): Promise<number> {
   return (await stat(target)).mtimeMs;
 }
 
+/**
+ * WCONV-02: every axis a rewrite could move. Byte equality alone is satisfied
+ * by an atomic rewrite of identical content, which is a write; the inode
+ * catches that rename and the nanosecond mtime catches a truncating rewrite
+ * that reused the inode.
+ */
+async function fileSnapshot(target: string): Promise<{
+  readonly bytes: string;
+  readonly inode: bigint;
+  readonly mtimeNs: bigint;
+}> {
+  const [bytes, metadata] = await Promise.all([
+    readFile(target, "utf8"),
+    stat(target, { bigint: true }),
+  ]);
+  return Object.freeze({ bytes, inode: metadata.ino, mtimeNs: metadata.mtimeNs });
+}
+
 test("RECON-05: two consecutive reconciles leave a workflow envelope untouched", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "workflow-reconcile-idem-"));
@@ -357,6 +375,96 @@ test("RECON-05 negative control: a forced-open gate over a grown set DOES rewrit
         description: "greets",
         script: 'export const meta = { name: "greet", description: "greets" };\n',
       });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WCONV-01 / WCONV-02: one load converges a record whose kind was invisible, and the next load rewrites nothing", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "workflow-convergence-"));
+    try {
+      // arrange -- install normally, then rewrite the record into the shape a
+      // plugin leaves behind when it is installed while the workflows kind is
+      // still invisible to the resolver: `installable: true`, `skills`
+      // recorded, and NOTHING unsupported. That is the population this
+      // convergence exists for, and it is why the record alone cannot be told
+      // apart from a clean install -- only the growth test sees the boundary
+      // move. The envelope goes with it, because that install never placed one.
+      await seedWorkflowPlugin({ cwd, marketplaceRoot: path.join(cwd, "mp-src") });
+      const install = makeCtx();
+      await installPlugin({
+        ctx: install.ctx,
+        pi: install.pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+      const locations = locationsFor("project", cwd);
+      const envelopePath = path.join(locations.workflowsSavedDir, "hello:greet.json");
+      await rm(envelopePath);
+      const { saveState } =
+        await import("../../extensions/pi-claude-marketplace/persistence/state-io.ts");
+      const seeded = await loadState(locations.extensionRoot);
+      const seededRecord = seeded.marketplaces["mp"]?.plugins["hello"];
+      assert.ok(seededRecord, "precondition: the install must have written a record");
+      assert.notStrictEqual(
+        EXTENSION_VERSION,
+        "0.0.0",
+        "precondition: the forced stamp must differ from the running constant",
+      );
+      seeded.lastReconciledExtensionVersion = "0.0.0";
+      seededRecord.compatibility = {
+        installable: true,
+        notes: [],
+        supported: ["skills"],
+        unsupported: [],
+      };
+      seededRecord.resources = { ...seededRecord.resources, workflows: [] };
+      await saveState(locations.extensionRoot, seeded);
+
+      // act -- the load the user did not initiate
+      const first = makeCtx();
+      await applyReconcile({ ctx: first.ctx, pi: first.pi, cwd, scope: "project" });
+
+      // assert -- the FIRST load converged. Without this half the equality
+      // below would also be satisfied by a scan that never ran at all.
+      const converged = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
+        "hello"
+      ];
+      assert.ok(converged, "expected the record to survive the load");
+      assert.ok(
+        converged.compatibility.supported.includes("workflows"),
+        `expected the grown set to be recorded; got: ${converged.compatibility.supported.join(" / ")}`,
+      );
+      assert.deepStrictEqual(converged.resources.workflows, ["hello:greet"]);
+      assert.deepStrictEqual(JSON.parse(await readFile(envelopePath, "utf8")), {
+        name: "hello:greet",
+        description: "greets",
+        script: 'export const meta = { name: "greet", description: "greets" };\n',
+      });
+      assert.notDeepStrictEqual(first.notifications, []);
+
+      // arrange -- the snapshot that matters is taken AFTER the first load: the
+      // promotion legitimately rewrites the compatibility block, the resources
+      // and the updated-at stamp, and the first load also closes the version
+      // gate. Backdating first removes any dependence on two loads landing in
+      // different timer ticks.
+      await backdate(envelopePath, locations.stateJsonPath);
+      const stateAfterFirst = await fileSnapshot(locations.stateJsonPath);
+      const envelopeAfterFirst = await fileSnapshot(envelopePath);
+
+      // act -- the next load over the converged scope
+      const second = makeCtx();
+      await applyReconcile({ ctx: second.ctx, pi: second.pi, cwd, scope: "project" });
+
+      // assert -- self-heal is one-time. An atomic rewrite of identical content
+      // is still a write, so bytes alone would not carry this claim.
+      assert.deepStrictEqual(await fileSnapshot(locations.stateJsonPath), stateAfterFirst);
+      assert.deepStrictEqual(await fileSnapshot(envelopePath), envelopeAfterFirst);
+      assert.deepStrictEqual(second.notifications, []);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

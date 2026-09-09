@@ -12,7 +12,7 @@
 // with no promised call: an unpromised `notify` or `getAllTools` call throws.
 
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, test } from "node:test";
@@ -329,6 +329,25 @@ async function savedWorkflowEntries(locations: ScopedLocations): Promise<string[
   }
 }
 
+/**
+ * Every axis a rewrite of state.json could move. Byte equality alone is
+ * satisfied by an atomic rewrite of identical content, which is a write; the
+ * inode catches exactly that rename, and the nanosecond mtime catches a
+ * truncating rewrite that reused the inode. One frozen object so a single
+ * deep equality reports all three.
+ */
+async function stateSnapshot(target: string): Promise<{
+  readonly bytes: string;
+  readonly inode: bigint;
+  readonly mtimeNs: bigint;
+}> {
+  const [bytes, metadata] = await Promise.all([
+    readFile(target, "utf8"),
+    stat(target, { bigint: true }),
+  ]);
+  return Object.freeze({ bytes, inode: metadata.ino, mtimeNs: metadata.mtimeNs });
+}
+
 /** A seeded scope that has been read but not re-materialized. */
 function seededScopeTree(): readonly string[] {
   return ["pi-claude-marketplace/", "pi-claude-marketplace/state.json"];
@@ -449,7 +468,7 @@ describe("applyBackfillForScopeIsolated", () => {
     verifyBoundary();
   });
 
-  test("RECON-05: leaves state.json byte-identical when the recorded stamp already matches", async (t) => {
+  test("RECON-05: leaves state.json unchanged in bytes, inode and mtime when the recorded stamp already matches", async (t) => {
     // arrange
     const { cwd, locations } = await createHermeticProjectScope(t, "gate-closed");
     const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
@@ -470,7 +489,7 @@ describe("applyBackfillForScopeIsolated", () => {
       },
     };
     await seedState(locations, seeded);
-    const seededBytes = await readFile(locations.stateJsonPath, "utf8");
+    const seededSnapshot = await stateSnapshot(locations.stateJsonPath);
     const { ctx, pi, verifyBoundary } = createSilentBoundary();
     const { gitOps, clonedUrls } = createOfflineGitOps();
     const outcomes: PerEntryOutcome[] = [];
@@ -485,7 +504,7 @@ describe("applyBackfillForScopeIsolated", () => {
 
     // assert
     assert.deepStrictEqual(outcomes, []);
-    assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), seededBytes);
+    assert.deepStrictEqual(await stateSnapshot(locations.stateJsonPath), seededSnapshot);
     assert.deepStrictEqual(await retryTree(locations.scopeRoot), seededScopeTree());
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
