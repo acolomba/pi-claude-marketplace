@@ -52,7 +52,7 @@ function stateWith(record: PluginInstallRecord): ExtensionState {
         plugins: { plugin: record },
       },
     },
-  } as ExtensionState;
+  };
 }
 
 function installable(state: MaterializablePlugin["state"] = "installable"): MaterializablePlugin {
@@ -68,7 +68,7 @@ function installable(state: MaterializablePlugin["state"] = "installable"): Mate
     mcpServers: {},
     defaultEnabled: true,
     ...(state === "partially-available" && { hooksConfigPath: "hooks/hooks.json" }),
-  } as MaterializablePlugin;
+  };
 }
 
 function handles(

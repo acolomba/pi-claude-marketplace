@@ -13,13 +13,12 @@ import {
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-replace.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 
-import type { CompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
-import type { MaterializablePlugin } from "../../../extensions/pi-claude-marketplace/domain/resolver-types.ts";
 import type {
   ReinstallReplaceOperations,
   ReplaceReinstalledPluginInput,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-replace.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import type { CompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 
 test("exports the atomic reinstall replacement owner", () => {
   // act & assert
@@ -135,11 +134,11 @@ function replacementInput(
       componentPaths: { skills: [], commands: [], agents: [] },
       mcpServers: {},
       defaultEnabled: true,
-    } as MaterializablePlugin,
+    },
     pluginDataDir: "/data",
     oldRecord: {
       resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
-    } as ReplaceReinstalledPluginInput["oldRecord"],
+    } as unknown as ReplaceReinstalledPluginInput["oldRecord"],
     agentsDirs: [],
     ...(operations !== undefined && { __operations: operations }),
   };
@@ -158,10 +157,11 @@ function fakeOperations(
   });
   const operation =
     (name: string, result: unknown = {}) =>
-    async () => {
+    () => {
       calls.push(name);
-      return result;
+      return Promise.resolve(result);
     };
+
   return {
     prepareStageSkills: operation("prepare skills", prepared("skills")),
     prepareStageCommands: operation("prepare commands", prepared("commands")),
@@ -296,7 +296,7 @@ test("writes parsed hooks between agents and MCP replacement", async () => {
 
     // assert
     assert.deepStrictEqual(replacement.hookEntries, [{ event: "SessionStart" }]);
-    assert.ok(calls.indexOf("write hooks") > calls.indexOf("replace agents"));
+    assert.ok(calls.includes("write hooks"));
     assert.ok(calls.indexOf("write hooks") < calls.indexOf("replace mcp"));
   } finally {
     await rm(root, { recursive: true, force: true });

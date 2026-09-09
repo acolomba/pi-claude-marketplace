@@ -4,6 +4,7 @@ import {
   ManualRecoveryError,
   PluginShapeError,
 } from "../../shared/errors.ts";
+
 import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
 import type { ExtensionState, PluginInstallRecord } from "../../persistence/state-io.ts";
 import type { HookSummaryEntry } from "../../shared/concerns/hooks.ts";
@@ -18,7 +19,8 @@ import type {
 } from "../types.ts";
 import type { ReinstallPreparedHandles } from "./reinstall-replace.ts";
 
-interface ReinstallOutcomeTarget {
+/** Identity shared by every composed reinstall outcome. */
+export interface ReinstallOutcomeTarget {
   readonly name: string;
   readonly marketplace: string;
   readonly scope: Scope;

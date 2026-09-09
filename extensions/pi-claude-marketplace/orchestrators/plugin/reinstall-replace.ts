@@ -35,6 +35,7 @@ import {
 import { parseHooksConfig, projectHookSummaryEntries } from "../../domain/components/hooks.ts";
 import { errorMessage, errorWithManualRecovery } from "../../shared/errors.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
+
 import { splitStagingWarnings } from "./shared.ts";
 
 import type { AgentsReplacement, PreparedAgentsStaging } from "../../bridges/agents/index.ts";
@@ -80,6 +81,7 @@ type ReplacementEntry =
 /** A replaced plugin plus the compensation ledger kept until commit. */
 export interface ReinstallReplacement {
   readonly handles: ReinstallPreparedHandles;
+  // fallow-ignore-next-line private-type-leak -- replacement entries are an opaque compensation token for rollback/finalize.
   readonly replacements: readonly ReplacementEntry[];
   readonly hookEntries: readonly HookSummaryEntry[] | undefined;
   readonly discoveryWarnings: readonly string[];

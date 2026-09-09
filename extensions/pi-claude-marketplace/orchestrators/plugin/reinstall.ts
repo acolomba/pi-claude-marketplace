@@ -102,7 +102,11 @@ import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
 import type { ReinstallFailedOutcome, ReinstallPluginOutcome } from "../types.ts";
 import type { ReinstallCloneCacheSeam } from "./reinstall-clone-probe.ts";
-import type { ReinstallTransaction, RemoveDataDirFn } from "./reinstall-replace.ts";
+import type {
+  ReinstallMaintenanceInput,
+  ReinstallTransaction,
+  RemoveDataDirFn,
+} from "./reinstall-replace.ts";
 import type { ReinstallPluginsTarget, SelectedReinstallTarget } from "./reinstall-targets.ts";
 
 /** Hook-routing capabilities consumed by committed reinstall finalization. */
@@ -264,14 +268,7 @@ async function reinstallPluginWithTransaction(
   }
 
   const maintenanceWarnings = await transaction.runPostSuccessMaintenance(
-    {
-      scope,
-      marketplace,
-      plugin,
-      ...(opts.__deps?.removeDataDir !== undefined && {
-        removeDataDir: opts.__deps.removeDataDir,
-      }),
-    },
+    maintenanceInput(opts),
     locations,
     completionCache,
   );
@@ -369,6 +366,17 @@ async function reinstallPluginWithTransaction(
   }
 
   return locked.outcome;
+}
+
+function maintenanceInput(opts: ReinstallPluginOptions): ReinstallMaintenanceInput {
+  return {
+    scope: opts.scope,
+    marketplace: opts.marketplace,
+    plugin: opts.plugin,
+    ...(opts.__deps?.removeDataDir !== undefined && {
+      removeDataDir: opts.__deps.removeDataDir,
+    }),
+  };
 }
 
 /** Bind one reinstall operation to a required semantic transaction owner. */
