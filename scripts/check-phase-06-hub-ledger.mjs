@@ -108,7 +108,6 @@ export const CATALOG_FIXTURES = Object.freeze(
 
 /** @type {readonly string[]} */
 export const LEGACY_HUBS = Object.freeze([
-  "tests/architecture/catalog-uat.test.ts",
   `${EXTENSION_ROOT}/orchestrators/plugin/install.ts`,
   `${EXTENSION_ROOT}/orchestrators/plugin/update.ts`,
   `${EXTENSION_ROOT}/orchestrators/plugin/reinstall.ts`,

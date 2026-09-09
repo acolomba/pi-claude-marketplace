@@ -2,7 +2,8 @@
 //
 // PL-1..7 orchestrator-level test corpus for listPlugins. This file owns the
 // orchestrator semantics; the rendered byte-shape contract is covered by the
-// catalog UAT in `tests/architecture/catalog-uat.test.ts`. The list surface
+// catalog UAT in `tests/architecture/catalog-uat/catalog-contract.test.ts`.
+// The list surface
 // emits its rows through the `notify()` NotificationMessage payload.
 //
 //   - PL-1 filter union (--installed / --available / --unavailable)

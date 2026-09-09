@@ -99,6 +99,8 @@ function collectGuardedSources(): ReadonlyMap<string, string> {
     readInto(files, [abs]);
   }
 
+  readInto(files, [path.join(ARCH_DIR, "catalog-uat", "catalog-contract.test.ts")]);
+
   return files;
 }
 
@@ -140,7 +142,7 @@ test("D-75-01 guard: the docs + arch-test surfaces loaded (sanity)", () => {
   assert.ok(
     GUARDED_SOURCES.has("docs/output-catalog.md") &&
       GUARDED_SOURCES.has("docs/messaging-style-guide.md") &&
-      GUARDED_SOURCES.has("tests/architecture/catalog-uat.test.ts"),
+      GUARDED_SOURCES.has("tests/architecture/catalog-uat/catalog-contract.test.ts"),
     "expected the docs + phase architecture tests to be in the guarded surface",
   );
 });

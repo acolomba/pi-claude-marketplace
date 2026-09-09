@@ -124,9 +124,9 @@ describe("MF-DEC-01 census", () => {
 });
 
 describe("PRE-EDIT ledger", () => {
-  const hub = "tests/architecture/catalog-uat.test.ts";
-  const legacyTest = hub;
-  const ledger = `# Catalog PRE-EDIT Ledger
+  const hub = "extensions/pi-claude-marketplace/orchestrators/plugin/install.ts";
+  const legacyTest = "tests/orchestrators/plugin/install.test.ts";
+  const ledger = `# Install PRE-EDIT Ledger
 
 Status: READY
 Hub: ${hub}
@@ -134,13 +134,13 @@ Legacy test: ${legacyTest}
 
 | Category | Current owner | Destination | Evidence |
 | --- | --- | --- | --- |
-| exported symbol | catalog parser | catalog-uat/catalog-parser.ts | tracked |
-| production caller | catalog contract driver | catalog-uat/catalog-contract.test.ts | CodeGraph |
-| source-scanning gate | scripts/check-phase-06-hub-ledger.mjs | catalog-uat/catalog-contract.test.ts | tracked |
-| documentation comment | docs/output-catalog.md | catalog-uat/catalog-contract.test.ts | tracked |
-| test ownership | catalog-uat.test.ts#driver | catalog-uat/catalog-contract.test.ts | exact owner |
-| completeness invariant | 20 command surfaces | catalog-uat/fixtures/*.ts | inverse walk |
-| dependency edge | catalog-uat.test.ts -> output-catalog.md | catalog-contract.test.ts -> catalog-parser.ts | acyclic |
+| exported symbol | InstallCloneCacheSeam | orchestrators/plugin/install-clone-probe.ts | tracked |
+| production caller | edge/handlers/plugin/import.ts | orchestrators/plugin/install-clone-probe.ts | CodeGraph |
+| source-scanning gate | scripts/check-phase-06-hub-ledger.mjs | orchestrators/plugin/install-clone-probe.ts | tracked |
+| documentation comment | 06-34-PLAN.md | orchestrators/plugin/install-declared-enabled.ts | tracked |
+| test ownership | install.test.ts clone-probe cases | install-clone-probe.test.ts | exact owner |
+| completeness invariant | cached/fresh/absent/failing clone states | install-clone-probe.test.ts | inverse walk |
+| dependency edge | install.ts -> clone probe | install-clone-probe.ts -> git.ts | acyclic |
 `;
 
   test("accepts a READY ledger with every repoint category", () => {
@@ -153,8 +153,8 @@ Legacy test: ${legacyTest}
         trackedPaths: new Set([
           hub,
           legacyTest,
-          "tests/architecture/catalog-uat/catalog-parser.ts",
-          "tests/architecture/catalog-uat/catalog-contract.test.ts",
+          "extensions/pi-claude-marketplace/orchestrators/plugin/install-clone-probe.ts",
+          "tests/orchestrators/plugin/install-clone-probe.test.ts",
         ]),
       }),
       [],
@@ -176,7 +176,7 @@ Legacy test: ${legacyTest}
       validatePreedit({
         hub,
         legacyTest,
-        ledger: `${ledger}| test ownership | duplicate | catalog-uat/catalog-contract.test.ts | duplicate |\n`,
+        ledger: `${ledger}| test ownership | duplicate | install-clone-probe.test.ts | duplicate |\n`,
         codegraph: hub,
         trackedPaths: new Set([hub, legacyTest]),
       }).join("\n"),

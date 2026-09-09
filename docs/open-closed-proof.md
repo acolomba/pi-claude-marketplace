@@ -21,7 +21,7 @@ Adding a new subcommand that reuses the existing grammar (existing status tokens
 
 2. **`edge/register.ts`** -- one wiring line in the `handlers` object (`:78`-`:97`), the `make*Handler(pi[, deps])` entry that binds the verb to its handler.
 
-3. **`docs/output-catalog.md`** -- one hand-authored H2 section with a `<!-- catalog-state: STATE -->` fenced block per new rendered state, consumed by `tests/architecture/catalog-uat.test.ts`. This central section is the accepted floor documented below (MOD-06 / D-03).
+3. **`docs/output-catalog.md`** -- one hand-authored H2 section with a `<!-- catalog-state: STATE -->` fenced block per new rendered state, consumed by `tests/architecture/catalog-uat/catalog-contract.test.ts`. This central section is the accepted floor documented below (MOD-06 / D-03).
 
 = **3 central files, 0 shared-notification-owner edits.** The renderer spine, the envelope, the shared presentation vocabulary, and the two extracted concerns are all command-agnostic; a new command owns its grammar locally (command-local status sets and render maps) and the soft-dep / hooks concerns are self-contained, so no shared notification owner changes.
 
@@ -39,13 +39,13 @@ The 9-11 figure assumed the pre-Phase-1 monolith where status tuples, per-varian
 The locked D-02 target is the **3 grammar/registration files** above, and the proof holds for those. Two further central touch-points are partially irreducible (audit Part D) and are reported here rather than papered over as absolute zero-touch:
 
 - **`edge/completions/provider.ts`** may still need a declarative descriptor when a new command introduces a novel positional or flag shape (the completion provider has to know the command's argument grammar to complete it). A command that reuses an existing positional/flag shape needs no provider edit.
-- **`tests/architecture/catalog-uat.test.ts`** `FIXTURES` map gains one `(section, state)` entry per new rendered state -- the test-side mirror of the catalog section in (3) above.
+- **`tests/architecture/catalog-uat/fixtures/*.ts`** gains one `(section, state)` entry per new rendered state, and `tests/architecture/catalog-uat/catalog-contract.test.ts` enforces that inverse inventory -- the test-side mirror of the catalog section in (3) above.
 
 Neither lives in a shared notification owner, so the zero-owner-edits claim is unaffected; both are noted for honesty.
 
 ## MOD-06 catalog floor (D-03)
 
-The catalog (`docs/output-catalog.md`) stays hand-authored: one central H2 section per new rendered state, with no generation or aggregation seam. This is a deliberate milestone boundary, not an oversight -- a generation/aggregation mechanism is explicitly deferred to a future milestone. The hand-authored catalog section is therefore the explicit, accepted **third central file** in the 3-central-files target above. The byte-equality gate (`tests/architecture/catalog-uat.test.ts`) keeps the hand-authored catalog honest against the renderer.
+The catalog (`docs/output-catalog.md`) stays hand-authored: one central H2 section per new rendered state, with no generation or aggregation seam. This is a deliberate milestone boundary, not an oversight -- a generation/aggregation mechanism is explicitly deferred to a future milestone. The hand-authored catalog section is therefore the explicit, accepted **third central file** in the 3-central-files target above. The byte-equality gate (`tests/architecture/catalog-uat/catalog-contract.test.ts`) keeps the hand-authored catalog honest against the renderer.
 
 ## Evidence: the legacy notification hub split into six owners
 
