@@ -204,12 +204,21 @@ async function writePluginTree(
   return pluginRoot;
 }
 
-/** Lay down the plugin trees and the cached marketplace manifest that declares them. */
+/**
+ * Lay down the plugin trees and the cached marketplace manifest that declares
+ * them.
+ *
+ * `sources` overrides the manifest entry's `source` for the named plugins.
+ * Every entry is a relative path source by default, which is the only shape
+ * that resolves offline; a case pinning the git-source bound (NFR-5) supplies
+ * an `owner/repo` shorthand or an `https://` URL here instead.
+ */
 async function writeMarketplaceSource(
   cwd: string,
   directory: string,
   marketplace: string,
   trees: Readonly<Record<string, PluginTree>>,
+  sources?: Readonly<Record<string, string>>,
 ): Promise<{ readonly marketplaceRoot: string; readonly manifestPath: string }> {
   const marketplaceRoot = path.join(cwd, directory);
   for (const [plugin, tree] of Object.entries(trees)) {
@@ -226,7 +235,7 @@ async function writeMarketplaceSource(
       plugins: Object.keys(trees).map((plugin) => ({
         name: plugin,
         version: "1.0.0",
-        source: `./plugins/${plugin}`,
+        source: sources?.[plugin] ?? `./plugins/${plugin}`,
       })),
     }),
   );
@@ -306,7 +315,6 @@ function readResultFor(state: ExtensionState, stateExisted: boolean): ScopeReadR
   return { scope: "project", plan: undefined, invalidOutcomes: [], state, stateExisted };
 }
 
-/** A seeded scope that has been read but not re-materialized. */
 /**
  * Envelope file names under the host engine's saved workflows directory, or
  * `[]` when the directory was never created. That directory lives under the
@@ -321,6 +329,7 @@ async function savedWorkflowEntries(locations: ScopedLocations): Promise<string[
   }
 }
 
+/** A seeded scope that has been read but not re-materialized. */
 function seededScopeTree(): readonly string[] {
   return ["pi-claude-marketplace/", "pi-claude-marketplace/state.json"];
 }
@@ -482,7 +491,7 @@ describe("applyBackfillForScopeIsolated", () => {
     verifyBoundary();
   });
 
-  test("D-68-03: stamps a gate-open scope that records no partially-installed plugin", async (t) => {
+  test("D-68-03 / WCONV-02: stamps a gate-open scope whose scanned record did not grow", async (t) => {
     // arrange
     const { cwd, locations } = await createHermeticProjectScope(t, "nothing-to-promote");
     const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
@@ -1379,6 +1388,60 @@ describe("scanForceInstalledBackfills", () => {
     verifyBoundary();
   });
 
+  test("RECON-04: does not re-materialize behind a disable the same load already applied", async (t) => {
+    // arrange -- the shape the apply pass leaves when it disables a plugin: the
+    // scan's snapshot PREDATES that pass, so it still reports the record
+    // enabled, and the growth test still says the set grew. Only the
+    // already-touched dedupe stands between the widened scan and a
+    // re-materialize, and the re-materialize writes `enabled: true`
+    // unconditionally -- so without the dedupe the scan would reverse the
+    // user's own decision at load time (ENBL-08).
+    const { cwd, locations } = await createHermeticProjectScope(t, "disable-already-touched");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      hello: { skill: "clean", workflow: true },
+    });
+    const snapshot: ExtensionState = {
+      schemaVersion: 2,
+      lastReconciledExtensionVersion: STALE_STAMP,
+      marketplaces: {
+        mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
+          hello: pluginRecord({
+            pluginRoot: path.join(marketplaceRoot, "plugins", "hello"),
+            installable: true,
+            supported: ["skills"],
+            unsupported: [],
+          }),
+        }),
+      },
+    };
+    await seedState(locations, snapshot);
+    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+    const outcomes: PerEntryOutcome[] = [
+      { kind: "plugin-disabled", scope: "project", marketplace: "mp", plugin: "hello" },
+    ];
+
+    // act
+    const anyFailure = await scanForceInstalledBackfills(
+      backfillOptions(ctx, pi, cwd, gitOps),
+      "project",
+      snapshot,
+      outcomes,
+    );
+
+    // assert -- no second row and no envelope: the plugin the user just
+    // disabled stays inert.
+    assert.strictEqual(anyFailure, false);
+    assert.deepStrictEqual(outcomes, [
+      { kind: "plugin-disabled", scope: "project", marketplace: "mp", plugin: "hello" },
+    ]);
+    assert.deepStrictEqual(await savedWorkflowEntries(locations), []);
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), snapshot);
+    assert.deepStrictEqual(await retryTree(locations.scopeRoot), seededScopeTree());
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
   test("ENBL-08: skips a disabled record whose supported set grew", async (t) => {
     // arrange
     const { cwd, locations } = await createHermeticProjectScope(t, "disabled-partial");
@@ -1655,6 +1718,70 @@ describe("scanForceInstalledBackfills", () => {
     // NFR-5: the whole promotion ran off the cached manifest and the local
     // clone, so the counting fake saw no remote at all.
     assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("NFR-5: skips a git-source record whose supported set grew, and reaches no remote", async (t) => {
+    // arrange -- both git-shaped sources the resolver classifies away from
+    // `path`: the `owner/repo` shorthand and an `https://` URL. The scan
+    // re-resolves with no clone-cache resolver, so each answers `unavailable`
+    // and never reaches the re-materialize. Both trees are seeded and both
+    // records seeded at a set that WOULD grow, so a case that passes here
+    // cannot be passing because the growth test skipped them.
+    const { cwd, locations } = await createHermeticProjectScope(t, "git-source");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(
+      cwd,
+      "mp-src",
+      "mp",
+      {
+        hello: { skill: "clean", workflow: true },
+        world: { skill: "clean", workflow: true },
+      },
+      { hello: "acolomba/some-plugin", world: "https://example.com/some-plugin.git" },
+    );
+    const seeded: ExtensionState = {
+      schemaVersion: 2,
+      lastReconciledExtensionVersion: STALE_STAMP,
+      marketplaces: {
+        mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
+          hello: pluginRecord({
+            pluginRoot: path.join(marketplaceRoot, "plugins", "hello"),
+            installable: true,
+            supported: ["skills"],
+            unsupported: [],
+          }),
+          world: pluginRecord({
+            pluginRoot: path.join(marketplaceRoot, "plugins", "world"),
+            installable: true,
+            supported: ["skills"],
+            unsupported: [],
+          }),
+        }),
+      },
+    };
+    await seedState(locations, seeded);
+    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+    const outcomes: PerEntryOutcome[] = [];
+
+    // act
+    const anyFailure = await scanForceInstalledBackfills(
+      backfillOptions(ctx, pi, cwd, gitOps),
+      "project",
+      seeded,
+      outcomes,
+    );
+
+    // assert -- a benign skip, not a failure: an unresolvable source leaves the
+    // version gate free to close. The empty clone list is the NFR-5 half -- a
+    // reload the user did not initiate reaches no remote, and the counting fake
+    // would have recorded the attempt if one had been made.
+    assert.strictEqual(anyFailure, false);
+    assert.deepStrictEqual(outcomes, []);
+    assert.deepStrictEqual(clonedUrls(), []);
+    assert.deepStrictEqual(await savedWorkflowEntries(locations), []);
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), seeded);
+    assert.deepStrictEqual(await retryTree(locations.scopeRoot), seededScopeTree());
     verifyBoundary();
   });
 
