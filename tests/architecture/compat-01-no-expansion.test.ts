@@ -79,12 +79,6 @@ import {
   STATE_SCHEMA,
 } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import {
-  MARKETPLACE_STATUSES,
-  PLUGIN_STATUSES,
-  REASONS,
-  STATUS_TOKENS,
-} from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
-import {
   ICON_AVAILABLE,
   ICON_DISABLED,
   ICON_INSTALLED,
@@ -92,14 +86,20 @@ import {
   ICON_PARTIALLY_INSTALLED,
   ICON_REMOTE,
   ICON_UNINSTALLABLE,
-} from "../../extensions/pi-claude-marketplace/shared/notify.ts";
+} from "../../extensions/pi-claude-marketplace/shared/notification-grammar.ts";
+import {
+  MARKETPLACE_STATUSES,
+  PLUGIN_STATUSES,
+  REASONS,
+  STATUS_TOKENS,
+} from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
 import { REPO_ROOT, stripComments } from "./source-scan.ts";
 
 import type { LedgerDegradationSignals } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts";
 import type { InstallPluginOutcome } from "../../extensions/pi-claude-marketplace/orchestrators/types.ts";
 
-const NOTIFY_REL = "extensions/pi-claude-marketplace/shared/notify.ts";
+const NOTIFICATION_GRAMMAR_REL = "extensions/pi-claude-marketplace/shared/notification-grammar.ts";
 const NETWORK_GATE_REL = "tests/architecture/no-orchestrator-network.test.ts";
 
 /**
@@ -359,7 +359,9 @@ test("COMPAT-01: the notify module declares no eighth glyph export", async () =>
   const expectedCount = 7;
 
   // act
-  const declarations = (await readStrippedSource(NOTIFY_REL)).match(GLYPH_DECLARATIONS);
+  const declarations = (await readStrippedSource(NOTIFICATION_GRAMMAR_REL)).match(
+    GLYPH_DECLARATIONS,
+  );
 
   // assert
   assert.equal(
