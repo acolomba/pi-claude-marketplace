@@ -3,10 +3,10 @@ gsd_state_version: "1.0"
 milestone: v1.20
 milestone_name: transitive-dependencies
 status: planning
-last_updated: "2026-09-09T17:08:12.988Z"
+last_updated: "2026-09-09T00:00:00.000Z"
 last_activity: 2026-09-09
 progress:
-  total_phases: 0
+  total_phases: 5
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -22,15 +22,34 @@ See: `.planning/PROJECT.md` (updated 2026-09-04 after the v1.19 milestone closed
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Planning the next milestone. v1.19 Unit Test Refactor shipped
+**Current focus:** v1.20 transitive-dependencies, on branch `features/manifest`.
+Record how each installed plugin got there so `uninstall --prune` can remove the
+ones nothing needs any more, and close the two adjacent gaps that land on the
+same surfaces. 25 requirements across 5 phases. v1.19 Unit Test Refactor closed
 2026-09-04 and is archived under `.planning/milestones/v1.19-*`.
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 1 of 5 — Manifest read fidelity (not started)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-09-09 — Milestone v1.20 started
+Status: Roadmap written; no phase discussed yet
+Last activity: 2026-09-09 — v1.20 roadmap created, 25/25 requirements mapped
+
+**Phase numbering restarts at 1 for this milestone** (operator decision,
+2026-09-09). Phases 1-117 belong to archived milestones. A bare phase number in
+v1.20 context always means a v1.20 phase.
+
+**The five phases:**
+
+| # | Phase | Requirements | Depends on |
+|---|-------|--------------|------------|
+| 1 | Manifest read fidelity | MANF-01..05, DEPS-01, DEPS-02 | nothing |
+| 2 | Uninstall data disposition and the uninstall option seam | DATA-01..03 | nothing |
+| 3 | Dependency resolution | RESV-01..06 | Phase 1 |
+| 4 | Install provenance | PROV-01..04 | Phase 3 |
+| 5 | Prune on uninstall | PRUNE-01..04, FLAG-01 | Phases 4 and 2 |
+
+Execution order 1 → 3 → 4 → 5, with 2 free to run at any point before 5.
 
 ## Performance Metrics
 
@@ -391,7 +410,22 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 
 ### Pending Todos
 
-None for roadmap creation.
+Four open decisions carried by the v1.20 roadmap, each bound to the discuss
+session that must settle it:
+
+1. **Version-constraint grammar (RESV-03) — Phase 3 discuss.** No semver library
+   is in the dependency tree and PL-5 compares versions as strings deliberately.
+   Add a dependency or document a constraint subset with a stated refusal.
+2. **Where a dependency-installed plugin stands relative to
+   `claude-plugins.json` — Phase 3 discuss.** `buildUninstallBucket`
+   (`orchestrators/reconcile/plan.ts:352`) uninstalls every recorded plugin the
+   merged config does not name, so a cascade install must be reconciled with that
+   config or it vanishes on the next `/reload`.
+3. **Stale-record wording and recovery command (PROV-04) — Phase 4 discuss.**
+   MIGR-01's own unresolved design question, scoped to the "stale state, absent
+   config" message. Answer that much only.
+4. **`--prune`'s value on the reconcile path — Phase 5 discuss.**
+   `applyPluginUninstalls()` carries no command line and takes the default.
 
 ### Blockers/Concerns
 
@@ -537,4 +571,8 @@ requirement-to-phase mapping.
 
 ## Operator Next Steps
 
-- Start the next milestone with /gsd-new-milestone
+- Review `.planning/ROADMAP.md` (5 phases, 25/25 requirements mapped).
+- Then `/gsd-discuss-phase 1` — Manifest read fidelity.
+- Plan v1.20 phases with the UI gate skipped. No phase in this milestone is a
+  frontend phase, but the keyword gate false-positives on "component", the flag
+  "surface", and the `ui5` / `ui-theme-designer` plugin names.

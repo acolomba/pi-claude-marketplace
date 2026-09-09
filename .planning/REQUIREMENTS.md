@@ -124,41 +124,45 @@ Acknowledged, not in this milestone.
 
 ## Traceability
 
-Filled during roadmap creation.
+Filled during roadmap creation (2026-09-09). Phase numbering restarts at 1 for
+this milestone.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| MANF-01 | — | Pending |
-| MANF-02 | — | Pending |
-| MANF-03 | — | Pending |
-| MANF-04 | — | Pending |
-| MANF-05 | — | Pending |
-| DEPS-01 | — | Pending |
-| DEPS-02 | — | Pending |
-| RESV-01 | — | Pending |
-| RESV-02 | — | Pending |
-| RESV-03 | — | Pending |
-| RESV-04 | — | Pending |
-| RESV-05 | — | Pending |
-| RESV-06 | — | Pending |
-| PROV-01 | — | Pending |
-| PROV-02 | — | Pending |
-| PROV-03 | — | Pending |
-| PROV-04 | — | Pending |
-| PRUNE-01 | — | Pending |
-| PRUNE-02 | — | Pending |
-| PRUNE-03 | — | Pending |
-| PRUNE-04 | — | Pending |
-| DATA-01 | — | Pending |
-| DATA-02 | — | Pending |
-| DATA-03 | — | Pending |
-| FLAG-01 | — | Pending |
+| MANF-01 | Phase 1 | Pending |
+| MANF-02 | Phase 1 | Pending |
+| MANF-03 | Phase 1 | Pending |
+| MANF-04 | Phase 1 | Pending |
+| MANF-05 | Phase 1 | Pending |
+| DEPS-01 | Phase 1 | Pending |
+| DEPS-02 | Phase 1 | Pending |
+| RESV-01 | Phase 3 | Pending |
+| RESV-02 | Phase 3 | Pending |
+| RESV-03 | Phase 3 | Pending |
+| RESV-04 | Phase 3 | Pending |
+| RESV-05 | Phase 3 | Pending |
+| RESV-06 | Phase 3 | Pending |
+| PROV-01 | Phase 4 | Pending |
+| PROV-02 | Phase 4 | Pending |
+| PROV-03 | Phase 4 | Pending |
+| PROV-04 | Phase 4 | Pending |
+| PRUNE-01 | Phase 5 | Pending |
+| PRUNE-02 | Phase 5 | Pending |
+| PRUNE-03 | Phase 5 | Pending |
+| PRUNE-04 | Phase 5 | Pending |
+| DATA-01 | Phase 2 | Pending |
+| DATA-02 | Phase 2 | Pending |
+| DATA-03 | Phase 2 | Pending |
+| FLAG-01 | Phase 5 | Pending |
 
 **Coverage:**
 
 - v1.20 requirements: 25 total
-- Mapped to phases: 0
-- Unmapped: 25 ⚠️
+- Mapped to phases: 25
+- Unmapped: 0 ✓
+
+Every requirement maps to exactly one phase: 7 to Phase 1, 3 to Phase 2, 6 to
+Phase 3, 4 to Phase 4, 5 to Phase 5.
 
 ## Planning Notes
 
