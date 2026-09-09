@@ -111,6 +111,59 @@ Requirements in scope: WCONV-01, WCONV-02, WCONV-03.
   transcripts into the SUMMARY, not a summary of them. A guard that is green
   because it checks nothing has shipped three times here.
 
+### D-116-04..07: Post-research decisions
+
+Recorded after `116-RESEARCH.md` answered the questions D-116-01 and D-116-03
+left open. Two came back AGAINST the expectation written above; the earlier
+wording stands as written and these supersede it, rather than being edited to
+look prescient.
+
+- **D-116-04: `hasForceInstalledPlugin` is NOT widened.** D-116-01 said measure
+  first, and the measurement says leave it alone. On the production path
+  `stateExisted === false` implies `state.marketplaces === {}`
+  (`apply.ts:107-182` -> `with-state-guard.ts:89` -> `state-io.ts:390-394`), so
+  the guard cannot gate a record that exists. Widening it also turns a green
+  test red -- `WR-01: brings no state.json into existence for a state-file-absent
+  scope with nothing to promote` (`backfill.test.ts:529`) -- because the stamp
+  write would create an unsolicited `state.json`. The one reachable exception is
+  a cross-process TOCTOU window whose cost is a single deferred load, since the
+  version gate stays open. The plan touches ONE line in `backfill.ts`, not two.
+- **D-116-05: the two red `tests/index.test.ts` cases are repaired at the seed,
+  not at the assertion.** Deleting the filter reddens exactly two tests in 5645
+  (`index.test.ts:601`, `:722`), both on an unexpected third `getAllTools()` --
+  one extra cascade emission. Close the version gate in `seedEnabledPlugin` so
+  the fixture stops opening a backfill scan it never meant to open. Do NOT bump
+  the notification-boundary counts: those literals exist to catch an unintended
+  extra emission, and raising them to accommodate one is the "green because it
+  checks nothing" failure this milestone has shipped three times.
+- **D-116-06: two new catalog states, and the corpus lock moves 195 -> 197.**
+  D-116-02 put the token on both render arms, so both existing backfill catalog
+  states change bytes and their prose paragraphs stop being true; there is no
+  published `installed`-arm state at all today. Decide the count here so the
+  literal at `catalog-uat.test.ts:5602-5610`, its comment and its message move
+  exactly once.
+- **D-116-07: the integration case extends
+  `tests/integration/workflow-kind-inversion.test.ts` rather than opening a new
+  file.** It already carries the mtime harness D-116-03 requires and an existing
+  negative control, and a new top-level suite would redden
+  `tests/architecture/unit-suite-glob-completeness.test.ts`.
+
+**Names are left alone.** `scanForceInstalledBackfills` and
+`hasForceInstalledPlugin` keep their spellings: the rename is churn beyond what
+the requirements ask for, and new prose spelling the hyphenated
+`force-install` form would redden `partial-vocabulary-guard.test.ts`.
+
+**One inherited claim is NOT yet measured.** This context asserted that both
+Anthropic-authored workflow plugins land on the `installable: true` side. The
+research bounds the widened scan to PATH-source plugins only -- a git-source
+record resolves `unavailable` offline, because `resolveRecordedPluginOffline`
+passes no clone-cache resolver. If those plugins are git-source, the population
+sentence is wrong even though every success criterion stays satisfiable. The
+plan MUST re-measure the source kind and correct the claim wherever it appears
+rather than carrying it forward on inheritance. This is the milestone's
+"assume the enumeration is short until measured" rule applied to a population
+instead of a count.
+
 ### Claude's Discretion
 
 Token spelling, the exact wording of the amended D-68-03 comment, test names,
