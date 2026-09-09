@@ -10625,3 +10625,122 @@ test("WLIF-01: an install succeeds unchanged when the staging sweep throws", asy
     }
   });
 });
+
+/**
+ * WGATE-01 / D-115-05: install one plugin whose single workflow script carries
+ * `body`, and report everything the standalone install surfaced.
+ *
+ * `notifications` is returned whole rather than pre-filtered, because the count
+ * IS the assertion: the row and the diagnostic block are two separate
+ * `ctx.ui.notify` calls, and a gate warning that never reached the second call
+ * reads exactly like one that was never composed.
+ */
+async function installGatedWorkflowPlugin(body: string): Promise<{
+  notifications: readonly NotifyRecord[];
+  envelope: string;
+  recordedWorkflows: readonly string[];
+}> {
+  return withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-workflows-gate-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "hello",
+        workflows: [{ sourceName: "greet", body }],
+      });
+      const { ctx, pi, notifications } = makeCtx({ toolNames: ["workflow_control"] });
+
+      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+
+      const state = await loadState(locations.extensionRoot);
+      const recordedWorkflows = state.marketplaces.mp?.plugins.hello?.resources.workflows;
+      assert.ok(recordedWorkflows !== undefined);
+      return {
+        notifications,
+        envelope: await readFile(
+          path.join(locations.workflowsSavedDir, "hello:greet.json"),
+          "utf8",
+        ),
+        recordedWorkflows,
+      };
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+}
+
+test("WGATE-01 / D-115-05: a standalone install names the engine check a script will be refused at", async () => {
+  // arrange -- a perfectly good literal `meta.name` and NO description. The
+  // envelope is written and the command registers, and the engine then refuses
+  // to load it at its own check 9, which is the gap the author cannot see.
+
+  // act
+  const run = await installGatedWorkflowPlugin('export const meta = { name: "greet" };\n');
+
+  // assert -- the script IS installed...
+  assert.deepStrictEqual(JSON.parse(run.envelope), {
+    name: "hello:greet",
+    script: 'export const meta = { name: "greet" };\n',
+  });
+  assert.deepStrictEqual(run.recordedWorkflows, ["hello:greet"]);
+  // ...and the install said so on a SECOND notification, naming the file, its
+  // directory and the engine's check number.
+  assert.strictEqual(run.notifications.length, 2);
+  const gateLine = run.notifications[1]?.message;
+  assert.ok(gateLine !== undefined);
+  assert.match(gateLine, /workflow script "greet\.js" in "workflows"/);
+  assert.match(gateLine, /check 9/);
+  // WGATE-03: the row itself is untouched -- no gate text, no reasons brace.
+  const row = run.notifications[0]?.message;
+  assert.ok(row !== undefined);
+  assert.doesNotMatch(row, /check 9/);
+  assert.doesNotMatch(row, /\{/);
+});
+
+/**
+ * One `meta` object literal carrying a spread, a computed key, a method, an
+ * accessor, a BigInt-literal key, a reserved key name and a sparse array, with
+ * the literal name and description LAST so the last-wins read still resolves
+ * them. Every one of these is a shape a gate predicate can only decide by
+ * reading a property off a node it was not written for.
+ */
+const hostileMetaScript =
+  "export const meta = {\n" +
+  "  ...extra,\n" +
+  '  ["computed"]: 1,\n' +
+  "  method() {},\n" +
+  "  get accessor() {\n" +
+  "    return 1;\n" +
+  "  },\n" +
+  '  1n: "bigint key",\n' +
+  "  prototype: 1,\n" +
+  "  nested: { holes: [, 1] },\n" +
+  '  name: "greet",\n' +
+  '  description: "greets",\n' +
+  "};\n";
+
+test("WGATE-03: a script whose meta carries shapes the gate predicates never expect still installs", async () => {
+  // arrange -- see `hostileMetaScript`.
+
+  // act
+  const run = await installGatedWorkflowPlugin(hostileMetaScript);
+
+  // assert -- the install carried on: the envelope is on disk and the record
+  // names it, so no throw out of gate reading reached the ledger.
+  assert.deepStrictEqual(JSON.parse(run.envelope), {
+    name: "hello:greet",
+    description: "greets",
+    script: hostileMetaScript,
+  });
+  assert.deepStrictEqual(run.recordedWorkflows, ["hello:greet"]);
+  // T-115-03: one line for the file, never a list of every failing shape. The
+  // diagnostic is `<header>\n\n<lines>`, so the lines are what follows the
+  // first blank line.
+  assert.strictEqual(run.notifications.length, 2);
+  const diagnostic = run.notifications[1]?.message;
+  assert.ok(diagnostic !== undefined);
+  assert.deepStrictEqual(diagnostic.split("\n\n").slice(1).join("\n\n").split("\n").length, 1);
+});
