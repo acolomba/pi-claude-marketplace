@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 06
 current_phase_name: Assertion and Module Refinement
 status: executing
-stopped_at: Completed 06-18-PLAN.md
-last_updated: "2026-09-09T10:02:05.839Z"
+stopped_at: Completed 06-20-PLAN.md
+last_updated: "2026-09-09T10:19:05.780Z"
 last_activity: 2026-09-08
 last_activity_desc: Phase 06 execution started
-state_head: 327ca5d383e99391efc1e37ff0b86893e84459be
+state_head: ed5a8e43839d790005c61be256874dcf530632f4
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 180
-  completed_plans: 148
+  completed_plans: 149
   percent: 11
 ---
 
@@ -33,7 +33,7 @@ component as a working Pi artifact.
 
 Phase: 06 (Assertion and Module Refinement) — EXECUTING
 Next: Discuss Phase 6
-Plan: 21 of 52
+Plan: 22 of 52
 Status: Ready to execute
 Last activity: 2026-09-08 — Phase 06 execution started
 
@@ -328,6 +328,7 @@ Last activity: 2026-09-08 — Phase 06 execution started
 | Phase 06 P19 | 12min | 2 tasks | 4 files |
 | Phase 06 P21 | 12min | 2 tasks | 3 files |
 | Phase 06 P18 | 8min | 2 tasks | 0 files |
+| Phase 06 P20 | 14min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -779,6 +780,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 06]: Preserve uninstall as a cohesive transaction; its only 06-21 change is one stale-path prose correction in uninstall.messaging.ts. — Honor the user-authorized uninstall exception and keep all observable behavior unchanged.
 - [Phase 06]: Leave all eight scoped consumers byte-for-byte unchanged because Plan 06-14 already migrated every notification symbol to its genuine named owner. — Avoids no-op import churn while preserving direct ownership evidence.
 - [Phase 06]: Retain notify-context.ts as the genuine command rendering and dispatch composition owner. — It calls notification-dispatch.ts directly and exposes no shared/notify.ts compatibility facade.
+- [Phase 06]: Keep all eight already-direct notification import graphs unchanged; repoint only seven stale owner comments.
+- [Phase 06]: Keep info.ts cohesive and byte-for-byte unchanged because its notification imports already name direct owners.
 
 ### Pending Todos
 
@@ -831,7 +834,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 06-18-PLAN.md
+**Stopped at:** Completed 06-20-PLAN.md
 
 Phase 04 completed all seven plans and closed AUTH-01 and TREF-01 through
 TREF-03. Independent verification passed 4/4 with no behavioral or UAT gap;
@@ -849,7 +852,7 @@ independent verification passed 6/6 with zero unverified behaviors.
 **Read beside it:** `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`, the
 Phase 01 terminal evidence ledger, and Phase 5's roadmap criteria.
 
-Last session: 2026-09-09T10:02:05.266Z
+Last session: 2026-09-09T10:19:05.158Z
 
 **Next:** Discuss Phase 06 to define the assertion-strengthening and approved
 module-refinement work before planning.
