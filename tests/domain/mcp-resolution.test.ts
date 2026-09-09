@@ -220,10 +220,13 @@ for (const { title, reference, expectedNote } of [
     );
 
     // assert
-    assert.deepStrictEqual({ dirty, resolution }, {
-      dirty: true,
-      resolution: { notes: [expectedNote], mcpServers: {} },
-    });
+    assert.deepStrictEqual(
+      { dirty, resolution },
+      {
+        dirty: true,
+        resolution: { notes: [expectedNote], mcpServers: {} },
+      },
+    );
   });
 }
 
@@ -354,13 +357,16 @@ test("classifies a malformed standalone document with a non-Error rejection", as
   );
 
   // assert
-  assert.deepStrictEqual({ dirty, resolution }, {
-    dirty: true,
-    resolution: {
-      notes: ["malformed mcpServers (.mcp.json): read failure"],
-      mcpServers: {},
+  assert.deepStrictEqual(
+    { dirty, resolution },
+    {
+      dirty: true,
+      resolution: {
+        notes: ["malformed mcpServers (.mcp.json): read failure"],
+        mcpServers: {},
+      },
     },
-  });
+  );
 });
 
 test("classifies a malformed standalone document with an Error rejection", async () => {
@@ -379,13 +385,16 @@ test("classifies a malformed standalone document with an Error rejection", async
   );
 
   // assert
-  assert.deepStrictEqual({ dirty, resolution }, {
-    dirty: true,
-    resolution: {
-      notes: ["malformed mcpServers (.mcp.json): read failure"],
-      mcpServers: {},
+  assert.deepStrictEqual(
+    { dirty, resolution },
+    {
+      dirty: true,
+      resolution: {
+        notes: ["malformed mcpServers (.mcp.json): read failure"],
+        mcpServers: {},
+      },
     },
-  });
+  );
 });
 
 test("classifies a wrapped malformed map like an inline malformed map", async () => {
@@ -454,10 +463,13 @@ test("resolves valid loose entry MCP without filesystem access", async () => {
   );
 
   // assert
-  assert.deepStrictEqual({ dirty, resolution }, {
-    dirty: false,
-    resolution: { notes: [], mcpServers: { alpha: {} } },
-  });
+  assert.deepStrictEqual(
+    { dirty, resolution },
+    {
+      dirty: false,
+      resolution: { notes: [], mcpServers: { alpha: {} } },
+    },
+  );
 });
 
 test("reports manifest and standalone loose MCP without an entry as one conflict", async () => {
@@ -484,8 +496,7 @@ test("reports manifest and standalone loose MCP without an entry as one conflict
       pluginRoot: "/plugins/standalone",
       resolution: standaloneResolution,
     },
-    (candidate) =>
-      Promise.resolve(candidate === "/plugins/standalone/.mcp.json" ? "file" : null),
+    (candidate) => Promise.resolve(candidate === "/plugins/standalone/.mcp.json" ? "file" : null),
   );
 
   // assert

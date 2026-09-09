@@ -46,11 +46,7 @@ import {
 } from "./component-paths.ts";
 import { PLUGIN_MANIFEST_VALIDATOR, type PluginEntry } from "./components/plugin.ts";
 import { resolveHooks, type HooksResolution } from "./hooks-resolution.ts";
-import {
-  resolveLooseMcp,
-  resolveStrictMcp,
-  type McpResolution,
-} from "./mcp-resolution.ts";
+import { resolveLooseMcp, resolveStrictMcp, type McpResolution } from "./mcp-resolution.ts";
 import { assertSafeName } from "./name.ts";
 import {
   parsePluginSource,

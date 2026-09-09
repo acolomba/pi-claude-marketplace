@@ -138,9 +138,7 @@ export async function resolveStrictMcp(
   }
 
   const standalone =
-    declaredMcp === undefined
-      ? await readStandaloneMcp(input.pluginRoot, dependencies)
-      : undefined;
+    declaredMcp === undefined ? await readStandaloneMcp(input.pluginRoot, dependencies) : undefined;
   if (standalone?.ok === false) {
     input.resolution.notes.push(standalone.reason);
     return true;

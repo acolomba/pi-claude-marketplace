@@ -22,7 +22,8 @@ function dependencies(
   readFileText: (candidate: string) => Promise<string>;
 } {
   return {
-    statKind: () => Promise.resolve(contents === undefined && readError === undefined ? null : "file"),
+    statKind: () =>
+      Promise.resolve(contents === undefined && readError === undefined ? null : "file"),
     readFileText: () =>
       readError === undefined ? Promise.resolve(contents ?? "") : Promise.reject(readError),
   };
@@ -105,10 +106,7 @@ test("propagates convention-file read failures unchanged", async () => {
 
   // act & assert
   await assert.rejects(
-    resolveHooks(
-      { pluginRoot: "/plugins/alpha", resolution },
-      dependencies(undefined, readError),
-    ),
+    resolveHooks({ pluginRoot: "/plugins/alpha", resolution }, dependencies(undefined, readError)),
     (error: unknown) => error === readError,
   );
   assert.deepStrictEqual(resolution, { supported: [], unsupported: [], notes: [] });
@@ -205,9 +203,7 @@ test("flags orphan rewake fields only in the retained hook subset", async () => 
     supported: ["hooks"],
     unsupported: ["hooks"],
     notes: [],
-    droppedHooks: [
-      { kind: "group", event: "PreToolUse", matcher: ".*", cond: "regex" },
-    ],
+    droppedHooks: [{ kind: "group", event: "PreToolUse", matcher: ".*", cond: "regex" }],
     hooksConfigPath: path.join("hooks", "hooks.json"),
     orphanRewake: true,
   });

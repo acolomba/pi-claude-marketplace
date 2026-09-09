@@ -40,8 +40,7 @@ test("collects strict paths in declaration order with first-wins deduplication",
       pluginRoot,
       resolution,
     },
-    (candidate) =>
-      Promise.resolve(candidate === path.join(pluginRoot, "skills") ? "dir" : null),
+    (candidate) => Promise.resolve(candidate === path.join(pluginRoot, "skills") ? "dir" : null),
   );
 
   // assert

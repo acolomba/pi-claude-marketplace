@@ -1,5 +1,15 @@
 import assert from "node:assert/strict";
-import { chmod, mkdir, mkdtemp, readFile, rm, stat, symlink, unlink, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  stat,
+  symlink,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -3843,9 +3853,7 @@ test("retry proof: install: completion-cache maintenance failure stays installed
         async (target: string, scope: Scope, marketplace: string) => {
           assert.strictEqual(target, cacheFilePath);
           firstSchedule.push(
-            cacheFault
-              ? "post-commit:completion-cache:failed"
-              : "post-commit:completion-cache:ok",
+            cacheFault ? "post-commit:completion-cache:failed" : "post-commit:completion-cache:ok",
           );
           if (cacheFault) {
             throw new Error("cache maintenance denied");
@@ -7757,7 +7765,9 @@ test("retry proof: install: ordered bridge warnings remain explicit and retry is
       assert.deepStrictEqual(first, {
         declaresAgents: true,
         declaresMcp: false,
-        postCommitWarnings: ["[reviewer] source description was missing or empty -- using fallback"],
+        postCommitWarnings: [
+          "[reviewer] source description was missing or empty -- using fallback",
+        ],
         resourcesChanged: true,
         status: "installed",
         version: "0.0.1",
@@ -7769,23 +7779,23 @@ test("retry proof: install: ordered bridge warnings remain explicit and retry is
       assert.strictEqual(await readFile(manifestPath, "utf8"), manifestBytes);
       assert.deepStrictEqual(await retryTree(locations.scopeRoot), firstTree);
       assert.deepStrictEqual(firstTree, [
-          "agents/",
-          `agents/${GENERATED_AGENT_PREFIX}complete-reviewer.md`,
-          "pi-claude-marketplace/",
-          "pi-claude-marketplace/agents-index.json",
-          "pi-claude-marketplace/agents-staging/",
-          "pi-claude-marketplace/commands-staging/",
-          "pi-claude-marketplace/data/",
-          "pi-claude-marketplace/data/mp/",
-          "pi-claude-marketplace/data/mp/complete/",
-          "pi-claude-marketplace/resources/",
-          "pi-claude-marketplace/resources/prompts/",
-          "pi-claude-marketplace/resources/prompts/complete:deploy.md",
-          "pi-claude-marketplace/resources/skills/",
-          "pi-claude-marketplace/resources/skills/complete-audit/",
-          "pi-claude-marketplace/resources/skills/complete-audit/SKILL.md",
-          "pi-claude-marketplace/skills-staging/",
-          "pi-claude-marketplace/state.json",
+        "agents/",
+        `agents/${GENERATED_AGENT_PREFIX}complete-reviewer.md`,
+        "pi-claude-marketplace/",
+        "pi-claude-marketplace/agents-index.json",
+        "pi-claude-marketplace/agents-staging/",
+        "pi-claude-marketplace/commands-staging/",
+        "pi-claude-marketplace/data/",
+        "pi-claude-marketplace/data/mp/",
+        "pi-claude-marketplace/data/mp/complete/",
+        "pi-claude-marketplace/resources/",
+        "pi-claude-marketplace/resources/prompts/",
+        "pi-claude-marketplace/resources/prompts/complete:deploy.md",
+        "pi-claude-marketplace/resources/skills/",
+        "pi-claude-marketplace/resources/skills/complete-audit/",
+        "pi-claude-marketplace/resources/skills/complete-audit/SKILL.md",
+        "pi-claude-marketplace/skills-staging/",
+        "pi-claude-marketplace/state.json",
       ]);
       assert.deepStrictEqual(
         (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.complete?.resources,
