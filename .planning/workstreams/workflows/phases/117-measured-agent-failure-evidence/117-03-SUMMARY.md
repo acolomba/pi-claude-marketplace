@@ -105,7 +105,8 @@ metrics:
 actuals:
   tokens: 12400
   tasks: 3
-  commits: 3
+  commits: 2
+  commits_counting_rule: "work commits only, matching 117-01 and 117-02. git rev-list e7841275..HEAD returns a larger number because it also counts this record's own commit and the two that corrected this very field; see the note under 'Commits'."
 plan_head_before: e7841275e712f70511df5cd9b8d1bda3f6f115ae
 ---
 
@@ -267,6 +268,17 @@ The workstream's untracked `.verification-ledger.json` is operator-owned and was
 Worktree isolation is off for this dispatch by design and the run is directly against the operator's checkout. `features/workflow` is the sanctioned branch for this milestone; the never-`main` rule was honoured and the protected-branch assertion ran before each commit. Recorded rather than silent, as in waves 1 and 2.
 
 **Total deviations:** 3 (1 auto-added consistency fix, 2 environment constraints recorded). **Impact:** none on the plan's objective. Every acceptance criterion and every gate passed.
+
+## Commits
+
+| Hash | What |
+|---|---|
+| `74f1f3a2` | Task 1 — the archived record's five corrections, plus the ledger append |
+| `413c40ab` | Task 2 — the two live seams and the four corrected criteria |
+| `5c029384` | this record |
+| `e8fee922`, and one more | corrections to the `commits:` field below |
+
+**Counting rule, stated because the number is otherwise misleading.** `actuals.commits: 2` counts **work commits** — the two task commits — matching how 117-01 and 117-02 recorded theirs (each excluded its own record commit). `git rev-list --count e7841275..HEAD` returns a larger figure because it also counts this record's commit and the bookkeeping commits that corrected this very field. Both numbers are true of different questions; the field answers "how much work did the plan commit", and the rule is written here so a reader does not have to guess which. Recorded rather than quietly rounded, since a figure without its counting rule is the defect this phase spent a task correcting elsewhere.
 
 ## Known Stubs
 
