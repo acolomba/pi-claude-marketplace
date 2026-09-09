@@ -22,7 +22,7 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..
  *
  * HOOK-04 (prior completion per D-58-01): `shared/notification-types.ts::REASONS` already
  * contains `"unsupported hooks"`, and `MANIFEST_FIELD_REASONS` in
- * `orchestrators/plugin/install.ts` excludes `"hooks"`. This test pins that
+ * `orchestrators/plugin/install.messaging.ts` excludes `"hooks"`. This test pins that
  * prior state so a future regression cannot silently re-add `"hooks"` to the
  * structural-degradation set, which would re-open the supersession.
  *

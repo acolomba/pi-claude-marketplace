@@ -17,10 +17,11 @@
  * rendered cascade MUST NOT contain the trailer.
  *
  * The reload-deferral oracle (`shouldEmitReloadHint`) and the trailer literal
- * (`RELOAD_HINT_TRAILER`) are module-private in `shared/notification-dispatch.ts`, so the
- * assertion observes the oracle through its only public effect: the trailer's
- * presence in the rendered `notify()` output (WILL-02 leaves the seam to
- * discretion). This file is green on the current (pre-retirement) tree -- it
+ * (`RELOAD_HINT_TRAILER`) live in `shared/notification-summary.ts`, while
+ * `shared/notification-dispatch.ts::notify()` owns their only public effect.
+ * The assertion therefore observes the oracle through the trailer's presence
+ * in the rendered output (WILL-02 leaves the seam to discretion). This file is
+ * green on the current (pre-retirement) tree -- it
  * inspects realized-cascade reload behavior, which already matches the oracle;
  * it is the anchor the pending-surface retirement must converge to.
  */
@@ -58,10 +59,10 @@ function piWithBothLoaded(): MockPi {
   };
 }
 
-// The trailer literal mirrors `RELOAD_HINT_TRAILER` in shared/notification-dispatch.ts; that
-// constant is module-private, so the agreement is observed via its rendered
-// substring (the same seam tests/architecture/notify-grammar-invariant.test.ts
-// uses).
+// The trailer literal independently mirrors `RELOAD_HINT_TRAILER` in
+// shared/notification-summary.ts, while the agreement is observed through the
+// rendered substring dispatched by shared/notification-dispatch.ts (the same
+// seam tests/architecture/notify-grammar-invariant.test.ts uses).
 const RELOAD_HINT_TRAILER = "/reload to pick up changes";
 
 // ---------------------------------------------------------------------------

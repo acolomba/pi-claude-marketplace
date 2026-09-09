@@ -94,12 +94,11 @@ interface SeededResolver {
  * test context, which restores it after the case.
  *
  * This is a HERMETICITY DEVICE, not an offline proof, and no case asserts a
- * call count against it. `data.ts`'s whole import closure -- `edge/router.ts`,
- * `edge/flag-catalog.ts`, `platform/pi-api.ts`, `shared/atomic-json.ts`,
- * `shared/completion-cache.ts`, `shared/concerns/{hooks,soft-dep}.ts`,
- * `shared/errors.ts`, `shared/notify.ts`, `shared/types.ts` -- contains no HTTP
- * client of any kind, so a count asserted here could not rise whatever this
- * module did. What the replacement does buy is that a dial-out this surface
+ * call count against it. `data.ts`'s repository-local import closure --
+ * `shared/atomic-json.ts`, `shared/completion-cache.ts`, `shared/errors.ts`,
+ * and `shared/types.ts` -- contains no HTTP client of any kind, so a count
+ * asserted here could not rise whatever this module did. What the replacement
+ * does buy is that a dial-out this surface
  * acquires LATER fails the case where it happens instead of passing silently:
  * measured, a live `https.request` call planted in
  * `getMarketplaceNamesAcrossScopes` leaves the whole suite green while the door
