@@ -888,52 +888,16 @@ Code seams: `shared/notify.ts` (message shapes), `platform/pi-api.ts`
 (re-exports `ExtensionContext`), `edge/router.ts` (the `/claude:plugin`
 command entry point every handler's `ctx` flows through).
 
-## WFLW-01: `workflows` component kind -- mechanical fix shipped, bridge planned
-
-Surfaced 2026-08-13 auditing Claude Code's official plugin-marketplace and
-plugins-reference docs (`code.claude.com/docs/en/plugins-reference`) against
-our own resolver. Claude Code's manifest schema has shipped a `workflows`
-field (`string|array`, "Custom workflow script files or directories,
-replaces default `workflows/`") as a first-class component kind alongside
-skills/commands/agents/hooks -- confirmed via direct fetch of the live docs,
-not inferred.
-
-`domain/resolver.ts` carries two closed component-kind lists:
-`SUPPORTED_COMPONENT_KINDS = ["skills", "commands", "agents", "hooks"]` and
-`UNSUPPORTED_COMPONENT_KINDS = ["lspServers", "monitors", "themes",
-"outputStyles", "channels", "userConfig", "settings"]`. `workflows` is in
-neither. The code carries its own warning directly above the unsupported
-list (T-02-25): "The list is closed. A new kind upstream that's neither in
-SUPPORTED_COMPONENT_KINDS nor in this list would be silently ignored.
-Re-audit when Claude Code adds new component kinds." That is exactly what
-happened -- a plugin declaring `workflows` today gets no degradation, no
-reason token, and no signal at all, unlike `monitors`/`themes`/etc., which
-are all correctly tracked and correctly demote the plugin to
-`partially-available`.
-
-**Half of this is done.** PR #154 (2026-08-29) landed the mechanical fix:
-`workflows` is in `UNSUPPORTED_COMPONENT_KINDS` with a `workflows/` convention
-entry, and a workflow-bearing plugin now resolves `partially-available` and
-reports a dedicated `workflows` reason. The closed-set guarantee is restored and
-the silent gap the paragraph above describes is closed. Read that description as
-history, not as current behavior.
-
-**The other half is scheduled.** A real bridge is no longer "a larger question
-with no known Pi analog" -- the analog was found and measured. Spikes 021-026
-chose `@quintinshaw/pi-dynamic-workflows` as the host on trust grounds, proved a
-hand-planted JSON envelope is discovered by its own directory scan, and
-reproduced its project-key derivation exactly; Spike 027 re-verified all of it
-against engine 3.10.1. The bridge itself was built on `features/workflows-spike`
-(Phases 101-105) and never merged.
-
-It is now the `workflows-replay` milestone, Phases 109-114, in the `workflows`
-workstream. Phase 109 is the inversion of what #154 landed. This entry stays
-open until that milestone ships, and closes with it.
-
-Code seams: `domain/resolver.ts` (`SUPPORTED_COMPONENT_KINDS`,
-`UNSUPPORTED_COMPONENT_KINDS`, `UNSUPPORTED_COMPONENT_CONVENTIONS`),
-`domain/components/plugin.ts` (`UNSUPPORTED_COMPONENT_FIELDS` schema),
-`shared/notify.ts` / `docs/output-catalog.md` (the closed REASONS set).
+<!--
+Pruned 2026-09-09: shipped under workflows-detection and workflows-replay, one
+half each -- the mechanical fix under workflows-detection (PR #154, 2026-08-29),
+and the bridge itself under workflows-replay, which re-landed it on this branch.
+- "`workflows` component kind -- mechanical fix shipped, bridge planned"
+  -> closed by WFLW-01..04, WBRG-01..04, WNAM-01..06, WPTH-01..05,
+  WLIF-01..06, WDEP-01..04, WVAL-01..03 and WDOC-01..03 (the bridge modules
+  under bridges/workflows/, the admission module domain/workflow-script.ts,
+  and the published contract docs/workflows-compatibility.md).
+-->
 
 ## PSRC-01: two real Claude Code plugin-source kinds unresolved (`npm`, `archive`)
 
