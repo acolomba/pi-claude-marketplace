@@ -34,9 +34,11 @@ component as a working Pi artifact.
 Phase: Milestone v1.19 complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-09-07 — Completed quick task 260907-uzb: strip a leading
-UTF-8 BOM at the agents, skills and commands frontmatter read sites (FMBOM-01,
-now CLOSED in BACKLOG.md)
+Last activity: 2026-09-09 — Completed quick task 260909-h38: made the three
+cross-process state.json race proofs deterministic (FIFO barrier for the
+uninstall and reinstall removal proofs; RECON-06 re-anchored on the invariants
+the lock-free apply pass actually guarantees plus an uncontended convergence
+pass)
 
 ## Performance Metrics
 
@@ -421,6 +423,7 @@ None for roadmap creation.
 | 260907-q0h | Fix issue #143: make generated command name separator platform-dependent so Windows installs stop failing with EINVAL | 2026-09-07 | bf53dec0 | [260907-q0h-fix-issue-143-make-generated-command-nam](./quick/260907-q0h-fix-issue-143-make-generated-command-nam/) |
 | 6 | Switch the Windows command name separator from dash to dot (follow-up to 260907-q0h, #143) | 2026-09-08 | 7ce485b1 | — |
 | 260907-uzb | FMBOM-01: strip leading UTF-8 BOM at skill and agent frontmatter read sites | 2026-09-08 | fb54c5d7 | [260907-uzb-fmbom-01-strip-leading-utf-8-bom-at-skil](./quick/260907-uzb-fmbom-01-strip-leading-utf-8-bom-at-skil/) |
+| 260909-h38 | Make three cross-process concurrency tests deterministic with a FIFO state.json barrier | 2026-09-09 | 147b63f4 | [260909-h38-make-three-cross-process-concurrency-tes](./quick/260909-h38-make-three-cross-process-concurrency-tes/) |
 
 ## Deferred Items
 
