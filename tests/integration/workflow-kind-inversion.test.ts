@@ -445,7 +445,16 @@ test("WCONV-01 / WCONV-02: one load converges a record whose kind was invisible,
         description: "greets",
         script: 'export const meta = { name: "greet", description: "greets" };\n',
       });
-      assert.notDeepStrictEqual(first.notifications, []);
+      // WCONV-03 on the bytes, not on the count. This is the only case that
+      // drives the real applyReconcile -> backfill -> projection -> notify
+      // chain, so it is the only place the PRODUCER of the convergence marker is
+      // exercised; the unit and catalog cases both hand-build their input. An
+      // "emitted something" assertion would stay green through a regression that
+      // stopped producing the outcome, or produced it under another kind.
+      assert.match(
+        first.notifications.map((n) => n.message).join("\n"),
+        /\(installed\) \{components now supported\}/,
+      );
 
       // arrange -- the snapshot that matters is taken AFTER the first load: the
       // promotion legitimately rewrites the compatibility block, the resources
