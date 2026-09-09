@@ -130,6 +130,82 @@ All Phase 6 behaviors have automated verification. Human review may inspect the 
 
 ---
 
+## Implementation Evidence
+
+Every command below was run from the repository root on branch `features/refine-unit-tests` at
+Phase 6 closure. Exit codes are recorded as observed, not narrated.
+
+### 06-52-01 — Ownership, stale-path, catalog, and patch censuses
+
+```console
+$ npm run test:corresponding
+Corresponding-test gate passed.
+EXIT=0
+
+$ npm run fallow
+dead-code: No issues found (0.63s)
+health:    Health score 78 B; 278,116 LOC; dead files 0.0%; dead exports 0.0%;
+           avg cyclomatic 1.7; p90 cyclomatic 3; maintainability 92.0 (good)
+dupes:     873 lines (1.1%) duplicated across 38 files, within the configured gate
+EXIT=0
+
+$ node scripts/check-phase-06-hub-ledger.mjs closure --owner-count 30 --catalog-fixture-count 20 --legacy-hubs extensions/pi-claude-marketplace/domain/resolver.ts,extensions/pi-claude-marketplace/shared/notify.ts,tests/architecture/catalog-uat.test.ts,extensions/pi-claude-marketplace/orchestrators/plugin/install.ts,extensions/pi-claude-marketplace/orchestrators/plugin/update.ts,extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts,extensions/pi-claude-marketplace/orchestrators/plugin/list.ts --sync-files 2 --sync-calls 18 --require-files 2 --require-calls 2 --roots extensions tests scripts docs eslint.config.js
+Phase 6 closure: owner, fixture, legacy-hub, and residual censuses verified
+EXIT=0
+```
+
+**Production owner pairs — 30/30.** `validateClosure` compares the tracked file set from
+`git ls-files` against `OWNER_PAIRS` twice: once for the 30 production sources and once for the
+30 mirrored owner tests at `tests/<production-relative-path>.test.ts`. A count other than 30, a
+missing source, or a missing owner test is a hard error. `npm run test:corresponding` independently
+proves each production module's owner test imports it directly rather than through a proxy.
+
+**Seven retired hubs and their paired tests are absent.** `validateLegacyInventory` requires the
+`--legacy-hubs` argument set to equal `LEGACY_HUBS` exactly and fails if any of the seven paths is
+still tracked. All seven are gone: `domain/resolver.ts`, `shared/notify.ts`,
+`tests/architecture/catalog-uat.test.ts`, and the `orchestrators/plugin/` `install.ts`, `update.ts`,
+`reinstall.ts`, and `list.ts` hubs.
+
+**Zero stale paths.** `git grep -F -c -- "<token>" -- extensions tests scripts docs eslint.config.js`
+returns no matching file for any retired production or test path:
+
+| Retired path token | Matching tracked files |
+| --- | --- |
+| `domain/resolver.ts` | 0 |
+| `shared/notify.ts` | 0 |
+| `orchestrators/plugin/install.ts` | 0 |
+| `orchestrators/plugin/update.ts` | 0 |
+| `orchestrators/plugin/reinstall.ts` | 0 |
+| `orchestrators/plugin/list.ts` | 0 |
+| `tests/architecture/catalog-uat.test.ts` | 0 |
+| `tests/domain/resolver.test.ts` | 0 |
+| `tests/shared/notify.test.ts` | 0 |
+| `tests/orchestrators/plugin/install.test.ts` | 0 |
+| `tests/orchestrators/plugin/update.test.ts` | 0 |
+| `tests/orchestrators/plugin/reinstall.test.ts` | 0 |
+| `tests/orchestrators/plugin/list.test.ts` | 0 |
+
+**Catalog inverse completeness.** `tests/architecture/catalog-uat/` holds the parser
+(`catalog-parser.ts`), its own owner test (`catalog-parser.test.ts`), the fixture model
+(`fixture-types.ts`), the mock Pi surface (`mock-pi.ts`), the contract driver
+(`catalog-contract.test.ts`), and exactly 20 fixture modules under `fixtures/`. The closure gate
+asserts the fixture count is 20 and that each named fixture is tracked; the contract driver
+inverse-walks both directions, so every catalog `(section, state)` block has exactly one fixture
+and every fixture key has exactly one catalog block.
+
+**Residual authorized patch census — exactly 2/18 and 2/2.** After removing the
+`MF-DEC-01`-authorized patches, the only tracked files still using the shared-process tokens are
+the two excluded residuals, `tests/bridges/skills/stage.test.ts` and
+`tests/orchestrators/plugin/uninstall.test.ts`:
+
+| Token | Files | Calls | Location breakdown |
+| --- | --- | --- | --- |
+| `syncBuiltinESMExports(` | 2 | 18 | `tests/bridges/skills/stage.test.ts` 16, `tests/orchestrators/plugin/uninstall.test.ts` 2 |
+| `createRequire(` | 2 | 2 | `tests/bridges/skills/stage.test.ts` 1, `tests/orchestrators/plugin/uninstall.test.ts` 1 |
+
+The census ignores `scripts/check-phase-06-hub-ledger.mjs`, which names both tokens only as the
+literals it counts. `ER-F19` stays reserved for Phase 8 and is untouched here.
+
 ## Validation Sign-Off
 
 - [ ] Every final task has an `<automated>` command or creates its paired test in the same task.
