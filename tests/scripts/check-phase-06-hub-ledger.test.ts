@@ -124,9 +124,9 @@ describe("MF-DEC-01 census", () => {
 });
 
 describe("PRE-EDIT ledger", () => {
-  const hub = "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts";
-  const legacyTest = "tests/orchestrators/plugin/reinstall.test.ts";
-  const ledger = `# Reinstall PRE-EDIT Ledger
+  const hub = "extensions/pi-claude-marketplace/orchestrators/plugin/list.ts";
+  const legacyTest = "tests/orchestrators/plugin/list.test.ts";
+  const ledger = `# List PRE-EDIT Ledger
 
 Status: READY
 Hub: ${hub}
@@ -134,13 +134,13 @@ Legacy test: ${legacyTest}
 
 | Category | Current owner | Destination | Evidence |
 | --- | --- | --- | --- |
-| exported symbol | ReinstallPluginsTarget | orchestrators/plugin/reinstall-targets.ts | tracked |
-| production caller | edge/handlers/plugin/reinstall.ts | orchestrators/plugin/reinstall-targets.ts | CodeGraph |
-| source-scanning gate | scripts/check-phase-06-hub-ledger.mjs | orchestrators/plugin/reinstall-targets.ts | tracked |
-| documentation comment | 06-44-PLAN.md | orchestrators/plugin/reinstall-clone-probe.ts | tracked |
-| test ownership | reinstall.test.ts target cases | reinstall-targets.test.ts | exact owner |
-| completeness invariant | explicit/bare/empty/single/many target states | reinstall-targets.test.ts | inverse walk |
-| dependency edge | reinstall.ts -> targets | reinstall-targets.ts -> resolver.ts | acyclic |
+| exported symbol | ListPluginsOptions | orchestrators/plugin/list-flow.ts | tracked |
+| production caller | edge/handlers/plugin/list.ts | orchestrators/plugin/list-flow.ts | CodeGraph |
+| source-scanning gate | scripts/check-phase-06-hub-ledger.mjs | orchestrators/plugin/list-flow.ts | tracked |
+| documentation comment | 06-49-PLAN.md | orchestrators/plugin/list-installed-row.ts | tracked |
+| test ownership | list.test.ts installed row cases | list-installed-row.test.ts | exact owner |
+| completeness invariant | zero/one/many cardinality and stable rows | list-flow.test.ts | inverse walk |
+| dependency edge | list.ts -> installed rows | list-installed-row.ts -> notification grammar | acyclic |
 `;
 
   test("accepts a READY ledger with every repoint category", () => {
@@ -153,8 +153,8 @@ Legacy test: ${legacyTest}
         trackedPaths: new Set([
           hub,
           legacyTest,
-          "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts",
-          "tests/orchestrators/plugin/reinstall-targets.test.ts",
+          "extensions/pi-claude-marketplace/orchestrators/plugin/list-installed-row.ts",
+          "tests/orchestrators/plugin/list-installed-row.test.ts",
         ]),
       }),
       [],
@@ -176,7 +176,7 @@ Legacy test: ${legacyTest}
       validatePreedit({
         hub,
         legacyTest,
-        ledger: `${ledger}| test ownership | duplicate | reinstall-targets.test.ts | duplicate |\n`,
+        ledger: `${ledger}| test ownership | duplicate | list-installed-row.test.ts | duplicate |\n`,
         codegraph: hub,
         trackedPaths: new Set([hub, legacyTest]),
       }).join("\n"),
