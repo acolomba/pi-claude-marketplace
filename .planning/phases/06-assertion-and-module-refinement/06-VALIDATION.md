@@ -206,6 +206,108 @@ the two excluded residuals, `tests/bridges/skills/stage.test.ts` and
 The census ignores `scripts/check-phase-06-hub-ledger.mjs`, which names both tokens only as the
 literals it counts. `ER-F19` stays reserved for Phase 8 and is untouched here.
 
+### 06-52-02 — Final integration gate (RED — seal withheld)
+
+`npm run check` is the phase closure gate. It exits **1**. The seal is therefore withheld:
+frontmatter stays `status: draft` and `nyquist_compliant: false`, and no row below is promoted to
+green. The chain is `typecheck && lint && fallow && format:check && test:corresponding &&
+test:corresponding:negative && test:coverage:direct:negative && test && test:integration`, so it
+halts at the first red member; the members after `format:check` were run individually to establish
+the complete state.
+
+```console
+$ npm run check
+EXIT=1
+```
+
+| Chain member | Exit | Result |
+| --- | --- | --- |
+| `npm run typecheck` | 0 | clean, no diagnostics |
+| `npm run lint` | 0 | clean, no warnings |
+| `npm run fallow` | 0 | dead-code, health, and dupes all within their gates |
+| `npm run format:check` | 1 | **RED** — halts the chain (finding F1) |
+| `npm run test:corresponding` | 0 | `Corresponding-test gate passed.` |
+| `npm run test:corresponding:negative` | 0 | `Corresponding-test negative controls passed.` |
+| `npm run test:coverage:direct:negative` | 0 | `Direct-coverage negative controls passed.` |
+| `npm test` | 1 | **RED** — 5881 tests, 5837 pass, 44 fail (findings F2, F3, F4) |
+| `npm run test:integration` | 0 | 32 tests, 32 pass, 0 fail |
+
+#### F1 — `format:check` fails on an untracked, unrelated file
+
+```console
+$ npm run format:check
+Checking formatting...
+[warn] .mcp.json
+[warn] Code style issues found in the above file. Run Prettier with --write to fix.
+EXIT=1
+```
+
+`format:check` globs `**/*.{js,json,ts}`, which prettier resolves from the filesystem rather than
+from the git index, so an untracked working-tree file enters the gate. `.mcp.json` is untracked, is
+not part of any Phase 6 deliverable, and is the only file reported. No tracked source or test file
+is unformatted.
+
+#### F2 — Two architecture gates still read deleted Phase 6 hubs
+
+Both failures are `ENOENT` at read time, not assertion failures. Each gate resolves its target from
+composed path segments, so the token-level stale-path scan in 06-52-01 could not see them: the
+literals `orchestrators/plugin/install.ts` and `orchestrators/plugin/reinstall.ts` never appear in
+either file.
+
+```console
+test at tests/architecture/hooks-lifecycle.test.ts:185:1
+✖ WR-03 Block C: reinstall.ts wires remove + add + rebuildRoutingTables in its per-plugin lock
+  [Error: ENOENT: no such file or directory, open
+  '<repo>/extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts']
+
+test at tests/architecture/import-boundaries.test.ts:251:1
+✖ D-11: no orchestrators/plugin LEDGER imports a marketplace ledger module
+  [Error: ENOENT: no such file or directory, open
+  '<repo>/extensions/pi-claude-marketplace/orchestrators/plugin/install.ts']
+```
+
+- `tests/architecture/hooks-lifecycle.test.ts:55` — `REINSTALL_PATH = path.join(ORCH_DIR, "reinstall.ts")`, read at line 186. The reinstall hub was retired in Plan 06-48; the gate was not repointed to `reinstall-flow.ts`.
+- `tests/architecture/import-boundaries.test.ts:211` — `PLUGIN_LEDGERS = ["install", "update", "uninstall", "reinstall", "enable-disable"]`, each read as `${ORCHESTRATORS_REL}/plugin/${name}.ts` at line 254. `install.ts`, `update.ts`, and `reinstall.ts` were retired in Plans 06-38, 06-43, and 06-48; only `uninstall.ts` and `enable-disable.ts` still exist. The gate's own comment states the intent — "A renamed or deleted ledger must fail loudly rather than silently uncovering this direction of the gate" — so this red is the gate working as designed and reporting an incomplete four-part repoint, not a false alarm.
+
+This is a real gap in the `Four-Part Repointing Gate` evidence for the install, update, and reinstall families: the *source-scanning gate* category was satisfied by a literal-token scan, and a gate that composes its path escapes that scan.
+
+#### F3 — Sealed requirement-route contract disagrees with REQUIREMENTS.md
+
+42 of the 44 failures come from `tests/architecture/revalidation.test.ts`, all with the same root
+cause. `scripts/revalidation.mjs` seals `TREF-04` through `TREF-09` as
+`{ route: "Phase N", status: "Pending" }` (lines 126-131), while the `.planning/REQUIREMENTS.md`
+traceability table (lines 170-175) now reads `Complete` for all six.
+
+```console
+$ node --test tests/architecture/revalidation.test.ts
+✖ RVAL-04 scope-impact checks all live planning-contract records
+  actual:   status 1, stderr:
+    requirement-route-contract: TREF-04: traceability route/status differs from sealed requirement contract
+    requirement-route-contract: TREF-05: traceability route/status differs from sealed requirement contract
+    requirement-route-contract: TREF-06: traceability route/status differs from sealed requirement contract
+    requirement-route-contract: TREF-07: traceability route/status differs from sealed requirement contract
+    requirement-route-contract: TREF-08: traceability route/status differs from sealed requirement contract
+    requirement-route-contract: TREF-09: traceability route/status differs from sealed requirement contract
+  expected: status 0, stdout: 'Scope impact valid: 40 records.\n'
+```
+
+The remaining 41 revalidation failures are the planted-offender cases: each expects only its own
+planted error on stderr and now also receives these six contract lines.
+
+**This drift predates Phase 6.** `git log -S` places the first `TREF-04 | Phase 5 | Complete` row at
+`5c47f436 docs(phase-05): close verified ownership phase`, so `npm test` has been red since Phase 5
+closed. Phase 6 extended the same drift to `TREF-07`, `TREF-08`, and `TREF-09` when its own plans
+marked those requirements complete. No Phase 6 plan ran the full suite, so the pre-existing red went
+unobserved for 51 plans — a sampling gap this validation contract's per-wave rate did not close.
+
+#### Closure status
+
+`npm run check` does not exit zero, so the Plan 06-52 acceptance criterion is unmet and the
+sign-off below stays unchecked. F2 is Phase 6 work left incomplete. F1 and F3 are outside the Phase 6
+boundary: F1 is an untracked working-tree file, and F3 is a planning-artifact contract sealed before
+this phase. All three are reported for a separately-scoped decision rather than repaired inside this
+validation plan, which is authorized to modify this file only.
+
 ## Validation Sign-Off
 
 - [ ] Every final task has an `<automated>` command or creates its paired test in the same task.
