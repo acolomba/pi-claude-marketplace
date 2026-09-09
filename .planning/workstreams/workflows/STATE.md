@@ -4,9 +4,9 @@ milestone: workflows-replay
 milestone_name: Workflow Bridge Replay onto main
 current_phase: 116
 current_phase_name: Load-time workflow convergence
-current_plan: Not started
-status: planning
-stopped_at: Phase 115 complete, ready to plan Phase 116
+current_plan: 0 of 4 executed
+status: executing
+stopped_at: Phase 116 planned -- 4 plans in 3 waves, plan-checker passed
 last_updated: "2026-09-09T13:17:29.757Z"
 state_head: ec9ac05ef9738df7caf72eb8dec30055f7fd80d0
 progress:
@@ -36,8 +36,8 @@ the gaps the bridge originally shipped with.
 ## Current Position
 
 Phase: 116 — Load-time workflow convergence
-Plan: Not started
-Status: Ready to plan
+Plan: 0 of 4 executed (4 plans, 3 waves, 10 tasks)
+Status: Planned and checked — ready to execute
 
 Phase 115 is complete on every gate. The replay milestone (109-114) is complete
 and the first of the three hardening phases has now closed behind it; 116 and 117
@@ -94,7 +94,7 @@ probe-purity gate instead.
 ## Progress
 
 **Phases Complete:** 7/9 verified (Phases 109-114 replay, 115-117 hardening)
-**Current Plan:** Not started
+**Current Plan:** 0/4 executed
 
 ```text
 [========--] 78%
@@ -109,7 +109,7 @@ probe-purity gate instead.
 | 113 | Update, enable/disable, reconcile | Complete (5/5 plans, verified 9/9) |
 | 114 | Degradation and documentation | Complete (5/5 plans, verified 7/7) |
 | 115 | Install-time admission-gate warnings | Complete (6/6 plans, verified 6/6, secured 30/30, nyquist 0 gaps) |
-| 116 | Load-time workflow convergence | Not started (hardening) |
+| 116 | Load-time workflow convergence | Planned (4 plans / 3 waves), checker passed (hardening) |
 | 117 | Measured `agent()` failure evidence | Not started (hardening) |
 
 **Why one run covers both milestones.** GSD scopes a milestone by parsing a

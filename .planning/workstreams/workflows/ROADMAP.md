@@ -636,7 +636,20 @@ Plans:
    `docs/output-catalog.md` against `tests/architecture/catalog-uat.test.ts` —
    while a scan that materialized nothing stays silent.
 
-**Plans**: TBD
+**Plans**: 4 plans in 3 waves
+
+**Wave 1**
+
+- [ ] 116-01-PLAN.md — Widen the load-time scan by deleting one filter, and give a convergence its own closed-set reason token on both render arms
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 116-02-PLAN.md — Pin what the widened scan must not touch, and prove the self-heal fires once on bytes, inode and mtime
+- [ ] 116-03-PLAN.md — Publish the fully-promoted arm's bytes as catalog states, and correct the three counts no gate reads
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [ ] 116-04-PLAN.md — Re-measure the inherited population claim and take the phase through `npm run check`
 
 ### Phase 117: Measured `agent()` failure evidence
 

@@ -726,22 +726,45 @@ async function stateSnapshot(filePath: string): Promise<{
 | A3 | Adding one `ContentReason` does not push `backfilledRowFromOutcome` or `backfillOnePluginIsolated` over either complexity ceiling. Reasoned, not measured (the deletion lowers one score and the token adds one spread element). | Pattern 1 / 2 | A fallow `health` failure at commit time; caught by `npm run check`. |
 | A4 | `npm run check`'s remaining members (`test:corresponding:negative`, `test:coverage:direct:negative`) are unaffected by a same-file edit. Not run this session (they are meta-gates over the pairing scripts). | Project Constraints | A late red in the full gate; run `npm run check` once before the phase closes. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Does the plan rename `scanForceInstalledBackfills` / `hasForceInstalledPlugin`?**
+All four were settled by the post-research decisions in `116-CONTEXT.md` before
+planning began. The questions are kept as written -- they record what was
+genuinely open when the research finished -- and each carries its resolution
+inline rather than being edited to look already-decided.
+
+1. **RESOLVED -- no rename** (`116-CONTEXT.md`, "Names are left alone"). The
+   spellings stay; the plan instead bans the hyphenated `force-install` form in
+   NEW prose, which is what would redden `partial-vocabulary-guard.test.ts`.
+   Renaming is churn beyond what WCONV-01..03 ask for.
+
+   **Does the plan rename `scanForceInstalledBackfills` / `hasForceInstalledPlugin`?**
    - Known: the names encode the retired policy; the vocabulary guard's `/force[- ]install/i` does **not** match the camelCase form, so keeping them is legal.
    - Unclear: whether renaming is worth touching the export, its one call site, its two doc references and one test import.
    - Recommendation: rename to a `force`-free name in the same change as the deletion (it is 5 sites and the guard makes the alternative — describing them in prose — a trap), or explicitly decide not to and say why in the SUMMARY.
 
-2. **Is a `tests/integration/` case needed, or is the unit suite enough?**
+2. **RESOLVED -- extend, do not create** (D-116-07). The recommendation below
+   was taken: `tests/integration/workflow-kind-inversion.test.ts` is extended
+   with the `installable: true` twin.
+
+   **Is a `tests/integration/` case needed, or is the unit suite enough?**
    - Known: `tests/integration/workflow-kind-inversion.test.ts:242-361` already drives the real `applyReconcile` twice with an mtime harness and a negative control; adapting it to `installable: true` is small. D-116-03 permits a new integration file "only if a real reload path cannot be reached from a unit test", and Measurement 5 shows the unit seam reaches the whole behavior.
    - Recommendation: put the WCONV-01/02 proofs in `backfill.test.ts` (unit) and **extend** the existing integration file with the `installable: true` twin rather than creating a new one. The integration dir is exempt from the pairing gate, so an extension is free.
 
-3. **How many catalog states end up added?**
+3. **RESOLVED -- two new states, lock 195 -> 197** (D-116-06). The
+   recommendation below was taken in full.
+
+   **How many catalog states end up added?**
    - Known: ≥1 (the `installed` arm), 2 existing states change bytes.
    - Recommendation: 2 new (`installed` clean, and `installed` + `{requires pi-dynamic-workflows}`), so the count lock moves 195 → 197. Decide before writing the plan so the lock literal, its comment and its failure message move once.
 
-4. **Do the two `tests/index.test.ts` cases get repair (a) or (b)?** See Q2. Recommendation: (a), closing the gate in `seedEnabledPlugin`.
+4. **RESOLVED -- repair (a), at the fixture seed** (D-116-05). The
+   notification-boundary counts are deliberately NOT raised: those literals
+   exist to catch an unintended extra emission, and raising them to accommodate
+   one is the "green because it checks nothing" failure this milestone has
+   already shipped three times.
+
+   **Do the two `tests/index.test.ts` cases get repair (a) or (b)?** See Q2. Recommendation: (a), closing the gate in `seedEnabledPlugin`.
 
 ## Environment Availability
 
