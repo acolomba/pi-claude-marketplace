@@ -40,6 +40,11 @@ import path from "node:path";
 import { PluginShapeError } from "../shared/errors.ts";
 import { PathContainmentError, assertPathInside } from "../shared/path-safety.ts";
 
+import {
+  collectLooseComponentPaths,
+  collectStrictComponentPaths,
+  type ComponentPathResolution,
+} from "./component-paths.ts";
 import { parseHooksConfig, type DroppedHook, type HooksConfig } from "./components/hooks.ts";
 import { MCP_SERVERS_VALIDATOR } from "./components/mcp.ts";
 import { PLUGIN_MANIFEST_VALIDATOR, type PluginEntry } from "./components/plugin.ts";
@@ -98,18 +103,7 @@ function readFileTextOf(ctx: ResolveContext): (p: string) => Promise<string> {
 // Helpers
 // ──────────────────────────────────────────────────────────────────────────
 
-/**
- * HOOK-01: the PRIVATE subset of supported kinds that carry per-entry
- * component-path semantics (entry/manifest declares a relative dir; the
- * resolver validates each path and adds it to `componentPaths.<kind>`).
- * `hooks` is deliberately excluded -- its discovery path is the
- * convention file `<pluginRoot>/hooks/hooks.json`, parsed by
- * `parseHooksConfig`, NOT a path-bearing field.
- */
-const SUPPORTED_COMPONENT_PATH_KINDS = ["skills", "commands", "agents"] as const;
-type SupportedPathKind = (typeof SUPPORTED_COMPONENT_PATH_KINDS)[number];
-
-interface PartialResolution {
+interface PartialResolution extends ComponentPathResolution {
   supported: string[];
   unsupported: string[];
   notes: string[];
@@ -478,151 +472,6 @@ async function preflightStages(
   };
 }
 
-/**
- * D-07 helper: normalize an untrusted entry / manifest `componentPaths.<kind>`
- * field into a flat readonly string-or-other-element array. The element-level
- * `validateComponentPath` call rejects non-string elements (and nested arrays);
- * we deliberately keep `unknown` typing on each element here so the rejection
- * messaging stays consistent with the PR-2 case 7 path.
- *
- * - `undefined` / `null` -> `[]` (not declared)
- * - a single string       -> `[string]`
- * - an array              -> the array as-is (element-level validation later)
- * - any other shape       -> `[value]` (forces validateComponentPath to emit
- *                            the "not a string" failure note for the caller)
- */
-function readPathOrArray(value: unknown): readonly unknown[] {
-  if (value === undefined || value === null) {
-    return [];
-  }
-
-  if (Array.isArray(value)) {
-    return value;
-  }
-
-  return [value];
-}
-
-/**
- * Validate a single component-path ELEMENT. Returns `{ ok: true, relative }`
- * on success (caller adds to componentPaths + supported), or
- * `{ ok: false, reason }` on failure (caller adds note + feeds the structural
- * `dirty` accumulator, so `decideResolution` resolves `unavailable`).
- *
- * D-07 narrowing: the resolver accepts a top-level array of strings as
- * legal input (the schema is `Type.Array(Type.String())`). Callers MUST
- * normalize their raw inputs through `readPathOrArray` BEFORE handing each
- * element to this function. Per-element non-string / nested-array values
- * are rejected here (the schema-level guard does not survive the
- * `as unknown` coercion that the resolver uses to read untrusted entry /
- * manifest fields).
- */
-async function validateComponentPath(
-  kind: SupportedPathKind,
-  raw: unknown,
-  pluginRoot: string,
-): Promise<{ ok: true; relative: string } | { ok: false; reason: string }> {
-  // D-07: nested arrays are still rejected at the element level. Top-level
-  // arrays are handled by `readPathOrArray` BEFORE this function is called.
-  if (Array.isArray(raw)) {
-    return {
-      ok: false,
-      reason: `component path for "${kind}" contains nested array element; must be a string`,
-    };
-  }
-
-  // PR-2 case 7: non-string is rejected.
-  if (typeof raw !== "string") {
-    return {
-      ok: false,
-      reason: `component path for "${kind}" is not a string (got ${typeof raw})`,
-    };
-  }
-
-  // PS-3: must be relative.
-  if (path.isAbsolute(raw)) {
-    return {
-      ok: false,
-      reason: `component path for "${kind}" must be relative (got absolute "${raw}")`,
-    };
-  }
-
-  // PR-2 case 8: must not escape pluginRoot.
-  const candidate = path.resolve(pluginRoot, raw);
-
-  try {
-    await assertPathInside(pluginRoot, candidate, `component path "${kind}"`);
-  } catch (err) {
-    if (err instanceof PathContainmentError) {
-      return { ok: false, reason: `component path for "${kind}" escapes plugin root: "${raw}"` };
-    }
-
-    throw err;
-  }
-
-  return { ok: true, relative: raw };
-}
-
-function addComponentPath(
-  partial: PartialResolution,
-  kind: SupportedPathKind,
-  seenPaths: Set<string>,
-  relative: string,
-): void {
-  if (seenPaths.has(relative)) {
-    return;
-  }
-
-  seenPaths.add(relative);
-  partial.componentPaths[kind].push(relative);
-}
-
-async function addValidatedComponentPath(
-  partial: PartialResolution,
-  kind: SupportedPathKind,
-  seenPaths: Set<string>,
-  raw: unknown,
-  pluginRoot: string,
-): Promise<boolean> {
-  const v = await validateComponentPath(kind, raw, pluginRoot);
-
-  if (v.ok) {
-    addComponentPath(partial, kind, seenPaths, v.relative);
-    return false;
-  }
-
-  partial.notes.push(v.reason);
-  return true;
-}
-
-async function collectStrictComponentKind(
-  entry: PluginEntry,
-  manifest: Record<string, unknown> | null,
-  partial: PartialResolution,
-  pluginRoot: string,
-  ctx: ResolveContext,
-  kind: SupportedPathKind,
-): Promise<boolean> {
-  let dirty = false;
-  const seenPaths = new Set<string>();
-  const fromEntry = readPathOrArray((entry as Record<string, unknown>)[kind]);
-  const fromManifest = readPathOrArray(manifest?.[kind]);
-
-  for (const raw of [...fromEntry, ...fromManifest]) {
-    dirty = (await addValidatedComponentPath(partial, kind, seenPaths, raw, pluginRoot)) || dirty;
-  }
-
-  if ((await statKindOf(ctx)(path.join(pluginRoot, kind))) === "dir") {
-    addComponentPath(partial, kind, seenPaths, kind);
-  }
-
-  if (partial.componentPaths[kind].length > 0) {
-    partial.supported.push(kind);
-  }
-
-  return dirty;
-}
-
 async function readStandaloneMcp(
   ctx: ResolveContext,
   pluginRoot: string,
@@ -967,40 +816,6 @@ async function applyStrictMcp(
   return applyMcpValue(partial, declaredMcp ?? mcpResult?.value);
 }
 
-async function collectLooseComponentKind(
-  entry: PluginEntry,
-  manifest: Record<string, unknown> | null,
-  partial: PartialResolution,
-  pluginRoot: string,
-  kind: SupportedPathKind,
-): Promise<boolean> {
-  const fromEntry = (entry as Record<string, unknown>)[kind];
-  const fromManifest = manifest?.[kind];
-
-  if (fromEntry === undefined) {
-    if (fromManifest === undefined) {
-      return false;
-    }
-
-    partial.notes.push(
-      `component declarations conflict: manifest declares "${kind}" but entry does not`,
-    );
-    return true;
-  }
-
-  let dirty = false;
-  const seenPaths = new Set<string>();
-  for (const raw of readPathOrArray(fromEntry)) {
-    dirty = (await addValidatedComponentPath(partial, kind, seenPaths, raw, pluginRoot)) || dirty;
-  }
-
-  if (partial.componentPaths[kind].length > 0) {
-    partial.supported.push(kind);
-  }
-
-  return dirty;
-}
-
 async function applyLooseMcp(
   entry: PluginEntry,
   manifest: Record<string, unknown> | null,
@@ -1070,14 +885,15 @@ export async function resolveStrict(
     // dir exists on disk and is not already declared, it is appended to the
     // array. First-wins dedup by relative-path string preserves ordering
     // (declared first, implicit last).
-    collectComponentKind: (args) =>
-      collectStrictComponentKind(
-        args.entry,
-        args.manifest,
-        args.partial,
-        args.pluginRoot,
-        args.ctx,
-        args.kind,
+    collectComponentPaths: (args) =>
+      collectStrictComponentPaths(
+        {
+          entry: args.entry,
+          manifest: args.manifest,
+          pluginRoot: args.pluginRoot,
+          resolution: args.partial,
+        },
+        statKindOf(args.ctx),
       ),
     // Step 8 (MM-5): mcpServers union (entry > manifest > standalone .mcp.json).
     applyMcp: (args) =>
@@ -1092,13 +908,12 @@ export async function resolveStrict(
  * the honest shape rather than a coincidence worth restating twice.
  */
 interface ResolveMode {
-  readonly collectComponentKind: (args: {
+  readonly collectComponentPaths: (args: {
     readonly entry: PluginEntry;
     readonly manifest: Record<string, unknown> | null;
     readonly partial: PartialResolution;
     readonly pluginRoot: string;
     readonly ctx: ResolveContext;
-    readonly kind: SupportedPathKind;
   }) => Promise<boolean>;
   readonly applyMcp: (args: {
     readonly entry: PluginEntry;
@@ -1142,10 +957,8 @@ async function resolveWithMode(
  * short-circuited, which is what the original `(await stage()) || dirty` chain
  * did too.
  *
- * HOOK-01: iterates SUPPORTED_COMPONENT_PATH_KINDS (skills/commands/agents),
- * NOT the full SUPPORTED_COMPONENT_KINDS tuple, because `hooks` carries no
- * per-entry component-path semantics. The hooks-config probe in step 8b owns
- * the discovery + admission of the `hooks` supported kind.
+ * Component-path collection owns the closed skills/commands/agents subset;
+ * hooks-config discovery remains the separate mode-agnostic stage below.
  */
 async function runStructuralStages(args: {
   readonly entry: PluginEntry;
@@ -1158,13 +971,8 @@ async function runStructuralStages(args: {
   const { entry, ctx, pluginRoot, manifest, partial, mode } = args;
   const flags: boolean[] = [];
 
-  for (const kind of SUPPORTED_COMPONENT_PATH_KINDS) {
-    flags.push(
-      await mode.collectComponentKind({ entry, manifest, partial, pluginRoot, ctx, kind }),
-    );
-  }
-
   flags.push(
+    await mode.collectComponentPaths({ entry, manifest, partial, pluginRoot, ctx }),
     await mode.applyMcp({ entry, manifest, partial, pluginRoot, ctx }),
     // Step 8b (HOOK-01 / D-57-04): probe `<pluginRoot>/hooks/hooks.json` and
     // either add `hooks` to supported (parse OK) or flip installable=false with
@@ -1217,7 +1025,7 @@ function decideResolution(
  * `defaultEnabled` with a silent entry is honored here rather than rejected --
  * it is resolved once in `preflightStages` and reads `plugin.json` in loose mode
  * exactly as it does in strict mode. The conflict machinery is closed-set by
- * construction (it iterates SUPPORTED_COMPONENT_PATH_KINDS plus `mcpServers`),
+ * construction (the component-path owner iterates its closed tuple plus `mcpServers` here),
  * which is what keeps the two classes of field apart.
  */
 export async function resolveLoose(
@@ -1230,14 +1038,13 @@ export async function resolveLoose(
     // conflict. Array shape mirrors strict mode, but with first-wins dedup
     // applied only to entry-declared paths (no convention probing). The loose
     // collector takes no `ctx` precisely because it never probes disk.
-    collectComponentKind: (args) =>
-      collectLooseComponentKind(
-        args.entry,
-        args.manifest,
-        args.partial,
-        args.pluginRoot,
-        args.kind,
-      ),
+    collectComponentPaths: (args) =>
+      collectLooseComponentPaths({
+        entry: args.entry,
+        manifest: args.manifest,
+        pluginRoot: args.pluginRoot,
+        resolution: args.partial,
+      }),
     // Step 8 (MM-7 loose mcpServers).
     applyMcp: (args) =>
       applyLooseMcp(args.entry, args.manifest, args.partial, args.pluginRoot, args.ctx),

@@ -8,7 +8,9 @@ import type * as ComponentPathsOwner from "../../extensions/pi-claude-marketplac
 
 type OwnerShape = typeof ComponentPathsOwner;
 
-function preserveDirectOwnerType(_owner: OwnerShape): void {}
+function preserveDirectOwnerType(owner: OwnerShape): void {
+  void owner;
+}
 
 function emptyResolution() {
   return {
@@ -38,7 +40,8 @@ test("collects strict paths in declaration order with first-wins deduplication",
       pluginRoot,
       resolution,
     },
-    async (candidate) => (candidate === path.join(pluginRoot, "skills") ? "dir" : null),
+    (candidate) =>
+      Promise.resolve(candidate === path.join(pluginRoot, "skills") ? "dir" : null),
   );
 
   // assert
@@ -68,7 +71,7 @@ test("accepts contained declared paths without requiring the leaf to exist", asy
       pluginRoot: "/plugins/alpha",
       resolution,
     },
-    async () => null,
+    () => Promise.resolve(null),
   );
 
   // assert
@@ -94,7 +97,7 @@ test("ignores null declarations and wrong-kind convention paths", async () => {
       pluginRoot: "/plugins/alpha",
       resolution,
     },
-    async () => "file",
+    () => Promise.resolve("file"),
   );
 
   // assert
@@ -140,7 +143,7 @@ for (const { title, value, reason } of invalidPathCases) {
         pluginRoot: "/plugins/alpha",
         resolution,
       },
-      async () => null,
+      () => Promise.resolve(null),
     );
 
     // assert
@@ -174,7 +177,7 @@ test("rejects a component path that crosses a symlink", async (testContext) => {
       pluginRoot,
       resolution,
     },
-    async () => null,
+    () => Promise.resolve(null),
   );
 
   // assert
@@ -206,7 +209,7 @@ test("propagates a containment inspection error", async (testContext) => {
           pluginRoot,
           resolution: emptyResolution(),
         },
-        async () => null,
+        () => Promise.resolve(null),
       ),
     (error: unknown) =>
       error instanceof Error && (error as NodeJS.ErrnoException).code === "ENOTDIR",
