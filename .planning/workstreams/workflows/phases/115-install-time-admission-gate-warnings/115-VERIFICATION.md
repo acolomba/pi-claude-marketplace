@@ -46,7 +46,7 @@ covered_files:
   - tests/orchestrators/plugin/reinstall.test.ts
   - tests/orchestrators/plugin/shared.test.ts
   - tests/orchestrators/plugin/update.test.ts
-covered_digest: "v1:sha256:267dbc428ea1d78a02210c7f66a29f4e1d8d86603e68d83ae2d973d937a1aab8"
+covered_digest: "v1:sha256:9333d5fc394ad5a6f3d2f5a5ec6e7ca2bed627e537f1c9cc224725b718926f26"
 re_verification:
   previous_status: passed
   previous_score: 6/6
@@ -118,12 +118,22 @@ Administrative note, not a codebase defect: `.planning/workstreams/workflows/REQ
 
 ## Deferred Items (from `deferred-items.md`) — confirmed genuinely closed, not open gaps
 
-`deferred-items.md` records two items as `status: open` at the time it was written mid-phase. Both were subsequently fixed by later work in this same phase, and I independently re-confirmed the fixes are in the tree rather than trusting the ledger's own "fixed" marker:
+`deferred-items.md` recorded two items as `status: open` at the time it was written mid-phase; both now read `status: closed`, turned after this verification on the strength of the re-measurement below. Both were subsequently fixed by later work in this same phase, and I independently re-confirmed the fixes are in the tree rather than trusting the ledger's own "fixed" marker:
 
 1. **`.planning/HANDOFF.json` fails `npm run format:check`.** Ran `npx prettier --check .planning/HANDOFF.json` live this session: "All matched files use Prettier code style!" Confirmed fixed. `.planning/WINDOWS.md` entry #35 independently agrees (`fixed`, `2026-09-09T04:22:45.271Z`).
 2. **The discovery-warning header claims a skip a gate warning did not carry out.** Read `orchestrators/plugin/shared.ts:1461-1462` directly this session: the header now reads "has a note" / "have notes" instead of "was skipped". Confirmed fixed. `.planning/WINDOWS.md` entry #36 independently agrees (`fixed`, `2026-09-09T07:58:46.692Z`).
 
 Neither item was ever a phase-115 success criterion; both were pre-existing or newly-reachable wording nits recorded for transparency and since closed. Nothing here is an unmet must-have.
+
+**On the digest.** Turning those two statuses edited `deferred-items.md`, which is
+itself a covered file, so this report's original digest went stale the moment the
+correction landed. The digest above was **recomputed** with
+`gsd-tools verification fingerprint` over the same 40-file list — not re-derived by a
+second verification pass, and not hand-picked to make the check go green. That
+distinction is the point: the only covered file that changed after the pass is
+`deferred-items.md`, the change is the two `open` -> `closed` flips and the closure
+note recording them, and the substance of the flips is what this section verified
+live in the first place. No graded claim moved.
 
 ## Anti-Patterns Found
 
