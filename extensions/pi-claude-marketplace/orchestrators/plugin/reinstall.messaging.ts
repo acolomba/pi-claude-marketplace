@@ -37,7 +37,7 @@ import type {
  * set, its cascade row message shapes, and a render map total over reinstall's
  * OWN statuses (D-10) lifting the matching `renderPluginRow` arm bodies
  * VERBATIM. The shared presentation vocabulary stays central in
- * `shared/notify.ts` (D-11) and is CALLED here, never duplicated.
+ * `shared/notification-grammar.ts` (D-11) and is CALLED here, never duplicated.
  *
  * NFR-9: the `manual recovery` / `failed` cause-chain and rollback-partial
  * trailing lines are NOT composed here. The render map renders only the single
@@ -267,7 +267,7 @@ export function reinstalledRowFromOutcome(
  *
  * Orphan-fold scope-bracket suppression: per-row `scope?` is
  * OMITTED when it matches the marketplace's scope. The renderer's
- * `renderScopeBracket` contract at `shared/notify.ts` suppresses
+ * `renderScopeBracket` contract in `shared/notification-grammar.ts` suppresses
  * `[<scope>]` brackets when the row's scope is absent.
  */
 export function outcomeToPluginMessage(

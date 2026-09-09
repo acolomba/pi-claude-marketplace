@@ -31,8 +31,8 @@ import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
  * `/claude:plugin list` (MOD-01). Co-locates the list surface's private status
  * set, its row message shapes, and a render map total over the list's OWN
  * statuses (D-10) whose arms DELEGATE to the shared per-row renderers. The
- * shared presentation vocabulary stays central in `shared/notify.ts` (D-11)
- * and is CALLED here, never duplicated.
+ * shared presentation vocabulary stays central in `shared/notification-grammar.ts`
+ * (D-11) and is CALLED here, never duplicated.
  *
  * RLD-04: the list surface's steady-state inventory row uses the `installed`
  * status with `needsReload: false` -- the stamped flag carries the

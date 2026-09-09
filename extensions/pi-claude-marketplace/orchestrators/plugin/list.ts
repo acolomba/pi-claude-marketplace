@@ -5,8 +5,8 @@
 // The orchestrator reads BOTH scopes' state (user + project) regardless of
 // which scope the caller requested, computes the orphan-fold per
 // D-13-17..D-13-19, and constructs a `NotificationMessage` of
-// `MarketplaceNotificationMessage`s for the renderer at
-// `shared/notify.ts`. The fold rule:
+// `MarketplaceNotificationMessage`s for the command-context renderer in
+// `orchestrators/plugin/list.messaging.ts`. The fold rule:
 //   - For each marketplace `<mp>` that exists in PROJECT scope: emit a
 //     `<mp>[project]` header block with the plugins installed under that
 //     project-scope marketplace.
@@ -104,7 +104,7 @@ import type { Scope } from "../../shared/types.ts";
  * PluginRenderStatus retained as an internal alias to keep the orchestrator's
  * bucketing logic (installed / upgradable / available / unavailable) typed.
  * Maps 1:1 onto the PluginNotificationMessage list-surface discriminator
- * subset per shared/notify.ts. RLD-04: the installed bucket emits the
+ * subset in shared/notification-types.ts. RLD-04: the installed bucket emits the
  * `installed` token with `needsReload: false` (the stamped flag suppresses the
  * OR-reduce reload-hint on steady-state list invocations); the PL-1
  * `--installed` filter treats `installed`, `upgradable`, and `disabled` as the
@@ -1261,7 +1261,7 @@ async function buildMarketplaceMessage(args: {
   // `causeTrailer` per the catalog "notify() does not emit a
   // marketplace-level cause: trailer for failed marketplaces with empty
   // plugins: []" contract. The autoupdate detail also drops on failure --
-  // the renderer's failed-status arm at shared/notify.ts:593 emits a
+  // `notification-grammar.ts::renderMpHeader`'s failed-status arm emits a
   // bare header with no `<autoupdate>` marker.
   if (!scopedManifest.ok) {
     return {

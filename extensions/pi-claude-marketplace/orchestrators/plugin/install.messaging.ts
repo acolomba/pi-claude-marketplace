@@ -39,8 +39,8 @@ import type { InstallPluginOutcome } from "../types.ts";
  *
  * The shared presentation vocabulary (`ICON_*`, `joinTokens`,
  * `renderScopeBracket`, `renderVersion`, `composeReasons`, `pluginRow`) stays
- * central in `shared/notify.ts` (D-11); this module CALLS it, never duplicates
- * it.
+ * central in `shared/notification-grammar.ts` (D-11); this module CALLS it,
+ * never duplicates it.
  */
 
 /**
