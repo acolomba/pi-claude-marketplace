@@ -4,19 +4,19 @@ milestone: workflows-replay
 milestone_name: Workflow Bridge Replay onto main
 current_phase: 115
 current_phase_name: Install-time admission-gate warnings
-current_plan: none started — 6 plans committed, plan-checker not run
-status: planned
-stopped_at: Phase 115 planned (6 plans, 3 waves); plan-checker is the next gate
-last_updated: "2026-09-09T02:25:41.000Z"
-state_head: 9a1c0180ad43a2f79bec1f899d3454ee18445bd7
+current_plan: 6 of 6 executed; verified 6/6, SECURED 30/30
+status: verifying
+stopped_at: Phase 115 executed, reviewed, fixed, verified and secured; nyquist gate is next
+last_updated: "2026-09-09T12:05:00.000Z"
+state_head: 66625997
 progress:
   total_phases: 9
   completed_phases: 6
   total_plans: 32
-  completed_plans: 26
+  completed_plans: 32
   percent: 67
 last_activity: 2026-09-09
-last_activity_desc: Phase 115 planned; both hung validation verbs re-run clean
+last_activity_desc: Phase 115 executed and verified; 1 critical security fix landed
 ---
 
 # Project State
@@ -36,9 +36,9 @@ the gaps the bridge originally shipped with.
 ## Current Position
 
 Phase: 115 — Install-time admission-gate warnings
-Plan: none started — Phase 115 is PLANNED (6 plans, 3 waves, committed at
-`4621fd24`); the plan-checker gate has not run
-Status: Ready to execute, one gate short. The replay milestone (109-114) is
+Plan: 6 of 6 executed. Reviewed (1 critical + 6 warnings, all fixed), verified
+6/6, SECURED 30/30 with `threats_open: 0`
+Status: One gate short of complete — the nyquist gate has not run. The replay milestone (109-114) is
 complete; 115-117 are the hardening phases.
 
 Phase 114 closed the replay. It made the host workflow engine the third soft
@@ -87,7 +87,7 @@ probe-purity gate instead.
 ## Progress
 
 **Phases Complete:** 6/9 verified (Phases 109-114 replay, 115-117 hardening)
-**Current Plan:** Not started (6 plans planned and committed)
+**Current Plan:** 6/6 complete
 
 ```text
 [=======---] 67%
@@ -101,7 +101,7 @@ probe-purity gate instead.
 | 112 | Install and removal lifecycle | Complete (4/4 plans, verified) |
 | 113 | Update, enable/disable, reconcile | Complete (5/5 plans, verified 9/9) |
 | 114 | Degradation and documentation | Complete (5/5 plans, verified 7/7) |
-| 115 | Install-time admission-gate warnings | Planned, 0/6 executed (hardening) |
+| 115 | Install-time admission-gate warnings | 6/6 executed, verified 6/6, secured (hardening) |
 | 116 | Load-time workflow convergence | Not started (hardening) |
 | 117 | Measured `agent()` failure evidence | Not started (hardening) |
 
@@ -208,7 +208,41 @@ implementation.
 
 ## Session Continuity
 
-**Last session:** 2026-09-09T02:25:41Z
+**Last session:** 2026-09-09T12:05:00Z
+
+**Stopped At:** Phase 115 is executed and closed on every gate but one. All six
+plans have SUMMARYs; the deep code review found 1 critical and 6 warnings and all
+7 were fixed; goal verification passed 6/6; the security audit returned SECURED
+with 30/30 threats closed and `threats_open: 0`. `npm run check` is green at
+5645/5645 unit and 34/34 integration.
+
+**Next Action:** the nyquist gate — `/gsd-validate-phase 115` — then mark the
+phase complete, then Phase 116 (Load-time workflow convergence, WCONV-01..03),
+Phase 117 (Measured `agent()` failure evidence), and the milestone lifecycle.
+Resume the whole remainder with `/gsd-autonomous --from 115`; it will skip the
+finished work and pick up at the outstanding gate.
+
+Two things this session settled that later phases should not re-litigate:
+
+- **A plugin-supplied file name could forge lines in the rendered warning block.**
+  `forMessage` escaped the name inside `reason` while `softFailWarning`
+  interpolated it raw one function away, and a third span (`reason` on the IO
+  paths, where an errno quotes the offending path back) was missed by the review
+  and caught by the fix pass. All three now route through the exported
+  `forMessage`. The lesson recorded in `115-SECURITY.md`: a mitigation can be
+  true of the component it names and false in the composer beside it.
+- **An `accept` justified by "pre-existing and unchanged" is not a safe accept.**
+  `T-115-15` reasoned exactly that way and was falsified — widening the render to
+  `install` and `reinstall` is what made the unescaped span reachable from them.
+
+Carried forward: Broken Windows **#37** (open) — `PathContainmentError`
+interpolates the untrusted resolved child path raw, so escaping a caller's label
+closes nothing. Measured at **15 non-constant labels across 58 call sites**, not
+the 1-of-23 first recorded; that correction is the twelfth instance of this
+milestone's short-enumeration pattern and the first one written by the
+orchestrator rather than found in a plan.
+
+**Superseded:** 2026-09-09T02:25:41Z
 
 **Stopped At:** Session resumed from `HANDOFF.json`. Phase 115 is planned (6
 plans, 3 waves, `4621fd24`) and the plan-checker gate has not run.
