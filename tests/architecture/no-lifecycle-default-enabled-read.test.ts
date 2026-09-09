@@ -55,7 +55,6 @@ import { assertNoForbiddenSurface } from "./source-scan.ts";
  *   helper; never hand-roll a raw read plus a match (D-98-09, D-98-10).
  */
 const FORBIDDEN_TARGETS: ReadonlyArray<string> = [
-  "extensions/pi-claude-marketplace/orchestrators/plugin/update.ts",
   "extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts",
   "extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts",
   "extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts",

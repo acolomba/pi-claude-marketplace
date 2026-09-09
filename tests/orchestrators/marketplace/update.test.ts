@@ -3217,7 +3217,7 @@ test("WR-12: the autoupdate cascade row is byte-identical to the standalone upda
 
     const first = notifications[0];
     assert.ok(first !== undefined);
-    // Byte-identical to the row `tests/orchestrators/plugin/update.test.ts`
+    // Byte-identical to the row `tests/orchestrators/plugin/update-flow.test.ts`
     // pins for the standalone verb, down to the two-space cascade indent.
     assert.ok(
       first.message.includes("  ● hello v1.0.0 → v1.0.1 (updated) {malformed skill}"),

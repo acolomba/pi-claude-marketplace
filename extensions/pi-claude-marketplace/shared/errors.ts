@@ -199,7 +199,7 @@ function renderCleanupFailure(failure: CleanupFailure): string {
  * `notes` aggregated outside the notify path. The `notify` renderer trails
  * the cause chain automatically below the plugin row; this helper exists for
  * outcome-aggregation callsites (orchestrators/marketplace/update.ts,
- * orchestrators/plugin/reinstall.ts, orchestrators/plugin/update.ts) that
+ * orchestrators/plugin/reinstall.ts, orchestrators/plugin/update-flow.ts) that
  * need the same text without going through the notify channel.
  *
  * Single canonical implementation here is the source of truth -- if the

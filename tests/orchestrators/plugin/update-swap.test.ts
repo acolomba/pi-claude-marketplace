@@ -14,7 +14,7 @@ import { locationsFor } from "../../../extensions/pi-claude-marketplace/persiste
 import { loadState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 
-// The legacy flow suite supplies the real bridge, filesystem, rollback, and
+// The flow suite supplies the real bridge, filesystem, rollback, and
 // state-ledger fixtures while this mirrored owner pair proves they execute
 // through the extracted swap module.
 import { seedPathMarketplace, withHermeticHome } from "./update-flow.test.ts";

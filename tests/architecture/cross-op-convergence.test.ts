@@ -182,7 +182,7 @@ const INVOKERS: Record<string, Invoker> = {
       ...(mode === "explicit" && { scope: "project" as const }),
     });
   },
-  // plugin update (marketplace target). update.test.ts ATTR-02.
+  // plugin update (marketplace target). update-flow.test.ts ATTR-02.
   "update (plugin)": async ({ ctx, pi, cwd, mode }) => {
     await createUpdatePlugins()({
       ctx,
@@ -216,7 +216,7 @@ const INVOKERS: Record<string, Invoker> = {
   },
   // marketplace update -- converged via the cross-op gate. A mock gitOps is
   // injected so a (regression) stray network call would be recorded; the
-  // pre-guard miss short-circuits before it is reached (NFR-5). update.test.ts
+  // pre-guard miss short-circuits before it is reached (NFR-5). update-flow.test.ts
   // SC#1.
   "marketplace update": async ({ ctx, pi, cwd, mode }) => {
     const { gitOps } = createGitOps();

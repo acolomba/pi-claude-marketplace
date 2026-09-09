@@ -27,7 +27,7 @@ import { assertNoForbiddenSurface } from "./source-scan.ts";
  *   entrypoint name. None of the three is read-only.
  *
  * Exempt files (do NOT add):
- *   - orchestrators/plugin/update.ts
+ *   - orchestrators/plugin/update-flow.ts
  *     PUP-2 syncClone REQUIRES gitOps; the orchestrator legitimately imports
  *     `GitOps` via the `orchestrators/marketplace/shared.ts` re-export
  *     (Pattern S-9). Adding it here would break update.
@@ -44,7 +44,7 @@ import { assertNoForbiddenSurface } from "./source-scan.ts";
  *   Planting `import { clone } from "platform/git.ts"` plus a `clone()` call
  *   in install-flow.ts was observed leaving `npm run fallow` at exit 0, while this
  *   test failed. Three reasons, each independent:
- *     1. `orchestrators` -> `platform` is a LEGAL edge -- update.ts,
+ *     1. `orchestrators` -> `platform` is a LEGAL edge -- update-flow.ts,
  *        clone-cache.ts and auth-host.ts all need it -- so an import rule at
  *        zone granularity cannot forbid it for three files only.
  *     2. Splitting a narrow `orchestrators-network-free` zone out was tried and
@@ -65,10 +65,8 @@ import { assertNoForbiddenSurface } from "./source-scan.ts";
  *   the assertion would fail on prose.
  */
 const FORBIDDEN_TARGETS: ReadonlyArray<string> = [
-  // NFR-5: the update composition root binds preflight, swap, and cascade but
-  // names no git surface. The retained update.ts hub remains the one exempt
-  // owner because it still owns refresh enumeration and the injected git seam.
-  "extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts",
+  // The update flow owns refresh enumeration and its injected Git seam, so it
+  // remains the exact update exemption documented above and is not gated here.
   // NFR-5 (amended): both install owners carry ZERO git surface of their own. A
   // git-source (url / git-subdir / github) clone is delegated to the
   // install-clone-probe.ts leaf, which reaches the clone-cache.ts sibling seam
@@ -104,7 +102,7 @@ const FORBIDDEN_TARGETS: ReadonlyArray<string> = [
   // FTCH-01: fetch reaches git ONLY through the clone-cache.ts seam (by
   // entrypoint name), install-style. It names zero gitOps surface, so it is
   // locked here permanently. It is NOT exempt: among the gated orchestrator
-  // candidates, update.ts is the only file allowed the gitOps surface (seam
+  // candidates, update-flow.ts is the only file allowed the gitOps surface (seam
   // files such as clone-cache.ts sit outside this gate's candidate set).
   "extensions/pi-claude-marketplace/orchestrators/plugin/fetch.ts",
   // NFR-5 / OUT-05: the resolver now answers a question for `list` and `info`,
@@ -133,6 +131,6 @@ test("NFR-5 + PI-2 + PL-3 + PRL-07: network-free orchestrators have zero gitOps 
     FORBIDDEN_TARGETS,
     FORBIDDEN_PATTERNS,
     (offenders) =>
-      `NFR-5 / PI-2 / PL-3 / PRL-07 violation: gitOps surface detected in network-free module(s):\n  ${offenders.join("\n  ")}\n  (every gated target is network-free by contract; among the gated orchestrator candidates, only update.ts is permitted to import gitOps via Pattern S-9.)`,
+      `NFR-5 / PI-2 / PL-3 / PRL-07 violation: gitOps surface detected in network-free module(s):\n  ${offenders.join("\n  ")}\n  (every gated target is network-free by contract; among the gated orchestrator candidates, only update-flow.ts is permitted to import gitOps via Pattern S-9.)`,
   );
 });

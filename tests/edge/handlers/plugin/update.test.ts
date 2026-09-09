@@ -54,7 +54,7 @@
 // records, both scopes' base and override config layers, and the generated
 // agent files -- compared as ONE whole value. The delegating cases deliberately
 // do NOT assert the notification body: that value belongs to
-// tests/orchestrators/plugin/update.test.ts, and re-deriving it here would
+// tests/orchestrators/plugin/update-flow.test.ts, and re-deriving it here would
 // restate a fact another pair owns.
 //
 // The negative half of D-116-06 is proven in full. Every rejecting case sizes
