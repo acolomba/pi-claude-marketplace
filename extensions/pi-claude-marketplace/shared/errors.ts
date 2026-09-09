@@ -145,7 +145,7 @@ export function cleanupFailuresFromError(err: unknown): readonly CleanupFailure[
  *
  * NFR-9: surfaces only `Error.message` (or `String`/
  * `Object.prototype.toString` fallback for non-Error). No `.stack`, no
- * absolute paths. `shared/notify.ts` consumes this walker via
+ * absolute paths. `shared/notification-grammar.ts` consumes this walker via
  * `renderIndentedCauseChain` so the trailer lands automatically below every
  * failed / manual-recovery plugin row.
  *
@@ -366,7 +366,8 @@ export class CrossPluginConflictError extends Error {
  * `runPhases` result unwinds the staged resources via the ledger's
  * `undo` chain; `formatRollbackError` returns the structured rollback
  * result and the orchestrator composes the final user message via the
- * `notify(ctx, NotificationMessage)` path (`shared/notify.ts`).
+ * `notifyWithContext` path (`shared/notify-context.ts`), whose dispatch tail is
+ * `shared/notification-dispatch.ts`.
  */
 export class ConcurrentInstallError extends Error {
   readonly plugin: string;
@@ -530,11 +531,11 @@ export class PluginUpdatePhase3Error extends Error {
  * when a rollback of a partially-completed `replace*Internal` swap
  * leaks files / directories the caller must clean up by hand. The
  * manual-recovery anchor is NOT embedded in `.message` -- per
- * MSG-MR-1 / MSG-MR-2 the manual-recovery row is composed at the notify
- * boundary in `shared/notify.ts`. Bridges produce STRUCTURED data
+ * MSG-MR-1 / MSG-MR-2 the manual-recovery row is composed by
+ * `shared/notification-grammar.ts` before dispatch. Bridges produce STRUCTURED data
  * (`.leaks`); the orchestrator (`orchestrators/plugin/reinstall.ts` reason
  * narrowing and the cascade-row mapper) type-checks the Error instead of
- * substring-matching the message text. `shared/notify.ts` reads `.leaks`
+ * substring-matching the message text. `shared/notification-grammar.ts` reads `.leaks`
  * directly to name the leaked paths on the rendered row (AS-7).
  *
  * `Error.cause` is set via the standard `ErrorOptions` bag (mirrors the

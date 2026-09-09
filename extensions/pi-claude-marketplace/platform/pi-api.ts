@@ -8,7 +8,7 @@
 // `hasLoadedPiMcpAdapter` / `softDepStatus`) live here because they
 // inspect `pi.getAllTools()`, which belongs to the external Pi API
 // surface. `softDepStatus(pi)` returns a `SoftDepStatus` snapshot that
-// `shared/notify.ts` reads once per render to decide whether to append the
+// `shared/notification-dispatch.ts` reads once per render to decide whether to append the
 // `requires pi-subagents` / `requires pi-mcp` markers to a plugin row whose
 // `dependencies` declare the kind.
 
