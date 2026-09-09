@@ -42,11 +42,11 @@ Only the requirements below are new, and all of them exist because #154 landed.
 
 <!-- Seams: domain/workflow-script.ts (admitWorkflowScript's decision order, the parseScript result the gates read), bridges/workflows/stage.ts (the warnings[] accumulator), docs/workflows-compatibility.md (the admit-versus-run table). Backlog rationale: BACKLOG.md WGATE-01. -->
 
-- [ ] **WGATE-01**: A workflow script whose shape the host engine will refuse at invocation installs with a per-script warning naming the refusing gate, so a plugin author learns at install time instead of at first invocation. The install still succeeds and sibling scripts are unaffected.
-- [ ] **WGATE-02**: The six gate checks read off the acorn parse `admitWorkflowScript` already performs. No second parse, and no vendored engine internal beyond what is needed to name the gate.
-- [ ] **WGATE-03**: A gate warning never refuses a script and never fails a plugin. This is the requirement that keeps the self-correcting error direction: if a later engine relaxes a gate, the cost is one spurious warning rather than a blocked install that only an extension release can clear.
-- [ ] **WGATE-04**: The determinism blocklist keeps its existing refusal behavior. It stays the one replicated gate because it is the one whose failure the engine reports wrongly -- a raw-text screen cannot tell a call from a mention, so a script is refused for a rule its comment merely names.
-- [ ] **WGATE-05**: `docs/workflows-compatibility.md`'s admit-versus-run table restates its "Replicated by this bridge?" column as replicate / warn / neither, so the published contract matches shipped behavior rather than describing the six gates as unhandled.
+- [x] **WGATE-01**: A workflow script whose shape the host engine will refuse at invocation installs with a per-script warning naming the refusing gate, so a plugin author learns at install time instead of at first invocation. The install still succeeds and sibling scripts are unaffected.
+- [x] **WGATE-02**: The six gate checks read off the acorn parse `admitWorkflowScript` already performs. No second parse, and no vendored engine internal beyond what is needed to name the gate.
+- [x] **WGATE-03**: A gate warning never refuses a script and never fails a plugin. This is the requirement that keeps the self-correcting error direction: if a later engine relaxes a gate, the cost is one spurious warning rather than a blocked install that only an extension release can clear.
+- [x] **WGATE-04**: The determinism blocklist keeps its existing refusal behavior. It stays the one replicated gate because it is the one whose failure the engine reports wrongly -- a raw-text screen cannot tell a call from a mention, so a script is refused for a rule its comment merely names.
+- [x] **WGATE-05**: `docs/workflows-compatibility.md`'s admit-versus-run table restates its "Replicated by this bridge?" column as replicate / warn / neither, so the published contract matches shipped behavior rather than describing the six gates as unhandled.
 
 ### Convergence
 
@@ -67,7 +67,7 @@ Only the requirements below are new, and all of them exist because #154 landed.
 
 <!-- Seams: .planning/BACKLOG.md (the trailing <!-- Pruned --> convention), .planning/workstreams/workflows/milestones/workflows-phases/105-*/105-VERIFICATION.md. -->
 
-- [ ] **WDOCS-01**: `WFLW-01` is pruned from `.planning/BACKLOG.md` under the file's existing pruned-footer convention, naming the milestone that closed it, so the backlog stops advertising shipped work as open.
+- [x] **WDOCS-01**: `WFLW-01` is pruned from `.planning/BACKLOG.md` under the file's existing pruned-footer convention, naming the milestone that closed it, so the backlog stops advertising shipped work as open.
 - [ ] **WDOCS-02**: `105-VERIFICATION.md` no longer contradicts itself. Its evidence table currently records the live canary as `UNRUN` while its own frontmatter and status line record it closed on 2026-08-16; the current record wins and the stale wording goes.
 
 ## Future Requirements
@@ -115,17 +115,17 @@ Which phases cover which requirements. Updated during roadmap creation.
 | WDOC-01 | Phase 114 | Complete |
 | WDOC-02 | Phase 114 | Complete |
 | WDOC-03 | Phase 114 | Complete (verification-only — `acorn` was already declared) |
-| WGATE-01 | Phase 115 | Pending |
-| WGATE-02 | Phase 115 | Pending |
-| WGATE-03 | Phase 115 | Pending |
-| WGATE-04 | Phase 115 | Pending |
-| WGATE-05 | Phase 115 | Pending |
+| WGATE-01 | Phase 115 | Complete |
+| WGATE-02 | Phase 115 | Complete |
+| WGATE-03 | Phase 115 | Complete |
+| WGATE-04 | Phase 115 | Complete |
+| WGATE-05 | Phase 115 | Complete |
 | WCONV-01 | Phase 116 | Pending |
 | WCONV-02 | Phase 116 | Pending |
 | WCONV-03 | Phase 116 | Pending |
 | WEVID-01 | Phase 117 | Pending |
 | WEVID-02 | Phase 117 | Pending |
-| WDOCS-01 | Phase 115 | Pending |
+| WDOCS-01 | Phase 115 | Complete |
 | WDOCS-02 | Phase 117 | Pending |
 
 **Coverage:**

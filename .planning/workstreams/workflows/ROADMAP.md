@@ -125,7 +125,7 @@ it rides in Phase 115 simply because that is the phase whose own backlog entry
 (`WGATE-01`) sits in the same file, and one editor should visit `BACKLOG.md`
 once.
 
-- [ ] **Phase 115: Install-time admission-gate warnings** — the seven unreplicated engine checks become per-script warnings read off the parse already in hand, never refusals; the published contract and the backlog catch up (WGATE-01..05, WDOCS-01 — prunes the stale `WFLW-01` entry)
+- [x] **Phase 115: Install-time admission-gate warnings** — the six unreplicated engine checks become per-script warnings read off the parse already in hand, never refusals; the published contract and the backlog catch up (WGATE-01..05, WDOCS-01 — prunes the stale `WFLW-01` entry) (completed 2026-09-09)
 - [ ] **Phase 116: Load-time workflow convergence** — a cleanly-installed record whose supported set grew converges on the next load, once, and says so on its row (WCONV-01..03)
 - [ ] **Phase 117: Measured `agent()` failure evidence** — the live canary drives the host engine's `agent()` failure path with a negative control, and the doc restates the divergence at the grade it was actually measured to (WEVID-01, WEVID-02, WDOCS-02)
 
@@ -598,18 +598,18 @@ Plans:
 
 **Wave 1**
 
-- [ ] 115-01-PLAN.md — Read the six engine gates off the parse already in hand, carry one per-script warning out, and make a standalone install show it
-- [ ] 115-06-PLAN.md — Prune the stale `WFLW-01` entry under the backlog's own pruned-footer convention
+- [x] 115-01-PLAN.md — Read the six engine gates off the parse already in hand, carry one per-script warning out, and make a standalone install show it
+- [x] 115-06-PLAN.md — Prune the stale `WFLW-01` entry under the backlog's own pruned-footer convention
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 115-02-PLAN.md — One warning line per file in both tenses, the WGATE-02 single-parse source gate, and the four falsified comments retired
-- [ ] 115-04-PLAN.md — `info` shows the gate warning in preview tense, with its rendered bytes published as a catalog state
+- [x] 115-02-PLAN.md — One warning line per file in both tenses, the WGATE-02 single-parse source gate, and the four falsified comments retired
+- [x] 115-04-PLAN.md — `info` shows the gate warning in preview tense, with its rendered bytes published as a catalog state
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 115-03-PLAN.md — Reinstall surfaces the discovery channel standalone, and criterion 2 lands as a byte assertion
-- [ ] 115-05-PLAN.md — Restate the published contract as replicate / warn / neither, bind it to the source union, and run the four-direction negative control
+- [x] 115-03-PLAN.md — Reinstall surfaces the discovery channel standalone, and criterion 2 lands as a byte assertion
+- [x] 115-05-PLAN.md — Restate the published contract as replicate / warn / neither, bind it to the source union, and run the four-direction negative control
 
 ### Phase 116: Load-time workflow convergence
 
@@ -674,6 +674,6 @@ Plans:
 | 112. Install and removal lifecycle | 4/4 | Complete    | 2026-09-05 |
 | 113. Update, enable/disable, reconcile | 5/5 | Complete    | 2026-09-06 |
 | 114. Degradation and documentation | 5/5 | Complete    | 2026-09-08 |
-| 115. Install-time admission-gate warnings | 0/? | Not started | - |
+| 115. Install-time admission-gate warnings | 6/6 | Complete    | 2026-09-09 |
 | 116. Load-time workflow convergence | 0/? | Not started | - |
 | 117. Measured `agent()` failure evidence | 0/? | Not started | - |

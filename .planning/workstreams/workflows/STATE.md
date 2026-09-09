@@ -2,13 +2,13 @@
 gsd_state_version: "1.0"
 milestone: workflows-replay
 milestone_name: Workflow Bridge Replay onto main
-current_phase: 115
-current_phase_name: Install-time admission-gate warnings
-current_plan: 6 of 6 executed; verified 6/6, SECURED 30/30
-status: verifying
-stopped_at: Phase 115 executed, reviewed, fixed, verified and secured; nyquist gate is next
-last_updated: "2026-09-09T12:05:00.000Z"
-state_head: 66625997
+current_phase: 116
+current_phase_name: Load-time workflow convergence
+current_plan: Not started
+status: planning
+stopped_at: Phase 115 complete, ready to plan Phase 116
+last_updated: "2026-09-09T13:17:29.757Z"
+state_head: ec9ac05ef9738df7caf72eb8dec30055f7fd80d0
 progress:
   total_phases: 9
   completed_phases: 6
@@ -35,11 +35,18 @@ the gaps the bridge originally shipped with.
 
 ## Current Position
 
-Phase: 115 — Install-time admission-gate warnings
-Plan: 6 of 6 executed. Reviewed (1 critical + 6 warnings, all fixed), verified
-6/6, SECURED 30/30 with `threats_open: 0`
-Status: One gate short of complete — the nyquist gate has not run. The replay milestone (109-114) is
-complete; 115-117 are the hardening phases.
+Phase: 116 — Load-time workflow convergence
+Plan: Not started
+Status: Ready to plan
+
+Phase 115 is complete on every gate. The replay milestone (109-114) is complete
+and the first of the three hardening phases has now closed behind it; 116 and 117
+remain.
+
+Phase 115 closed at 6/6 plans, a deep code review of 1 critical and 6 warnings
+with all 7 fixed, goal verification 6/6, security SECURED at 30/30 threats closed
+with `threats_open: 0`, and the nyquist gate validated with zero gaps. Its two
+deferred items were re-measured and closed rather than carried.
 
 Phase 114 closed the replay. It made the host workflow engine the third soft
 dependency and published `docs/workflows-compatibility.md`, the contract of the
@@ -86,11 +93,11 @@ probe-purity gate instead.
 
 ## Progress
 
-**Phases Complete:** 6/9 verified (Phases 109-114 replay, 115-117 hardening)
-**Current Plan:** 6/6 complete
+**Phases Complete:** 7/9 verified (Phases 109-114 replay, 115-117 hardening)
+**Current Plan:** Not started
 
 ```text
-[=======---] 67%
+[========--] 78%
 ```
 
 | Phase | Name | Status |
@@ -101,7 +108,7 @@ probe-purity gate instead.
 | 112 | Install and removal lifecycle | Complete (4/4 plans, verified) |
 | 113 | Update, enable/disable, reconcile | Complete (5/5 plans, verified 9/9) |
 | 114 | Degradation and documentation | Complete (5/5 plans, verified 7/7) |
-| 115 | Install-time admission-gate warnings | 6/6 executed, verified 6/6, secured (hardening) |
+| 115 | Install-time admission-gate warnings | Complete (6/6 plans, verified 6/6, secured 30/30, nyquist 0 gaps) |
 | 116 | Load-time workflow convergence | Not started (hardening) |
 | 117 | Measured `agent()` failure evidence | Not started (hardening) |
 
@@ -210,17 +217,15 @@ implementation.
 
 **Last session:** 2026-09-09T12:05:00Z
 
-**Stopped At:** Phase 115 is executed and closed on every gate but one. All six
-plans have SUMMARYs; the deep code review found 1 critical and 6 warnings and all
-7 were fixed; goal verification passed 6/6; the security audit returned SECURED
-with 30/30 threats closed and `threats_open: 0`. `npm run check` is green at
-5645/5645 unit and 34/34 integration.
+**Stopped At:** Phase 115 complete and marked. All six plans have SUMMARYs; the
+deep code review found 1 critical and 6 warnings and all 7 were fixed; goal
+verification passed 6/6; the security audit returned SECURED with 30/30 threats
+closed and `threats_open: 0`; the nyquist gate validated with zero gaps. `npm run
+check` is green at 5645/5645 unit and 34/34 integration.
 
-**Next Action:** the nyquist gate — `/gsd-validate-phase 115` — then mark the
-phase complete, then Phase 116 (Load-time workflow convergence, WCONV-01..03),
-Phase 117 (Measured `agent()` failure evidence), and the milestone lifecycle.
-Resume the whole remainder with `/gsd-autonomous --from 115`; it will skip the
-finished work and pick up at the outstanding gate.
+**Next Action:** Phase 116 (Load-time workflow convergence, WCONV-01..03), then
+Phase 117 (Measured `agent()` failure evidence), then the milestone lifecycle.
+Resume with `/gsd-autonomous --from 116`.
 
 Two things this session settled that later phases should not re-litigate:
 
