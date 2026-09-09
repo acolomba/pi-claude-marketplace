@@ -3,9 +3,9 @@ phase: "115"
 slug: "install-time-admission-gate-warnings"
 # status lifecycle: draft (seeded by plan-phase) → validated (set by validate-phase §6)
 # audit-milestone §5.5 distinguishes NOT-VALIDATED (draft) from PARTIAL (validated + nyquist_compliant: false) (#2117)
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: validated
+nyquist_compliant: true
+wave_0_complete: true
 created: "2026-09-08"
 ---
 
@@ -53,7 +53,7 @@ A new top-level `tests/` directory reddens
 | WGATE-01 | the warning reaches a **standalone** reinstall's rendered output (D-115-05) | unit | `node --test tests/orchestrators/plugin/reinstall.test.ts` | ✅ extend |
 | WGATE-01 | the warning reaches `info` in preview tense | unit | `node --test tests/orchestrators/plugin/info.test.ts` | ✅ extend |
 | WGATE-01 | sibling scripts install with no warning of their own | unit | `node --test tests/bridges/workflows/discover.test.ts` | ✅ extend |
-| WGATE-02 | one `parse()` per script — no second parse | architecture | `node --test tests/architecture/<no-second-parse>.test.ts` | ❌ Wave 0 |
+| WGATE-02 | one `parse()` per script — no second parse | architecture | `node --test tests/architecture/workflows-single-parse.test.ts` | ✅ created |
 | WGATE-03 | a gate warning changes no plugin-level status, glyph or disposition — **asserted on row BYTES**, not inferred from the channel being separate (D-115-06) | unit (byte) | `node --test tests/orchestrators/plugin/install.test.ts` | ✅ extend |
 | WGATE-03 | a gate-warned script's verdict stays `named` / `stem-fallback` | unit | `node --test tests/domain/workflow-script.test.ts` | ✅ extend |
 | WGATE-04 | the four determinism causes and reasons unchanged; no gate line joins them | unit (regression) | `node --test tests/domain/workflow-script.test.ts` | ✅ extend |
@@ -66,12 +66,12 @@ A new top-level `tests/` directory reddens
 
 ## Wave 0 Requirements
 
-- [ ] **Decide the module boundary before writing tasks — it changes the file list.** If the gate
+- [x] **Decide the module boundary before writing tasks — it changes the file list.** If the gate
       reader lands in a NEW module, `npm run test:corresponding` requires a paired
       `tests/domain/<module>.test.ts`. If it lives inside `domain/workflow-script.ts`, the
       existing `tests/domain/workflow-script.test.ts` satisfies the pairing gate and no new file
       is needed.
-- [ ] An architecture assertion for WGATE-02: `domain/workflow-script.ts` contains exactly one
+- [x] An architecture assertion for WGATE-02: `domain/workflow-script.ts` contains exactly one
       `parse(` call site. `tests/architecture/source-scan.ts`'s `assertNoForbiddenSurface` is the
       right primitive. Does not exist today.
       **PLANNED:** this gap is closed by `115-02-PLAN.md` Task 2, which creates
@@ -79,10 +79,12 @@ A new top-level `tests/` directory reddens
       in the comment-stripped module) plus the evaluator-surface case over
       `domain/workflow-script.ts` and `bridges/workflows/`, each proven by a planted violation.
       The same task also carries the WGATE-03 containment case, which pins `readEngineGate`'s
-      `try`/`catch` in source rather than only in a SUMMARY transcript. The `File exists?` column
-      above still reads `❌ Wave 0` because the file genuinely does not exist yet; planned is not
-      written.
-- [ ] Everything else: **no gaps.** Every other target file exists and already has a paired suite.
+      `try`/`catch` in source rather than only in a SUMMARY transcript. **CLOSED:** the file exists at 210 lines and carries all three cases —
+      the `parse` count case, the evaluator-surface case, and `readEngineGate`'s `try`/`catch`
+      containment case. All three run green (`node --test
+      tests/architecture/workflows-single-parse.test.ts`, 3/3). The `File exists?` column above
+      now reads `✅ created`.
+- [x] Everything else: **no gaps.** Every other target file exists and already has a paired suite.
 
 ---
 
@@ -141,12 +143,56 @@ Asserting only one script per refusal path catches a rewrite but not a *reorderi
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] All four totality-construct controls run, transcripts pasted into the SUMMARY
-- [ ] Criterion 3 pinned by the two structural-unreachability behaviors, not by comment
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags
+- [x] All four totality-construct controls run, transcripts pasted into the SUMMARY
+- [x] Criterion 3 pinned by the two structural-unreachability behaviors, not by comment
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** validated 2026-09-09 — nyquist-compliant, 0 gaps
+
+---
+
+## Validation Audit 2026-09-09
+
+| Metric | Count |
+|--------|-------|
+| Gaps found | 0 |
+| Resolved | 0 |
+| Escalated | 0 |
+
+The one gap this file recorded when it was seeded — WGATE-02's architecture
+assertion, listed as `❌ Wave 0` — was closed during execution by
+`115-02-PLAN.md` Task 2. No auditor was spawned: there was nothing left to fill.
+
+**How each row was settled — by measurement, not by reading the map.** The
+phase's own first anti-pattern is that an enumeration is shorter than the set it
+names, so the six-gate figure was re-derived rather than inherited: `GATE_ORDER`
+in `domain/workflow-script.ts` holds exactly six members, `GATE_PREDICATES`
+holds exactly six keys, and each of the six names appears in at least one
+assertion under `tests/`. Every mapped test file was then run.
+
+| Suite | Result |
+|---|---|
+| `workflow-script` + `discover` + `workflows-doc-pins` + `workflows-single-parse` | 160 pass, 0 fail |
+| `install` + `reinstall` + `info` | 428 pass, 0 fail |
+
+`tests/architecture/workflows-single-parse.test.ts` reports 3/3: the `parse`
+count case, the evaluator-surface case, and `readEngineGate`'s containment case.
+
+Both transcript-bearing sign-off items were confirmed against the artifacts
+rather than assumed. The four-direction negative control on the
+union-to-document construct is pasted verbatim in `115-05-SUMMARY.md`, run in
+the order 1, 4, restore, 2, restore, 3, restore; direction 3 was red, so the
+gate compares column values and not merely gate names. Criterion 3's two
+structural-unreachability behaviors are pinned as tests, not comments —
+`WGATE-04: refuses a script that is both unparseable and gate-tripping as
+unparseable alone` and `WGATE-04: refuses a script that is both nondeterministic
+and gate-tripping on the blocklist alone`.
+
+The one Manual-Only row that is checkable without judgement was checked:
+`WFLW-01` appears in `.planning/BACKLOG.md` only inside a pruned comment block
+whose footer cites `workflows-replay` (D-115-08). The two prose-judgement rows
+remain Manual-Only by design.
