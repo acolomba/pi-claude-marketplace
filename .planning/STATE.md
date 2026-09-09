@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 06
 current_phase_name: Assertion and Module Refinement
 status: executing
-stopped_at: Completed 06-16-PLAN.md
-last_updated: "2026-09-09T09:06:08.050Z"
+stopped_at: Completed 06-17-PLAN.md
+last_updated: "2026-09-09T09:19:54.666Z"
 last_activity: 2026-09-08
 last_activity_desc: Phase 06 execution started
-state_head: 786f8da176cd9f80e492a6eaa40a0294ee30617b
+state_head: aa575fe5c76035c13b76a835035668c5a1ce36e6
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 180
-  completed_plans: 144
+  completed_plans: 145
   percent: 11
 ---
 
@@ -33,7 +33,7 @@ component as a working Pi artifact.
 
 Phase: 06 (Assertion and Module Refinement) — EXECUTING
 Next: Discuss Phase 6
-Plan: 17 of 52
+Plan: 18 of 52
 Status: Ready to execute
 Last activity: 2026-09-08 — Phase 06 execution started
 
@@ -324,6 +324,7 @@ Last activity: 2026-09-08 — Phase 06 execution started
 | Phase 06 P14 | 31min | 2 tasks | 48 files |
 | Phase 06 P15 | 9min | 2 tasks | 3 files |
 | Phase 06 P16 | 9min | 2 tasks | 0 files |
+| Phase 06 P17 | 9min | 2 tasks | 0 files |
 
 ## Accumulated Context
 
@@ -767,6 +768,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 06]: Point authentication callback documentation to makeRawNotifyFn and error rendering documentation to notification-grammar.ts.
 - [Phase 06]: Leave all eight 06-16 handlers byte-for-byte unchanged because Plan 06-14 already migrated every notification call to the genuine notification-dispatch owner.
 - [Phase 06]: Treat notify and notifyUsageError as genuine dispatch-owner implementations, not compatibility seams; both render or dispatch directly to the Pi notification context.
+- [Phase 06]: Leave all seven 06-17 consumers byte-for-byte unchanged because Plan 06-14 already migrated every notification symbol to its genuine named owner. — Avoids no-op import churn while retaining complete ownership and behavior proof.
+- [Phase 06]: Keep tools on notification-types.ts and root raw notifications on notification-dispatch.ts. — Each consumer imports only the genuine owner of the symbol it uses.
 
 ### Pending Todos
 
@@ -819,7 +822,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 06-16-PLAN.md
+**Stopped at:** Completed 06-17-PLAN.md
 
 Phase 04 completed all seven plans and closed AUTH-01 and TREF-01 through
 TREF-03. Independent verification passed 4/4 with no behavioral or UAT gap;
@@ -837,7 +840,7 @@ independent verification passed 6/6 with zero unverified behaviors.
 **Read beside it:** `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`, the
 Phase 01 terminal evidence ledger, and Phase 5's roadmap criteria.
 
-Last session: 2026-09-09T09:06:07.418Z
+Last session: 2026-09-09T09:19:54.052Z
 
 **Next:** Discuss Phase 06 to define the assertion-strengthening and approved
 module-refinement work before planning.
