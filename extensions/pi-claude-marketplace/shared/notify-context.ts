@@ -1,14 +1,14 @@
 import {
-  emitContextCascade,
-  emitReconcileAppliedContextCascade,
-  emitUpdateNoOpCascade,
-} from "./notify.ts";
-import {
   type CascadeNotificationMessage,
   type MarketplaceNotificationMessage,
   type PluginNotificationMessage,
   type ReconcileAppliedCascadeMessage,
 } from "./notification-types.ts";
+import {
+  emitContextCascade,
+  emitReconcileAppliedContextCascade,
+  emitUpdateNoOpCascade,
+} from "./notify.ts";
 
 import type { Scope } from "./types.ts";
 import type { NotificationContext, SoftDepStatus, ToolInventory } from "../platform/pi-api.ts";

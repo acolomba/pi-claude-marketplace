@@ -1,6 +1,16 @@
 import { causeChainTrailer, errorMessage, PluginShapeError } from "../../shared/errors.ts";
 import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
 import {
+  type ContentReason,
+  type PluginDisabledMessage,
+  type PluginFailedMessage,
+  type PluginInstalledMessage,
+  type PluginPartiallyAvailableMessage,
+  type PluginPartiallyInstalledMessage,
+  type PluginUnavailableMessage,
+  type StatusToken,
+} from "../../shared/notification-types.ts";
+import {
   ICON_DISABLED,
   ICON_INSTALLED,
   ICON_UNINSTALLABLE,
@@ -11,16 +21,6 @@ import {
   renderUnavailableRow,
   renderVersion,
 } from "../../shared/notify.ts";
-import {
-  type ContentReason,
-  type PluginDisabledMessage,
-  type PluginFailedMessage,
-  type PluginInstalledMessage,
-  type PluginPartiallyAvailableMessage,
-  type PluginPartiallyInstalledMessage,
-  type PluginUnavailableMessage,
-  type StatusToken,
-} from "../../shared/notification-types.ts";
 import { PathContainmentError } from "../../shared/path-safety.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 

@@ -13,6 +13,14 @@ import {
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState as defaultLoadState, type ExtensionState } from "../../persistence/state-io.ts";
 import { ConcurrentInstallError, errorMessage, PluginShapeError } from "../../shared/errors.ts";
+import { type ContentReason } from "../../shared/notification-types.ts";
+import {
+  type MarketplaceStatus,
+  type PluginFailedMessage,
+  type PluginInstalledMessage,
+  type PluginSkippedMessage,
+  type PluginUnavailableMessage,
+} from "../../shared/notification-types.ts";
 import {
   notifyWithContext,
   type MarketplaceRows,
@@ -39,14 +47,6 @@ import type { InstallPluginOutcome } from "../../orchestrators/types.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
-import { type ContentReason } from "../../shared/notification-types.ts";
-import {
-  type MarketplaceStatus,
-  type PluginFailedMessage,
-  type PluginInstalledMessage,
-  type PluginSkippedMessage,
-  type PluginUnavailableMessage,
-} from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 
 export interface MarketplaceAddedOutcome {

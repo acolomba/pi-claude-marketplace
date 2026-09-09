@@ -12,6 +12,13 @@
 // `renderPluginRow` `updated` / `skipped` / `failed` arms, so dispatch is
 // byte-identical.
 
+import {
+  type ContentReason,
+  type PluginFailedMessage,
+  type PluginPartiallyInstalledMessage,
+  type PluginSkippedMessage,
+  type PluginUpdatedMessage,
+} from "../../shared/notification-types.ts";
 import { skipSeverity } from "../../shared/notify-reasons.ts";
 import {
   ICON_INSTALLED,
@@ -23,13 +30,6 @@ import {
   pluginRow,
   renderScopeBracket,
 } from "../../shared/notify.ts";
-import {
-  type ContentReason,
-  type PluginFailedMessage,
-  type PluginPartiallyInstalledMessage,
-  type PluginSkippedMessage,
-  type PluginUpdatedMessage,
-} from "../../shared/notification-types.ts";
 import { updatedRowFromOutcome } from "../plugin/update-row.ts";
 
 import type { CommandContext } from "../../shared/notify-context.ts";

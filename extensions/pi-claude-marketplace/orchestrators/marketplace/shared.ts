@@ -43,6 +43,7 @@ import {
   MarketplaceNotFoundError,
   PluginShapeError,
 } from "../../shared/errors.ts";
+import { type ContentReason } from "../../shared/notification-types.ts";
 import { notify } from "../../shared/notify.ts";
 
 import type { UnstageAgentFailure } from "../../bridges/agents/types.ts";
@@ -51,7 +52,6 @@ import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { CredentialOps } from "../../platform/git-credential.ts";
 import type { OnAuthRequiredFn } from "../../platform/git.ts";
 import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
-import { type ContentReason } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 
 /**

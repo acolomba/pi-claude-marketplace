@@ -106,6 +106,8 @@ import {
   composeErrorWithCauseChain,
 } from "../../shared/errors.ts";
 import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
+import { type ContentReason } from "../../shared/notification-types.ts";
+import { type PluginFailedMessage } from "../../shared/notification-types.ts";
 import {
   notifyWithContext,
   type MarketplaceRows,
@@ -139,8 +141,6 @@ import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { CredentialOps } from "../../platform/git-credential.ts";
 import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
-import { type ContentReason } from "../../shared/notification-types.ts";
-import { type PluginFailedMessage } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { PluginUpdateFn, PluginUpdateOutcome } from "../types.ts";
 

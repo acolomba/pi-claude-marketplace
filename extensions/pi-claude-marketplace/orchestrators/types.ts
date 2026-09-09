@@ -7,9 +7,10 @@
 // D-01's escalation note about a future BridgeOps<Prep, Target>
 // belonging at this same path.
 
+import { type ContentReason } from "../shared/notification-types.ts";
+
 import type { CleanupFailure } from "../shared/errors.ts";
 import type { DegradeKind } from "../shared/notify-reasons.ts";
-import { type ContentReason } from "../shared/notification-types.ts";
 import type { Scope } from "../shared/types.ts";
 import type { LedgerDegradationSignals } from "./plugin/shared.ts";
 

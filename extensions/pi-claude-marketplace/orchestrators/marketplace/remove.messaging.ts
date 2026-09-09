@@ -13,11 +13,11 @@
 // shared row helpers the central `renderPluginRow` `uninstalled` / `failed` arms
 // call, so dispatch is byte-identical.
 
+import { type PluginFailedMessage } from "../../shared/notification-types.ts";
+import { type PluginUninstalledMessage, type Reason } from "../../shared/notification-types.ts";
 import { ICON_UNINSTALLABLE, pluginRow, renderUninstalledRow } from "../../shared/notify.ts";
 
 import type { CommandContext } from "../../shared/notify-context.ts";
-import { type PluginFailedMessage } from "../../shared/notification-types.ts";
-import { type PluginUninstalledMessage, type Reason } from "../../shared/notification-types.ts";
 
 /**
  * D-09 / MOD-01: the command-private reason owned by `marketplace remove`.

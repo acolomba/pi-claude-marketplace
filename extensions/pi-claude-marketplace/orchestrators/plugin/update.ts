@@ -117,6 +117,8 @@ import {
 } from "../../shared/errors.ts";
 import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
 import { RECOVERY_PLUGIN_REINSTALL_PREFIX } from "../../shared/markers.ts";
+import { type ContentReason } from "../../shared/notification-types.ts";
+import { type PluginFailedMessage } from "../../shared/notification-types.ts";
 import {
   notifyUpdateNoOpWithContext,
   notifyUpdateWithContext,
@@ -170,8 +172,6 @@ import type { NotificationContext, SoftDepStatus, ToolInventory } from "../../pl
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { HookSummaryEntry } from "../../shared/concerns/hooks.ts";
 import type { DegradeKind } from "../../shared/notify-reasons.ts";
-import { type ContentReason } from "../../shared/notification-types.ts";
-import { type PluginFailedMessage } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
 import type {

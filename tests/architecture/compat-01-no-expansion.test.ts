@@ -79,6 +79,12 @@ import {
   STATE_SCHEMA,
 } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import {
+  MARKETPLACE_STATUSES,
+  PLUGIN_STATUSES,
+  REASONS,
+  STATUS_TOKENS,
+} from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
+import {
   ICON_AVAILABLE,
   ICON_DISABLED,
   ICON_INSTALLED,
@@ -87,12 +93,6 @@ import {
   ICON_REMOTE,
   ICON_UNINSTALLABLE,
 } from "../../extensions/pi-claude-marketplace/shared/notify.ts";
-import {
-  MARKETPLACE_STATUSES,
-  PLUGIN_STATUSES,
-  REASONS,
-  STATUS_TOKENS,
-} from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
 import { REPO_ROOT, stripComments } from "./source-scan.ts";
 

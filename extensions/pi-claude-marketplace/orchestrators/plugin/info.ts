@@ -51,6 +51,12 @@ import { isRecordedButDisabled, type ExtensionState } from "../../persistence/st
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage, isErrnoException } from "../../shared/errors.ts";
 import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
+import { type ContentReason } from "../../shared/notification-types.ts";
+import {
+  type NotificationMessage,
+  type PluginInfoMessage,
+  type PluginInfoRow,
+} from "../../shared/notification-types.ts";
 import {
   notifyWithContext,
   type MarketplaceRows,
@@ -85,12 +91,6 @@ import type {
 } from "../../domain/resolver-types.ts";
 import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
 import type { HookSummaryEntry } from "../../shared/concerns/hooks.ts";
-import { type ContentReason } from "../../shared/notification-types.ts";
-import {
-  type NotificationMessage,
-  type PluginInfoMessage,
-  type PluginInfoRow,
-} from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
 import type { Dirent } from "node:fs";

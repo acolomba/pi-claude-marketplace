@@ -37,6 +37,7 @@ import { loadMergedScopeConfig, mergeScopeConfigs } from "../../persistence/conf
 import { locationsFor } from "../../persistence/locations.ts";
 import { buildConfigFromState } from "../../persistence/migrate-config.ts";
 import { loadState } from "../../persistence/state-io.ts";
+import { type ContentReason } from "../../shared/notification-types.ts";
 import {
   notifyWithContext,
   type MarketplaceRows,
@@ -58,7 +59,6 @@ import type { PlannedPluginInstall, ReconcilePlan } from "./types.ts";
 import type { MergedConfig, ScopeLoadOutcome } from "../../persistence/config-merge.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
-import { type ContentReason } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 
 export interface PendingReconcileOptions {

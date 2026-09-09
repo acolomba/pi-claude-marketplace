@@ -41,12 +41,12 @@ import { fileURLToPath } from "node:url";
 
 import { LIST_CONTEXT } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/list.messaging.ts";
 import { UPDATE_CONTEXT } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/update.messaging.ts";
+import { type NotificationMessage } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 import {
   notifyUpdateNoOpWithContext,
   notifyWithContext,
 } from "../../extensions/pi-claude-marketplace/shared/notify-context.ts";
 import { notify } from "../../extensions/pi-claude-marketplace/shared/notify.ts";
-import { type NotificationMessage } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 import { narrowUnsupportedKinds } from "../../extensions/pi-claude-marketplace/shared/probe-classifiers.ts";
 
 // ---------------------------------------------------------------------------

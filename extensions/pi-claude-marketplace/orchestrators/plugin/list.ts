@@ -65,25 +65,7 @@ import {
   type ExtensionState,
 } from "../../persistence/state-io.ts";
 import { errorMessage } from "../../shared/errors.ts";
-import {
-  notifyWithContext,
-  type MarketplaceRows,
-  type Plural,
-} from "../../shared/notify-context.ts";
 import { isScopeBearingListRow } from "../../shared/notification-types.ts";
-import {
-  narrowProbeError as sharedNarrowProbeError,
-  narrowResolverNotes as sharedNarrowResolverNotes,
-  narrowUnsupportedKinds,
-} from "../../shared/probe-classifiers.ts";
-
-import { makePresenceProbe } from "./git-source-probe.ts";
-import { LIST_CONTEXT, type ListMsg } from "./list.messaging.ts";
-import { classifyInstalledRecord, classifyManifestEntry } from "./plugin-state-classifier.ts";
-
-import type { ResolveContext } from "../../domain/resolver-types.ts";
-import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
-import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import {
   type PluginAvailableMessage,
@@ -98,6 +80,24 @@ import {
   type PluginPartiallyAvailableMessage,
   type PluginUpgradableMessage,
 } from "../../shared/notification-types.ts";
+import {
+  notifyWithContext,
+  type MarketplaceRows,
+  type Plural,
+} from "../../shared/notify-context.ts";
+import {
+  narrowProbeError as sharedNarrowProbeError,
+  narrowResolverNotes as sharedNarrowResolverNotes,
+  narrowUnsupportedKinds,
+} from "../../shared/probe-classifiers.ts";
+
+import { makePresenceProbe } from "./git-source-probe.ts";
+import { LIST_CONTEXT, type ListMsg } from "./list.messaging.ts";
+import { classifyInstalledRecord, classifyManifestEntry } from "./plugin-state-classifier.ts";
+
+import type { ResolveContext } from "../../domain/resolver-types.ts";
+import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
+import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type { Scope } from "../../shared/types.ts";
 
 /**

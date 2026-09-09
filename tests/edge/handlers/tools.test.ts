@@ -38,13 +38,13 @@ import {
 } from "../../../extensions/pi-claude-marketplace/edge/handlers/tools.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { type PluginNotificationMessage } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type {
   ExtensionAPI,
   ExtensionContext,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
-import { type PluginNotificationMessage } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 
 /**

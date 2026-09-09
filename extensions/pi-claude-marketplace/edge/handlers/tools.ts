@@ -40,10 +40,10 @@ import { loadVisibleMarketplaces } from "../../orchestrators/marketplace/shared.
 import { loadPluginListPayload } from "../../orchestrators/plugin/list.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { isScopeBearingListRow } from "../../shared/notification-types.ts";
+import { type PluginNotificationMessage } from "../../shared/notification-types.ts";
 
 import type { ParsedSource } from "../../domain/source.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
-import { type PluginNotificationMessage } from "../../shared/notification-types.ts";
 
 // ─── LLM tool parameter schemas (TypeBox) ─────────────────────────────────
 

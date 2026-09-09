@@ -15,8 +15,9 @@
 // and `(failed) {<reason>}` header forms carry no local status declaration and
 // route through the central header seam.
 
-import type { CommandContext } from "../../shared/notify-context.ts";
 import { type Reason } from "../../shared/notification-types.ts";
+
+import type { CommandContext } from "../../shared/notify-context.ts";
 
 /**
  * D-09 / MOD-01: command-private reasons owned by `marketplace add`. These two

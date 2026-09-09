@@ -48,6 +48,12 @@ import { loadConfig } from "../../persistence/config-io.ts";
 import { deletePluginConfigEntry } from "../../persistence/config-write-back.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { StateLockHeldError, errorMessage, isErrnoException } from "../../shared/errors.ts";
+import { type ContentReason } from "../../shared/notification-types.ts";
+import {
+  type PluginFailedMessage,
+  type PluginUninstalledMessage,
+  type Reason,
+} from "../../shared/notification-types.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 import { AgentsUnstageFailureError, cascadeUnstagePlugin } from "../marketplace/shared.ts";
@@ -66,12 +72,6 @@ import type { HooksRouting } from "../../bridges/hooks/index.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
-import { type ContentReason } from "../../shared/notification-types.ts";
-import {
-  type PluginFailedMessage,
-  type PluginUninstalledMessage,
-  type Reason,
-} from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { UnstageOutcome } from "../marketplace/shared.ts";
 

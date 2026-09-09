@@ -30,6 +30,7 @@ import { buildAuthCallbacks } from "../../../extensions/pi-claude-marketplace/pl
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { PluginShapeError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
+import { type Severity } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
@@ -46,7 +47,6 @@ import type {
   NotificationContext,
   ToolInventory,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
-import { type Severity } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 
 function createUpdateSinglePlugin(): PluginUpdateFn {

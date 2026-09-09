@@ -1,4 +1,16 @@
 import {
+  type PluginAvailableMessage,
+  type PluginDisabledMessage,
+  type PluginFailedMessage,
+  type PluginInstalledMessage,
+  type PluginPartiallyAvailableMessage,
+  type PluginPartiallyInstalledMessage,
+  type PluginPartiallyUpgradableMessage,
+  type PluginRemoteMessage,
+  type PluginUnavailableMessage,
+  type PluginUpgradableMessage,
+} from "../../shared/notification-types.ts";
+import {
   ICON_INSTALLED,
   ICON_PARTIALLY_INSTALLED,
   ICON_UNINSTALLABLE,
@@ -11,18 +23,6 @@ import {
   renderUnavailableRow,
   renderVersion,
 } from "../../shared/notify.ts";
-import {
-  type PluginAvailableMessage,
-  type PluginDisabledMessage,
-  type PluginFailedMessage,
-  type PluginInstalledMessage,
-  type PluginPartiallyAvailableMessage,
-  type PluginPartiallyInstalledMessage,
-  type PluginPartiallyUpgradableMessage,
-  type PluginRemoteMessage,
-  type PluginUnavailableMessage,
-  type PluginUpgradableMessage,
-} from "../../shared/notification-types.ts";
 
 import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
 

@@ -18,13 +18,13 @@ import { INSTALL_CONTEXT } from "../../extensions/pi-claude-marketplace/orchestr
 import { REINSTALL_CONTEXT } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts";
 import { UNINSTALL_CONTEXT } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.messaging.ts";
 import { UPDATE_CONTEXT } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/update.messaging.ts";
+import { type Severity } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 import { notifyWithContext } from "../../extensions/pi-claude-marketplace/shared/notify-context.ts";
 
 import type {
   ExtensionAPI,
   ExtensionContext,
 } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
-import { type Severity } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
 interface CapturedNotification {
   readonly message: string;
