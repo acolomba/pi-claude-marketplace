@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 06
 current_phase_name: Assertion and Module Refinement
 status: executing
-stopped_at: Completed 06-44-PLAN.md
-last_updated: "2026-09-09T18:47:50.245Z"
+stopped_at: Completed 06-45-PLAN.md
+last_updated: "2026-09-09T19:21:52.655Z"
 last_activity: 2026-09-08
 last_activity_desc: Phase 06 execution started
-state_head: 05fc7445d567ea97d9e08a6e53be78116bacc338
+state_head: 5b37e6c2aee5ad32be96c76718c4835a995690ed
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 180
-  completed_plans: 172
+  completed_plans: 173
   percent: 11
 ---
 
@@ -33,7 +33,7 @@ component as a working Pi artifact.
 
 Phase: 06 (Assertion and Module Refinement) — EXECUTING
 Next: Discuss Phase 6
-Plan: 45 of 52
+Plan: 46 of 52
 Status: Ready to execute
 Last activity: 2026-09-08 — Phase 06 execution started
 
@@ -348,6 +348,7 @@ Last activity: 2026-09-08 — Phase 06 execution started
 | Phase 06 P42 | 7min | 2 tasks | 0 files |
 | Phase 06 P43 | 16min | 3 tasks | 15 files |
 | Phase 06 P44 | 28 min | 2 tasks | 10 files |
+| Phase 06 P45 | 30 min | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -849,6 +850,9 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 06]: Keep ReinstallPluginsOptions and flow factories in reinstall.ts until the locked flow-owner plan; move only target selection and clone probing now.
 - [Phase 06]: Preserve bare-scope parallel reads plus a confirmation read so target ordering and concurrent-removal attribution remain exact.
 - [Phase 06]: Make probeReinstallClone own the optional production materialization seam and consume the recorded sha without remote ref resolution.
+- [Phase 06]: Keep reinstall flow factories and register wiring in reinstall.ts until locked Plan 46 so the hub remains genuine.
+- [Phase 06]: Use an opaque replacement compensation token so rollback and finalize retain the physical operation owner that performed replacement.
+- [Phase 06]: Make skipped and failed reinstall record outcomes non-mutating; only the reinstalled arm writes persisted state.
 
 ### Pending Todos
 
@@ -901,7 +905,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 06-44-PLAN.md
+**Stopped at:** Completed 06-45-PLAN.md
 
 Phase 04 completed all seven plans and closed AUTH-01 and TREF-01 through
 TREF-03. Independent verification passed 4/4 with no behavioral or UAT gap;
@@ -919,7 +923,7 @@ independent verification passed 6/6 with zero unverified behaviors.
 **Read beside it:** `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`, the
 Phase 01 terminal evidence ledger, and Phase 5's roadmap criteria.
 
-Last session: 2026-09-09T18:47:49.699Z
+Last session: 2026-09-09T19:21:51.987Z
 
 **Next:** Discuss Phase 06 to define the assertion-strengthening and approved
 module-refinement work before planning.
