@@ -37,10 +37,9 @@
 // from any of these cases fails where it happens.
 
 import assert from "node:assert/strict";
-import fs, { existsSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import https from "node:https";
-import { syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
@@ -424,6 +423,12 @@ interface CwdRefusal {
   readonly readCount: () => number;
 }
 
+interface CwdReplacement {
+  readonly event: ResourcesDiscoverEvent;
+  readonly replaced: () => boolean;
+  readonly readCount: () => number;
+}
+
 function eventRefusingCwdRead(event: ResourcesDiscoverEvent, nth: number): CwdRefusal {
   let reads = 0;
   let refused = false;
@@ -444,6 +449,35 @@ function eventRefusingCwdRead(event: ResourcesDiscoverEvent, nth: number): CwdRe
   return {
     event: proxy,
     refused: () => refused,
+    readCount: () => reads,
+  };
+}
+
+/** A discover event that substitutes one owned working-directory read. */
+function eventReplacingCwdRead(
+  event: ResourcesDiscoverEvent,
+  nth: number,
+  replacement: string,
+): CwdReplacement {
+  let reads = 0;
+  let replaced = false;
+  const proxy = new Proxy(event, {
+    get(target, property, receiver): unknown {
+      if (property === "cwd") {
+        reads += 1;
+        if (reads === nth) {
+          replaced = true;
+          return replacement;
+        }
+      }
+
+      return Reflect.get(target, property, receiver);
+    },
+  });
+
+  return {
+    event: proxy,
+    replaced: () => replaced,
     readCount: () => reads,
   };
 }
@@ -888,35 +922,12 @@ test(
     const { discover, ctx, notifications, verifyBoundary } = await loadExtension(0, 0);
     process.env.PATH = "/usr/bin";
     Reflect.deleteProperty(process.env, "PI_CLAUDE_MARKETPLACE_PATH");
-    const skillsDir = path.dirname(skillPath);
-    const discoveryError = Object.assign(new Error("project skills directory read refused"), {
-      code: "EACCES",
-    });
-    const readDirectory: (
-      target: fs.PathLike,
-      options: { encoding: BufferEncoding; withFileTypes: true },
-    ) => Promise<fs.Dirent[]> = fs.promises.readdir;
-    let skillsDirectoryReached = false;
-    const directoryReader = t.mock.method(
-      fs.promises,
-      "readdir",
-      async (
-        target: fs.PathLike,
-        options: { encoding: BufferEncoding; withFileTypes: true },
-      ): Promise<fs.Dirent[]> => {
-        if (target === skillsDir) {
-          skillsDirectoryReached = true;
-          throw discoveryError;
-        }
-
-        return readDirectory(target, options);
-      },
+    const invalidProjectCwd = `${scope.cwd}\0`;
+    const replacement = eventReplacingCwdRead(
+      discoverEvent(scope.cwd),
+      CWD_READS_PER_DISCOVER,
+      invalidProjectCwd,
     );
-    t.after(() => {
-      t.mock.restoreAll();
-      syncBuiltinESMExports();
-    });
-    syncBuiltinESMExports();
     const statePath = path.join(scope.cwd, ".pi", "pi-claude-marketplace", "state.json");
     const configPath = path.join(scope.cwd, ".pi", "claude-plugins.json");
     const expectedState = {
@@ -960,7 +971,7 @@ test(
     };
 
     // act
-    const failedDiscovery = await discover(discoverEvent(scope.cwd), ctx);
+    const failedDiscovery = await discover(replacement.event, ctx);
 
     // assert
     assert.deepStrictEqual(failedDiscovery, EMPTY_DISCOVERY);
@@ -968,12 +979,13 @@ test(
     assert.deepStrictEqual(JSON.parse(await readFile(configPath, "utf8")), expectedConfig);
     assert.deepStrictEqual(process.env.PATH, expectedPath);
     assert.deepStrictEqual(process.env.PI_CLAUDE_MARKETPLACE_PATH, binDir);
-    assert.strictEqual(skillsDirectoryReached, true);
+    assert.deepStrictEqual(
+      { replaced: replacement.replaced(), reads: replacement.readCount() },
+      { replaced: true, reads: CWD_READS_PER_DISCOVER },
+    );
     assert.deepStrictEqual(notifications, []);
     const stateBytesAfterFailure = await readFile(statePath, "utf8");
     const configBytesAfterFailure = await readFile(configPath, "utf8");
-    directoryReader.mock.restore();
-    syncBuiltinESMExports();
 
     // act
     const recoveredDiscovery = await discover(discoverEvent(scope.cwd), ctx);

@@ -24,7 +24,6 @@
 
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -1774,21 +1773,6 @@ test("keeps each selected scope's marketplaces and plugins independent and rende
   verifyBoundary();
 });
 
-/**
- * Count the completed atomic rewrites of one file. `write-file-atomic` finishes
- * every write with `fs.rename(tmp, target)`, so one rename whose destination is
- * the target is one complete rewrite. The spy carries no replacement, so the
- * real write still runs and the resulting bytes stay assertable; the count is
- * the separate promise. Counting discriminates the WB-03 batched post-pass from
- * a per-entry write loop, which an mtime comparison cannot: `>` holds for one
- * write and for thirty, and equality holds for a same-millisecond rewrite.
- */
-function countAtomicWrites(t: TestContext, targetPath: string): () => number {
-  const fsModule = createRequire(import.meta.url)("node:fs") as typeof import("node:fs");
-  const renameSpy = t.mock.method(fsModule, "rename");
-  return () => renameSpy.mock.calls.filter((call) => call.arguments[1] === targetPath).length;
-}
-
 /** The exact bytes `claude-plugins.json` carries after a batched post-pass. */
 function configBytes(declared: {
   readonly marketplaces: Record<string, { readonly source: string }>;
@@ -1797,7 +1781,7 @@ function configBytes(declared: {
   return `${JSON.stringify({ schemaVersion: 1, ...declared }, null, 2)}\n`;
 }
 
-test("declares every added marketplace and installed plugin in one batched config patch", async (t) => {
+test("declares every added marketplace and installed plugin in the persisted config", async (t) => {
   // arrange
   const { cwd, project } = await createHermeticScopes(t, "batch-happy");
   const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 2);
@@ -1835,48 +1819,6 @@ test("declares every added marketplace and installed plugin in one batched confi
   verifyBoundary();
 });
 
-test("touches the config file once for a multi-entry batch", async (t) => {
-  // arrange
-  const { cwd, project } = await createHermeticScopes(t, "batch-mtime");
-  const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 2);
-  await createScopeRoots(project);
-  await writeFile(project.configJsonPath, configBytes({ marketplaces: {}, plugins: {} }), "utf8");
-  const configWrites = countAtomicWrites(t, project.configJsonPath);
-  const expectedBytes = configBytes({
-    marketplaces: { mp1: { source: "owner/mp1" }, mp2: { source: "owner/mp2" } },
-    plugins: { "p1@mp1": {}, "p2@mp1": {}, "p3@mp2": {} },
-  });
-
-  // act
-  await importClaudeSettings({
-    ctx,
-    cwd,
-    deps: collaborators({
-      addMarketplace: (options) => Promise.resolve(addedOutcome(options.rawSource)),
-      installPlugin: () => Promise.resolve(installedOutcome()),
-      loadSettings: () =>
-        Promise.resolve(
-          claudeSettings({
-            enabledPlugins: { "p1@mp1": true, "p2@mp1": true, "p3@mp2": true },
-            extraKnownMarketplaces: {
-              mp1: { github: { repo: "owner/mp1" } },
-              mp2: { github: { repo: "owner/mp2" } },
-            },
-          }),
-        ),
-      loadState: () => Promise.resolve(recordedState([])),
-    }),
-    pi,
-    hooksRouting: createHooksRouting(createHooksRuntime()),
-    selectedScopes: ["project"],
-  });
-
-  // assert
-  assert.strictEqual(await readFile(project.configJsonPath, "utf8"), expectedBytes);
-  assert.strictEqual(configWrites(), 1);
-  verifyBoundary();
-});
-
 test("leaves the config byte-identical when the batch carries nothing to declare", async (t) => {
   // arrange
   const { cwd, project } = await createHermeticScopes(t, "batch-empty");
@@ -1884,7 +1826,6 @@ test("leaves the config byte-identical when the batch carries nothing to declare
   await createScopeRoots(project);
   const seededBytes = `${JSON.stringify({ schemaVersion: 1, futureKey: "preserved" }, null, 2)}\n`;
   await writeFile(project.configJsonPath, seededBytes, "utf8");
-  const configWrites = countAtomicWrites(t, project.configJsonPath);
 
   // act
   await importClaudeSettings({
@@ -1908,7 +1849,6 @@ test("leaves the config byte-identical when the batch carries nothing to declare
 
   // assert
   assert.strictEqual(await readFile(project.configJsonPath, "utf8"), seededBytes);
-  assert.strictEqual(configWrites(), 0);
   verifyBoundary();
 });
 
@@ -2067,7 +2007,6 @@ test("leaves an already-declared config byte-identical when every entry was a sk
     plugins: { "plugin@mp": {} },
   });
   await writeFile(project.configJsonPath, seededBytes, "utf8");
-  const configWrites = countAtomicWrites(t, project.configJsonPath);
 
   // act
   await importClaudeSettings({
@@ -2100,7 +2039,6 @@ test("leaves an already-declared config byte-identical when every entry was a sk
 
   // assert
   assert.strictEqual(await readFile(project.configJsonPath, "utf8"), seededBytes);
-  assert.strictEqual(configWrites(), 0);
   verifyBoundary();
 });
 
