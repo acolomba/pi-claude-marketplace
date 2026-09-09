@@ -10744,3 +10744,186 @@ test("WGATE-03: a script whose meta carries shapes the gate predicates never exp
   assert.ok(diagnostic !== undefined);
   assert.deepStrictEqual(diagnostic.split("\n\n").slice(1).join("\n\n").split("\n").length, 1);
 });
+
+/**
+ * WGATE-03 / D-115-06: the two scripts the byte comparison below runs. They
+ * differ in ONE property -- `meta.description` -- which is the whole difference
+ * between a script the engine loads and one it refuses at its check 9. Anything
+ * else that differed would give the row a second reason to move.
+ */
+const WORKFLOW_GATE_SCRIPT = 'export const meta = { name: "greet" };\n';
+const WORKFLOW_UNGATED_SCRIPT = 'export const meta = { name: "greet", description: "greets" };\n';
+
+/**
+ * The gate-warned run's envelope, written independently of the bridge that
+ * serializes it: a 2-space-indented object with NO `description` key, because
+ * the script declares none, and a trailing newline.
+ *
+ * This is one of the byte comparison's non-vacuity anchors. Two runs whose rows
+ * agree prove nothing about the gate until each run is shown to have installed
+ * the script its own script body describes.
+ */
+const gatedWorkflowEnvelopeBytes = `{
+  "name": "hello:greet",
+  "script": "export const meta = { name: \\"greet\\" };\\n"
+}
+`;
+
+test("WGATE-03 / D-115-06: a gate warning moves no byte of the plugin row", async () => {
+  // arrange -- see WORKFLOW_GATE_SCRIPT. Each call takes its own hermetic home
+  // and its own cwd, so the first run's envelope cannot satisfy the second
+  // run's read.
+
+  // act
+  const warned = await installGatedWorkflowPlugin(WORKFLOW_GATE_SCRIPT);
+  const ungated = await installGatedWorkflowPlugin(WORKFLOW_UNGATED_SCRIPT);
+
+  // assert -- non-vacuity first, on the envelope: each run installed the script
+  // its own body describes, so neither row is the row of a failed install.
+  assert.equal(warned.envelope, gatedWorkflowEnvelopeBytes);
+  assert.equal(ungated.envelope, workflowEnvelopeBytes);
+  assert.deepStrictEqual(warned.recordedWorkflows, ["hello:greet"]);
+  assert.deepStrictEqual(ungated.recordedWorkflows, ["hello:greet"]);
+  // Non-vacuity, both directions on the channel: the warned run MUST have
+  // produced a gate line...
+  assert.equal(warned.notifications.length, 2, JSON.stringify(warned.notifications));
+  assert.match(warned.notifications[1]?.message ?? "", /check 9/);
+  // ...and the unwarned run must have produced no second notification at all,
+  // so two identical rows cannot be satisfied by neither run warning.
+  assert.equal(ungated.notifications.length, 1, JSON.stringify(ungated.notifications));
+
+  // Criterion 2, on BYTES: an absence check would green over a row that changed
+  // in some other way, and what is forbidden is ANY plugin-level status, glyph
+  // or disposition change, not the appearance of gate text.
+  const warnedRow = warned.notifications[0];
+  const ungatedRow = ungated.notifications[0];
+  assert.ok(warnedRow !== undefined);
+  assert.ok(ungatedRow !== undefined);
+  assert.equal(warnedRow.message, ungatedRow.message);
+  assert.equal(warnedRow.severity, ungatedRow.severity);
+  // The whole record, so the ABSENCE of a severity argument is compared too:
+  // this harness omits the key entirely for an info row, and two `undefined`
+  // reads would agree whether or not the argument was passed.
+  assert.deepStrictEqual(warnedRow, ungatedRow);
+  // And the literal, so the pair cannot be satisfied by two empty rows.
+  assert.equal(
+    warnedRow.message,
+    "● mp [project]\n  ● hello v0.0.1 (installed)\n\n/reload to pick up changes",
+  );
+});
+
+test("WGATE-01 / WGATE-03: installing the same gate-warned plugin twice warns once each time", async () => {
+  // arrange -- the same body, twice, each into its own hermetic home.
+
+  // act
+  const first = await installGatedWorkflowPlugin(WORKFLOW_GATE_SCRIPT);
+  const second = await installGatedWorkflowPlugin(WORKFLOW_GATE_SCRIPT);
+
+  // assert -- `discoverPluginWorkflows` builds a fresh array per call and
+  // `InstallCtx` is constructed per install, so stability is the expected
+  // answer; asserting it is what makes a future shared accumulator fail here.
+  assert.equal(first.notifications.length, 2, JSON.stringify(first.notifications));
+  assert.equal(second.notifications.length, first.notifications.length);
+  assert.equal(second.notifications[1]?.message, first.notifications[1]?.message);
+  // The count of LINES inside the block, not only the block's identity: an
+  // accumulator that appended the same line twice would still produce two
+  // notifications.
+  assert.equal((first.notifications[1]?.message ?? "").split("\n").length, 3);
+});
+
+// ──────────────────────────────────────────────────────────────────────────
+// WGATE-01 / D-115-05: every workflow discovery family on a standalone install
+//
+// The families are the `WorkflowOutcomeSite` union
+// (`bridges/workflows/discover.ts`) measured member by member -- `gate`,
+// `skipped`, `refused`, `stem-fallback`, `read` and `inspect` -- and all six
+// ride the one array the workflows prepare returns. `inspect` is the only one
+// that cannot share a directory with the rest: it fires when `lstat` fails on
+// an entry `readdir` returned, which needs the directory's execute bit cleared,
+// and that also stops every sibling from being opened. `tests/bridges/workflows`
+// pins it at the bridge, one layer under this one.
+// ──────────────────────────────────────────────────────────────────────────
+
+const WORKFLOW_DISCOVERY_FAMILY_SCRIPTS: readonly {
+  readonly sourceName: string;
+  readonly body: string;
+}[] = [
+  { sourceName: "alpha-gate", body: WORKFLOW_GATE_SCRIPT },
+  { sourceName: "beta-helper", body: "export function helper() {\n  return 1;\n}\n" },
+  {
+    sourceName: "delta-stem",
+    body: 'export const meta = { description: "a helper with no name" };\n',
+  },
+  {
+    sourceName: "gamma-roll",
+    body: 'export const meta = { name: "roll", description: "rolls" };\nMath.random();\n',
+  },
+  // Well-formed, and it earns no line: without it the expected list below would
+  // also match a channel that warns about every script it walks.
+  { sourceName: "zeta-fine", body: 'export const meta = { name: "fine", description: "fine" };\n' },
+];
+
+/** The line each family earns, in directory-entry-name order. */
+const EXPECTED_DISCOVERY_FAMILY_LINES: readonly string[] = [
+  'workflow script "alpha-gate.js" in "workflows" was installed but the engine will refuse to load it: the engine refuses at its check 9 -- `meta.description` must be a non-empty string, and `meta.model` (a string) and `meta.phases` (an array of objects each carrying a string `title`) must match those shapes wherever they are declared',
+  'workflow script "beta-helper.js" in "workflows" was not installed: beta-helper.js declares no `meta`, so there is nothing to install',
+  'workflow script "delta-stem.js" in "workflows" was installed but will not run: the engine loads a command only from a literal `meta.name` with a non-empty `meta.description`, and this script declares no readable name',
+  'workflow script "epsilon-bad.js" in "workflows" could not be read and was skipped: the file is not valid UTF-8, so its bytes cannot be copied verbatim',
+  'workflow script "gamma-roll.js" in "workflows" was refused: gamma-roll.js calls `Math.random`, which the workflow engine refuses as nondeterministic',
+];
+
+test("WGATE-01 / D-115-05: a standalone install renders every workflow discovery family", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-workflow-families-"));
+    try {
+      // arrange
+      const { pluginRoot } = await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceName: "mp",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "hello",
+        workflows: [...WORKFLOW_DISCOVERY_FAMILY_SCRIPTS],
+      });
+      // The `read` family's script is written as raw bytes: `0xff 0xfe` is not
+      // valid UTF-8 in any position, which is deterministic on every platform
+      // and is not a permission the test process might hold. `writeFile` with a
+      // string cannot produce it -- every JavaScript string encodes to valid
+      // UTF-8.
+      await writeFile(
+        path.join(pluginRoot, "workflows", "epsilon-bad.js"),
+        Buffer.from([0x65, 0x78, 0xff, 0xfe, 0x0a]),
+      );
+      const { ctx, pi, notifications } = makeCtx({ toolNames: ["workflow_control"] });
+
+      // act
+      await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+
+      // assert
+      assert.equal(notifications.length, 2, JSON.stringify(notifications));
+      const diagnostic = notifications[1];
+      assert.ok(diagnostic !== undefined);
+      assert.equal(diagnostic.severity, "warning");
+      // Per-family attribution first: a changed phrase names its own line here,
+      // where the whole-message comparison below names only the block.
+      assert.deepStrictEqual(
+        diagnostic.message.split("\n").filter((line) => line.startsWith("workflow script ")),
+        EXPECTED_DISCOVERY_FAMILY_LINES,
+      );
+      // Then the whole block, byte for byte -- the header, the blank-line
+      // separator and the line order, none of which the filter above sees.
+      //
+      // The header says all five components "were skipped", which is false of
+      // the two that were installed with a caveat. That sentence is shared by
+      // install, update and reinstall and is asserted here as it stands;
+      // Broken Windows #36 carries the fix.
+      assert.equal(
+        diagnostic.message,
+        `Plugin "hello" installed; 5 declared components were skipped.\n\n${EXPECTED_DISCOVERY_FAMILY_LINES.join("\n")}`,
+      );
+      // NFR-9: the temporary marketplace root never reaches the user.
+      assert.ok(!diagnostic.message.includes(cwd), diagnostic.message);
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
