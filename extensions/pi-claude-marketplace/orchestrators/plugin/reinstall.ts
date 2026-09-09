@@ -87,15 +87,13 @@ import { requirePartialInstallable, resolveStrict } from "../../domain/plugin-re
 import { asAbsolutePluginRoot } from "../../domain/plugin-root.ts";
 import { parsePluginSource } from "../../domain/source.ts";
 import { locationsFor } from "../../persistence/locations.ts";
-import { clonePluginRecord, isRecordedButDisabled, loadState } from "../../persistence/state-io.ts";
-import { compareByNameThenScope } from "../../shared/compare-name-scope.ts";
+import { clonePluginRecord, isRecordedButDisabled } from "../../persistence/state-io.ts";
 import {
   composeErrorWithCauseChain,
   errorMessage,
   errorWithManualRecovery,
   findManualRecoveryError,
   ManualRecoveryError,
-  MarketplaceNotFoundError,
   PluginShapeError,
 } from "../../shared/errors.ts";
 import { pathExists } from "../../shared/fs-utils.ts";
@@ -115,7 +113,6 @@ import {
   type LockedStateTransactionDeps,
 } from "../../transaction/with-state-guard.ts";
 import { DEFAULT_CREDENTIAL_OPS, buildCloneAuth } from "../auth-host.ts";
-import { resolveScopeFromState } from "../marketplace/shared.ts";
 
 import { canonicalCloneUrl, materializePluginClone, resolveGitSubdirRoot } from "./clone-cache.ts";
 import { discoverGeneratedNames } from "./discover-names.ts";
@@ -126,15 +123,13 @@ import {
   reinstalledRowFromOutcome,
   renderReinstallPartitionAndNotify,
 } from "./reinstall.messaging.ts";
+import { selectReinstallTargets } from "./reinstall-targets.ts";
 import {
   assertNoCrossPluginConflicts,
   emitMarketplaceNotAddedSignal,
   MarketplaceNotAddedSignal,
-  missIsNotInstalled,
   maybeWritePluginConfigBack,
   removePluginRecord,
-  resolveCrossScopePluginTarget,
-  resolveInstalledMarketplaceTarget,
   splitStagingWarnings,
   surfaceDiscoveryWarnings,
 } from "./shared.ts";
@@ -160,6 +155,7 @@ import type {
   ReinstallPluginOutcome,
   ReinstallReinstalledOutcome,
 } from "../types.ts";
+import type { ReinstallPluginsTarget, SelectedReinstallTarget } from "./reinstall-targets.ts";
 
 export type { ReinstallPluginOutcome } from "../types.ts";
 
@@ -233,11 +229,6 @@ export interface ReinstallPluginDeps {
 export interface ReinstallCloneCacheSeam {
   readonly materializePluginClone: typeof materializePluginClone;
 }
-
-export type ReinstallPluginsTarget =
-  | { readonly kind: "all" }
-  | { readonly kind: "marketplace"; readonly marketplace: string }
-  | { readonly kind: "plugin"; readonly plugin: string; readonly marketplace: string };
 
 export interface ReinstallPluginsOptions {
   readonly ctx: NotificationContext;
@@ -329,12 +320,6 @@ const REAL_REINSTALL_TRANSACTION: ReinstallTransaction = {
   runPostSuccessMaintenance,
   withLockedStateTransaction,
 };
-
-interface ResolvedReinstallTarget {
-  readonly plugin: string;
-  readonly marketplace: string;
-  readonly scope: Scope;
-}
 
 // ATTR-03 / D-47-A: the structural marketplace-not-added signal thrown by the
 // reinstall target enumerator is the shared `MarketplaceNotAddedSignal` from
@@ -592,17 +577,24 @@ async function reinstallPluginsWith(
   reinstallPlugin: ReinstallPluginFn,
 ): Promise<readonly ReinstallPluginOutcome[]> {
   const { ctx, pi, cwd } = opts;
-  // OUT-04 / D-04: cardinality belongs to the parsed invocation, including
-  // enumeration failures that return before any result rows exist.
-  const cardinality: "single" | "plural" = opts.target.kind === "plugin" ? "single" : "plural";
-
-  let targets: readonly ResolvedReinstallTarget[];
+  let selection: {
+    readonly cardinality: "single" | "plural";
+    readonly targets: readonly SelectedReinstallTarget[];
+  };
   try {
-    targets = await enumerateReinstallTargets(opts);
+    selection = await selectReinstallTargets({
+      cwd,
+      target: opts.target,
+      ...(opts.scope !== undefined && { scope: opts.scope }),
+    });
   } catch (err) {
+    // Enumeration failures occur before the selector can return, so preserve
+    // invocation-form cardinality at this error-projection boundary.
+    const cardinality = opts.target.kind === "plugin" ? "single" : "plural";
     await handleEnumerationFailure(opts, err as Error, cardinality);
     return [];
   }
+  const { cardinality, targets } = selection;
 
   if (targets.length === 0) {
     // Empty-targets renders as the `(no marketplaces)` sentinel via
@@ -748,192 +740,6 @@ async function handleEnumerationFailure(
     [{ name: targetingMp, scope: targetingScope, plugins: [failedRow] }],
     undefined,
     cardinality,
-  );
-}
-
-async function enumerateReinstallTargets(
-  opts: ReinstallPluginsOptions,
-): Promise<readonly ResolvedReinstallTarget[]> {
-  const { cwd, target } = opts;
-  const explicitScope = opts.scope;
-
-  if (target.kind === "all") {
-    return enumerateAllReinstallTargets(cwd, explicitScope);
-  }
-
-  return enumerateMarketplaceReinstallTargets(cwd, explicitScope, target);
-}
-
-async function enumerateAllReinstallTargets(
-  cwd: string,
-  explicitScope: Scope | undefined,
-): Promise<readonly ResolvedReinstallTarget[]> {
-  // Iteration order is project-first per MSG-GR-3 / compareByNameThenScope
-  // so same-name cross-scope stable-sort ties render project-before-user.
-  const scopes: readonly Scope[] =
-    explicitScope === undefined ? ["project", "user"] : [explicitScope];
-  const out: ResolvedReinstallTarget[] = [];
-  for (const scope of scopes) {
-    out.push(...(await installedTargetsForScope(cwd, scope)));
-  }
-
-  return sortReinstallTargets(out);
-}
-
-async function installedTargetsForScope(
-  cwd: string,
-  scope: Scope,
-): Promise<readonly ResolvedReinstallTarget[]> {
-  const state = await loadState(locationsFor(scope, cwd).extensionRoot);
-  return Object.entries(state.marketplaces).flatMap(([marketplace, mp]) =>
-    Object.keys(mp.plugins).map((plugin) => ({ plugin, marketplace, scope })),
-  );
-}
-
-async function enumerateMarketplaceReinstallTargets(
-  cwd: string,
-  explicitScope: Scope | undefined,
-  target: Extract<ReinstallPluginsTarget, { kind: "marketplace" | "plugin" }>,
-): Promise<readonly ResolvedReinstallTarget[]> {
-  const marketplace = target.marketplace;
-
-  // ATTR-03 / D-47-A: probe marketplace existence STRUCTURALLY across the
-  // three forms (explicit-scope-plugin, explicit-scope-marketplace, bare).
-  // A miss raises `MarketplaceNotAddedSignal` -- caught at the
-  // `reinstallPlugins` entrypoint and re-attributed to the standalone
-  // `{marketplace not added}` variant, so all three forms attribute the miss
-  // identically.
-  const resolved = await resolveMarketplaceReinstallScope(cwd, marketplace, target, explicitScope);
-  const state = await loadState(resolved.locations.extensionRoot);
-  const mp = state.marketplaces[marketplace];
-  if (mp === undefined) {
-    // Defensive: `resolveMarketplaceReinstallScope` only returns a scope whose
-    // container it confirmed present. A miss here is a concurrent-removal edge;
-    // signal it as not-added carrying the resolved scope so the standalone
-    // emission still fires (never a raw throw escaping the orchestrator).
-    throw new MarketplaceNotAddedSignal(marketplace, explicitScope);
-  }
-
-  const plugins = target.kind === "plugin" ? [target.plugin] : Object.keys(mp.plugins);
-  return sortReinstallTargets(
-    plugins.map((plugin) => ({ plugin, marketplace, scope: resolved.scope })),
-  );
-}
-
-/**
- * ATTR-03 / SCOPE-01: resolve the scope of an existing marketplace container
- * for the marketplace/plugin reinstall forms, raising
- * `MarketplaceNotAddedSignal` when the marketplace is not added.
- *
- *  - explicit-scope PLUGIN form: reuse the discriminated
- *    cross-scope resolver so an other-scope-only target yields the SCOPE-01
- *    hint (signal carrying the REQUESTED scope) rather than a synthesized
- *    `(skipped) {not installed}` phantom target.
- *  - explicit-scope MARKETPLACE form: confirm the container in the requested
- *    scope; on a miss, signal `{marketplace not added}` carrying the REQUESTED scope.
- *  - bare (no `--scope`) form: the existing two-scope `resolveScopeFromState`
- *    read establishes both-scope absence; on a miss, signal `{marketplace not added}`
- *    with NO bracket (absent-from-both form).
- *
- * All reads are `loadState` only (NFR-5: no network).
- */
-async function resolveMarketplaceReinstallScope(
-  cwd: string,
-  marketplace: string,
-  target: Extract<ReinstallPluginsTarget, { kind: "marketplace" | "plugin" }>,
-  explicitScope: Scope | undefined,
-): Promise<{ scope: Scope; locations: ReturnType<typeof locationsFor> }> {
-  if (target.kind === "plugin") {
-    // PLUGIN form (explicit OR bare): reuse the discriminated
-    // cross-scope resolver. It resolves against the marketplace CONTAINER's
-    // scope when present (so the downstream `runLockedReinstall` `oldRecord ===
-    // undefined` branch keeps the legitimate `(skipped) {not installed}` for a
-    // present-marketplace/absent-plugin), and surfaces SCOPE-01 /
-    // marketplace-absence otherwise.
-    const resolution = await resolveCrossScopePluginTarget({
-      cwd,
-      marketplace,
-      plugin: target.plugin,
-      ...(explicitScope !== undefined && { explicitScope }),
-    });
-    if (resolution.kind === "resolved") {
-      return { scope: resolution.scope, locations: resolution.locations };
-    }
-
-    // marketplace-absent OR other-scope (present only in the other scope).
-    // SCOPE-01: carry the REQUESTED scope (explicit form) so the `[scope]`
-    // bracket reads "not added in the scope you asked for"; the bare form that
-    // missed everywhere carries no bracket (resolution.requestedScope is
-    // undefined there).
-    // SCOPE-01: a container one scope over means nothing is installed HERE,
-    // so the row's subject is the plugin, not the marketplace.
-    const notInstalledAt = await missIsNotInstalled({ cwd, marketplace, resolution });
-    throw new MarketplaceNotAddedSignal(
-      marketplace,
-      resolution.requestedScope,
-      notInstalledAt === undefined ? undefined : { scope: notInstalledAt, plugin: target.plugin },
-    );
-  }
-
-  // MARKETPLACE form.
-  if (explicitScope !== undefined) {
-    // WR-03: reuse the discriminated `resolveInstalledMarketplaceTarget` (the
-    // resolver update.ts uses) so reinstall's explicit-scope cross-scope read
-    // is consistent with update. A `resolved` arm yields the (scope,
-    // locations) pair; both the `marketplace-absent` and `other-scope` arms
-    // (which carry the REQUESTED scope) collapse to the same
-    // `{marketplace not added} [requestedScope]` bracket-only emission.
-    const resolution = await resolveInstalledMarketplaceTarget({
-      cwd,
-      marketplace,
-      explicitScope,
-    });
-    if (resolution.kind === "resolved") {
-      return { scope: resolution.scope, locations: resolution.locations };
-    }
-
-    throw new MarketplaceNotAddedSignal(marketplace, explicitScope);
-  }
-
-  try {
-    return await resolveScopeFromState(
-      marketplace,
-      locationsFor("user", cwd),
-      locationsFor("project", cwd),
-    );
-  } catch (err) {
-    // resolveScopeFromState throws MarketplaceNotFoundError when absent from
-    // BOTH scopes -- re-attribute to the no-bracket `{marketplace not added}` signal
-    // (absent-from-both form). Any other error propagates unchanged.
-    if (err instanceof MarketplaceNotFoundError) {
-      throw new MarketplaceNotAddedSignal(marketplace);
-    }
-
-    throw err;
-  }
-}
-
-function sortReinstallTargets(
-  targets: readonly ResolvedReinstallTarget[],
-): readonly ResolvedReinstallTarget[] {
-  // CR-01 / D-01: route through the canonical comparator on marketplace
-  // (primary) then plugin (secondary). Both keys carry the row's scope so
-  // the project-before-user tie-break per MSG-GR-3 holds at every level.
-  return Object.freeze(
-    [...targets].sort((a, b) => {
-      const mpDiff = compareByNameThenScope(
-        { name: a.marketplace, scope: a.scope },
-        { name: b.marketplace, scope: b.scope },
-      );
-      if (mpDiff !== 0) {
-        return mpDiff;
-      }
-
-      return compareByNameThenScope(
-        { name: a.plugin, scope: a.scope },
-        { name: b.plugin, scope: b.scope },
-      );
-    }),
   );
 }
 
