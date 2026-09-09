@@ -1903,6 +1903,21 @@ The plugin ships a workflow script that the command will not admit. The row show
     note: workflow script "roll.js" in "workflows" will be refused: roll.js calls `Math.random`, which the workflow engine refuses as nondeterministic
 ```
 
+### Success -- a workflow script the engine will refuse to load (WGATE-01)
+
+The plugin ships a workflow script that the command installs and that the host workflow engine will then refuse to load. The script is admitted, so its command name shows on the `workflows:` line like any other; the `note:` line for it names the script, the directory that holds it, and the engine check that will refuse it, so the author can fix the script before they install it. The wording is in the FUTURE tense, because this surface writes nothing: it states what WOULD happen. The directory shows as its name alone and never as a full path, so the row does not disclose where the user's home directory is (NFR-9) and its bytes do not change from one machine to another. A `note:` line does not change the severity of the row: it is a statement about one file, and not a failure of the read. Severity `info`; no reload-hint (read-only surface).
+
+<!-- catalog-state: installed-with-workflow-gate-note -->
+
+```text
+● claude-plugins-official [user] <autoupdate>
+  ● commit-commands v1.2.0 (installed)
+    Helpful git commit commands for everyday use.
+    skills: commit-summary
+    workflows: commit-commands:changelog, commit-commands:greet
+    note: workflow script "greet.js" in "workflows" would be installed but the engine will refuse to load it: the engine refuses at its check 9 -- `meta.description` must be a non-empty string, and `meta.model` (a string) and `meta.phases` (an array of objects each carrying a string `title`) must match those shapes wherever they are declared
+```
+
 ### Success -- installed from the installation record (INFO-09)
 
 The marketplace manifest loads correctly, but it does not declare the plugin. An enabled installation record for the plugin exists, so the row shows the plugin as installed and states the absence as a reason. The version comes from the installation record, because there is no manifest entry to supply one. No description line and no dependencies line show: the manifest is the only source of both, and this state does not reconstruct them. The component names are the Pi-generated INSTALLED names -- `<plugin>-<skill>` for skills, `<plugin>:<command>` for commands, and `pi-claude-marketplace-<plugin>-<agent>` for agents. These names are different from the source names that the manifest-backed states above show (D-96-01). MCP servers are the one exception: the installation record keeps their raw source keys. This state replaces the `error`-severity `missing-plugin-not-in-manifest` outcome for this input, so the severity for an installed record changes from `error` to `info`. Severity `info`; no reload-hint (read-only surface).

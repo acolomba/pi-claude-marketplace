@@ -3626,6 +3626,39 @@ const FIXTURES: FixtureMap = {
       } satisfies NotificationMessage,
     },
 
+    // WGATE-01: the engine-gate advisory. A gated script is ADMITTED -- its
+    // envelope is written and its command registers -- so its generated name
+    // sits on the `workflows:` line and the note is the only place the coming
+    // refusal is stated. Free text again: no closed-set reason, an empty brace,
+    // and `info` severity, because the sentence is about one file.
+    "installed-with-workflow-gate-note": {
+      pi: piWithAllLoaded(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "claude-plugins-official",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: true },
+        plugin: {
+          status: "installed",
+          name: "commit-commands",
+          version: "1.2.0",
+          description: "Helpful git commit commands for everyday use.",
+          notes: [
+            'workflow script "greet.js" in "workflows" would be installed but the engine will ' +
+              "refuse to load it: the engine refuses at its check 9 -- `meta.description` must " +
+              "be a non-empty string, and `meta.model` (a string) and `meta.phases` (an array " +
+              "of objects each carrying a string `title`) must match those shapes wherever " +
+              "they are declared",
+          ],
+          componentsResolved: true,
+          components: {
+            skills: ["commit-summary"],
+            workflows: ["commit-commands:changelog", "commit-commands:greet"],
+          },
+        },
+      } satisfies NotificationMessage,
+    },
+
     "state-only-installed-single-scope": {
       pi: piWithAllLoaded(),
       message: {
@@ -5566,14 +5599,14 @@ test("catalog UAT: every <!-- catalog-state: --> annotation pairs byte-equal wit
   const catalog = await readFile(CATALOG_PATH, "utf8");
   const examples = loadCatalogExamples(catalog);
 
-  // Exact count, not a floor: 194 is the number of annotated examples in
+  // Exact count, not a floor: 195 is the number of annotated examples in
   // docs/output-catalog.md, and it is what stops a `loadCatalogExamples`
   // refactor from silently parsing a fraction of the corpus. Update it
   // deliberately when catalog examples are added or removed.
   assert.equal(
     examples.length,
-    194,
-    `Expected exactly 194 annotated catalog examples; found ${examples.length}. Check that the discriminator comments in docs/output-catalog.md were not lost, and update this count when examples are added.`,
+    195,
+    `Expected exactly 195 annotated catalog examples; found ${examples.length}. Check that the discriminator comments in docs/output-catalog.md were not lost, and update this count when examples are added.`,
   );
 
   const failures: Failure[] = [];
