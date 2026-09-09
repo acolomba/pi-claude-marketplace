@@ -988,12 +988,14 @@ async function runLockedReinstall(
     );
 
     // WB-01 / A7: deep-equal short-circuit preserves RECON-05
-    // mtime invariant. Reinstall is invoked by the user (both standalone and
-    // bulk-cascade paths are user-initiated); there is no orchestrated /
-    // reconcile-driven caller today. The deep-equal gate compares the
-    // prospective `{...existing, ...patch}` shape against the existing
-    // entry; a byte-stable patch (the common reinstall case -- entry shape
-    // unchanged) leaves the config file untouched.
+    // mtime invariant. Most reinstalls are user-invoked -- both the standalone
+    // and the bulk-cascade paths are -- but `orchestrators/reconcile/backfill.ts`
+    // is a reconcile-driven caller and reaches this line on a load the user did
+    // not initiate. The argument holds for it too: the deep-equal gate compares
+    // the prospective `{...existing, ...patch}` shape against the existing
+    // entry, and reinstall preserves the recorded version (D-68-02), so a
+    // byte-stable patch (the common case -- entry shape unchanged) leaves the
+    // config file untouched.
     const writeResult = await maybeWritePluginConfigBack({
       locations,
       marketplace,

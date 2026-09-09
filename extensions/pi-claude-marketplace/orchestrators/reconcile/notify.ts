@@ -610,6 +610,18 @@ function enabledRowFromOutcome(
  * here. A MALFORMED component takes the `warning` raise on either arm: it is a
  * degrade this backfill's own ledger just produced, exactly as on the
  * `plugin-installed` and `plugin-enabled` arms (WARN-01 / D-86-03).
+ *
+ * The SEV-01 soft-dep raise does NOT fire on this row, and that is a property of
+ * the projection rather than a stance this arm takes. `companionSeverity` needs a
+ * `SoftDepStatus`, and no reconcile outcome carries one -- `applyPluginOutcomeToBlock`
+ * is pure over outcomes and takes no probe -- so no arm in this file can compute
+ * it. A backfilled row that staged a workflow into a session with no host
+ * workflow engine therefore renders `{requires pi-dynamic-workflows}` at `info`
+ * where the standalone install row renders the same fact at `warning`. The
+ * sibling `enabledRowFromOutcome` above diverges identically and for the same
+ * reason. Closing that gap means threading a probe into the projection, not
+ * editing this line -- so read the divergence as a bounded projection-wide
+ * property, not an oversight on this arm.
  */
 function backfilledRowFromOutcome(
   outcome: PluginBackfilledOutcome,

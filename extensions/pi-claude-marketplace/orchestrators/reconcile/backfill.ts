@@ -165,13 +165,20 @@ export async function runScopeIsolated(
  * a stamp write is worth bringing a state.json into existence for: with none and
  * no state.json on disk, the file stays absent.
  *
- * D-116-04: the predicate is deliberately narrower than the population the scan
- * itself walks, and stays that way. It is consulted only when
- * `readResult.stateExisted === false`, which on the production read path implies
- * an empty `marketplaces` map (`apply.ts` probes the path before the lock;
- * `with-state-guard.ts` hands back `loadState`, which answers DEFAULT_STATE on
- * ENOENT), so a wider predicate would decide nothing that can exist and would
- * create the unsolicited state.json WR-05 forbids.
+ * D-116-04: on the production path this predicate answers `false` and can answer
+ * nothing else. Its only caller consults it when `readResult.stateExisted ===
+ * false`, and `apply.ts` sets that flag from a `pathExists` probe taken BEFORE
+ * the lock; with the probe false, `with-state-guard.ts` hands back `loadState`'s
+ * ENOENT answer, whose `marketplaces` map is empty, so the loop below never runs
+ * a body. The single window in which it returns `true` is the TOCTOU gap where
+ * another process created state.json between that probe and the guard's
+ * `loadState` -- the records are then real and the stamp lands on a file that
+ * already exists, which is what WR-05 permits.
+ *
+ * So this is not a predicate held narrower than the scan's population on
+ * purpose: it is vacuous outside that window. Widening it to match the
+ * population would decide nothing extra that can exist, and would create the
+ * unsolicited state.json WR-05 forbids.
  */
 function hasForceInstalledPlugin(state: ExtensionState): boolean {
   for (const mp of Object.values(state.marketplaces)) {
@@ -444,8 +451,9 @@ async function maybeBackfillPlugin(
     installable: resolved.state === "installable",
     // SEV-05 / D-69-04: carry the re-resolved dropped-component kinds so the
     // `(partially-installed)` row composes a factual `{reasons}` brace through the
-    // shared `narrowUnsupportedKinds` seam. The `installable` arm projects to
-    // the brace-less `(installed)` row, so its unsupported set is empty.
+    // shared `narrowUnsupportedKinds` seam. The `installable` arm projects to the
+    // `(installed)` row, whose brace holds the convergence marker alone
+    // (WCONV-03), so its unsupported set is empty.
     unsupported: resolved.state === "partially-available" ? resolved.unsupported : [],
     // SURF-05 / WARN-01 / WR-04: the other two ledger signals, threaded exactly
     // as the install and enable arms thread them. The orphan-rewake fact rides

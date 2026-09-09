@@ -279,8 +279,9 @@ export interface ScopeReadResult {
   /**
    * BFILL-02: the read-pass state snapshot, carried out so the load-time
    * backfill gate can read its persisted `lastReconciledExtensionVersion`
-   * stamp + scan its partially-installed plugins. Undefined for a pristine scope
-   * (no state.json) -- backfill MUST NOT create state.json there (WR-05).
+   * stamp + scan every plugin the scope records (WCONV-01). Undefined for a
+   * pristine scope (no state.json) -- backfill MUST NOT create state.json there
+   * (WR-05).
    */
   readonly state?: ExtensionState;
   /**
