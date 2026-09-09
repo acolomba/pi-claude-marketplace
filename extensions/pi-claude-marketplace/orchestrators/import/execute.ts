@@ -3,7 +3,7 @@ import { addMarketplace as defaultAddMarketplace } from "../../orchestrators/mar
 import {
   createNodeInstallPlugin,
   type InstallPluginOptions,
-} from "../../orchestrators/plugin/install.ts";
+} from "../../orchestrators/plugin/install-flow.ts";
 import { loadConfig } from "../../persistence/config-io.ts";
 import {
   writeBatchedConfigEntries,

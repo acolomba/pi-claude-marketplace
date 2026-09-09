@@ -4,7 +4,10 @@ import path from "node:path";
 import test from "node:test";
 
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
-import { runInstallLedger } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts";
+import {
+  installedPluginOutcome,
+  runInstallLedger,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   loadState,
@@ -117,7 +120,15 @@ test("projects the complete empty-plugin summary and preserves a caller pin", as
   assert.deepStrictEqual(ledgerOutcome, {
     kind: "installed",
     summary: {
+      agentForeignFailures: [],
+      bridgeWarnings: [],
+      cwd: environment.cwd,
+      discoveryWarnings: [],
       frontmatterDegradations: [],
+      locations,
+      marketplace: "marketplace",
+      plugin: "empty",
+      pluginDataDir: path.join(locations.dataRoot, "marketplace", "empty"),
       resolved: {
         componentPaths: { agents: [], commands: [], skills: [] },
         defaultEnabled: true,
@@ -131,10 +142,53 @@ test("projects the complete empty-plugin summary and preserves a caller pin", as
         unsupported: [],
       },
       stagedAgentNames: [],
+      stagedCommandNames: [],
       stagedMcpServerNames: [],
+      stagedSkillNames: [],
+      version: "pinned-by-caller",
     },
   });
   assert.equal(seeded.state.marketplaces.marketplace?.plugins.empty?.version, "pinned-by-caller");
+
+  assert.equal(ledgerOutcome.kind, "installed");
+  assert.deepStrictEqual(installedPluginOutcome(ledgerOutcome.summary, [], false), {
+    declaresAgents: false,
+    declaresMcp: false,
+    resourcesChanged: false,
+    status: "installed",
+    version: "pinned-by-caller",
+  });
+
+  const richSummary = {
+    ...ledgerOutcome.summary,
+    frontmatterDegradations: [
+      { generatedName: "broken", kind: "skill" as const, parseError: "bad yaml" },
+      { generatedName: "also-broken", kind: "skill" as const, parseError: "bad yaml" },
+      { generatedName: "broken-command", kind: "command" as const, parseError: "bad yaml" },
+    ],
+    resolved: {
+      ...ledgerOutcome.summary.resolved,
+      orphanRewake: true,
+      state: "partially-available" as const,
+      unsupported: ["hooks"],
+    },
+    stagedAgentNames: ["agent"],
+    stagedCommandNames: ["command"],
+    stagedMcpServerNames: ["server"],
+    stagedSkillNames: ["skill"],
+  };
+  assert.deepStrictEqual(installedPluginOutcome(richSummary, ["warning"], true), {
+    declaresAgents: true,
+    declaresMcp: true,
+    degradedKinds: ["skill", "command"],
+    landedDisabled: true,
+    orphanRewake: true,
+    postCommitWarnings: ["warning"],
+    resourcesChanged: false,
+    status: "installed",
+    unsupported: ["hooks"],
+    version: "pinned-by-caller",
+  });
 });
 
 test("captures the resolved version when a concurrent record aborts state commit", async (t) => {

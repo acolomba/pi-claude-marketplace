@@ -62,7 +62,7 @@ import { withLockedStateTransaction } from "../../transaction/with-state-guard.t
 import { addMarketplace } from "../marketplace/add.ts";
 import { removeMarketplace } from "../marketplace/remove.ts";
 import { createNodeSetPluginEnabled } from "../plugin/enable-disable.ts";
-import { createNodeInstallPlugin } from "../plugin/install.ts";
+import { createNodeInstallPlugin } from "../plugin/install-flow.ts";
 import { createNodeUninstallPlugin } from "../plugin/uninstall.ts";
 
 import {

@@ -360,9 +360,10 @@ export class CrossPluginConflictError extends Error {
 /**
  * PI-15 concurrent install detected at the state-guard save boundary.
  *
- * Thrown inside the `withStateGuard` closure of
- * orchestrators/plugin/install.ts when a re-read of state shows the plugin
- * record already exists (another process beat us to the commit). The outer
+ * Thrown by the guard-free ledger in `orchestrators/plugin/install.ts` when a
+ * re-read of state shows the plugin record already exists (another process
+ * beat us to the commit). The install-flow transaction owner supplies the
+ * state guard. The outer
  * `runPhases` result unwinds the staged resources via the ledger's
  * `undo` chain; `formatRollbackError` returns the structured rollback
  * result and the orchestrator composes the final user message via the
@@ -634,7 +635,7 @@ export function manualRecoveryLeaks(err: unknown): readonly string[] {
  *                                with `op = "install"`
  *   - `"no-longer-installable"` -- PR-6, thrown from `requireInstallable`
  *                                with `op = "update"`
- * The downstream consumer is `classifyEntityShapeError` (install.ts).
+ * The downstream consumer is `classifyEntityShapeError` (install-flow.ts).
  *
  * The constructor is the SINGLE SOURCE OF TRUTH for the `.message` text. The
  * exact byte-equal forms (preserved so existing
@@ -650,7 +651,7 @@ export function manualRecoveryLeaks(err: unknown): readonly string[] {
  * strings (`"contains hooks"`, `"source dir does not exist"`,
  * `"declares dependencies that must be installed manually"`, etc.) -- the
  * closed `Reason` set lives one layer up at the renderer boundary. The
- * `classifyEntityShapeError` consumer in `orchestrators/plugin/install.ts`
+ * `classifyEntityShapeError` consumer in `orchestrators/plugin/install-flow.ts`
  * narrows these strings to closed-set `Reason` members. Carrying the raw
  * strings here preserves byte-equal `.message` text (the resolver's notes
  * are joined verbatim) and removes the regex re-parse path entirely.
