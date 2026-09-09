@@ -7,8 +7,6 @@ import type { PluginNotificationMessage } from "../../shared/notification-types.
 import type { MarketplaceRows } from "../../shared/notify-context.ts";
 import type { Scope } from "../../shared/types.ts";
 
-type MarketplaceRecord = ExtensionState["marketplaces"][string];
-
 /** Project-scope inventory rows adopted by a cloned user marketplace. */
 export interface OrphanFold {
   readonly folded: readonly ListMsg[];
@@ -17,9 +15,9 @@ export interface OrphanFold {
 
 /** Reports whether a project record is the project-scope clone of a user marketplace. */
 export function isOrphanMarketplaceClone(
-  projectMarketplace: MarketplaceRecord | undefined,
-  userMarketplace: MarketplaceRecord | undefined,
-): projectMarketplace is MarketplaceRecord {
+  projectMarketplace: ExtensionState["marketplaces"][string] | undefined,
+  userMarketplace: ExtensionState["marketplaces"][string] | undefined,
+): projectMarketplace is ExtensionState["marketplaces"][string] {
   if (projectMarketplace === undefined || userMarketplace === undefined) {
     return false;
   }

@@ -31,6 +31,7 @@ function installedRow(name: string, scope: "user" | "project" = "project"): List
     name,
     dependencies: [],
     scope,
+    severity: "info",
     needsReload: false,
   };
 }
@@ -152,6 +153,7 @@ test("uses the marketplace scope for rows without an explicit scope", () => {
     status: "installed",
     name: "Alpha",
     dependencies: [],
+    severity: "info",
     needsReload: false,
   };
   const projectAlpha = installedRow("ALPHA", "project");
