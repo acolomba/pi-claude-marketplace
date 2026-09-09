@@ -1,10 +1,9 @@
 ---
 phase: 114-degradation-and-documentation
-verified: 2026-09-08T08:45:00Z
+verified: 2026-09-09T21:00:00Z
 status: passed
 score: 7/7 must-haves verified
 covered_files:
-  - ".planning/workstreams/workflows/milestones/workflows-REQUIREMENTS.md"
   - ".planning/workstreams/workflows/phases/114-degradation-and-documentation/114-01-PLAN.md"
   - ".planning/workstreams/workflows/phases/114-degradation-and-documentation/114-01-SUMMARY.md"
   - ".planning/workstreams/workflows/phases/114-degradation-and-documentation/114-02-PLAN.md"
@@ -43,21 +42,92 @@ covered_files:
   - "tests/architecture/catalog-uat.test.ts"
   - "tests/architecture/no-probe-in-workflows-bridge.test.ts"
   - "tests/architecture/source-scan.ts"
+  - "tests/architecture/workflows-doc-pins.test.ts"
   - "tests/architecture/workflows-marker-coverage.test.ts"
   - "tests/domain/resolver.test.ts"
   - "tests/orchestrators/plugin/install.test.ts"
-covered_digest: "v1:sha256:ed32eb2d470cfec0cdfa170c17b3b257fd92fa943cff03613331d698f2c664d1"
+covered_digest: "v1:sha256:d9394440ee18b3e4efc0233c194241b1b8b3ae7f28dd7c5d696d475c8c6caa67"
 behavior_unverified: 0
 overrides_applied: 0
+re_verification:
+  previous_status: passed
+  previous_score: 7/7
+  gaps_closed: []
+  gaps_remaining: []
+  regressions: []
 ---
 
 # Phase 114: Degradation and documentation Verification Report
 
 **Phase Goal:** The host engine becomes the third soft dependency, and the
 contract of the one bridge that installs executable code is written down.
-**Verified:** 2026-09-08T08:45:00Z
+**Verified:** 2026-09-09T21:00:00Z
 **Status:** passed
-**Re-verification:** No — initial verification
+**Re-verification:** Yes — the 2026-09-08 report covered a tree that ten
+files have since moved under: `docs/output-catalog.md`,
+`docs/workflows-compatibility.md`,
+`extensions/pi-claude-marketplace/orchestrators/plugin/{install,shared,reinstall}.ts`,
+`extensions/pi-claude-marketplace/orchestrators/reconcile/{apply-outcomes,notify}.ts`,
+`extensions/pi-claude-marketplace/shared/{notify,notify-reasons}.ts`,
+`tests/architecture/catalog-uat.test.ts`, and
+`tests/orchestrators/plugin/install.test.ts`, all touched by Phases 115, 116
+and 117. This report re-derives every Phase 114 conclusion directly against
+HEAD (commit `f0581b7`) rather than reusing the prior report's readings. It
+does not re-grade Phases 115/116/117's own work — only whether their changes
+left Phase 114's goal standing. `reinstall.ts` itself carries no `Dependency[]`
+derivation (the derivation site is `reinstall.messaging.ts`, confirmed by the
+tree-bound coverage gate below), so its inclusion in the changed-file list
+does not add a new must-have to check.
+
+## What changed underneath Phase 114, and what was re-established
+
+1. **`shared/notify.ts` / `shared/notify-reasons.ts`** — Phase 116 appended an
+   unrelated 46th `REASONS` member (`"components now supported"`,
+   WCONV-03) *after* `"requires pi-dynamic-workflows"` (the 45th, Phase 114's
+   own addition). Re-read the array at HEAD: `requires pi-dynamic-workflows`
+   still sits immediately after `stale workflow command`, at the same index
+   it held at Phase 114 close; the new member is appended, not inserted.
+   `tests/architecture/notify-closed-set-locks.test.ts`'s
+   `REASONS.length === 46` assertion (updated by Phase 116) now pins the new
+   count and passed when run directly. Phase 114's WDEP-04 ordering claim
+   ("no existing member's index moves") still holds.
+2. **`docs/output-catalog.md` / `tests/architecture/catalog-uat.test.ts`** —
+   Phases 115 and 116 raised the pinned example count from 195 to 197. Both
+   of Phase 114's own catalog states
+   (`success-with-workflow-engine-absent`,
+   `success-with-agents-and-workflows-soft-dep`) are still present, still
+   byte-pinned, and the full `catalog-uat` suite (6 tests, including the
+   197-example lock and the inverse fixture walk) passed when run directly.
+3. **`docs/workflows-compatibility.md`** — Phase 115 touched the
+   admit-versus-run gate table; Phase 117 rewrote the `agent()`
+   failure-semantics section, replacing a source-read-only claim ("every
+   failure branch throws") with a runtime-measured recoverable/non-recoverable
+   split, and states in its own prose that this supersedes what the document
+   "previously said." That correction does not touch anything Phase 114
+   established (the nine-check/six-warning admit-versus-run figures, the two
+   host-engine peer floors, the upstream-stability version count, the
+   severity-raise-on-three-surfaces rule) — all re-read at HEAD and unchanged
+   from what the prior report recorded. `tests/architecture/workflows-doc-pins.test.ts`
+   (not present at Phase 114 close; a later hardening addition) independently
+   gates the doc's WDOC-01 figures against the source counts and against the
+   retired "seven gates" wording, and passed when run directly.
+4. **`orchestrators/plugin/{install,shared}.ts`,
+   `orchestrators/reconcile/{apply-outcomes,notify}.ts`,
+   `orchestrators/plugin/reinstall.messaging.ts`,
+   `tests/orchestrators/plugin/install.test.ts`** — all five of the
+   `Dependency[]` derivation sites among the ten changed files
+   (`install.ts`, `shared.ts`, `apply-outcomes.ts`, plus the untouched
+   `list.ts`, `update-row.ts`, `import/execute.ts`,
+   `reinstall.messaging.ts`) are covered by
+   `tests/architecture/workflows-marker-coverage.test.ts`'s tree-bound
+   coverage gate (a regex scan of `orchestrators/` re-derives the 7-site set
+   and asserts it equals the hardcoded case list, in both directions) — run
+   directly at HEAD, both of its tests passed, confirming no 8th untracked
+   derivation exists and none of the 7 lost its marker. The byte-equality
+   test in `tests/orchestrators/plugin/install.test.ts`
+   ("WDEP-02 / WDEP-03: the envelope bytes do not depend on whether the host
+   engine is loaded") and `tests/architecture/no-probe-in-workflows-bridge.test.ts`
+   were both run directly at HEAD and passed unchanged.
 
 ## Goal Achievement
 
@@ -65,13 +135,13 @@ contract of the one bridge that installs executable code is written down.
 
 | # | Truth (ROADMAP success criterion) | Status | Evidence |
 |---|---|---|---|
-| 1 | `Dependency` carries a third member and every surface that can render a soft-dependency marker renders `requires pi-dynamic-workflows`, per the CONTEXT-authorized wording caveat (union member, not tuple; byte-order guarantee delivered via two catalog states, not an order-and-length lock) | ✓ VERIFIED | `shared/concerns/soft-dep.ts` declares `type Dependency = "agents" \| "mcp" \| "workflows"` with header explicitly stating "nothing iterates the members at runtime, so the union type alone is the sole declaration site" (matches D-114-01/02 of CONTEXT). All 7 `Dependency[]` derivation sites (`install.ts`, `list.ts`, `shared.ts`, `reinstall.messaging.ts`, `update-row.ts`, `import/execute.ts`, `reconcile/apply-outcomes.ts`) independently grepped and confirmed to push `"workflows"` last. `docs/output-catalog.md` pins two byte-exact rendered states (`success-with-workflow-engine-absent`, `success-with-agents-and-workflows-soft-dep`) showing marker order `agents, mcp, workflows`. `REASONS` array confirmed 45 members with `"requires pi-dynamic-workflows"` last, pinned by `notify-closed-set-locks.test.ts` (`REASONS.length === 45`). |
-| 2 | The envelopes are written whether or not the engine is loaded, and two installs differing only in the session's tool list write the same bytes | ✓ VERIFIED | `tests/orchestrators/plugin/install.test.ts:9793` (`WDEP-02 / WDEP-03: the envelope bytes do not depend on whether the host engine is loaded`) pins an independently-hand-written envelope literal FIRST (`assert.equal(withoutEngine.envelopeBytes, workflowEnvelopeBytes)`), then compares the two runs' raw bytes with `assert.equal` (no `JSON.parse`), plus inventory equality and marker-presence assertions in BOTH directions. Read verbatim; confirmed non-vacuous — "no bytes at all, twice" would fail the literal-pin assertion before the pairwise comparison runs. `tests/architecture/no-probe-in-workflows-bridge.test.ts` (post-review-fix) structurally forbids the probe surface (`softDepStatus`, `SoftDepStatus`, `hasLoadedWorkflowEngine`, `workflowEngineLoaded`, plus the WR-03 capability patterns `getAllTools`, `ExtensionAPI`) from all 5 files in `bridges/workflows/`, with the roster derived from `readdir` rather than hardcoded (closes the WR-03 addition hole). Test ran green as part of the `npm run check` I executed myself (exit 0). |
-| 3 | A gate, not a grep, proves the marker coverage: reverting any one `Dependency[]` derivation turns exactly one case red | ✓ VERIFIED | `tests/architecture/workflows-marker-coverage.test.ts` holds 7 `SITE_CASES` records driving each site through its public surface (2 direct exported functions, 2 exported row composers, 3 full-orchestrator drives with a plugin carrying a NAMED `meta` export so a stub can't pass vacuously), asserted via one `assert.deepEqual` over a projection — reverting one arm turns exactly one row red (verified in SUMMARY's negative-control transcript for all 7, not just the required 1). Independently confirmed the forcing construct: a second test scans `orchestrators/` for the `DERIVATION_SHAPE` regex and asserts set equality against `SITE_CASES` in both directions. I independently re-grepped `orchestrators/` for the same shape and got exactly the same 7 files the case list names — no eighth site exists on this tree. I also ran the regex against a real non-derivation type annotation (`readonly dependencies: readonly Dependency[];` in `apply-outcomes.ts`) and confirmed it does NOT match (verifying the anchoring claim that a pure type annotation cannot false-red the gate), while confirming it DOES match both real derivation shapes present in the tree. This is the exact WR-04 hole the code review found and the fix (`9f255745`) closed — I verified the closed state, not the pre-fix state. |
-| 4 | `docs/workflows-compatibility.md` states which engine runs third-party JavaScript, how it is sandboxed, which script shapes install and then refuse to run, and which claims were measured versus read. Engine claims cite 3.10.1 and Spike 027 | ✓ VERIFIED | Read the full 244-line document. States the engine by name (`@quintinshaw/pi-dynamic-workflows`) and why it was chosen over the rejected `@nicknisi/pi-workflows`; quotes the engine's own "vm is not a security sandbox" caveat verbatim; tabulates 8 admit-versus-run divergence rows plus a 9-check refusal classification table (nine checks, six `validateMeta` messages — matches the corrected D-114-03 figures, not the stale "seven gates" figure inherited from the archived requirement); every claim carries an explicit evidence-grade tag (`source-read at 3.10.1`, `runtime-measured at 3.10.1`, `measured at 3.5.1`, `read from the 2.1.251 binary`, `documented upstream`); cites 3.10.1 throughout and Spike 027 by name multiple times, including for the sandbox `process.env` measurement and the `agent()` failure-semantics section. Both the WR-01 (0.x → correct "past 1.0, 57 versions across 3 majors" wording) and WR-05 (severity-raise qualification: 3 of 7 surfaces raise `warning`, stated explicitly) review fixes confirmed landed in the current text. |
-| 5 | The engine's own peer floor (`pi-coding-agent >=0.80.8`) is documented as distinct from this project's (`>=0.80.5`) | ✓ VERIFIED | `docs/workflows-compatibility.md` "Host engine requirements" section states both floors as two bullet points naming two different packages: `pi-claude-marketplace peers on @earendil-works/pi-coding-agent >=0.80.5. This project has not raised its own floor...` / `@quintinshaw/pi-dynamic-workflows 3.10.1 peers on @earendil-works/pi-coding-agent >=0.80.8...`. Cross-checked `package.json`: `peerDependencies["@earendil-works/pi-coding-agent"] === ">=0.80.5"`, confirming the doc's claim about this project's own floor is accurate and unchanged (D-114-07: no `package.json` edit in this phase). |
-| 6 | The path-bearing premise is confirmed against Claude Code's own documentation, or the behavior resting on it is changed | ✓ VERIFIED | `tests/domain/resolver.test.ts:1795-1811` (the `WINV-01 strict: a non-string workflows declaration resolves unavailable` test) carries a header comment stating the confirmed citation: Claude Code 2.1.251's manifest schema declares `workflows` as `string \| array`, described identically to `themes`/`outputStyles`, corroborated by the published plugins reference. No "premise has lineage but no upstream citation" language remains (grepped, no match). `docs/workflows-compatibility.md` line 46 carries the same citation with explicit HIGH/MEDIUM grading (binary read HIGH, published page MEDIUM). Behavior did NOT change — `SUPPORTED_COMPONENT_PATH_KINDS` still includes `workflows`, matching D-114-01's disposition (confirmed, not falsified). |
-| 7 | `npm run check` is green | ✓ VERIFIED | Ran `npm run check` myself in the main checkout (not trusting the 4 independent SUMMARY/REVIEW-FIX claims). Completed with exit code 0. Final stages: `npm test` → 5564 tests, 313 suites, 0 failures; `npm run test:integration` → 34 tests, 0 failures. Full chain (`typecheck && lint && fallow && format:check && test:corresponding && test:corresponding:negative && test:coverage:direct:negative && test && test:integration`) ran to completion with no early exit. |
+| 1 | `Dependency` carries a third member and every surface that can render a soft-dependency marker renders `requires pi-dynamic-workflows` | ✓ VERIFIED | `shared/concerns/soft-dep.ts:30` at HEAD: `type Dependency = "agents" \| "mcp" \| "workflows"` — still exactly 3 members. `shared/notify.ts` `REASONS` array read in full (lines 93-278 at HEAD): 46 members (up from 45, Phase 116 addition), `"requires pi-dynamic-workflows"` still present at its original relative position, immediately after `"stale workflow command"`. `docs/output-catalog.md`'s two Phase 114 catalog states re-read and still byte-pinned. |
+| 2 | The envelopes are written whether or not the engine is loaded, and two installs differing only in the session's tool list write the same bytes | ✓ VERIFIED | `tests/orchestrators/plugin/install.test.ts` "WDEP-02 / WDEP-03: the envelope bytes do not depend on whether the host engine is loaded" run directly at HEAD: 1 test, 1 pass. |
+| 3 | A gate, not a grep, proves the marker coverage: reverting any one `Dependency[]` derivation turns exactly one case red | ✓ VERIFIED | `tests/architecture/workflows-marker-coverage.test.ts` run directly at HEAD: both tests pass — the 7-case coverage assertion and the tree-bound `DERIVATION_SHAPE` re-enumeration confirming the case list still equals the discovered site set on the current tree (which now includes the post-Phase-115/116/117 versions of `install.ts`, `shared.ts`, and `apply-outcomes.ts`). |
+| 4 | `docs/workflows-compatibility.md` states which engine runs third-party JavaScript, how it is sandboxed, which script shapes install and then refuse to run, and which claims were measured versus read. Engine claims cite 3.10.1 and Spike 027 | ✓ VERIFIED | Doc re-read in full at HEAD (258 lines, up from 244 — Phase 117 grew the `agent()` section). Still states the engine by name, still quotes the "vm is not a security sandbox" caveat verbatim, still tabulates "nine distinct checks" / "Six of those seven" warned, still carries per-claim evidence grades, still cites 3.10.1 and Spike 027 throughout. `tests/architecture/workflows-doc-pins.test.ts::"WDOC-01: the refusal-check counts agree with the enumerations beneath them"` and `::"the compatibility doc states this project's peer floor as package.json declares it"` both run directly and passed, mechanically re-proving these two figures against the source at HEAD rather than trusting a re-read. |
+| 5 | The engine's own peer floor (`pi-coding-agent >=0.80.8`) is documented as distinct from this project's (`>=0.80.5`) | ✓ VERIFIED | Doc's "Host engine requirements" section (line 181-188) unchanged in substance; cross-checked `package.json` at HEAD: `peerDependencies["@earendil-works/pi-coding-agent"] === ">=0.80.5"`. `workflows-doc-pins.test.ts` mechanically asserts this pairing and passed. |
+| 6 | The path-bearing premise is confirmed against Claude Code's own documentation, or the behavior resting on it is changed | ✓ VERIFIED | `tests/domain/resolver.test.ts` untouched by the ten-file diff; re-read the cited test and the doc's matching citation (line 46) — both still present, unchanged. `SUPPORTED_COMPONENT_PATH_KINDS` still includes `workflows` (behavior unchanged, matching the confirmed premise). |
+| 7 | `npm run check` is green | ✓ VERIFIED (by measurement, not re-run) | Per this re-verification's constraints, `npm run check` was not re-run — it completed at exit 0 during Phase 117's fix pass (5654 unit / 35 integration). Confirmed by measurement that no source has moved since: `git status --short` at HEAD shows a clean tree (only pre-existing operator-owned files: `.claude/settings.json`, `.codex/config.toml`, and untracked non-source paths), and `git log -1` shows HEAD is `f0581b7`, the Phase 117 close commit, with no intervening commits. Additionally ran the specific targeted suites this re-verification depends on directly (`workflows-marker-coverage.test.ts`, `catalog-uat.test.ts`, `no-probe-in-workflows-bridge.test.ts`, `notify-closed-set-locks.test.ts`, `compat-01-no-expansion.test.ts`, `workflows-doc-pins.test.ts`, and the byte-equality test in `install.test.ts`) — all green, 0 failures. |
 
 **Score:** 7/7 truths verified (0 present, behavior-unverified)
 
@@ -79,60 +149,60 @@ contract of the one bridge that installs executable code is written down.
 
 | Artifact | Expected | Status | Details |
 |---|---|---|---|
-| `platform/pi-api.ts::hasLoadedWorkflowEngine` | Probes `workflow_control` exactly, catch → false | ✓ VERIFIED | Read verbatim: `pi.getAllTools().some((tool) => tool.name === "workflow_control")`, `catch { return false; }`. No case folding, no substring, no `sourceInfo` fallback. |
-| `shared/concerns/soft-dep.ts::Dependency` | 3-member literal union, no runtime tuple | ✓ VERIFIED | `type Dependency = "agents" \| "mcp" \| "workflows"`, module header explains why no tuple. `softDepMarkers` takes a required 3rd positional boolean, appends the marker last. |
-| `shared/notify.ts::REASONS` | 45 members, new token last | ✓ VERIFIED | Pinned by `notify-closed-set-locks.test.ts` (`REASONS.length === 45`) and `compat-01-no-expansion.test.ts`. |
-| `tests/architecture/workflows-marker-coverage.test.ts` | Coverage gate over 7 derivation sites, bound to tree | ✓ VERIFIED | Both the site-driving test and the WR-04 forcing-construct test present; independently re-derived the 7-site set via grep and confirmed it matches. |
-| `tests/architecture/no-probe-in-workflows-bridge.test.ts` | Bridge files carry zero probe surface | ✓ VERIFIED | Post-fix version scans all `.ts` files in `bridges/workflows/` via `readdir` (not hardcoded), 6 forbidden patterns including WR-03's `getAllTools`/`ExtensionAPI` additions. |
-| `docs/workflows-compatibility.md` | New 200+ line executable-code contract | ✓ VERIFIED | 244 lines, all required sections present (manifest/discovery, admit-vs-run divergence, refusal classification, script semantics, sandbox, `agent()` semantics, naming, host engine requirements, when absent, upstream stability, install-time disposition). |
-| `README.md` / `README.es.md` | Workflows in Features, host engine in Prerequisites, tagline updated, doc linked | ✓ VERIFIED | All three additions present on identical line numbers in both files. Tagline fix (WR-02) confirmed landed: "...hooks, MCP servers and workflows." / "...hooks, servidores MCP y workflows de Claude." |
-| `tests/domain/resolver.test.ts` | Upstream citation replaces open-premise paragraph | ✓ VERIFIED | Citation present, byte-identical assertions (comment-only diff per SUMMARY, confirmed by reading current state). |
+| `platform/pi-api.ts::hasLoadedWorkflowEngine` | Probes `workflow_control` exactly, catch → false | ✓ VERIFIED | Untouched by the ten-file diff; unchanged from the prior report's reading. |
+| `shared/concerns/soft-dep.ts::Dependency` | 3-member literal union, no runtime tuple | ✓ VERIFIED | Re-read at HEAD, unchanged: `type Dependency = "agents" \| "mcp" \| "workflows"`. |
+| `shared/notify.ts::REASONS` | Closed set, `requires pi-dynamic-workflows` present and correctly ordered | ✓ VERIFIED | Now 46 members (Phase 116 added `"components now supported"` after it); Phase 114's member and its relative position unchanged. Pinned by `notify-closed-set-locks.test.ts` (`REASONS.length === 46`), run directly, passed. |
+| `tests/architecture/workflows-marker-coverage.test.ts` | Coverage gate over 7 derivation sites, bound to tree | ✓ VERIFIED | Run directly at HEAD against the post-Phase-115/116/117 versions of the three touched derivation sites; both tests pass; tree-bound re-enumeration confirms no 8th site exists. |
+| `tests/architecture/no-probe-in-workflows-bridge.test.ts` | Bridge files carry zero probe surface | ✓ VERIFIED | Run directly at HEAD, 1 test, passed. |
+| `docs/workflows-compatibility.md` | Executable-code contract, evidence-graded | ✓ VERIFIED | Re-read in full at HEAD (258 lines); Phase 114's sections all present and internally consistent with Phase 117's `agent()` rewrite (the rewrite states its own supersession explicitly, in keeping with the evidence-grading discipline Phase 114 established, rather than silently contradicting it). |
+| `README.md` / `README.es.md` | Workflows in Features, host engine in Prerequisites, tagline updated, doc linked | ✓ VERIFIED | Untouched by the ten-file diff; re-confirmed present by `workflows-doc-pins.test.ts::"WDOC-01: both READMEs carry the workflows entry..."`, run directly, passed. |
+| `tests/domain/resolver.test.ts` | Upstream citation replaces open-premise paragraph | ✓ VERIFIED | Untouched by the ten-file diff; unchanged from the prior report's reading. |
 
 ### Key Link Verification
 
 | From | To | Via | Status | Details |
 |---|---|---|---|---|
-| `platform/pi-api.ts::hasLoadedWorkflowEngine` | `shared/notify.ts` row rendering | `softDepStatus` → `softDepMarkers` → `composeReasons` → `notify()` | ✓ WIRED | Full chain confirmed by reading each hop; `install.ts:1854` is the sole legitimate probe consumer among orchestrators, exempted by name in the no-probe gate's own header comment. |
-| 7 `Dependency[]` derivation sites | Rendered plugin row | `orchestrators/*` → `shared/notify.ts::notify()` | ✓ WIRED | `workflows-marker-coverage.test.ts` drives all 7 through their public surfaces and asserts on rendered bytes, not intermediate arrays (D-114-05). |
-| `bridges/workflows/stage.ts` | Envelope write | `prepareStageWorkflows` (no `pi` parameter) | ✓ WIRED (and structurally isolated from the probe) | `StageWorkflowsInput` carries no `pi`; `no-probe-in-workflows-bridge.test.ts` proves the isolation by scan, byte-equality pair proves it behaviorally. |
+| `platform/pi-api.ts::hasLoadedWorkflowEngine` | `shared/notify.ts` row rendering | `softDepStatus` → `softDepMarkers` → `composeReasons` → `notify()` | ✓ WIRED | Re-confirmed: `install.ts:1867` still the sole probe-consuming call among the 3 `companionSeverity` production call sites re-grepped at HEAD (`install.ts:1867`, `update.ts:2844`, `enable-disable.ts:1273`), matching the doc's "three surfaces raise" claim exactly. |
+| 7 `Dependency[]` derivation sites | Rendered plugin row | `orchestrators/*` → `shared/notify.ts::notify()` | ✓ WIRED | `workflows-marker-coverage.test.ts` drives all 7 (including the 3 post-Phase-115/116/117 versions) through their public surfaces and passed. |
+| `bridges/workflows/stage.ts` | Envelope write | `prepareStageWorkflows` (no `pi` parameter) | ✓ WIRED (isolated from the probe) | `no-probe-in-workflows-bridge.test.ts` re-run at HEAD, passed. |
 
 ### Behavioral Spot-Checks
 
 | Behavior | Command | Result | Status |
 |---|---|---|---|
-| DERIVATION_SHAPE regex correctly distinguishes derivations from type annotations | `node -e` regex test against 3 real lines from the tree | Function return type: matches (true). Accumulator: matches (true). Pure type annotation: does not match (false) | ✓ PASS |
-| 7-site enumeration matches SITE_CASES | `grep -rnE` for both derivation shapes across `orchestrators/` | Exactly 7 files: `update-row.ts`, `import/execute.ts`, `install.ts`, `reinstall.messaging.ts`, `list.ts`, `shared.ts`, `apply-outcomes.ts` | ✓ PASS |
-| `companionSeverity` production call sites | `grep -rn "companionSeverity("` | Exactly 3: `install.ts:1854`, `update.ts:2844`, `enable-disable.ts:1273` — matches WR-05 fix's stated claim | ✓ PASS |
-| `requires pi-workflows` (unscoped, wrong package) does not appear anywhere reachable | `grep -rn` across `docs/`, `tests/`, `extensions/`, both READMEs | No match | ✓ PASS |
-| `npm run check` | full chain | exit 0, 5564+34 tests pass | ✓ PASS |
+| `Dependency` union still exactly 3 members | `grep -n "^export type Dependency"` | `"agents" \| "mcp" \| "workflows"` | ✓ PASS |
+| `REASONS` closed-set count and marker position at HEAD | direct test run: `notify-closed-set-locks.test.ts` | `REASONS.length === 46`; marker unmoved | ✓ PASS |
+| 7-site marker-coverage gate on the post-Phase-115/116/117 tree | direct test run: `workflows-marker-coverage.test.ts` | 2/2 pass | ✓ PASS |
+| Envelope byte-equality (engine loaded vs. absent) | direct test run: `install.test.ts -t "envelope bytes do not depend"` | 1/1 pass | ✓ PASS |
+| Catalog corpus lock and Phase 114's two catalog states | direct test run: `catalog-uat.test.ts` | 6/6 pass, 197-example lock holds | ✓ PASS |
+| Compatibility-doc figures (9 checks / 6 warnings / 3 severity-raising surfaces / peer floors) mechanically re-checked against source | direct test run: `workflows-doc-pins.test.ts` | 4/4 pass | ✓ PASS |
+| No debt markers (`TBD`/`FIXME`/`XXX`) in the 10 changed files | `grep -n -E "TBD\|FIXME\|XXX"` over all 10 | no matches | ✓ PASS |
+| No stale wrong-package or retired-figure wording reintroduced | `grep -rn "requires pi-workflows\b"` / `"seven gates"` (only in the test's own guard string) | no unguarded stale text | ✓ PASS |
+| Working tree clean since Phase 117's `npm run check` run | `git status --short` / `git log -1` | clean (operator files only); HEAD is the Phase 117 close commit | ✓ PASS |
 
 ### Requirements Coverage
 
 | Requirement | Description | Status | Evidence |
 |---|---|---|---|
-| WDEP-01 | Probe via `workflow_control`, not bare `workflow` | ✓ SATISFIED | `hasLoadedWorkflowEngine` verified above. |
-| WDEP-02 | Workflow artifacts written with engine absent, install still succeeds, degradation reason carried | ✓ SATISFIED | Byte-equality test truth #2. |
-| WDEP-03 | Install-engine-and-reload recovers with no reinstall | ✓ SATISFIED (mechanical proof) | Bridge-probe isolation gate + byte-equality pair prove the mechanism; the live end-to-end claim itself rests on Spike 027 (pre-existing evidence base, explicitly out of scope for a new canary per D-114-08) and is stated at that grade in the doc, not overclaimed. |
-| WDEP-04 | `workflows` becomes 3rd `Dependency` member with marker, new REASONS token | ✓ SATISFIED | Truth #1. Note: delivered as a union member per D-114-01/02, not a re-introduced tuple — this is the CONTEXT-authorized reading of the requirement text, not a deviation. |
-| WDOC-01 | Docs state executable-code framing, engine name/trust grounds, guaranteed-vs-divergent semantics, evidence grading | ✓ SATISFIED | Truth #4. Uses corrected 3.10.1 figures (9 checks / 6 messages), not the stale "seven gates" figure the archived requirement text itself carries — correct per D-114-03. |
-| WDOC-02 | `docs/output-catalog.md` carries new token and rendered states under the byte gate | ✓ SATISFIED | Two states confirmed present and byte-pinned. |
-| WDOC-03 | `acorn` declared as a runtime dependency | ✓ SATISFIED | Verified `package.json` declares `acorn ^8.16.0` in `dependencies`; per D-114-07 this phase only verifies, does not change it. |
+| WDEP-01 | Probe via `workflow_control`, not bare `workflow` | ✓ SATISFIED | Unchanged file; unaffected by the ten-file diff. |
+| WDEP-02 | Workflow artifacts written with engine absent, install still succeeds, degradation reason carried | ✓ SATISFIED | Byte-equality test re-run at HEAD, passed. |
+| WDEP-03 | Install-engine-and-reload recovers with no reinstall | ✓ SATISFIED (mechanical proof, unchanged grade) | Same bridge-isolation + byte-equality mechanism, re-run at HEAD. |
+| WDEP-04 | `workflows` becomes 3rd `Dependency` member with marker, new REASONS token | ✓ SATISFIED | Truth #1; `Dependency` still 3 members, marker still present and correctly ordered inside a now-46-member set. |
+| WDOC-01 | Docs state executable-code framing, engine name/trust grounds, guaranteed-vs-divergent semantics, evidence grading | ✓ SATISFIED | Truth #4; figures mechanically re-verified by `workflows-doc-pins.test.ts` against the current source, not just re-read. |
+| WDOC-02 | `docs/output-catalog.md` carries new token and rendered states under the byte gate | ✓ SATISFIED | Two Phase 114 states re-confirmed present and byte-pinned under the now-197-example corpus. |
+| WDOC-03 | `acorn` declared as a runtime dependency | ✓ SATISFIED | `package.json` unchanged by the ten-file diff; re-confirmed present. |
 
-All 7 requirement IDs (WDEP-01..04, WDOC-01..03) traced to `.planning/workstreams/workflows/milestones/workflows-REQUIREMENTS.md` lines ~133-149 (archived file, per this milestone's re-land structure) and cross-checked `[x]` complete in that source. No orphaned requirements found for this phase.
+`.planning/workstreams/workflows/REQUIREMENTS.md` lines 131-137 confirm all 7 IDs (WDEP-01..04, WDOC-01..03) mapped to Phase 114 and marked `Complete`. No orphaned requirements found for this phase.
 
 ### Anti-Patterns Found
 
-None blocking. Debt-marker scan (`TBD`/`FIXME`/`XXX`) on the phase's changed files: none found. One legitimately-open, explicitly-referenced debt item exists (Broken Windows #34, `docs/workflows-compatibility.md:23`, `unmet-truth`, `status: open`) — this records that the doc's ~15 engine source line-number citations are pinned to 3.10.1 and unguarded against a future engine upgrade (WR-06 finding). The review-fix explicitly chose to keep the citations (with a stated staleness contract) over dropping them, and filed the ledger entry naming `WPIN-01` as the subject of the eventual re-read. This is documented, intentional, future-tracked debt — not a phase-114 gap. Broken Windows #32 (marker gap on enable/update rows) and #33 (README taglines) are both `status: fixed`, confirmed by reading the current source.
-
-Three code-review Info findings (IN-01, IN-02, IN-04) were deliberately left unfixed with recorded rationale in `114-REVIEW-FIX.md` — all pre-existing or genuinely out-of-scope-and-non-free per the review-fix's own analysis, none blocking the phase goal.
+None blocking. Debt-marker scan (`TBD`/`FIXME`/`XXX`) on all ten changed files at HEAD: no matches. Broken Windows #34 (the pinned-line-number staleness risk in `docs/workflows-compatibility.md`, tracked as `WPIN-01`) remains open and unaffected by this re-verification — it was already documented, intentional, future-tracked debt at Phase 114 close and none of the ten changes altered that disposition.
 
 ## Gaps Summary
 
-None. All 7 ROADMAP success criteria verified directly against the codebase (not inferred from SUMMARY claims): the union-based `Dependency` reading was cross-checked against `114-CONTEXT.md`'s explicit D-114-01/02 authorization before being accepted, all 7 marker-coverage derivation sites were independently re-enumerated by grep and matched the gate's case list exactly, the byte-equality and no-probe gates were read post-review-fix (not the pre-fix state the SUMMARY narrates), the compatibility doc was read in full and its evidence-grade discipline confirmed, both peer floors were cross-checked against `package.json`, the resolver citation was read directly, and `npm run check` was executed by the verifier (not merely cited) and returned exit 0 with 5598 total tests passing (5564 unit + 34 integration).
-
-The code review (6 warnings, 4 info) and its fix report were both read; all 6 warnings were independently spot-checked in the current source and confirmed fixed, not merely claimed fixed.
+None. All ten files that moved underneath the prior verification were individually re-checked against Phase 114's specific claims at HEAD, and every check that exists to enforce those claims (`workflows-marker-coverage.test.ts`, `catalog-uat.test.ts`, `no-probe-in-workflows-bridge.test.ts`, `notify-closed-set-locks.test.ts`, `compat-01-no-expansion.test.ts`, `workflows-doc-pins.test.ts`, and the install-test byte-equality assertion) was run directly by this verifier — not cited from a SUMMARY — and passed. Phase 117's `agent()`-semantics rewrite in `docs/workflows-compatibility.md` corrects a source-read-only claim with a runtime-measured one and states its own supersession in-document; this is the evidence-grading discipline Phase 114 established operating as designed, not a regression of anything Phase 114 claimed. Phase 116's `REASONS` 46th member and Phase 115/116's catalog-count increase to 197 both land strictly additively relative to Phase 114's markers, confirmed by direct index/position checks rather than by trusting the count alone. The host engine remains the third and only additional `Dependency` union member (still exactly 3), and the workflows bridge's executable-code contract in `docs/workflows-compatibility.md` still stands, fully cross-referenced and internally consistent, at HEAD (`f0581b7`).
 
 ---
 
-_Verified: 2026-09-08T08:45:00Z_
-_Verifier: Claude (gsd-verifier)_
+_Verified: 2026-09-09T21:00:00Z_
+_Verifier: Claude (gsd-verifier, re-verification)_

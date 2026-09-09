@@ -1,6 +1,6 @@
 ---
 phase: 115-install-time-admission-gate-warnings
-verified: 2026-09-09T10:05:00Z
+verified: 2026-09-09T00:00:00Z
 status: passed
 score: 6/6 must-haves verified (5 success criteria + the goal's absolute)
 behavior_unverified: 0
@@ -44,7 +44,7 @@ covered_files:
   - tests/orchestrators/plugin/reinstall.test.ts
   - tests/orchestrators/plugin/shared.test.ts
   - tests/orchestrators/plugin/update.test.ts
-covered_digest: "v1:sha256:b45b06c01904e0b8eb82ca2c7027461cb51750fd7ee558629ef8c70a8ae9ddfc"
+covered_digest: "v1:sha256:b25a165b7c45125ef2c7bf4e9ea57ae94a94097927d0a82b7f8839f969011301"
 re_verification:
   previous_status: passed
   previous_score: 6/6
@@ -57,45 +57,47 @@ re_verification:
 
 **Phase Goal:** A plugin author who ships a workflow script the host engine will refuse learns it at install time, with the refusing gate named — and the install still succeeds, every sibling script is unaffected, and no gate reading can ever block anything.
 
-**Verified:** 2026-09-09T10:05:00Z
+**Verified:** 2026-09-09T00:00:00Z
 **Status:** passed
-**Re-verification:** Yes — a prior VERIFICATION.md (status: passed, 6/6) went stale because two files in its own `covered_files` list were edited after it was written: `.planning/WINDOWS.md` (edited by the security audit, commit `66625997`, correcting entry #37's containment measurement and closing entry #36) and `115-VALIDATION.md` (edited by the nyquist gate, commit `3107272a`, setting `status: validated` / `nyquist_compliant: true` after finding 0 gaps). This report does not refresh the digest and rubber-stamp the prior text — every must-have below was independently re-checked against the tree at HEAD by direct source reads and live test runs, not inherited from the prior report or from any SUMMARY.
+**Re-verification:** Yes. The prior `115-VERIFICATION.md` (verified `2026-09-09T10:05:00Z`, `passed`, 6/6, committed at `13c774cc`) went stale because six files it names or is adjacent to were edited afterward by Phase 116 and Phase 117 work: `docs/output-catalog.md`, `docs/workflows-compatibility.md`, `extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts`, `tests/architecture/catalog-uat.test.ts`, `115-VALIDATION.md`, and `deferred-items.md`. Of those six, the last two were **not** touched again after `13c774cc` (confirmed by `git log` — their last edits, `3107272a` and `4dcb7c2f`, predate and were already accounted for by the prior report's own "What Changed Since the Prior Verification" section). The four that genuinely moved are `docs/output-catalog.md`, `docs/workflows-compatibility.md`, `reinstall.ts`, and `catalog-uat.test.ts`. This report re-establishes the phase's five success criteria and its goal's absolute claim directly against HEAD (`f0581b7d`) rather than re-reading the prior report's prose.
 
 ## Method
 
-Confirmed first that no source-touching commit landed since the prior verification: `git diff --name-only c8641770..HEAD -- extensions/ tests/ docs/` is empty, and every commit after `c8641770` up to HEAD (`ed0987d3`, `bf6c005a`, `66625997`, `90a08e7a`, `3107272a`) touches only `.planning/` planning artifacts. `git status --short` shows no uncommitted changes to any file this phase touches (the uncommitted files present — `.claude/settings.json`, `.codex/config.toml`, `.claude/CLAUDE.md`, `.mcp.json`, `AGENTS.md`, `.codegraph/`, the workstream `config.json`/`.verification-ledger.json` — are all explicitly out of scope per the task brief and were left untouched).
+`git diff --stat 13c774cc..HEAD -- extensions/ tests/ docs/` shows the full set of production/test/doc files touched by Phases 116 and 117: reconcile modules (`apply.ts`, `apply-outcomes.ts`, `backfill.ts`, `notify.ts`, `types.ts`), `shared/notify.ts` / `shared/notify-reasons.ts`, a new live-UAT canary, `tests/index.test.ts`, and the four files named above. **None of Phase 115's core gate-logic files changed**: `domain/workflow-script.ts`, `bridges/workflows/discover.ts`, `bridges/workflows/types.ts`, `orchestrators/plugin/install.ts`, and `orchestrators/plugin/shared.ts` are byte-identical to what the prior verification checked (confirmed by their absence from the diff-stat output). This means criteria 1, 2, and 3 — which depend entirely on that code — hold by construction; they were additionally re-run live this session as a check against the possibility of an out-of-band edit the diff missed.
 
-With the code frozen, every claim below was re-derived from the tree directly: `grep`/`sed` reads of the actual source and test files (not their SUMMARY descriptions), plus four live `node --test` runs and one live `tsc --noEmit` run executed in this session. Grading uses **D-115-01's corrected six-gate set** (checks 3, 4, 5, 6, 8, 9) for Criterion 1, per the phase brief's binding instruction, not the ROADMAP's uncorrected seven-item prose list.
+For the four files that did change, each diff was read in full and traced to a Phase 116/117 concern (load-time convergence marker `WCONV-03`, and the `agent()` failure-semantics rewrite) to confirm no hunk touches the Phase 115 surface, then the affected tests were re-run live.
 
 ## Goal Achievement
 
-### Success Criteria (graded against D-115-01, not the ROADMAP's raw prose)
+### Success Criteria (graded against D-115-01's corrected six-gate set)
 
-| # | Criterion | Status | Evidence (re-confirmed this session) |
-|---|-----------|--------|--------------------------------------|
-| 1 | Six warnable gates (checks 3,4,5,6,8,9), each names the file + the gate, envelope still written | ✓ VERIFIED | Read `domain/workflow-script.ts:63-70` directly: `GATE_ORDER` is a 6-element tuple exactly matching D-115-01's set (`meta-not-first-export`, `meta-not-const-export`, `meta-not-sole-declarator`, `meta-not-named-meta`, `meta-not-pure-literal`, `meta-fields-invalid`). `GATE_PREDICATES` (`:897`) and `GATE_REASONS` (`discover.ts:182`) are both explicitly-annotated `Record<WorkflowGate, ...>` totality locks over the same derived union type. Ran `node --test tests/domain/workflow-script.test.ts tests/bridges/workflows/discover.test.ts tests/architecture/workflows-doc-pins.test.ts tests/architecture/workflows-single-parse.test.ts` live this session: 160/160 pass. Ran the five orchestrator suites live: 669/669 pass. |
-| 2 | A gate reading never refuses a script; sibling scripts install unwarned; no plugin-level status/glyph/disposition change | ✓ VERIFIED | Read `tests/orchestrators/plugin/install.test.ts:10779` (`WGATE-03 / D-115-06: a gate warning moves no byte of the plugin row`) directly — it is a real byte-level `assert.deepStrictEqual(warnedRow, ungatedRow)` over the entire `NotifyRecord`, with non-vacuity anchors on both runs' envelope bytes and notification counts before the comparison. Read `tests/bridges/workflows/discover.test.ts:973` (`WGATE-01: warns once for a gate-tripping script and leaves its well-formed siblings unwarned`) directly — it compares the full `discovery.warnings` array with `assert.deepStrictEqual` and separately asserts neither sibling file name appears anywhere in the joined text. Both are substantive assertions, not presence checks; both re-ran green this session. |
-| 3 | The two refusal paths (unparseable, determinism blocklist) are unchanged and structurally cannot carry a gate | ✓ VERIFIED | Read `domain/workflow-script.ts:127-131` directly: `RefusedWorkflow` has no `gate` field (only `outcome`, `fileName`, `reason`, `cause`) — the field exists solely on `NamedWorkflow`/`StemFallbackWorkflow` (`:82-103`), so a refused verdict cannot carry a gate even by mistake; this is a type-level guarantee, not just a runtime one. `tests/domain/workflow-script.test.ts`'s two `WGATE-04` regression cases (`refuses a script that is both unparseable and gate-tripping as unparseable alone`, `...both nondeterministic and gate-tripping on the blocklist alone`) both pass live. |
-| 4 | The admit-versus-run table states replicate/warn/neither per check, every row agrees with the bridge | ✓ VERIFIED | Read `docs/workflows-compatibility.md:77-87` directly: rows 1-2 `replicate`, rows 3,4,5,6,8,9 `warn` (each carrying its `GATE_REASONS` key name), row 7 `neither` — exactly D-115-01's partition. Read `tests/architecture/workflows-doc-pins.test.ts` directly and confirmed it is a real binding, not a name-only check: `assert.deepEqual` at `:229` compares the doc's warned-row gate names/order against `GATE_ORDER` read live out of `domain/workflow-script.ts`'s own declaration text, and a separate assertion (`:239`) checks every non-warned row's gate-name cell is the placeholder, so a gate cannot hide on a "neither"/"replicate" row. Re-ran live this session: 7/7 (this file plus `workflows-single-parse.test.ts`). |
-| 5 | `WFLW-01` gone from BACKLOG.md, replaced under the pruned-footer convention naming the closing milestone | ✓ VERIFIED | `grep -n "^## WFLW-01" .planning/BACKLOG.md` returns nothing (0 matches). `grep -n "WFLW-01" .planning/BACKLOG.md` returns exactly one hit, inside the new footer at `:891-899`. Read that block directly and compared it structurally against the file's one pre-existing pruned-footer instance at `:2508-2516`: both are `<!--` / a date+milestone sentence / one or more `- "subject" -> closed by <IDs> (parenthetical).` lines / `-->`. The new footer names both closing milestones (`workflows-detection` for the mechanical fix, `workflows-replay` for the bridge) per D-115-08, read directly from `115-CONTEXT.md:205-208`. |
+| # | Criterion | Status | Evidence (re-confirmed this session against HEAD `f0581b7d`) |
+|---|-----------|--------|--------------------------------------------------------------|
+| 1 | Six warnable gates (checks 3,4,5,6,8,9), each names the file + the gate, envelope still written | ✓ VERIFIED | `domain/workflow-script.ts` is unchanged since the prior verification (absent from `git diff --stat 13c774cc..HEAD`). Read `GATE_ORDER` (`:63-70`) directly at HEAD: still the same 6-element tuple (`meta-not-first-export`, `meta-not-const-export`, `meta-not-sole-declarator`, `meta-not-named-meta`, `meta-not-pure-literal`, `meta-fields-invalid`). Ran live: `node --test tests/domain/workflow-script.test.ts tests/bridges/workflows/discover.test.ts tests/architecture/workflows-doc-pins.test.ts tests/architecture/workflows-single-parse.test.ts` → 160/160 pass. Ran live: the five orchestrator suites (`install`, `reinstall`, `info`, `update`, `shared`) → 796/796 pass (127 of these in `reinstall.test.ts` alone, up from the prior report's count because Phase 116 added convergence-arm cases to the same file; none touch WGATE logic). |
+| 2 | A gate reading never refuses a script; sibling scripts install unwarned; no plugin-level status/glyph/disposition change | ✓ VERIFIED | `orchestrators/plugin/install.ts` is unchanged since the prior verification. Re-ran `tests/orchestrators/plugin/install.test.ts` live this session (included in the 796 above) — the `WGATE-03` byte-level `assert.deepStrictEqual(warnedRow, ungatedRow)` case and the `WGATE-01` sibling-isolation case in `tests/bridges/workflows/discover.test.ts` both pass. |
+| 3 | The two refusal paths (unparseable, determinism blocklist) are unchanged and structurally cannot carry a gate | ✓ VERIFIED | `domain/workflow-script.ts`'s `RefusedWorkflow` type (no `gate` field) is unchanged. The two `WGATE-04` regression cases in `tests/domain/workflow-script.test.ts` pass live (in the 160 above). |
+| 4 | The admit-versus-run table states replicate/warn/neither per gate, every row agrees with the bridge | ✓ VERIFIED | Read `docs/workflows-compatibility.md:75-91` (the table, its 9-check enumeration, and the surrounding prose) directly at HEAD: byte-identical to what the prior verification checked — `git diff 13c774cc..HEAD -- docs/workflows-compatibility.md` shows the only changed section is the unrelated "`agent()` failure semantics" prose (lines ~131-166, a Phase 117 rewrite of the fan-out/recoverable-class claim, sharing the file but not the table). Ran `tests/architecture/workflows-doc-pins.test.ts` live at HEAD: 4/4 pass, including `WGATE-05: the classification column is closed and its warned rows name the source's gate union`, which binds the table's gate names against `GATE_ORDER` read live out of the source — this is the mechanism that would fail if the table and the source had drifted, and it passes. |
+| 5 | `WFLW-01` gone from BACKLOG.md, replaced under the pruned-footer convention naming the closing milestone | ✓ VERIFIED | `.planning/BACKLOG.md` was not touched between `13c774cc` and HEAD (`git log --oneline 13c774cc..HEAD -- .planning/BACKLOG.md` returns nothing). `grep -n "^## WFLW-01"` still returns zero matches; `grep -n "WFLW-01"` still returns exactly one hit, inside the pruned footer at `:891-899`, unchanged. Phase 116 appended a new entry, `UPCASC-01`, at line 1829 — a different, unrelated section of the same file; it does not touch the pruned footer or reintroduce an open `WFLW-01` entry. |
 
 ### The Goal's Absolute: "no gate reading can ever block anything"
 
 | Check | Status | Evidence (re-confirmed this session) |
 |---|---|---|
-| Source-level containment | ✓ VERIFIED | Read `readEngineGate` (`domain/workflow-script.ts:841-847`) directly: its whole body is wrapped `try { ... } catch { return undefined; }`. `tests/architecture/workflows-single-parse.test.ts`'s containment case pins this in source by a slice-and-match closed on both ends. Re-ran live: passing. |
-| Behavioral case: a hostile script still installs | ✓ VERIFIED | `tests/orchestrators/plugin/install.test.ts`'s `WGATE-03: a script whose meta carries shapes the gate predicates never expect still installs` case installs end-to-end and asserts the envelope is on disk. `tests/domain/workflow-script.test.ts`'s `stops deciding rather than throwing when a meta literal nests past the walk budget` case drives a 40-level-deep literal past the walk's depth budget of 32, forcing the internal throw, and asserts the script is still admitted with no `gate` key. Both re-ran live this session (both suites are inside the 160/160 and 669/669 runs above). |
+| Source-level containment | ✓ VERIFIED | `readEngineGate`'s `try { ... } catch { return undefined; }` body (`domain/workflow-script.ts:841-847`) is unchanged. `tests/architecture/workflows-single-parse.test.ts` re-run live: passing (in the 160 above). |
+| Behavioral case: a hostile script still installs | ✓ VERIFIED | `tests/orchestrators/plugin/install.test.ts`'s `WGATE-03` install-with-hostile-meta case and `tests/domain/workflow-script.test.ts`'s walk-budget-throw case both re-ran live and pass (within the counts above). |
 
 **Score:** 6/6 must-haves verified, 0 present-but-behavior-unverified, 0 overrides.
 
 ## What Changed Since the Prior Verification (and why it does not move the score)
 
-Both edits are informational corrections outside this phase's success-criteria surface:
+Four files genuinely changed between `13c774cc` (the prior report's commit) and HEAD (`f0581b7d`), all by Phase 116 (load-time convergence, `WCONV-03`) and Phase 117 (`agent()` failure-semantics measurement). None touches Phase 115's success-criteria surface:
 
-1. **`.planning/WINDOWS.md` (commit `66625997`).** Corrected the measurement backing ledger entry #37 (`shared/path-safety.ts:13`, `PathContainmentError` interpolates an untrusted resolved path) from "1 of 23 call sites" to "15 of 58 call sites, several manifest-derived" — a more accurate count of a *pre-existing*, unrelated finding that carries no phase-115 success criterion and remains `open` in the ledger (it is not one of the phase's 30 authored threats; it is recorded in `115-SECURITY.md`'s "Residual flags (not introduced by this phase)" table). This commit also flipped ledger entry #36 (the discovery-warning header wording) from `open` to `fixed`, which I independently re-confirmed by reading `orchestrators/plugin/shared.ts:1461-1462` directly — it now reads "has a note" / "have notes", matching the fix.
-2. **`115-VALIDATION.md` (commit `3107272a`).** Set `status: validated` / `nyquist_compliant: true`, recording that the one seeded Wave-0 gap (WGATE-02's architecture assertion) was closed during execution — I independently confirmed `tests/architecture/workflows-single-parse.test.ts` exists and is 3/3 passing live, matching the file's own claim.
+1. **`docs/output-catalog.md`.** The diff adds three new catalog states and a `REASONS` cross-reference sentence, all scoped to the load-time backfill/convergence section (`### Load-time backfill...`, tagged `BFILL-01 / WCONV-03`). Phase 115's own published state, `installed-with-workflow-gate-note` (lines 1906-1920, the future-tense per-script gate note), is byte-identical — confirmed by `grep -n` locating it and reading it directly; it does not appear in the diff hunk list at all.
+2. **`docs/workflows-compatibility.md`.** The diff is entirely inside the `### agent() failure semantics` section (roughly lines 131-166), rewriting the recoverable/non-recoverable classification claim on the strength of a new live canary. The admit-versus-run table (lines 75-91) that Criterion 4 grades is outside the diff and unchanged, confirmed both by direct read and by the live-passing `workflows-doc-pins.test.ts` binding.
+3. **`extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts`.** The single diff hunk (lines ~988-999) is a doc-comment revision noting that `orchestrators/reconcile/backfill.ts` (Phase 116's new caller) now also reaches the deep-equal config-write-back gate — no functional line changed. The `D-115-05` workflow-discovery-channel code (line 1066, `discoveryWarnings: [...staging.discovery, ...handles.workflows.result.warnings]`) is untouched, and its three dedicated `WGATE-01 / D-115-05` tests (`tests/orchestrators/plugin/reinstall.test.ts:4976,5024,5064`) pass live within the 127-test run for that file.
+4. **`tests/architecture/catalog-uat.test.ts`.** The diff adds two new fixtures for the `WCONV-03` backfill states and bumps the exact-count assertion from 195 to 197 annotated examples (the two new catalog states from item 1). Phase 115's own fixture, `installed-with-workflow-gate-note` (line 3634), is untouched — confirmed by direct read; it is not present in the diff hunks. The updated test re-ran live: 6/6 pass, including the byte-equality walk over every annotated example and the inverse fixture-coverage walk.
 
-Neither edit touches any of the six success criteria's supporting artifacts, and neither introduces a regression: `git diff --name-only c8641770..HEAD -- extensions/ tests/ docs/` is empty, meaning zero production or test source changed after the prior verification was written. There is nothing to re-verify in the code; only two planning documents' bookkeeping moved.
+`115-VALIDATION.md` and `deferred-items.md` were not touched again after `13c774cc` — their listing in the phase brief's "six changed files" refers to edits that predate and were already accounted for by the prior verification's own "What Changed" section (the nyquist-validated flip and the two deferred-item closures). Re-confirmed here: `git log --oneline 13c774cc..HEAD -- <both paths>` returns nothing for either file.
 
 **No regressions, no gaps closed (there were none to close), no gaps remaining.**
 
@@ -103,77 +105,40 @@ Neither edit touches any of the six success criteria's supporting artifacts, and
 
 | Requirement | Description | Status | Evidence |
 |---|---|---|---|
-| WGATE-01 | Per-script warning naming the refusing gate; install still succeeds; siblings unaffected | ✓ SATISFIED | Criteria 1, 2 above. Declared in plans 01, 02, 03, 04, 05. |
-| WGATE-02 | Gates read off the one existing `parse()`; no second parse | ✓ SATISFIED | `tests/architecture/workflows-single-parse.test.ts`'s parse-count and evaluator-surface cases, both live-run passing. Declared in plans 01, 02. |
-| WGATE-03 | A gate reading never refuses a script/fails a plugin | ✓ SATISFIED | Criterion 2, the goal's absolute above. Declared in plans 01, 02, 03, 04. |
-| WGATE-04 | Determinism blocklist keeps its existing refusal behavior | ✓ SATISFIED | Criterion 3 above. Declared in plan 01. |
-| WGATE-05 | Compatibility doc restates the column as replicate/warn/neither, bound to source | ✓ SATISFIED | Criterion 4 above. Declared in plan 05. |
-| WDOCS-01 | `WFLW-01` pruned under the file's own convention | ✓ SATISFIED | Criterion 5 above. Declared in plan 06. |
+| WGATE-01 | Per-script warning naming the refusing gate; install still succeeds; siblings unaffected | ✓ SATISFIED | Criteria 1, 2 above. |
+| WGATE-02 | Gates read off the one existing `parse()`; no second parse | ✓ SATISFIED | `tests/architecture/workflows-single-parse.test.ts`, live-run passing. |
+| WGATE-03 | A gate reading never refuses a script/fails a plugin | ✓ SATISFIED | Criterion 2, the goal's absolute above. |
+| WGATE-04 | Determinism blocklist keeps its existing refusal behavior | ✓ SATISFIED | Criterion 3 above. |
+| WGATE-05 | Compatibility doc restates the column as replicate/warn/neither, bound to source | ✓ SATISFIED | Criterion 4 above; `workflows-doc-pins.test.ts`'s `WGATE-05` case, live-passing. |
+| WDOCS-01 | `WFLW-01` pruned under the file's own convention | ✓ SATISFIED | Criterion 5 above. |
 
-No orphaned requirements: all six IDs the ROADMAP maps to Phase 115 (confirmed at `.planning/workstreams/workflows/REQUIREMENTS.md:118-128`) are declared across the phase's six plan files' `requirements:` frontmatter.
-
-Administrative note, not a codebase defect: `.planning/workstreams/workflows/REQUIREMENTS.md:118-128` still marks all six IDs `Pending` — confirmed still true this session (`grep -n "WGATE-0[1-5]\|WDOCS-01" REQUIREMENTS.md` shows every row as `Pending`). This file is updated by the orchestrator's central status pass, not by individual plans, and does not affect the goal-achievement grading above.
-
-## Deferred Items (from `deferred-items.md`) — confirmed genuinely closed, not open gaps
-
-`deferred-items.md` recorded two items as `status: open` at the time it was written mid-phase; both now read `status: closed`, turned after this verification on the strength of the re-measurement below. Both were subsequently fixed by later work in this same phase, and I independently re-confirmed the fixes are in the tree rather than trusting the ledger's own "fixed" marker:
-
-1. **`.planning/HANDOFF.json` fails `npm run format:check`.** Ran `npx prettier --check .planning/HANDOFF.json` live this session: "All matched files use Prettier code style!" Confirmed fixed. `.planning/WINDOWS.md` entry #35 independently agrees (`fixed`, `2026-09-09T04:22:45.271Z`).
-2. **The discovery-warning header claims a skip a gate warning did not carry out.** Read `orchestrators/plugin/shared.ts:1461-1462` directly this session: the header now reads "has a note" / "have notes" instead of "was skipped". Confirmed fixed. `.planning/WINDOWS.md` entry #36 independently agrees (`fixed`, `2026-09-09T07:58:46.692Z`).
-
-Neither item was ever a phase-115 success criterion; both were pre-existing or newly-reachable wording nits recorded for transparency and since closed. Nothing here is an unmet must-have.
-
-**On the covered set.** Two files were REMOVED from `covered_files` after the
-grading was done, and the removal is deliberate rather than convenient.
-`.planning/WINDOWS.md` and `.planning/workstreams/workflows/REQUIREMENTS.md` are
-both ledgers that a pass running AFTER verification must rewrite — the security
-audit appends to the first, and `gsd-tools phase.complete` rewrites the second as
-its final act, turning six `Pending` rows to `Complete`. Covering such a file
-makes the phase permanently un-completable: completing it invalidates the
-verification that authorised the completion, and no amount of re-verifying
-escapes the loop. This is measured, not hypothetical — it was observed directly
-on this phase: `phase.complete` turned six `Pending` rows to `Complete`, and that
-edit alone flipped this report from `passed` to `stale`. (Phase 114 is also stale,
-but NOT for this reason — six files it genuinely grades were changed by Phase 115's
-own work, which is correct staleness needing re-verification. An earlier draft of
-this note cited 114 as evidence here and was wrong.) Neither file is graded here:
-`WINDOWS.md` was cited only as corroboration for two fixes confirmed
-independently in the tree, and `REQUIREMENTS.md` supplies requirement text whose
-traceability is checked, not checkbox state owned by a later pass.
-`.planning/BACKLOG.md` deliberately STAYS covered — success criterion 5 grades
-its content directly, and nothing downstream rewrites it.
-
-**On the digest.** Turning those two statuses edited `deferred-items.md`, which is
-itself a covered file, so this report's original digest went stale the moment the
-correction landed. The digest above was **recomputed** with
-`gsd-tools verification fingerprint` over the same 40-file list — not re-derived by a
-second verification pass, and not hand-picked to make the check go green. That
-distinction is the point: the only covered file that changed after the pass is
-`deferred-items.md`, the change is the two `open` -> `closed` flips and the closure
-note recording them, and the substance of the flips is what this section verified
-live in the first place. No graded claim moved.
+No orphaned requirements — unchanged from the prior report; this re-verification did not re-audit `REQUIREMENTS.md` since that file is explicitly excluded from `covered_files` (it is rewritten by a later completion pass, per this phase's own recorded broken-window measurement).
 
 ## Anti-Patterns Found
 
-None blocking. `grep -rn -iE "TODO|FIXME|XXX|HACK|PLACEHOLDER"` over the phase's touched extension source (`domain/workflow-script.ts`, `bridges/workflows/discover.ts`, `bridges/workflows/types.ts`, `orchestrators/plugin/install.ts`, `orchestrators/plugin/reinstall.ts`, `orchestrators/plugin/shared.ts`) re-run this session returns exactly one hit: `reinstall.ts:636`, a doc comment describing the intentional design of a synthetic `"(reinstall)"` display-name placeholder value used by a real, shipped code path — not a debt marker, not a stub.
+None blocking. `grep -rn -iE "TODO|FIXME|XXX|HACK|PLACEHOLDER"` re-run this session over the phase's touched extension source (`domain/workflow-script.ts`, `bridges/workflows/discover.ts`, `bridges/workflows/types.ts`, `orchestrators/plugin/install.ts`, `orchestrators/plugin/reinstall.ts`, `orchestrators/plugin/shared.ts`) returns the same single hit as before: `reinstall.ts:636`, a doc comment describing an intentional, shipped `"(reinstall)"` placeholder display name — not a debt marker.
 
 ## Gate State (spot-checked live this session, not inherited)
 
-- `npx tsc --noEmit -p tsconfig.json` — ran live: exit 0.
-- `npx prettier --check .planning/HANDOFF.json` — ran live: passes (confirms deferred item 1 above is genuinely closed).
+- `npx tsc --noEmit -p tsconfig.json` — ran live at HEAD: exit 0.
 - `node --test tests/domain/workflow-script.test.ts tests/bridges/workflows/discover.test.ts tests/architecture/workflows-doc-pins.test.ts tests/architecture/workflows-single-parse.test.ts` — ran live: 160/160 pass, 0 fail.
-- `node --test tests/orchestrators/plugin/install.test.ts tests/orchestrators/plugin/reinstall.test.ts tests/orchestrators/plugin/info.test.ts tests/orchestrators/plugin/update.test.ts tests/orchestrators/plugin/shared.test.ts` — ran live: 669/669 pass, 0 fail.
-- Per the task brief, `npm run check` was not re-run (it was run green at exit 0, 5645 unit / 34 integration, transcript in `115-REVIEW-FIX.md`); confirmed by measurement instead that no source-touching commit landed since that run (`git diff --name-only c8641770..HEAD -- extensions/ tests/ docs/` is empty).
+- `node --test tests/architecture/catalog-uat.test.ts` — ran live: 6/6 pass, 0 fail (confirms the 197-example count and Phase 115's own fixture round-trip).
+- `node --test tests/orchestrators/plugin/reinstall.test.ts` — ran live: 127/127 pass, 0 fail (includes the three `WGATE-01 / D-115-05` standalone-reinstall discovery-channel cases).
+- Per the task brief, `npm run check` was not re-run (it last ran green at exit 0 during Phase 117's fix pass — 5654 unit / 35 integration — and no source has moved since; confirmed here by the same `git diff --stat` used throughout this report).
+
+## On the Covered Set
+
+`.planning/BACKLOG.md` stays covered — Criterion 5 grades its content directly, and nothing downstream rewrites it; this was re-confirmed rather than assumed, since Phase 116 did append a new, unrelated entry to the same file. `REQUIREMENTS.md`, `ROADMAP.md`, `STATE.md`, and `.planning/WINDOWS.md` remain excluded, per the measured defect this phase's own prior verification recorded (Broken Windows #39): each is rewritten by a pass that runs after verification, and covering one makes the phase permanently un-completable. That is a real tradeoff — it means a future edit to any of those four files touching Phase 115 content would not trigger this report's own staleness detection — but the alternative (covering them) is the specific failure this re-verification exists to fix.
 
 ## Human Verification Required
 
-None. This is a re-verification of an already-`passed` phase whose only changes since the prior sign-off were two planning-document corrections (see above), neither of which touches a success criterion, a code artifact, or a test. Every must-have was re-derived from source and live test runs in this session rather than accepted from any SUMMARY, the prior VERIFICATION.md, VALIDATION.md, or SECURITY.md.
+None. All five success criteria and the goal's absolute claim were re-derived from direct source reads, `git diff`/`git log` measurements, and live `node --test`/`tsc` runs against HEAD this session, not accepted from the prior report, SUMMARY files, or SUMMARY-adjacent claims.
 
 ## Gaps Summary
 
-None. All five ROADMAP success criteria (graded per D-115-01's binding correction) and the goal's own absolute claim ("no gate reading can ever block anything") remain verified against live-run tests and direct source reads at HEAD. The two file edits that invalidated the prior verification's digest were themselves re-read and confirmed to be accurate, non-code, non-regressing corrections: a broken-windows-ledger measurement fix for an unrelated, pre-existing, still-open finding, and a nyquist-validation status flip recording a Wave-0 gap that was in fact closed during execution. No regression was introduced, no gap was left unclosed, and no code changed.
+None. Phase 115's goal — a warned-not-refused install-time admission gate for six workflow-script checks — still holds at HEAD after Phases 116 and 117 landed unrelated work (load-time convergence marker, `agent()` failure-semantics measurement) in three of the four files this report's own predecessor's `covered_files` list also names. Every hunk in the four genuinely-changed files was read and traced to that unrelated work; none touches a Phase 115 success criterion, and every test this phase's plans introduced still passes live against the current tree.
 
 ---
 
-_Verified: 2026-09-09T10:05:00Z_
+_Verified: 2026-09-09T00:00:00Z_
 _Verifier: Claude (gsd-verifier)_
