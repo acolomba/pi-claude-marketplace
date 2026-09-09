@@ -1,7 +1,7 @@
 # Deferred Items
 
 - `.planning/HANDOFF.json` fails `npm run format:check`
-  status: open
+  status: closed
   **What:** `prettier --check "**/*.{js,json,ts}"` reports the file as unformatted,
   which fails `npm run check` at its `format:check` step before the test steps run.
   **Pre-existing:** committed at `9a1c0180` ("wip: workflows paused after planning
@@ -17,7 +17,7 @@
   34 integration tests.
 
 - The discovery-warning block's header claims a skip that a gate warning did not carry out
-  status: open
+  status: closed
   **What:** `surfaceDiscoveryWarnings` (`orchestrators/plugin/shared.ts:1453`) heads its
   block with `Plugin "<name>" installed; 1 declared component was skipped.` A gate
   warning's own line correctly says `was installed but the engine will refuse to load
@@ -45,3 +45,21 @@
   `reinstall.test.ts` (4) and `update.test.ts` (5). No catalog state has to move with
   it, which makes the fix cheaper than 115-01 estimated, but it is still a cross-verb
   rendering change outside 115-04's file list.
+
+---
+
+## Closure, 2026-09-09
+
+Both items above were fixed during the phase's code-review pass and are recorded
+`closed` rather than left `open`. Re-measured at the goal-verification gate:
+
+- **`HANDOFF.json`** — `npx prettier --check .planning/HANDOFF.json` reports
+  `All matched files use Prettier code style!`.
+- **The discovery-warning header** — `orchestrators/plugin/shared.ts:1461-1462`
+  now reads `1 declared component has a note.` / `N declared components have
+  notes.` It took the neutralising shape this entry proposed, so the header no
+  longer claims a skip the gate warning did not carry out.
+
+Leaving a fixed item marked `open` is the same defect WDOCS-01 exists to correct
+— a record advertising completed work as outstanding — so the statuses are
+turned here rather than carried into the milestone audit.
