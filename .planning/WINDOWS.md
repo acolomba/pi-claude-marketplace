@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 1
+open_count: 3
 waived_count: 13
 fixed_count: 20
-total_count: 34
-last_updated: 2026-09-08T08:05:26.612Z
+total_count: 36
+last_updated: 2026-09-09T04:15:18.020Z
 ---
 
 # Broken Windows Ledger
@@ -49,6 +49,8 @@ last_updated: 2026-09-08T08:05:26.612Z
 | 32 | 114 | deviation | extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts | 125 | [workflows-replay] enable and update rows raise severity to warning for an absent host workflow engine but render no {requires pi-dynamic-workflows} marker: enableRowDependencies and update-row.ts::outcomeDependencies do not yet push "workflows" | fixed |  | 2026-09-08T05:17:30.752Z | 2026-09-08T06:07:43.302Z |
 | 33 | 114 | deviation | README.md |  | [workflows-replay] both README taglines still list five component kinds and omit workflows; the Features and Prerequisites lists were updated but the tagline was out of the plan's scope | fixed |  | 2026-09-08T07:41:37.490Z | 2026-09-08T08:05:26.612Z |
 | 34 | 114 | unmet-truth | docs/workflows-compatibility.md | 23 | [workflows-replay] the compatibility doc cites 15 exact line ranges inside @quintinshaw/pi-dynamic-workflows 3.10.1, a package this repo does not vendor, so no gate can detect that an engine upgrade has moved them; the doc now states the pin explicitly and this entry names it as the subject WPIN-01's machine-checkable re-read has to cover | open |  | 2026-09-08T08:05:03.125Z |  |
+| 35 | 115 | lint-warning | .planning/HANDOFF.json |  | [workflows-replay] .planning/HANDOFF.json fails prettier, so npm run check stops at format:check before its test steps (pre-existing at 9a1c0180) | open |  | 2026-09-09T04:15:17.661Z |  |
+| 36 | 115 | deviation | extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts | 1453 | [workflows-replay] surfaceDiscoveryWarnings heads a gate warning with '1 declared component was skipped', contradicting the gate line's 'was installed'; newly reachable via D-115-05 | open |  | 2026-09-09T04:15:18.020Z |  |
 
 ````json
 [
@@ -458,6 +460,30 @@ last_updated: 2026-09-08T08:05:26.612Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-09-08T08:05:03.125Z",
+    "resolved_at": null
+  },
+  {
+    "id": 35,
+    "kind": "lint-warning",
+    "phase": "115",
+    "file": ".planning/HANDOFF.json",
+    "line": null,
+    "description": "[workflows-replay] .planning/HANDOFF.json fails prettier, so npm run check stops at format:check before its test steps (pre-existing at 9a1c0180)",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-09T04:15:17.661Z",
+    "resolved_at": null
+  },
+  {
+    "id": 36,
+    "kind": "deviation",
+    "phase": "115",
+    "file": "extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts",
+    "line": 1453,
+    "description": "[workflows-replay] surfaceDiscoveryWarnings heads a gate warning with '1 declared component was skipped', contradicting the gate line's 'was installed'; newly reachable via D-115-05",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-09T04:15:18.020Z",
     "resolved_at": null
   }
 ]
