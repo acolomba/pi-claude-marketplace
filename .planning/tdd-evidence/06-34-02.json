@@ -1,0 +1,9 @@
+{
+  "command": "node --test --test-isolation=none --test-reporter=tap tests/orchestrators/plugin/install-declared-enabled.test.ts",
+  "exitCode": 1,
+  "output": "TAP version 13\n# Subtest: returns true from a selected local declaration\nnot ok 1 - returns true from a selected local declaration\n  error: Got unwanted rejection: install-declared-enabled.ts must own tri-state config selection\n  code: ERR_ASSERTION\n  actual: ERR_MODULE_NOT_FOUND\n1..5\n# tests 5\n# pass 0\n# fail 5",
+  "targetTest": "returns true from a selected local declaration",
+  "targetFile": "tests/orchestrators/plugin/install-declared-enabled.test.ts",
+  "expected": "the named install declared-enabled owner exports raw tri-state selection",
+  "actual": "ERR_MODULE_NOT_FOUND for extensions/pi-claude-marketplace/orchestrators/plugin/install-declared-enabled.ts"
+}
