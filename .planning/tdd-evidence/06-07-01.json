@@ -1,0 +1,9 @@
+{
+  "command": "node --test-reporter tap tests/domain/hooks-resolution.test.ts",
+  "exitCode": 1,
+  "output": "TAP version 13\n# Subtest: resolves no hooks when the convention file is absent\nnot ok 1 - resolves no hooks when the convention file is absent\n  ---\n  error: Got unwanted rejection: hooks-resolution.ts is absent\n  code: ERR_ASSERTION\n  ...\n1..9\n# tests 9\n# pass 0\n# fail 9\n",
+  "targetTest": "resolves no hooks when the convention file is absent",
+  "targetFile": "tests/domain/hooks-resolution.test.ts",
+  "expected": "The hooks-resolution owner returns a clean no-op outcome when hooks/hooks.json is absent.",
+  "actual": "The dynamic import rejected because hooks-resolution.ts does not exist before extraction."
+}
