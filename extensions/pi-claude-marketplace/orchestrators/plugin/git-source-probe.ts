@@ -18,12 +18,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 
 import { canonicalCloneUrl, pluginCloneKey, pluginMirrorKey } from "../../domain/clone-key.ts";
-import { resolveStrict } from "../../domain/resolver.ts";
-import type {
-  GitPluginRootResult,
-  ResolveContext,
-  ResolvedPlugin,
-} from "../../domain/resolver-types.ts";
+import { resolveStrict } from "../../domain/plugin-resolver.ts";
 import {
   parsePluginSource,
   type GitHubSource,
@@ -39,6 +34,11 @@ import {
 } from "./plugin-state-classifier.ts";
 
 import type { MarketplaceManifest } from "../../domain/manifest.ts";
+import type {
+  GitPluginRootResult,
+  ResolveContext,
+  ResolvedPlugin,
+} from "../../domain/resolver-types.ts";
 
 export type ManifestEntry = MarketplaceManifest["plugins"][number];
 
