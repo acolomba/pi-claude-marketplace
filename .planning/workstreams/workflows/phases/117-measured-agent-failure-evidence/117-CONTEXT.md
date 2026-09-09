@@ -87,6 +87,69 @@ Requirements in scope: WEVID-01, WEVID-02, WDOCS-02.
   (frontmatter/status line, `:55`, `:91`) plus anything else citing it as
   evidence for a closed canary.
 
+### D-117-04..07: Post-research decisions
+
+Recorded after `117-RESEARCH.md` drove the engine at 3.10.1. The headline result
+went AGAINST the published claim, so the decisions below supersede parts of
+D-117-02 rather than confirming them.
+
+- **D-117-04: the phase now reports a REFUTATION, not a confirmation.**
+  `docs/workflows-compatibility.md:140` says every failure branch in the chosen
+  engine's `agent()` throws. Measured at 3.10.1 it does not: a **recoverable**
+  failure returns `null` once retries exhaust (`src/workflow.ts:990-995`), and
+  `wrapError`'s catch-all arm (`src/errors.ts:200-204`) makes any plain thrown
+  `Error` recoverable -- so `null` is the ORDINARY case and only non-recoverable
+  failures reject. The doc's practical-consequence paragraph inverts with it: a
+  `pipeline(...)` + `.filter(Boolean)` script does NOT abort, it drops the failed
+  items and completes. The two engines AGREE on the ordinary failure and diverge
+  only on the non-recoverable class. The rewrite must say that, not soften it.
+- **D-117-05: the canary needs no provider credentials, and must PROVE it is
+  measuring.** Pointing `PI_CODING_AGENT_DIR` at an empty directory makes the
+  real `WorkflowAgent` fail with `No API key found for the selected model.`,
+  which classifies recoverable and resolves `null`. No fake runner and no
+  network. The hazard is the inverse: a machine that DOES have credentials
+  silently un-measures the canary by letting the call succeed. An `A0`
+  precondition asserting on `res.logs` is therefore mandatory, not optional --
+  without it the canary is green on a machine where it proved nothing, which is
+  this milestone's signature defect.
+- **D-117-06: the census is published only with its counting rule, and the
+  consequence is published unconditionally.** The inherited "six of seven,
+  twelve times" is wrong: `.filter(Boolean)` occurs **26** times across 6 of 7
+  scripts, and `pipeline(` in only **2** of 7 (3 calls). "Twelve" reproduces
+  only by counting `grep -n` LINES, and `scan.js` is minified onto one line
+  carrying 14 occurrences by itself. The doc's own rule forbids a count without
+  an honest counting rule, and these figures come from one un-pinned local clone.
+  So: state the consequence unconditionally; give figures only with provenance
+  and the counting rule, or not at all.
+- **D-117-07: the 105 correction includes a FOURTH site the discuss missed.**
+  The `evidence:` block at `105-VERIFICATION.md:14-32` asserts a W1/W2/W3 pass
+  inside the same YAML entry whose `why_human` says W1-W3 is unexercised.
+  Correcting `result: CLOSED` without it leaves the persuasive half of the false
+  story standing. Its `WINDOWS.md (id 5)` citation is also dangling -- today's
+  id 5 is a Phase-112 deviation from a different milestone. Both are in scope.
+
+**Three measured pitfalls the plan must carry.** Each was established by running,
+not by reading:
+
+- `runWorkflow`'s result is a **cross-realm object** (`r instanceof Object` is
+  `false`), so `deepStrictEqual` fails on identical data. Use `structuredClone`.
+- A marker-less `tests/**/*.mjs` fails `fallow dead-code` with exit 1, and the
+  `npm-fallow` pre-commit hook fires on it too. The new canary needs the same
+  whole-file `fallow-ignore-file unused-file` marker its two siblings carry.
+- `.fallowrc.json`'s `duplicates.ignoredClones` holds exactly two pre-approved
+  entries, both existing canaries. A third near-copy may trip the dupes gate at
+  `threshold: 3`. Measured MEDIUM confidence -- the gate exits 0 today, but a
+  third copy was not exercised. Write the canary to be structurally distinct
+  rather than assuming the gate stays quiet.
+
+**Two research open questions, resolved here.** The `@nicknisi/pi-workflows`
+row's version-less `runtime-measured` grade stays as it is -- out of scope, and
+recorded only if an edit happens to touch it. The `agent()` doc section is
+UNPINNED, proved by planting a full rewrite that left all four
+`workflows-doc-pins` cases green; only `no-stale-test-citations` fired, and only
+because the canary did not yet exist. So the doc edit is free, and the plan must
+NOT invent a gate obligation that does not exist.
+
 ### Claude's Discretion
 
 The canary's internal structure, the failure-induction technique, file naming,
