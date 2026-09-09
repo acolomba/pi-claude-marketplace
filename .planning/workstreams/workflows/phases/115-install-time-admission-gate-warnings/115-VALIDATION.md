@@ -94,9 +94,13 @@ that was unconditionally `never` and one seven-entry literal bound to nothing.
    touching code. Expect the doc-pin test red — **but only if the test compares column values
    and not merely gate names.** If it stays green, the construct checks half of what criterion 4
    asks and must be strengthened. This is the exact "green because it checked nothing" failure.
-4. **The construct's own liveness.** Comment out the predicate map's type annotation and confirm
-   step 1 still goes red — proving step 1's redness came from the annotation rather than an
-   unrelated error.
+4. **The construct's own liveness.** With direction 1's fabricated member still in place, remove
+   the predicate map's type annotation and re-run the typecheck. The attribution runs the other
+   way round from the wording that reads naturally here: direction 1's redness is credited to the
+   annotation only if the typecheck error that NAMED the predicate map now DISAPPEARS. A
+   construct that stays red once its annotation is gone is red for an unrelated reason, which is
+   the failure this direction exists to detect. Record what was observed in each configuration
+   rather than asserting an expected outcome, then restore both edits.
 
 **Paste all four transcripts into the SUMMARY, not a summary of them.**
 

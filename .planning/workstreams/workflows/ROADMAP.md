@@ -604,11 +604,11 @@ Plans:
 **Wave 2** *(blocked on Wave 1 completion)*
 
 - [ ] 115-02-PLAN.md — One warning line per file in both tenses, the WGATE-02 single-parse source gate, and the four falsified comments retired
-- [ ] 115-03-PLAN.md — Reinstall surfaces the discovery channel standalone, and criterion 2 lands as a byte assertion
 - [ ] 115-04-PLAN.md — `info` shows the gate warning in preview tense, with its rendered bytes published as a catalog state
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
+- [ ] 115-03-PLAN.md — Reinstall surfaces the discovery channel standalone, and criterion 2 lands as a byte assertion
 - [ ] 115-05-PLAN.md — Restate the published contract as replicate / warn / neither, bind it to the source union, and run the four-direction negative control
 
 ### Phase 116: Load-time workflow convergence
