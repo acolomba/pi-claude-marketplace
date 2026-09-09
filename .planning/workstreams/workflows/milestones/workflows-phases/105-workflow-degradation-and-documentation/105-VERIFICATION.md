@@ -9,29 +9,52 @@ human_verification:
   - test: "Run `node tests/live-uat/workflow-storage-canary.mjs` against a real, locally installed `@quintinshaw/pi-dynamic-workflows` host engine (`mkdir -p /tmp/wf-engine && npm install --prefix /tmp/wf-engine @quintinshaw/pi-dynamic-workflows && PI_WORKFLOW_ENGINE_ROOT=/tmp/wf-engine/node_modules node tests/live-uat/workflow-storage-canary.mjs && rm -rf /tmp/wf-engine`). Expect the new W1/W2/W3 lines: W1 asserts the degradation marker rendered on the engine-absent install row, W2 asserts the real engine's own storage scan finds the envelope by its generated name, W3 is the negative control asserting a never-written name is absent from the listing."
     expected: "PASS on W1, W2, W3 alongside the existing U*/P*/X/R* lines, exit 0. Record the engine version the driver prints."
     why_human: "The host engine is not resolvable in this tree and is deliberately in no dependency manifest (NFR-5/D-98-10 carried risk) — reproducing this needs an out-of-tree install with real engine `session_start` machinery, not reachable from a unit/integration test. Phase 104's structurally identical canary route (R1/R2 removal assertions) was already run and closed by a human against real engine 3.5.1 on 2026-08-16, and demonstrated it can genuinely fail (a mutated copy with one uninstall skipped FAILED as required), so the mechanism is proven meaningful — the W1-W3 code follows the same conventions but is itself unexercised against a live engine."
-    result: CLOSED
-    closed: 2026-08-16
+    result: UNRUN
+    correction: |
+      WDOCS-02 correction, 2026-09-09. This entry previously carried an outcome of
+      `CLOSED` and a closure date of 2026-08-16. Neither was true of THIS test.
+
+      The entry settles itself: its own `why_human` field, unchanged above, says
+      that what had actually been run and closed by a human on that date was the
+      PREVIOUS phase's structurally identical canary route (the R1/R2 removal
+      assertions), and that "the W1-W3 code follows the same conventions but is
+      itself unexercised against a live engine". The unexercised reading is the
+      true one; the closure was the over-claim.
+
+      The outcome now reads UNRUN, which is the word this file's own truthful
+      sites already use for this run (see the criterion-3 evidence cell and the
+      artifact row). The retired outcome and date are quoted here rather than
+      deleted: the point of this correction is that a record over-claimed, and a
+      rewrite that reads as though it was always right would erase the only
+      evidence of that.
     evidence: |
-      Run by the orchestrator against real engine 3.5.1, installed into a disposable
-      scratch prefix and deleted afterward. `package.json` and `package-lock.json` were
-      never touched; the real `~/.pi/workflows/` does not exist, so nothing leaked.
+      WDOCS-02 correction, 2026-09-09. What this block said before is retired. It
+      narrated a clean exit-zero run of this entry's own W1/W2/W3 assertions
+      against real engine 3.5.1, and named each of the three as having passed.
+      That narrative was never true of W1, W2 or W3, and it is the persuasive
+      half of the false story -- correcting the outcome field while leaving it
+      standing would have fixed the label and not the account.
 
-      Exit 0, every assertion PASS. The three that close WDEP-03:
-        W1 -- the engine-absent install SUCCEEDED and its row reported
-             `requires pi-dynamic-workflows`
-        W2 -- a real engine's own storage scan listed `wfdegraded:deploy`, an envelope
-             installed while the engine was absent. This is criterion 3 proven live:
-             install the engine, reload, and the already-installed workflow is found,
-             with no reinstall.
-        W3 -- the same listing did NOT report `wfdegraded:never-written`, the
-             non-vacuity control that stops W2 passing against an empty scan.
-      Ua-Ud, Pa-Pd, X, R1 and R2 (the Phase 103/104 assertions) all PASS unchanged, so
-      this phase regressed none of them.
+      What WAS genuinely established on 2026-08-16, and still stands:
+        - The PREVIOUS phase's canary route (the R1/R2 removal assertions, same
+          script, same conventions) was run by a human against real engine 3.5.1
+          and closed.
+        - That run had a negative control: a disposable copy with one uninstall
+          skipped FAILED with a named surviving envelope. The mechanism was
+          therefore proven capable of failing, which is what makes a pass on
+          that route mean anything.
+        - The engine was installed into a disposable scratch prefix and deleted
+          afterward; `package.json` and `package-lock.json` were never touched.
 
-      The canary's ability to FAIL was established during Phase 104's verification by a
-      negative control on the same route (a disposable copy with one uninstall skipped
-      failed with a named surviving envelope), so its PASS is meaningful rather than
-      merely quiet.
+      What was NOT among it: W1, W2 and W3. The three assertions this entry names
+      were never driven against a live engine at all. Keep the distinction sharp
+      -- the mechanism was proven capable of failing; these particular assertions
+      were never driven. The driver carrying them,
+      `tests/live-uat/workflow-storage-canary.mjs`, was present on the branch
+      where this phase ran and was never re-landed by the replay, so they cannot
+      be driven on the current branch either. That open obligation is carried by
+      `.planning/WINDOWS.md` entry id 45 (`unrun-verify`, prefixed
+      `[workflows-replay]`).
 
 ---
 
@@ -41,8 +64,18 @@ human_verification:
 plainly why they do not run yet, and the contract of a bridge that installs executable code is
 stated where a plugin author will read it.
 **Verified:** 2026-08-16
-**Status:** passed (live canary closed 2026-08-16 — see frontmatter evidence)
+**Status:** passed (six of six criteria; the W1/W2/W3 live canary was never run — WDOCS-02 correction, 2026-09-09)
 **Re-verification:** No — initial verification
+
+> **WDOCS-02 correction, 2026-09-09.** The parenthetical above previously read
+> "(live canary closed 2026-08-16 — see frontmatter evidence)", and it pointed the
+> reader at a frontmatter evidence block that narrated a run of W1/W2/W3 which
+> never happened. What closed on 2026-08-16 was the previous phase's structurally
+> identical canary route, not this one — the entry's own `why_human` field says so.
+> The phase status VALUE is deliberately unchanged: it is drawn from a small
+> canonical set the tooling parses, and it is defensible at six of six criteria in
+> its own right. What was wrong was the pairing, and the pairing is corrected here
+> and at the human-verification entry rather than by breaking a parsed field.
 
 ## Goal Achievement
 
@@ -88,7 +121,16 @@ The phase submitted with a prior review (`105-REVIEW.md`, 1 critical + 5 warning
 | `docs/workflows-compatibility.md` | new compatibility doc | ✓ VERIFIED | 200 lines, 10 sections, all review gaps closed |
 | `README.md` / `README.es.md` | Workflows entry + link | ✓ VERIFIED | Structurally parallel |
 | `tests/architecture/no-probe-in-workflows-bridge.test.ts` | boundary gate | ✓ VERIFIED | Directory-enumerated, passing |
-| `tests/live-uat/workflow-storage-canary.mjs` | W1/W2/W3 assertion | ✓ PRESENT, code-reviewed | UNRUN against a real engine — see Human Verification |
+| `tests/live-uat/workflow-storage-canary.mjs` | W1/W2/W3 assertion | ⚠ PRESENT and code-reviewed on the branch this phase ran on; ABSENT on the current branch (WDOCS-02, 2026-09-09) | UNRUN against a real engine — see Human Verification |
+
+> **WDOCS-02 correction, 2026-09-09.** The status cell above previously read a bare
+> "✓ PRESENT, code-reviewed". Its UNRUN half was and remains right; its presence
+> half was a fact about one tree stated as a fact about all of them. The driver
+> existed on the branch where this phase ran; the replay that rebuilt this
+> milestone never re-landed it, so it does not exist on the current branch and the
+> W1/W2/W3 assertions cannot be driven here. Both halves are stated because
+> collapsing two trees into one row is what made the row wrong. The open
+> obligation is carried by `.planning/WINDOWS.md` entry id 45.
 
 ### Requirements Coverage
 
@@ -137,9 +179,23 @@ re-verified as genuinely fixed — including a live mutation test that reverted 
 confirmed the stamp-coverage gate catches the regression it was built to catch, which is the
 exact property the review's WR-01 finding said was missing. The two items the fixer explicitly
 declined to address are both sound engineering judgments, not corner-cutting. The sole open item
-is the live-engine canary run, which needs a real out-of-tree engine install and is properly
-tracked as an open `unrun-verify` entry in `.planning/WINDOWS.md` (id 5) rather than silently
-assumed — this phase is honest about what it has and has not proven.
+is the live-engine canary run, which needs a real out-of-tree engine install and is tracked as
+an open `unrun-verify` entry in `.planning/WINDOWS.md` (id 45) rather than silently assumed —
+this phase is honest about what it has and has not proven.
+
+> **WDOCS-02 correction, 2026-09-09.** The citation above previously named
+> `.planning/WINDOWS.md` id 5. That citation is dangling and always will be: the
+> ledger is shared and append-only across milestones, and phase numbers repeat, so
+> a numeric position rots silently. Today's id 5 is a Phase-112 `deviation` about a
+> stale ROADMAP row from a different milestone, already `fixed` — nothing to do
+> with this canary. The paragraph is right that the item was open and right to say
+> it was tracked rather than assumed; only the position was wrong. The obligation
+> is now carried by id 45, an `unrun-verify` entry prefixed `[workflows-replay]`
+> so it stays attributable when the phase number repeats again. Its scope is
+> narrower than this paragraph's original: the storage assertions were never
+> re-landed on the current branch, so the storage half of this route has no live
+> coverage there at all. Re-landing it is a recorded deferred idea (D-117-01), not
+> work this milestone took on.
 
 ---
 

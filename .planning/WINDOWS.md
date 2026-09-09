@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 8
+open_count: 9
 waived_count: 14
 fixed_count: 22
-total_count: 44
-last_updated: 2026-09-09T17:51:43.533Z
+total_count: 45
+last_updated: 2026-09-09T19:27:52.900Z
 ---
 
 # Broken Windows Ledger
@@ -59,6 +59,7 @@ last_updated: 2026-09-09T17:51:43.533Z
 | 42 | 116 | unmet-truth | tests/orchestrators/reconcile/backfill.test.ts |  | [workflows-replay] ENBL-08: skips a disabled record whose supported set grew stays GREEN when the isRecordedButDisabled filter it names is deleted -- reinstall's own refusal produces the same missing row, so the case gates the second layer, not the filter in its title. Measured in 116-02's control: 2 of 34 cases redden and this is not one of them. | open |  | 2026-09-09T16:21:30.222Z |  |
 | 43 | 116 | unmet-truth | tests/orchestrators/reconcile/backfill.test.ts | 557 | [workflows-replay] two ungated line-number citations drifted and were caught only by the security audit re-reading the sites: T-116-02's mitigation and 116-04-SUMMARY section 7 cite the WR-01 control at backfill.test.ts:529, but 529 is inside the D-68-03/WCONV-02 case and the control is at :557; WINDOWS entry 41 cites :1445 for the ENBL-08 case, which is at :1582. Same class as the compatibility doc's ungated engine line citations (entry 34) -- a line number in prose that no gate reads rots silently. | open |  | 2026-09-09T16:39:28.798Z |  |
 | 44 | 116 | todo | extensions/pi-claude-marketplace/orchestrators/reconcile/backfill.ts | 175 | [workflows-replay] scanForceInstalledBackfills and hasForceInstalledPlugin still assert the filter this phase deleted -- hasForceInstalledPlugin's own doc comment now has to open by contradicting its name. Code review WR-03 proposed renaming; skipped because 116-CONTEXT locks 'Names are left alone'. Half that lock's rationale did not survive measurement: the proposed replacements contain no 'force', so partial-vocabulary-guard.test.ts cannot fire on them. The surviving half -- rename is churn beyond what WCONV-01..03 ask for -- is why it stayed skipped. Operator call for a later phase. | open |  | 2026-09-09T17:51:43.533Z |  |
+| 45 | 117 | unrun-verify | .planning/workstreams/workflows/milestones/workflows-phases/105-workflow-degradation-and-documentation/105-VERIFICATION.md | 91 | [workflows-replay] The W1/W2/W3 storage assertions were never driven against a live engine and their driver (tests/live-uat/workflow-storage-canary.mjs) was never re-landed on this branch, so the storage half of the host-engine route has no live coverage here. Re-landing it is a recorded deferred idea (D-117-01), not scope of WEVID-01/WEVID-02/WDOCS-02. | open |  | 2026-09-09T19:27:52.900Z |  |
 
 ````json
 [
@@ -588,6 +589,18 @@ last_updated: 2026-09-09T17:51:43.533Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-09-09T17:51:43.533Z",
+    "resolved_at": null
+  },
+  {
+    "id": 45,
+    "kind": "unrun-verify",
+    "phase": "117",
+    "file": ".planning/workstreams/workflows/milestones/workflows-phases/105-workflow-degradation-and-documentation/105-VERIFICATION.md",
+    "line": 91,
+    "description": "[workflows-replay] The W1/W2/W3 storage assertions were never driven against a live engine and their driver (tests/live-uat/workflow-storage-canary.mjs) was never re-landed on this branch, so the storage half of the host-engine route has no live coverage here. Re-landing it is a recorded deferred idea (D-117-01), not scope of WEVID-01/WEVID-02/WDOCS-02.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-09T19:27:52.900Z",
     "resolved_at": null
   }
 ]
