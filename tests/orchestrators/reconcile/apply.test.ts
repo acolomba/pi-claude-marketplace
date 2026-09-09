@@ -2361,7 +2361,9 @@ describe("applyReconcile", () => {
         message:
           "● mp [project]\n" +
           "  ● fresh (installed)\n" +
-          "  ● promoted v1.0.0 (installed)\n" +
+          // WCONV-03: the promotion row says why it appeared; the fresh install
+          // beside it has no such brace, which is the whole point of the marker.
+          "  ● promoted v1.0.0 (installed) {components now supported}\n" +
           "\n" +
           "Reconcile: 2 successes",
       },

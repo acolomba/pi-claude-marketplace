@@ -2425,26 +2425,26 @@ OUT-03/D-04: the plural tally counts the failed mp header + the two failed plugi
 
 ### Load-time backfill -- partially-installed promotion carries the dropped-kinds brace (SEV-05)
 
-BFILL-01 / SEV-05 / D-69-04: a load-time backfill re-materialized a recorded partially-installed plugin in place (its supported set grew, but it still re-resolves `partially-available`). The promotion row reuses the `◉` `(partially-installed)` byte form and now carries a factual `{reasons}` brace composed from the re-resolved dropped-component kinds through the SAME shared `narrowUnsupportedKinds` seam the install / list / info surfaces use -- no per-state reasons mechanism (`installed` / `partially-installed` / `partially-upgradable` rows all route through `composeReasons`). The marketplace was already added, so its header is the bare always-marketplace-header form (no status token). SEV-03 / A3 / D-68-04: a backfill is a benign promotion (re-materializing now-supported components), NOT a new degradation, so the row stays `info` -- the SEV-03 newly-degrades warning fires only on the autoupdate cascade. The `Run /reload` trailer is structurally excluded (RECON-04); the trailing tally counts the row as one success.
+BFILL-01 / WCONV-03 / SEV-05 / D-69-04: a load-time backfill re-materialized a recorded partially-installed plugin in place (its supported set grew, but it still re-resolves `partially-available`). The promotion row reuses the `◉` `(partially-installed)` byte form. Its brace leads with `components now supported`, the WCONV-03 convergence marker every backfilled row carries, so a reload the user did not initiate never renders byte-identically to a fresh install; the re-resolved dropped-component kinds follow, composed through the SAME shared `narrowUnsupportedKinds` seam the install / list / info surfaces use -- no per-state reasons mechanism (`installed` / `partially-installed` / `partially-upgradable` rows all route through `composeReasons`). The marketplace was already added, so its header is the bare always-marketplace-header form (no status token). SEV-03 / A3 / D-68-04: a backfill is a benign promotion (re-materializing now-supported components), NOT a new degradation, so the row stays `info` -- the SEV-03 newly-degrades warning fires only on the autoupdate cascade. The `Run /reload` trailer is structurally excluded (RECON-04); the trailing tally counts the row as one success.
 
 <!-- catalog-state: backfill-partially-installed -->
 
 ```text
 ● local-mp [user]
-  ◉ hello v1.0.0 (partially-installed) {lsp}
+  ◉ hello v1.0.0 (partially-installed) {components now supported, lsp}
 
 Reconcile: 1 success
 ```
 
-### Load-time backfill -- no dropped kinds renders brace-less (byte-identical to today)
+### Load-time backfill -- no dropped kinds leaves the convergence marker alone in the brace (WCONV-03)
 
-The degenerate case: a backfill `(partially-installed)` row whose re-resolved dropped-kind set is empty renders brace-less -- `narrowUnsupportedKinds([])` returns `[]`, so `composeReasons` emits no brace and the row is byte-identical to the pre-SEV-05 form. This proves the SEV-05 change is additive: rows WITHOUT reasons do not gain a brace (D-69-04).
+The degenerate case: a backfill `(partially-installed)` row whose re-resolved dropped-kind set is empty. `narrowUnsupportedKinds([])` returns `[]`, so nothing follows the `components now supported` marker and the brace holds that one token. A backfilled row has no brace-less shape at all -- the projection places the marker ahead of any dropped kind (WCONV-03 / D-69-04), and that is what separates this row from a fresh install of the same plugin.
 
 <!-- catalog-state: backfill-partially-installed-no-reasons -->
 
 ```text
 ● local-mp [user]
-  ◉ hello v1.0.0 (partially-installed)
+  ◉ hello v1.0.0 (partially-installed) {components now supported}
 
 Reconcile: 1 success
 ```

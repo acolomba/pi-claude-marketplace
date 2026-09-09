@@ -594,11 +594,15 @@ function enabledRowFromOutcome(
 /**
  * Build the row for a load-time backfill.
  *
+ * WCONV-03: every backfilled row carries at least one reason. The row exists
+ * because a reload the user did not initiate re-materialized the record, so it
+ * leads with `{components now supported}` on BOTH arms and can never render
+ * byte-identically to a fresh install.
+ *
  * WR-04: the backfill runs the same class of ledger as the install and enable
  * arms, so it names the same two degradation signals in `install.ts`'s emit
  * order -- `{orphan rewake}`, then the per-kind `{malformed skill}` /
  * `{malformed command}` tokens, then (on the degraded arm) the dropped kinds.
- * A backfill that reports neither renders byte-identically to before (NREG-01).
  *
  * Severity: a backfill is a benign promotion (re-materializing now-supported
  * components), NOT a new degradation, so a still-degraded arm stays `info` per
@@ -612,6 +616,11 @@ function backfilledRowFromOutcome(
 ): PluginInstalledMessage | PluginPartiallyInstalledMessage {
   const malformed = malformedReasonsForKinds(outcome.degradedKinds);
   const reasons: ContentReason[] = [
+    // WCONV-03: the convergence marker, first in the brace. Both returns read
+    // this one array, so the emit order is fixed here once: this token, then
+    // orphan rewake, then the malformed tokens, then (degraded arm only) the
+    // dropped kinds, then the soft-dep markers `composeReasons` appends last.
+    "components now supported",
     ...(outcome.orphanRewake === true ? (["orphan rewake"] as const) : []),
     ...malformed,
   ];
@@ -622,7 +631,9 @@ function backfilledRowFromOutcome(
       name: outcome.plugin,
       ...(outcome.version !== undefined && { version: outcome.version }),
       dependencies: outcome.dependencies,
-      ...(reasons.length > 0 && { reasons }),
+      // WCONV-03: unconditional, because the prelude above always places the
+      // convergence marker -- this arm has no brace-less shape to guard for.
+      reasons,
       severity,
       needsReload: true,
     };
@@ -633,11 +644,11 @@ function backfilledRowFromOutcome(
     name: outcome.plugin,
     ...(outcome.version !== undefined && { version: outcome.version }),
     dependencies: outcome.dependencies,
-    // SEV-05 / D-69-04: populate the factual `{reasons}` brace from the
-    // re-resolved dropped-component kinds through the SAME shared
-    // `narrowUnsupportedKinds` seam the install/list/info surfaces use -- no
-    // per-state reasons mechanism. An empty set renders brace-less
-    // (byte-identical to a no-dropped-kinds backfill).
+    // SEV-05 / D-69-04: append the factual dropped-component kinds to the
+    // prelude through the SAME shared `narrowUnsupportedKinds` seam the
+    // install/list/info surfaces use -- no per-state reasons mechanism. They
+    // land after the convergence marker, so a row with no dropped kinds differs
+    // from a fully-promoted one only by its status token.
     reasons: [...reasons, ...narrowUnsupportedKinds(outcome.unsupported)],
     severity,
     needsReload: true,

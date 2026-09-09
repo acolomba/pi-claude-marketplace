@@ -5348,11 +5348,12 @@ const FIXTURES: FixtureMap = {
       },
     },
 
-    // BFILL-01 / SEV-05 / D-69-04: a load-time backfill promotion row carries
-    // the re-resolved dropped-component kinds as a factual {reasons} brace
-    // through the shared narrowUnsupportedKinds seam (lspServers -> lsp). The
-    // marketplace was already added, so its header is bare (no status token).
-    // SEV-03 / A3: a benign promotion stays info -- no expectedSeverity.
+    // BFILL-01 / WCONV-03 / SEV-05 / D-69-04: a load-time backfill promotion row
+    // leads its brace with the convergence marker, then carries the re-resolved
+    // dropped-component kinds through the shared narrowUnsupportedKinds seam
+    // (lspServers -> lsp). The marketplace was already added, so its header is
+    // bare (no status token). SEV-03 / A3: a benign promotion stays info -- no
+    // expectedSeverity.
     "backfill-partially-installed": {
       pi: piWithAllLoaded(),
       message: {
@@ -5369,7 +5370,7 @@ const FIXTURES: FixtureMap = {
                 name: "hello",
                 version: "1.0.0",
                 dependencies: [],
-                reasons: ["lsp"],
+                reasons: ["components now supported", "lsp"],
                 severity: "info",
                 needsReload: true,
               },
@@ -5379,9 +5380,9 @@ const FIXTURES: FixtureMap = {
       },
     },
 
-    // SEV-05 / D-69-04: a backfill partially-installed row whose dropped-kind set is
-    // empty renders brace-less -- byte-identical to the pre-SEV-05 form (the
-    // change is additive; rows without reasons do not gain a brace).
+    // WCONV-03 / SEV-05 / D-69-04: a backfill partially-installed row whose
+    // dropped-kind set is empty still braces the convergence marker alone. A
+    // backfilled row has no brace-less shape.
     "backfill-partially-installed-no-reasons": {
       pi: piWithAllLoaded(),
       message: {
@@ -5398,7 +5399,7 @@ const FIXTURES: FixtureMap = {
                 name: "hello",
                 version: "1.0.0",
                 dependencies: [],
-                reasons: [],
+                reasons: ["components now supported"],
                 severity: "info",
                 needsReload: true,
               },
