@@ -179,7 +179,7 @@ function ifPredicateMapKey(
 }
 
 /**
- * Discriminated parse result. Consumers (resolver) narrow on `ok`.
+ * Discriminated parse result. Consumers narrow on `ok`.
  *
  * MATCH-03 extension: the success arm carries the compiled `ifPredicates`
  * side-Map. D-71-03 extension: the success arm's `value` is now the FILTERED
@@ -202,8 +202,8 @@ export type HookConfigParseResult<P> =
 /**
  * D-57-04 parse path. Returns the discriminated `{ok:true, value, dropped}` on
  * success; on failure returns `{ok:false, reason}` and forwards the detail
- * through `hookDebugLog`. The resolver maps a structural `{ok:false}` failure to
- * `state: "unavailable"`; a `{ok:true}` parse with a non-empty
+ * through `hookDebugLog`. The hooks-resolution owner maps a structural
+ * `{ok:false}` failure to `state: "unavailable"`; a `{ok:true}` parse with a non-empty
  * `dropped: readonly DroppedHook[]` list resolves `state: "partially-available"` with the
  * `{unsupported hooks}` reason. No throws.
  *

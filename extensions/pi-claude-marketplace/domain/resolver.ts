@@ -34,7 +34,6 @@
 // and resolves `unavailable`).
 
 import { readFile, stat } from "node:fs/promises";
-import { homedir } from "node:os";
 import path from "node:path";
 
 import { PluginShapeError } from "../shared/errors.ts";
@@ -45,8 +44,8 @@ import {
   collectStrictComponentPaths,
   type ComponentPathResolution,
 } from "./component-paths.ts";
-import { parseHooksConfig, type DroppedHook, type HooksConfig } from "./components/hooks.ts";
 import { PLUGIN_MANIFEST_VALIDATOR, type PluginEntry } from "./components/plugin.ts";
+import { resolveHooks, type HooksResolution } from "./hooks-resolution.ts";
 import {
   resolveLooseMcp,
   resolveStrictMcp,
@@ -107,29 +106,7 @@ function readFileTextOf(ctx: ResolveContext): (p: string) => Promise<string> {
 // Helpers
 // ──────────────────────────────────────────────────────────────────────────
 
-interface PartialResolution extends ComponentPathResolution, McpResolution {
-  supported: string[];
-  unsupported: string[];
-  notes: string[];
-  componentPaths: { skills: string[]; commands: string[]; agents: string[] };
-  mcpServers: Record<string, unknown>;
-  // HOOK-01: relative path of the discovered hooks/hooks.json when the
-  // convention probe found a parseable file. Undefined when no file
-  // exists on disk or when parse failed.
-  hooksConfigPath?: string;
-  // SURF-05 / D-63-08: set ONLY on the parseHooksConfig success branch by
-  // `detectOrphanRewake`. Absent when no hooks.json exists, parse failed,
-  // or no handler is orphaned. The cascade-wiring path reads this on the
-  // installable variant.
-  orphanRewake?: boolean;
-  // D-71-03 / PHOOK-02: set by `applyHooksConfig` on a successful parse whose
-  // partition dropped at least one unsupportable event / matcher group /
-  // handler. Routed alongside the `"hooks"` push into `partial.unsupported`,
-  // so a partial-hook plugin resolves `partially-available` while
-  // its supported handlers still materialize. Absent when no hooks.json
-  // exists, the parse failed structurally, or nothing dropped.
-  droppedHooks?: DroppedHook[];
-}
+interface PartialResolution extends ComponentPathResolution, McpResolution, HooksResolution {}
 
 function emptyResolution(): PartialResolution {
   // hooksConfigPath is left absent (not `undefined`) to satisfy
@@ -476,184 +453,6 @@ async function preflightStages(
   };
 }
 
-/**
- * HOOK-01 / D-57-04: discover + parse the per-plugin hooks config file.
- *
- * Returns:
- *   - `{ ok: true }` when no `<pluginRoot>/hooks/hooks.json` exists on disk
- *     (the no-op happy path: the plugin neither declares nor provides hooks).
- *   - `{ ok: true, value, relativePath }` when the file exists AND
- *     `parseHooksConfig` succeeds. The caller adds `"hooks"` to
- *     `partial.supported` and records `partial.hooksConfigPath`.
- *   - `{ ok: false, reason }` when the file exists but `parseHooksConfig`
- *     fails (invalid JSON, structural shape mismatch, missing REQUIRED
- *     `command` on a `type: "command"` handler, or TOOL-02 supportability
- *     trip). The reason is prefixed with `malformed hooks.json: ` so
- *     downstream `startsWith`-anchored narrowing in
- *     `shared/probe-classifiers.ts::narrowResolverNotes` (HOOK-04
- *     tightened detection) emits the `unsupported hooks` Reason.
- *
- * WR-02 (D-58 review): a read I/O failure (EACCES / EPERM / etc.) is
- * RE-THROWN unchanged rather than wrapped with the `malformed hooks.json:`
- * prefix. The outer probe-classifier (`narrowProbeError` in
- * `orchestrators/plugin/{list,info}.ts`) then classifies the error by
- * its `.code` and emits the truthful `{permission denied}` /
- * `{unreadable}` Reason -- the previous wrapper silently lumped I/O
- * failures into the `{unsupported hooks}` bucket. Schema / parse /
- * supportability failures still flow through the structured note path so
- * the catalog layer continues to emit `{unsupported hooks}` for them.
- *
- * Disk I/O is routed through injected `statKind` + `readFileText` readers,
- * matching the domain's standalone-config reader pattern for testability.
- */
-async function readStandaloneHooks(
-  ctx: ResolveContext,
-  pluginRoot: string,
-): Promise<
-  | { ok: true; value?: HooksConfig; relativePath?: string; dropped?: readonly DroppedHook[] }
-  | { ok: false; reason: string }
-> {
-  const hooksPath = path.join(pluginRoot, "hooks", "hooks.json");
-  if ((await statKindOf(ctx)(hooksPath)) !== "file") {
-    return { ok: true };
-  }
-
-  // WR-02 (D-58 review): let read errors propagate so the outer
-  // `narrowProbeError` ladder classifies them by `.code` rather than
-  // lying about the cause class with a generic `malformed hooks.json:`
-  // wrapper.
-  const raw = await readFileTextOf(ctx)(hooksPath);
-
-  // MATCH-03 / A1 projectRoot fallback: the resolver has no
-  // `ExtensionContext` in scope; construct the path-anchor triple from
-  // `os.homedir()` + `process.cwd()`. The resolver's outcome is the
-  // discriminated `installable` shape -- the `if`-field side-Map is
-  // discarded here (only the bridge cache hydrate / install /
-  // reinstall / update paths consume it). The `skipIfMap` opt-out
-  // short-circuits the handler walk entirely; the `compileIf` callback
-  // is still a no-op sentinel for type-system completeness, but is
-  // never invoked when `skipIfMap` is set. Domain MUST NOT import the
-  // bridge `IfPredicate` union (D-11), and the resolver-emitted map is
-  // unreachable from any consumer at this call site.
-  const ifCtx = { homedir: homedir(), cwd: process.cwd(), projectRoot: process.cwd() };
-  const noopCompileIf = JSON.parse.bind(JSON, "null") as () => null;
-  const parsed = parseHooksConfig(raw, ifCtx, noopCompileIf, { skipIfMap: true });
-  if (!parsed.ok) {
-    return { ok: false, reason: `malformed hooks.json: ${parsed.reason}` };
-  }
-
-  // D-71-03 / PHOOK-02: forward `parsed.dropped` so `applyHooksConfig` can
-  // route supportability drops to `partial.unsupported` + `partial.droppedHooks`.
-  // `parsed.value` is the FILTERED supported subset (possibly `{}` for the
-  // Q2 empty-subset edge); the caller decides whether to materialize it.
-  return {
-    ok: true,
-    value: parsed.value,
-    relativePath: path.join("hooks", "hooks.json"),
-    dropped: parsed.dropped,
-  };
-}
-
-/**
- * SURF-05 / D-63-08: scan an already-parsed hooks config for orphan-rewake
- * companion fields. Returns `true` on the first handler whose
- * `rewakeMessage` OR `rewakeSummary` is non-undefined AND whose
- * `asyncRewake` is not `=== true` (the upstream Command-hook-fields
- * orphan-subordinate case). One-per-plugin invariant -- the resolver
- * records a single flag, install row composition emits a single
- * `(installed) {orphan rewake}` reason regardless of N orphan handlers.
- *
- * Plugins where every orphan-bearing handler ALSO declares
- * `asyncRewake: true` return `false`: the companion fields have their
- * required parent, so the install is silent. Handlers with neither
- * companion field never participate.
- */
-function detectOrphanRewake(parsed: HooksConfig): boolean {
-  for (const groups of Object.values(parsed)) {
-    for (const group of groups) {
-      for (const handler of group.hooks) {
-        const hasRewakeField =
-          handler.rewakeMessage !== undefined || handler.rewakeSummary !== undefined;
-        const asyncRewakeTrue = handler.asyncRewake === true;
-        if (hasRewakeField && !asyncRewakeTrue) {
-          return true;
-        }
-      }
-    }
-  }
-
-  return false;
-}
-
-/**
- * HOOK-01 + D-57-04 wiring helper. Probe `hooks/hooks.json`, update the
- * partial resolution, and report whether the result feeds the STRUCTURAL
- * dirty accumulator. Mode-agnostic: both `resolveStrict` and `resolveLoose`
- * call this unchanged (parse-failure semantics do not depend on
- * entry-vs-manifest declaration mode).
- *
- * D-71-03 / PHOOK-02 / PHOOK-03: the verdict is now THREE-way, not two.
- *   - STRUCTURAL failure (invalid JSON S1, schema mismatch S2, or the X1
- *     table-desync programmer bug) -> push the reason note and return `true`
- *     so `decideResolution` resolves `unavailable` (structural precedence,
- *     D-64-07). UNCHANGED arm.
- *   - SUPPORTABILITY drops on an otherwise-parseable config -> route the
- *     dropped signal to `partial.unsupported` (kind "hooks") +
- *     `partial.droppedHooks`, NEVER the structural dirty accumulator, so the
- *     plugin resolves `partially-available`.
- *   - The KEPT handlers (the filtered non-empty subset) still materialize:
- *     push "hooks" to `partial.supported` + record `hooksConfigPath`.
- *
- * SURF-05 / D-63-08: on the materialized-subset branch only, writes
- * `partial.orphanRewake` from `detectOrphanRewake` over the FILTERED subset,
- * so a dropped handler's orphan-rewake field cannot raise a false marker.
- */
-async function applyHooksConfig(
-  ctx: ResolveContext,
-  pluginRoot: string,
-  partial: PartialResolution,
-): Promise<boolean> {
-  const hooksResult = await readStandaloneHooks(ctx, pluginRoot);
-  // D-57-04 / D-64-07: a STRUCTURAL parse failure feeds the structural dirty
-  // accumulator and resolves `unavailable` (structural precedence). Unchanged.
-  if (!hooksResult.ok) {
-    partial.notes.push(hooksResult.reason);
-    return true;
-  }
-
-  // D-71-03 / PHOOK-02: a successful parse may still carry supportability
-  // drops. Route that signal to `partial.unsupported` (kind "hooks") +
-  // `partial.droppedHooks` so `decideResolution` returns `partially-available`. This
-  // mirrors `addUnsupportedKindNotes`, which pushes to `partial.unsupported`;
-  // the dropped-hooks signal NEVER increments the structural dirty accumulator.
-  if (hooksResult.dropped !== undefined && hooksResult.dropped.length > 0) {
-    partial.unsupported.push("hooks");
-    partial.droppedHooks = [...hooksResult.dropped];
-  }
-
-  // D-71-03 / Q2: materialize the KEPT handlers only when the filtered subset
-  // is non-empty. A Stop-only config (every handler dropped) filters to `{}`
-  // -> stage nothing, set no hooksConfigPath, run no orphan probe; the
-  // `droppedHooks` push above still routes it `partially-available`.
-  if (hooksResult.value !== undefined && Object.keys(hooksResult.value).length > 0) {
-    partial.supported.push("hooks");
-    if (hooksResult.relativePath !== undefined) {
-      partial.hooksConfigPath = hooksResult.relativePath;
-    }
-
-    // SURF-05 / D-63-08: `detectOrphanRewake` runs over the FILTERED
-    // subset only. Only SET the flag when true (mirror hooksConfigPath
-    // discipline). Absent-vs-false is intentional: a config with no orphan
-    // handler leaves `partial.orphanRewake` undefined, the constructor spread
-    // omits the field, and consumers read `r.orphanRewake === true`.
-    if (detectOrphanRewake(hooksResult.value)) {
-      partial.orphanRewake = true;
-    }
-  }
-
-  return false;
-}
-
 async function addUnsupportedKindNotes(
   entry: PluginEntry,
   manifest: Record<string, unknown> | null,
@@ -787,7 +586,10 @@ async function runStructuralStages(args: {
     // either add `hooks` to supported (parse OK) or flip installable=false with
     // the parse-failure detail. Mode-agnostic: entry-vs-manifest hooks-FIELD
     // conflict semantics are deferred, so the convention file is the sole gate.
-    await applyHooksConfig(ctx, pluginRoot, partial),
+    await resolveHooks(
+      { pluginRoot, resolution: partial },
+      { statKind: statKindOf(ctx), readFileText: readFileTextOf(ctx) },
+    ),
   );
 
   return flags.includes(true);
