@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 06
 current_phase_name: Assertion and Module Refinement
 status: executing
-stopped_at: Completed 06-03-PLAN.md
-last_updated: "2026-09-09T04:26:32.829Z"
+stopped_at: Completed 06-04-PLAN.md
+last_updated: "2026-09-09T04:42:01.839Z"
 last_activity: 2026-09-08
 last_activity_desc: Phase 06 execution started
-state_head: fb75cee02c89107aac3f4955b2234bcec7c2ce16
+state_head: 00dba1ed582e0f8b15c8904302290ffb6f2a9d3c
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 180
-  completed_plans: 131
+  completed_plans: 132
   percent: 11
 ---
 
@@ -33,7 +33,7 @@ component as a working Pi artifact.
 
 Phase: 06 (Assertion and Module Refinement) — EXECUTING
 Next: Discuss Phase 6
-Plan: 4 of 52
+Plan: 5 of 52
 Status: Ready to execute
 Last activity: 2026-09-08 — Phase 06 execution started
 
@@ -311,6 +311,7 @@ Last activity: 2026-09-08 — Phase 06 execution started
 | Phase 06 P01 | 13min | 2 tasks | 6 files |
 | Phase 06 P02 | 30min | 3 tasks | 8 files |
 | Phase 06 P03 | 30min | 2 tasks | 5 files |
+| Phase 06 P04 | 12min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -723,6 +724,9 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 06]: Irreproducible builtin timing cases are removed only where an existing production port or direct owner retains the same public failure or convergence contract.
 - [Phase 06]: Install schedule evidence observes a case-owned InstallTransaction phase ledger instead of Node's shared filesystem module.
 - [Phase 06]: Reinstall lifecycle faults use existing persistence, cache, data, and routing ports or real case-owned filesystem state.
+- [Phase 06]: Index and import tests use case-owned path/state outcomes instead of shared builtin mutation. — Public registration, persisted bytes, notifications, and recovery remain exact without primitive interception.
+- [Phase 06]: Scope inventory captures a direct readdir import before protected owner mocks are armed. — The helper remains independent without createRequire while protected stage and uninstall exclusions stay unchanged.
+- [Phase 06]: Raw patch census counts executable source sites, not validator fixture literals. — Runtime fixture assembly preserves the closure test while making the required 2/18 and 2/2 census deterministic.
 
 ### Pending Todos
 
@@ -775,7 +779,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 06-03-PLAN.md
+**Stopped at:** Completed 06-04-PLAN.md
 
 Phase 04 completed all seven plans and closed AUTH-01 and TREF-01 through
 TREF-03. Independent verification passed 4/4 with no behavioral or UAT gap;
@@ -793,7 +797,7 @@ independent verification passed 6/6 with zero unverified behaviors.
 **Read beside it:** `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`, the
 Phase 01 terminal evidence ledger, and Phase 5's roadmap criteria.
 
-Last session: 2026-09-09T04:26:32.282Z
+Last session: 2026-09-09T04:42:01.314Z
 
 **Next:** Discuss Phase 06 to define the assertion-strengthening and approved
 module-refinement work before planning.
