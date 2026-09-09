@@ -1660,11 +1660,16 @@ describe("scanForceInstalledBackfills", () => {
   test("RECON-04: does not re-materialize behind a disable the same load already applied", async (t) => {
     // arrange -- the shape the apply pass leaves when it disables a plugin: the
     // scan's snapshot PREDATES that pass, so it still reports the record
-    // enabled, and the growth test still says the set grew. Only the
-    // already-touched dedupe stands between the widened scan and a
-    // re-materialize, and the re-materialize writes `enabled: true`
-    // unconditionally -- so without the dedupe the scan would reverse the
-    // user's own decision at load time (ENBL-08).
+    // enabled, and the growth test still says the set grew.
+    //
+    // What the dedupe protects is single-emit (RECON-04): no second row for a
+    // plugin this load already transitioned, and no redundant re-materialize
+    // over it. It is NOT the last line of defence against re-enabling a disabled
+    // record -- `runLockedReinstall` re-reads fresh state under its own lock and
+    // refuses a disabled record with `already disabled`
+    // (`reinstall.ts` isRecordedButDisabled branch), which is precisely the
+    // cross-process shape this fixture simulates. `backfill.ts` says the same
+    // beside its own ENBL-08 filter.
     const { cwd, locations } = await createHermeticProjectScope(t, "disable-already-touched");
     const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
       hello: { skill: "clean", workflow: true },
