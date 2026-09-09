@@ -7388,3 +7388,163 @@ test("WFLW-04: the state-only arm carries no advisory line, because it runs no d
     ]);
   });
 });
+
+// ---------------------------------------------------------------------------
+// WGATE-01 / WGATE-03: the engine-gate advisory on the read-only surface.
+//
+// A script the host engine will refuse is ADMITTED: the install writes its
+// envelope and registers its command, and the refusal only happens when the
+// engine loads it. So the author cannot learn it from anything the install
+// prints about disposal -- they learn it here, before they decide, in the
+// future tense this surface owes them.
+// ---------------------------------------------------------------------------
+
+/** Admitted, and refused by the engine at its check 9: no `meta.description`. */
+const WORKFLOW_GATE_NO_DESCRIPTION = 'export const meta = { name: "greet" };\n';
+
+/** The same command name, well-formed, so the gate is the only difference. */
+const WORKFLOW_NAMED_GREET = 'export const meta = { name: "greet", description: "greets" };\n';
+
+/** Admitted name, refused by the determinism screen before any gate is read. */
+const WORKFLOW_REFUSED_SEED =
+  'export const meta = { name: "roll", description: "rolls" };\n' +
+  "export const seed = Math.random();\n";
+
+/**
+ * The advisory `WORKFLOW_GATE_NO_DESCRIPTION` earns, written out rather than
+ * composed from the bridge's phrase tables: a test that asked the producer for
+ * its own expected string would agree with any wording it produced.
+ */
+const EXPECTED_GATE_NOTE_CHECK_9 =
+  'workflow script "greet.js" in "workflows" would be installed but the engine will refuse to ' +
+  "load it: the engine refuses at its check 9 -- `meta.description` must be a non-empty string, " +
+  "and `meta.model` (a string) and `meta.phases` (an array of objects each carrying a string " +
+  "`title`) must match those shapes wherever they are declared";
+
+/** One `info` run over `foo` carrying exactly one workflow script. */
+function runFooInfoWithGreetScript(source: string): Promise<NotifyRecord[]> {
+  return withHermeticHome(async ({ home, cwd }) => {
+    const mpRoot = await seedFooInstalled(home, cwd);
+    await seedWorkflowScripts(mpRoot, "foo", { "greet.js": source });
+    const { ctx, pi, notifications } = makeCtx();
+
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "foo", scope: "user", cwd });
+
+    return notifications;
+  });
+}
+
+test("WGATE-01: info names the engine check that will refuse an admitted script, in the future tense", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange -- `greet.js` declares a readable name and no description, so it
+    // is admitted, it is listed on the `workflows:` line beside a well-formed
+    // sibling, and the engine will refuse to load it.
+    const mpRoot = await seedFooInstalled(home, cwd);
+    await seedWorkflowScripts(mpRoot, "foo", {
+      "greet.js": WORKFLOW_GATE_NO_DESCRIPTION,
+      "zeta.js": WORKFLOW_NAMED_ZETA,
+    });
+    const { ctx, pi, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "foo", scope: "user", cwd });
+
+    // assert
+    assert.deepEqual(notifications, [
+      {
+        message:
+          EXPECTED_FOO_INSTALLED_INFO +
+          "\n    workflows: foo:greet, foo:zeta" +
+          `\n    note: ${EXPECTED_GATE_NOTE_CHECK_9}`,
+      },
+    ]);
+  });
+});
+
+test("WGATE-03: the gate note is the only byte an info row gains, at the same severity", async () => {
+  // arrange + act -- two runs over one manifest shape, differing only in
+  // whether the script on disk declares a description. Both scripts are
+  // admitted under the same generated name, so the `workflows:` line is equal
+  // and the note is the only byte the gate can move.
+  const gated = await runFooInfoWithGreetScript(WORKFLOW_GATE_NO_DESCRIPTION);
+  const ungated = await runFooInfoWithGreetScript(WORKFLOW_NAMED_GREET);
+
+  // assert -- the gate-free row first, so the comparison below is against a
+  // stated baseline rather than against whatever the other run produced.
+  assert.deepEqual(ungated, [
+    { message: `${EXPECTED_FOO_INSTALLED_INFO}\n    workflows: foo:greet` },
+  ]);
+  // One record with no `severity` key is how this harness records an `info`
+  // notification: `ctx.ui.notify` was called with no second argument.
+  assert.equal(gated.length, 1);
+  assert.deepEqual(Object.keys(gated[0]!), ["message"]);
+  const gatedLines = gated[0]!.message.split("\n");
+  assert.deepEqual(
+    gatedLines.filter((line) => line.startsWith("    note: ")),
+    [`    note: ${EXPECTED_GATE_NOTE_CHECK_9}`],
+  );
+  assert.deepEqual(
+    gatedLines.filter((line) => !line.startsWith("    note: ")).join("\n"),
+    ungated[0]!.message,
+  );
+});
+
+test("NFR-9: the gate note names the workflows directory by name and discloses no home path", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange -- the discovery pass embeds the ABSOLUTE directory it walked, so
+    // an unreduced note would disclose the resolved home path and make the row's
+    // bytes vary by machine.
+    const mpRoot = await seedFooInstalled(home, cwd);
+    await seedWorkflowScripts(mpRoot, "foo", { "greet.js": WORKFLOW_GATE_NO_DESCRIPTION });
+    const { ctx, pi, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "foo", scope: "user", cwd });
+
+    // assert
+    const message = notifications[0]!.message;
+    assert.ok(
+      message.includes(`    note: ${EXPECTED_GATE_NOTE_CHECK_9}`),
+      `expected the gate note with the directory reduced to its name; got:\n${message}`,
+    );
+    assert.ok(
+      !message.includes(home),
+      `expected no path from the temporary home in the row; got:\n${message}`,
+    );
+  });
+});
+
+test("WGATE-01: a gate note takes its place among the other advisories, in directory-entry order", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange -- one gate-tripping script, one helper the pass skips, and one
+    // script the determinism screen refuses. Nothing places a gate note
+    // anywhere special, and pinning the order is what makes a future sort a
+    // failure rather than a silent reordering.
+    const mpRoot = await seedFooInstalled(home, cwd);
+    await seedWorkflowScripts(mpRoot, "foo", {
+      "greet.js": WORKFLOW_GATE_NO_DESCRIPTION,
+      "helper.js": WORKFLOW_NO_META,
+      "roll.js": WORKFLOW_REFUSED_SEED,
+      "zeta.js": WORKFLOW_NAMED_ZETA,
+    });
+    const { ctx, pi, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "foo", scope: "user", cwd });
+
+    // assert
+    assert.deepEqual(notifications, [
+      {
+        message: [
+          EXPECTED_FOO_INSTALLED_INFO,
+          "    workflows: foo:greet, foo:zeta",
+          `    note: ${EXPECTED_GATE_NOTE_CHECK_9}`,
+          '    note: workflow script "helper.js" in "workflows" will not be installed: ' +
+            "helper.js declares no `meta`, so there is nothing to install",
+          '    note: workflow script "roll.js" in "workflows" will be refused: roll.js calls ' +
+            "`Math.random`, which the workflow engine refuses as nondeterministic",
+        ].join("\n"),
+      },
+    ]);
+  });
+});
