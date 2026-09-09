@@ -4,19 +4,19 @@ milestone: workflows-replay
 milestone_name: Workflow Bridge Replay onto main
 current_phase: 115
 current_phase_name: Install-time admission-gate warnings
-current_plan: Not started
-status: planning
-stopped_at: Phase 114 complete, ready to plan Phase 115
-last_updated: "2026-09-08T08:48:06.344Z"
-state_head: 99582e0040765fd20e8eec84aa1ab31bf0068456
+current_plan: none started — 6 plans committed, plan-checker not run
+status: planned
+stopped_at: Phase 115 planned (6 plans, 3 waves); plan-checker is the next gate
+last_updated: "2026-09-09T02:25:41.000Z"
+state_head: 9a1c0180ad43a2f79bec1f899d3454ee18445bd7
 progress:
   total_phases: 9
   completed_phases: 6
-  total_plans: 26
+  total_plans: 32
   completed_plans: 26
   percent: 67
-last_activity: 2026-09-08
-last_activity_desc: Phase 114 complete — verified 7/7, secured, validated
+last_activity: 2026-09-09
+last_activity_desc: Phase 115 planned; both hung validation verbs re-run clean
 ---
 
 # Project State
@@ -36,9 +36,10 @@ the gaps the bridge originally shipped with.
 ## Current Position
 
 Phase: 115 — Install-time admission-gate warnings
-Plan: none started — Phase 115 is not planned
-Status: Ready to plan. The replay milestone (109-114) is complete; 115-117 are
-the hardening phases.
+Plan: none started — Phase 115 is PLANNED (6 plans, 3 waves, committed at
+`4621fd24`); the plan-checker gate has not run
+Status: Ready to execute, one gate short. The replay milestone (109-114) is
+complete; 115-117 are the hardening phases.
 
 Phase 114 closed the replay. It made the host workflow engine the third soft
 dependency and published `docs/workflows-compatibility.md`, the contract of the
@@ -86,7 +87,7 @@ probe-purity gate instead.
 ## Progress
 
 **Phases Complete:** 6/9 verified (Phases 109-114 replay, 115-117 hardening)
-**Current Plan:** Not started
+**Current Plan:** Not started (6 plans planned and committed)
 
 ```text
 [=======---] 67%
@@ -100,7 +101,7 @@ probe-purity gate instead.
 | 112 | Install and removal lifecycle | Complete (4/4 plans, verified) |
 | 113 | Update, enable/disable, reconcile | Complete (5/5 plans, verified 9/9) |
 | 114 | Degradation and documentation | Complete (5/5 plans, verified 7/7) |
-| 115 | Install-time admission-gate warnings | Next (hardening) |
+| 115 | Install-time admission-gate warnings | Planned, 0/6 executed (hardening) |
 | 116 | Load-time workflow convergence | Not started (hardening) |
 | 117 | Measured `agent()` failure evidence | Not started (hardening) |
 
@@ -207,11 +208,31 @@ implementation.
 
 ## Session Continuity
 
-**Last session:** 2026-09-05T19:20:00Z
+**Last session:** 2026-09-09T02:25:41Z
 
-**Stopped At:** Phase 114 complete, ready to plan Phase 115
-**Resume File:** None
-**Next Action:** `/gsd-verify-work 112` — all four plans are executed and the
+**Stopped At:** Session resumed from `HANDOFF.json`. Phase 115 is planned (6
+plans, 3 waves, `4621fd24`) and the plan-checker gate has not run.
+**Resume File:**
+`.planning/workstreams/workflows/phases/115-install-time-admission-gate-warnings/.continue-here.md`
+**Next Action:** Spawn `gsd-plan-checker` for Phase 115, then
+`/gsd-autonomous --from 115`.
+
+The two validation verbs the planner could not finish under load have now been
+re-run on a quiet machine (load 0.90 against the 52-70 that hung them) and both
+are clean: `frontmatter validate --schema plan` reports `valid: true` on all six
+plans, and `verify plan-structure` reports `valid: true` with zero errors on all
+six. A negative control was run on the first verb — `115-CONTEXT.md` against
+`--schema plan` returns `valid: false` with all eight fields missing — so the
+six green results are not a guard that checks nothing. Note both verbs exit 0
+regardless of verdict; the `valid` field is the signal, not the exit code.
+
+`verify plan-structure` raised ONE warning, on `115-06` only:
+`[plan-criteria R4] A fallible git in a non-final pipeline stage is swallowed —
+the pipeline reports the last stage's status, so a broken command reads as
+clean. Capture the status first.` This is the milestone's own recurring class
+and should be fixed in the plan before `115-06` executes.
+
+Superseded next action: `/gsd-verify-work 112` — all four plans are executed and the
 phase gate is green. Three stale "five kinds" statements survive OUTSIDE the six
 files `112-04` was scoped to and are the closest thing the phase leaves open:
 `tests/orchestrators/plugin/enable-disable.test.ts:869` (which mirrors the
