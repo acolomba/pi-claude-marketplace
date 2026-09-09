@@ -35,6 +35,7 @@ import path from "node:path";
 
 import { assertSafeName } from "../../domain/name.ts";
 import { parseFrontmatter } from "../../platform/pi-api.ts";
+import { stripBom } from "../../shared/bom.ts";
 import { BridgeStagingError } from "../../shared/errors-bridges.ts";
 import {
   appendLeakToError,
@@ -211,7 +212,11 @@ export async function prepareStageCommands(
         const targetFile = path.join(locations.promptsTargetDir, command.generatedName + ".md");
         await assertPathInside(locations.promptsTargetDir, targetFile, "target command file");
 
-        let content = await readFile(command.commandFile, "utf8");
+        // FMBOM-01: a leading U+FEFF produces no gate-1 throw, so no CMD-01
+        // degrade fires and the marker rides `content` straight into the
+        // staged artifact below -- where a peer at the `>=0.80.5` floor drops
+        // the whole frontmatter block at load time.
+        let content = stripBom(await readFile(command.commandFile, "utf8"));
 
         // PARSE-01: parse the SOURCE frontmatter BEFORE substitution to establish
         // attribution ground truth + the degrade trigger. A THROW means a closed

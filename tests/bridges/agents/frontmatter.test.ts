@@ -591,6 +591,58 @@ Body.
     assert.deepStrictEqual(parsedAgentFile, expectedParsedAgentFile);
   });
 
+  test("parses a source led by a byte-order mark identically to the unmarked source", () => {
+    // arrange
+    // FMBOM-01: the marker defeats the anchored `^---` fence match, so without
+    // the strip `raw` comes back empty and the whole block lands in `body`.
+    const sourceAgentFile = `---
+name: reviewer
+description: Reviews changes
+model: sonnet
+tools: Read,Bash
+---
+Review the change.
+`;
+    const markedSourceAgentFile = `\uFEFF${sourceAgentFile}`;
+    const expectedParsedAgentFile = {
+      raw: {
+        name: "reviewer",
+        description: "Reviews changes",
+        model: "sonnet",
+        tools: "Read,Bash",
+      },
+      body: "Review the change.\n",
+    };
+
+    // act
+    const parsedMarkedAgentFile = parseFrontmatter(markedSourceAgentFile);
+    const parsedAgentFile = parseFrontmatter(sourceAgentFile);
+
+    // assert
+    assert.deepStrictEqual(parsedMarkedAgentFile, expectedParsedAgentFile);
+    assert.deepStrictEqual(parsedAgentFile, expectedParsedAgentFile);
+  });
+
+  test("keeps a doubled byte-order mark on the no-frontmatter path", () => {
+    // arrange
+    // T-FMBOM-02: only one marker is stripped, so a doubled marker still fails
+    // closed rather than being cleaned into a parseable fence.
+    const doublyMarkedSourceAgentFile = `\uFEFF\uFEFF---
+name: reviewer
+---
+Review the change.
+`;
+
+    // act
+    const parsedAgentFile = parseFrontmatter(doublyMarkedSourceAgentFile);
+
+    // assert
+    assert.deepStrictEqual(parsedAgentFile, {
+      raw: {},
+      body: "\uFEFF---\nname: reviewer\n---\nReview the change.\n",
+    });
+  });
+
   test("folds dash items written at column zero", () => {
     // arrange
     const sourceAgentFile = `---
