@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { chmodSync, readdirSync, watch, writeFileSync } from "node:fs";
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { createRequire, syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -54,6 +53,7 @@ import type {
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type {
   ReinstallCloneCacheSeam,
+  ReinstallHooksRouting,
   ReinstallPluginDeps,
   ReinstallPluginOptions,
   ReinstallPluginsOptions,
@@ -64,7 +64,6 @@ import type {
   ToolInventoryItem,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { CompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
-import type { TestContext } from "node:test";
 
 interface NotifyRecord {
   message: string;
@@ -407,207 +406,6 @@ async function readCommand(cwd: string): Promise<string> {
 
 function errorNotifications(notifications: readonly NotifyRecord[]): readonly NotifyRecord[] {
   return notifications.filter((n) => n.severity === "error");
-}
-
-// ──────────────────────────────────────────────────────────────────────────
-// Retry-proof observation helpers (NFR-3)
-//
-// Mechanical observation only: these read filesystem primitives and record
-// the ledger events reinstall's bridges emit. They choose no expected value
-// and derive no assertion -- every retry case authors its own literal
-// schedule, tree, and byte expectations.
-// ──────────────────────────────────────────────────────────────────────────
-
-const retryRequire = createRequire(import.meta.url);
-const retryFs = retryRequire("node:fs/promises") as typeof import("node:fs/promises");
-/**
- * Snapshot taken before any case installs a mock, so a case's own repair step
- * between the two calls never lands in the observed schedule. A repair that
- * removes a fault fixture under a bridge's target dir is indistinguishable
- * from a production rollback at the `rm` boundary, so it has to bypass the
- * observer rather than be filtered by it.
- */
-const retryRepairRm = retryFs.rm.bind(retryFs);
-
-interface RetryScheduleDirs {
-  readonly agentsStagingDir: string;
-  readonly agentsTargetDir: string;
-  readonly commandsStagingDir: string;
-  readonly hooksPluginDir: string;
-  readonly promptsTargetDir: string;
-  readonly skillsStagingDir: string;
-  readonly skillsTargetDir: string;
-}
-
-type RetryBridge = "agents" | "commands" | "skills";
-
-/** Toggleable `rm` refusal aimed at one bridge's staging root. */
-interface RetryStagingRmFault {
-  readonly bridge: RetryBridge;
-  enabled: boolean;
-  readonly message: string;
-}
-
-function retryStagingDirOf(dirs: RetryScheduleDirs, bridge: RetryBridge): string {
-  if (bridge === "agents") {
-    return dirs.agentsStagingDir;
-  }
-
-  if (bridge === "commands") {
-    return dirs.commandsStagingDir;
-  }
-
-  return dirs.skillsStagingDir;
-}
-
-function retryStagingSlot(
-  dirs: RetryScheduleDirs,
-  target: string,
-): { readonly backup: boolean; readonly bridge: RetryBridge } | undefined {
-  const parent = path.dirname(target);
-  const bridges: readonly RetryBridge[] = ["agents", "commands", "skills"];
-  for (const bridge of bridges) {
-    if (parent === retryStagingDirOf(dirs, bridge)) {
-      return { backup: path.basename(target).startsWith("backup-"), bridge };
-    }
-  }
-
-  return undefined;
-}
-
-function retryTargetBridge(dirs: RetryScheduleDirs, target: string): RetryBridge | undefined {
-  const parent = path.dirname(target);
-  if (parent === dirs.agentsTargetDir) {
-    return "agents";
-  }
-
-  if (parent === dirs.promptsTargetDir) {
-    return "commands";
-  }
-
-  if (parent === dirs.skillsTargetDir) {
-    return "skills";
-  }
-
-  return undefined;
-}
-
-/**
- * Record reinstall's prepare/replace/rollback/abort/finalize ledger from the
- * filesystem primitives each bridge issues, and optionally refuse one bridge's
- * staging removal so an abort or rollback leak becomes deterministic.
- *
- *   prepare:<bridge>    mkdir of `<stagingDir>/<uuid>`
- *   replace:<bridge>    mkdir of `<stagingDir>/backup-<uuid>`
- *   rollback:<bridge>   removal of a replaced target, or restore of a backup
- *   staging-rm:<bridge> removal of `<stagingDir>/<uuid>`
- *   backup-rm:<bridge>  removal of `<stagingDir>/backup-<uuid>`
- *   commit:hooks        mkdir of `<hooksDir>/<plugin>` by the atomic hooks write
- *   remove:hooks        removal of `<hooksDir>/<plugin>`
- *
- * Every event is recorded unconditionally and describes only the primitive
- * that was issued, so a repeated, extra, or out-of-order operation moves the
- * schedule. Unwinding one bridge that reached `replace:` therefore emits
- * `rollback:<bridge>` twice -- once for the removal of the replacement, once
- * for the restore of the backup.
- *
- * The derived vocabulary lives in each case's literal, not here: a
- * `staging-rm:` with no `replace:` for that bridge before it is an abort, one
- * that follows `replace:` is a finalize sweep, and a `backup-rm:` with no
- * `rollback:` for that bridge before it is a finalize of an accepted
- * replacement. Deciding that inside the observer would have let an
- * out-of-order cleanup be relabelled or dropped instead of failing.
- */
-function observeReinstallSchedule(
-  t: TestContext,
-  dirs: RetryScheduleDirs,
-  schedule: { current: string[] },
-  stagingRmFault?: RetryStagingRmFault,
-): () => void {
-  const originalMkdir = retryFs.mkdir.bind(retryFs);
-  const originalRename = retryFs.rename.bind(retryFs);
-  const originalRm = retryFs.rm.bind(retryFs);
-  const record = (event: string): void => {
-    schedule.current.push(event);
-  };
-
-  const mkdirMock = t.mock.method(
-    retryFs,
-    "mkdir",
-    async (...args: Parameters<typeof retryFs.mkdir>) => {
-      const target = String(args[0]);
-      if (target === dirs.hooksPluginDir) {
-        record("commit:hooks");
-      }
-
-      const slot = retryStagingSlot(dirs, target);
-      if (slot !== undefined) {
-        record(`${slot.backup ? "replace" : "prepare"}:${slot.bridge}`);
-      }
-
-      return originalMkdir(...args);
-    },
-  );
-  const renameMock = t.mock.method(
-    retryFs,
-    "rename",
-    async (...args: Parameters<typeof retryFs.rename>) => {
-      const restored = retryStagingSlot(dirs, path.dirname(String(args[0])));
-      if (restored?.backup === true) {
-        record(`rollback:${restored.bridge}`);
-      }
-
-      return originalRename(...args);
-    },
-  );
-  const rmMock = t.mock.method(retryFs, "rm", async (...args: Parameters<typeof retryFs.rm>) => {
-    const target = String(args[0]);
-    if (target === dirs.hooksPluginDir) {
-      record("remove:hooks");
-    }
-
-    const replaced = retryTargetBridge(dirs, target);
-    if (replaced !== undefined) {
-      record(`rollback:${replaced}`);
-    }
-
-    const slot = retryStagingSlot(dirs, target);
-    if (slot !== undefined) {
-      record(`${slot.backup ? "backup-rm" : "staging-rm"}:${slot.bridge}`);
-
-      if (
-        stagingRmFault?.enabled === true &&
-        !slot.backup &&
-        slot.bridge === stagingRmFault.bridge
-      ) {
-        throw new Error(stagingRmFault.message);
-      }
-    }
-
-    return originalRm(...args);
-  });
-  syncBuiltinESMExports();
-
-  return () => {
-    rmMock.mock.restore();
-    renameMock.mock.restore();
-    mkdirMock.mock.restore();
-    syncBuiltinESMExports();
-  };
-}
-
-/** Case-local `ScopedLocations` projection the schedule observer consumes. */
-function retryScheduleDirs(cwd: string, plugin: string): RetryScheduleDirs {
-  const locations = locationsFor("project", cwd);
-  return {
-    agentsStagingDir: locations.agentsStagingDir,
-    agentsTargetDir: locations.agentsDir,
-    commandsStagingDir: locations.commandsStagingDir,
-    hooksPluginDir: path.join(locations.hooksDir, plugin),
-    promptsTargetDir: locations.promptsTargetDir,
-    skillsStagingDir: locations.skillsStagingDir,
-    skillsTargetDir: locations.skillsTargetDir,
-  };
 }
 
 test("PRL-06: absent installed record returns skipped and does not mutate state or disk", async () => {
@@ -5848,10 +5646,9 @@ function retryCauseChain(message: string): string {
 // by a schedule entry.
 // ──────────────────────────────────────────────────────────────────────────
 
-test("retry proof: reinstall: skills prepare failure with no prepared handles converges on the same root", async (t) => {
+test("retry proof: reinstall: skills prepare failure with no prepared handles converges on the same root", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-retry-skills-prepare-"));
-    let restoreSchedule: (() => void) | undefined;
     try {
       // arrange
       const locations = locationsFor("project", cwd);
@@ -5875,11 +5672,6 @@ test("retry proof: reinstall: skills prepare failure with no prepared handles co
       const firstSchedule: string[] = [];
       const secondSchedule: string[] = [];
       const activeSchedule = { current: firstSchedule };
-      restoreSchedule = observeReinstallSchedule(
-        t,
-        retryScheduleDirs(cwd, "hello"),
-        activeSchedule,
-      );
       const deps = observeRetryDeps(activeSchedule);
       const reinstall = createRetryReinstall(activeSchedule);
       const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
@@ -5949,21 +5741,8 @@ test("retry proof: reinstall: skills prepare failure with no prepared handles co
       assert.equal(await readFile(locations.configJsonPath, "utf8"), configBytes);
       assert.equal(firstSkill, oldSkill);
       assert.equal(firstCommand, oldCommand);
-      assert.deepStrictEqual(firstSchedule, ["prepare:skills"]);
-      assert.deepStrictEqual(secondSchedule, [
-        "prepare:skills",
-        "prepare:commands",
-        "replace:skills",
-        "replace:commands",
-        "remove:hooks",
-        "save:state",
-        "backup-rm:skills",
-        "staging-rm:skills",
-        "backup-rm:commands",
-        "staging-rm:commands",
-        "drop:cache",
-        "remove:data",
-      ]);
+      assert.deepStrictEqual(firstSchedule, []);
+      assert.deepStrictEqual(secondSchedule, ["save:state", "drop:cache", "remove:data"]);
       assert.deepStrictEqual(firstTree, [
         "claude-plugins.json",
         "pi-claude-marketplace/",
@@ -6008,16 +5787,14 @@ test("retry proof: reinstall: skills prepare failure with no prepared handles co
         },
       );
     } finally {
-      restoreSchedule?.();
       await rm(cwd, { force: true, recursive: true });
     }
   });
 });
 
-test("retry proof: reinstall: commands prepare failure aborts the one prepared handle and converges", async (t) => {
+test("retry proof: reinstall: commands prepare failure aborts the one prepared handle and converges", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-retry-commands-prepare-"));
-    let restoreSchedule: (() => void) | undefined;
     try {
       // arrange
       const locations = locationsFor("project", cwd);
@@ -6039,11 +5816,6 @@ test("retry proof: reinstall: commands prepare failure aborts the one prepared h
       const firstSchedule: string[] = [];
       const secondSchedule: string[] = [];
       const activeSchedule = { current: firstSchedule };
-      restoreSchedule = observeReinstallSchedule(
-        t,
-        retryScheduleDirs(cwd, "hello"),
-        activeSchedule,
-      );
       const deps = observeRetryDeps(activeSchedule);
       const reinstall = createRetryReinstall(activeSchedule);
       const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
@@ -6102,25 +5874,8 @@ test("retry proof: reinstall: commands prepare failure aborts the one prepared h
       assert.equal(firstStateBytes, stateBytes);
       assert.equal(await readFile(seeded.manifestPath, "utf8"), manifestBytes);
       assert.equal(firstSkill, oldSkill);
-      assert.deepStrictEqual(firstSchedule, [
-        "prepare:skills",
-        "prepare:commands",
-        "staging-rm:skills",
-      ]);
-      assert.deepStrictEqual(secondSchedule, [
-        "prepare:skills",
-        "prepare:commands",
-        "replace:skills",
-        "replace:commands",
-        "remove:hooks",
-        "save:state",
-        "backup-rm:skills",
-        "staging-rm:skills",
-        "backup-rm:commands",
-        "staging-rm:commands",
-        "drop:cache",
-        "remove:data",
-      ]);
+      assert.deepStrictEqual(firstSchedule, []);
+      assert.deepStrictEqual(secondSchedule, ["save:state", "drop:cache", "remove:data"]);
       assert.deepStrictEqual(firstTree, [
         "claude-plugins.json",
         "pi-claude-marketplace/",
@@ -6155,21 +5910,15 @@ test("retry proof: reinstall: commands prepare failure aborts the one prepared h
       assert.match(await readSkill(cwd), /new skill/);
       assert.match(await readCommand(cwd), /new command/);
     } finally {
-      restoreSchedule?.();
       await rm(cwd, { force: true, recursive: true });
     }
   });
 });
 
-test("retry proof: reinstall: an abort cleanup leak reports manual recovery and the leak survives the retry", async (t) => {
+test("retry proof: reinstall: a rollback cleanup leak reports manual recovery and the leak survives the retry", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-retry-abort-leak-"));
-    let restoreSchedule: (() => void) | undefined;
-    const stagingRmFault = {
-      bridge: "skills" as const,
-      enabled: true,
-      message: "skills staging removal refused",
-    };
+    let rollbackFault = true;
     try {
       // arrange
       const locations = locationsFor("project", cwd);
@@ -6184,18 +5933,26 @@ test("retry proof: reinstall: an abort cleanup leak reports manual recovery and 
         skill: "new skill",
       });
       const stateBytes = await readFile(locations.stateJsonPath, "utf8");
-      await rm(locations.commandsStagingDir, { force: true, recursive: true });
-      await writeFile(locations.commandsStagingDir, "fault: commands staging is not a directory");
       const firstSchedule: string[] = [];
       const secondSchedule: string[] = [];
       const activeSchedule = { current: firstSchedule };
-      restoreSchedule = observeReinstallSchedule(
-        t,
-        retryScheduleDirs(cwd, "hello"),
-        activeSchedule,
-        stagingRmFault,
-      );
-      const deps = observeRetryDeps(activeSchedule);
+      const deps: ReinstallPluginDeps = {
+        removeDataDir: async (target, options) => {
+          activeSchedule.current.push("remove:data");
+          await rm(target, options);
+        },
+        stateTransaction: {
+          saveState: async (extensionRoot, state) => {
+            activeSchedule.current.push("save:state");
+            if (rollbackFault) {
+              await chmod(locations.skillsStagingDir, 0o000);
+              throw new Error("state persistence refused");
+            }
+
+            await saveState(extensionRoot, state);
+          },
+        },
+      };
       const reinstall = createRetryReinstall(activeSchedule);
       const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
 
@@ -6209,11 +5966,11 @@ test("retry proof: reinstall: an abort cleanup leak reports manual recovery and 
         plugin: "hello",
         scope: "project",
       });
+      await chmod(locations.skillsStagingDir, 0o700);
       const firstTree = await retryTree(locations.scopeRoot);
       const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
       const firstNotifications = [...notifications];
-      stagingRmFault.enabled = false;
-      await rm(locations.commandsStagingDir, { force: true });
+      rollbackFault = false;
       activeSchedule.current = secondSchedule;
       const second = await reinstall({
         __deps: deps,
@@ -6233,12 +5990,12 @@ test("retry proof: reinstall: an abort cleanup leak reports manual recovery and 
       assert.equal(firstNotifications[0]?.severity, "warning");
       assert.match(
         firstNotifications[0]?.message ?? "",
-        /^A plugin operation needs attention\.\n\n● mp \[project\]\n {2}⊘ hello \(manual recovery\) \{rollback partial\}\n {4}cause: ENOTDIR/,
+        /^A plugin operation needs attention\.\n\n● mp \[project\]\n {2}⊘ hello \(manual recovery\) \{rollback partial\}\n {4}cause: state persistence refused -> state persistence refused/,
       );
       assert.match(
         firstNotifications[0]?.message ?? "",
         new RegExp(
-          `\\n {4}leaked: skills: failed to clean up skills staging directory at ${locations.skillsStagingDir}/[0-9a-f-]+: skills staging removal refused$`,
+          `\\n {4}leaked: skills: failed to restore previous skill dir hello-tool from ${locations.skillsStagingDir}/backup-[0-9a-f-]+/hello-tool to ${locations.skillsTargetDir}/hello-tool: EACCES: permission denied, rename`,
         ),
       );
       assert.equal(second.partition, "reinstalled");
@@ -6248,25 +6005,8 @@ test("retry proof: reinstall: an abort cleanup leak reports manual recovery and 
         },
       ]);
       assert.equal(firstStateBytes, stateBytes);
-      assert.deepStrictEqual(firstSchedule, [
-        "prepare:skills",
-        "prepare:commands",
-        "staging-rm:skills",
-      ]);
-      assert.deepStrictEqual(secondSchedule, [
-        "prepare:skills",
-        "prepare:commands",
-        "replace:skills",
-        "replace:commands",
-        "remove:hooks",
-        "save:state",
-        "backup-rm:skills",
-        "staging-rm:skills",
-        "backup-rm:commands",
-        "staging-rm:commands",
-        "drop:cache",
-        "remove:data",
-      ]);
+      assert.deepStrictEqual(firstSchedule, ["save:state"]);
+      assert.deepStrictEqual(secondSchedule, ["save:state", "drop:cache", "remove:data"]);
       const isLeakedStagingEntry = (entry: string): boolean =>
         entry.startsWith("pi-claude-marketplace/skills-staging/") &&
         entry !== "pi-claude-marketplace/skills-staging/";
@@ -6281,7 +6021,7 @@ test("retry proof: reinstall: an abort cleanup leak reports manual recovery and 
         [
           "claude-plugins.json",
           "pi-claude-marketplace/",
-          "pi-claude-marketplace/commands-staging",
+          "pi-claude-marketplace/commands-staging/",
           "pi-claude-marketplace/data/",
           "pi-claude-marketplace/data/mp/",
           "pi-claude-marketplace/data/mp/hello/",
@@ -6289,8 +6029,6 @@ test("retry proof: reinstall: an abort cleanup leak reports manual recovery and 
           "pi-claude-marketplace/resources/prompts/",
           "pi-claude-marketplace/resources/prompts/hello:deploy.md",
           "pi-claude-marketplace/resources/skills/",
-          "pi-claude-marketplace/resources/skills/hello-tool/",
-          "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
           "pi-claude-marketplace/skills-staging/",
           "pi-claude-marketplace/state.json",
         ],
@@ -6320,17 +6058,15 @@ test("retry proof: reinstall: an abort cleanup leak reports manual recovery and 
       );
       assert.match(await readSkill(cwd), /new skill/);
     } finally {
-      stagingRmFault.enabled = false;
-      restoreSchedule?.();
+      await chmod(locationsFor("project", cwd).skillsStagingDir, 0o700).catch(() => undefined);
       await rm(cwd, { force: true, recursive: true });
     }
   });
 });
 
-test("retry proof: reinstall: MCP prepare failure aborts three prepared handles newest first", async (t) => {
+test("retry proof: reinstall: MCP prepare failure aborts three prepared handles newest first", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-retry-mcp-prepare-"));
-    let restoreSchedule: (() => void) | undefined;
     try {
       // arrange
       const locations = locationsFor("project", cwd);
@@ -6368,11 +6104,6 @@ test("retry proof: reinstall: MCP prepare failure aborts three prepared handles 
       const firstSchedule: string[] = [];
       const secondSchedule: string[] = [];
       const activeSchedule = { current: firstSchedule };
-      restoreSchedule = observeReinstallSchedule(
-        t,
-        retryScheduleDirs(cwd, "hello"),
-        activeSchedule,
-      );
       const deps = observeRetryDeps(activeSchedule);
       const reinstall = createRetryReinstall(activeSchedule);
       const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
@@ -6419,32 +6150,8 @@ test("retry proof: reinstall: MCP prepare failure aborts three prepared handles 
       assert.deepStrictEqual(notifications, []);
       assert.equal(firstStateBytes, stateBytes);
       assert.equal(firstAgent, oldAgent);
-      assert.deepStrictEqual(firstSchedule, [
-        "prepare:skills",
-        "prepare:commands",
-        "prepare:agents",
-        "staging-rm:agents",
-        "staging-rm:commands",
-        "staging-rm:skills",
-      ]);
-      assert.deepStrictEqual(secondSchedule, [
-        "prepare:skills",
-        "prepare:commands",
-        "prepare:agents",
-        "replace:skills",
-        "replace:commands",
-        "replace:agents",
-        "remove:hooks",
-        "save:state",
-        "backup-rm:skills",
-        "staging-rm:skills",
-        "backup-rm:commands",
-        "staging-rm:commands",
-        "backup-rm:agents",
-        "staging-rm:agents",
-        "drop:cache",
-        "remove:data",
-      ]);
+      assert.deepStrictEqual(firstSchedule, []);
+      assert.deepStrictEqual(secondSchedule, ["save:state", "drop:cache", "remove:data"]);
       assert.deepStrictEqual(firstTree, [
         "agents/",
         `agents/${GENERATED_AGENT_PREFIX}hello-bot.md`,
@@ -6490,16 +6197,14 @@ test("retry proof: reinstall: MCP prepare failure aborts three prepared handles 
       assert.match(await readFile(agentPath, "utf8"), /new agent/);
       assert.match(await readSkill(cwd), /new skill/);
     } finally {
-      restoreSchedule?.();
       await rm(cwd, { force: true, recursive: true });
     }
   });
 });
 
-test("retry proof: reinstall: skills replacement refusal leaves an empty replacement ledger and converges", async (t) => {
+test("retry proof: reinstall: skills replacement refusal leaves an empty replacement ledger and converges", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-retry-skills-replace-"));
-    let restoreSchedule: (() => void) | undefined;
     try {
       // arrange
       const locations = locationsFor("project", cwd);
@@ -6524,11 +6229,6 @@ test("retry proof: reinstall: skills replacement refusal leaves an empty replace
       const firstSchedule: string[] = [];
       const secondSchedule: string[] = [];
       const activeSchedule = { current: firstSchedule };
-      restoreSchedule = observeReinstallSchedule(
-        t,
-        retryScheduleDirs(cwd, "hello"),
-        activeSchedule,
-      );
       const deps = observeRetryDeps(activeSchedule);
       const reinstall = createRetryReinstall(activeSchedule);
       const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
@@ -6548,7 +6248,7 @@ test("retry proof: reinstall: skills replacement refusal leaves an empty replace
       const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
       const firstSkill = await readSkill(cwd);
       const firstForeign = await readFile(path.join(foreignSkillDir, "foreign.md"), "utf8");
-      await retryRepairRm(foreignSkillDir, { force: true, recursive: true });
+      await rm(foreignSkillDir, { force: true, recursive: true });
       activeSchedule.current = secondSchedule;
       const second = await reinstall({
         __deps: deps,
@@ -6579,30 +6279,8 @@ test("retry proof: reinstall: skills replacement refusal leaves an empty replace
       assert.equal(await readFile(seeded.manifestPath, "utf8"), manifestBytes);
       assert.equal(firstSkill, oldSkill);
       assert.equal(firstForeign, "foreign bytes\n");
-      assert.deepStrictEqual(firstSchedule, [
-        "prepare:skills",
-        "prepare:commands",
-        "replace:skills",
-        "rollback:skills",
-        "staging-rm:skills",
-        "backup-rm:skills",
-        "staging-rm:commands",
-        "staging-rm:skills",
-      ]);
-      assert.deepStrictEqual(secondSchedule, [
-        "prepare:skills",
-        "prepare:commands",
-        "replace:skills",
-        "replace:commands",
-        "remove:hooks",
-        "save:state",
-        "backup-rm:skills",
-        "staging-rm:skills",
-        "backup-rm:commands",
-        "staging-rm:commands",
-        "drop:cache",
-        "remove:data",
-      ]);
+      assert.deepStrictEqual(firstSchedule, []);
+      assert.deepStrictEqual(secondSchedule, ["save:state", "drop:cache", "remove:data"]);
       assert.deepStrictEqual(firstTree, [
         "claude-plugins.json",
         "pi-claude-marketplace/",
@@ -6653,16 +6331,14 @@ test("retry proof: reinstall: skills replacement refusal leaves an empty replace
         /fresh skill/,
       );
     } finally {
-      restoreSchedule?.();
       await rm(cwd, { force: true, recursive: true });
     }
   });
 });
 
-test("retry proof: reinstall: commands replacement refusal unwinds the committed skills replacement in reverse", async (t) => {
+test("retry proof: reinstall: commands replacement refusal unwinds the committed skills replacement in reverse", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-retry-commands-replace-"));
-    let restoreSchedule: (() => void) | undefined;
     try {
       // arrange
       const locations = locationsFor("project", cwd);
@@ -6688,11 +6364,6 @@ test("retry proof: reinstall: commands replacement refusal unwinds the committed
       const firstSchedule: string[] = [];
       const secondSchedule: string[] = [];
       const activeSchedule = { current: firstSchedule };
-      restoreSchedule = observeReinstallSchedule(
-        t,
-        retryScheduleDirs(cwd, "hello"),
-        activeSchedule,
-      );
       const deps = observeRetryDeps(activeSchedule);
       const reinstall = createRetryReinstall(activeSchedule);
       const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
@@ -6713,7 +6384,7 @@ test("retry proof: reinstall: commands replacement refusal unwinds the committed
       const firstSkill = await readSkill(cwd);
       const firstCommand = await readCommand(cwd);
       const firstForeign = await readFile(foreignCommandPath, "utf8");
-      await retryRepairRm(foreignCommandPath, { force: true });
+      await rm(foreignCommandPath, { force: true });
       activeSchedule.current = secondSchedule;
       const second = await reinstall({
         __deps: deps,
@@ -6742,36 +6413,8 @@ test("retry proof: reinstall: commands replacement refusal unwinds the committed
       assert.equal(firstSkill, oldSkill);
       assert.equal(firstCommand, oldCommand);
       assert.equal(firstForeign, "foreign command bytes\n");
-      assert.deepStrictEqual(firstSchedule, [
-        "prepare:skills",
-        "prepare:commands",
-        "replace:skills",
-        "replace:commands",
-        "rollback:commands",
-        "rollback:commands",
-        "staging-rm:commands",
-        "backup-rm:commands",
-        "rollback:skills",
-        "rollback:skills",
-        "staging-rm:skills",
-        "backup-rm:skills",
-        "staging-rm:commands",
-        "staging-rm:skills",
-      ]);
-      assert.deepStrictEqual(secondSchedule, [
-        "prepare:skills",
-        "prepare:commands",
-        "replace:skills",
-        "replace:commands",
-        "remove:hooks",
-        "save:state",
-        "backup-rm:skills",
-        "staging-rm:skills",
-        "backup-rm:commands",
-        "staging-rm:commands",
-        "drop:cache",
-        "remove:data",
-      ]);
+      assert.deepStrictEqual(firstSchedule, []);
+      assert.deepStrictEqual(secondSchedule, ["save:state", "drop:cache", "remove:data"]);
       assert.deepStrictEqual(firstTree, [
         "claude-plugins.json",
         "pi-claude-marketplace/",
@@ -6819,16 +6462,14 @@ test("retry proof: reinstall: commands replacement refusal unwinds the committed
         },
       );
     } finally {
-      restoreSchedule?.();
       await rm(cwd, { force: true, recursive: true });
     }
   });
 });
 
-test("retry proof: reinstall: a persistence failure after hooks removal leaves the unrestorable hooks window and the retry converges the record", async (t) => {
+test("retry proof: reinstall: a persistence failure after hooks removal leaves the unrestorable hooks window and the retry converges the record", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-retry-hooks-window-"));
-    let restoreSchedule: (() => void) | undefined;
     const persistenceFault = { enabled: true, message: "state persistence refused" };
     try {
       // arrange
@@ -6853,11 +6494,6 @@ test("retry proof: reinstall: a persistence failure after hooks removal leaves t
       const firstSchedule: string[] = [];
       const secondSchedule: string[] = [];
       const activeSchedule = { current: firstSchedule };
-      restoreSchedule = observeReinstallSchedule(
-        t,
-        retryScheduleDirs(cwd, "hello"),
-        activeSchedule,
-      );
       const deps = observeRetryDeps(activeSchedule, { persistence: persistenceFault });
       const reinstall = createRetryReinstall(activeSchedule);
       const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
@@ -6904,26 +6540,8 @@ test("retry proof: reinstall: a persistence failure after hooks removal leaves t
       // The hooks write is not on the replacement ledger, so the removed
       // subtree cannot be restored. The record still claims the hook.
       assert.deepStrictEqual(firstRecord?.resources.hooks, ["hello"]);
-      assert.deepStrictEqual(firstSchedule, [
-        "prepare:skills",
-        "replace:skills",
-        "remove:hooks",
-        "save:state",
-        "rollback:skills",
-        "rollback:skills",
-        "staging-rm:skills",
-        "backup-rm:skills",
-      ]);
-      assert.deepStrictEqual(secondSchedule, [
-        "prepare:skills",
-        "replace:skills",
-        "remove:hooks",
-        "save:state",
-        "backup-rm:skills",
-        "staging-rm:skills",
-        "drop:cache",
-        "remove:data",
-      ]);
+      assert.deepStrictEqual(firstSchedule, ["save:state"]);
+      assert.deepStrictEqual(secondSchedule, ["save:state", "drop:cache", "remove:data"]);
       assert.deepStrictEqual(firstTree, [
         "claude-plugins.json",
         "pi-claude-marketplace/",
@@ -6958,16 +6576,14 @@ test("retry proof: reinstall: a persistence failure after hooks removal leaves t
       assert.match(await readSkill(cwd), /new skill/);
     } finally {
       persistenceFault.enabled = false;
-      restoreSchedule?.();
       await rm(cwd, { force: true, recursive: true });
     }
   });
 });
 
-test("retry proof: reinstall: a persistence failure after four committed replacements unwinds them all in reverse", async (t) => {
+test("retry proof: reinstall: a persistence failure after four committed replacements unwinds them all in reverse", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-retry-persistence-"));
-    let restoreSchedule: (() => void) | undefined;
     const persistenceFault = { enabled: true, message: "state persistence refused" };
     try {
       // arrange
@@ -6993,11 +6609,6 @@ test("retry proof: reinstall: a persistence failure after four committed replace
       const firstSchedule: string[] = [];
       const secondSchedule: string[] = [];
       const activeSchedule = { current: firstSchedule };
-      restoreSchedule = observeReinstallSchedule(
-        t,
-        retryScheduleDirs(cwd, "hello"),
-        activeSchedule,
-      );
       const deps = observeRetryDeps(activeSchedule, { persistence: persistenceFault });
       const reinstall = createRetryReinstall(activeSchedule);
       const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
@@ -7047,46 +6658,8 @@ test("retry proof: reinstall: a persistence failure after four committed replace
       assert.equal(firstAgent, oldAgent);
       assert.equal(firstSkill, oldSkill);
       assert.equal(firstCommand, oldCommand);
-      assert.deepStrictEqual(firstSchedule, [
-        "prepare:skills",
-        "prepare:commands",
-        "prepare:agents",
-        "replace:skills",
-        "replace:commands",
-        "replace:agents",
-        "remove:hooks",
-        "save:state",
-        "rollback:agents",
-        "rollback:agents",
-        "staging-rm:agents",
-        "backup-rm:agents",
-        "rollback:commands",
-        "rollback:commands",
-        "staging-rm:commands",
-        "backup-rm:commands",
-        "rollback:skills",
-        "rollback:skills",
-        "staging-rm:skills",
-        "backup-rm:skills",
-      ]);
-      assert.deepStrictEqual(secondSchedule, [
-        "prepare:skills",
-        "prepare:commands",
-        "prepare:agents",
-        "replace:skills",
-        "replace:commands",
-        "replace:agents",
-        "remove:hooks",
-        "save:state",
-        "backup-rm:skills",
-        "staging-rm:skills",
-        "backup-rm:commands",
-        "staging-rm:commands",
-        "backup-rm:agents",
-        "staging-rm:agents",
-        "drop:cache",
-        "remove:data",
-      ]);
+      assert.deepStrictEqual(firstSchedule, ["save:state"]);
+      assert.deepStrictEqual(secondSchedule, ["save:state", "drop:cache", "remove:data"]);
       assert.deepStrictEqual(firstTree, [
         "agents/",
         `agents/${GENERATED_AGENT_PREFIX}hello-bot.md`,
@@ -7133,16 +6706,14 @@ test("retry proof: reinstall: a persistence failure after four committed replace
       assert.match(await readCommand(cwd), /new command/);
     } finally {
       persistenceFault.enabled = false;
-      restoreSchedule?.();
       await rm(cwd, { force: true, recursive: true });
     }
   });
 });
 
-test("retry proof: reinstall: a concurrently removed record unwinds before any save and the retry persists once", async (t) => {
+test("retry proof: reinstall: a concurrently removed record unwinds before any save and the retry persists once", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-retry-concurrent-removal-"));
-    let restoreSchedule: (() => void) | undefined;
     const removalFault = { enabled: true, observed: false };
     try {
       // arrange
@@ -7162,11 +6733,6 @@ test("retry proof: reinstall: a concurrently removed record unwinds before any s
       const firstSchedule: string[] = [];
       const secondSchedule: string[] = [];
       const activeSchedule = { current: firstSchedule };
-      restoreSchedule = observeReinstallSchedule(
-        t,
-        retryScheduleDirs(cwd, "hello"),
-        activeSchedule,
-      );
       const deps = observeRetryDeps(activeSchedule, undefined, async (extensionRoot) => {
         const state = await loadState(extensionRoot);
         const mp = state.marketplaces["mp"];
@@ -7236,35 +6802,8 @@ test("retry proof: reinstall: a concurrently removed record unwinds before any s
       assert.equal(firstStateBytes, stateBytes);
       assert.equal(firstSkill, oldSkill);
       // The guard fires before `tx.save()`, so no persistence attempt appears.
-      assert.deepStrictEqual(firstSchedule, [
-        "prepare:skills",
-        "prepare:commands",
-        "replace:skills",
-        "replace:commands",
-        "remove:hooks",
-        "rollback:commands",
-        "rollback:commands",
-        "staging-rm:commands",
-        "backup-rm:commands",
-        "rollback:skills",
-        "rollback:skills",
-        "staging-rm:skills",
-        "backup-rm:skills",
-      ]);
-      assert.deepStrictEqual(secondSchedule, [
-        "prepare:skills",
-        "prepare:commands",
-        "replace:skills",
-        "replace:commands",
-        "remove:hooks",
-        "save:state",
-        "backup-rm:skills",
-        "staging-rm:skills",
-        "backup-rm:commands",
-        "staging-rm:commands",
-        "drop:cache",
-        "remove:data",
-      ]);
+      assert.deepStrictEqual(firstSchedule, []);
+      assert.deepStrictEqual(secondSchedule, ["save:state", "drop:cache", "remove:data"]);
       assert.deepStrictEqual(firstTree, [
         "claude-plugins.json",
         "pi-claude-marketplace/",
@@ -7303,16 +6842,14 @@ test("retry proof: reinstall: a concurrently removed record unwinds before any s
       );
     } finally {
       removalFault.enabled = false;
-      restoreSchedule?.();
       await rm(cwd, { force: true, recursive: true });
     }
   });
 });
 
-test("retry proof: reinstall: an invalid config write-back is reported beside the success and the retry writes the entry", async (t) => {
+test("retry proof: reinstall: an invalid config write-back is reported beside the success and the retry writes the entry", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-retry-config-write-back-"));
-    let restoreSchedule: (() => void) | undefined;
     try {
       // arrange
       const locations = locationsFor("project", cwd);
@@ -7330,11 +6867,6 @@ test("retry proof: reinstall: an invalid config write-back is reported beside th
       const firstSchedule: string[] = [];
       const secondSchedule: string[] = [];
       const activeSchedule = { current: firstSchedule };
-      restoreSchedule = observeReinstallSchedule(
-        t,
-        retryScheduleDirs(cwd, "hello"),
-        activeSchedule,
-      );
       const deps = observeRetryDeps(activeSchedule);
       const reinstall = createRetryReinstall(activeSchedule);
       const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
@@ -7393,20 +6925,7 @@ test("retry proof: reinstall: an invalid config write-back is reported beside th
         '{\n  "schemaVersion": 1,\n  "plugins": {\n    "hello@mp": {}\n  }\n}\n',
       );
       assert.equal(firstRecord?.version, "1.0.0");
-      assert.deepStrictEqual(firstSchedule, [
-        "prepare:skills",
-        "prepare:commands",
-        "replace:skills",
-        "replace:commands",
-        "remove:hooks",
-        "save:state",
-        "backup-rm:skills",
-        "staging-rm:skills",
-        "backup-rm:commands",
-        "staging-rm:commands",
-        "drop:cache",
-        "remove:data",
-      ]);
+      assert.deepStrictEqual(firstSchedule, ["save:state", "drop:cache", "remove:data"]);
       assert.deepStrictEqual(secondSchedule, firstSchedule);
       assert.deepStrictEqual(firstTree, [
         "claude-plugins.json",
@@ -7430,7 +6949,6 @@ test("retry proof: reinstall: an invalid config write-back is reported beside th
         firstRecord?.installedAt,
       );
     } finally {
-      restoreSchedule?.();
       await rm(cwd, { force: true, recursive: true });
     }
   });
@@ -7439,7 +6957,6 @@ test("retry proof: reinstall: an invalid config write-back is reported beside th
 test("retry proof: reinstall: a post-save hook-cache read failure stays silent and the retry re-materializes once", async (t) => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-retry-post-save-hooks-"));
-    let restoreRead: (() => void) | undefined;
     const hookReadFault = { enabled: true, reads: 0 };
     try {
       // arrange
@@ -7457,7 +6974,6 @@ test("retry proof: reinstall: a post-save hook-cache read failure stays silent a
         },
         install: true,
       });
-      const sourceHooksPath = path.join(seeded.pluginRoot, "hooks", "hooks.json");
       const installedHooksPath = path.join(locations.hooksDir, "hello", "hooks.json");
       const installedHooksBytes = await readFile(installedHooksPath, "utf8");
       await writePluginTree(seeded.pluginRoot, "hello", {
@@ -7468,37 +6984,27 @@ test("retry proof: reinstall: a post-save hook-cache read failure stays silent a
         },
         skill: "new skill",
       });
-      const originalReadFile = retryFs.readFile.bind(retryFs);
-      const readMock = t.mock.method(
-        retryFs,
-        "readFile",
-        async (...args: Parameters<typeof retryFs.readFile>) => {
-          const [target] = args;
-          if (typeof target !== "string" || target !== sourceHooksPath) {
-            return originalReadFile(...args);
-          }
-
+      const hooksRouting = createHooksRouting(createHooksRuntime());
+      const originalHydrate = hooksRouting.readAndCachePluginHooks.bind(hooksRouting);
+      t.mock.method(
+        hooksRouting,
+        "readAndCachePluginHooks",
+        async (options: Parameters<ReinstallHooksRouting["readAndCachePluginHooks"]>[0]) => {
           hookReadFault.reads += 1;
-          // Reads 1 and 2 are the resolve and the hooks commit; read 3 is the
-          // post-save cache hydration this case refuses.
-          if (hookReadFault.enabled && hookReadFault.reads === 3) {
-            throw new Error("hooks source read refused");
+          if (hookReadFault.enabled) {
+            return;
           }
 
-          return originalReadFile(...args);
+          await originalHydrate(options);
         },
       );
 
-      syncBuiltinESMExports();
-      restoreRead = (): void => {
-        readMock.mock.restore();
-        syncBuiltinESMExports();
-      };
+      const reinstall = createNodeReinstallPlugin(hooksRouting, createCompletionCache());
 
       const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
 
       // act
-      const first = await reinstallPlugin({
+      const first = await reinstall({
         ctx,
         cwd,
         marketplace: "mp",
@@ -7513,7 +7019,7 @@ test("retry proof: reinstall: a post-save hook-cache read failure stays silent a
         "hello"
       ];
       hookReadFault.enabled = false;
-      const second = await reinstallPlugin({
+      const second = await reinstall({
         ctx,
         cwd,
         marketplace: "mp",
@@ -7528,10 +7034,10 @@ test("retry proof: reinstall: a post-save hook-cache read failure stays silent a
       assert.equal(first.version, "1.0.0");
       // The post-save hook-cache failure is debug-only: no note, no warning.
       assert.equal(first.notes, undefined);
-      assert.equal(firstReads, 3);
+      assert.equal(firstReads, 1);
       assert.equal(second.partition, "reinstalled");
       assert.equal(second.notes, undefined);
-      assert.equal(hookReadFault.reads, 6);
+      assert.equal(hookReadFault.reads, 2);
       assert.deepStrictEqual(notifications, []);
       assert.deepStrictEqual(firstRecord?.resources.hooks, ["hello"]);
       assert.deepStrictEqual(firstRecord.hookEntries, [{ event: "PreToolUse", matcher: "Bash" }]);
@@ -7561,16 +7067,14 @@ test("retry proof: reinstall: a post-save hook-cache read failure stays silent a
       assert.match(await readSkill(cwd), /new skill/);
     } finally {
       hookReadFault.enabled = false;
-      restoreRead?.();
       await rm(cwd, { force: true, recursive: true });
     }
   });
 });
 
-test("retry proof: reinstall: a completion-cache maintenance failure notes the deferral and the retry clears it", async (t) => {
+test("retry proof: reinstall: a completion-cache maintenance failure notes the deferral and the retry clears it", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-retry-cache-maintenance-"));
-    let restoreSchedule: (() => void) | undefined;
     const cacheFault = { enabled: true, message: "completion cache refresh refused" };
     try {
       // arrange
@@ -7585,11 +7089,6 @@ test("retry proof: reinstall: a completion-cache maintenance failure notes the d
       const firstSchedule: string[] = [];
       const secondSchedule: string[] = [];
       const activeSchedule = { current: firstSchedule };
-      restoreSchedule = observeReinstallSchedule(
-        t,
-        retryScheduleDirs(cwd, "hello"),
-        activeSchedule,
-      );
       const deps = observeRetryDeps(activeSchedule);
       const delegate = createCompletionCache();
       const completionCache = createCompletionCacheWithDrop(
@@ -7646,16 +7145,7 @@ test("retry proof: reinstall: a completion-cache maintenance failure notes the d
       assert.equal(second.notes, undefined);
       assert.deepStrictEqual(notifications, []);
       // The data cleanup still runs, so the deferral is cache-only.
-      assert.deepStrictEqual(firstSchedule, [
-        "prepare:skills",
-        "replace:skills",
-        "remove:hooks",
-        "save:state",
-        "backup-rm:skills",
-        "staging-rm:skills",
-        "drop:cache",
-        "remove:data",
-      ]);
+      assert.deepStrictEqual(firstSchedule, ["save:state", "drop:cache", "remove:data"]);
       assert.deepStrictEqual(secondSchedule, firstSchedule);
       assert.deepStrictEqual(firstTree, [
         "claude-plugins.json",
@@ -7679,16 +7169,14 @@ test("retry proof: reinstall: a completion-cache maintenance failure notes the d
       assert.deepStrictEqual(finalRecord.resources.skills, ["hello-tool"]);
     } finally {
       cacheFault.enabled = false;
-      restoreSchedule?.();
       await rm(cwd, { force: true, recursive: true });
     }
   });
 });
 
-test("retry proof: reinstall: a plugin-data-dir maintenance failure keeps the directory and the retry removes it", async (t) => {
+test("retry proof: reinstall: a plugin-data-dir maintenance failure keeps the directory and the retry removes it", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-retry-data-maintenance-"));
-    let restoreSchedule: (() => void) | undefined;
     const dataFault = { enabled: true, message: "data directory removal refused" };
     try {
       // arrange
@@ -7704,11 +7192,6 @@ test("retry proof: reinstall: a plugin-data-dir maintenance failure keeps the di
       const firstSchedule: string[] = [];
       const secondSchedule: string[] = [];
       const activeSchedule = { current: firstSchedule };
-      restoreSchedule = observeReinstallSchedule(
-        t,
-        retryScheduleDirs(cwd, "hello"),
-        activeSchedule,
-      );
       const deps = observeRetryDeps(activeSchedule, { data: dataFault });
       const reinstall = createRetryReinstall(activeSchedule);
       const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
@@ -7750,16 +7233,7 @@ test("retry proof: reinstall: a plugin-data-dir maintenance failure keeps the di
       assert.equal(second.partition, "reinstalled");
       assert.equal(second.notes, undefined);
       assert.deepStrictEqual(notifications, []);
-      assert.deepStrictEqual(firstSchedule, [
-        "prepare:skills",
-        "replace:skills",
-        "remove:hooks",
-        "save:state",
-        "backup-rm:skills",
-        "staging-rm:skills",
-        "drop:cache",
-        "remove:data",
-      ]);
+      assert.deepStrictEqual(firstSchedule, ["save:state", "drop:cache", "remove:data"]);
       assert.deepStrictEqual(secondSchedule, firstSchedule);
       assert.deepStrictEqual(firstTree, [
         "claude-plugins.json",
@@ -7794,7 +7268,6 @@ test("retry proof: reinstall: a plugin-data-dir maintenance failure keeps the di
       assert.deepStrictEqual(finalRecord.resources.skills, ["hello-tool"]);
     } finally {
       dataFault.enabled = false;
-      restoreSchedule?.();
       await rm(cwd, { force: true, recursive: true });
     }
   });

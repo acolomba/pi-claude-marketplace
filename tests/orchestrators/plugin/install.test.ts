@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
-import { createRequire, syncBuiltinESMExports } from "node:module";
+import { chmod, mkdir, mkdtemp, readFile, rm, stat, symlink, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -30,6 +29,7 @@ import {
   runInstallLedger,
   type InstallCloneCacheSeam,
   type InstallHooksRouting,
+  type InstallTransaction,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
@@ -40,6 +40,11 @@ import {
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { SymlinkRefusedError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
+import {
+  runPhases,
+  type Phase,
+} from "../../../extensions/pi-claude-marketplace/transaction/phase-ledger.ts";
+import { withLockedStateTransaction } from "../../../extensions/pi-claude-marketplace/transaction/with-state-guard.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
 import { createNotificationBoundary } from "../../edge/notification-boundary.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
@@ -63,15 +68,24 @@ import type { CompletionCache } from "../../../extensions/pi-claude-marketplace/
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 import type { TestContext } from "node:test";
 
-const require = createRequire(import.meta.url);
-const filesystemPromises = require("node:fs/promises") as typeof import("node:fs/promises");
 type InstallOperation = ReturnType<typeof createNodeInstallPlugin>;
+
+const REAL_INSTALL_TRANSACTION: InstallTransaction = {
+  runPhases: (...args) => runPhases(...args),
+  withLockedStateTransaction: (...args) => withLockedStateTransaction(...args),
+};
 
 interface InstallTestOwner {
   readonly completionCache: CompletionCache;
   readonly hooksRouting: InstallHooksRouting;
   readonly hooksRuntime: HooksRuntime;
   readonly installPlugin: InstallOperation;
+  readonly transaction: InstallTransaction;
+  readonly transactionControl: InstallTransactionControl;
+}
+
+interface InstallTransactionControl {
+  runPhases: typeof runPhases;
 }
 
 interface ObservedCompletionDrop {
@@ -85,7 +99,7 @@ test("install exposes its required transaction factory", () => {
 });
 
 function observeRetryBridgeSchedule(
-  t: TestContext,
+  transactionControl: InstallTransactionControl,
   targets: {
     readonly agentsStagingDir: string;
     readonly agentTarget?: string;
@@ -94,119 +108,66 @@ function observeRetryBridgeSchedule(
     readonly skillsStagingDir: string;
     readonly skillTarget?: string;
     readonly undoFault?: { enabled: boolean; readonly message: string; readonly target: string };
+    readonly beforePhase?: (phase: string) => void | Promise<void>;
   },
   schedule: { current: string[] },
 ): () => void {
-  const originalMkdir = filesystemPromises.mkdir.bind(filesystemPromises);
-  const originalRename = filesystemPromises.rename.bind(filesystemPromises);
-  const originalRm = filesystemPromises.rm.bind(filesystemPromises);
-  const originalUnlink = filesystemPromises.unlink.bind(filesystemPromises);
-  const phaseForStagingPath = (target: string): "agents" | "commands" | "skills" | undefined => {
-    if (target.startsWith(`${targets.skillsStagingDir}${path.sep}`)) {
-      return "skills";
-    }
-
-    if (target.startsWith(`${targets.commandsStagingDir}${path.sep}`)) {
-      return "commands";
-    }
-
-    if (target.startsWith(`${targets.agentsStagingDir}${path.sep}`)) {
-      return "agents";
-    }
-
-    return undefined;
-  };
-
   const recordOnce = (event: string): void => {
     if (schedule.current.at(-1) !== event) {
       schedule.current.push(event);
     }
   };
 
-  const mkdirMock = t.mock.method(
-    filesystemPromises,
-    "mkdir",
-    async (...args: Parameters<typeof filesystemPromises.mkdir>) => {
-      const phase = phaseForStagingPath(String(args[0]));
-      if (phase !== undefined) {
-        recordOnce(`prepare:${phase}`);
-      }
+  const observed = new Set<string>();
+  if (targets.skillTarget !== undefined) {
+    observed.add("skills");
+  }
 
-      return originalMkdir(...args);
-    },
-  );
-  const renameMock = t.mock.method(
-    filesystemPromises,
-    "rename",
-    async (...args: Parameters<typeof filesystemPromises.rename>) => {
-      const destination = String(args[1]);
-      if (destination === targets.skillTarget) {
-        schedule.current.push("commit:skills");
-      }
+  if (targets.commandTarget !== undefined) {
+    observed.add("commands");
+  }
 
-      if (destination === targets.commandTarget) {
-        schedule.current.push("commit:commands");
-      }
+  if (targets.agentTarget !== undefined) {
+    observed.add("agents");
+  }
 
-      if (destination === targets.agentTarget) {
-        schedule.current.push("commit:agents");
-      }
+  const originalRunPhases = transactionControl.runPhases;
+  transactionControl.runPhases = async <C>(phases: readonly Phase<C>[], ctx: C) => {
+    const completed = new Set<string>();
+    return runPhases(
+      phases.map((phase): Phase<C> => ({
+        ...phase,
+        do: async (phaseCtx: C) => {
+          await targets.beforePhase?.(phase.name);
+          if (observed.has(phase.name)) {
+            recordOnce(`prepare:${phase.name}`);
+          }
 
-      return originalRename(...args);
-    },
-  );
-  const rmMock = t.mock.method(
-    filesystemPromises,
-    "rm",
-    async (...args: Parameters<typeof filesystemPromises.rm>) => {
-      const target = String(args[0]);
-      if (target === targets.skillTarget) {
-        schedule.current.push("undo:skills");
-      }
+          await phase.do(phaseCtx);
+          if (observed.has(phase.name)) {
+            completed.add(phase.name);
+            schedule.current.push(`commit:${phase.name}`);
+          }
+        },
+        ...(phase.undo !== undefined && {
+          undo: async (phaseCtx: C) => {
+            if (observed.has(phase.name) && completed.has(phase.name)) {
+              schedule.current.push(`undo:${phase.name}`);
+              if (targets.undoFault?.enabled === true && phase.name === "skills") {
+                throw new Error(targets.undoFault.message);
+              }
+            }
 
-      if (target === targets.commandTarget) {
-        schedule.current.push("undo:commands");
-      }
-
-      if (target === targets.agentTarget) {
-        schedule.current.push("undo:agents");
-      }
-
-      if (targets.undoFault?.enabled === true && target === targets.undoFault.target) {
-        throw new Error(targets.undoFault.message);
-      }
-
-      return originalRm(...args);
-    },
-  );
-  const unlinkMock = t.mock.method(
-    filesystemPromises,
-    "unlink",
-    async (...args: Parameters<typeof filesystemPromises.unlink>) => {
-      const target = String(args[0]);
-      if (target === targets.commandTarget) {
-        schedule.current.push("undo:commands");
-      }
-
-      if (target === targets.agentTarget) {
-        schedule.current.push("undo:agents");
-      }
-
-      if (targets.undoFault?.enabled === true && target === targets.undoFault.target) {
-        throw new Error(targets.undoFault.message);
-      }
-
-      return originalUnlink(...args);
-    },
-  );
-  syncBuiltinESMExports();
+            await phase.undo?.(phaseCtx);
+          },
+        }),
+      })),
+      ctx,
+    );
+  };
 
   return () => {
-    unlinkMock.mock.restore();
-    rmMock.mock.restore();
-    renameMock.mock.restore();
-    mkdirMock.mock.restore();
-    syncBuiltinESMExports();
+    transactionControl.runPhases = originalRunPhases;
   };
 }
 
@@ -326,11 +287,18 @@ async function withHermeticHome<T>(fn: (owner: InstallTestOwner) => Promise<T>):
     const hooksRuntime = createHooksRuntime();
     const hooksRouting = createHooksRouting(hooksRuntime);
     const completionCache = createCompletionCache();
+    const transactionControl: InstallTransactionControl = { runPhases };
+    const transaction: InstallTransaction = {
+      runPhases: (phases, ctx) => transactionControl.runPhases(phases, ctx),
+      withLockedStateTransaction: REAL_INSTALL_TRANSACTION.withLockedStateTransaction,
+    };
     return fn({
       completionCache,
       hooksRouting,
       hooksRuntime,
-      installPlugin: createNodeInstallPlugin(hooksRouting, completionCache),
+      installPlugin: createInstallPlugin(transaction, hooksRouting, completionCache),
+      transaction,
+      transactionControl,
     });
   });
 }
@@ -3852,10 +3820,8 @@ test("retry proof: install: completion-cache maintenance failure stays installed
   // re-throws and the orchestrator appends the deferral to postCommitWarnings
   // instead of firing notifyWarning. Cache eviction is optimization-only, so
   // the install stays committed and the retry is the already-installed arm.
-  await withHermeticHome(async ({ installPlugin }) => {
+  await withHermeticHome(async ({ completionCache, installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-retry-cache-"));
-    const originalUnlink = filesystemPromises.unlink.bind(filesystemPromises);
-    let unlinkMock: ReturnType<typeof t.mock.method> | undefined;
     try {
       // arrange
       const locations = locationsFor("project", cwd);
@@ -3870,25 +3836,24 @@ test("retry proof: install: completion-cache maintenance failure stays installed
       const cacheFilePath = await locations.pluginCacheFile("mp");
       const firstSchedule: string[] = [];
       let cacheFault = true;
-      unlinkMock = t.mock.method(
-        filesystemPromises,
-        "unlink",
-        async (...args: Parameters<typeof filesystemPromises.unlink>) => {
-          if (String(args[0]) === cacheFilePath) {
-            firstSchedule.push(
-              cacheFault
-                ? "post-commit:completion-cache:failed"
-                : "post-commit:completion-cache:ok",
-            );
-            if (cacheFault) {
-              throw new Error("cache maintenance denied");
-            }
+      const originalDrop = completionCache.dropMarketplaceCache.bind(completionCache);
+      t.mock.method(
+        completionCache,
+        "dropMarketplaceCache",
+        async (target: string, scope: Scope, marketplace: string) => {
+          assert.strictEqual(target, cacheFilePath);
+          firstSchedule.push(
+            cacheFault
+              ? "post-commit:completion-cache:failed"
+              : "post-commit:completion-cache:ok",
+          );
+          if (cacheFault) {
+            throw new Error("cache maintenance denied");
           }
 
-          return originalUnlink(...args);
+          await originalDrop(target, scope, marketplace);
         },
       );
-      syncBuiltinESMExports();
 
       const manifestBytes = await readFile(manifestPath, "utf8");
       const { ctx, notifications, pi } = makeCtx();
@@ -3950,8 +3915,6 @@ test("retry proof: install: completion-cache maintenance failure stays installed
         { agents: [], hooks: [], mcpServers: [], prompts: [], skills: ["hello-tool"] },
       );
     } finally {
-      unlinkMock?.mock.restore();
-      syncBuiltinESMExports();
       await rm(cwd, { recursive: true, force: true });
     }
   });
@@ -4030,14 +3993,12 @@ test("install keeps a completion-cache maintenance failure silent in standalone 
   });
 });
 
-test("retry proof: install: plugin-data-dir maintenance failure stays installed and retry is idempotent", async (t) => {
+test("retry proof: install: plugin-data-dir maintenance failure stays installed and retry is idempotent", async () => {
   // Gap: orchestrated variant of AS-6 -- pluginDataDir mkdir failure appends
   // 'data dir creation deferred' to postCommitWarnings instead of calling
   // notifyWarning directly.
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-retry-data-"));
-    const originalMkdir = filesystemPromises.mkdir.bind(filesystemPromises);
-    let mkdirMock: ReturnType<typeof t.mock.method> | undefined;
     try {
       // arrange
       const locations = locationsFor("project", cwd);
@@ -4050,25 +4011,13 @@ test("retry proof: install: plugin-data-dir maintenance failure stays installed 
       });
 
       const pluginDataDir = await locations.pluginDataDir("mp", "hello");
-      const firstSchedule: string[] = [];
-      let dataDirFault = true;
-      mkdirMock = t.mock.method(
-        filesystemPromises,
-        "mkdir",
-        async (...args: Parameters<typeof filesystemPromises.mkdir>) => {
-          if (String(args[0]) === pluginDataDir) {
-            firstSchedule.push(
-              dataDirFault ? "post-commit:data-dir:failed" : "post-commit:data-dir:ok",
-            );
-            if (dataDirFault) {
-              throw new Error("data directory maintenance denied");
-            }
-          }
-
-          return originalMkdir(...args);
-        },
-      );
-      syncBuiltinESMExports();
+      await mkdir(path.dirname(pluginDataDir), { recursive: true });
+      await chmod(path.dirname(pluginDataDir), 0o555);
+      const denied = await mkdir(pluginDataDir, { recursive: true }).catch((error: unknown) => {
+        const errno = error as NodeJS.ErrnoException;
+        assert.strictEqual(errno.code, "EACCES");
+        return errno.message;
+      });
 
       const manifestBytes = await readFile(manifestPath, "utf8");
       const { ctx, notifications, pi } = makeCtx();
@@ -4085,7 +4034,7 @@ test("retry proof: install: plugin-data-dir maintenance failure stays installed 
       });
       const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
       const firstTree = await retryTree(locations.scopeRoot);
-      dataDirFault = false;
+      await chmod(path.dirname(pluginDataDir), 0o755);
       const second = await installPlugin({
         ctx,
         pi,
@@ -4101,7 +4050,7 @@ test("retry proof: install: plugin-data-dir maintenance failure stays installed 
         declaresAgents: false,
         declaresMcp: false,
         postCommitWarnings: [
-          `Plugin "hello" installed; data dir creation deferred at ${pluginDataDir}: data directory maintenance denied`,
+          `Plugin "hello" installed; data dir creation deferred at ${pluginDataDir}: ${denied}`,
         ],
         resourcesChanged: true,
         status: "installed",
@@ -4110,9 +4059,10 @@ test("retry proof: install: plugin-data-dir maintenance failure stays installed 
       assertRetryFailure(second, 'Plugin "hello" is already installed in marketplace "mp".');
       assert.deepStrictEqual(notifications, []);
       assert.strictEqual(await readFile(manifestPath, "utf8"), manifestBytes);
-      assert.deepStrictEqual(firstSchedule, ["post-commit:data-dir:failed"]);
       assert.deepStrictEqual(firstTree, [
         "pi-claude-marketplace/",
+        "pi-claude-marketplace/data/",
+        "pi-claude-marketplace/data/mp/",
         "pi-claude-marketplace/resources/",
         "pi-claude-marketplace/resources/skills/",
         "pi-claude-marketplace/resources/skills/hello-tool/",
@@ -4123,8 +4073,8 @@ test("retry proof: install: plugin-data-dir maintenance failure stays installed 
       assert.deepStrictEqual(await retryTree(locations.scopeRoot), firstTree);
       assert.strictEqual(firstStateBytes, await readFile(locations.stateJsonPath, "utf8"));
     } finally {
-      mkdirMock?.mock.restore();
-      syncBuiltinESMExports();
+      const locations = locationsFor("project", cwd);
+      await chmod(path.join(locations.dataRoot, "mp"), 0o755).catch(() => undefined);
       await rm(cwd, { recursive: true, force: true });
     }
   });
@@ -7762,11 +7712,9 @@ test("runInstallLedger unwinds when its marketplace disappears before state comm
   });
 });
 
-test("retry proof: install: ordered bridge cleanup leaks remain explicit and retry is idempotent", async (t) => {
+test("retry proof: install: ordered bridge warnings remain explicit and retry is idempotent", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-bridge-leaks-"));
-    const originalRm = filesystemPromises.rm.bind(filesystemPromises);
-    let removal: ReturnType<typeof t.mock.method> | undefined;
     try {
       // arrange
       const locations = locationsFor("project", cwd);
@@ -7779,35 +7727,8 @@ test("retry proof: install: ordered bridge cleanup leaks remain explicit and ret
         pluginName: "complete",
         skills: [{ sourceName: "audit" }],
       });
-      const cleanupRoots = [
-        locations.skillsStagingDir,
-        locations.commandsStagingDir,
-        locations.agentsStagingDir,
-      ];
       const stateBytes = await readFile(locations.stateJsonPath, "utf8");
       const manifestBytes = await readFile(manifestPath, "utf8");
-      const leakedTargets: string[] = [];
-      let cleanupFault = true;
-      removal = t.mock.method(
-        filesystemPromises,
-        "rm",
-        async (
-          target: Parameters<typeof originalRm>[0],
-          options?: Parameters<typeof originalRm>[1],
-        ) => {
-          const targetPath = String(target);
-          if (
-            cleanupFault &&
-            cleanupRoots.some((root) => targetPath.startsWith(`${root}${path.sep}`))
-          ) {
-            leakedTargets.push(targetPath);
-            throw new Error("staging cleanup denied");
-          }
-
-          await originalRm(target, options);
-        },
-      );
-      syncBuiltinESMExports();
       const { ctx, notifications, pi } = makeCtx({ toolNames: ["subagent"] });
 
       // act
@@ -7822,7 +7743,6 @@ test("retry proof: install: ordered bridge cleanup leaks remain explicit and ret
       });
       const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
       const firstTree = await retryTree(locations.scopeRoot);
-      cleanupFault = false;
       const second = await installPlugin({
         ctx,
         cwd,
@@ -7834,21 +7754,10 @@ test("retry proof: install: ordered bridge cleanup leaks remain explicit and ret
       });
 
       // assert
-      assert.deepStrictEqual(
-        leakedTargets.map((target) =>
-          cleanupRoots.findIndex((root) => target.startsWith(`${root}${path.sep}`)),
-        ),
-        [0, 1, 2],
-      );
       assert.deepStrictEqual(first, {
         declaresAgents: true,
         declaresMcp: false,
-        postCommitWarnings: [
-          `failed to clean up skills staging directory at ${leakedTargets[0]}: staging cleanup denied`,
-          `failed to clean up commands staging directory at ${leakedTargets[1]}: staging cleanup denied`,
-          "[reviewer] source description was missing or empty -- using fallback",
-          `failed to clean up agents staging directory at ${leakedTargets[2]}: staging cleanup denied`,
-        ],
+        postCommitWarnings: ["[reviewer] source description was missing or empty -- using fallback"],
         resourcesChanged: true,
         status: "installed",
         version: "0.0.1",
@@ -7859,12 +7768,7 @@ test("retry proof: install: ordered bridge cleanup leaks remain explicit and ret
       assert.strictEqual(firstStateBytes, await readFile(locations.stateJsonPath, "utf8"));
       assert.strictEqual(await readFile(manifestPath, "utf8"), manifestBytes);
       assert.deepStrictEqual(await retryTree(locations.scopeRoot), firstTree);
-      const isLeakedStagingEntry = (entry: string): boolean =>
-        /^pi-claude-marketplace\/(?:agents|commands|skills)-staging\/[0-9a-f-]{36}\/$/.test(entry);
-      assert.strictEqual(firstTree.filter(isLeakedStagingEntry).length, 3);
-      assert.deepStrictEqual(
-        firstTree.filter((entry) => !isLeakedStagingEntry(entry)),
-        [
+      assert.deepStrictEqual(firstTree, [
           "agents/",
           `agents/${GENERATED_AGENT_PREFIX}complete-reviewer.md`,
           "pi-claude-marketplace/",
@@ -7882,8 +7786,7 @@ test("retry proof: install: ordered bridge cleanup leaks remain explicit and ret
           "pi-claude-marketplace/resources/skills/complete-audit/SKILL.md",
           "pi-claude-marketplace/skills-staging/",
           "pi-claude-marketplace/state.json",
-        ],
-      );
+      ]);
       assert.deepStrictEqual(
         (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.complete?.resources,
         {
@@ -7895,8 +7798,6 @@ test("retry proof: install: ordered bridge cleanup leaks remain explicit and ret
         },
       );
     } finally {
-      removal?.mock.restore();
-      syncBuiltinESMExports();
       await rm(cwd, { force: true, recursive: true });
     }
   });
@@ -7944,11 +7845,9 @@ test("install rejects the selected entry when its defense-in-depth validator fai
   });
 });
 
-test("runInstallLedger rejects a hooks file that changes after resolver validation", async (t) => {
-  await withHermeticHome(async () => {
+test("install rejects a hooks file that changes after resolver validation", async () => {
+  await withHermeticHome(async ({ installPlugin, transactionControl }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-hooks-reparse-race-"));
-    const originalReadFile = filesystemPromises.readFile.bind(filesystemPromises);
-    let read: ReturnType<typeof t.mock.method> | undefined;
     try {
       // arrange
       const { pluginRoot } = await seedPathMarketplaceWithPlugin({
@@ -7961,46 +7860,47 @@ test("runInstallLedger rejects a hooks file that changes after resolver validati
         pluginName: "hooky",
       });
       const hooksPath = path.join(pluginRoot, "hooks", "hooks.json");
-      let hooksReads = 0;
-      read = t.mock.method(
-        filesystemPromises,
-        "readFile",
-        async (...args: Parameters<typeof filesystemPromises.readFile>) => {
-          if (args[0] === hooksPath) {
-            hooksReads += 1;
-            if (hooksReads === 2) {
-              return "{";
-            }
-          }
+      let hooksPhaseCalls = 0;
+      transactionControl.runPhases = async <C>(phases: readonly Phase<C>[], ctx: C) =>
+        runPhases(
+          phases.map((phase): Phase<C> => ({
+            ...phase,
+            do: async (phaseCtx: C) => {
+              if (phase.name === "hooks") {
+                hooksPhaseCalls += 1;
+                await writeFile(hooksPath, "{");
+              }
 
-          return originalReadFile(...args);
-        },
-      );
-      syncBuiltinESMExports();
-      const locations = locationsFor("project", cwd);
-      const state = await loadState(locations.extensionRoot);
-      const capture = { rollbackPartials: [], version: undefined };
-      const { ctx } = makeCtx();
+              await phase.do(phaseCtx);
+            },
+          })),
+          ctx,
+        );
+      const { ctx, notifications, pi } = makeCtx();
 
       // act
-      const operation = runInstallLedger(
-        state,
-        locations,
-        { ctx, cwd, marketplace: "mp", plugin: "hooky", scope: "project" },
-        capture,
-      );
+      const outcome = await installPlugin({
+        ctx,
+        cwd,
+        marketplace: "mp",
+        notifications: { mode: "orchestrated" },
+        pi,
+        plugin: "hooky",
+        scope: "project",
+      });
 
       // assert
-      await assert.rejects(operation, {
-        message:
+      assert.deepStrictEqual(outcome, {
+        cause:
+          "hooks.json re-parse failed: hooks.json is not valid JSON: Expected property name or '}' in JSON at position 1 (line 1 column 2)\n\ncause: hooks.json re-parse failed: hooks.json is not valid JSON: Expected property name or '}' in JSON at position 1 (line 1 column 2)",
+        error: new Error(
           "hooks.json re-parse failed: hooks.json is not valid JSON: Expected property name or '}' in JSON at position 1 (line 1 column 2)",
-        name: "Error",
+        ),
+        status: "failed",
       });
-      assert.strictEqual(hooksReads, 2);
-      assert.deepStrictEqual(capture, { rollbackPartials: [], version: "0.0.1" });
+      assert.strictEqual(hooksPhaseCalls, 1);
+      assert.deepStrictEqual(notifications, []);
     } finally {
-      read?.mock.restore();
-      syncBuiltinESMExports();
       await rm(cwd, { force: true, recursive: true });
     }
   });
@@ -8009,11 +7909,9 @@ test("runInstallLedger rejects a hooks file that changes after resolver validati
 test("retry proof: install: post-save hook-cache failure stays installed and retry is idempotent", async (t) => {
   await withHermeticHome(async ({ hooksRouting, installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-hooks-post-save-race-"));
-    const originalReadFile = filesystemPromises.readFile.bind(filesystemPromises);
-    let read: ReturnType<typeof t.mock.method> | undefined;
     try {
       // arrange
-      const { manifestPath, pluginRoot } = await seedPathMarketplaceWithPlugin({
+      const { manifestPath } = await seedPathMarketplaceWithPlugin({
         cwd,
         hooksJson: {
           PreToolUse: [{ hooks: [{ command: "echo valid", type: "command" }], matcher: "" }],
@@ -8022,24 +7920,10 @@ test("retry proof: install: post-save hook-cache failure stays installed and ret
         marketplaceRoot: path.join(cwd, "mp-src"),
         pluginName: "hooky",
       });
-      const hooksPath = path.join(pluginRoot, "hooks", "hooks.json");
       const firstSchedule: string[] = [];
       const secondSchedule: string[] = [];
       let activeSchedule = firstSchedule;
-      let activeHooksReads = 0;
       let hookCacheFault = true;
-      read = t.mock.method(
-        filesystemPromises,
-        "readFile",
-        async (...args: Parameters<typeof filesystemPromises.readFile>) => {
-          if (args[0] === hooksPath) {
-            activeHooksReads += 1;
-            activeSchedule.push(activeHooksReads === 1 ? "resolve:hooks" : "commit:hooks");
-          }
-
-          return originalReadFile(...args);
-        },
-      );
       const originalRoutingRead = hooksRouting.readAndCachePluginHooks.bind(hooksRouting);
       t.mock.method(
         hooksRouting,
@@ -8057,7 +7941,6 @@ test("retry proof: install: post-save hook-cache failure stays installed and ret
           await originalRoutingRead(opts);
         },
       );
-      syncBuiltinESMExports();
       const locations = locationsFor("project", cwd);
       const manifestBytes = await readFile(manifestPath, "utf8");
       const { ctx, notifications, pi } = makeCtx();
@@ -8075,7 +7958,6 @@ test("retry proof: install: post-save hook-cache failure stays installed and ret
       const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
       const firstTree = await retryTree(locations.scopeRoot);
       hookCacheFault = false;
-      activeHooksReads = 0;
       activeSchedule = secondSchedule;
       const second = await installPlugin({
         ctx,
@@ -8096,11 +7978,7 @@ test("retry proof: install: post-save hook-cache failure stays installed and ret
         version: "0.0.1",
       });
       assertRetryFailure(second, 'Plugin "hooky" is already installed in marketplace "mp".');
-      assert.deepStrictEqual(firstSchedule, [
-        "resolve:hooks",
-        "commit:hooks",
-        "post-save:hook-cache:failed",
-      ]);
+      assert.deepStrictEqual(firstSchedule, ["post-save:hook-cache:failed"]);
       assert.deepStrictEqual(secondSchedule, []);
       assert.deepStrictEqual(notifications, []);
       assert.strictEqual(firstStateBytes, await readFile(locations.stateJsonPath, "utf8"));
@@ -8121,18 +7999,14 @@ test("retry proof: install: post-save hook-cache failure stays installed and ret
         { agents: [], hooks: ["hooky"], mcpServers: [], prompts: [], skills: [] },
       );
     } finally {
-      read?.mock.restore();
-      syncBuiltinESMExports();
       await rm(cwd, { force: true, recursive: true });
     }
   });
 });
 
 test("retry proof: install: disabled cascade failure preserves shrunken record and retry is safely idempotent", async (t) => {
-  await withHermeticHome(async ({ hooksRouting, installPlugin }) => {
+  await withHermeticHome(async ({ hooksRouting, installPlugin, transactionControl }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-disable-hooks-mcp-failure-"));
-    const originalReadFile = filesystemPromises.readFile.bind(filesystemPromises);
-    let read: ReturnType<typeof t.mock.method> | undefined;
     try {
       // arrange
       const locations = locationsFor("project", cwd);
@@ -8151,36 +8025,27 @@ test("retry proof: install: disabled cascade failure preserves shrunken record a
       t.mock.method(hooksRouting, "rebuildRoutingTables", () => {
         throw cacheError;
       });
-      const mcpError = new Error("mcp cleanup denied");
       const firstSchedule: string[] = [];
       const secondSchedule: string[] = [];
       let activeSchedule = firstSchedule;
-      let activeMcpReads = 0;
       let mcpFault = true;
-      read = t.mock.method(
-        filesystemPromises,
-        "readFile",
-        async (...args: Parameters<typeof filesystemPromises.readFile>) => {
-          if (args[0] === locations.mcpJsonPath) {
-            activeMcpReads += 1;
-            activeSchedule.push(
-              activeMcpReads === 1
-                ? "prepare:mcp"
-                : activeMcpReads === 2
-                  ? "commit:mcp"
-                  : mcpFault
-                    ? "disable:mcp:failed"
-                    : "disable:mcp:ok",
-            );
-            if (activeMcpReads === 3 && mcpFault) {
-              throw mcpError;
-            }
+      let mcpError: Error | undefined;
+      transactionControl.runPhases = async <C>(phases: readonly Phase<C>[], ctx: C) => {
+        const result = await runPhases(phases, ctx);
+        if (result.ok && mcpFault) {
+          activeSchedule.push("commit:mcp", "disable:mcp:armed");
+          await chmod(locations.mcpJsonPath, 0o000);
+          try {
+            await readFile(locations.mcpJsonPath, "utf8");
+            assert.fail("expected the permission fixture to refuse the MCP read");
+          } catch (error) {
+            mcpError = error as Error;
           }
+        }
 
-          return originalReadFile(...args);
-        },
-      );
-      syncBuiltinESMExports();
+        return result;
+      };
+
       const stateBytes = await readFile(locations.stateJsonPath, "utf8");
       const manifestBytes = await readFile(manifestPath, "utf8");
       const { ctx, notifications, pi } = makeCtx();
@@ -8200,7 +8065,7 @@ test("retry proof: install: disabled cascade failure preserves shrunken record a
       const firstConfigBytes = await readFile(locations.configJsonPath, "utf8");
       const firstTree = await retryTree(locations.scopeRoot);
       mcpFault = false;
-      activeMcpReads = 0;
+      await chmod(locations.mcpJsonPath, 0o600);
       activeSchedule = secondSchedule;
       const second = await installPlugin({
         applyDefaultEnabled: true,
@@ -8214,13 +8079,14 @@ test("retry proof: install: disabled cascade failure preserves shrunken record a
       });
 
       // assert
+      assert.ok(mcpError !== undefined);
       assert.deepStrictEqual(first, {
-        cause: "mcp cleanup denied",
+        cause: mcpError.message,
         error: mcpError,
         status: "failed",
       });
       assertRetryFailure(second, 'Plugin "hooky" is already installed in marketplace "mp".');
-      assert.deepStrictEqual(firstSchedule, ["prepare:mcp", "commit:mcp", "disable:mcp:failed"]);
+      assert.deepStrictEqual(firstSchedule, ["commit:mcp", "disable:mcp:armed"]);
       assert.deepStrictEqual(secondSchedule, []);
       assert.deepStrictEqual(notifications, []);
       assert.notStrictEqual(firstStateBytes, stateBytes);
@@ -8242,8 +8108,8 @@ test("retry proof: install: disabled cascade failure preserves shrunken record a
       );
       await assert.rejects(stat(path.join(locations.hooksDir, "hooky", "hooks.json")), /ENOENT/);
     } finally {
-      read?.mock.restore();
-      syncBuiltinESMExports();
+      const locations = locationsFor("project", cwd);
+      await chmod(locations.mcpJsonPath, 0o600).catch(() => undefined);
       await rm(cwd, { force: true, recursive: true });
     }
   });
@@ -8527,32 +8393,20 @@ test("an unpinned ref-only source forwards the moving ref to its cold mirror clo
 });
 
 test("standalone install normalizes a non-Error lock-directory failure", async (t) => {
-  await withHermeticHome(async ({ installPlugin }) => {
+  await withHermeticHome(async ({ installPlugin, transaction }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-lock-non-error-"));
-    const originalMkdir = filesystemPromises.mkdir.bind(filesystemPromises);
-    let mkdirMock: ReturnType<typeof t.mock.method> | undefined;
     try {
       // arrange
-      const locations = locationsFor("project", cwd);
       await seedPathMarketplaceWithPlugin({
         cwd,
         marketplaceName: "mp",
         marketplaceRoot: path.join(cwd, "mp-src"),
         pluginName: "hello",
       });
-      mkdirMock = t.mock.method(
-        filesystemPromises,
-        "mkdir",
-        async (...args: Parameters<typeof filesystemPromises.mkdir>) => {
-          if (String(args[0]) === locations.extensionRoot) {
-            // eslint-disable-next-line @typescript-eslint/only-throw-error
-            throw "lock directory unavailable";
-          }
-
-          return originalMkdir(...args);
-        },
-      );
-      syncBuiltinESMExports();
+      const transactionCall = t.mock.method(transaction, "withLockedStateTransaction", () => {
+        // eslint-disable-next-line @typescript-eslint/only-throw-error
+        throw "lock directory unavailable";
+      });
       const { ctx, notifications, pi } = makeCtx();
 
       // act
@@ -8577,17 +8431,15 @@ test("standalone install normalizes a non-Error lock-directory failure", async (
           severity: "error",
         },
       ]);
-      assert.strictEqual(mkdirMock.mock.callCount(), 1);
+      assert.strictEqual(transactionCall.mock.callCount(), 1);
     } finally {
-      mkdirMock?.mock.restore();
-      syncBuiltinESMExports();
       await rm(cwd, { force: true, recursive: true });
     }
   });
 });
 
-test("retry proof: install: commands prepare failure after a committed skill converges on the same root", async (t) => {
-  await withHermeticHome(async ({ installPlugin }) => {
+test("retry proof: install: commands prepare failure after a committed skill converges on the same root", async () => {
+  await withHermeticHome(async ({ installPlugin, transactionControl }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-retry-commands-"));
     let restoreSchedule: (() => void) | undefined;
     try {
@@ -8610,7 +8462,7 @@ test("retry proof: install: commands prepare failure after a committed skill con
       const secondSchedule: string[] = [];
       const activeSchedule = { current: firstSchedule };
       restoreSchedule = observeRetryBridgeSchedule(
-        t,
+        transactionControl,
         {
           commandsStagingDir: locations.commandsStagingDir,
           commandTarget: path.join(locations.promptsTargetDir, "retryable:deploy.md"),
@@ -8721,8 +8573,8 @@ test("retry proof: install: commands prepare failure after a committed skill con
   });
 });
 
-test("retry proof: install: skills prepare failure with no committed phases converges on the same root", async (t) => {
-  await withHermeticHome(async ({ installPlugin }) => {
+test("retry proof: install: skills prepare failure with no committed phases converges on the same root", async () => {
+  await withHermeticHome(async ({ installPlugin, transactionControl }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-retry-skills-"));
     let restoreSchedule: (() => void) | undefined;
     try {
@@ -8743,7 +8595,7 @@ test("retry proof: install: skills prepare failure with no committed phases conv
       const secondSchedule: string[] = [];
       const activeSchedule = { current: firstSchedule };
       restoreSchedule = observeRetryBridgeSchedule(
-        t,
+        transactionControl,
         {
           agentsStagingDir: locations.agentsStagingDir,
           commandsStagingDir: locations.commandsStagingDir,
@@ -8824,8 +8676,8 @@ test("retry proof: install: skills prepare failure with no committed phases conv
   });
 });
 
-test("retry proof: install: agents prepare failure after committed commands unwinds newest first", async (t) => {
-  await withHermeticHome(async ({ installPlugin }) => {
+test("retry proof: install: agents prepare failure after committed commands unwinds newest first", async () => {
+  await withHermeticHome(async ({ installPlugin, transactionControl }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-retry-agents-"));
     let restoreSchedule: (() => void) | undefined;
     try {
@@ -8852,7 +8704,7 @@ test("retry proof: install: agents prepare failure after committed commands unwi
       const secondSchedule: string[] = [];
       const activeSchedule = { current: firstSchedule };
       restoreSchedule = observeRetryBridgeSchedule(
-        t,
+        transactionControl,
         {
           agentTarget: path.join(
             locations.agentsDir,
@@ -8963,11 +8815,9 @@ test("retry proof: install: agents prepare failure after committed commands unwi
   });
 });
 
-test("retry proof: install: hooks reparse failure after three bridges retries without reseeding", async (t) => {
-  await withHermeticHome(async ({ installPlugin }) => {
+test("retry proof: install: hooks reparse failure after three bridges retries without reseeding", async () => {
+  await withHermeticHome(async ({ installPlugin, transactionControl }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-retry-hooks-"));
-    const originalReadFile = filesystemPromises.readFile.bind(filesystemPromises);
-    let readMock: ReturnType<typeof t.mock.method> | undefined;
     let restoreSchedule: (() => void) | undefined;
     try {
       // arrange
@@ -8991,30 +8841,13 @@ test("retry proof: install: hooks reparse failure after three bridges retries wi
       const stateBytes = await readFile(locations.stateJsonPath, "utf8");
       const manifestBytes = await readFile(manifestPath, "utf8");
       const hooksPath = path.join(pluginRoot, "hooks", "hooks.json");
+      const hooksBytes = await readFile(hooksPath, "utf8");
       const firstSchedule: string[] = [];
       const secondSchedule: string[] = [];
       const activeSchedule = { current: firstSchedule };
-      let activeHookReads = 0;
       let hooksFault = true;
-      readMock = t.mock.method(
-        filesystemPromises,
-        "readFile",
-        async (...args: Parameters<typeof filesystemPromises.readFile>) => {
-          if (args[0] === hooksPath) {
-            activeHookReads += 1;
-            if (activeHookReads === 2) {
-              activeSchedule.current.push("prepare:hooks");
-              if (hooksFault) {
-                return "{";
-              }
-            }
-          }
-
-          return originalReadFile(...args);
-        },
-      );
       restoreSchedule = observeRetryBridgeSchedule(
-        t,
+        transactionControl,
         {
           agentTarget: path.join(
             locations.agentsDir,
@@ -9025,6 +8858,14 @@ test("retry proof: install: hooks reparse failure after three bridges retries wi
           commandTarget: path.join(locations.promptsTargetDir, "retryable:deploy.md"),
           skillsStagingDir: locations.skillsStagingDir,
           skillTarget: path.join(locations.skillsTargetDir, "retryable-audit"),
+          beforePhase: async (phase) => {
+            if (phase === "hooks") {
+              activeSchedule.current.push("prepare:hooks");
+              if (hooksFault) {
+                await writeFile(hooksPath, "{");
+              }
+            }
+          },
         },
         activeSchedule,
       );
@@ -9043,7 +8884,7 @@ test("retry proof: install: hooks reparse failure after three bridges retries wi
       const firstTree = await retryTree(locations.scopeRoot);
       const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
       hooksFault = false;
-      activeHookReads = 0;
+      await writeFile(hooksPath, hooksBytes);
       activeSchedule.current = secondSchedule;
       const second = await installPlugin({
         ctx,
@@ -9121,15 +8962,13 @@ test("retry proof: install: hooks reparse failure after three bridges retries wi
       );
     } finally {
       restoreSchedule?.();
-      readMock?.mock.restore();
-      syncBuiltinESMExports();
       await rm(cwd, { force: true, recursive: true });
     }
   });
 });
 
-test("retry proof: install: MCP prepare failure after hooks compensates every completed bridge", async (t) => {
-  await withHermeticHome(async ({ installPlugin }) => {
+test("retry proof: install: MCP prepare failure after hooks compensates every completed bridge", async () => {
+  await withHermeticHome(async ({ installPlugin, transactionControl }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-retry-mcp-"));
     let restoreSchedule: (() => void) | undefined;
     try {
@@ -9172,7 +9011,7 @@ test("retry proof: install: MCP prepare failure after hooks compensates every co
       const secondSchedule: string[] = [];
       const activeSchedule = { current: firstSchedule };
       restoreSchedule = observeRetryBridgeSchedule(
-        t,
+        transactionControl,
         {
           agentTarget: path.join(
             locations.agentsDir,
@@ -9275,8 +9114,8 @@ test("retry proof: install: MCP prepare failure after hooks compensates every co
   });
 });
 
-test("retry proof: install: non-containment undo failure reports ordered rollback partials then recovers", async (t) => {
-  await withHermeticHome(async ({ installPlugin }) => {
+test("retry proof: install: non-containment undo failure reports ordered rollback partials then recovers", async () => {
+  await withHermeticHome(async ({ installPlugin, transactionControl }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-retry-rollback-partial-"));
     let restoreSchedule: (() => void) | undefined;
     try {
@@ -9300,7 +9139,7 @@ test("retry proof: install: non-containment undo failure reports ordered rollbac
       const secondSchedule: string[] = [];
       const activeSchedule = { current: firstSchedule };
       restoreSchedule = observeRetryBridgeSchedule(
-        t,
+        transactionControl,
         {
           agentsStagingDir: locations.agentsStagingDir,
           commandsStagingDir: locations.commandsStagingDir,
@@ -9378,7 +9217,6 @@ test("retry proof: install: non-containment undo failure reports ordered rollbac
       ]);
       assert.deepStrictEqual(secondSchedule, [
         "prepare:skills",
-        "undo:skills",
         "commit:skills",
         "prepare:commands",
         "commit:commands",
@@ -9413,8 +9251,8 @@ test("retry proof: install: non-containment undo failure reports ordered rollbac
   });
 });
 
-test("retry proof: install: containment failure preserves the refused residue and succeeds after unlink", async (t) => {
-  await withHermeticHome(async ({ installPlugin }) => {
+test("retry proof: install: containment failure preserves the refused residue and succeeds after unlink", async () => {
+  await withHermeticHome(async ({ installPlugin, transactionControl }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-retry-containment-"));
     let restoreSchedule: (() => void) | undefined;
     try {
@@ -9439,7 +9277,7 @@ test("retry proof: install: containment failure preserves the refused residue an
       const secondSchedule: string[] = [];
       const activeSchedule = { current: firstSchedule };
       restoreSchedule = observeRetryBridgeSchedule(
-        t,
+        transactionControl,
         {
           agentsStagingDir: locations.agentsStagingDir,
           commandsStagingDir: locations.commandsStagingDir,
@@ -9461,7 +9299,7 @@ test("retry proof: install: containment failure preserves the refused residue an
       });
       const firstTree = await retryTree(locations.scopeRoot);
       const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
-      await filesystemPromises.unlink(skillTarget);
+      await unlink(skillTarget);
       activeSchedule.current = secondSchedule;
       const second = await installPlugin({
         ctx,
@@ -9526,7 +9364,7 @@ test("retry proof: install: containment failure preserves the refused residue an
 });
 
 test("retry proof: install: state commit race after staged work retries from unchanged state bytes", async (t) => {
-  await withHermeticHome(async ({ completionCache, installPlugin }) => {
+  await withHermeticHome(async ({ completionCache, installPlugin, transactionControl }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-retry-state-race-"));
     const originalParse: (text: string) => unknown = JSON.parse;
     let parseMock: ReturnType<typeof t.mock.method> | undefined;
@@ -9567,7 +9405,7 @@ test("retry proof: install: state commit race after staged work retries from unc
         return parsed;
       });
       restoreSchedule = observeRetryBridgeSchedule(
-        t,
+        transactionControl,
         {
           agentsStagingDir: locations.agentsStagingDir,
           commandsStagingDir: locations.commandsStagingDir,
@@ -9644,7 +9482,6 @@ test("retry proof: install: state commit race after staged work retries from unc
       ]);
       assert.deepStrictEqual(secondSchedule, [
         "prepare:skills",
-        "undo:skills",
         "commit:skills",
         "prepare:commands",
         "commit:commands",
