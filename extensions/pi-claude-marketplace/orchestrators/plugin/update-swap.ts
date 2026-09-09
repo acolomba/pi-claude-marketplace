@@ -114,7 +114,6 @@ import { UPDATE_CONTEXT } from "./update.messaging.ts";
 
 import type { PreparedAgentsStaging } from "../../bridges/agents/index.ts";
 import type { PreparedCommandsStaging } from "../../bridges/commands/index.ts";
-import type { HooksRouting } from "../../bridges/hooks/index.ts";
 import type { PreparedMcpStaging } from "../../bridges/mcp/index.ts";
 import type { PreparedSkillsStaging } from "../../bridges/skills/index.ts";
 import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
@@ -125,14 +124,9 @@ import type { HookSummaryEntry } from "../../shared/concerns/hooks.ts";
 import type { DegradeKind } from "../../shared/notify-reasons.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
+import type { UpdateHooksRouting } from "./update-cascade.ts";
 import type { PreparedPluginUpdate, UpdateCloneCacheSeam } from "./update-preflight.ts";
 import type { PluginUpdateFailedOutcome, PluginUpdateOutcome } from "../types.ts";
-
-/** Hook-routing capabilities consumed by successful update finalization. */
-export type UpdateHooksRouting = Pick<
-  HooksRouting,
-  "readAndCachePluginHooks" | "rebuildRoutingTables" | "removePluginConfigFromCache"
->;
 
 /** Common collaborators and identity for one prepared plugin replacement. */
 export interface ThreePhaseArgsBase {

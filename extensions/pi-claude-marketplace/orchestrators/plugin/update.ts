@@ -61,8 +61,6 @@
 
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
-import { softDepStatus } from "../../platform/pi-api.ts";
-import { compareByNameThenScope } from "../../shared/compare-name-scope.ts";
 import {
   CleanupContextError,
   cleanupFailuresFromError,
@@ -75,14 +73,7 @@ import {
 import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import { type PluginFailedMessage } from "../../shared/notification-types.ts";
-import {
-  notifyUpdateNoOpWithContext,
-  notifyUpdateWithContext,
-  notifyWithContext,
-  type MarketplaceRows,
-  type Plural,
-} from "../../shared/notify-context.ts";
-import { companionSeverity, skipSeverity } from "../../shared/notify-reasons.ts";
+import { notifyUpdateNoOpWithContext, notifyWithContext } from "../../shared/notify-context.ts";
 import { DEFAULT_GIT_OPS, refreshGitHubClone, type GitOps } from "../marketplace/shared.ts";
 import { marketplaceInOtherScope } from "../marketplace/shared.ts";
 
@@ -94,31 +85,30 @@ import {
   resolveInstalledPluginTarget,
   surfaceDiscoveryWarnings,
 } from "./shared.ts";
+import { composeUpdateCascade } from "./update-cascade.ts";
 import { preparePluginUpdate } from "./update-preflight.ts";
-import { updatedRowFromOutcome } from "./update-row.ts";
 import { swapPluginUpdate } from "./update-swap.ts";
-import { UPDATE_CONTEXT, type UpdateMsg } from "./update.messaging.ts";
+import { UPDATE_CONTEXT } from "./update.messaging.ts";
 
+import type { UpdateCascadeOutcome, UpdateHooksRouting } from "./update-cascade.ts";
 import type {
   UpdatePluginsFn,
   UpdatePluginsOptions,
   UpdatePluginsTarget,
 } from "./update-preflight.ts";
 import type {
-  DirectRenderableOutcome,
   DirectThreePhaseArgs,
   ThreePhaseArgs,
-  UpdateHooksRouting,
   UpdatePhase3Failure,
   UpdatePhase3FailedOutcome,
   UpdateRunOutcome,
 } from "./update-swap.ts";
 import type { ParsedSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
-import type { NotificationContext, SoftDepStatus, ToolInventory } from "../../platform/pi-api.ts";
+import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { Scope } from "../../shared/types.ts";
-import type { PluginUpdateFn, PluginUpdateOutcome, PluginUpdateSkippedOutcome } from "../types.ts";
+import type { PluginUpdateFn, PluginUpdateOutcome } from "../types.ts";
 
 /** The two update operations owned by one extension lifecycle. */
 export interface PluginUpdateOperations {
@@ -263,7 +253,7 @@ async function updatePluginsWith(
   // by (scope, marketplace) per CMC-21 (per-scope rendering, no collapse).
   // The bare update across multiple scopes / marketplaces becomes one
   // cascade block per (scope, marketplace) pair.
-  const outcomes: TargetedOutcome[] = [];
+  const outcomes: UpdateCascadeOutcome[] = [];
   // OUT-04 / D-04: the structural single-vs-plural cardinality is the invocation
   // FORM -- a `<plugin>@<mp>` target is single-target (omits the tally), while
   // the `@<marketplace>` and bare forms are bulk (emit the tally).
@@ -351,7 +341,7 @@ async function updatePluginsWith(
     outcomes.push({ target: t, outcome });
   }
 
-  renderUpdateCascadeAndNotify(ctx, pi, outcomes, cardinality);
+  composeUpdateCascade(ctx, pi, outcomes, cardinality);
   surfaceUpdateDiscoveryWarnings(ctx, outcomes);
 }
 
@@ -480,14 +470,14 @@ function isPhase3aAggregateFailure(
 function renderUpdateCascadeIfAny(
   ctx: NotificationContext,
   pi: ToolInventory,
-  outcomes: readonly TargetedOutcome[],
+  outcomes: readonly UpdateCascadeOutcome[],
   cardinality: "single" | "plural",
   // WR-01: the phase-3a abort path sets this so the never-silent no-op headline
   // is suppressed when the accumulated outcomes contain no realized transition.
   abortedByFailure = false,
 ): void {
   if (outcomes.length > 0) {
-    renderUpdateCascadeAndNotify(ctx, pi, outcomes, cardinality, abortedByFailure);
+    composeUpdateCascade(ctx, pi, outcomes, cardinality, abortedByFailure);
   }
 }
 
@@ -617,337 +607,6 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<UpdateRunOutco
   }
 
   return swapPluginUpdate(args, preflight);
-}
-
-interface TargetedOutcome {
-  readonly target: ResolvedTarget;
-  readonly outcome: DirectRenderableOutcome;
-}
-
-/**
- * SEV-04 / D-69-02: severity for a `skipped` update row. An absent-target skip
- * (`not installed` / `not found`) is always error (D-01). A partially-upgradable
- * decline (`no longer installable`, no `--partial`) follows the invocation shape:
- * a targeted `<plugin>@<marketplace>` update the user explicitly opted into is
- * actionable -> warning; a bulk / untargeted update that skips one the user did
- * not name is benign -> info. This threads the EXISTING `cardinality`
- * invocation-shape signal -- no inference from cascade shape. All OTHER
- * non-idempotent reasons keep the producer-local `skipSeverity` judgment, so the
- * change is surgical to the partially-upgradable decline.
- */
-function cascadeSkipSeverity(
-  reasons: readonly ContentReason[],
-  cardinality: "single" | "plural",
-): "info" | "warning" | "error" {
-  if (reasons.includes("not installed") || reasons.includes("not found")) {
-    return "error";
-  }
-
-  if (reasons.includes("no longer installable")) {
-    return cardinality === "single" ? "warning" : "info";
-  }
-
-  return skipSeverity(reasons);
-}
-
-/**
- * Project a `skipped` outcome to its cascade row. Split out of
- * `outcomeToCascadePluginMessage` so the parent switch stays within the
- * cognitive-complexity budget.
- *
- * XSURF-03: the partially-upgradable manual update-decline (`outcome.partialUpgradable`)
- * flips to the `partially-upgradable` token (consistent with how `list` describes
- * the same plugin) + the update-worded `--partial` trailer. The SEV-04 split
- * (targeted=warning / bulk=info) is keyed on this status arm directly, not on
- * the reason string -- the reason here carries the list-consistent degrade
- * kinds, not `no longer installable`. Every other skipped reason keeps
- * `status: "skipped"` + the unchanged `cascadeSkipSeverity` judgment.
- */
-function projectSkippedOutcome(
-  target: ResolvedTarget,
-  outcome: PluginUpdateSkippedOutcome,
-  cardinality: "single" | "plural",
-): UpdateMsg {
-  const reasons = outcome.reasons;
-  const version =
-    outcome.fromVersion !== undefined && outcome.fromVersion !== ""
-      ? { version: outcome.fromVersion }
-      : {};
-
-  if (outcome.partialUpgradable === true) {
-    return {
-      status: "partially-upgradable",
-      name: outcome.name,
-      scope: target.scope,
-      ...version,
-      reasons,
-      partialHint: true,
-      severity: cardinality === "single" ? "warning" : "info",
-      needsReload: false,
-    };
-  }
-
-  return {
-    status: "skipped",
-    name: outcome.name,
-    scope: target.scope,
-    ...version,
-    reasons,
-    // D-01: an absent-target update (the named plugin is not installed / not
-    // found) cannot be carried out -> error (severity-only flip; the `(skipped)
-    // {not installed}` per-row grammar is preserved). Otherwise the
-    // benign/idempotent case stays info; an actionable (targeted) decline routes
-    // to warning (SEV-04); never reloads.
-    severity: cascadeSkipSeverity(reasons, cardinality),
-    needsReload: false,
-  };
-}
-
-/**
- * Map an outcome to a `PluginNotificationMessage`. Returns `undefined`
- * for outcomes the cascade should skip rendering entirely (currently
- * none -- the `unchanged` partition maps to a `(skipped) {up-to-date}`
- * cascade row per the catalog).
- *
- * Per-partition mapping (mirrors marketplace/update.ts:446 precedent):
- *  - updated -> PluginUpdatedMessage ({ from, to, dependencies })
- *  - unchanged -> PluginSkippedMessage (reasons: ["up-to-date"])
- *  - skipped -> PluginSkippedMessage (reasons from producer or notes-fallback)
- *  - failed -> PluginFailedMessage (reasons + cause? + rollbackPartial?)
- *
- * Plugin scope is forwarded so the renderer's orphan-fold
- * can suppress the redundant `[<scope>]` bracket when plugin.scope ===
- * mp.scope. `cardinality` drives the SEV-04 targeted-vs-bulk decline severity.
- */
-function outcomeToCascadePluginMessage(
-  target: ResolvedTarget,
-  outcome: DirectRenderableOutcome,
-  probe: SoftDepStatus,
-  cardinality: "single" | "plural",
-): UpdateMsg {
-  // SEV-01: an otherwise-successful update whose DECLARED soft-dep companion is
-  // unloaded silently degrades a clean update -> raise the desired-state
-  // severity from info to warning (symmetric with the install success arm).
-  const successSeverity = companionSeverity(
-    { declaresAgents: outcome.declaresAgents, declaresMcp: outcome.declaresMcp },
-    probe,
-  );
-  switch (outcome.partition) {
-    case "updated":
-      // CR-01: BOTH row forms of this partition -- the clean `(updated)` row and
-      // the FSTAT-07 / D-66-04 dropped-kind `(partially-installed)` row -- are
-      // composed by the shared composer. A mapper that picked the partial form
-      // itself short-circuited past the composer, so the malformed-component
-      // axis WR-12 threaded onto the clean row silently vanished on a
-      // `--partial` update that also degraded a component.
-      //
-      // SEV-01: this surface stamps info raised to warning on a missing declared
-      // companion, on both forms -- an explicit `--partial` opt-in does not
-      // raise on the drop itself (the autoupdate surface, where the user did not
-      // opt in, is the one that raises for that; SEV-03 / D-69-01).
-      return updatedRowFromOutcome(outcome, target.scope, {
-        updated: successSeverity,
-        partiallyInstalled: successSeverity,
-      });
-    case "unchanged":
-      // Catalog `all-up-to-date-noop` (docs/output-catalog.md:528-532):
-      // unchanged renders as `(skipped) {up-to-date}`.
-      return {
-        status: "skipped",
-        name: outcome.name,
-        scope: target.scope,
-        reasons: ["up-to-date"],
-        // D-03/D-06: an `up-to-date` no-op is benign -> info, no reload.
-        severity: "info",
-        needsReload: false,
-      };
-    case "skipped":
-      return projectSkippedOutcome(target, outcome, cardinality);
-
-    case "failed": {
-      return {
-        status: "failed",
-        name: outcome.name,
-        scope: target.scope,
-        reasons: outcome.reasons,
-        // D-03/D-06: a failed update -> error, no reload.
-        severity: "error",
-        needsReload: false,
-      };
-    }
-  }
-}
-
-/**
- * Build the cascade payload and emit via a single notify(ctx, pi, ...) call.
- *
- * Marketplace blocks are grouped by (scope, marketplace) per CMC-21 and
- * sorted via compareByNameThenScope before emission so the renderer's
- * caller-order honored discipline preserves alphabetic ordering.
- *
- * Severity (`error` / `warning` / info) is computed by notify per
- * ; reload-hint trailer is appended by notify; the
- * per-row soft-dep marker is injected by the renderer
- * . Orchestrator MUST NOT compose any of these.
- */
-function renderUpdateCascadeAndNotify(
-  ctx: NotificationContext,
-  pi: ToolInventory,
-  outcomes: readonly TargetedOutcome[],
-  cardinality: "single" | "plural",
-  // WR-01: set on the phase-3a abort path. The failing plugin fired its own
-  // failure notification and is absent from `outcomes`, so the never-silent
-  // no-op headline must be suppressed here -- otherwise an all-`unchanged`
-  // accumulator emits a contradictory `nothing to update` line right after the
-  // failure. The empty/suppressed body renders nothing, which is acceptable
-  // since the failure was already reported.
-  abortedByFailure = false,
-): void {
-  // Group by (scope, marketplace) per CMC-21. Insertion order tracks the
-  // first occurrence of each (scope, marketplace) pair -- the post-grouping
-  // sort below restores alphabetic-by-name then project-before-user
-  // (MSG-GR-3) ordering across marketplaces, while plugin rows within a
-  // marketplace stay in caller order.
-  interface MpGroup {
-    readonly name: string;
-    readonly scope: Scope;
-    readonly plugins: UpdateMsg[];
-  }
-  // SEV-01: single companion probe per notify invocation, threaded into every
-  // per-row mapping so the success arms can raise severity on a missing
-  // declared companion (mirrors the renderer's single-probe discipline).
-  const probe = softDepStatus(pi);
-
-  // UGRM-02 / D-04: the headline counts realized transitions ONLY. The `updated`
-  // partition holds both clean `(updated)` rows AND partially-installed degraded
-  // updates (the partially-installed arm is emitted from `case "updated"`), so a
-  // single partition filter captures every realized transition. A
-  // `partially-upgradable` decline is partition `skipped`, so it contributes 0
-  // (correct). Derived BEFORE row suppression -- independent of UGRM-01
-  // filtering.
-  const updatedCount = outcomes.filter((o) => o.outcome.partition === "updated").length;
-
-  const byMp = new Map<string, MpGroup>();
-  for (const { target, outcome } of outcomes) {
-    // UGRM-01 suppression (Site A -- at the orchestrator, NOT the renderer): a
-    // BULK (`plural`) update does not render a per-plugin `(skipped)
-    // {up-to-date}` row for each unchanged plugin. The single-target path is
-    // untouched (a user who named one plugin still sees its up-to-date skip
-    // row). Only the `unchanged` partition is suppressed; a `skipped`-partition
-    // row (e.g. the `partially-upgradable` decline) survives into the cascade.
-    if (cardinality === "plural" && outcome.partition === "unchanged") {
-      continue;
-    }
-
-    const key = `${target.scope}:${target.marketplace}`;
-    // WR-01: mirror the reinstall.ts:597-610 get-existing-or-construct-new
-    // shape so the in-place mutation invariant does not rely on the
-    // get-then-conditional-set pattern (which was correct but obscured the
-    // intent -- a future refactor that converted the conditional set to an
-    // unconditional one would silently break the second-iteration mutation
-    // path).
-    const existing = byMp.get(key);
-    if (existing === undefined) {
-      byMp.set(key, {
-        name: target.marketplace,
-        scope: target.scope,
-        plugins: [outcomeToCascadePluginMessage(target, outcome, probe, cardinality)],
-      });
-    } else {
-      existing.plugins.push(outcomeToCascadePluginMessage(target, outcome, probe, cardinality));
-    }
-  }
-
-  // Sort marketplace blocks via compareByNameThenScope (orchestrator
-  // controls iteration order; notify does not sort). The comparator's
-  // `Sortable` shape requires only `name` + `scope`.
-  // OUT-07 / D-12: the update cascade is a bulk op, so its row slot is typed
-  // `Plural<Row>` (a readonly array). Additive typing only -- a fresh
-  // variable-length array, identical at runtime.
-  // WR-01: the grouped plugin rows are accumulated through the
-  // `outcomeToCascadePluginMessage` helper, now typed to `UpdateMsg`, so the
-  // `MarketplaceRows<UpdateMsg>` annotation holds without a cast -- a status
-  // drift between the producer and the render map is a compile error here.
-  const marketplaces: Plural<MarketplaceRows<UpdateMsg>> = [...byMp.values()]
-    // UGRM-01: drop a marketplace group emptied by suppression so no bare
-    // `● mp [scope]` header renders (a group only reaches zero rows if every one
-    // of its plugins was an `unchanged` suppression; the loop `continue` already
-    // prevents creating one, this is the belt-and-braces guard).
-    .filter((g) => g.plugins.length > 0)
-    .sort((a, b) =>
-      compareByNameThenScope({ name: a.name, scope: a.scope }, { name: b.name, scope: b.scope }),
-    )
-    .map((g) => ({
-      name: g.name,
-      scope: g.scope,
-      plugins: g.plugins,
-    }));
-
-  // cascade construction recipe (mirrors the recipe at
-  // orchestrators/plugin/uninstall.ts; substitutes the
-  // version-arrow cascade variant set).
-  // - One MarketplaceNotificationMessage per affected (scope, marketplace)
-  //  group, emitted via a single notify(ctx, pi,...) call per
-  //  orchestration.
-  // - plugins: readonly PluginNotificationMessage[] carries the
-  //  PluginUpdatedMessage (status "updated" with required from/to per
-  // ) / PluginSkippedMessage (status "skipped" with required
-  //  reasons) / PluginFailedMessage (status "failed" with required
-  //  reasons + optional cause + optional rollbackPartial) variants.
-  //  The renderer composes the version-arrow `<from> → v<to>` with the
-  //  asymmetric `v` prefix on `to` only per docs/output-catalog.md:499.
-  // - Severity and `/reload to pick up changes` trailer are computed by
-  //  notify from the variant set.
-  // - Reference: catalog UAT plugin-update fixtures at
-  //  docs/output-catalog.md:489-568 (single-mp-mixed, failed-with-
-  //  rollback-partial, all-up-to-date-noop, bare-multi-mp,
-  //  same-mp-both-scopes).
-  // UGRM-01 / UGRM-02: detect the zero-realized-transition bulk case -- a
-  // `plural` update that updated nothing AND has no surviving error/warning row.
-  // This covers BOTH an empty post-suppression cascade (all up-to-date) and a
-  // non-empty cascade whose only rows are benign info skips (e.g. the
-  // `partially-upgradable` decline). The surviving severities are the caller-stamped
-  // per-row `severity` fields (undefined defaults to info).
-  const hasErrorOrWarningRow = marketplaces.some((mp) =>
-    mp.plugins.some((p) => p.severity === "error" || p.severity === "warning"),
-  );
-  if (
-    cardinality === "plural" &&
-    updatedCount === 0 &&
-    !hasErrorOrWarningRow &&
-    !abortedByFailure
-  ) {
-    // Never-silent no-op headline. `emitUpdateNoOpCascade` renders the surviving
-    // body (empty for all-up-to-date) and folds the hard-coded `Plugin update:
-    // nothing to update` line below it. The line can NEVER vanish (a
-    // `tally {count: 0}` override would collapse to `""` in composeTally; this
-    // owns the headline instead). Info severity, no reload-hint.
-    notifyUpdateNoOpWithContext(ctx, pi, UPDATE_CONTEXT, marketplaces, cardinality);
-    return;
-  }
-
-  // WR-01: on the phase-3a abort path the failure is already reported and the
-  // no-op headline is suppressed above. If suppression also emptied the cascade
-  // body (every accumulated predecessor was `unchanged`), there is nothing left
-  // to render -- emit nothing rather than routing an empty `marketplaces` through
-  // `notifyUpdateWithContext`, which would render `(no marketplaces)`.
-  if (abortedByFailure && marketplaces.length === 0) {
-    return;
-  }
-
-  // OUT-04 / D-04 / UGRM-02: the trailing per-operation tally renders only for
-  // the bulk (`@marketplace` / bare) update forms; a single-target
-  // `<plugin>@<mp>` update omits it (the row embeds the outcome). The structural
-  // single-vs-plural signal is the invocation FORM, threaded from
-  // `updatePlugins`. The updates-only `tally` override owns the success category
-  // (realized transitions only); failure/warning categories still come from the
-  // rows, so a mixed cascade renders `Plugin update: 1 failure, 1 updated`. On a
-  // single-target update the override is unread (`composeTally` returns "" for
-  // `cardinality !== "plural"`).
-  notifyUpdateWithContext(ctx, pi, UPDATE_CONTEXT, marketplaces, cardinality, {
-    verb: "updated",
-    count: updatedCount,
-  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
