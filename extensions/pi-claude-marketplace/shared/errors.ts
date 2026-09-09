@@ -360,7 +360,7 @@ export class CrossPluginConflictError extends Error {
 /**
  * PI-15 concurrent install detected at the state-guard save boundary.
  *
- * Thrown by the guard-free ledger in `orchestrators/plugin/install.ts` when a
+ * Thrown by the guard-free ledger in `orchestrators/plugin/install-outcome.ts` when a
  * re-read of state shows the plugin record already exists (another process
  * beat us to the commit). The install-flow transaction owner supplies the
  * state guard. The outer

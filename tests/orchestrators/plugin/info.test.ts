@@ -5853,7 +5853,7 @@ test("DFEN-04 / DFEN-05: a config `enabled` declaration SUPPRESSES `{installs di
     };
 
     // The row states what an install WOULD do, so it must model the same
-    // precedence `install` applies (install.ts::readDeclaredEnabled), not a
+    // precedence `install` applies (install-declared-enabled.ts), not a
     // shorter one:
     //
     // `yes` -- the config says `enabled: true`. `install` reads that FIRST,

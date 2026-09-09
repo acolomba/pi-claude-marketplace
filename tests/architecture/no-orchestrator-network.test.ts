@@ -75,7 +75,7 @@ const FORBIDDEN_TARGETS: ReadonlyArray<string> = [
   // inside the seam. Keep both targets so splitting composition from the
   // ledger cannot weaken the original gate.
   "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts",
-  "extensions/pi-claude-marketplace/orchestrators/plugin/install.ts",
+  "extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts",
   // PL-3 + NFR-5: list is read-only against state + manifest; no network.
   "extensions/pi-claude-marketplace/orchestrators/plugin/list.ts",
   // PRL-07: reinstall uses cached manifests only -- which is also why

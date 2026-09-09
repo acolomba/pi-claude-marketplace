@@ -138,9 +138,9 @@ function assertRecordedStateLedgerInstalled(
  * shared `LedgerDegradationSignals` shape, kept under the enable-side name its
  * consumers already import (`reconcile/apply-outcomes.ts`, `reconcile/apply.ts`).
  *
- * The shape itself lives in `./shared.ts` because `install.ts` intersects it
- * too and this module imports `runInstallLedger` from `install.ts` -- declaring
- * it here would close a module cycle (IN-07 / D-98-01).
+ * The shape itself lives in `./shared.ts` because the install outcome owner
+ * intersects it too. Keeping the shared shape below both consumers preserves
+ * the one-way module graph (IN-07 / D-98-01).
  */
 export type EnableDegradationSignals = LedgerDegradationSignals;
 

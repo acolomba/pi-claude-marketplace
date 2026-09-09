@@ -1,9 +1,9 @@
 // orchestrators/plugin/install-flow.ts
 //
 // Public composition root for install transaction sequencing. The guard-free
-// phase ledger remains in install.ts until the family hub deletion plan; this
-// owner binds that ledger to clone probing, declared enablement, disable
-// cascade, outcome projection, locking, and exact notification behavior.
+// phase ledger lives in install-outcome.ts; this owner binds that ledger to
+// clone probing, declared enablement, disable cascade, outcome projection,
+// locking, and exact notification behavior.
 
 import { mkdir } from "node:fs/promises";
 import path from "node:path";

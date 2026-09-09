@@ -2624,7 +2624,7 @@ test("I3: disable cascade partial failure mutates state.resources to drop the ca
 // type contract holds: the existing fresh-enable test (CR-01) drives the
 // happy path (capture stays empty, the row renders as `(installed)`), AND
 // the ENBL-03 missing-clone test pins the non-rollback failure path.
-// The non-empty-rollbackPartials shape is pinned by install.test.ts's
+// The non-empty-rollbackPartials shape is pinned by install-outcome.test.ts's
 // `composeInstallFailureMessage` coverage; this test only exercises the
 // I4 thread (capture argument provided) without asserting a rollback row.
 

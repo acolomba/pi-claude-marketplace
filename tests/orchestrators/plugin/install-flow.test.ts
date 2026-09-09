@@ -3385,12 +3385,12 @@ test("PI-17: same plugin may be installed in both user and project target scopes
 });
 
 // ───────────────────────────────────────────────────────────────────────────
-// PI-2 / NFR-5 -- architectural: no gitOps surface in install.ts
+// PI-2 / NFR-5 -- architectural: no gitOps surface in install-outcome.ts
 // ───────────────────────────────────────────────────────────────────────────
 
-test("PI-2 / NFR-5: install.ts has zero git surface (no platform-git import, no DEFAULT_GIT_OPS, no gitOps field)", async () => {
+test("PI-2 / NFR-5: install outcome has zero git surface (no platform-git import, no DEFAULT_GIT_OPS, no gitOps field)", async () => {
   const src = await readFile(
-    "extensions/pi-claude-marketplace/orchestrators/plugin/install.ts",
+    "extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts",
     "utf8",
   );
   // Header docstring legitimately mentions platform-git / DEFAULT_GIT_OPS /
@@ -4236,7 +4236,7 @@ test("D-03-INV :: install invalidates plugin cache for the target marketplace", 
 // written file, while the supported group is present. The bridge stages
 // `parseHooksConfig.value` (the pure filtered subset), so the staged file can
 // never carry a dropped handler (PHOOK-04 containment invariant). No source
-// change to install.ts / stage.ts -- the subset is inherited from the partition.
+// change to install-outcome.ts / stage.ts -- the subset is inherited from the partition.
 // ───────────────────────────────────────────────────────────────────────────
 
 test("PHOOK-04: install --force stages a strict-subset hooks.json -- dropped Notification event absent, supported PostToolUse group present", async () => {
@@ -5270,7 +5270,7 @@ test("WR-03: installPlugin of a hooks-declaring plugin rebuilds the routing tabl
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// LIFE-01 / LIFE-02 / SURF-05: 5th cascade slot in install.ts -- a plugin
+// LIFE-01 / LIFE-02 / SURF-05: 5th cascade slot in install-outcome.ts -- a plugin
 // declaring `hooks/hooks.json` writes `<hooksDir>/<plugin>/hooks.json` via
 // the bridge `writeHookConfig`; the cascade row surfaces orphan-rewake when
 // the resolver flagged it; rollback removes the just-written file.

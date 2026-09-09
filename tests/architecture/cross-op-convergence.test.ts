@@ -151,7 +151,7 @@ const INVOKERS: Record<string, Invoker> = {
       ...(mode === "explicit" && { scope: "project" as const }),
     });
   },
-  // install ALWAYS carries a resolved scope -> explicit only. install.test.ts M1.
+  // install ALWAYS carries a resolved scope -> explicit only. install-flow.test.ts M1.
   install: async ({ ctx, pi, cwd }) => {
     await createNodeInstallPlugin(
       createHooksRouting(createHooksRuntime()),

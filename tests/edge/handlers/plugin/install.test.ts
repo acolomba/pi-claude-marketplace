@@ -49,7 +49,7 @@
 // generated agent files -- compared as ONE whole value, which is what turns
 // "which scope, which layer, which member" into a measurement. The delegating
 // cases deliberately do NOT assert the notification body: that value belongs to
-// tests/orchestrators/plugin/install.test.ts, and re-deriving it here would
+// tests/orchestrators/plugin/install-flow.test.ts, and re-deriving it here would
 // restate a fact another pair owns at full direct coverage.
 //
 // The negative half of D-116-06 is proven in full. Every rejecting case sizes

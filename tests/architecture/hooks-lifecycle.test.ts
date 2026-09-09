@@ -50,7 +50,7 @@ const EVENT_ROUTER_PATH = path.join(
   "../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts",
 );
 
-const INSTALL_PATH = path.join(ORCH_DIR, "install.ts");
+const INSTALL_PATH = path.join(ORCH_DIR, "install-flow.ts");
 const UNINSTALL_PATH = path.join(ORCH_DIR, "uninstall.ts");
 const REINSTALL_PATH = path.join(ORCH_DIR, "reinstall.ts");
 const UPDATE_PATH = path.join(ORCH_DIR, "update.ts");
@@ -130,13 +130,13 @@ function assertMutatorFollowedByRebuilder(
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-// Block A: WR-03 -- install.ts addPluginConfigToCache -> rebuildRoutingTables
+// Block A: WR-03 -- install-flow.ts cache mutation -> rebuildRoutingTables
 // ──────────────────────────────────────────────────────────────────────────
 
-test("WR-03 Block A: install.ts pairs the cache-mutation site with rebuildRoutingTables in lockstep", async () => {
+test("WR-03 Block A: install flow pairs the cache-mutation site with rebuildRoutingTables in lockstep", async () => {
   const lines = await readNonCommentLines(INSTALL_PATH);
 
-  // install.ts wraps the cache-add in the bridge helper
+  // install-flow.ts wraps the cache-add in the bridge helper
   // `readAndCachePluginHooks` because the call ALSO performs the disk read
   // + parse of the just-installed `<pluginRoot>/hooks/hooks.json`. The
   // orchestrator invocation site is the helper call
@@ -155,9 +155,9 @@ test("WR-03 Block A: install.ts pairs the cache-mutation site with rebuildRoutin
   );
   assert.ok(
     mutator,
-    `install.ts: no cache-mutation call site found (tried ${HELPER_FORMS.join(", ")})`,
+    `install-flow.ts: no cache-mutation call site found (tried ${HELPER_FORMS.join(", ")})`,
   );
-  assertMutatorFollowedByRebuilder(lines, mutator, "rebuildRoutingTables(", 20, "install.ts");
+  assertMutatorFollowedByRebuilder(lines, mutator, "rebuildRoutingTables(", 20, "install-flow.ts");
 });
 
 // ──────────────────────────────────────────────────────────────────────────

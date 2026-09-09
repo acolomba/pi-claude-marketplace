@@ -54,7 +54,7 @@ const ABSENCE_JUDGING_SURFACES: ReadonlyArray<string> = [
  */
 const NON_ABSENCE_LOOKUPS: ReadonlyArray<{ readonly rel: string; readonly purpose: string }> = [
   {
-    rel: "extensions/pi-claude-marketplace/orchestrators/plugin/install.ts",
+    rel: "extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts",
     purpose:
       "fetches the entry it is about to INSTALL (the resolver's input). A miss throws PluginShapeError kind not-in-manifest; it renders no absence row.",
   },
