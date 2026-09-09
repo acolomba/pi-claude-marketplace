@@ -86,18 +86,9 @@ import {
   prepareStageSkills,
 } from "../../bridges/skills/index.ts";
 import { parseHooksConfig, projectHookSummaryEntries } from "../../domain/components/hooks.ts";
-import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
-import { loadMarketplaceManifest } from "../../domain/manifest.ts";
-import {
-  requirePartialInstallable,
-  requireInstallable,
-  resolveStrict,
-} from "../../domain/plugin-resolver.ts";
 import { asAbsolutePluginRoot } from "../../domain/plugin-root.ts";
-import { parsePluginSource } from "../../domain/source.ts";
-import { shaVersion } from "../../domain/version.ts";
 import { locationsFor } from "../../persistence/locations.ts";
-import { isRecordedButDisabled, loadState } from "../../persistence/state-io.ts";
+import { loadState } from "../../persistence/state-io.ts";
 import { softDepStatus } from "../../platform/pi-api.ts";
 import { compareByNameThenScope } from "../../shared/compare-name-scope.ts";
 import {
@@ -108,7 +99,6 @@ import {
   errorWithCleanupFailures,
   InvalidMarketplaceManifestError,
   MarketplaceNotFoundError,
-  PluginShapeError,
   PluginUpdateConcurrencyError,
   PluginUpdatePhase3Error,
   type CleanupArtifact,
@@ -128,19 +118,10 @@ import {
   type Plural,
 } from "../../shared/notify-context.ts";
 import { companionSeverity, skipSeverity } from "../../shared/notify-reasons.ts";
-import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
-import { withLockedStateTransaction, withStateGuard } from "../../transaction/with-state-guard.ts";
-import { DEFAULT_CREDENTIAL_OPS, buildAuthForHost, hostFromCloneUrl } from "../auth-host.ts";
+import { withStateGuard } from "../../transaction/with-state-guard.ts";
 import { DEFAULT_GIT_OPS, refreshGitHubClone, type GitOps } from "../marketplace/shared.ts";
 import { marketplaceInOtherScope } from "../marketplace/shared.ts";
 
-import {
-  canonicalCloneUrl,
-  materializeOrRefreshPluginMirror,
-  materializePluginClone,
-  resolveGitSubdirRoot,
-  resolvePluginPin,
-} from "./clone-cache.ts";
 import { garbageCollectPluginClones } from "./clone-gc.ts";
 import { discoverGeneratedNames } from "./discover-names.ts";
 import {
@@ -151,10 +132,10 @@ import {
   removePluginRecord,
   resolveInstalledMarketplaceTarget,
   resolveInstalledPluginTarget,
-  resolvePluginVersion,
   splitStagingWarnings,
   surfaceDiscoveryWarnings,
 } from "./shared.ts";
+import { preparePluginUpdate } from "./update-preflight.ts";
 import { updatedRowFromOutcome } from "./update-row.ts";
 import { UPDATE_CONTEXT, type UpdateMsg } from "./update.messaging.ts";
 
@@ -163,11 +144,9 @@ import type { PreparedCommandsStaging } from "../../bridges/commands/index.ts";
 import type { HooksRouting } from "../../bridges/hooks/index.ts";
 import type { PreparedMcpStaging } from "../../bridges/mcp/index.ts";
 import type { PreparedSkillsStaging } from "../../bridges/skills/index.ts";
-import type { PluginEntry } from "../../domain/components/plugin.ts";
-import type { GitPluginRootResult, MaterializablePlugin } from "../../domain/resolver-types.ts";
-import type { GitBackedSource, ParsedSource } from "../../domain/source.ts";
+import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
+import type { ParsedSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
-import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { NotificationContext, SoftDepStatus, ToolInventory } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { HookSummaryEntry } from "../../shared/concerns/hooks.ts";
@@ -175,103 +154,17 @@ import type { DegradeKind } from "../../shared/notify-reasons.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
 import type {
+  PreparedPluginUpdate,
+  UpdateCloneCacheSeam,
+  UpdatePluginsOptions,
+  UpdatePluginsTarget,
+} from "./update-preflight.ts";
+import type {
   PluginUpdateFailedOutcome,
   PluginUpdateFn,
   PluginUpdateOutcome,
   PluginUpdateSkippedOutcome,
-  PluginUpdateUnchangedOutcome,
 } from "../types.ts";
-
-// ─────────────────────────────────────────────────────────────────────────────
-// updatePlugins -- direct entrypoint (PUP-1 three forms)
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Target spec for PUP-1 three forms. edge layer parses argv and
- * constructs this discriminated union:
- *  - `{ kind: "all" }` (bare form)
- *  - `{ kind: "marketplace", marketplace }` (@mp form)
- *  - `{ kind: "plugin", plugin, marketplace }` (pl@mp form)
- */
-export type UpdatePluginsTarget =
-  | { readonly kind: "all" }
-  | { readonly kind: "marketplace"; readonly marketplace: string }
-  | { readonly kind: "plugin"; readonly plugin: string; readonly marketplace: string };
-
-// ATTR-02 / D-47-A: the structural marketplace-not-added signal raised by the
-// direct-path enumerator (`enumerateMarketplaceTarget`) is the shared
-// `MarketplaceNotAddedSignal` from `./shared.ts` (one source of truth so
-// `instanceof` agrees with reinstall.ts). The cascade path
-// (`updateSinglePlugin` / `preflightUpdate`) NEVER raises it -- it keeps its
-// non-throwing concurrent-removal outcome (A3).
-
-/**
- * PURL-06 / D-78-05: the clone-cache seam update injects into the git-source
- * candidate probe. update.ts is the sole gitOps exemption under
- * tests/architecture/no-orchestrator-network.test.ts, so unlike install
- * it may resolveRemoteRef + materialize inline. Production leaves this undefined
- * and update uses the real `resolvePluginPin` / `materializePluginClone` imports
- * (which default to the real git backend). Tests substitute mock-backed
- * entrypoints so the git-source update path runs without touching the network.
- */
-export interface UpdateCloneCacheSeam {
-  readonly resolvePluginPin: typeof resolvePluginPin;
-  readonly materializePluginClone: typeof materializePluginClone;
-  /**
-   * MIRR-01/MIRR-03 / D-79.1-01: the mirror seam for an UNPINNED git source
-   * (`source.sha === undefined`). Refreshes the single mutable
-   * `plugin-clones/<urlhash12>/` mirror in place and re-anchors the record to
-   * the bare mirror key with the resolved HEAD sha.
-   */
-  readonly materializeOrRefreshPluginMirror: typeof materializeOrRefreshPluginMirror;
-}
-
-export interface UpdatePluginsOptions {
-  readonly ctx: NotificationContext;
-  /** Factory `pi` reference -- carries `getAllTools` for RH-3/RH-4 soft-dep probes. */
-  readonly pi: ToolInventory;
-  readonly scope?: Scope;
-  readonly cwd: string;
-  readonly target: UpdatePluginsTarget;
-  /** D-12 injection seam; defaults to DEFAULT_GIT_OPS. */
-  readonly gitOps?: GitOps;
-  /** PURL-06 test-only clone-cache seam override; production uses the real imports. */
-  readonly cloneCacheSeam?: UpdateCloneCacheSeam;
-  /**
-   * AG-7 opt-in flag. Default false: re-staged agents omit `model:` and
-   * Pi picks its own default. The edge handler sets this to `true` only
-   * when the user supplies `--map-model` on `/claude:plugin update`.
-   * The marketplace autoupdate cascade (`updateSinglePlugin`) does NOT
-   * accept this flag; cascade-driven re-installs always omit `model:`.
-   */
-  readonly mapModel?: boolean;
-  /**
-   * WB-01 / WB-02: when true, target
-   * `claude-plugins.local.json` instead of `claude-plugins.json` for
-   * write-back on the direct path.
-   */
-  readonly local?: boolean;
-  /**
-   * FORCE-02 opt-in. When true, the candidate resolve admits the
-   * partially-available arm (D-65-04): a `partially-available` target
-   * updates by degrading instead of blocking. Default false keeps the
-   * existing `requireInstallable` block. Never bypasses an `unavailable`/
-   * structural candidate (FORCE-05). The cascade entrypoint
-   * (`updateSinglePlugin`) does NOT accept this flag.
-   */
-  readonly partial?: boolean;
-  /**
-   * PROV-03 / D-79-05 injection seam. Defaults to DEFAULT_CREDENTIAL_OPS at use.
-   * The git-source candidate probe passes it to `buildAuthForHost` so an
-   * unpinned private update authenticates at pin-resolution (Q1) and the
-   * re-clone authenticates (PROV-03). Callers can inject a CredentialOps collaborator.
-   */
-  readonly credentialOps?: CredentialOps;
-  /** PROV-03 Device Flow HTTP seam; callers can inject a network-free collaborator. */
-  readonly deviceFlowHttp?: DeviceFlowHttp;
-  /** D-79-02 once-per-host memo shared across a bulk update. */
-  readonly authMemo?: Map<string, AuthAttemptResult>;
-}
 
 /** Direct/bulk update operation with the full command-owned option contract. */
 export type UpdatePluginsFn = (opts: UpdatePluginsOptions) => Promise<void>;
@@ -365,6 +258,7 @@ function buildDirectThreePhaseArgs(
     ...(opts.credentialOps !== undefined && { credentialOps: opts.credentialOps }),
     ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
     ...(opts.authMemo !== undefined && { authMemo: opts.authMemo }),
+    cleanupClones: garbageCollectPluginClones,
   };
 }
 
@@ -685,6 +579,7 @@ async function updateSinglePluginWith(
       // The manual `update` path (`updatePlugins` -> `runThreePhaseUpdate`
       // directly) is unaffected; it sets `partial` from the user's `--partial` flag.
       partial: true,
+      cleanupClones: garbageCollectPluginClones,
     });
   } catch (err) {
     // Cascade-safe: capture throws into a partition='failed' outcome so the
@@ -808,6 +703,7 @@ interface ThreePhaseArgsBase {
   readonly deviceFlowHttp?: DeviceFlowHttp;
   /** D-79-02 once-per-host memo (see UpdatePluginsOptions.authMemo). */
   readonly authMemo?: Map<string, AuthAttemptResult>;
+  readonly cleanupClones: (locations: ScopedLocations) => Promise<void>;
 }
 
 interface DirectThreePhaseArgs extends ThreePhaseArgsBase {
@@ -861,510 +757,11 @@ interface UpdatePhase3FailedOutcome extends Omit<
   readonly cause?: never;
 }
 
-type UpdatePreflightOutcome =
-  PluginUpdateSkippedOutcome | PluginUpdateUnchangedOutcome | DirectRenderableFailedOutcome;
 type DirectRenderableOutcome = NonFailedUpdateOutcome | DirectRenderableFailedOutcome;
 type UpdateRunOutcome = DirectRenderableOutcome | UpdatePhase3FailedOutcome;
 type NonEmptyUpdatePhase3Failures = readonly [UpdatePhase3Failure, ...UpdatePhase3Failure[]];
 
-interface PluginPreflight {
-  readonly state: ExtensionState;
-  readonly record: ExtensionState["marketplaces"][string]["plugins"][string];
-  readonly entry: PluginEntry;
-  readonly installable: MaterializablePlugin;
-  readonly fromVersion: string;
-  readonly toVersion: string;
-  /**
-   * PURL-06 / D-77-02: the full 40-hex commit sha the git-source candidate probe
-   * captured (pinned source.sha or the re-resolved remote HEAD). Undefined for
-   * path / github-name sources. `finalizeUpdateRecord` writes it into
-   * `sRecord.resolvedSha` on the all-success arm so a future reinstall can pin
-   * its re-clone to the persisted commit identity and clone GC keeps the
-   * record's clone key live (D-78-01).
-   */
-  readonly resolvedSha?: string;
-}
-
-/**
- * PURL-06 / D-78-05: build the clone-materializing `resolveGitPluginRoot` probe
- * plus a getter for the resolved sha it captured. Mirrors install's
- * `makeInstallCloneProbe`, but update is gitOps-exempt (the sole exemption
- * under tests/architecture/no-orchestrator-network.test.ts) so the probe
- * legally resolves the pin (D-78-05: pinned source.sha short-circuits;
- * unpinned re-resolves remote HEAD by refreshing the mirror AT UPDATE TIME) and
- * materializes the new clone into the cache BEFORE the swap. git-subdir
- * containment (PURL-03 / NFR-10) is anchored to the clone root. The full sha is
- * captured as a side-channel because the resolver's `ResolvedPlugin` schema
- * cannot carry it; the caller reads `resolvedSha()` AFTER the resolve.
- */
-function makeUpdateCloneProbe(
-  seam: UpdateCloneCacheSeam,
-  locations: ScopedLocations,
-  auth: {
-    ctx?: NotificationContext;
-    credentialOps: CredentialOps;
-    deviceFlowHttp?: DeviceFlowHttp;
-    authMemo?: Map<string, AuthAttemptResult>;
-  },
-): {
-  probe: (source: GitBackedSource) => Promise<GitPluginRootResult>;
-  resolvedSha: () => string | undefined;
-} {
-  let captured: string | undefined;
-
-  // PROV-02/03 / T-79-09: build a host-keyed auth bundle from the CANONICAL clone
-  // url (undefined for a public / no-provider host, or whenever `ctx` is absent
-  // -- the cascade path has no user UI to prompt). Shared by both probe arms.
-  const buildBundle = (gitSource: GitBackedSource, cloneUrl: string) => {
-    if (auth.ctx === undefined) {
-      return undefined;
-    }
-
-    return buildAuthForHost({
-      host: hostFromCloneUrl(cloneUrl, gitSource.kind),
-      credentialOps: auth.credentialOps,
-      ctx: auth.ctx,
-      ...(auth.deviceFlowHttp !== undefined && { deviceFlowHttp: auth.deviceFlowHttp }),
-      ...(auth.authMemo !== undefined && { authMemo: auth.authMemo }),
-    });
-  };
-
-  // MIRR-01/MIRR-03 / D-79.1-01: an UNPINNED source (no manifest sha, incl.
-  // ref-only moving pointers) refreshes the single mutable mirror clone at
-  // `plugin-clones/<urlhash12>/` in place and re-anchors the record to that bare
-  // mirror key -- it does NOT re-clone into the per-sha immutable cache. update
-  // is gitOps-exempt (the sole exemption under
-  // tests/architecture/no-orchestrator-network.test.ts), but the mirror git
-  // surface still lives in the clone-cache seam; the probe reaches it only by
-  // name for parity with install.
-  const probeUnpinned = async (gitSource: GitBackedSource): Promise<GitPluginRootResult> => {
-    const cloneUrl = canonicalCloneUrl(gitSource);
-    const authBundle = buildBundle(gitSource, cloneUrl);
-    const { pluginRoot: mirrorRoot, resolvedSha } = await seam.materializeOrRefreshPluginMirror({
-      locations,
-      cloneUrl,
-      ...(gitSource.ref !== undefined && { ref: gitSource.ref }),
-      ...(authBundle !== undefined && { auth: authBundle }),
-    });
-
-    if (gitSource.kind === "git-subdir") {
-      const subdirResult = await resolveGitSubdirRoot(mirrorRoot, gitSource.path);
-      if (subdirResult.kind !== "materialized") {
-        return subdirResult;
-      }
-
-      captured = resolvedSha;
-      return { kind: "materialized", pluginRoot: subdirResult.pluginRoot, resolvedSha };
-    }
-
-    // Capture the resolved HEAD sha AFTER a successful materialize so a failed
-    // mirror op does not leave a stale sha for the version/state record.
-    captured = resolvedSha;
-    return { kind: "materialized", pluginRoot: mirrorRoot, resolvedSha };
-  };
-
-  const probePinned = async (gitSource: GitBackedSource): Promise<GitPluginRootResult> => {
-    const authBundle = buildBundle(gitSource, canonicalCloneUrl(gitSource));
-    // The bundle threads into BOTH the pin resolution AND the re-clone.
-    const { cloneUrl, pin, ref } = await seam.resolvePluginPin({
-      source: gitSource,
-      ...(authBundle !== undefined && { auth: authBundle }),
-    });
-    const cloneRoot = await seam.materializePluginClone({
-      locations,
-      cloneUrl,
-      pin,
-      ...(ref !== undefined && { ref }),
-      ...(authBundle !== undefined && { auth: authBundle }),
-    });
-
-    if (gitSource.kind === "git-subdir") {
-      const subdirResult = await resolveGitSubdirRoot(cloneRoot, gitSource.path);
-      if (subdirResult.kind !== "materialized") {
-        return subdirResult;
-      }
-
-      captured = pin;
-      return { kind: "materialized", pluginRoot: subdirResult.pluginRoot, resolvedSha: pin };
-    }
-
-    // Capture the pin AFTER a successful materialize so a failed clone does not
-    // leave a stale sha for the version/state record.
-    captured = pin;
-    return { kind: "materialized", pluginRoot: cloneRoot, resolvedSha: pin };
-  };
-
-  const probe = (gitSource: GitBackedSource): Promise<GitPluginRootResult> =>
-    gitSource.sha === undefined ? probeUnpinned(gitSource) : probePinned(gitSource);
-
-  return { probe, resolvedSha: () => captured };
-}
-
-/**
- * PURL-06 / D-77-01: derive the update's `toVersion`. A git source (url /
- * git-subdir / github) with a captured sha records `shaVersion(pin)` -- the
- * commit IS the version identity (mirror install's `deriveInstallVersion`); path
- * / github-name plugins keep the 3-tier `resolvePluginVersion` ladder.
- */
-async function deriveUpdateToVersion(
-  entry: PluginEntry,
-  installable: MaterializablePlugin,
-  resolvedSha: string | undefined,
-): Promise<string> {
-  const kind = parsePluginSource(entry.source).kind;
-  const isGitSource = kind === "url" || kind === "git-subdir" || kind === "github";
-  if (isGitSource && resolvedSha !== undefined) {
-    return shaVersion(resolvedSha);
-  }
-
-  return resolvePluginVersion(entry, installable);
-}
-
-type PartialableUpdateShapeError = PluginShapeError & {
-  readonly shape: PluginShapeError["shape"] & {
-    readonly kind: "no-longer-installable";
-    readonly partialable: true;
-    readonly unsupportedKinds: readonly string[];
-  };
-};
-
-/**
- * The resolver's partialable update throw comes only from `requireInstallable`,
- * which writes `unsupportedKinds: r.unsupported` on that same object. The
- * partial gate may omit the field only on its non-partialable structural throw.
- */
-function isPartialableUpdateShapeError(err: unknown): err is PartialableUpdateShapeError {
-  return (
-    err instanceof PluginShapeError &&
-    err.shape.kind === "no-longer-installable" &&
-    err.shape.partialable
-  );
-}
-
-/**
- * Resolve + gate the update candidate, returning the materializable plugin on
- * success or a skipped `PluginUpdateOutcome` on a decline. Extracted from
- * `preflightUpdate` to keep that function inside the cognitive-complexity
- * ceiling; the catch fans out the three decline arms:
- *   - PURL-06 / NFR-3 git-probe network throw -> the EXISTING `network
- *     unreachable` / `authentication required` REASON (fail-clean; the plugin
- *     stays on its recorded sha, no swap).
- *   - XSURF-03 partially-upgradable decline (`--partial` could help) -> the
- *     list-consistent degrade kinds + `partialUpgradable: true`.
- *   - structural decline -> `no longer installable`.
- */
-async function resolveUpdateCandidate(
-  entry: PluginEntry,
-  marketplaceRoot: string,
-  resolveGitPluginRoot: (source: GitBackedSource) => Promise<GitPluginRootResult>,
-  ctx: { readonly plugin: string; readonly fromVersion: string; readonly partial: boolean },
-): Promise<MaterializablePlugin | PluginUpdateSkippedOutcome> {
-  const { plugin, fromVersion, partial } = ctx;
-  try {
-    const resolved = await resolveStrict(entry, { marketplaceRoot, resolveGitPluginRoot });
-    // FORCE-02/FORCE-05 (D-65-04): `--partial` widens the gate at the CANDIDATE
-    // resolve so a `partially-available` target degrades (supported components
-    // materialize, unsupported kinds skip) instead of blocking. Without
-    // `--partial` the candidate still blocks via `requireInstallable`. Both
-    // gates still reject an `unavailable`/structural candidate (FORCE-05).
-    if (partial) {
-      requirePartialInstallable(resolved, "update");
-    } else {
-      requireInstallable(resolved, "update");
-    }
-
-    return resolved;
-  } catch (err) {
-    // For a PATH source `resolveStrict` never throws (returns a not-installable
-    // variant) and the only typed-throw producer is `requireInstallable`. For a
-    // GIT source the injected `resolveGitPluginRoot` probe re-resolves an
-    // unpinned entry's remote HEAD (D-78-05) and materializes the clone -- so a
-    // vanished / unreachable repo throws a network error HERE.
-    //
-    // PURL-06 / NFR-3 / D-78-05: a git-probe network throw is fail-clean --
-    // classify it through the shared `classifyGitTransportFailure` ladder to the
-    // EXISTING `network unreachable` / `authentication required` REASON (no new
-    // token); the plugin STAYS on its recorded sha. The raw error text rides
-    // `notes` for the cause chain; an unclassified (non-transport) throw keeps
-    // the `no longer installable` fallthrough below.
-    const networkReason = classifyGitTransportFailure(err);
-    if (networkReason !== undefined) {
-      return {
-        partition: "skipped",
-        name: plugin,
-        fromVersion,
-        notes: [errorMessage(err)],
-        reasons: [networkReason] as const,
-        declaresAgents: false,
-        declaresMcp: false,
-      };
-    }
-
-    // XSURF-03: `err.shape.partialable === true` ⇔ the resolver verdict was
-    // `partially-available`, i.e. a partially-upgradable decline `--partial`
-    // could degrade-update. Carry the list-consistent degrade kinds via the SAME
-    // `narrowUnsupportedKinds` helper the `list (partially-upgradable)` row uses
-    // (byte-parity, pinned by catalog-uat) and mark `partialUpgradable: true`. A
-    // structural decline keeps the `no longer installable` reason.
-    if (isPartialableUpdateShapeError(err)) {
-      return {
-        partition: "skipped",
-        name: plugin,
-        fromVersion,
-        notes: [errorMessage(err)],
-        reasons: narrowUnsupportedKinds(err.shape.unsupportedKinds),
-        partialUpgradable: true,
-        declaresAgents: false,
-        declaresMcp: false,
-      };
-    }
-
-    return {
-      partition: "skipped",
-      name: plugin,
-      fromVersion,
-      notes: [errorMessage(err)],
-      reasons: ["no longer installable"] as const,
-      declaresAgents: false,
-      declaresMcp: false,
-    };
-  }
-}
-
-/**
- * WR-04 / WR-01 / D-98-04: the record shape whose re-pin may run WITHOUT the
- * caller's `--partial` flag -- a disabled record that is ALREADY degraded.
- *
- * Composed from the single ENBL-05 disabled predicate; the availability axis is
- * read HERE, beside it, and never folded into it. The two facts stay orthogonal
- * as far as "is this record disabled" is concerned. What this predicate answers
- * is narrower: has the user ALREADY consented to this record's degradation?
- *
- * WR-01: a record that is disabled but still CLEAN has consented to nothing. If
- * its manifest entry has newly gained an unsupported kind, admitting it here
- * would let `refreshDisabledRecord` write `installable: false` plus the dropped
- * kinds with no flag typed and no row naming the degradation -- and the bulk
- * and autoupdate paths funnel through this same preflight, so the flip could
- * happen with no user command at all. A clean disabled record therefore keeps
- * the XSURF-03 decline row, and its degrade still needs an explicit `--partial`.
- */
-function widensPartialGate(
-  record: ExtensionState["marketplaces"][string]["plugins"][string],
-): boolean {
-  return isRecordedButDisabled(record) && !record.compatibility.installable;
-}
-
-/**
- * A static preflight verdict -- one the update reaches without resolving a
- * candidate. Reasons are pre-narrowed to the closed set so the cascade
- * consumer reads `reasons[0]` directly instead of regex-parsing `notes`.
- *
- * declaresAgents / declaresMcp are required `boolean` predicates, and neither
- * a skipped nor a failed row renders the soft-dep marker (MSG-SD-3), so both
- * are always false here.
- */
-type StaticPreflightRowArgs = {
-  readonly plugin: string;
-  readonly notes: readonly string[];
-  readonly reason: ContentReason;
-} & (
-  | { readonly partition: "failed"; readonly fromVersion?: never }
-  | { readonly partition: "skipped"; readonly fromVersion?: string }
-);
-
-function staticPreflightRow(
-  args: StaticPreflightRowArgs,
-): PluginUpdateSkippedOutcome | DirectRenderableFailedOutcome {
-  if (args.partition === "failed") {
-    return {
-      partition: "failed",
-      name: args.plugin,
-      notes: [...args.notes],
-      reasons: [args.reason],
-      declaresAgents: false,
-      declaresMcp: false,
-    };
-  }
-
-  return {
-    partition: "skipped",
-    name: args.plugin,
-    ...(args.fromVersion !== undefined && { fromVersion: args.fromVersion }),
-    notes: [...args.notes],
-    reasons: [args.reason],
-    declaresAgents: false,
-    declaresMcp: false,
-  };
-}
-
-/**
- * UXG-08 / D-29-08/09 membership triage, asked of BOTH the install record and
- * the refreshed manifest before any candidate resolution.
- *
- * Manifest membership is consulted BEFORE concluding "not installed": a
- * plugin absent from both state and manifest is a typo or a nonexistent name,
- * so it classifies as `(failed) {not in manifest}` like `install` rather than
- * the misleading `(skipped) {not installed}` the installed-state-first
- * ordering produced.
- */
-function triageUpdateMembership(
-  plugin: string,
-  record: PluginStateRecord | undefined,
-  lookup: ReturnType<typeof lookupDeclaredPlugin>,
-): UpdatePreflightOutcome | { readonly record: PluginStateRecord; readonly entry: PluginEntry } {
-  if (record === undefined) {
-    return lookup.kind === "absent"
-      ? // Not installed AND absent from the manifest. No `fromVersion` --
-        // there is no install record to read a version from.
-        staticPreflightRow({
-          partition: "failed",
-          plugin,
-          notes: ["not in manifest"],
-          reason: "not in manifest",
-        })
-      : // Declared but not installed. No manifest-entry validation is needed
-        // because this returns before the entry is resolved.
-        staticPreflightRow({
-          partition: "skipped",
-          plugin,
-          notes: ["not installed"],
-          reason: "not installed",
-        });
-  }
-
-  if (lookup.kind === "absent") {
-    // Installed but no longer listed in the refreshed manifest.
-    return staticPreflightRow({
-      partition: "skipped",
-      plugin,
-      notes: ["not in manifest"],
-      reason: "not in manifest",
-      fromVersion: record.version,
-    });
-  }
-
-  return { record, entry: lookup.entry };
-}
-
-async function preflightUpdate(
-  args: ThreePhaseArgs,
-): Promise<PluginPreflight | UpdatePreflightOutcome> {
-  const { plugin, marketplace, scope, locations } = args;
-  const state = await loadState(locations.extensionRoot);
-  const mp = state.marketplaces[marketplace];
-  if (mp === undefined) {
-    return staticPreflightRow({
-      partition: "skipped",
-      plugin,
-      notes: [`marketplace "${marketplace}" not found in ${scope} scope`],
-      reason: "not in manifest",
-    });
-  }
-
-  // The manifest read is unguarded on purpose: a manifest this verb cannot
-  // read is a throw, not a row, so the membership question is asked only of a
-  // manifest that was actually parsed. `lookupDeclaredPlugin` (D-99-02a) is
-  // the one writing of that question, shared with `list` and `info`.
-  const manifest = await loadCachedMarketplaceManifest(mp.manifestPath);
-  const triaged = triageUpdateMembership(
-    plugin,
-    mp.plugins[plugin],
-    lookupDeclaredPlugin(manifest, plugin),
-  );
-  if ("partition" in triaged) {
-    return triaged;
-  }
-
-  const { record, entry } = triaged;
-
-  // PURL-06 / D-78-05: a git source (url / git-subdir / github) resolves its
-  // pluginRoot through the clone-materializing probe -- pinned entries pin
-  // source.sha, unpinned entries re-resolve remote HEAD at update time -- and
-  // captures the resolved sha for the swap-or-not decision + the resolvedSha
-  // state field. Path / github-name plugins keep the no-git-callback behavior
-  // (the resolver derives their pluginRoot from marketplaceRoot).
-  const clone = makeUpdateCloneProbe(
-    args.cloneCacheSeam ?? {
-      resolvePluginPin,
-      materializePluginClone,
-      materializeOrRefreshPluginMirror,
-    },
-    locations,
-    {
-      ...(args.ctx !== undefined && { ctx: args.ctx }),
-      credentialOps: args.credentialOps ?? DEFAULT_CREDENTIAL_OPS,
-      ...(args.deviceFlowHttp !== undefined && { deviceFlowHttp: args.deviceFlowHttp }),
-      ...(args.authMemo !== undefined && { authMemo: args.authMemo }),
-    },
-  );
-
-  // WR-04 / D-98-04: derive the gate from the RECORD as well as the caller
-  // flag, the same record-derived stance the enable branch takes (ENBL-07 /
-  // D-69-01). The strict gate exists so a degrade is never materialized without
-  // consent, and a disabled record materializes nothing: the D-UPD short-circuit
-  // below rewrites only version, resolvedSource, resolvedSha, compatibility and
-  // the updated-at stamp inside a state guard, leaving every `resources.*` array
-  // empty. Without this widening a disabled PARTIAL record is declined by the
-  // one command that can re-pin it against the current manifest entry.
-  const candidate = await resolveUpdateCandidate(entry, mp.marketplaceRoot, clone.probe, {
-    plugin,
-    fromVersion: record.version,
-    partial: args.partial === true || widensPartialGate(record),
-  });
-  if ("partition" in candidate) {
-    return candidate;
-  }
-
-  const installable: MaterializablePlugin = candidate;
-  const fromVersion = record.version;
-
-  // PURL-06 / D-78-05: for a git source with a captured sha, `toVersion` is
-  // `shaVersion(pin)` so the existing `toVersion === fromVersion` short-circuit
-  // below renders `(unchanged)` on an equal sha and swaps on a differing one.
-  // Path / github-name plugins keep the 3-tier `resolvePluginVersion` ladder.
-  const resolvedSha = clone.resolvedSha();
-  const toVersion = await deriveUpdateToVersion(entry, installable, resolvedSha);
-  // D-99-05a: version equality is the whole answer for an ENABLED record --
-  // nothing else it holds can move without the version moving, because every
-  // other field is rewritten by the materialization the version gates.
-  //
-  // A DISABLED record holds more than the version. `refreshDisabledRecord` also
-  // owns `resolvedSource` and the `compatibility` block, and both move
-  // independently of the pin: a path-source marketplace re-added from another
-  // directory, or a manifest entry that gains or loses an unsupported kind with
-  // no version bump. Returning here would leave a later `enable` pointed at a
-  // path that may no longer exist, or gated on a stale availability
-  // discriminant. So a disabled record falls THROUGH to
-  // `runDisabledRecordRefresh`, which re-derives this same version equality for
-  // its row and lets the refresh's own guard decide whether to write.
-  if (toVersion === fromVersion && !isRecordedButDisabled(record)) {
-    // `(unchanged)` rows do not render the soft-dep marker either.
-    return {
-      partition: "unchanged",
-      name: plugin,
-      fromVersion,
-      toVersion,
-      declaresAgents: false,
-      declaresMcp: false,
-    };
-  }
-
-  return {
-    state,
-    record,
-    entry,
-    installable,
-    fromVersion,
-    toVersion,
-    ...(resolvedSha !== undefined && { resolvedSha }),
-  };
-}
-
-function isOutcome(
-  value: PluginPreflight | UpdatePreflightOutcome,
-): value is UpdatePreflightOutcome {
-  return "partition" in value;
-}
+type PluginPreflight = PreparedPluginUpdate;
 
 /**
  * Prepare all four bridges into tmp, in skills -> commands -> agents -> mcp
@@ -1651,292 +1048,6 @@ async function markUpdateInProgress(
       unsupported: [...sRecord.compatibility.unsupported],
     };
   });
-}
-
-/**
- * D-99-05a: the slice of a disabled record that {@link refreshDisabledRecord}
- * owns, normalized to one string so two snapshots compare with `===` rather
- * than through a hand-rolled recursive walk. Positional, so no key ordering can
- * make equal records compare unequal.
- *
- * `updatedAt` is deliberately absent: the refresh derives it from the wall
- * clock, so a projection carrying it would differ from itself on every call and
- * the guard could never hold.
- *
- * Element order WITHIN the three component-kind arrays is significant,
- * and that is a real dependence on the resolver, not an accident of this
- * function. The projection is compared against one built from a record written
- * by an EARLIER resolution, so a resolver whose emit order varies between two
- * resolutions of the same input makes every disabled plugin read as moved: the
- * RECON-05 no-write guard stops holding, and `disabledRefreshWouldWrite` starts
- * acquiring the `retries: 0` lock on every pass. Sorting here would hide that
- * rather than fix it, so the contingency is pinned by a test instead -- see the
- * WR-08 case in `tests/orchestrators/plugin/update.test.ts`, which round-trips
- * multi-element lists through `state.json`.
- */
-function disabledPinProjection(
-  version: string,
-  resolvedSource: string,
-  resolvedSha: string | undefined,
-  compatibility: {
-    readonly installable: boolean;
-    readonly notes: readonly string[];
-    readonly supported: readonly string[];
-    readonly unsupported: readonly string[];
-  },
-): string {
-  return JSON.stringify([
-    version,
-    resolvedSource,
-    resolvedSha ?? null,
-    compatibility.installable,
-    [...compatibility.notes],
-    [...compatibility.supported],
-    [...compatibility.unsupported],
-  ]);
-}
-
-/** The compatibility block a disabled-record refresh would write, plus its projection. */
-interface NextDisabledPin {
-  readonly compatibility: {
-    readonly installable: boolean;
-    readonly notes: string[];
-    readonly supported: string[];
-    readonly unsupported: string[];
-  };
-  readonly projection: string;
-}
-
-/**
- * D-99-05a: the values a refresh WOULD write, derived from the preflight
- * resolution alone. `shaFallback` is the sha the record keeps when this source
- * carries no pin -- read from the live record inside the transaction and from
- * the preflight snapshot outside it, which is the only difference between the
- * two callers.
- *
- * ENBL-09: the availability discriminant is DERIVED from the resolution rather
- * than hard-coded, so it always agrees with the unsupported list copied beside
- * it. `installable: true` next to a non-empty `unsupported` array is a record
- * whose two fields contradict each other, and every downstream classifier reads
- * a different token off the same record.
- */
-function nextDisabledPin(
-  preflight: PluginPreflight,
-  shaFallback: string | undefined,
-): NextDisabledPin {
-  const { installable, toVersion, resolvedSha } = preflight;
-  const compatibility = {
-    installable: installable.state === "installable",
-    notes: [...installable.notes],
-    supported: [...installable.supported],
-    unsupported: [...installable.unsupported],
-  };
-  return {
-    compatibility,
-    projection: disabledPinProjection(
-      toVersion,
-      installable.pluginRoot,
-      // The sha the record would END UP with: a path / github-name source
-      // carries no pin and leaves the recorded one alone, so comparing against a
-      // bare `undefined` would read every such refresh as a move.
-      resolvedSha ?? shaFallback,
-      compatibility,
-    ),
-  };
-}
-
-/**
- * WR-02 / NFR-3: would the refresh below write anything, judged from the record
- * `preflightUpdate` already loaded? A disabled record at an unchanged version
- * falls THROUGH to the refresh, and the refresh opens a `retries: 0` scope
- * lock even when nothing would move -- risking a `StateLockHeldError`
- * whenever another process holds the lock, which would abort the bare-form
- * batch on that throw, taking every target after the disabled one with it. A
- * plugin with nothing to write must not pay for the lock.
- *
- * The snapshot is read outside the lock, so this answer is advisory about the
- * RECORD: the in-transaction guard re-derives the same comparison against the
- * live record and is the authority for whether the write happens. Neither guard
- * is fresher than `preflightUpdate` about the RESOLUTION -- both derive the
- * `next` side from the same out-of-lock resolve.
- */
-function disabledRefreshWouldWrite(preflight: PluginPreflight): boolean {
-  const { record } = preflight;
-  const next = nextDisabledPin(preflight, record.resolvedSha);
-  const current = disabledPinProjection(
-    record.version,
-    record.resolvedSource,
-    record.resolvedSha,
-    record.compatibility,
-  );
-  return next.projection !== current;
-}
-
-/**
- * D-UPD: refresh a disabled-but-recorded plugin's version pin, resolvedSource
- * and compatibility block under the scope lock so a future `enable`
- * re-materializes from the current manifest.
- *
- * ENBL-18 SKEW, deliberate: `resources.*` and `hookEntries` are NOT touched, so
- * after `disable` -> `update` the record pins version B while its inventory
- * still describes what version A materialized. The two fields answer different
- * questions -- the pin says what the next `enable` will install, the inventory
- * says what the last install actually put on disk -- and only `enable` can make
- * them agree, because only `enable` re-materializes. Clearing the inventory
- * instead would trade a stale answer for no answer at all, which is the
- * self-describing record ENBL-18 exists to keep; refusing to move the pin would
- * leave a future `enable` installing a version the marketplace no longer
- * declares. `info` and `list` therefore render the retained inventory under the
- * NEW version until the plugin is enabled again -- recorded in the
- * `state-only-disabled-with-components` catalog state.
- *
- * The standalone-direct write-back
- * (maybeWritePluginConfigBack) is SKIPPED -- the config entry already exists by
- * construction (the disabled record only persists when the user explicitly
- * disabled it), and writing the byte-stable `{}` patch would touch state.json
- * mtime via the SOLE sanctioned save seam without changing user-visible bytes.
- *
- * D-99-05a: reached on an unchanged version too, so the guard below is what
- * keeps a repeated update from rewriting an already-current record. RECON-05:
- * nothing moved means no save at all -- not a save that happens to land the
- * same values, which still bumps `updatedAt` and state.json's mtime. That is
- * why the transaction saves explicitly instead of using `withStateGuard`, which
- * persists unconditionally.
- *
- * Returns whether anything was written.
- */
-async function refreshDisabledRecord(
-  args: ThreePhaseArgs,
-  preflight: PluginPreflight,
-): Promise<boolean> {
-  const { plugin, marketplace, locations } = args;
-  const { installable, toVersion, resolvedSha } = preflight;
-  return withLockedStateTransaction(locations, async (tx) => {
-    const sMp = tx.state.marketplaces[marketplace];
-    if (sMp === undefined) {
-      return false;
-    }
-
-    const sRecord = sMp.plugins[plugin];
-    if (sRecord === undefined) {
-      return false;
-    }
-
-    // Re-derived against the LIVE record, which `disabledRefreshWouldWrite`
-    // could only see as a pre-lock snapshot. Only the CURRENT half of the
-    // comparison is live, though: the NEXT half comes from `preflight`, whose
-    // `installable` / `toVersion` were resolved outside this lock. So this guard
-    // is authoritative about the RECORD and no fresher than the preflight about
-    // the RESOLUTION -- it cannot tell that the marketplace manifest moved after
-    // `preflightUpdate` read it, and a caller must not skip its own re-resolve
-    // on the strength of holding this lock.
-    const next = nextDisabledPin(preflight, sRecord.resolvedSha);
-    const nextCompatibility = next.compatibility;
-    const current = disabledPinProjection(
-      sRecord.version,
-      sRecord.resolvedSource,
-      sRecord.resolvedSha,
-      sRecord.compatibility,
-    );
-    if (next.projection === current) {
-      return false;
-    }
-
-    sRecord.version = toVersion;
-    sRecord.resolvedSource = installable.pluginRoot;
-    // PURL-06 / PURL-09 / D-77-02 / D-78-01: the pin and the sha-derived
-    // version move TOGETHER. For a git source `toVersion` is `shaVersion(
-    // resolvedSha)`, so writing the version without the sha leaves the record
-    // advertising the new commit while `reinstall` still pins its re-clone to
-    // the old one -- a silent revert of the update with no row saying so.
-    // Mirrors the write `finalizeUpdateRecord` makes on its all-success arm;
-    // undefined for path / github-name sources, which carry no pin.
-    if (resolvedSha !== undefined) {
-      sRecord.resolvedSha = resolvedSha;
-    }
-
-    sRecord.compatibility = nextCompatibility;
-    sRecord.updatedAt = new Date().toISOString();
-    await tx.save();
-    return true;
-  });
-}
-
-/**
- * The disabled-record arm of the three-phase body: refresh the pin, sweep the
- * clone the refresh un-referenced, and pick the row.
- *
- * Extracted so the reordering that made this arm reachable on an unchanged
- * version does not add a branch to `runThreePhaseUpdate`'s already-suppressed
- * complexity budget.
- */
-async function runDisabledRecordRefresh(
-  args: ThreePhaseArgs,
-  preflight: PluginPreflight,
-): Promise<PluginUpdateSkippedOutcome | PluginUpdateUnchangedOutcome> {
-  const { plugin } = args;
-  const { fromVersion, toVersion } = preflight;
-  // WR-02 / NFR-3: skip the whole transaction -- and therefore the `retries: 0`
-  // scope lock -- when the snapshot says nothing can have moved. The refresh's
-  // own in-transaction guard stays the authority on whether the write happens.
-  const wrote = disabledRefreshWouldWrite(preflight)
-    ? await refreshDisabledRecord(args, preflight)
-    : false;
-
-  // PURL-06 / D-78-01: a refresh that moved the pin re-pointed resolvedSource +
-  // resolvedSha at the clone `preflightUpdate` just materialized, so the OLD
-  // clone key is now unreferenced. This arm RETURNS before the finalize path's
-  // GC-after-swap, so without this sweep every repeated update of a disabled
-  // git-source plugin leaves one more orphan until some unrelated command
-  // happens to sweep -- the accumulation the derive-not-persist GC exists to
-  // prevent. Same shape as the finalize call: outside the state guard (the
-  // refresh's transaction has committed and released), gated on a git-source
-  // swap, and swallowed per D-19-01. A refresh that wrote nothing un-referenced
-  // nothing, so it sweeps nothing either.
-  if (wrote && preflight.resolvedSha !== undefined) {
-    try {
-      await garbageCollectPluginClones(args.locations);
-    } catch {
-      // D-19-01: a GC failure never fails the update; the next pass retries.
-    }
-  }
-
-  if (toVersion === fromVersion) {
-    // D-99-05a row contract: the `unchanged` row stays, byte for byte, even
-    // when the refresh above moved the source or the compatibility block. The
-    // row reports the ARTIFACT state, and that state genuinely is unchanged --
-    // a disabled record materializes nothing either way. Moving a byte-pinned
-    // row here would buy the reader no new fact and cost a catalog amendment,
-    // so the up-to-date claim is kept deliberately, not by omission.
-    return {
-      partition: "unchanged",
-      name: plugin,
-      fromVersion,
-      toVersion,
-      declaresAgents: false,
-      declaresMcp: false,
-    };
-  }
-
-  // WR-02: NOT the `unchanged` partition. `unchanged` renders `{up-to-date}`,
-  // a claim about the VERSION, and the refresh just moved that version along
-  // with the source, the sha and the compatibility block. `up-to-date` is
-  // therefore the one fact this row cannot claim. Report the skip that actually
-  // happened and name why nothing was materialized: the record is disabled.
-  // Both tokens are inherited closed-set members; `already disabled` is
-  // idempotent, so the row keeps its info severity and emits no summary line.
-  // `fromVersion` is deliberately omitted: the record no longer holds it (the
-  // refresh just moved the pin), so rendering it in the row's version slot
-  // would trade one stale claim for another. The row makes no version claim,
-  // which is the same slot shape the `unchanged` projection renders above.
-  return {
-    partition: "skipped",
-    name: plugin,
-    notes: [],
-    reasons: ["already disabled"] as const,
-    declaresAgents: false,
-    declaresMcp: false,
-  };
 }
 
 /** The persisted per-plugin install record the finalize window mutates. */
@@ -2440,24 +1551,12 @@ async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<UpdateRunOutco
 
   // ─── Pre-phase: resolve current vs new (PUP-3/4/5 short-circuits) ─────────
 
-  const preflight = await preflightUpdate(args);
-  if (isOutcome(preflight)) {
+  const preflight = await preparePluginUpdate(args);
+  if ("partition" in preflight) {
     return preflight;
   }
 
   const { installable, fromVersion, toVersion } = preflight;
-
-  // D-UPD / ENBL-05: a disabled-but-recorded plugin (explicit `enabled: false`
-  // read through the single `isRecordedButDisabled` predicate -- degraded or
-  // not, since availability is an orthogonal axis) must NOT re-materialize
-  // artifacts; an `enable` after the update is the rematerialization surface.
-  // ENBL-09: refresh the record's version, resolvedSource and compatibility so
-  // a future enable reads the current pin. ENBL-18: `resources.*` and
-  // `hookEntries` are left alone -- they describe the last installation, and
-  // only a re-materialization can move them (see `refreshDisabledRecord`).
-  if (isRecordedButDisabled(preflight.record)) {
-    return runDisabledRecordRefresh(args, preflight);
-  }
 
   // ─── : prepare into tmp ────────────────────────────────────────────
   //
@@ -3359,10 +2458,4 @@ async function resolveUpdateMarketplaceScope(
   // scope plugin form is carried by the `mp === undefined` arm in
   // `enumerateMarketplaceTarget`, which is where that payload is built.
   throw new MarketplaceNotAddedSignal(mpName, resolution.requestedScope);
-}
-
-async function loadCachedMarketplaceManifest(
-  manifestPath: string,
-): Promise<{ name: string; plugins: readonly PluginEntry[] }> {
-  return loadMarketplaceManifest(manifestPath);
 }

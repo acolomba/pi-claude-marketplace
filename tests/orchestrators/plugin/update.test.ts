@@ -66,7 +66,7 @@ import type {
 import type {
   UpdateCloneCacheSeam,
   UpdatePluginsOptions,
-} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update.ts";
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts";
 import type { PluginUpdateFn } from "../../../extensions/pi-claude-marketplace/orchestrators/types.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type {
