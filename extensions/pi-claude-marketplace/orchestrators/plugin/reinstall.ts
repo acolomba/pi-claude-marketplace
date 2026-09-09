@@ -113,14 +113,14 @@ import {
 import { DEFAULT_CREDENTIAL_OPS } from "../auth-host.ts";
 
 import { discoverGeneratedNames } from "./discover-names.ts";
+import { probeReinstallClone } from "./reinstall-clone-probe.ts";
+import { selectReinstallTargets } from "./reinstall-targets.ts";
 import {
   REINSTALL_CONTEXT,
   narrowReasons,
   reinstalledRowFromOutcome,
   renderReinstallPartitionAndNotify,
 } from "./reinstall.messaging.ts";
-import { probeReinstallClone } from "./reinstall-clone-probe.ts";
-import { selectReinstallTargets } from "./reinstall-targets.ts";
 import {
   assertNoCrossPluginConflicts,
   emitMarketplaceNotAddedSignal,
@@ -581,6 +581,7 @@ async function reinstallPluginsWith(
     await handleEnumerationFailure(opts, err as Error, cardinality);
     return [];
   }
+
   const { cardinality, targets } = selection;
 
   if (targets.length === 0) {

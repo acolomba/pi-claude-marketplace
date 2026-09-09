@@ -5,8 +5,8 @@ import path from "node:path";
 import test, { type TestContext } from "node:test";
 
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
-import { MarketplaceNotAddedSignal } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts";
 import { selectReinstallTargets } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts";
+import { MarketplaceNotAddedSignal } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
@@ -499,12 +499,16 @@ test("reports a marketplace removed after scope resolution", async (testContext)
     stdio: ["ignore", "ignore", "pipe", "ipc"],
   });
   testContext.after(() => {
-    if (monitor.exitCode === null && monitor.signalCode === null) monitor.kill("SIGTERM");
+    if (monitor.exitCode === null && monitor.signalCode === null) {
+      monitor.kill("SIGTERM");
+    }
   });
   await new Promise<void>((resolve, reject) => {
     monitor.once("error", reject);
     monitor.on("message", (message) => {
-      if (message === "ready") resolve();
+      if (message === "ready") {
+        resolve();
+      }
     });
   });
 
