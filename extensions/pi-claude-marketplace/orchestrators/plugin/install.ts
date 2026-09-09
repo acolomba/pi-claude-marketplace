@@ -378,12 +378,18 @@ interface InstallCtx {
   stagedWorkflowNames: readonly string[];
   // Aggregated soft warnings from the bridges (e.g. agents bridge cleanup leaks).
   bridgeWarnings: string[];
-  // D-07 discovery warnings from the skills, commands and agents bridges: an
-  // artifact the plugin author shipped that this install did NOT materialize
+  // D-07 discovery warnings from the skills, commands and workflows bridges.
+  // Each names ONE declared component and what became of it: either an
+  // artifact the plugin author shipped that this install did not materialize
   // (a duplicate generated name, an unreadable subdirectory, a source path
-  // that produces no valid name). Kept apart from `bridgeWarnings` because
-  // D-19-01 as amended surfaces these in standalone mode and the hygiene
-  // warnings beside them stay suppressed.
+  // that produces no valid name), or -- WGATE-01 -- one it DID materialize
+  // with a caveat, such as a workflow script the host engine will refuse to
+  // load. The second half is why the rendered header claims no disposal.
+  //
+  // The agents bridge is not a feeder: it mixes three kinds of warning onto
+  // one result field and rides `bridgeWarnings` instead. Kept apart from that
+  // array because D-19-01 as amended surfaces these in standalone mode and
+  // the hygiene warnings beside them stay suppressed.
   discoveryWarnings: string[];
   // Bridge-side per-record AG-5 foreign-content rows -- routed to notifyWarning post-success.
   agentForeignFailures: { generatedName: string; reason: string }[];
