@@ -496,7 +496,7 @@ Plans:
 - [ ] 06-07-PLAN.md — Complete resolver behavior extraction before bulk caller migration
 - [ ] 06-08-PLAN.md — Migrate all remaining production resolver callers in bounded groups
 - [ ] 06-09-PLAN.md — Migrate all remaining production resolver callers in bounded groups
-- [ ] 06-10-PLAN.md — Finish resolver ownership, including the authorized import-only stage exception, and delete the legacy hub/test
+- [ ] 06-10-PLAN.md — Repoint resolver documentation, gates, and non-protected bridge tests
 - [ ] 06-11-PLAN.md — Finish resolver ownership, including the authorized import-only stage exception, and delete the legacy hub/test
 - [ ] 06-12-PLAN.md — Start notification extraction with type and security leaves
 - [ ] 06-13-PLAN.md — Extract deterministic notification grammar and sorting leaves
