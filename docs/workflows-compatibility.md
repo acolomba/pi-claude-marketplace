@@ -9,7 +9,7 @@ The upstream column reflects Claude Code's published plugins reference at [code.
 Every claim about either engine carries its evidence grade where it is made. The grades are:
 
 - **source-read at 3.10.1** -- the engine's own source was read and nothing was executed.
-- **runtime-measured at 3.10.1** -- a probe ran against the installed engine and observed the result (Spike 027).
+- **runtime-measured at 3.10.1** -- something was run against the installed engine and the result observed. More than one driver carries this grade: Spike 027's probes, and the live canary named beside the claim it establishes.
 - **measured at 3.5.1** -- observed against an earlier engine release and not re-driven since.
 - **read from the 2.1.251 binary** -- the string or schema was read out of the shipped Claude Code executable.
 - **documented upstream** -- Claude Code's published reference states it.
@@ -131,17 +131,23 @@ The columns here name two Pi extensions rather than the two hosts, because the q
 
 ### `agent()` failure semantics
 
-The three runtimes disagree about what a failed subagent call does, and the two host-side claims hold different grades:
+The chosen engine sorts a failed `agent()` call into a recoverable class and a non-recoverable one, and the class decides the outcome. The two hosts agree on the first and part company on the second:
 
-| Runtime                             | On a failed `agent()` call | Grade                                                                                                                |
-| ----------------------------------- | -------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| Claude Code                         | resolves to `null`         | read from the 2.1.251 binary, whose own prose says to filter with `.filter(Boolean)`                                 |
-| `@nicknisi/pi-workflows`            | throws                     | **runtime-measured**                                                                                                 |
-| `@quintinshaw/pi-dynamic-workflows` | throws                     | **source-read only** -- every failure branch in its agent implementation throws, and none has been driven at runtime |
+| Runtime                             | On a failed `agent()` call                                                 | Grade                                                                                |
+| ----------------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| Claude Code                         | resolves to `null`                                                         | read from the 2.1.251 binary, whose own prose says to filter with `.filter(Boolean)` |
+| `@nicknisi/pi-workflows`            | throws                                                                     | **runtime-measured**                                                                 |
+| `@quintinshaw/pi-dynamic-workflows` | resolves to `null` when the failure is recoverable, rejects when it is not | **runtime-measured at 3.10.1** by `tests/live-uat/workflow-agent-failure-canary.mjs` |
 
-The chosen engine's behavior has never been observed at run time, because driving it needs real subagent spawn machinery the fixtures avoid. It is stated here at the grade it holds today. Upgrading it to a measurement is separate work that has not been done, and no result should be inferred from this section until it has been.
+A recoverable failure resolves to `null` once the retry budget is exhausted, and the default budget is a single attempt (source-read at 3.10.1, `src/workflow.ts:990-995,791-792`). The engine's error classification ends in a catch-all arm that marks any plainly-thrown `Error` recoverable (`src/errors.ts:200-204`), so `null` is the ordinary outcome rather than an edge case: a subagent that dies because no credential resolves comes back as `null`. Only the non-recoverable class rejects, and its codes are named ones -- `MODEL_NOT_FOUND`, `AGENT_LIMIT_EXCEEDED`, `TOKEN_BUDGET_EXHAUSTED`, `SCRIPT_VALIDATION_ERROR` -- each carrying `recoverable: false`, so a reader can tell which class they hit from the error itself.
 
-The practical consequence for a plugin author: a script written for Claude Code that leans on `agent()` resolving to `null` -- a `pipeline(...)` followed by `.filter(Boolean)` -- may abort under Pi instead of dropping the failed item, on the source read above.
+This document previously said that every failure branch in the chosen engine's `agent()` throws. That was a source read, and driving the engine overturned it. The canary named in the table observed both sides of the split in one credential-free run: a missing-provider failure resolved to `null`, and a model spec resolving to nothing rejected with `MODEL_NOT_FOUND`.
+
+The two engines therefore agree on the ordinary failure. Upstream's own contract is conditional in the same way -- it returns `null` when the subagent "dies on a terminal API error after retries (filter with `.filter(Boolean)`)" (read from the 2.1.251 binary) -- and the engine's recoverable class is the direct analogue of that condition. What remains is the narrower divergence: on the non-recoverable class this engine rejects, and an uncaught rejection ends the whole run and aborts every sibling call still in flight (source-read at 3.10.1, `src/workflow.ts:1430-1471`).
+
+The practical consequence for a plugin author inverts with it. A script written for Claude Code that fans out and drops falsy results -- a `pipeline(...)` or `parallel(...)` followed by `.filter(Boolean)` -- does not die here on the ordinary failure; it drops the failed items and finishes. Both fan-out helpers carry the same recoverable-to-`null` arm as a bare `agent()` call: three deliberately failed items came back as three rows, none survived the filter, and the run completed (runtime-measured at 3.10.1). What such a script does need to defend against is the non-recoverable class, which ends the run instead of yielding a `null` the filter can drop.
+
+That pattern is what upstream scripts actually use. In Claude Code's own marketplace clone `claude-plugins-official`, the two Anthropic-authored plugins that ship workflows -- `claude-security` 0.11.0 and `code-modernization`, which declares no version -- carry seven scripts between them, read 2026-09-09. Counting textual occurrences rather than matching lines, because one of those scripts is minified onto a single line and holds 14 `.filter(Boolean)` occurrences by itself: six of the seven scripts call `.filter(Boolean)` (26 occurrences), six call `parallel()` (14 calls), and two call `pipeline()` (3 calls). Those are three separate counts and not one figure. They come from an un-pinned clone on one machine, and are given with their provenance and their counting rule so a reader holding the same clone can re-derive them; a reader without it should take the consequence above, which follows from the engine's code rather than from any count.
 
 ## Naming
 
