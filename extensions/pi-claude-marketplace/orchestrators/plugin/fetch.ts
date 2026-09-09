@@ -480,7 +480,7 @@ async function reasonedRow(
   meta: { version?: string; description?: string },
   status: FetchStatus,
 ): Promise<FetchMsg> {
-  const { resolveStrict } = await import("../../domain/resolver.ts");
+  const { resolveStrict } = await import("../../domain/plugin-resolver.ts");
 
   try {
     // `reasonedRow` is reached only after `fetchOne` has materialized a git

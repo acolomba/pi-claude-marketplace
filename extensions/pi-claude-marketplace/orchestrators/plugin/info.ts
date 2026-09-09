@@ -38,7 +38,7 @@ import {
 } from "../../domain/components/hooks.ts";
 import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest, type MarketplaceManifest } from "../../domain/manifest.ts";
-import { resolveStrict } from "../../domain/resolver.ts";
+import { resolveStrict } from "../../domain/plugin-resolver.ts";
 import {
   parsePluginSource,
   type GitBackedSource,
