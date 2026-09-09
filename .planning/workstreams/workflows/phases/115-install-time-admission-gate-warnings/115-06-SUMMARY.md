@@ -307,6 +307,17 @@ None — no external service configuration required.
   entry the rest of phase 115 touches in this same file, and this plan changed nothing
   else in it.
 
+## Self-Check: PASSED
+
+Run after the SUMMARY commit (`4be654c5`), against the committed tree:
+
+- `[ -f .planning/workstreams/workflows/phases/115-install-time-admission-gate-warnings/115-06-SUMMARY.md ]` — FOUND.
+- `git log --oneline --all | grep f89c6dc8` — FOUND. Same for `4be654c5`.
+- Task 1 verify 1 and verify 2 re-run against the committed `.planning/BACKLOG.md` — both exit `0`.
+- Plan-level `test -z "$(git diff HEAD --name-only -- package.json package-lock.json extensions tests)"` — exit `0`. No source, no manifest (T-115-30).
+- `git diff --name-only f89c6dc8~1 HEAD` — exactly two paths, `.planning/BACKLOG.md` and this SUMMARY. Nothing else moved (T-115-28).
+- The reviewer-diff line numbers this SUMMARY cites were MEASURED, not assumed: `grep -n '^<!--\|^-->' .planning/BACKLOG.md` prints `891`, `900`, `2508`, `2516` — the new block and the pre-existing instance at its post-prune position.
+
 ---
 *Phase: 115-install-time-admission-gate-warnings*
 *Completed: 2026-09-09*
