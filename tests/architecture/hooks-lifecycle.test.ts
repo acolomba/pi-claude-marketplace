@@ -52,7 +52,7 @@ const EVENT_ROUTER_PATH = path.join(
 
 const INSTALL_PATH = path.join(ORCH_DIR, "install-flow.ts");
 const UNINSTALL_PATH = path.join(ORCH_DIR, "uninstall.ts");
-const REINSTALL_PATH = path.join(ORCH_DIR, "reinstall.ts");
+const REINSTALL_PATH = path.join(ORCH_DIR, "reinstall-flow.ts");
 const UPDATE_PATH = path.join(ORCH_DIR, "update-swap.ts");
 
 /**
@@ -176,13 +176,13 @@ test("WR-03 Block B: uninstall.ts pairs removePluginConfigFromCache with rebuild
 });
 
 // ──────────────────────────────────────────────────────────────────────────
-// Block C: WR-03 / D-60-05 -- reinstall.ts explicit remove + add + rebuild
+// Block C: WR-03 / D-60-05 -- reinstall-flow.ts explicit remove + add + rebuild
 // inside the per-plugin lock. The mutator pair lives in `runLockedReinstall`
 // (the re-install does NOT delegate to install/uninstall, so the wiring
 // must be present in THIS file -- D-60-05 audit closure).
 // ──────────────────────────────────────────────────────────────────────────
 
-test("WR-03 Block C: reinstall.ts wires remove + add + rebuildRoutingTables in its per-plugin lock", async () => {
+test("WR-03 Block C: reinstall-flow.ts wires remove + add + rebuildRoutingTables in its per-plugin lock", async () => {
   const lines = await readNonCommentLines(REINSTALL_PATH);
 
   // Both cache mutators must appear as call sites (not just imports). The
@@ -199,12 +199,12 @@ test("WR-03 Block C: reinstall.ts wires remove + add + rebuildRoutingTables in i
   const hasRebuild = lines.some(
     (l) => l.includes("rebuildRoutingTables(") && !/\bimport\b/.test(l),
   );
-  assert.ok(hasRemove, "reinstall.ts: missing removePluginConfigFromCache call site");
+  assert.ok(hasRemove, "reinstall-flow.ts: missing removePluginConfigFromCache call site");
   assert.ok(
     hasAdd,
-    "reinstall.ts: missing addPluginConfigToCache / readAndCachePluginHooks call site",
+    "reinstall-flow.ts: missing addPluginConfigToCache / readAndCachePluginHooks call site",
   );
-  assert.ok(hasRebuild, "reinstall.ts: missing rebuildRoutingTables call site");
+  assert.ok(hasRebuild, "reinstall-flow.ts: missing rebuildRoutingTables call site");
 
   // The remove must be followed within window by the rebuild call.
   assertMutatorFollowedByRebuilder(
@@ -212,7 +212,7 @@ test("WR-03 Block C: reinstall.ts wires remove + add + rebuildRoutingTables in i
     "removePluginConfigFromCache(",
     "rebuildRoutingTables(",
     30,
-    "reinstall.ts",
+    "reinstall-flow.ts",
   );
 });
 

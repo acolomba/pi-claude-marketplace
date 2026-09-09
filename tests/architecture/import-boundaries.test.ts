@@ -207,8 +207,21 @@ test("D-11: npm run fallow runs dead-code unfiltered, so cycles are gated", asyn
  * `bootstrap.ts` is deliberately absent from the plugin side: it is a composer,
  * not a ledger, and composing `addMarketplace` + `setMarketplaceAutoupdate` is
  * its entire job.
+ *
+ * The install, update, and reinstall ledgers carry a `-flow` suffix; their
+ * sibling `*-probe`/`*-swap`/`*-record`/`*-row` modules are extracted helpers
+ * and leaf composers, not ledgers. This list names the ledger entry points
+ * only, so it must track their filenames exactly -- both directions of the gate
+ * below derive from it, and a name that resolves to nothing silently stops
+ * matching instead of failing.
  */
-const PLUGIN_LEDGERS = ["install", "update", "uninstall", "reinstall", "enable-disable"] as const;
+const PLUGIN_LEDGERS = [
+  "install-flow",
+  "update-flow",
+  "uninstall",
+  "reinstall-flow",
+  "enable-disable",
+] as const;
 const MARKETPLACE_LEDGERS = ["add", "remove", "update", "autoupdate"] as const;
 
 // Non-global on purpose: a /g regex carries `lastIndex` across `.test()` calls
