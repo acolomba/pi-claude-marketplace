@@ -3,9 +3,9 @@ phase: "117"
 slug: "measured-agent-failure-evidence"
 # status lifecycle: draft (seeded by plan-phase) → validated (set by validate-phase §6)
 # audit-milestone §5.5 distinguishes NOT-VALIDATED (draft) from PARTIAL (validated + nyquist_compliant: false) (#2117)
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: validated
+nyquist_compliant: true
+wave_0_complete: true
 created: "2026-09-09"
 ---
 
@@ -60,14 +60,14 @@ item rather than an automated gate.
 
 ## Wave 0 Requirements
 
-- [ ] `tests/live-uat/workflow-agent-failure-canary.mjs` — covers WEVID-01. MUST
+- [x] `tests/live-uat/workflow-agent-failure-canary.mjs` — covers WEVID-01. MUST
       carry the whole-file `fallow-ignore-file unused-file` marker: a marker-less
       `tests/**/*.mjs` fails `fallow dead-code` with exit 1, measured by planting,
       and the `npm-fallow` pre-commit hook fires on it too.
-- [ ] `tests/live-uat/README.md` — a third row in the canary table plus a
+- [x] `tests/live-uat/README.md` — a third row in the canary table plus a
       per-canary section. Note the "Needs live `pi`" column: this canary's answer
       is **no** (engine only), which is new for that table.
-- [ ] No framework install needed.
+- [x] No framework install needed.
 
 ---
 
@@ -107,13 +107,56 @@ gated when it is not.
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] The live canary run (green) and the `--invert` run (red) both recorded as transcripts
-- [ ] A0 proven to fire, so a credentialed machine cannot pass silently
-- [ ] All four `105-VERIFICATION.md` contradiction sites corrected, including the `evidence:` block and the dangling `WINDOWS.md (id 5)` citation
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags
+- [x] The live canary run (green) and the `--invert` run (red) both recorded as transcripts
+- [x] A0 proven to fire, so a credentialed machine cannot pass silently
+- [x] All four `105-VERIFICATION.md` contradiction sites corrected, including the `evidence:` block and the dangling `WINDOWS.md (id 5)` citation
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** validated 2026-09-09 — nyquist-compliant, 0 gaps
+
+---
+
+## Validation Audit 2026-09-09
+
+| Metric | Count |
+|--------|-------|
+| Gaps found | 0 |
+| Resolved | 0 |
+| Escalated | 0 |
+
+No auditor was spawned — both Wave 0 gaps closed during execution and every map
+row has a real observation behind it. Measured rather than read:
+
+| Map row | What closes it |
+|---|---|
+| recoverable `agent()` failure resolves to `null` at 3.10.1 | canary assertion A1, run green against a real scratch engine |
+| the assertion can fail | `--invert` exits 1 naming A1; transcript verbatim in `117-01-SUMMARY.md` |
+| **A0: the run actually measured something** | present at `workflow-agent-failure-canary.mjs:217-221`, asserted BEFORE any verdict is read, with its own `NOTHING WAS MEASURED` non-zero exit |
+| the canary parses | `node --check` exits 0 |
+| the doc names a path that resolves | `no-stale-test-citations` passes |
+| the doc's pinned cases are unmoved | `workflows-doc-pins` passes (5 pass / 0 fail across the pair) |
+| `105-VERIFICATION.md` claims no run that did not happen | five sites corrected, including the `evidence:` block |
+
+**A0 was proven to fire, not merely written.** The seam
+`const observedLogs = recoverable.logs;` was replaced with `[]` — the exact shape
+a SUCCESSFUL call produces — and the run exited 1 with `NOTHING WAS MEASURED`
+without reading a verdict. That control is the one that mattered most here: this
+phase exists because a record once claimed a canary had run when it had not, and
+a canary that passes on a credentialed machine having measured nothing would have
+been the same defect wearing new clothes.
+
+**Two risks the research rated open were closed by measurement.** The dupes gate
+did not move — `fallow dupes` reports the same `1,045 lines (1.4%) across 40
+files` as before the third canary existed, so no `ignoredClones` entry was added
+or needed. And `PI_CODING_AGENT_DIR` alone proved sufficient isolation: `HOME`
+was untouched on a machine that HAS working credentials, and every run still
+induced the failure.
+
+**One figure was deliberately not published.** The Anthropic clone turns out to
+be pinned by a `.gcs-sha` the research missed, but the executor did not publish
+that hash, because what it pins could not be established. Publishing a figure of
+unverified semantics is the exact defect this phase corrects.
