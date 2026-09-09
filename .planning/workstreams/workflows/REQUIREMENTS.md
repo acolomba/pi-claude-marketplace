@@ -58,17 +58,37 @@ Only the requirements below are new, and all of them exist because #154 landed.
 
 ### Evidence
 
-<!-- Seams: tests/live-uat/workflow-storage-canary.mjs (the standing live driver), docs/workflows-compatibility.md (script-semantics section and its evidence-grade labels). -->
+<!-- Seams: tests/live-uat/workflow-agent-failure-canary.mjs (the standing live driver), docs/workflows-compatibility.md (script-semantics section and its evidence-grade labels). -->
 
 - [x] **WEVID-01**: The live-UAT canary drives the host engine's `agent()` failure path and asserts the observed behavior, with a negative control proving the assertion can fail. This is currently the weakest link in the compatibility chain and the one that matters most: it decides whether a script degrades or dies.
-- [x] **WEVID-02**: `docs/workflows-compatibility.md` restates the `agent()` divergence at its measured grade, and names the concrete consequence for the upstream `pipeline(...)` + `.filter(Boolean)` pattern -- which six of the seven real Anthropic workflow scripts use, twelve times in total.
+- [x] **WEVID-02**: `docs/workflows-compatibility.md` restates the `agent()` divergence at its measured grade, and names the concrete consequence for the upstream `pipeline(...)` + `.filter(Boolean)` pattern. Any figure published beside that consequence carries its provenance and its counting rule. Measured 2026-09-09 over the seven Anthropic-authored workflow scripts in Claude Code's own `claude-plugins-official` clone, counting textual occurrences rather than matching lines: six of the seven call `.filter(Boolean)` (26 occurrences), six call `parallel()` (14 calls), and two call `pipeline()` (3 calls). Those are three separate counts over two different populations, not one composite figure.
+
+> **WEVID-02 census correction, 2026-09-09 (D-117-06).** The clause above previously
+> read "-- which six of the seven real Anthropic workflow scripts use, twelve times in
+> total". Both halves were wrong and this sentence was the only place either was ever
+> written; the published document never carried them. "Six of the seven" is the
+> `.filter(Boolean)` population, while the `pipeline(` population is two of seven -- the
+> claim named one population and counted another. The total reproduces only by counting
+> matching LINES, a rule `docs/workflows-compatibility.md` forbids for exactly this
+> reason: one of the seven scripts is minified onto a single line and carries 14
+> `.filter(Boolean)` occurrences by itself, so a line rule undercounts it 14-to-1. The
+> replacement states the two populations separately with the counting rule beside them,
+> and matches the document word for word so the two cannot disagree about a number.
 
 ### Documentation Hygiene
 
 <!-- Seams: .planning/BACKLOG.md (the trailing <!-- Pruned --> convention), .planning/workstreams/workflows/milestones/workflows-phases/105-*/105-VERIFICATION.md. -->
 
 - [x] **WDOCS-01**: `WFLW-01` is pruned from `.planning/BACKLOG.md` under the file's existing pruned-footer convention, naming the milestone that closed it, so the backlog stops advertising shipped work as open.
-- [ ] **WDOCS-02**: `105-VERIFICATION.md` no longer contradicts itself. Its evidence table currently records the live canary as `UNRUN` while its own frontmatter and status line record it closed on 2026-08-16; the current record wins and the stale wording goes.
+- [ ] **WDOCS-02**: `105-VERIFICATION.md` no longer contradicts itself. Its evidence table records the live canary as `UNRUN` while its own frontmatter and status line recorded it closed on 2026-08-16. The `UNRUN` side is the true one and the closure claim was the over-claim, settled from inside the record by the entry's own reason-for-human field; the closure wording goes and every site that asserted it says so.
+
+> **WDOCS-02 disambiguation, 2026-09-09 (D-117-03, D-117-07).** The sentence above
+> previously ended "the current record wins and the stale wording goes", which does not
+> say which of the two contradicting sides is current. It reads either way, and the
+> reading a later verifier picks decides whether this requirement asks for the closure to
+> be removed or for the `UNRUN` cells to be removed -- opposite work. Named explicitly
+> here for the same reason the roadmap criterion it mirrors was corrected: a requirement
+> and the criterion measuring it must not be readable as asking for opposite outcomes.
 
 ## Future Requirements
 

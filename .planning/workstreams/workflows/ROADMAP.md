@@ -663,22 +663,82 @@ Plans:
 **Requirements**: WEVID-01, WEVID-02, WDOCS-02
 **Success Criteria** (what must be TRUE):
 
-1. `tests/live-uat/workflow-storage-canary.mjs` drives the host engine's
+1. `tests/live-uat/workflow-agent-failure-canary.mjs` drives the host engine's
    `agent()` failure path and asserts the observed behavior — rejection versus
    resolution to `null` — instead of restating the source read.
+
+> **Criterion 1 corrected 2026-09-09 (D-117-01).** It previously named
+> `tests/live-uat/workflow-storage-canary.mjs` and read as though that file were
+> being extended. It was not: the driver existed on the spike branch and the replay
+> never re-landed it, so the criterion named a file absent from this branch and no
+> correct work could satisfy it. The canary this phase created carries only the
+> `agent()` assertions WEVID-01 asks for; the storage assertions the old name implies
+> belong to an archived milestone's requirement and are a recorded deferred idea.
+
 2. A negative control in the same driver proves the assertion can fail:
    inverting the expectation turns the run red, so a green run means something.
-3. The canary has been run against a real engine 3.5.1 through the scratch
+3. The canary has been run against a real engine 3.10.1 through the scratch
    install route (`npm install --prefix` plus `PI_WORKFLOW_ENGINE_ROOT`), and
    its result is recorded. The engine is deliberately not a declared
-   dependency, so this is a HUMAN-UAT item rather than an automated gate, and
-   the phase carries it as one.
+   dependency, but the failure the canary induces is reachable with no provider
+   credentials, so the run is driven by the phase's own task verification and
+   its transcript recorded there — green and inverted both — rather than left
+   waiting on an operator.
+
+> **Criterion 3 corrected 2026-09-09 (D-117-02, D-117-05).** Two stale premises, one
+> note. It previously pinned engine **3.5.1**, a version this phase did not use: that
+> number was inherited from an archived phase's run, and the version actually observed
+> at run time from the engine's own manifest was 3.10.1, which the compatibility
+> document already carries for its other rows. And it previously framed the run as "a
+> HUMAN-UAT item rather than an automated gate", reasoning from the engine not being a
+> declared dependency. That reasoning held when it was written. It no longer does:
+> pointing the agent-state directory at an empty sandbox makes the real subagent runner
+> fail for want of an API key, so the failure path needs no credentials and no network,
+> and this phase's own `<automated>` verify blocks installed the scratch engine and drove
+> the canary as ordinary task verification. The engine is still undeclared and the driver
+> is still outside `npm run check`; what changed is that a run no longer waits on a
+> human. A later reader must not be told to run this by hand when the phase's own gate
+> already ran it and recorded the transcript.
+
 4. `docs/workflows-compatibility.md` states the `agent()` divergence at its
    measured grade and names the concrete consequence for the upstream
-   `pipeline(...)` plus `.filter(Boolean)` pattern — used by six of the seven
-   real Anthropic workflow scripts, twelve times in total.
-5. `105-VERIFICATION.md` no longer records the live canary as `UNRUN` while its
-   own frontmatter and status line record it closed; the current record wins.
+   `pipeline(...)` plus `.filter(Boolean)` pattern, and any figure published
+   beside that consequence carries its provenance and its counting rule.
+   Measured 2026-09-09 over the seven Anthropic-authored workflow scripts in
+   Claude Code's own `claude-plugins-official` clone, counting textual
+   occurrences rather than matching lines: six of the seven call
+   `.filter(Boolean)` (26 occurrences), six call `parallel()` (14 calls), and
+   two call `pipeline()` (3 calls) — three separate counts over two different
+   populations, not one composite figure.
+
+> **Criterion 4 corrected 2026-09-09 (D-117-06).** It previously described the pattern
+> as "used by six of the seven real Anthropic workflow scripts, twelve times in total",
+> a composite figure that had never been measured on any tree. Measurement broke both
+> halves: the six-of-seven population is `.filter(Boolean)`, while `pipeline(` appears in
+> only two of the seven, so the claim named one population and counted another. The total
+> reproduces only by counting matching lines — a rule the document itself forbids,
+> because one of the seven scripts is minified onto a single line carrying 14
+> `.filter(Boolean)` occurrences by itself. The criterion now asks for what was
+> published: the consequence unconditionally, and figures only with the marketplace, the
+> read date and the occurrences-not-lines rule beside them.
+
+5. `105-VERIFICATION.md` no longer contradicts itself about whether the
+   W1/W2/W3 live canary ran. The `UNRUN` side is the true one and the closure
+   claim was the over-claim — the entry's own reason-for-human field says what
+   closed on that date was the previous phase's structurally identical canary
+   route — so every site that asserted the closure says so instead: the entry's
+   outcome field, its evidence narrative, the report's status line and the
+   artifact row, each corrected as a dated note that leaves the retired claim
+   legible rather than erased.
+
+> **Criterion 5 corrected 2026-09-09 (D-117-03, D-117-07).** It previously ended "the
+> current record wins", which does not say which of the two contradicting sides is
+> current — it reads either way, and the two readings ask for opposite work. This phase's
+> decision record settles it from inside the record itself, so the criterion now names
+> the winning side outright. It also names the fourth site the discuss pass missed: the
+> frontmatter `evidence:` block, which narrated a clean run of the three assertions in
+> the same entry whose reason field calls them unexercised. Correcting the outcome field
+> without it would have left the persuasive half of the false story standing.
 
 **Plans**: 3 plans in 3 waves
 
