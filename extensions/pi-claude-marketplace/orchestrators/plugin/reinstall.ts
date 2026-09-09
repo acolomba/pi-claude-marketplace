@@ -54,13 +54,7 @@ import { asAbsolutePluginRoot } from "../../domain/plugin-root.ts";
 import { parsePluginSource } from "../../domain/source.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { clonePluginRecord, isRecordedButDisabled } from "../../persistence/state-io.ts";
-import {
-  composeErrorWithCauseChain,
-  errorWithManualRecovery,
-  findManualRecoveryError,
-  ManualRecoveryError,
-  PluginShapeError,
-} from "../../shared/errors.ts";
+import { composeErrorWithCauseChain, errorWithManualRecovery } from "../../shared/errors.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import {
   type PluginFailedMessage,
@@ -79,6 +73,7 @@ import { DEFAULT_CREDENTIAL_OPS } from "../auth-host.ts";
 
 import { discoverGeneratedNames } from "./discover-names.ts";
 import { probeReinstallClone } from "./reinstall-clone-probe.ts";
+import { recordReinstallOutcome, reinstallReasonsFromError } from "./reinstall-record.ts";
 import { REAL_REINSTALL_TRANSACTION } from "./reinstall-replace.ts";
 import { selectReinstallTargets } from "./reinstall-targets.ts";
 import {
@@ -101,27 +96,14 @@ import type { PluginEntry } from "../../domain/components/plugin.ts";
 import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
 import type { GitBackedSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
-import type { ExtensionState, PluginInstallRecord } from "../../persistence/state-io.ts";
 import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
-import type { HookSummaryEntry } from "../../shared/concerns/hooks.ts";
-import type { DegradeKind } from "../../shared/notify-reasons.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
-import type {
-  ReinstallFailedOutcome,
-  ReinstallPluginOutcome,
-  ReinstallReinstalledOutcome,
-} from "../types.ts";
+import type { ReinstallFailedOutcome, ReinstallPluginOutcome } from "../types.ts";
 import type { ReinstallCloneCacheSeam } from "./reinstall-clone-probe.ts";
-import type {
-  ReinstallPreparedHandles,
-  ReinstallTransaction,
-  RemoveDataDirFn,
-} from "./reinstall-replace.ts";
+import type { ReinstallTransaction, RemoveDataDirFn } from "./reinstall-replace.ts";
 import type { ReinstallPluginsTarget, SelectedReinstallTarget } from "./reinstall-targets.ts";
-
-export type { ReinstallPluginOutcome } from "../types.ts";
 
 /** Hook-routing capabilities consumed by committed reinstall finalization. */
 export type ReinstallHooksRouting = Pick<
@@ -424,18 +406,23 @@ function handleSinglePluginFailure(
   render: "default" | "none",
 ): ReinstallFailedOutcome {
   const { ctx, pi, scope, marketplace, plugin } = opts;
+  const outcome = recordReinstallOutcome({
+    partition: "failed",
+    name: plugin,
+    marketplace,
+    scope,
+    error: err,
+  });
+  if (outcome.partition !== "failed") {
+    throw new Error("Reinstall failure composition returned a non-failure outcome.");
+  }
 
-  // notify() owns the cause-chain trailer via the PluginFailedMessage /
-  // PluginManualRecoveryMessage `cause?` field. The
-  // `composeErrorWithCauseChain(err)` text still feeds the orchestrated-mode
-  // `notes` field below (consumers outside the notify path).
-  const message = composeErrorWithCauseChain(err);
   const causeErr = err;
-  const typedReasons = reasonsFromTypedError(err);
-  const isManualRecovery = findManualRecoveryError(err) !== undefined;
+  const typedReasons = outcome.reasons;
+  const isManualRecovery = outcome.failureClass === "manual-recovery";
   const reasons: readonly ContentReason[] = isManualRecovery
     ? (["rollback partial"] as const)
-    : (typedReasons ?? narrowReasons([message]));
+    : (typedReasons ?? narrowReasons(outcome.notes));
 
   if (render !== "none") {
     // Per-row scope is OMITTED (orphan-fold) since it matches the
@@ -470,15 +457,7 @@ function handleSinglePluginFailure(
     );
   }
 
-  return {
-    partition: "failed",
-    name: plugin,
-    marketplace,
-    scope,
-    notes: [message],
-    ...(isManualRecovery && { failureClass: "manual-recovery" as const }),
-    ...(typedReasons !== undefined && { reasons: typedReasons }),
-  };
+  return outcome;
 }
 
 async function reinstallPluginsWith(
@@ -628,7 +607,7 @@ async function handleEnumerationFailure(
     return;
   }
 
-  const typedReasons = reasonsFromTypedError(err);
+  const typedReasons = reinstallReasonsFromError(err);
   const reasons: readonly ContentReason[] =
     typedReasons ?? narrowReasons([composeErrorWithCauseChain(err)]);
   const causeErr = err;
@@ -669,31 +648,6 @@ async function handleEnumerationFailure(
  * Reason via substring matching. Forcing a default Reason here would
  * shadow that fallback.
  */
-function reasonsFromTypedError(err: unknown): readonly ContentReason[] | undefined {
-  if (err instanceof PluginShapeError) {
-    // Reinstall's sole producer is requirePartialInstallable(..., "install"),
-    // whose only failure kind is `not-installable`.
-    return ["source mismatch"] as const;
-  }
-
-  if (err instanceof ManualRecoveryError) {
-    return ["rollback partial"] as const;
-  }
-
-  if (err instanceof Error) {
-    const code = (err as NodeJS.ErrnoException).code;
-    if (code === "EACCES" || code === "EPERM") {
-      return ["permission denied"] as const;
-    }
-
-    if (code === "ENOENT" || code === "ENOTDIR") {
-      return ["source missing"] as const;
-    }
-  }
-
-  return undefined;
-}
-
 async function runLockedReinstall(
   transaction: ReinstallTransaction,
   hooksRouting: ReinstallHooksRouting,
@@ -706,7 +660,13 @@ async function runLockedReinstall(
   const oldRecord = mp?.plugins[plugin];
   if (mp === undefined || oldRecord === undefined) {
     return {
-      outcome: { partition: "skipped", name: plugin, marketplace, scope, notes: ["not installed"] },
+      outcome: recordReinstallOutcome({
+        partition: "skipped",
+        name: plugin,
+        marketplace,
+        scope,
+        reason: "not installed",
+      }),
       discoveryWarnings: [],
       bridgeWarnings: [],
     };
@@ -728,13 +688,13 @@ async function runLockedReinstall(
   // evidence that anything is on disk and must not be read as one.
   if (isRecordedButDisabled(oldRecord)) {
     return {
-      outcome: {
+      outcome: recordReinstallOutcome({
         partition: "skipped",
         name: plugin,
         marketplace,
         scope,
-        notes: ["already disabled"],
-      },
+        reason: "already disabled",
+      }),
       discoveryWarnings: [],
       bridgeWarnings: [],
     };
@@ -775,16 +735,19 @@ async function runLockedReinstall(
   });
 
   let invalidConfigWriteBack: boolean;
+  let outcome: ReinstallPluginOutcome;
   try {
-    updateStateRecord(
-      tx.state,
+    outcome = recordReinstallOutcome({
+      partition: "reinstalled",
+      name: plugin,
       marketplace,
-      plugin,
-      oldSnapshot,
+      scope,
+      state: tx.state,
+      oldRecord: oldSnapshot,
       installable,
-      replacement.handles,
-      replacement.hookEntries,
-    );
+      handles: replacement.handles,
+      hookEntries: replacement.hookEntries,
+    });
 
     // WB-01 / A7: deep-equal short-circuit preserves RECON-05
     // mtime invariant. Reinstall is invoked by the user (both standalone and
@@ -851,7 +814,7 @@ async function runLockedReinstall(
     ...(await transaction.finalizeReinstalledPlugin(replacement)),
   ];
   return {
-    outcome: successOutcome(scope, marketplace, plugin, oldSnapshot, replacement.handles),
+    outcome,
     discoveryWarnings: replacement.discoveryWarnings,
     bridgeWarnings,
     ...(invalidConfigWriteBack && { invalidConfigWriteBack: true }),
@@ -926,132 +889,4 @@ async function resolveInstallable(input: {
   });
   requirePartialInstallable(resolved, "install");
   return resolved;
-}
-
-function updateStateRecord(
-  state: ExtensionState,
-  marketplace: string,
-  plugin: string,
-  oldRecord: PluginInstallRecord,
-  installable: MaterializablePlugin,
-  handles: ReinstallPreparedHandles,
-  hookEntries: readonly HookSummaryEntry[] | undefined,
-): void {
-  const mp = state.marketplaces[marketplace];
-  if (mp?.plugins[plugin] === undefined) {
-    throw new Error(
-      `Plugin "${plugin}" was concurrently removed from marketplace "${marketplace}".`,
-    );
-  }
-
-  mp.plugins[plugin] = {
-    // D-68-02: SAME recorded version -- reinstall/backfill is a repair/promotion,
-    // never an upgrade.
-    version: oldRecord.version,
-    resolvedSource: installable.pluginRoot,
-    // PURL-07 / D-78-02: carry the recorded resolvedSha forward. Reinstall is a
-    // repair/promotion, so the git identity survives exactly as version and
-    // installedAt do -- dropping it corrupts GC key derivation and a later
-    // reinstall's pin. The conditional spread leaves path/github-name records
-    // (which never had a resolvedSha) without a spurious field.
-    ...(oldRecord.resolvedSha !== undefined && { resolvedSha: oldRecord.resolvedSha }),
-    // BFILL-01: record the REAL compatibility from the resolve, not a hardcoded
-    // `installable: true`. A partial re-materialize (resolved `partially-available`)
-    // persists `installable: false` with the still-unsupported set, so the
-    // partially-installed derivation (D-66-01) stays truthful; a full one records
-    // `installable: true` with an empty unsupported set.
-    compatibility: {
-      installable: installable.state === "installable",
-      notes: [...installable.notes],
-      supported: [...installable.supported],
-      unsupported: [...installable.unsupported],
-    },
-    resources: resourcesFromHandles(handles, plugin, installable),
-    // D-100-01 / ENBL-10: describe the hooks this re-materialize wrote. Top
-    // level, so it does not belong in `resourcesFromHandles`. Omitted when the
-    // resolved plugin declares no hooks -- that branch removed the subtree.
-    ...(hookEntries !== undefined && { hookEntries: [...hookEntries] }),
-    enabled: true,
-    installedAt: oldRecord.installedAt,
-    updatedAt: new Date().toISOString(),
-  };
-}
-
-function resourcesFromHandles(
-  handles: ReinstallPreparedHandles,
-  plugin?: string,
-  installable?: MaterializablePlugin,
-): PluginInstallRecord["resources"] {
-  return {
-    skills: handles.skills.result.recorded.map((r) => r.generatedName),
-    prompts: handles.commands.result.recorded.map((r) => r.generatedName),
-    agents: handles.agents.result.recorded.map((r) => r.generatedName),
-    mcpServers: handles.mcp.result.recorded.map((r) => r.generatedName),
-    // HOOK-02 / D-57-01: additive required field. WR-03: mirror install-flow.ts
-    // -- when the resolver advertises a hooks config, record the plugin's
-    // id as the slug so `rebuildRoutingTables`' state walk (gated on
-    // `resources.hooks.length > 0`) visits this plugin and pulls its
-    // refreshed `parsedConfigCache` entry into the routing table without
-    // requiring `/reload` (NFR-2). The `successOutcome` caller only needs
-    // the agents / mcpServers entries from this record, so it omits the
-    // `plugin` / `installable` args and the hooks inventory stays empty
-    // for that path (no state write occurs there either).
-    hooks: plugin !== undefined && installable?.hooksConfigPath !== undefined ? [plugin] : [],
-  };
-}
-
-function successOutcome(
-  scope: Scope,
-  marketplace: string,
-  plugin: string,
-  oldRecord: PluginInstallRecord,
-  handles: ReinstallPreparedHandles,
-): ReinstallReinstalledOutcome {
-  const resources = resourcesFromHandles(handles);
-  // WARN-01 / WR-04 / D-86-03: the same per-kind degrade collection
-  // `install-flow.ts` makes off its ledger summary, read here off the prepared
-  // handles the bridges returned. Skill before command by collection order,
-  // matching the install emit order.
-  const degradedKinds = Array.from(
-    new Set<DegradeKind>([
-      ...(handles.skills.result.degraded.length > 0 ? (["skill"] as const) : []),
-      ...(handles.commands.result.degraded.length > 0 ? (["command"] as const) : []),
-    ]),
-  );
-  // CMC-13: surface effective-state per-row soft-dep
-  // predicates so cascade rendering can emit `{requires pi-subagents}` /
-  // `{requires pi-mcp}` iff (declares AND companion unloaded). The
-  // predicate is satisfied iff the plugin's reinstall actually staged
-  // resources of that kind (i.e. the resolved manifest declared them AND
-  // they materialized). Probing companion-loaded state is the
-  // renderer's job via the injected SoftDepProbe.
-  return {
-    partition: "reinstalled",
-    name: plugin,
-    marketplace,
-    scope,
-    version: oldRecord.version,
-    stagedAgentNames: resources.agents,
-    stagedMcpServerNames: resources.mcpServers,
-    declaresAgents: resources.agents.length > 0,
-    declaresMcp: resources.mcpServers.length > 0,
-    resourcesChanged: resourcesChanged(oldRecord.resources, resources),
-    ...(degradedKinds.length > 0 && { degradedKinds }),
-  };
-}
-
-function resourcesChanged(
-  oldResources: PluginInstallRecord["resources"],
-  next: PluginInstallRecord["resources"],
-): boolean {
-  return (
-    next.skills.length > 0 ||
-    next.prompts.length > 0 ||
-    next.agents.length > 0 ||
-    next.mcpServers.length > 0 ||
-    oldResources.skills.length > 0 ||
-    oldResources.prompts.length > 0 ||
-    oldResources.agents.length > 0 ||
-    oldResources.mcpServers.length > 0
-  );
 }

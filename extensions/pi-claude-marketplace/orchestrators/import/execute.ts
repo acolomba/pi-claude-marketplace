@@ -1193,8 +1193,8 @@ export async function importClaudeSettings(
   }
 
   // D-20-02 / D-19-02: cascade construction
-  // mirrors the reinstall.ts recipe at
-  // orchestrators/plugin/reinstall.ts; execute.ts substitutes the
+  // mirrors the reinstall outcome recipe at
+  // orchestrators/plugin/reinstall-record.ts; execute.ts substitutes the
   // import-cascade variant set (added / updated / failed marketplaces).
   // Truly catastrophic throws bubble to Pi runtime -- better for debugging
   // than a polished error message that masks the bug. The inner
