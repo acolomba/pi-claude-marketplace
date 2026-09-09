@@ -84,7 +84,7 @@ import {
   type DisableMsg,
   type EnableMsg,
 } from "./enable-disable.messaging.ts";
-import { runInstallLedger } from "./install.ts";
+import { runInstallLedger } from "./install-outcome.ts";
 import {
   absentTargetReasons,
   applyPartialCascadeFold,
@@ -99,7 +99,7 @@ import {
   writeAdoptingConfigEntries,
 } from "./shared.ts";
 
-import type { InstallFailureCapture, InstallLedgerResult } from "./install.ts";
+import type { InstallFailureCapture, InstallLedgerResult } from "./install-outcome.ts";
 import type { HooksRouting } from "../../bridges/hooks/index.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { DisabledPluginRecord, ExtensionState } from "../../persistence/state-io.ts";

@@ -52,7 +52,9 @@ export interface InstallDisableCascadeOwner {
 }
 
 type MarketplaceStateRecord = ExtensionState["marketplaces"][string];
-type InstalledPluginRecord = MarketplaceStateRecord["plugins"][string];
+/** Installed record supplied to the injected cascade collaborator. */
+export type InstallDisableCascadePluginRecord =
+  ExtensionState["marketplaces"][string]["plugins"][string];
 
 type FailedUnstageOutcome = UnstageOutcome & {
   readonly ok: false;
@@ -68,7 +70,10 @@ function locateFreshlyInstalledRecord(
   marketplace: string,
   plugin: string,
 ):
-  | { readonly marketplace: MarketplaceStateRecord; readonly installed: InstalledPluginRecord }
+  | {
+      readonly marketplace: MarketplaceStateRecord;
+      readonly installed: InstallDisableCascadePluginRecord;
+    }
   | undefined {
   const marketplaceRecord = state.marketplaces[marketplace];
   const installed = marketplaceRecord?.plugins[plugin];
@@ -80,7 +85,7 @@ function locateFreshlyInstalledRecord(
 }
 
 function foldFailedDisableCascade(
-  installed: InstalledPluginRecord,
+  installed: InstallDisableCascadePluginRecord,
   cascade: FailedUnstageOutcome,
   now: () => string,
 ): FreshInstallDisableResult {
@@ -126,7 +131,7 @@ export function composeInstallDisableCascade(dependencies: {
     plugin: string,
     marketplace: string,
     locations: ScopedLocations,
-    installedPlugin: InstalledPluginRecord,
+    installedPlugin: InstallDisableCascadePluginRecord,
   ) => Promise<UnstageOutcome>;
 }): InstallDisableCascadeOwner {
   return {
