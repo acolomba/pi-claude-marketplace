@@ -9,7 +9,7 @@ import {
   createHooksRuntime,
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { registerClaudePluginCommand } from "../../extensions/pi-claude-marketplace/edge/register.ts";
-import { createPluginUpdateOperations } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/update.ts";
+import { createPluginUpdateOperations } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { loadState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";

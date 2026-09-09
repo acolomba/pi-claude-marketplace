@@ -53,7 +53,7 @@ import { getPluginInfo } from "../../extensions/pi-claude-marketplace/orchestrat
 import { createNodeInstallPlugin } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts";
 import { createNodeReinstallPlugins } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts";
 import { createNodeUninstallPlugin } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
-import { createPluginUpdateOperations } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/update.ts";
+import { createPluginUpdateOperations } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { createGitOpsFake } from "../platform/git-ops-fake.ts";
 import { withHermeticEnvironment } from "../platform/hermetic-environment.ts";

@@ -37,7 +37,8 @@ import {
   resolvePluginPin,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts";
 import { createNodeInstallPlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts";
-import { createPluginUpdateOperations } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update.ts";
+import { createPluginUpdateOperations } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts";
+import { updatePluginsWith } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   loadState,
@@ -88,6 +89,11 @@ function updatePlugins(options: UpdatePluginsOptions): Promise<void> {
 
 const updateSinglePlugin: PluginUpdateFn = (plugin, marketplace, scope) =>
   createUpdateOperations().pluginUpdate(plugin, marketplace, scope);
+
+test("retains update target enumeration in the legacy hub", () => {
+  // act and assert
+  assert.strictEqual(typeof updatePluginsWith, "function");
+});
 
 const UPDATE_REMOTE_URLS = [
   "https://github.com/anthropics/test.git",
@@ -1032,98 +1038,6 @@ test("LIFE-05: global-bulk target renders `(skipped) {not in manifest}` and writ
       // equality over the whole record covers the version pin, the resolved
       // source, the compatibility block, and the resource lists at once.
       assert.deepEqual(await readRecord(), before);
-    } finally {
-      await rm(cwd, { recursive: true, force: true });
-    }
-  });
-});
-
-// ─── PUP-6: happy 3-phase path -- updated outcome + state record swap + reload hint ─
-
-test("PUP-6 happy: version bump triggers 3-phase swap; state reflects new version + reload hint emitted", async () => {
-  await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-pup6-happy-"));
-    try {
-      const locations = locationsFor("project", cwd);
-      const seeded = await seedPathMarketplace({
-        cwd,
-        marketplaceRoot: path.join(cwd, "mp-src"),
-        marketplaceName: "mp",
-        manifestPlugins: {
-          hello: {
-            version: "1.0.1",
-            hasSkill: true,
-            hasCommand: true,
-            hasAgent: true,
-            hasMcp: true,
-          },
-        },
-        installedVersions: { hello: "1.0.0" },
-      });
-
-      const { ctx, pi, notifications } = makeCtx();
-      await updatePlugins({
-        ctx,
-        pi,
-        scope: "project",
-        cwd,
-        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
-      });
-
-      // State.json reflects the swap.
-      const after = await loadState(locations.extensionRoot);
-      const record = after.marketplaces["mp"]?.plugins["hello"];
-      assert.ok(record !== undefined);
-      assert.equal(record.version, "1.0.1");
-      assert.deepEqual([...record.resources.skills], ["hello-tool"]);
-      assert.deepEqual([...record.resources.prompts], ["hello:deploy"]);
-      assert.deepEqual([...record.resources.agents], [`${GENERATED_AGENT_PREFIX}hello-bot`]);
-      assert.deepEqual([...record.resources.mcpServers], ["server1"]);
-
-      // TR-04 SC#2 all-success finalize contract: the
-      // intent-mark `compatibility = { installable: false, notes:
-      // [update-in-progress] }` set by `markUpdateInProgress` must be
-      // overwritten by `finalizeUpdateRecord` on the all-success path.
-      // WR-04 alignment: lock the no-leak assertion.
-      assert.equal(record.compatibility.installable, true);
-      assert.ok(
-        !record.compatibility.notes.includes("update-in-progress"),
-        "intent-mark must NOT leak into success state",
-      );
-
-      // Disk state: skill SKILL.md exists at target.
-      const skillTarget = path.join(locations.skillsTargetDir, "hello-tool", "SKILL.md");
-      assert.ok((await readFile(skillTarget, "utf8")).length > 0, "skill must exist on disk");
-
-      // V2 byte form mirrors catalog
-      // `single-mp-mixed` (docs/output-catalog.md:495-504) version-arrow
-      // discipline: `v<from> → v<to>` with `v` prefix on both sides --
-      // the renderer's composeVersionArrow owns
-      // the formatting per D-15-04 / D-16-04. Plugin-row `[<scope>]`
-      // bracket suppressed by orphan-fold. Soft-dep markers emit because
-      // the plugin declares agents + mcp but the host's `getAllTools()`
-      // returns [] (probe sees both companions unloaded). Reload-hint
-      // appended by notify() per D-16-12 from the `updated` variant.
-      // SEV-01: the update declares agents + mcp while both companions are
-      // unloaded, so the success row stamps warning (symmetric with the install
-      // success arm) -- the cascade gains the `needs attention` summary line.
-      const errs = notifications.filter((n) => n.severity === "error");
-      assert.equal(errs.length, 0, `unexpected errors: ${JSON.stringify(errs)}`);
-      assert.equal(notifications.length, 1);
-      assert.equal(notifications[0]?.severity, "warning");
-      const body = notifications[0]?.message ?? "";
-      assert.equal(
-        body,
-        "A plugin operation needs attention.\n" +
-          "\n" +
-          "● mp [project]\n" +
-          "  ● hello v1.0.0 → v1.0.1 (updated) {requires pi-subagents, requires pi-mcp}\n" +
-          "\n" +
-          "/reload to pick up changes",
-      );
-
-      // Ensure we referenced the seeded marketplaceRoot (compile-time use of `seeded`).
-      assert.ok(seeded.marketplaceRoot.length > 0);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

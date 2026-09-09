@@ -65,6 +65,10 @@ import { assertNoForbiddenSurface } from "./source-scan.ts";
  *   the assertion would fail on prose.
  */
 const FORBIDDEN_TARGETS: ReadonlyArray<string> = [
+  // NFR-5: the update composition root binds preflight, swap, and cascade but
+  // names no git surface. The retained update.ts hub remains the one exempt
+  // owner because it still owns refresh enumeration and the injected git seam.
+  "extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts",
   // NFR-5 (amended): both install owners carry ZERO git surface of their own. A
   // git-source (url / git-subdir / github) clone is delegated to the
   // install-clone-probe.ts leaf, which reaches the clone-cache.ts sibling seam

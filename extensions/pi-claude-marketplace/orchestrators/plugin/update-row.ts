@@ -4,9 +4,9 @@
 // it imports the outcome type from `../types.ts` plus the shared notify
 // vocabulary, and nothing from either update ledger.
 //
-// D-05 / D-06 / D-11: the composer is shared by `plugin/update.ts` (the manual
-// update cascade) and `marketplace/update.ts` (the autoupdate cascade), so it
-// cannot live in either of them. Importing it from `plugin/update.ts` gave
+// D-05 / D-06 / D-11: the composer is shared by `plugin/update-cascade.ts` (the
+// manual update cascade) and `marketplace/update.ts` (the autoupdate cascade),
+// so it cannot live in either of them. Importing it from `plugin/update.ts` gave
 // `marketplace/update.ts` a static edge onto the plugin-update LEDGER -- the
 // module graph the injected `pluginUpdate` seam exists to keep it out of, and
 // the `orchestrators/marketplace` -> `orchestrators/plugin` direction

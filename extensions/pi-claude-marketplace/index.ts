@@ -8,7 +8,7 @@ import {
 import { registerClaudeMarketplaceTools, registerClaudePluginCommand } from "./edge/register.ts";
 import { aggregateDiscoveredResources } from "./orchestrators/discover.ts";
 import { DEFAULT_GIT_OPS } from "./orchestrators/marketplace/shared.ts";
-import { createPluginUpdateOperations } from "./orchestrators/plugin/update.ts";
+import { createPluginUpdateOperations } from "./orchestrators/plugin/update-flow.ts";
 import { recomputePluginPath } from "./orchestrators/plugin-path.ts";
 import { applyReconcile } from "./orchestrators/reconcile/apply.ts";
 import { locationsFor } from "./persistence/locations.ts";

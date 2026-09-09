@@ -1,4 +1,4 @@
-// orchestrators/plugin/update.ts
+// orchestrators/plugin/update-swap.ts
 //
 // PUP-1..9 + AS-3 (3-phase) + AS-7 (orphan agent index entries) + WR-04 +
 // NFR-2 + NFR-3.

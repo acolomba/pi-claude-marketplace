@@ -12,7 +12,7 @@ import { pathSource } from "../../extensions/pi-claude-marketplace/domain/source
 import { createNodeInstallPlugin } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts";
 import { createNodeReinstallPlugin } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts";
 import { createNodeUninstallPlugin } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
-import { createPluginUpdateOperations } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/update.ts";
+import { createPluginUpdateOperations } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 

@@ -62,7 +62,7 @@ import { routeClaudePlugin } from "./router.ts";
 import type { SubcommandHandlers } from "./router.ts";
 import type { EdgeDeps } from "./types.ts";
 import type { InstallHooksRouting } from "../orchestrators/plugin/install-disable-cascade.ts";
-import type { UpdatePluginsFn } from "../orchestrators/plugin/update-preflight.ts";
+import type { UpdatePluginsFn } from "../orchestrators/plugin/update-flow.ts";
 import type { ExtensionAPI } from "../platform/pi-api.ts";
 
 const COMMAND_DESCRIPTION =

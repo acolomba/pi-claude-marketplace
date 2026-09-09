@@ -31,7 +31,7 @@ import {
   selectDeclaringConfigWriteTarget,
   writeAdoptingConfigEntries,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts";
-import { createPluginUpdateOperations } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update.ts";
+import { createPluginUpdateOperations } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts";
 import { applyReconcile } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
 import { isDeclaredEnabled } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { loadMergedScopeConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-merge.ts";

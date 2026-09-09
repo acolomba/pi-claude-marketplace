@@ -69,9 +69,6 @@ export interface UpdatePluginsOptions {
   readonly authMemo?: Map<string, AuthAttemptResult>;
 }
 
-/** Direct/bulk update operation with the complete command option contract. */
-export type UpdatePluginsFn = (options: UpdatePluginsOptions) => Promise<void>;
-
 /** Candidate state required by the staged update swap. */
 export interface PreparedPluginUpdate {
   readonly state: ExtensionState;

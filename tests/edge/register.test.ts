@@ -54,7 +54,7 @@ import {
 } from "../../extensions/pi-claude-marketplace/edge/register.ts";
 import { TOP_LEVEL_USAGE } from "../../extensions/pi-claude-marketplace/edge/router.ts";
 import { makeLocationsResolver } from "../../extensions/pi-claude-marketplace/orchestrators/edge-deps.ts";
-import { createPluginUpdateOperations } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/update.ts";
+import { createPluginUpdateOperations } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   loadState,

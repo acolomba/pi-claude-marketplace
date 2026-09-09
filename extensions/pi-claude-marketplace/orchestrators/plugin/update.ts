@@ -85,17 +85,10 @@ import {
   resolveInstalledPluginTarget,
   surfaceDiscoveryWarnings,
 } from "./shared.ts";
-import { composeUpdateCascade } from "./update-cascade.ts";
-import { preparePluginUpdate } from "./update-preflight.ts";
-import { swapPluginUpdate } from "./update-swap.ts";
 import { UPDATE_CONTEXT } from "./update.messaging.ts";
 
 import type { UpdateCascadeOutcome, UpdateHooksRouting } from "./update-cascade.ts";
-import type {
-  UpdatePluginsFn,
-  UpdatePluginsOptions,
-  UpdatePluginsTarget,
-} from "./update-preflight.ts";
+import type { UpdatePluginsOptions, UpdatePluginsTarget } from "./update-preflight.ts";
 import type {
   DirectThreePhaseArgs,
   ThreePhaseArgs,
@@ -108,13 +101,19 @@ import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { Scope } from "../../shared/types.ts";
-import type { PluginUpdateFn, PluginUpdateOutcome } from "../types.ts";
+import type { PluginUpdateOutcome } from "../types.ts";
 
-/** The two update operations owned by one extension lifecycle. */
-export interface PluginUpdateOperations {
-  readonly updatePlugins: UpdatePluginsFn;
-  readonly pluginUpdate: PluginUpdateFn;
-}
+/** Runs one prepared update target for the retained enumeration hub. */
+export type UpdatePluginRunner = (args: ThreePhaseArgs) => Promise<UpdateRunOutcome>;
+
+/** Folds retained-hub outcomes through the extracted cascade owner. */
+export type UpdateCascadeComposer = (
+  ctx: NotificationContext,
+  pi: ToolInventory,
+  outcomes: readonly UpdateCascadeOutcome[],
+  cardinality: "single" | "plural",
+  abortedByFailure?: boolean,
+) => void;
 /**
  * PUP-2 syncCloneOnce memoization -- one refresh per (scope, marketplace)
  * pair. Path-source marketplaces are noops (NFR-5: no network for path
@@ -224,10 +223,12 @@ function buildDirectThreePhaseArgs(
  * BEFORE the cascade is built (the cascade body still names them via the
  * `PluginUpdatedMessage`/`PluginSkippedMessage`/`PluginFailedMessage` rows).
  */
-async function updatePluginsWith(
+export async function updatePluginsWith(
   opts: UpdatePluginsOptions,
   hooksRouting: UpdateHooksRouting,
   completionCache: CompletionCache,
+  runPluginUpdate: UpdatePluginRunner,
+  composeCascade: UpdateCascadeComposer,
 ): Promise<void> {
   const { ctx, pi } = opts;
   // OUT-04 / D-04: cardinality belongs to the parsed invocation, including
@@ -285,7 +286,7 @@ async function updatePluginsWith(
 
     let outcome: UpdateRunOutcome;
     try {
-      outcome = await runThreePhaseUpdate(
+      outcome = await runPluginUpdate(
         buildDirectThreePhaseArgs(opts, t, cardinality, hooksRouting, completionCache),
       );
     } catch (err) {
@@ -334,14 +335,14 @@ async function updatePluginsWith(
       // outcome was `unchanged`, the bulk-suppressed cascade is empty and the
       // headline would otherwise emit a contradictory `nothing to update` line
       // directly after the failure notification.
-      renderUpdateCascadeIfAny(ctx, pi, outcomes, cardinality, true);
+      renderUpdateCascadeIfAny(ctx, pi, outcomes, cardinality, composeCascade, true);
       return;
     }
 
     outcomes.push({ target: t, outcome });
   }
 
-  composeUpdateCascade(ctx, pi, outcomes, cardinality);
+  composeCascade(ctx, pi, outcomes, cardinality);
   surfaceUpdateDiscoveryWarnings(ctx, outcomes);
 }
 
@@ -472,12 +473,13 @@ function renderUpdateCascadeIfAny(
   pi: ToolInventory,
   outcomes: readonly UpdateCascadeOutcome[],
   cardinality: "single" | "plural",
+  composeCascade: UpdateCascadeComposer,
   // WR-01: the phase-3a abort path sets this so the never-silent no-op headline
   // is suppressed when the accumulated outcomes contain no realized transition.
   abortedByFailure = false,
 ): void {
   if (outcomes.length > 0) {
-    composeUpdateCascade(ctx, pi, outcomes, cardinality, abortedByFailure);
+    composeCascade(ctx, pi, outcomes, cardinality, abortedByFailure);
   }
 }
 
@@ -493,9 +495,10 @@ function renderUpdateCascadeIfAny(
  * PathContainmentError, ST-9 stale-version, prep failures, phase-3a aggregate
  * failures) are captured into `partition='failed'` outcomes. PUP-9.
  */
-async function updateSinglePluginWith(
+export async function updateSinglePluginWith(
   hooksRouting: UpdateHooksRouting,
   completionCache: CompletionCache,
+  runPluginUpdate: UpdatePluginRunner,
   plugin: string,
   marketplace: string,
   scope: Scope,
@@ -508,7 +511,7 @@ async function updateSinglePluginWith(
   const locations = locationsFor(scope, cwd);
 
   try {
-    return await runThreePhaseUpdate({
+    return await runPluginUpdate({
       plugin,
       marketplace,
       scope,
@@ -556,18 +559,6 @@ async function updateSinglePluginWith(
   }
 }
 
-/** Bind direct and cascade update operations to one lifecycle routing owner. */
-export function createPluginUpdateOperations(
-  hooksRouting: UpdateHooksRouting,
-  completionCache: CompletionCache,
-): PluginUpdateOperations {
-  const updatePlugins: UpdatePluginsFn = (opts) =>
-    updatePluginsWith(opts, hooksRouting, completionCache);
-  const pluginUpdate: PluginUpdateFn = (plugin, marketplace, scope) =>
-    updateSinglePluginWith(hooksRouting, completionCache, plugin, marketplace, scope);
-  return { updatePlugins, pluginUpdate };
-}
-
 /**
  * Map an exported-workflow error to a closed-set `Reason[]` for cascade-failure
  * outcomes. Typed concurrency facts and errno codes win; the permissive
@@ -598,15 +589,6 @@ function reasonsFromTypedError(err: unknown): readonly ContentReason[] {
   }
 
   return ["not in manifest"] as const;
-}
-
-async function runThreePhaseUpdate(args: ThreePhaseArgs): Promise<UpdateRunOutcome> {
-  const preflight = await preparePluginUpdate(args);
-  if ("partition" in preflight) {
-    return preflight as UpdateRunOutcome;
-  }
-
-  return swapPluginUpdate(args, preflight);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

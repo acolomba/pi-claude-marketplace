@@ -363,8 +363,8 @@ export type PluginUpdateOutcome =
 /**
  * D-05 function-injection seam. (`marketplace update` with
  * `record.autoupdate === true`) calls this once per installed plugin
- * during the autoupdate cascade. `orchestrators/plugin/update.ts` ships
- * the real implementation; tests inject a mock. The
+ * during the autoupdate cascade. `orchestrators/plugin/update-flow.ts` ships
+ * the real composed operation; tests inject a mock. The
  * `index.ts` barrel performs the registration-time wiring.
  */
 export type PluginUpdateFn = (

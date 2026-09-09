@@ -500,7 +500,7 @@ export class StateLockHeldError extends Error {
 /**
  * PUP-6 aggregate phase-3 failure for plugin update.
  *
- * Wraps the heterogeneous-undo phase-3a failures from update.ts's
+ * Wraps the heterogeneous-undo phase-3a failures from update-swap.ts's
  * hand-rolled 3-phase sequence. `failures` carries one entry per bridge
  * (`skills` | `commands` | `agents` | `mcp`) whose `commit*` threw. The
  * constructor's `message` argument typically embeds the

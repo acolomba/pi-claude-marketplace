@@ -115,7 +115,7 @@ import {
 } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { SCOPE_TARGET_FLAG } from "../../../../extensions/pi-claude-marketplace/edge/flag-catalog.ts";
 import { makeUpdateHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/update.ts";
-import { createPluginUpdateOperations } from "../../../../extensions/pi-claude-marketplace/orchestrators/plugin/update.ts";
+import { createPluginUpdateOperations } from "../../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts";
 import { loadConfig } from "../../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { loadState } from "../../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";

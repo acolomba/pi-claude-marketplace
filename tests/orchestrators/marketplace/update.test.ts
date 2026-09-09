@@ -19,7 +19,7 @@ import {
   updateAllMarketplaces,
   updateMarketplace,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts";
-import { createPluginUpdateOperations } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update.ts";
+import { createPluginUpdateOperations } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts";
 import { saveConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {

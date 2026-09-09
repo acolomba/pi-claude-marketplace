@@ -56,6 +56,7 @@ import { assertNoForbiddenSurface } from "./source-scan.ts";
  */
 const FORBIDDEN_TARGETS: ReadonlyArray<string> = [
   "extensions/pi-claude-marketplace/orchestrators/plugin/update.ts",
+  "extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts",
   "extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts",
   "extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts",
   "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts",

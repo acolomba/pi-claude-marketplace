@@ -53,7 +53,7 @@ const EVENT_ROUTER_PATH = path.join(
 const INSTALL_PATH = path.join(ORCH_DIR, "install-flow.ts");
 const UNINSTALL_PATH = path.join(ORCH_DIR, "uninstall.ts");
 const REINSTALL_PATH = path.join(ORCH_DIR, "reinstall.ts");
-const UPDATE_PATH = path.join(ORCH_DIR, "update.ts");
+const UPDATE_PATH = path.join(ORCH_DIR, "update-swap.ts");
 
 /**
  * Read a TypeScript source file from disk and return its lines after
@@ -217,11 +217,11 @@ test("WR-03 Block C: reinstall.ts wires remove + add + rebuildRoutingTables in i
 });
 
 // ──────────────────────────────────────────────────────────────────────────
-// Block D: WR-03 / D-60-05 -- update.ts explicit remove + add + rebuild
+// Block D: WR-03 / D-60-05 -- update-swap.ts explicit remove + add + rebuild
 // inside the per-plugin lock. Same gap as reinstall (no delegation).
 // ──────────────────────────────────────────────────────────────────────────
 
-test("WR-03 Block D: update.ts wires remove + add + rebuildRoutingTables in its per-plugin lock", async () => {
+test("WR-03 Block D: update-swap.ts wires remove + add + rebuildRoutingTables in its per-plugin lock", async () => {
   const lines = await readNonCommentLines(UPDATE_PATH);
 
   const hasRemove = lines.some(
@@ -235,19 +235,19 @@ test("WR-03 Block D: update.ts wires remove + add + rebuildRoutingTables in its 
   const hasRebuild = lines.some(
     (l) => l.includes("rebuildRoutingTables(") && !/\bimport\b/.test(l),
   );
-  assert.ok(hasRemove, "update.ts: missing removePluginConfigFromCache call site");
+  assert.ok(hasRemove, "update-swap.ts: missing removePluginConfigFromCache call site");
   assert.ok(
     hasAdd,
-    "update.ts: missing addPluginConfigToCache / readAndCachePluginHooks call site",
+    "update-swap.ts: missing addPluginConfigToCache / readAndCachePluginHooks call site",
   );
-  assert.ok(hasRebuild, "update.ts: missing rebuildRoutingTables call site");
+  assert.ok(hasRebuild, "update-swap.ts: missing rebuildRoutingTables call site");
 
   assertMutatorFollowedByRebuilder(
     lines,
     "removePluginConfigFromCache(",
     "rebuildRoutingTables(",
     30,
-    "update.ts",
+    "update-swap.ts",
   );
 });
 
