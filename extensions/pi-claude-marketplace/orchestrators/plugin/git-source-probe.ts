@@ -2,7 +2,7 @@
 //
 // PURL-08 / D-78-03 / D-78-04 / NFR-5: the SHARED git-source probe module,
 // colocated with `plugin-state-classifier.ts`. Both the `list` orchestrator
-// (`availableRowMessage` / `installedRowMessage`) and the completion bucketizer
+// (`composeCandidateListRow` / `composeInstalledListRow`) and the completion bucketizer
 // (`orchestrators/edge-deps.ts::loadManifestForMarketplace`) consume THESE
 // helpers so their status buckets never diverge on the same manifest (the
 // divergence class where install completion classifies a git-source entry

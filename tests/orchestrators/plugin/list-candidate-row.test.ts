@@ -1,8 +1,12 @@
 import assert from "node:assert/strict";
-import { mkdir } from "node:fs/promises";
+import * as fs from "node:fs";
+import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
 
+import * as git from "isomorphic-git";
+
+import { pluginMirrorKey } from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
@@ -205,6 +209,42 @@ test("classifies a thrown candidate probe without leaking the error", async (tes
       reasons: ["unreadable"],
     },
     bucket: "unavailable",
+  });
+});
+
+test("resolves a warm git mirror into an available row", async (testContext) => {
+  // arrange
+  const composeCandidateListRow = await loadComposeCandidateListRow();
+  const environment = await candidateEnvironment(testContext);
+  const canonicalUrl = "https://example.com/warm-plugin";
+  const mirrorDirectory = await environment.locations.pluginCloneDir(pluginMirrorKey(canonicalUrl));
+  await mkdir(path.join(mirrorDirectory, ".claude-plugin"), { recursive: true });
+  await writeFile(
+    path.join(mirrorDirectory, ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "warm-plugin" }),
+  );
+  await git.init({ fs, dir: mirrorDirectory, defaultBranch: "main" });
+  await git.add({ fs, dir: mirrorDirectory, filepath: ".claude-plugin/plugin.json" });
+  await git.commit({
+    fs,
+    dir: mirrorDirectory,
+    message: "initial",
+    author: { name: "test", email: "test@example.com" },
+  });
+  const entry: ManifestPluginEntry = { name: "warm-plugin", source: canonicalUrl };
+
+  // act
+  const row = await composeCandidateListRow(
+    entry,
+    environment.marketplaceRoot,
+    environment.locations,
+    undefined,
+  );
+
+  // assert
+  assert.deepStrictEqual(row, {
+    message: { status: "available", name: "warm-plugin" },
+    bucket: "available",
   });
 });
 

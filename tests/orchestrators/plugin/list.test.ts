@@ -38,7 +38,6 @@ import { mock, verify, when } from "strong-mock";
 import { pluginMirrorKey } from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
-  availableRowMessage,
   listPlugins,
   loadPluginListPayload,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/list.ts";
@@ -1163,7 +1162,7 @@ test("T-80-08 / D-78-04: an INSTALLED git plugin with a missing clone stays `(in
     // assert
     const out = notifications[0]!.message;
     // The installed path (composeInstalledListRow) never renders `(remote)` -- the
-    // `remote` derivation lives only on the not-installed availableRowMessage
+    // `remote` derivation lives only on the not-installed composeCandidateListRow
     // path. A cold clone does not regress the row (D-78-04 degrade preserved).
     assert.match(out, /● gitplug v1\.0\.0 \(installed\)/, out);
     assert.equal(out.includes("(remote)"), false, out);
@@ -4213,40 +4212,6 @@ test("plugin list manifest absent: BOUND-01: a marketplace whose OWN manifest fa
     verify(ctx);
     verify(pi);
     verify(ui);
-  });
-});
-
-test("availableRowMessage returns the complete available candidate projection", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    // arrange
-    const marketplaceRoot = path.join(cwd, "marketplace");
-    await mkdir(path.join(marketplaceRoot, "alpha"), { recursive: true });
-    const locations = locationsFor("project", cwd);
-    const manifestEntry = {
-      name: "alpha",
-      source: "./alpha",
-      version: "1.0.0",
-      description: "Alpha plugin.",
-    } satisfies Parameters<typeof availableRowMessage>[0];
-
-    // act
-    const candidate = await availableRowMessage(
-      manifestEntry,
-      marketplaceRoot,
-      locations,
-      undefined,
-    );
-
-    // assert
-    assert.deepStrictEqual(candidate, {
-      message: {
-        status: "available",
-        name: "alpha",
-        version: "1.0.0",
-        description: "Alpha plugin.",
-      },
-      bucket: "available",
-    });
   });
 });
 

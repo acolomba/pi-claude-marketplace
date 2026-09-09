@@ -121,7 +121,7 @@ async function classifyNotInstalledPluginRow(
   // classification (a not-installed url/git-subdir/github entry with a cold clone
   // classifies `remote`; a warm one resolves the three-way verdict) AND the
   // catch-to-`unavailable` fold -- including a presence-probe throw on a
-  // corrupt mirror -- at parity with `list`'s availableRowMessage -- both
+  // corrupt mirror -- at parity with `list`'s composeCandidateListRow -- both
   // surfaces route through the SAME `probeManifestEntry`, so the bucket never
   // diverges. No local try/catch is needed -- `probeManifestEntry` folds every
   // throw internally and never throws, so one broken mirror degrades one row
