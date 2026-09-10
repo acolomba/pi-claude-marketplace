@@ -126,9 +126,9 @@ const SEALED_REQUIREMENT_ROUTES = Object.freeze({
   "TREF-04": Object.freeze({ route: "Phase 5", status: "Complete" }),
   "TREF-05": Object.freeze({ route: "Phase 5", status: "Complete" }),
   "TREF-06": Object.freeze({ route: "Phase 5", status: "Complete" }),
-  "TREF-07": Object.freeze({ route: "Phase 6", status: "Complete" }),
-  "TREF-08": Object.freeze({ route: "Phase 6", status: "Complete" }),
-  "TREF-09": Object.freeze({ route: "Phase 6", status: "Complete" }),
+  "TREF-07": Object.freeze({ route: "Phase 6", status: "Pending" }),
+  "TREF-08": Object.freeze({ route: "Phase 6", status: "Pending" }),
+  "TREF-09": Object.freeze({ route: "Phase 6", status: "Pending" }),
 });
 const PUBLISH_JOURNAL_FIELDS = new Set(["status", "records"]);
 const PUBLISH_RECORD_FIELDS = new Set(["destination", "staged", "backup", "hadDestination"]);
