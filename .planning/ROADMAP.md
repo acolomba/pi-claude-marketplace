@@ -692,7 +692,7 @@ Plans:
 **Goal:** Make structural gates prove that they scan and enforce real production contracts.
 **Depends on:** Phase 6
 **Requirements:** GGAT-01, GGAT-03, GGAT-04
-**Plans:** 12/16 plans executed
+**Plans:** 16/16 plans complete
 
 **Success Criteria**:
 
@@ -738,16 +738,16 @@ Plans:
 
 **Wave 4** _(blocked on Wave 3 completion)_
 
-- [ ] 07-13-PLAN.md — Gate the `__`-prefixed test-only surface class with a structural brand carve-out
-- [ ] 07-14-PLAN.md — Widen the vocabulary guard to the recursive unit-test sources and repair 137 lines
+- [x] 07-13-PLAN.md — Gate the `__`-prefixed test-only surface class with a structural brand carve-out
+- [x] 07-14-PLAN.md — Widen the vocabulary guard to the recursive unit-test sources and repair 137 lines
 
 **Wave 5** _(blocked on Wave 4 completion)_
 
-- [ ] 07-15-PLAN.md — Unexport the two named instances and pin the production-unowned-export census
+- [x] 07-15-PLAN.md — Unexport the two named instances and pin the production-unowned-export census
 
 **Wave 6** _(blocked on Wave 5 completion)_
 
-- [ ] 07-16-PLAN.md — Land the self-hosting registry meta-gate and close the phase on a fired-controls ledger
+- [x] 07-16-PLAN.md — Land the self-hosting registry meta-gate and close the phase on a fired-controls ledger
 
 **Cross-cutting constraints:**
 
@@ -837,6 +837,6 @@ baseline, which still includes both pairs; neither is a terminal shortfall.
 | 4. Hermetic Test Infrastructure      | 7/7            | Complete    | 2026-09-07 |
 | 5. Injection and Ownership Design    | 34/34          | Complete    | 2026-09-08 |
 | 6. Assertion and Module Refinement   | 52/52          | Complete    | 2026-09-10 |
-| 7. Gate Integrity                    | 12/16 | In Progress|  |
+| 7. Gate Integrity                    | 16/16 | Complete   | 2026-09-10 |
 | 8. Direct Coverage                   | 0/0            | Not started | —          |
 | 9. Final Quality and Backlog Closure | 0/0            | Not started | —          |
