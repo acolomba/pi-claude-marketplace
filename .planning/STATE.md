@@ -980,6 +980,34 @@ module-refinement work before planning.
 
 ## Deferred Verification
 
-| Phase | State                      | Resume                      |
-| ----- | -------------------------- | --------------------------- |
-| 01    | verification_deferred_gaps | `$gsd-plan-phase 01 --gaps` |
+| Phase | State                       | Resume                      |
+| ----- | --------------------------- | --------------------------- |
+| 01    | verification_deferred_gaps  | `$gsd-plan-phase 01 --gaps` |
+| 03    | verification_deferred_human | `$gsd-verify-work 03`       |
+| 04    | verification_deferred_human | `$gsd-verify-work 04`       |
+| 05    | verification_deferred_human | `$gsd-verify-work 05`       |
+
+Phases 03, 04, and 05 are listed here to keep an autonomous re-entry from diverting into them, not
+because their work is unfinished. All three are implemented with every plan summarised, and each
+`VERIFICATION.md` reads `status: passed` with a full score — 5/5, 4/4, and 6/6. They report `stale`
+only because their `covered_files` include `.planning/REQUIREMENTS.md`, `ROADMAP.md`, and `STATE.md`,
+which every later plan rewrites. Re-verifying them re-stales them as soon as the next phase writes
+STATE.md, so the loop never converges; that is why the autonomous queue must skip them and why
+`stale` here is a timestamp verdict rather than an outcome verdict. Settle them once at milestone
+audit, or clear them deliberately with the resume commands above.
+
+## Autonomous Run Parameters
+
+Resume the milestone with `/gsd-autonomous --from 7`.
+
+Queue is **7 → 8 → 9**. Phases 01 and 03-05 are skipped via the Deferred Verification table above;
+phase 02 is complete and phase 06 closed on 2026-09-10.
+
+Two things a fresh run will hit:
+
+1. The lifecycle audit step looks for `.planning/v<version>-MILESTONE-AUDIT.md`. This milestone is
+   named `refine-unit-tests`, not a `vX.Y` version, so that path never exists and the audit will
+   read as missing. Locate the audit artifact by name instead of by that template before treating it
+   as a failure.
+2. `gsd-tools query verification.status` disagrees with the report files for phases 03-06, per the
+   staleness artifact described above. Read the file's `status:` field, not the query.
