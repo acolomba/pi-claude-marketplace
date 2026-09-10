@@ -734,7 +734,7 @@ test("PRL-10 / RINST-01: bare reinstall unconditionally overwrites foreign agent
       });
       const { ctx, pi, notifications } = makeCtx();
 
-      // RINST-01 / D-67-03: a bare reinstall (no `--force`) overwrites the
+      // RINST-01 / D-67-03: a bare reinstall (no `--partial`) overwrites the
       // agent that holds foreign bytes and refreshes every bridge -- overwrite
       // is unconditional.
       const outcome = await reinstallDefault(cwd, ctx, pi);
@@ -2713,10 +2713,10 @@ test("LIFE-01 (reinstall): a plugin without hooks removes any stale <hooksDir>/<
   });
 });
 
-// BFILL-01 / RINST-01 / D-68-02: reinstall is force-capable. It resolves the
-// `installable | unsupported` union through `requireForceInstallable`, so a
-// plugin that re-resolves `unsupported` (here: a `.lsp.json` lspServers
-// convention file beside a supported skill) passes the gate instead of
+// BFILL-01 / RINST-01 / D-68-02: reinstall is partial-capable. It resolves the
+// `installable | partially-available` union through `requirePartialInstallable`,
+// so a plugin that re-resolves `partially-available` (here: a `.lsp.json`
+// lspServers convention file beside a supported skill) passes the gate instead of
 // throwing `{not-installable}`. Re-resolution stays cache-only (NFR-5). The persisted
 // compatibility record reflects the REAL supported/unsupported sets at the
 // SAME recorded version (a promotion-shaped repair, not an upgrade).
@@ -2729,14 +2729,14 @@ async function seedThenDegradeToUnsupported(cwd: string): Promise<string> {
     install: true,
   });
   // Drop an lspServers convention file so re-resolution degrades to
-  // `unsupported` with supported=["skills"], unsupported=["lspServers"].
+  // `partially-available` with supported=["skills"], unsupported=["lspServers"].
   await writeFile(path.join(seeded.pluginRoot, ".lsp.json"), "{}");
   return seeded.pluginRoot;
 }
 
-test("BFILL-01 / RINST-01: reinstalling a force-installed (unsupported) plugin succeeds instead of throwing", async () => {
+test("BFILL-01 / RINST-01: reinstalling a partially-installed plugin succeeds instead of throwing", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-bfill-force-"));
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-bfill-partial-"));
     try {
       await seedThenDegradeToUnsupported(cwd);
 
@@ -2782,7 +2782,7 @@ test("BFILL-01 / D-68-02 partial: reinstall records the REAL non-empty unsupport
         "hello"
       ];
       assert.ok(record !== undefined);
-      // The partial re-materialize stays force-installed: installable=false
+      // The partial re-materialize stays partially-installed: installable=false
       // with a non-empty unsupported set (D-66-01 derivation source).
       assert.equal(record.compatibility.installable, false);
       assert.deepEqual(record.compatibility.unsupported, ["lspServers"]);

@@ -2270,15 +2270,15 @@ test("a newly degraded autoupdate cascade emits its partial row and warning enve
     const first = notifications[0];
     assert.ok(first !== undefined);
     const body = first.message;
-    // Byte-exact force-installed child row under the marketplace header. The ◉
-    // glyph, single realized version, `(partially-installed)` token, and `{lsp}`
-    // dropped-component brace mirror the plugin-surface force-installed byte lock
+    // Byte-exact partially-installed child row under the marketplace header. The
+    // ◉ glyph, single realized version, `(partially-installed)` token, and
+    // `{lsp}` dropped-component brace mirror the plugin-surface byte lock
     // (`narrowUnsupportedKinds(["lspServers"]) -> "lsp"`). The `[project]` scope
     // bracket is orphan-folded (plugin.scope === mp.scope).
     const headerIdx = body.indexOf("● auto-mp [project]");
     const rowIdx = body.indexOf("  ◉ hello v0.0.2 (partially-installed) {lsp}");
     assert.ok(headerIdx >= 0, `marketplace header missing:\n${body}`);
-    assert.ok(rowIdx > headerIdx, `force-installed child row missing/misplaced:\n${body}`);
+    assert.ok(rowIdx > headerIdx, `partially-installed child row missing/misplaced:\n${body}`);
     // newlyDegraded -> warning envelope -> the degraded summary variant.
     assert.equal(first.severity, "warning");
     assert.match(body, /needs attention/);

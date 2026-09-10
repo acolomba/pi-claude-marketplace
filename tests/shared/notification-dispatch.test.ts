@@ -371,7 +371,7 @@ test("USTAT-01 / D-64-01: notify renders unsupported plugin with version and {ls
   ]);
 });
 
-test("XSURF-01: unsupported install-failure row with partialHint emits the --force install trailer", (t) => {
+test("XSURF-01: partially-available install-failure row with partialHint emits the --partial install trailer", (t) => {
   // arrange
   const ctx = createContext(t);
   const pi = piWithNothingLoaded();
@@ -442,7 +442,7 @@ test("XSURF-01: unsupported row WITHOUT partialHint stays byte-frozen (no traile
   assert.ok(!(args[0] as string).includes("--partial"));
 });
 
-test("XSURF-03: force-upgradable update-decline row with partialHint emits the --force update trailer", (t) => {
+test("XSURF-03: partially-upgradable update-decline row with partialHint emits the --partial update trailer", (t) => {
   // arrange
   const ctx = createContext(t);
   const pi = piWithBothLoaded();
@@ -478,7 +478,7 @@ test("XSURF-03: force-upgradable update-decline row with partialHint emits the -
   );
 });
 
-test("XSURF-03: list-inventory force-upgradable row WITHOUT partialHint stays byte-frozen (no trailer)", (t) => {
+test("XSURF-03: list-inventory partially-upgradable row WITHOUT partialHint stays byte-frozen (no trailer)", (t) => {
   // arrange
   const ctx = createContext(t);
   const pi = piWithBothLoaded();
@@ -544,7 +544,7 @@ test("notify renders upgradable plugin with version and reasons brace", (t) => {
   ]);
 });
 
-test("FSTAT-02 / D-66-03: force-installed renders the ◉ glyph distinct from ● installed", (t) => {
+test("FSTAT-02 / D-66-03: partially-installed renders the ◉ glyph distinct from ● installed", (t) => {
   // arrange
   const ctx = createContext(t);
   const pi = piWithBothLoaded();
@@ -580,7 +580,7 @@ test("FSTAT-02 / D-66-03: force-installed renders the ◉ glyph distinct from �
   assert.ok(!(args[0] as string).includes("● degraded-plugin"));
 });
 
-test("WR-03: force-installed success row threads dependencies -> soft-dep marker fires in the SAME brace as the dropped-component reason", (t) => {
+test("WR-03: partially-installed success row threads dependencies -> soft-dep marker fires in the SAME brace as the dropped-component reason", (t) => {
   // arrange
   const ctx = createContext(t);
   const pi = piWithMcpLoaded();
@@ -616,7 +616,7 @@ test("WR-03: force-installed success row threads dependencies -> soft-dep marker
   );
 });
 
-test("WR-03: force-installed INVENTORY row (no dependencies) renders no soft-dep marker even when a companion is unloaded", (t) => {
+test("WR-03: partially-installed INVENTORY row (no dependencies) renders no soft-dep marker even when a companion is unloaded", (t) => {
   // arrange
   const ctx = createContext(t);
   const pi = piWithNothingLoaded();
@@ -648,7 +648,7 @@ test("WR-03: force-installed INVENTORY row (no dependencies) renders no soft-dep
   );
 });
 
-test("FSTAT-04 / D-66-03: force-upgradable reuses the ● glyph like the upgradable arm", (t) => {
+test("FSTAT-04 / D-66-03: partially-upgradable reuses the ● glyph like the upgradable arm", (t) => {
   // arrange
   const ctx = createContext(t);
   const pi = piWithBothLoaded();
@@ -682,7 +682,7 @@ test("FSTAT-04 / D-66-03: force-upgradable reuses the ● glyph like the upgrada
   );
 });
 
-test("FSTAT-06 / D-66-04: will-install force modifier renders (will partially install)", (t) => {
+test("FSTAT-06 / D-66-04: the will-install partial modifier renders (will partially install)", (t) => {
   // arrange
   const ctx = createContext(t);
   const pi = piWithBothLoaded();
@@ -706,7 +706,7 @@ test("FSTAT-06 / D-66-04: will-install force modifier renders (will partially in
   assert.equal(args[0], `● new-mp [user]\n  ● degraded-plugin (will partially install)`);
 });
 
-test("FSTAT-06 / D-66-04: will-install WITHOUT the force modifier renders (will install)", (t) => {
+test("FSTAT-06 / D-66-04: will-install WITHOUT the partial modifier renders (will install)", (t) => {
   // arrange
   const ctx = createContext(t);
   const pi = piWithBothLoaded();

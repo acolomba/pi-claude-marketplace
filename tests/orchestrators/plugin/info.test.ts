@@ -290,8 +290,8 @@ interface SeedPathMarketplaceOpts {
       /**
        * FSTAT-01 / D-66-01: seed the persisted `compatibility.unsupported`
        * component-kind list. A non-empty value reproduces a recorded-installed
-       * plugin that resolved `unsupported` at install time -- the force-installed
-       * signal the deriver reads (with `installable: false`).
+       * plugin that resolved `partially-available` at install time -- the
+       * partially-installed signal the deriver reads (with `installable: false`).
        */
       unsupported?: readonly string[];
       /** Override the persisted source used by state-only info. */
@@ -1067,13 +1067,13 @@ test("WR-01: installed plugin with malformed hooks/hooks.json surfaces `{unsuppo
 });
 
 // ---------------------------------------------------------------------------
-// FSTAT-07 / D-66-04: an INSTALLED plugin that re-resolves `unsupported`
-// (manifest declares an unsupported component kind such as `lspServers`)
-// is reported as `(partially-installed)` with the dropped-component detail
-// from `narrowUnsupportedKinds` -- NOT `(installed)`. The `unavailable`
-// arm keeps `(installed)` (D-64-05, covered by WR-01 above) and the
-// `installable` arm keeps `(installed)` (INFO-02 above); info never emits
-// `force-upgradable` (that is a list-inventory-only concept).
+// FSTAT-07 / D-66-04: an INSTALLED plugin that re-resolves
+// `partially-available` (manifest declares an unsupported component kind such
+// as `lspServers`) is reported as `(partially-installed)` with the
+// dropped-component detail from `narrowUnsupportedKinds` -- NOT `(installed)`.
+// The `unavailable` arm keeps `(installed)` (D-64-05, covered by WR-01 above)
+// and the `installable` arm keeps `(installed)` (INFO-02 above); info never
+// emits `partially-upgradable` (that is a list-inventory-only concept).
 // ---------------------------------------------------------------------------
 
 test("FSTAT-07 / D-66-04: installed plugin re-resolving unsupported (lspServers) renders `◉ ... (partially-installed) {lsp}`", async () => {
@@ -1094,7 +1094,7 @@ test("FSTAT-07 / D-66-04: installed plugin re-resolving unsupported (lspServers)
             version: "1.0.0",
             description: "Degraded plugin.",
             // An unsupported component kind flips resolveStrict to the
-            // `unsupported` arm (D-64-06); narrowUnsupportedKinds maps
+            // `partially-available` arm (D-64-06); narrowUnsupportedKinds maps
             // `lspServers` -> the `lsp` manifest-field marker.
             lspServers: { foo: { command: "foo-lsp" } },
           },
@@ -1109,7 +1109,7 @@ test("FSTAT-07 / D-66-04: installed plugin re-resolving unsupported (lspServers)
     await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "degraded", scope: "user", cwd });
     // assert
     assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.severity, undefined, "force-installed is info, not error");
+    assert.equal(notifications[0]!.severity, undefined, "partially-installed is info, not error");
     assert.equal(
       notifications[0]!.message,
       [
@@ -1122,7 +1122,7 @@ test("FSTAT-07 / D-66-04: installed plugin re-resolving unsupported (lspServers)
 });
 
 // ---------------------------------------------------------------------------
-// WR-02 / D-66-01: cross-surface force-installed parity for NON-PATH sources.
+// WR-02 / D-66-01: cross-surface partially-installed parity for NON-PATH sources.
 // INFO-05 defers LIVE component resolution for non-path (npm/github/...)
 // sources to preserve NFR-5, but the install-time `compatibility.unsupported`
 // record is read OFFLINE -- the SAME single deriver `list` reads. A
@@ -1153,7 +1153,7 @@ test("WR-02 / D-66-01: non-path (npm) recorded-installed plugin with persisted u
         ],
       },
       // Recorded-installed AND the install-time resolution dropped `lspServers`
-      // -- the persisted force-installed signal the deriver reads.
+      // -- the persisted partially-installed signal the deriver reads.
       installed: { remote: { version: "1.0.0", unsupported: ["lspServers"] } },
     });
 
@@ -1162,7 +1162,7 @@ test("WR-02 / D-66-01: non-path (npm) recorded-installed plugin with persisted u
     await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "remote", scope: "user", cwd });
     // assert
     assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.severity, undefined, "force-installed is info, not error");
+    assert.equal(notifications[0]!.severity, undefined, "partially-installed is info, not error");
     assert.equal(
       notifications[0]!.message,
       [
@@ -4616,11 +4616,12 @@ test("INFO-05: composeResolvedComponents throw on the installed arm falls back t
 // ---------------------------------------------------------------------------
 // INFO-05: lenient hooks reader -- when the resolver bails because the
 // hooks file declares non-bucket-A events, the info surface STILL lists
-// the declared events with a `(unsupported)` suffix on each non-bucket-A
-// one. The strict resolver-side parser (HOOK-01) remains unchanged; the
+// the declared events with a component-level (unsupported) suffix on each
+// non-bucket-A one. The strict resolver-side parser (HOOK-01) remains unchanged; the
 // lenient reader runs ONLY on the path-resolvable
-// `(partially-available) {unsupported hooks}` carrier row (USTAT-01 / D-64-01: the
-// row resolves `unsupported`, so it renders the de-collapsed `⊖` token).
+// `(partially-available) {unsupported hooks}` carrier row (USTAT-01 / D-64-01:
+// the row resolves partially available, so it renders the de-collapsed `⊖`
+// token).
 // ---------------------------------------------------------------------------
 
 test("INFO-05: lenient reader lists `Notification (unsupported)` on a path-resolvable `(partially-available) {unsupported hooks}` row", async () => {
@@ -4641,7 +4642,7 @@ test("INFO-05: lenient reader lists `Notification (unsupported)` on a path-resol
 
     // A single top-level `Notification` event, which is not in
     // BUCKET_A_EVENTS. The partition filters it to the EMPTY subset
-    // (Q2), so the plugin resolves `unsupported` WITHOUT recording
+    // (Q2), so the plugin resolves `partially-available` WITHOUT recording
     // `hooksConfigPath` -- info therefore routes to the lenient reader, which
     // still enumerates `Notification (unsupported)` from the source file.
     const pluginDir = path.join(mpRoot, "ralph");
@@ -4666,7 +4667,7 @@ test("INFO-05: lenient reader lists `Notification (unsupported)` on a path-resol
   });
 });
 
-test("PHOOK-05 / D-71-05: strict reader lists the kept `PostToolUse(Bash)` group plus the dropped `Notification (unsupported)` on a mixed force-degradable row", async () => {
+test("PHOOK-05 / D-71-05: strict reader lists the kept `PostToolUse(Bash)` group plus the dropped `Notification (unsupported)` on a mixed partially-available row", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange
     const userRoot = path.join(home, ".pi", "agent");
@@ -4685,7 +4686,7 @@ test("PHOOK-05 / D-71-05: strict reader lists the kept `PostToolUse(Bash)` group
     // Mixed shape: PostToolUse (bucket-A, with a matcher) + Notification
     // (non-bucket-A). The partition keeps the supportable PostToolUse(Bash)
     // group and drops the Notification event, so the plugin resolves
-    // `unsupported` and records `hooksConfigPath`. Info therefore routes to
+    // `partially-available` and records `hooksConfigPath`. Info therefore routes to
     // the STRICT reader, which extracts the matcher (`PostToolUse(Bash)`) and
     // now also enumerates the dropped Notification event (FSTAT-07
     // dropped-component detail).
@@ -4734,7 +4735,7 @@ test("PHOOK-05 / D-71-05: strict reader enumerates an intra-event dropped matche
     // Intra-event matcher-group partition (D-71-02): PreToolUse declares a
     // supportable `Edit` group and an unsupportable regex `.*` group. The
     // partition keeps the Edit group and drops the regex group, so the plugin
-    // resolves `unsupported` with `hooksConfigPath` recorded. The strict
+    // resolves `partially-available` with `hooksConfigPath` recorded. The strict
     // reader renders the kept group plain and the dropped group at
     // matcher-group granularity with the (unsupported) suffix.
     const pluginDir = path.join(mpRoot, "grouped");

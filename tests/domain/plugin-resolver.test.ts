@@ -476,7 +476,7 @@ test("D-57-04: hooks/hooks.json with structural-shape mismatch -> notInstallable
 
 // PHOOK-02 / D-71-03: a hooks.json that PARSES but drops a non-bucket-A
 // event (here `Notification`) while keeping a supported group resolves the
-// force-degradable `unsupported` arm, NOT `unavailable`. The kept group still
+// `partially-available` arm, NOT `unavailable`. The kept group still
 // materializes (hooksConfigPath recorded, `"hooks"` in supported) and the
 // dropped `Notification` is enumerated in droppedHooks. `"hooks"` is
 // intentionally a member of BOTH supported and unsupported (dual membership).
@@ -516,7 +516,8 @@ test("PHOOK-02 / D-71-03: hooks.json with a kept group + dropped Notification ev
 
 // D-71-02 / PHOOK-02: an intra-event matcher mix keeps the clean group and
 // drops only the unsupportable (regex) group. The event survives partially:
-// `unsupported` with hooksConfigPath recorded and the regex group enumerated.
+// `partially-available` with hooksConfigPath recorded and the regex group
+// enumerated.
 test("D-71-02: intra-event matcher mix keeps the clean group, drops the regex group -> unsupported", async () => {
   // arrange
   const localRoot = pathUnderMarketplace("./local");
@@ -554,9 +555,9 @@ test("D-71-02: intra-event matcher mix keeps the clean group, drops the regex gr
 });
 
 // D-71-03 / Q2: a Notification-only config filters to the EMPTY subset. It
-// still resolves `unsupported` (droppedHooks recorded) but stages nothing: no
-// hooksConfigPath and `"hooks"` is absent from supported (mirrors the
-// LSP-only precedent where force installs nothing).
+// still resolves `partially-available` (droppedHooks recorded) but stages
+// nothing: no hooksConfigPath and `"hooks"` is absent from supported (mirrors
+// the LSP-only precedent where a partial install stages nothing).
 test("D-71-03 / Q2: Notification-only config (empty subset) -> unsupported, no hooksConfigPath, hooks absent from supported", async () => {
   // arrange
   const localRoot = pathUnderMarketplace("./local");
@@ -1861,7 +1862,7 @@ test("MM-5 happy path: valid entry + manifest with skills -> installable with sk
 // A plugin that is BOTH structurally broken (malformed mcpServers) AND
 // declares an unsupported component kind (themes) resolves `unavailable` --
 // the structural defect wins, so `pluginRoot` never leaks through the
-// `unsupported` arm. Both reasons are still present in `notes`.
+// `partially-available` arm. Both reasons are still present in `notes`.
 test("RSTATE-02: structural defect + unsupported kind -> unavailable (structural precedence)", async () => {
   // arrange
   const context = resolveContext(marketplaceRoot, { [pathUnderMarketplace("./local")]: "dir" });
@@ -1960,16 +1961,16 @@ test("RSTATE-04 requirePartialInstallable(resolvedPlugin, 'update') throws with 
 });
 
 // ──────────────────────────────────────────────────────────────────────────
-// SEV-02 / IN-02 / D-69-03 / RSTATE-05: requireInstallable on the `unsupported`
-// arm carries the force hint + typed unsupported-kind list
+// SEV-02 / IN-02 / D-69-03 / RSTATE-05: requireInstallable on the
+// `partially-available` arm carries the partial hint + typed unsupported-kind list
 // ──────────────────────────────────────────────────────────────────────────
 
-// requireInstallable throws on an `unsupported` (force-degradable) plugin, and
-// the thrown PluginShapeError pins the force-hint ternaries:
+// requireInstallable throws on a `partially-available` plugin, and the thrown
+// PluginShapeError pins the partial-hint ternaries:
 // `partialable: resolvedPlugin.state === "partially-available"` (true here) and
 // `unsupportedKinds: resolvedPlugin.state === "partially-available" ? resolvedPlugin.unsupported : []` (the typed
 // component-kind list, NOT the empty structural default). A regression that
-// dropped either would silently suppress the `--force` hint on the render row.
+// dropped either would silently suppress the `--partial` hint on the render row.
 test("SEV-02 / IN-02: requireInstallable on unsupported throws partialable with the typed unsupportedKinds", async () => {
   // arrange
   const context = resolveContext(marketplaceRoot, { [pathUnderMarketplace("./local")]: "dir" });
@@ -2008,7 +2009,8 @@ test("SEV-02 / IN-02: requireInstallable on unsupported throws partialable with 
 // unsupportable group (regex matcher ".*") whose only handler declares
 // `rewakeMessage` WITHOUT `asyncRewake:true`. The orphan lives in the dropped
 // group, so it never enters the filtered subset `detectOrphanRewake` scans ->
-// `orphanRewake` stays absent even though the plugin resolves `unsupported`.
+// `orphanRewake` stays absent even though the plugin resolves
+// `partially-available`.
 test("SURF-05 / D-71-03: orphan in a DROPPED group does not flag orphanRewake -> unsupported, orphanRewake absent", async () => {
   // arrange
   const localRoot = pathUnderMarketplace("./local");
@@ -2050,7 +2052,7 @@ test("SURF-05 / D-71-03: orphan in a DROPPED group does not flag orphanRewake ->
 
 // Converse: the orphan lives in the KEPT group (matcher "Bash") while the regex
 // group drops. The kept group IS in the filtered subset, so `orphanRewake`
-// still flags true even though the plugin resolves `unsupported`.
+// still flags true even though the plugin resolves `partially-available`.
 test("SURF-05 / D-71-03: orphan in the KEPT group still flags orphanRewake -> unsupported, orphanRewake true", async () => {
   // arrange
   const localRoot = pathUnderMarketplace("./local");
