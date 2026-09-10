@@ -7,7 +7,7 @@ current_phase_name: Measured `agent()` failure evidence
 current_plan: 3 of 3 executed
 status: audit passed with tech debt; archive paused
 stopped_at: Milestone audit recorded tech_debt; operator chose to clear debt before the archive
-last_updated: "2026-09-10T02:10:00.000Z"
+last_updated: "2026-09-10T03:05:00.000Z"
 state_head: 2b7ffdc4cd56f08bb3a4107d05f6a27f4671c922
 progress:
   total_phases: 9
@@ -16,7 +16,7 @@ progress:
   completed_plans: 39
   percent: 100
 last_activity: 2026-09-09
-last_activity_desc: Retroactive threat verification landed for phases 109-113; all nine now verified
+last_activity_desc: Validation contracts reconciled for 109-113; two architecture gates written
 ---
 
 # Project State
@@ -55,8 +55,8 @@ and `cleanup` have NOT run. What is owed, in the order the audit lists it:
    Four further false claims in the surviving block were found and corrected on
    the way; one more — a stale statement of the reload-hint MECHANISM, not an
    enumeration defect — became ledger entry 47, so item 2 below grew by one.
-2. **Fifteen open Broken Windows entries**, all tagged `[workflows-replay]`:
-   #34, #37, #39-#51. #44 and #51 are TODOs; #41 and #42 are the same inert
+2. **Sixteen open Broken Windows entries**, all tagged `[workflows-replay]`:
+   #34, #37, #39-#52. #44 and #51 are TODOs; #41 and #42 are the same inert
    `ENBL-08` case seen from two angles; #47 is the reload-hint mechanism claim
    the messaging quick task deliberately did not fix inline. #48-#51 are new,
    from the retroactive security audits — a containment check anchored on the
@@ -64,15 +64,21 @@ and `cleanup` have NOT run. What is owed, in the order the audit lists it:
    naming a regression gate that was never built (#49), a sweep refusal
    documented as loud that both call sites discard silently (#50), and an
    absent threat-flag channel across all 21 summaries of phases 109-113 (#51).
+   #52 came out of the validation pass: the update record's commit-succeeded arm
+   sources the prepare's staged names, and it is the same arm that reasons about
+   a placement which did not survive a successful commit.
 3. ~~Phases 109-113 carry no SECURITY.md~~ — **DONE** (`2b7ffdc4`). One
    auditor per phase verified all 127 registered threats against the
    implementation; every phase returns SECURED at `threats_open: 0`, and every
    register parse matched an independently measured row count. All nine phases
    of the milestone now read `status: verified`.
-4. **Phases 109-113 sit at VALIDATION.md `status: draft`** — never reconciled by
-   validate-phase, so `nyquist_compliant` is not authoritative there.
-   `/gsd-validate-phase N` each. Per #2117 this is a coverage TODO, not a
-   compliance failure.
+4. ~~Phases 109-113 sit at VALIDATION.md `status: draft`~~ — **DONE**
+   (`364dc753`, `358577b5`). All five reconciled to `validated` /
+   `nyquist_compliant: true`. Four had zero test gaps; only 113 found any, and
+   two of its three were closed with new architecture gates, each planted and
+   observed red before being trusted. The third — the abort-path call-site
+   enumeration — is an accepted, named residual. `wave_0_complete` on the bridge
+   phase was corrected from `false` to `true` against its nine satisfied items.
 5. **Four unresolved code-review findings**, each already filed behind a carrier:
    Phase 110 WR-07 (refiled) and WR-09 (deferred); Phase 112 WR-03 (deferred,
    and already closed by Phase 113's WLIF-02 — its ledger status wants turning
@@ -645,8 +651,9 @@ debt work, then the archive:
   substring guard in two live-UAT canaries
 - ~~Run `/gsd-secure-phase N` for 109-113~~ — done; all nine phases now carry a
   verified SECURITY.md at `threats_open: 0`
-- Run `/gsd-validate-phase N` for the same five — each sits at VALIDATION.md
-  `status: draft`, so its `nyquist_compliant` value is not authoritative
+- ~~Run `/gsd-validate-phase N` for the same five~~ — done; all five now read
+  `validated` / `nyquist_compliant: true`, with two new architecture gates and
+  one named residual
 - Turn Phase 112's WR-03 ledger status (Phase 113 already closed it) and waive
   Phase 116's WR-03 (its fix reverses an operator-locked decision)
 - Then `/gsd-complete-milestone workflows-replay`, which takes all nine phases as

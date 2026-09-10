@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 15
+open_count: 16
 waived_count: 14
 fixed_count: 22
-total_count: 51
-last_updated: 2026-09-10T02:05:17.644Z
+total_count: 52
+last_updated: 2026-09-10T13:23:19.387Z
 ---
 
 # Broken Windows Ledger
@@ -66,6 +66,7 @@ last_updated: 2026-09-10T02:05:17.644Z
 | 49 | 113 | unmet-truth | .planning/workstreams/workflows/phases/111-workflows-bridge/111-01-PLAN.md | 206 | [workflows-replay] three threat mitigations name a regression gate that was never built. T-111-03 (111-01-PLAN.md:206) says a bare path join is kept out of the workflows bridge by 'a source assertion in the acceptance criteria' - no such criterion exists in either plan, and no architecture test scans the bridge for it (no-probe-in-workflows-bridge.test.ts covers probe surface only). T-113-08 promises 'a grep gate pins the callback's presence' - grep -rn onPlaced tests/architecture/ returns 0. T-113-20 promises 'a grep gate pins the absence of write calls in the module', which cannot exist as worded because the same module hosts the destructive sweep and imports rm. All three properties were verified TRUE at HEAD by direct read, so nothing is broken today; none is guarded against reintroduction. A durable gate belongs beside assertNoForbiddenSurface in tests/architecture/source-scan.ts. Found by the retroactive phase-111 and phase-113 security audits. | open |  | 2026-09-10T02:05:16.905Z |  |
 | 50 | 112 | unmet-truth | extensions/pi-claude-marketplace/orchestrators/plugin/workflows-staging-gc.ts | 148 | [workflows-replay] the staging sweep's containment refusal is silent, and the comment above it says otherwise. workflows-staging-gc.ts:148-154 states the refusal is 'still loud'; the WR-01 fix turned the propagating throw into a per-entry leak string (:155-164), and BOTH call sites then discard the leak array in a bare catch {} - install.ts:1740-1744 and uninstall.ts:478-482 - so a symlinked staging segment is refused with no user-visible signal on either path. The tampering vector is fully closed either way (rm never runs on a refused entry, proven by two symlink tests asserting external trees survive); what is wrong is the stated observability. Three planning artifacts still assert the superseded propagate behavior: 112-04-PLAN.md:389, 112-04-SUMMARY.md:101, and 112-VERIFICATION.md:32's citation of it. Found by the retroactive phase-112 security audit. | open |  | 2026-09-10T02:05:17.280Z |  |
 | 51 | 113 | todo | .planning/workstreams/workflows/phases |  | [workflows-replay] not one SUMMARY across phases 109-113 carries a '## Threat Flags' section - 21 summaries, zero sections. The section is ABSENT rather than empty, so the executor's new-attack-surface channel produced nothing for any security audit to cross-check against, and every register's completeness rests entirely on register_authored_at_plan_time:true. All four auditors independently flagged this and none treated the absence as evidence that no new surface appeared; each verified mitigations by reading the implementation instead. Mitigating factor for these five phases: the new surface was independently enumerated by the code-review iterations, and each finding mapped onto a register row. The fix is a template change so the section is emitted even when the answer is None. | open |  | 2026-09-10T02:05:17.644Z |  |
+| 52 | 113 | todo | extensions/pi-claude-marketplace/orchestrators/plugin/update.ts | 1992 | [workflows-replay] the commit-SUCCEEDED arm records the prepare's staged names, and it is the arm that reasons about a post-success failure. update.ts:1992-1994 sets sRecord.resources.workflows from handles.workflows.result.stagedNames when args.workflows.committed is true, and from previousWorkflowNames + the commit-reported placedNames otherwise. The stated rationale for the succeeded arm is that on a commit which ran, what it staged is the truth - but a staging-cleanup leak is a recorded failure over a commit that fully succeeded, and the comment directly above that line reasons about exactly that case (envelopes left in .previous/ rather than at their targets, producing a false stale-workflow-command stamp on the next update and phantom entries on info). So the arm whose premise is 'the commit ran, therefore the intent is the truth' is the same arm that handles the case where the commit ran and the placement did not survive. Surfaced while writing the WLIF-02 architecture gate: the gate could not be written to the property as originally promised (never source from the prepare) because that property is false by design on this arm, which is what exposed the question. Not changed here - it is behavior rather than coverage, and deciding it needs the leak path measured rather than read. | open |  | 2026-09-10T13:23:19.387Z |  |
 
 ````json
 [
@@ -679,6 +680,18 @@ last_updated: 2026-09-10T02:05:17.644Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-09-10T02:05:17.644Z",
+    "resolved_at": null
+  },
+  {
+    "id": 52,
+    "kind": "todo",
+    "phase": "113",
+    "file": "extensions/pi-claude-marketplace/orchestrators/plugin/update.ts",
+    "line": 1992,
+    "description": "[workflows-replay] the commit-SUCCEEDED arm records the prepare's staged names, and it is the arm that reasons about a post-success failure. update.ts:1992-1994 sets sRecord.resources.workflows from handles.workflows.result.stagedNames when args.workflows.committed is true, and from previousWorkflowNames + the commit-reported placedNames otherwise. The stated rationale for the succeeded arm is that on a commit which ran, what it staged is the truth - but a staging-cleanup leak is a recorded failure over a commit that fully succeeded, and the comment directly above that line reasons about exactly that case (envelopes left in .previous/ rather than at their targets, producing a false stale-workflow-command stamp on the next update and phantom entries on info). So the arm whose premise is 'the commit ran, therefore the intent is the truth' is the same arm that handles the case where the commit ran and the placement did not survive. Surfaced while writing the WLIF-02 architecture gate: the gate could not be written to the property as originally promised (never source from the prepare) because that property is false by design on this arm, which is what exposed the question. Not changed here - it is behavior rather than coverage, and deciding it needs the leak path measured rather than read.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-10T13:23:19.387Z",
     "resolved_at": null
   }
 ]

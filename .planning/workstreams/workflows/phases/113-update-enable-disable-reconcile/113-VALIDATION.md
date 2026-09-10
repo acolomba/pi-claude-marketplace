@@ -2,10 +2,11 @@
 phase: "113"
 slug: "update-enable-disable-reconcile"
 # status lifecycle: draft (seeded by plan-phase) → validated (set by validate-phase §6)
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: validated
+nyquist_compliant: true
+wave_0_complete: true
 created: "2026-09-05"
+validated: "2026-09-10"
 ---
 
 # Phase 113 — Validation Strategy
@@ -56,7 +57,7 @@ drawn from the requirement map below.
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| pending | — | — | — | — | — | — | — | — | ⬜ pending |
+| pending | — | — | — | — | — | — | — | — | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -85,27 +86,27 @@ drawn from the requirement map below.
 
 ## Wave 0 Requirements
 
-- [ ] A compile-forcing proof for the `info` component-kind set — nothing guards
+- [x] A compile-forcing proof for the `info` component-kind set — nothing guards
       the widening direction today. Land it with a negative control that shows
       the probe fires.
-- [ ] `docs/output-catalog.md` + `tests/architecture/catalog-uat.test.ts` paired
+- [x] `docs/output-catalog.md` + `tests/architecture/catalog-uat.test.ts` paired
       fixtures for: an `info` row with a `workflows:` line (resolved arm), an
       `info` row with a `workflows:` line (state-only arm), the `list`
       regression row, an `info` row carrying preview-tense discovery warnings,
       the two `pending` arms carrying a retained-tree advisory, and one retiring
       row per WLIF-06 stamping verb.
-- [ ] Criterion-6 cases: one per widened slot (`update.ts`'s
+- [x] Criterion-6 cases: one per widened slot (`update.ts`'s
       `PHASE3_FAILURE_PHASES`, `orchestrators/types.ts`, `shared/errors.ts`),
       each driving a **workflows** failure through the `update` verb.
-- [ ] A workflows-failure vehicle for `update`. A `WorkflowTargetOccupiedError`
+- [x] A workflows-failure vehicle for `update`. A `WorkflowTargetOccupiedError`
       planted at a target path is the cheapest deterministic vehicle — it places
       nothing, so the placed-names report is empty and the finalize failure arm
       narrows to the recorded names alone.
-- [ ] A criterion-3 double-reconcile idempotence case with a negative control.
-- [ ] `tests/bridges/workflows/discover.test.ts` — every existing
+- [x] A criterion-3 double-reconcile idempotence case with a negative control.
+- [x] `tests/bridges/workflows/discover.test.ts` — every existing
       `discoverPluginWorkflows({ pluginName, resolved })` call needs a `tense`
       if the parameter is required (~25 sites).
-- [ ] A WLIF-04 case (reinstall replaces a workflow artifact: old envelope gone,
+- [x] A WLIF-04 case (reinstall replaces a workflow artifact: old envelope gone,
       new envelope present, record rewritten), then correct the traceability row
       in the same commit as the evidence.
 
@@ -119,13 +120,97 @@ drawn from the requirement map below.
 
 ---
 
+## Validation Audit 2026-09-10
+
+| Metric | Count |
+|--------|-------|
+| Requirements + criteria audited | 13 |
+| Covered | 10 |
+| Partial (at audit time) | 3 |
+| Missing | 0 |
+| Gaps closed by new gates | 2 |
+| Gaps accepted as residual | 1 |
+| Tests generated | 2 |
+
+Run retroactively; this file was seeded by plan-phase and never reconciled. The
+audit ran the cited suites live rather than trusting the map. This was the only
+one of the five replay phases where the gate found real gaps.
+
+### The three gaps, and what happened to each
+
+All three were the same shape: the property is TRUE at HEAD and has a passing
+behavioural test, but the regression-prevention mechanism the plan promised was
+never built. None was blocker-grade.
+
+1. **The `onPlaced` source gate — CLOSED.**
+   `tests/architecture/workflows-update-placed-names.test.ts`.
+2. **The read-only-scan gate — CLOSED.**
+   `tests/architecture/no-write-in-workflows-staging-scan.test.ts`.
+3. **The abort-path call-site enumeration — ACCEPTED as residual.** See below.
+
+Both new gates were planted and observed red before being trusted, then reverted;
+`git diff extensions/` is empty. `npm run fallow` exits 0 with them present, so
+neither introduced a duplication finding.
+
+### The first gap was mis-stated, and the gate is narrower than its own promise
+
+The promise was that `update.ts` derives persisted names from the commit-time
+callback and **never** from the prepare-time intent. That is true on only one of
+two arms. At `update.ts:1992-1994` the commit-SUCCEEDED arm reads
+`handles.workflows.result.stagedNames` deliberately, with a stated rationale — on
+a commit that ran, what it staged is the truth. Only the commit-FAILED arm reads
+the callback value.
+
+A gate written to the literal promise would therefore be **red on a correct
+tree** — the same impossibility class already known for the second gap, sitting
+undetected in the first. The shipped gate is scoped to the shapes that would
+source a *placed-name answer* from the prepare, plus required-surface assertions
+that the mechanism still exists.
+
+**One behavioural question is left open by this, deliberately.** Whether the
+succeeded-arm read of `stagedNames` is itself right is arguable: a
+staging-cleanup leak is a recorded failure over a commit that fully succeeded,
+and that arm reasons about exactly that case. That is behaviour, not coverage, so
+it was not changed here; it is filed in the Broken Windows ledger instead.
+
+### The accepted residual
+
+The removed grep threshold (`abortPreparedWorkflows` appearing three or more
+times) was replaced by a structural argument when two unwind helpers merged into
+one guarded `abortHandles`. The property it stood for — no unwind path omits the
+workflows arm — is genuinely covered for the paths that exist:
+`update.test.ts#WLIF-02` plants a real mid-update abort and asserts the workflows
+staging tree is empty, and would go red if `abortHandles` stopped calling
+`abortPreparedWorkflows`.
+
+What it would NOT catch is a *second* function-level entry point into the abort
+flow that skips the workflows arm on a different failure branch. Today's
+single-function shape makes that hard to introduce by accident, but nothing
+enumerates the call sites the way the count did. Accepted rather than gated: the
+operator chose the two gates above and not a third. Named here so the absence
+stays visible rather than dissolving into the count.
+
+---
+
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 30s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags
+- [x] Feedback latency acceptable — both new gates run in well under a second
+- [x] Both new gates planted and observed red before being trusted
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+`nyquist_compliant: true` is set with one named residual — the abort-path
+call-site enumeration above — and with the single Manual-Only row adjudicated as
+genuinely un-automatable rather than declined:
+
+**The lingering command actually stays runnable for the session.** Pi exposes no
+`unregisterCommand` API to assert against in a headless harness. The row
+correctly scopes the automated obligation down to "the stamped notification row
+is unit-testable", which it is — all seven stamp sites carry direct, named,
+passing cases rather than inheriting coverage from the original four the roadmap
+named. Only the live-session command-liveness claim is left manual.
+
+**Approval:** validated 2026-09-10
