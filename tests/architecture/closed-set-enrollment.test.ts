@@ -21,10 +21,13 @@
  * Neither `ClaudeHookEvent` nor `Dependency` has a runtime tuple of its own, so
  * neither offers members this gate could count directly. The hook half counts
  * `BUCKET_A_EVENTS`, the registration tuple the resolver reads. The `Dependency`
- * half pins `softDepMarkers`, the sole runtime surface the set drives: a third
- * dependency added to the union without a `softDepMarkers` branch would leave
- * the flag count and the emitted marker set unchanged, which is the drift this
- * pins.
+ * half takes the two instruments a bare literal union leaves available: a
+ * compile-time `Exclude` proof that the union holds exactly the two members
+ * `softDepMarkers` branches on, and a runtime pin on that function's arity. A
+ * third dependency added to the union without a `softDepMarkers` branch leaves
+ * the flag count and the emitted marker set unchanged, so neither the five
+ * cross-product cases below nor the catalog case would notice it; the proof
+ * fails to compile instead.
  */
 
 import assert from "node:assert/strict";
@@ -38,6 +41,19 @@ import { softDepMarkers } from "../../extensions/pi-claude-marketplace/shared/co
 import { REASONS } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
 import type { SoftDepStatus } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { Dependency } from "../../extensions/pi-claude-marketplace/shared/concerns/soft-dep.ts";
+
+/**
+ * The two `Dependency` members `softDepMarkers` carries a branch for.
+ *
+ * `AssertNever` accepts `never` alone, so a third member of the union leaves
+ * `UnenrolledDependency` non-`never` and the annotation below is a TS2344 build
+ * failure. This is the reverse direction `hook-events.ts` states for the event
+ * set, spelled here because `Dependency` has no tuple of its own to constrain.
+ */
+type AssertNever<T extends never> = T;
+type UnenrolledDependency = Exclude<Dependency, "agents" | "mcp">;
+const UNENROLLED_DEPENDENCIES: AssertNever<UnenrolledDependency>[] = [];
 
 test("SCN-F025: BUCKET_A_EVENTS is the closed 10-entry admitted-event set", () => {
   // TOOL-02: the admission set opened at 8 events, the closed set
@@ -81,6 +97,27 @@ test("SCN-F025: every TOOL_EVENTS member is an admitted bucket-A event", () => {
 
   // assert
   assert.deepStrictEqual(unadmittedToolEvents, []);
+});
+
+test("SCN-F025: Dependency is the closed 2-member set softDepMarkers branches on", () => {
+  // arrange
+  const expectedDeclaresFlagCount = 2;
+  const probeParameterCount = 1;
+
+  // act
+  const parameterCount = softDepMarkers.length;
+
+  // assert
+  assert.deepStrictEqual(
+    UNENROLLED_DEPENDENCIES,
+    [],
+    "SCN-F025: a Dependency member outside the enrolled pair is a compile failure at UNENROLLED_DEPENDENCIES, not a value this array could ever hold.",
+  );
+  assert.equal(
+    parameterCount,
+    expectedDeclaresFlagCount + probeParameterCount,
+    "SCN-F025: softDepMarkers changed arity, so the Dependency set moved without its marker branch, its catalog row, or this classification being revisited.",
+  );
 });
 
 test("SCN-F025: softDepMarkers emits both markers in canonical agents-before-mcp order", () => {
