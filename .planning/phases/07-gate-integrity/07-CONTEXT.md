@@ -45,11 +45,18 @@ claim that has not been independently revalidated (`D-22`).
   **Reversibility:** costly — the root parameter reaches every current and future
   caller of the shared scan mechanic, so reverting means re-inlining `REPO_ROOT`
   at each gate.
-- **D-07-02:** Gates that invoke a real tool (ESLint flat config, Fallow) use a
-  committed in-repo fixture instead, because plugin and `tsconfig` resolution must
-  work. That fixture is linted through the **real resolved config**, never through
-  a synthetic `overrideConfig`. The two mechanisms are deliberate: each is matched
-  to what its gate actually invokes.
+- **D-07-02 (amended after research):** Gates that invoke a real tool (ESLint flat
+  config, Fallow) prove firing through an offender **config**, not an offender
+  fixture. Each offender is the real `eslint.config.js` (or `.fallowrc.json`) plus
+  one appended mutation, resolved against **real extension files**. The original
+  wording called for a committed in-repo fixture linted through the real config;
+  measurement showed that is not possible here — `tests/fixtures/bad-imports/**` is
+  globally ignored at `eslint.config.js:303` and sits outside BLOCK C's
+  `extensions/pi-claude-marketplace/**/*.ts` glob, so `calculateConfigForFile`
+  returns `undefined` for it and the zone rule is absent even with `ignore: false`.
+  Delete the synthetic-`overrideConfig` canary in `import-boundaries.test.ts` rather
+  than leaving the weak form beside the strong one. The two mechanisms remain
+  deliberate: temp-root copies for file scans, offender configs for tool runs.
 - **D-07-03:** Visitation is proved separately from firing. Each scan reports the
   set of paths it actually opened, and the gate deep-compares that set against its
   declared target list. This catches both a target that stopped resolving and a
@@ -130,25 +137,45 @@ claim that has not been independently revalidated (`D-22`).
   has been split. Record those as closed-by-earlier-phase with positive current
   evidence rather than re-fixing them, and still add the gate so the class cannot
   return.
-- **D-07-18:** The test-only-surface gate fires on real offenders, and the one live
-  offender is removed in this phase:
-  `extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-replace.ts` exports
-  `__operations?: ReinstallReplaceOperations` on `ReplaceReinstalledPluginInput`, which
-  `MF-DEC-07` forbids as a `__deps` bag. Give `reinstall-replace.ts` a
-  production-owned collaborator the way Phase 5 did elsewhere, so the gate ships green
-  against a tree that actually satisfies it. No allow-list entry: this milestone has
-  repeatedly found allow-lists go stale and silent. — **Reversibility:** costly —
-  the collaborator becomes part of the reinstall compensation path's public shape, so
-  reverting means migrating the replacement schedule and its owner test back.
+- **D-07-18 (amended after research):** The test-only-surface gate fires on real
+  offenders, and **both** live offenders are removed in this phase:
+  1. `orchestrators/plugin/reinstall-replace.ts` exports
+     `__operations?: ReinstallReplaceOperations` on `ReplaceReinstalledPluginInput`.
+  2. `orchestrators/plugin/reinstall-flow.ts:138,151` carries a second `__deps` bag
+     plus a forwarding site — surfaced by research, absent from the original wording.
+
+  `MF-DEC-07` and `D-05-01` forbid both. Give each a production-owned collaborator
+  the way Phase 5 did elsewhere, so the gate ships green against a tree that actually
+  satisfies it. Removing one and gating the other is the same split `D-07-19` warns
+  against. No allow-list entry: this milestone has repeatedly found allow-lists go
+  stale and silent. — **Reversibility:** costly — each collaborator becomes part of
+  its flow's public shape, so reverting means migrating the call sites and owner
+  tests back.
 
 ### Production-Unowned Exports
 
-- **D-07-19:** The production-unowned-export gate is a repository-wide sweep: an
-  export with no production consumer outside its own module is an offender. It closes
-  `DCORE-030` (`MARKETPLACE_VALIDATOR` in `domain/manifest.ts`) and the identical
-  instance `surfacePostCommitWarnings` (`orchestrators/reconcile/apply.ts`) together.
-  They are one defect with two instances; gating one while leaving the other is the
-  split that lets a class survive.
+- **D-07-19 (amended after research):** The production-unowned-export gate is a
+  repository-wide **pinned snapshot**, not a must-be-zero sweep. The original wording
+  assumed two instances; the measured census is **91 unowned exports in
+  `extensions/`** (102 with `scripts/`), confirmed by two independent instruments —
+  `fallow dead-code --production --unused-exports` and a from-scratch TypeScript
+  compiler-API census. A must-be-zero gate cannot ship green, and `D-07-18`
+  forecloses an allow-list.
+
+  The gate therefore commits the full census list beside itself and asserts the
+  measured set equals it **exactly**. This is `markers-snapshot.test.ts`'s house
+  pattern, and it is not an allow-list: an allow-list forgives named entries silently
+  and forever, while a pinned set fails on any change in either direction — an
+  addition, a removal, or a swap — forcing a conscious diff.
+
+  `DCORE-030` (`MARKETPLACE_VALIDATOR`, `domain/manifest.ts:40`) and its identical
+  twin `surfacePostCommitWarnings` (`orchestrators/reconcile/apply.ts:921`) are both
+  removed in this phase and the pin drops by two. They are one defect with two
+  instances; gating one while leaving the other is the split that lets a class
+  survive. The remaining entries stay pinned, not remediated — many are legitimate
+  design (the `create*` injectable factories exist for exactly the dependency-injection
+  pattern `CONVENTIONS.md` prescribes), and a 91-item remediation is a phase of its own.
+  — **Reversibility:** reversible — the pin is one committed list.
 - **D-07-20:** Fallow's `production: false` setting stays as it is. It is `FLOW-06`'s
   deliberate fix, paired with `includeEntryExports`, and the operator owns that
   question separately. The unowned-export gate is therefore a **test**, not a config
@@ -173,6 +200,21 @@ claim that has not been independently revalidated (`D-22`).
   `maxCyclomatic: 20` / `maxUnitSize: 60`. Passing one does not predict the other.
 - `duplicates.threshold: 3` applies to gate fixture setup. Shared temp-root and
   registry helpers must be extracted, not copied across gate files.
+
+### Rulings Taken After Research
+
+- **`SHC-F047` redundant-gate audit:** `tests/shared/markers.test.ts` is the module's
+  owner test, which `.claude/rules/typescript-unit-testing.md` requires, so it keeps
+  the byte pins. `tests/architecture/markers-snapshot.test.ts` retains only what the
+  owner test cannot express — the `locationsFor` assertion at `:72-76` and the
+  agents-bridge markers at `:34-44`, which come from a different module. Its dangling
+  `no-legacy-markers.test.ts` citation is fixed either way.
+- **`OPEFR-F007`:** try converting `orchestrators/plugin/fetch.ts:483`'s dynamic
+  `import()` to a static import. If `npm run check` stays green, make it static and
+  close the finding outright rather than documenting a form with no reason.
+  `orchestrators/plugin` → `domain` is a legal zone edge and `fetch.ts` already imports
+  other `domain/` modules statically. The gate gains the dynamic-`import()` pattern
+  regardless: `OPEF-F01` is about the gate's blind spot, not about that one call site.
 
 ### Claude's Discretion
 
