@@ -57,14 +57,38 @@ export const BUCKET_A_EVENTS = [
  *
  * SURF-02 / D-63-06: `BucketAEvent` is a structural duplicate of the
  * `ClaudeHookEvent` literal-union declared in `shared/concerns/hooks.ts`. The
- * `as const satisfies readonly ClaudeHookEvent[]` assertion above is the
- * single-source-of-truth pin -- adding/removing a value from
- * `BUCKET_A_EVENTS` here without the matching `ClaudeHookEvent` edit (or
- * vice versa) breaks the typecheck at that assertion site. The two
- * declarations exist on opposite sides of the `shared/` <- `domain/`
- * import-direction fence (`import-x/no-restricted-paths`).
+ * two declarations sit on opposite sides of the `shared/` <- `domain/`
+ * import-direction fence (`import-x/no-restricted-paths`), and holding them
+ * in step takes one mechanism per direction:
+ *
+ *   - The `as const satisfies readonly ClaudeHookEvent[]` assertion above
+ *     proves every `BUCKET_A_EVENTS` member is a `ClaudeHookEvent`. A tuple
+ *     entry outside the union fails at that assertion site.
+ *   - `_BucketAEventsCoverageProof` below proves every `ClaudeHookEvent` is
+ *     a `BUCKET_A_EVENTS` member. A union member left unregistered fails
+ *     there.
+ *
+ * SCN-F025 / GGAT-04: `satisfies readonly T[]` constrains the tuple against
+ * the union and not the union against the tuple, so the reverse proof is what
+ * makes an unregistered event a compile error rather than an event the
+ * resolver admits and no dispatch translator routes.
  */
 export type BucketAEvent = (typeof BUCKET_A_EVENTS)[number];
+
+/**
+ * SCN-F025 / GGAT-04 completeness proof for the second direction described
+ * above. `Exclude<ClaudeHookEvent, BucketAEvent>` resolves to `never` only
+ * when the tuple registers the whole union; an unregistered member leaves a
+ * non-`never` type, which violates `_AssertNever`'s constraint and is a
+ * TS2344 build failure. Type-only, with no runtime footprint. The export is
+ * what keeps `noUnusedLocals` quiet -- `_AssertNever` and
+ * `_UnregisteredHookEvent` are the proof's own internals and mean nothing to
+ * a caller.
+ */
+type _AssertNever<T extends never> = T;
+type _UnregisteredHookEvent = Exclude<ClaudeHookEvent, BucketAEvent>;
+// fallow-ignore-next-line private-type-leak -- SCN-F025 completeness proof; a non-never result is a TS2344 build failure, and the export is what keeps `noUnusedLocals` quiet. `_AssertNever` / `_UnregisteredHookEvent` are the proof's own internals, meaningless to a caller.
+export type _BucketAEventsCoverageProof = _AssertNever<_UnregisteredHookEvent>;
 
 /**
  * The three bucket-A events whose matcher targets a Claude tool name

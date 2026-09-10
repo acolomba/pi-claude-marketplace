@@ -10,6 +10,7 @@ import {
   type DispatchableEvent,
   type StopFailureErrorType,
   type ToolEvent,
+  type _BucketAEventsCoverageProof,
 } from "../../../extensions/pi-claude-marketplace/domain/components/hook-events.ts";
 
 void ("SessionStart" satisfies BucketAEvent);
@@ -24,6 +25,16 @@ void ("Notification" satisfies DispatchableEvent);
 void ("rate_limit" satisfies StopFailureErrorType);
 // @ts-expect-error Error types use the closed vocabulary.
 void ("timeout" satisfies StopFailureErrorType);
+
+// The proof resolves to `never` exactly when `BUCKET_A_EVENTS` registers every
+// `ClaudeHookEvent`. The tuple wrappers stop the naked-`never` conditional from
+// distributing, so both directions are compared as written.
+type BucketAEventsCoverageProofIsExact = [_BucketAEventsCoverageProof] extends [never]
+  ? [never] extends [_BucketAEventsCoverageProof]
+    ? true
+    : false
+  : false;
+void (true satisfies BucketAEventsCoverageProofIsExact);
 
 describe("BUCKET_A_EVENTS", () => {
   test("publishes every admitted event in registration order", () => {
