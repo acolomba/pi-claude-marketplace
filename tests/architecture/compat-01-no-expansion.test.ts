@@ -95,12 +95,25 @@ import {
   STATUS_TOKENS,
 } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
+import { COMPAT_NO_EXPANSION_TARGETS, NETWORK_FREE_TARGETS } from "./gate-targets.ts";
 import { REPO_ROOT, stripComments } from "./source-scan.ts";
 
 import type { LedgerDegradationSignals } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts";
 import type { InstallPluginOutcome } from "../../extensions/pi-claude-marketplace/orchestrators/types.ts";
 
-const NOTIFICATION_GRAMMAR_REL = "extensions/pi-claude-marketplace/shared/notification-grammar.ts";
+/**
+ * The two files this gate reads as data, taken from the registry (D-07-05) so
+ * the paths are named once for every gate rather than once per gate. The tuple
+ * order is the group's own: grammar owner first, then the catalog it must not
+ * outgrow.
+ */
+const NOTIFICATION_GRAMMAR_REL = COMPAT_NO_EXPANSION_TARGETS[0];
+const OUTPUT_CATALOG_REL = COMPAT_NO_EXPANSION_TARGETS[1];
+
+/**
+ * The registry module the delegation clause below reads. A test path, not a
+ * production one, so D-07-05 does not cover it and it is spelled here.
+ */
 const NETWORK_GATE_REL = "tests/architecture/gate-targets.ts";
 
 /**
@@ -332,7 +345,7 @@ test("COMPAT-01: the catalog names each glyph the way the code-point pins above 
   ];
 
   // act
-  const catalog = await readFile(path.join(REPO_ROOT, "docs/output-catalog.md"), "utf8");
+  const catalog = await readFile(path.join(REPO_ROOT, OUTPUT_CATALOG_REL), "utf8");
   const mismatches = expected
     .filter(([glyph, name]) => !catalog.includes(`- \`${glyph}\` -- ${name}`))
     .map(([glyph, name]) => `${glyph} is not named "${name}" in the catalog's Glyphs section`);
@@ -365,6 +378,10 @@ test("COMPAT-01: the notification grammar owner declares no eighth glyph export"
   );
 
   // assert
+  assert.ok(
+    COMPAT_NO_EXPANSION_TARGETS.length > 0,
+    "D-07-03: an empty target group leaves this clause and the catalog clause reading nothing and reporting success over zero files.",
+  );
   assert.equal(
     declarations?.length,
     expectedCount,
@@ -523,7 +540,12 @@ test("COMPAT-01: the network clause is covered by the orchestrator-network gate"
   // the named files still EXIST is the shared scanner's job -- it fails on a
   // missing target rather than skipping it, so a rename cannot leave both gates
   // green over a file neither read.
-  const requiredTargets = [
+  //
+  // The annotation is the load-bearing half: `(typeof NETWORK_FREE_TARGETS)[number]`
+  // is the union of the group's own entries, so dropping either surface from the
+  // registry stops this file compiling. The scrape below stays as the runtime
+  // half, and covers the case where the registry module itself moves.
+  const requiredTargets: ReadonlyArray<(typeof NETWORK_FREE_TARGETS)[number]> = [
     "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts",
     "extensions/pi-claude-marketplace/orchestrators/marketplace/info.ts",
   ];
