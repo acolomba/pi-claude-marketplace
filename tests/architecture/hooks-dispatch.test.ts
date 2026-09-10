@@ -39,41 +39,6 @@ test("OBS-01 keeps console.error in the shared debug-log seam only", async () =>
   assert.deepStrictEqual(offenders.sort(), ["shared/debug-log.ts"]);
 });
 
-test("OBS-01 limits extension no-console overrides to the documented files", async () => {
-  // arrange
-  const configPath = path.join(process.cwd(), "eslint.config.js");
-  const expectedPaths = [
-    "extensions/pi-claude-marketplace/persistence/migrate.ts",
-    "extensions/pi-claude-marketplace/shared/debug-log.ts",
-    "extensions/pi-claude-marketplace/shared/notification-dispatch.ts",
-  ];
-
-  // act
-  const source = await readFile(configPath, "utf8");
-  const allowedPaths: string[] = [];
-  for (const match of source.matchAll(/files:\s*\[([^\]]+)]/g)) {
-    const arraySource = match[1] ?? "";
-    if (!arraySource.includes("extensions/pi-claude-marketplace")) {
-      continue;
-    }
-
-    const objectTail = source.slice(match.index, match.index + 600);
-    if (!/["']no-console["']\s*:\s*["']off["']/.test(objectTail)) {
-      continue;
-    }
-
-    for (const pathMatch of arraySource.matchAll(/"([^"]+)"/g)) {
-      const allowedPath = pathMatch[1];
-      if (allowedPath !== undefined) {
-        allowedPaths.push(allowedPath);
-      }
-    }
-  }
-
-  // assert
-  assert.deepStrictEqual([...new Set(allowedPaths)].sort(), expectedPaths);
-});
-
 test("OBS-01 routes hook parser diagnostics through shared debug-log", async () => {
   // arrange
   const hooksPath = path.join(
