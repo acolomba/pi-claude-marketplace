@@ -67,8 +67,9 @@ export const WORKFLOWS_STAGING_MAX_AGE_MS =
 
 /**
  * WLIF-01: delete every abandoned `<workflowsStagingDir>/<uuid>/` tree,
- * returning per-directory rm-failure leak strings (callers ignore them --
- * hygienic cleanup never becomes the primary path, D-19-01). The return is the
+ * returning one leak string per entry it could not sweep -- an rm failure, an
+ * lstat failure, or a containment refusal (callers ignore them all -- hygienic
+ * cleanup never becomes the primary path, D-19-01). The return is the
  * set of trees it FAILED to remove, not the ones it removed, matching what
  * `garbageCollectPluginClones` actually returns.
  *
@@ -150,8 +151,11 @@ export async function garbageCollectWorkflowsStaging(
     // discarded there AND would end the pass for every remaining aged tree --
     // one poisoned entry, such as a symlinked staging segment, would stop
     // orphaned executable envelopes from ever being collected again. Recorded
-    // as a leak instead: still loud, still distinct from an rm failure by the
-    // message the assertion raises, and it does not stop the sweep.
+    // as a leak instead: it lands in the returned array, distinguishable from
+    // an rm failure by the message the assertion raises, and the sweep goes on.
+    // Silent to the user, though: both callers discard that array under the
+    // same D-19-01 sanction that keeps the whole sweep silent. What a refusal
+    // buys is the `rm` that never runs on the refused entry, not a report.
     try {
       await assertPathInside(
         locations.workflowsHomeDir,

@@ -312,3 +312,30 @@ What Phase 113 inherits:
 ## Self-Check: PASSED
 
 Both created files exist on disk. All four commits (`27af6664`, `b2c2b4af`, `85b0692b`, `388b97c1`) are present in the log. Every task-level `<acceptance_criteria>` was re-run at its task boundary; the one arithmetically impossible criterion is documented above with its direct verification. The plan-level `<verification>` commands were re-run in full: `npm run check` exits 0, all three direct-coverage reports read `hit === found`, the corresponding-test gate names no missing test, and `git status` is clean after every commit.
+
+## Correction, 2026-09-10
+
+This summary is a dated record of what plan 112-04 executed, and everything
+above stands as written. One claim it carries was superseded by the same
+phase's code review and is corrected here rather than edited in place.
+
+**Superseded claim:** a containment refusal propagates out of the sweep rather
+than becoming a leak string. Written in `key-decisions` (line 48), in the D5
+`actuals` entry (line 101, T-112-17), and in the Accomplishments bullet at line
+162.
+
+**What shipped:** the refusal is caught PER ENTRY, recorded as a leak string,
+and the sweep continues to the next tree. Iteration-1 review finding WR-01
+(`112-REVIEW-FIX.md`, commit `7ed19e4f`) made that change: a propagating refusal
+ended the pass for every remaining aged tree, so one poisoned entry stopped
+orphaned executable envelopes from ever being collected again. The symlink case
+that pinned the propagating behaviour was rewritten to plant two aged entries
+behind the same symlinked segment and assert both are refused.
+
+**What did not change.** The assertion still resolves outside the `rm`'s try, so
+a refusal is still never mistaken for an rm failure, and `rm` still never runs
+on a refused entry -- the T-112-17 tampering vector is closed in either shape.
+Nor did the refusal ever reach a user: `collectPostCommitWarnings` and
+`runPostUninstallCleanup` both discard the sweep's return under D-19-01, so the
+leak string is a distinguishable record inside the returned array and not a
+report.

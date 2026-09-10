@@ -160,8 +160,12 @@ export async function runScopeIsolated(
 }
 
 /**
- * WR-01: true iff any recorded plugin in this scope is partially-installed
- * (compatibility.installable === false). It decides exactly one thing -- whether
+ * WR-01: true iff any recorded plugin in this scope is partially-installed --
+ * `compatibility.installable === false`, which is the definition. The
+ * identifier keeps a spelling of that verdict the rest of the codebase does not
+ * use, so read the field and not the name.
+ *
+ * It decides exactly one thing -- whether
  * a stamp write is worth bringing a state.json into existence for: with none and
  * no state.json on disk, the file stays absent.
  *
@@ -194,8 +198,9 @@ function hasForceInstalledPlugin(state: ExtensionState): boolean {
 
 /**
  * BFILL-01 / WCONV-01: scan EVERY plugin in the read-pass snapshot and
- * re-materialize each whose supported set grew. Iterates the snapshot;
- * reinstallPlugin self-locks and re-reads fresh state per plugin (CR-01).
+ * re-materialize each whose supported set grew -- a wider population than the
+ * name describes. Iterates the snapshot; reinstallPlugin self-locks and
+ * re-reads fresh state per plugin (CR-01).
  *
  * WCONV-01 is what makes the population every record rather than only the
  * degraded ones: a plugin declaring a component kind this extension did not
@@ -206,8 +211,8 @@ function hasForceInstalledPlugin(state: ExtensionState): boolean {
  * promotion gate, and the caller stamps the running version on a gate that
  * opened even when the scan promoted nothing.
  *
- * The scan's real bound is the resolver's, not the filter's: NFR-5 keeps it
- * offline, so `resolveRecordedPluginOffline` passes no clone-cache resolver and
+ * The scan's real bound is the resolver's: NFR-5 keeps it offline, so
+ * `resolveRecordedPluginOffline` passes no clone-cache resolver and
  * every `url` / `git-subdir` / `github` source resolves `unavailable` here. Only
  * path-source records converge at load time.
  *
