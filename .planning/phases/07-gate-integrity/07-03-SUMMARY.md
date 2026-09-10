@@ -253,3 +253,12 @@ Open and not attempted here: the `bridges/commands/discover.ts` coverage shortfa
 ---
 *Phase: 07-gate-integrity*
 *Completed: 2026-09-10*
+
+## Self-Check: PASSED
+
+- `scripts/test-coverage-direct.mjs` — present on disk.
+- `scripts/test-coverage-direct.negative.mjs` — present on disk.
+- `.planning/phases/07-gate-integrity/07-03-SUMMARY.md` — present on disk.
+- `0e146152`, `24ab4a00`, `b6f0acbc` — all reachable in `git log --oneline --all`.
+- `.planning/STATE.md` and `.planning/ROADMAP.md` — no diff against `f25c8b5f` and no working-tree change; the orchestrator owns those writes.
+- Only this plan's two declared files and this SUMMARY appear in its three commits.
