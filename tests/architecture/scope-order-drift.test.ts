@@ -65,7 +65,77 @@ const ALLOWLIST_FILES: ReadonlySet<string> = new Set(
 const USER_FIRST_LITERAL_RE = /\[\s*"user"\s*,\s*"project"\s*\]/;
 const USER_FIRST_RANK_RE = /===\s*"user"\s*\?\s*\d+\s*:\s*\d+/;
 
-async function walkTsFiles(root: string, repoRoot: string): Promise<string[]> {
+/** The per-line waiver marker both scans honour. */
+const WAIVER_MARKER = "scope-order: justified";
+
+/**
+ * How many waived lines the extension tree may carry.
+ *
+ * The marker is a per-line escape hatch with no registry entry, so nothing else
+ * in this file would notice a guard uncovered by typing a comment. Pinning the
+ * population is what makes taking the hatch a visible edit here, the way
+ * SHELL_OUT_EXEMPT_TARGETS and ALLOWED_STATE_JSON_WRITERS are pinned by an
+ * 'exactly N' assertion beside the allow-list they widen. Move the number in
+ * the SAME change that adds or removes a marker.
+ */
+const EXPECTED_JUSTIFIED_WAIVERS = 0;
+
+interface ScopeOrderLine {
+  file: string;
+  line: number;
+  text: string;
+}
+
+/**
+ * Every line under the extension root that `select` accepts, outside the
+ * canonical declaration sites.
+ *
+ * `honourWaiver` is what separates the two readings of the tree the file needs:
+ * the drift scans pass over a waived line, and the waiver census counts exactly
+ * those lines. One walk serves both so the two readings cannot disagree about
+ * which files they cover.
+ */
+async function scopeOrderLines(
+  repoRoot: string,
+  select: (text: string) => boolean,
+  honourWaiver: boolean,
+): Promise<ScopeOrderLine[]> {
+  const extensionsRoot = path.join(repoRoot, EXTENSION_ROOT_REL);
+  const files = await walkTsFiles(extensionsRoot);
+
+  assert.ok(
+    files.length > 0,
+    `D-07-03: the walk of ${EXTENSION_ROOT_REL} enumerated no file, so this guard inspected nothing and would report zero offenders over zero modules.`,
+  );
+
+  const found: ScopeOrderLine[] = [];
+  for (const abs of files) {
+    const rel = normaliseRel(repoRoot, abs);
+    if (ALLOWLIST_FILES.has(rel)) {
+      continue;
+    }
+
+    const lines = (await readFile(abs, "utf8")).split("\n");
+    for (const [index, text] of lines.entries()) {
+      if (honourWaiver && text.includes(WAIVER_MARKER)) {
+        continue;
+      }
+
+      if (select(text)) {
+        found.push({ file: rel, line: index + 1, text: text.trim() });
+      }
+    }
+  }
+
+  return found;
+}
+
+/** The offender list as a failure message renders it. */
+function renderOffenders(offenders: ReadonlyArray<ScopeOrderLine>): string {
+  return offenders.map((o) => `  ${o.file}:${String(o.line)}  ${o.text}`).join("\n");
+}
+
+async function walkTsFiles(root: string): Promise<string[]> {
   const out: string[] = [];
   for (const entry of await readdir(root, { withFileTypes: true })) {
     const abs = path.join(root, entry.name);
@@ -80,7 +150,7 @@ async function walkTsFiles(root: string, repoRoot: string): Promise<string[]> {
         continue;
       }
 
-      out.push(...(await walkTsFiles(abs, repoRoot)));
+      out.push(...(await walkTsFiles(abs)));
       continue;
     }
 
@@ -103,80 +173,51 @@ function normaliseRel(repoRoot: string, abs: string): string {
 test('260525-cjr B3: no `["user", "project"]` literal outside the canonical SCOPES declaration', async () => {
   // Walk the whole extension tree -- assertion is tree-wide by design (not just
   // orchestrators/ + edge/handlers/ where the ESLint rule fires).
-  const repoRoot = REPO_ROOT;
-  const extensionsRoot = path.join(repoRoot, EXTENSION_ROOT_REL);
-  const files = await walkTsFiles(extensionsRoot, repoRoot);
 
-  assert.ok(
-    files.length > 0,
-    `D-07-03: the walk of ${EXTENSION_ROOT_REL} enumerated no file, so this guard inspected nothing and would report zero offenders over zero modules.`,
+  // arrange
+  const repoRoot = REPO_ROOT;
+
+  // act
+  const offenders = await scopeOrderLines(
+    repoRoot,
+    (text) => USER_FIRST_LITERAL_RE.test(text),
+    true,
   );
 
-  const offenders: { file: string; line: number; text: string }[] = [];
-  for (const abs of files) {
-    const rel = normaliseRel(repoRoot, abs);
-    if (ALLOWLIST_FILES.has(rel)) {
-      continue;
-    }
-
-    const lines = (await readFile(abs, "utf8")).split("\n");
-    for (let i = 0; i < lines.length; i++) {
-      const text = lines[i] ?? "";
-      // Skip lines that carry the explicit justification marker.
-      if (text.includes("scope-order: justified")) {
-        continue;
-      }
-
-      if (USER_FIRST_LITERAL_RE.test(text)) {
-        offenders.push({ file: rel, line: i + 1, text: text.trim() });
-      }
-    }
-  }
-
+  // assert
   assert.equal(
     offenders.length,
     0,
-    `Scope-order drift detected. Import the canonical \`SCOPES\` constant from \`${SCOPES_OWNER_REL}\` instead of redeclaring \`["user", "project"]\`. Offenders:\n${offenders
-      .map((o) => `  ${o.file}:${String(o.line)}  ${o.text}`)
-      .join("\n")}`,
+    `Scope-order drift detected. Import the canonical \`SCOPES\` constant from \`${SCOPES_OWNER_REL}\` instead of redeclaring \`["user", "project"]\`. Offenders:\n${renderOffenders(offenders)}`,
   );
 });
 
 test('260525-cjr B3: no `=== "user" ? <low> : <high>` scope-rank ternary outside the canonical comparator', async () => {
+  // arrange
   const repoRoot = REPO_ROOT;
-  const extensionsRoot = path.join(repoRoot, EXTENSION_ROOT_REL);
-  const files = await walkTsFiles(extensionsRoot, repoRoot);
 
-  assert.ok(
-    files.length > 0,
-    `D-07-03: the walk of ${EXTENSION_ROOT_REL} enumerated no file, so this guard inspected nothing and would report zero offenders over zero modules.`,
-  );
+  // act
+  const offenders = await scopeOrderLines(repoRoot, (text) => USER_FIRST_RANK_RE.test(text), true);
 
-  const offenders: { file: string; line: number; text: string }[] = [];
-  for (const abs of files) {
-    const rel = normaliseRel(repoRoot, abs);
-    if (ALLOWLIST_FILES.has(rel)) {
-      continue;
-    }
-
-    const lines = (await readFile(abs, "utf8")).split("\n");
-    for (let i = 0; i < lines.length; i++) {
-      const text = lines[i] ?? "";
-      if (text.includes("scope-order: justified")) {
-        continue;
-      }
-
-      if (USER_FIRST_RANK_RE.test(text)) {
-        offenders.push({ file: rel, line: i + 1, text: text.trim() });
-      }
-    }
-  }
-
+  // assert
   assert.equal(
     offenders.length,
     0,
-    `Scope-rank drift detected. Use the canonical \`compareByNameThenScope\` from \`${COMPARATOR_OWNER_REL}\` instead of an inline \`scope === "user" ? <low> : <high>\` ternary. Offenders:\n${offenders
-      .map((o) => `  ${o.file}:${String(o.line)}  ${o.text}`)
-      .join("\n")}`,
+    `Scope-rank drift detected. Use the canonical \`compareByNameThenScope\` from \`${COMPARATOR_OWNER_REL}\` instead of an inline \`scope === "user" ? <low> : <high>\` ternary. Offenders:\n${renderOffenders(offenders)}`,
+  );
+});
+
+test("260525-cjr B3: the justified-waiver population is pinned", async () => {
+  // arrange
+  const repoRoot = REPO_ROOT;
+
+  // act
+  const waived = await scopeOrderLines(repoRoot, (text) => text.includes(WAIVER_MARKER), false);
+
+  // assert
+  assert.equal(
+    waived.length,
+    EXPECTED_JUSTIFIED_WAIVERS,
+    `A \`${WAIVER_MARKER}\` waiver appeared or disappeared, and both scans in this file pass over a waived line. Record the change in EXPECTED_JUSTIFIED_WAIVERS in the same commit. Waived lines:\n${renderOffenders(waived)}`,
   );
 });
