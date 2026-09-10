@@ -338,8 +338,8 @@ async function seedRealDisabledMarketplace(
      * convention marker file for the named unsupported kind into the plugin
      * root (`.lsp.json` for `lspServers`) so `resolveStrict` returns the
      * partially-available arm, and seeds the record's availability
-     * discriminant to match (`installable: false` + the kind listed in
-     * `unsupported`). The plugin keeps its skill, so the degraded record
+     * discriminant to match (`installable: false` + the kind listed in the
+     * `unsupported` array). The plugin keeps its skill, so the degraded record
      * still has a supported component to re-materialize.
      */
     unsupportedKind?: "lspServers";

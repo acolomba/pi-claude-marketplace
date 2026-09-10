@@ -246,7 +246,7 @@ test("composes ordinary, typed, errno, and manual-recovery failures", () => {
   const shape = new PluginShapeError({
     kind: "not-installable",
     plugin: "plugin",
-    reasons: ["unsupported"],
+    reasons: ["unsupported component"],
     partialable: false,
   });
   const manual = new ManualRecoveryError("rollback failed", ["skills: /leak"]);

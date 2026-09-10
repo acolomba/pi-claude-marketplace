@@ -2762,7 +2762,7 @@ test("PI-10: staged skill body has ${CLAUDE_PLUGIN_ROOT} replaced with absolute 
 // PI-11 / RH-3 -- subagents not loaded warning
 // ───────────────────────────────────────────────────────────────────────────
 
-test("PI-11 / RH-3: staged agents + pi.getAllTools has no 'subagent' -> success message includes 'pi-subagents is not loaded'", async () => {
+test("PI-11 / RH-3: staged agents + pi.getAllTools has no 'subagent' -> the success row carries the {requires pi-subagents} marker", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-pi11-"));
     try {
@@ -2807,7 +2807,7 @@ test("PI-11 / RH-3: staged agents + pi.getAllTools has no 'subagent' -> success 
 // PI-12 / RH-4 -- mcp-adapter not loaded warning
 // ───────────────────────────────────────────────────────────────────────────
 
-test("PI-12 / RH-4: staged mcp + pi.getAllTools has no 'mcp' -> success message includes 'pi-mcp-adapter is not loaded'", async () => {
+test("PI-12 / RH-4: staged mcp + pi.getAllTools has no 'mcp' -> the success row carries the {requires pi-mcp} marker", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-pi12-"));
     try {

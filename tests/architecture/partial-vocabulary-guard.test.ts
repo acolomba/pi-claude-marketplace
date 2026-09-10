@@ -12,7 +12,11 @@
 // as binary the way a recursive shell `grep` would):
 //   - the extension tree `extensions/pi-claude-marketplace/**/*.ts`
 //   - the two user-facing docs `docs/output-catalog.md` + `docs/messaging-style-guide.md`
-//   - the phase architecture tests `tests/architecture/*.ts` (this file excluded)
+//   - the unit-suite tests `tests/**/*.ts`, RECURSIVELY, minus this file (it
+//     necessarily spells every retired token in order to forbid it) and minus
+//     the separately-scripted `tests/e2e` / `tests/integration` roots. A guard
+//     that names the vocabulary of a suite it never opens reports success over
+//     nothing, so `POLICED_TEST_ROOTS` below is asserted to have been reached
 //   - the PRD `docs/prd/pi-claude-marketplace-prd.md`, scanned SEPARATELY because
 //     it legitimately spells the stable `FORCE-NN` / `FSTAT-NN` requirement IDs
 //     and the component-level `unsupported <kind>` homonyms, which an allowlist
@@ -43,14 +47,50 @@
 
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
+import { materializeTargets, plantOffender, withTempRoot } from "./temp-root-control.ts";
+
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const EXT_ROOT = path.join(REPO_ROOT, "extensions", "pi-claude-marketplace");
-const ARCH_DIR = path.join(REPO_ROOT, "tests", "architecture");
+const TEST_ROOT = path.join(REPO_ROOT, "tests");
 const SELF = path.relative(REPO_ROOT, fileURLToPath(import.meta.url));
+
+/**
+ * The `tests/` subdirectories the ABSENCE checks police, each asserted below to
+ * have contributed at least one file.
+ *
+ * Naming the roots rather than counting files is what makes the widening
+ * checkable: a walk that silently stopped matching, or one pointed at the wrong
+ * directory, still returns "a lot of files" but stops naming one of these.
+ */
+const POLICED_TEST_ROOTS = [
+  "architecture",
+  "bridges",
+  "domain",
+  "edge",
+  "orchestrators",
+  "persistence",
+  "platform",
+  "scripts",
+  "shared",
+  "transaction",
+] as const;
+
+/**
+ * The `tests/` roots this guard leaves alone: two separately-scripted suites
+ * (`npm run test:e2e` / `npm run test:integration`) outside the unit suite the
+ * guard serves.
+ */
+const UNPOLICED_TEST_ROOTS = ["tests/e2e/", "tests/integration/"];
+
+/** Whether the repo-relative `rel` is a test source this guard reads. */
+function isPolicedTestSource(rel: string): boolean {
+  return rel !== SELF && !UNPOLICED_TEST_ROOTS.some((root) => rel.startsWith(root));
+}
 
 /** Read a set of files into a repo-relative-path -> content map. */
 function readInto(files: Map<string, string>, absPaths: readonly string[]): void {
@@ -59,9 +99,12 @@ function readInto(files: Map<string, string>, absPaths: readonly string[]): void
   }
 }
 
-/** Every `.ts` file under the extension tree, keyed by repo-relative path. */
-function collectExtensionSources(): ReadonlyMap<string, string> {
-  const entries = readdirSync(EXT_ROOT, { recursive: true, withFileTypes: true });
+/** Every `.ts` file under `root` that `include` accepts, by repo-relative path. */
+function collectTreeSources(
+  root: string,
+  include: (rel: string) => boolean,
+): ReadonlyMap<string, string> {
+  const entries = readdirSync(root, { recursive: true, withFileTypes: true });
   const files = new Map<string, string>();
   for (const entry of entries) {
     if (!entry.isFile() || !entry.name.endsWith(".ts")) {
@@ -69,16 +112,24 @@ function collectExtensionSources(): ReadonlyMap<string, string> {
     }
 
     // `entry.parentPath` is the absolute directory (Node >= 20.12).
-    readInto(files, [path.join(entry.parentPath, entry.name)]);
+    const abs = path.join(entry.parentPath, entry.name);
+    if (include(path.relative(REPO_ROOT, abs))) {
+      readInto(files, [abs]);
+    }
   }
 
   return files;
 }
 
+/** Every `.ts` file under the extension tree, keyed by repo-relative path. */
+function collectExtensionSources(): ReadonlyMap<string, string> {
+  return collectTreeSources(EXT_ROOT, () => true);
+}
+
 /**
  * The full ABSENCE surface: the extension tree PLUS the two user-facing docs and
- * the phase architecture tests (this guard file excluded, since it necessarily
- * spells the retired tokens out to forbid them).
+ * the recursive unit-test tree (this guard file and the separately-scripted e2e
+ * and integration roots excluded).
  */
 function collectGuardedSources(): ReadonlyMap<string, string> {
   const files = new Map(collectExtensionSources());
@@ -86,20 +137,9 @@ function collectGuardedSources(): ReadonlyMap<string, string> {
     path.join(REPO_ROOT, "docs", "output-catalog.md"),
     path.join(REPO_ROOT, "docs", "messaging-style-guide.md"),
   ]);
-  for (const entry of readdirSync(ARCH_DIR, { withFileTypes: true })) {
-    if (!entry.isFile() || !entry.name.endsWith(".ts")) {
-      continue;
-    }
-
-    const abs = path.join(ARCH_DIR, entry.name);
-    if (path.relative(REPO_ROOT, abs) === SELF) {
-      continue;
-    }
-
-    readInto(files, [abs]);
+  for (const [rel, content] of collectTreeSources(TEST_ROOT, isPolicedTestSource)) {
+    files.set(rel, content);
   }
-
-  readInto(files, [path.join(ARCH_DIR, "catalog-uat", "catalog-contract.test.ts")]);
 
   return files;
 }
@@ -138,14 +178,122 @@ test("D-75-01 guard: the extension tree is non-empty (sanity)", () => {
   );
 });
 
-test("D-75-01 guard: the docs + arch-test surfaces loaded (sanity)", () => {
+test("D-75-01 guard: the docs surface loaded (sanity)", () => {
   assert.ok(
     GUARDED_SOURCES.has("docs/output-catalog.md") &&
       GUARDED_SOURCES.has("docs/messaging-style-guide.md") &&
       GUARDED_SOURCES.has("tests/architecture/catalog-uat/catalog-contract.test.ts"),
-    "expected the docs + phase architecture tests to be in the guarded surface",
+    "expected the docs + the nested catalog-uat contract to be in the guarded surface",
   );
 });
+
+test("D-75-01 guard: the recursive unit-test walk reached every policed root", () => {
+  // act
+  const testSources = [...GUARDED_SOURCES.keys()].filter((rel) => rel.startsWith("tests/"));
+  const unreached = POLICED_TEST_ROOTS.filter(
+    (root) => !testSources.some((rel) => rel.startsWith(`tests/${root}/`)),
+  );
+
+  // assert
+  assert.ok(
+    testSources.length > 0,
+    `the guard read ${GUARDED_SOURCES.size} files and NONE of them was a test source, so every ABSENCE check below reports success over nothing`,
+  );
+  assert.deepEqual(
+    [...unreached],
+    [],
+    `the walk read ${testSources.length} test sources of ${GUARDED_SOURCES.size} guarded files but reached none under these roots, so their retired vocabulary is unpoliced:\n  ${unreached.join("\n  ")}`,
+  );
+  assert.equal(
+    testSources.includes(SELF),
+    false,
+    "this guard file must stay out of its own ABSENCE surface: it spells every retired token in order to forbid it",
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Per-(file, token) waivers. A waiver says: this file spells this token for a
+// reason the rename did not retire, so the ABSENCE check skips it HERE and
+// nowhere else. Three categories, each narrow enough that a genuine
+// regression in the same file still fails on every other token:
+//
+//   - `homonym`  -- the token names something other than this project's plugin
+//                   verdict vocabulary (a Pi-side boundary value, or the live
+//                   `compatibility.unsupported` component-kind field).
+//   - `subject`  -- the file's case IS the proof that the retired token is
+//                   rejected, so it cannot assert that without naming it. Same
+//                   reason this guard file excludes itself.
+//   - `mapping`  -- the document IS the retired-to-live mapping table, so
+//                   naming the retired form is its purpose.
+//
+// Every row is asserted below to be load-bearing, which is what stops a waiver
+// from outliving the line it was written for.
+// ---------------------------------------------------------------------------
+
+interface TokenWaiver {
+  readonly file: string;
+  readonly token: string;
+  readonly category: "homonym" | "subject" | "mapping";
+  readonly why: string;
+}
+
+const TOKEN_WAIVERS: readonly TokenWaiver[] = [
+  {
+    file: "tests/platform/pi-api.test.ts",
+    token: '"unsupported"',
+    category: "homonym",
+    why: "two `@ts-expect-error` boundary probes spell a deliberately-invalid Pi `AgentMessage` role and a deliberately-invalid Pi `StopReason`. Both name Pi-side values, not this project's resolver verdict.",
+  },
+  {
+    file: "tests/persistence/state-io.test.ts",
+    token: '"unsupported"',
+    category: "homonym",
+    why: "a legacy `state.json` fixture spells the persisted `compatibility.unsupported` component-kind KEY. The key survives the rename (the guard's own presence checks pin it), so the fixture must keep it byte-for-byte.",
+  },
+  {
+    file: "tests/orchestrators/plugin/install-flow.test.ts",
+    token: '"unsupported"',
+    category: "homonym",
+    why: '`Object.hasOwn(clean, "unsupported")` reads the SAME component-kind field as the fixture above, as a property key. NREG-01 needs the absent-key fact, which cannot be asserted without naming the key.',
+  },
+  {
+    file: "tests/edge/handlers/plugin/reinstall.test.ts",
+    token: "--force",
+    category: "subject",
+    why: 'RINST-01 / D-67-03: the case proves reinstall REJECTS the retired overwrite flag. Its input argument and the echoed `Unknown flag: "--force".` message must spell the retired flag or the case proves nothing.',
+  },
+  {
+    file: "docs/messaging-style-guide.md",
+    token: "pi-subagents is not loaded",
+    category: "mapping",
+    why: "the retired-to-live table names the retired sentence in its left column and `{requires pi-subagents}` in its right one (MSG-SD-1).",
+  },
+  {
+    file: "docs/messaging-style-guide.md",
+    token: "pi-mcp-adapter is not loaded",
+    category: "mapping",
+    why: "the same table's second soft-dependency row, mapping to `{requires pi-mcp}` (MSG-SD-1).",
+  },
+];
+
+/** The files waived for `token`. */
+function waivedFor(token: string): string[] {
+  return TOKEN_WAIVERS.filter((waiver) => waiver.token === token).map((waiver) => waiver.file);
+}
+
+/**
+ * Repo-relative files in `sources` that spell `token` without a waiver.
+ *
+ * `sources` is a parameter rather than a closed-over constant so the controls
+ * at the bottom of this file can run this exact function against a temp-root
+ * copy of a real source. A clause that can only ever read the repository can
+ * never be seen to fail.
+ */
+function unwaivedHits(token: string, sources: ReadonlyMap<string, string>): string[] {
+  const waived = waivedFor(token);
+
+  return filesContaining(token, sources).filter((rel) => !waived.includes(rel));
+}
 
 // ---------------------------------------------------------------------------
 // ABSENCE: the in-scope force/unsupported vocabulary is gone from EVERY guarded
@@ -200,14 +348,23 @@ const ABSENT_IDENTIFIERS = [
   "forceInstalledRow",
 ];
 
-for (const token of [
+// MSG-SD-1: the free-text soft-dependency warning sentences were replaced by
+// the per-row `{requires pi-subagents}` / `{requires pi-mcp}` reason markers.
+// The retired sentences have no homonym; the only file that may still spell
+// them is the retired-to-live mapping table itself, which is waived by name.
+const ABSENT_SOFT_DEP_PROSE = ["pi-subagents is not loaded", "pi-mcp-adapter is not loaded"];
+
+const ABSENT_TOKENS = [
   ...ABSENT_FLAGS,
   ...ABSENT_STATUS_LITERALS,
   ...ABSENT_RENDER_TOKENS,
   ...ABSENT_IDENTIFIERS,
-]) {
-  test(`D-75-01 guard: absent everywhere (code + docs + arch tests) -- ${token}`, () => {
-    const hits = filesContaining(token, GUARDED_SOURCES);
+  ...ABSENT_SOFT_DEP_PROSE,
+];
+
+for (const token of ABSENT_TOKENS) {
+  test(`D-75-01 guard: absent everywhere (code + docs + unit tests) -- ${token}`, () => {
+    const hits = unwaivedHits(token, GUARDED_SOURCES);
     assert.equal(
       hits.length,
       0,
@@ -215,6 +372,25 @@ for (const token of [
     );
   });
 }
+
+test("D-75-01 guard: every token waiver is load-bearing", () => {
+  // arrange
+  const declared = new Set(ABSENT_TOKENS);
+
+  // act
+  const inert = TOKEN_WAIVERS.filter(
+    (waiver) =>
+      !declared.has(waiver.token) ||
+      !filesContaining(waiver.token, GUARDED_SOURCES).includes(waiver.file),
+  );
+
+  // assert
+  assert.deepEqual(
+    inert.map((waiver) => `${waiver.file} -- ${waiver.token} (${waiver.category})`),
+    [],
+    "a waiver whose file no longer spells its token, or whose token is no longer forbidden, silences a check nobody needs silenced. Delete the row rather than leaving it to cover a future regression.",
+  );
+});
 
 // The force-FAMILY prose/backtick/label forms. `force[- ]install` catches
 // `force-installed` / `force-installable` / "force install"; the others catch
@@ -496,4 +672,96 @@ test("D-75-01 guard: completion-description extractor finds the --partial rows",
       catalog.some((d) => d.includes("unsupported components")),
     "expected the partial list-filter and install/update completion descriptions to be extracted",
   );
+});
+
+// ---------------------------------------------------------------------------
+// Controls for the widened scope. Reading more files is not evidence that the
+// wider surface is policed; being SEEN to fail on one of those files is.
+//
+// D-07-01: the offender is derived from the real target at plant time rather
+// than hand-authored, so it cannot drift away from the file it stands for.
+// D-07-04: the unmutated copy of the same target is the benign half -- without
+// it, a clause that failed everything would look identical to a working one.
+// ---------------------------------------------------------------------------
+
+/**
+ * The unit-test source the controls copy and mutate.
+ *
+ * It is a file the recursive walk added and that no waiver touches, so a hit
+ * against its copy can only come from the planted line.
+ */
+const CONTROL_TARGET = "tests/domain/plugin-resolver.test.ts";
+
+/** A retired render token from `ABSENT_RENDER_TOKENS`, planted by the control. */
+const CONTROL_TOKEN = "(force-installed)";
+
+/** First double-quoted `test("...")` title in a module. */
+const FIRST_TEST_TITLE = /^\s*test\("([^"\\]+)"/m;
+
+/**
+ * Build the offending line from a case title `target` really declares.
+ *
+ * A hand-written offender is a claim about the target; restating one of its own
+ * titles with a retired token is a fact about it, and it reproduces the exact
+ * defect this widening exists for -- retired vocabulary in a test TITLE, which
+ * a guard that only read assertion bodies would never see.
+ */
+async function offenderLineFor(target: string): Promise<string> {
+  const source = await readFile(path.join(REPO_ROOT, target), "utf8");
+  const title = FIRST_TEST_TITLE.exec(source)?.[1];
+
+  assert.ok(
+    title,
+    `D-07-01: ${target} declares no double-quoted case title, so the offender below would be hand-authored rather than derived from the real file.`,
+  );
+
+  return `test("${title} renders ${CONTROL_TOKEN}", () => {});`;
+}
+
+/** Read `targets` out of `root` into the map shape the ABSENCE checks take. */
+async function sourcesUnder(
+  root: string,
+  targets: readonly string[],
+): Promise<ReadonlyMap<string, string>> {
+  const files = new Map<string, string>();
+  for (const rel of targets) {
+    files.set(rel, await readFile(path.join(root, rel), "utf8"));
+  }
+
+  return files;
+}
+
+test("D-75-01 guard: the widened scan fires on a retired token planted in a copy of a real unit-test source", async () => {
+  await withTempRoot("vocabulary-guard-offender-", async (root) => {
+    // arrange
+    await materializeTargets(root, [CONTROL_TARGET]);
+    await plantOffender(root, CONTROL_TARGET, await offenderLineFor(CONTROL_TARGET));
+
+    // act
+    const hits = unwaivedHits(CONTROL_TOKEN, await sourcesUnder(root, [CONTROL_TARGET]));
+
+    // assert
+    assert.deepEqual(
+      hits,
+      [CONTROL_TARGET],
+      `the ABSENCE check must report ${CONTROL_TARGET} once a retired render token is planted in it; a silent pass here means the widened surface is read but not policed`,
+    );
+  });
+});
+
+test("D-75-01 guard: an unmutated copy of the same real unit-test source passes", async () => {
+  await withTempRoot("vocabulary-guard-benign-", async (root) => {
+    // arrange
+    await materializeTargets(root, [CONTROL_TARGET]);
+
+    // act
+    const hits = unwaivedHits(CONTROL_TOKEN, await sourcesUnder(root, [CONTROL_TARGET]));
+
+    // assert
+    assert.deepEqual(
+      hits,
+      [],
+      `the byte-identical copy of ${CONTROL_TARGET} must pass, or the offender case above proves only that the check fails everything`,
+    );
+  });
 });
