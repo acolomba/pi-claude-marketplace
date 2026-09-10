@@ -1,24 +1,9 @@
 ---
 phase: 114-degradation-and-documentation
-verified: 2026-09-09T21:00:00Z
+verified: 2026-09-10T03:40:00Z
 status: passed
 score: 7/7 must-haves verified
 covered_files:
-  - ".planning/workstreams/workflows/phases/114-degradation-and-documentation/114-01-PLAN.md"
-  - ".planning/workstreams/workflows/phases/114-degradation-and-documentation/114-01-SUMMARY.md"
-  - ".planning/workstreams/workflows/phases/114-degradation-and-documentation/114-02-PLAN.md"
-  - ".planning/workstreams/workflows/phases/114-degradation-and-documentation/114-02-SUMMARY.md"
-  - ".planning/workstreams/workflows/phases/114-degradation-and-documentation/114-03-PLAN.md"
-  - ".planning/workstreams/workflows/phases/114-degradation-and-documentation/114-03-SUMMARY.md"
-  - ".planning/workstreams/workflows/phases/114-degradation-and-documentation/114-04-PLAN.md"
-  - ".planning/workstreams/workflows/phases/114-degradation-and-documentation/114-04-SUMMARY.md"
-  - ".planning/workstreams/workflows/phases/114-degradation-and-documentation/114-05-PLAN.md"
-  - ".planning/workstreams/workflows/phases/114-degradation-and-documentation/114-05-SUMMARY.md"
-  - ".planning/workstreams/workflows/phases/114-degradation-and-documentation/114-CONTEXT.md"
-  - ".planning/workstreams/workflows/phases/114-degradation-and-documentation/114-REVIEW-FIX.md"
-  - ".planning/workstreams/workflows/phases/114-degradation-and-documentation/114-REVIEW.md"
-  - "README.es.md"
-  - "README.md"
   - "docs/messaging-style-guide.md"
   - "docs/output-catalog.md"
   - "docs/workflows-compatibility.md"
@@ -39,23 +24,115 @@ covered_files:
   - "extensions/pi-claude-marketplace/shared/concerns/soft-dep.ts"
   - "extensions/pi-claude-marketplace/shared/notify-reasons.ts"
   - "extensions/pi-claude-marketplace/shared/notify.ts"
+  - ".planning/workstreams/workflows/phases/114-degradation-and-documentation/114-01-PLAN.md"
+  - ".planning/workstreams/workflows/phases/114-degradation-and-documentation/114-01-SUMMARY.md"
+  - ".planning/workstreams/workflows/phases/114-degradation-and-documentation/114-02-PLAN.md"
+  - ".planning/workstreams/workflows/phases/114-degradation-and-documentation/114-02-SUMMARY.md"
+  - ".planning/workstreams/workflows/phases/114-degradation-and-documentation/114-03-PLAN.md"
+  - ".planning/workstreams/workflows/phases/114-degradation-and-documentation/114-03-SUMMARY.md"
+  - ".planning/workstreams/workflows/phases/114-degradation-and-documentation/114-04-PLAN.md"
+  - ".planning/workstreams/workflows/phases/114-degradation-and-documentation/114-04-SUMMARY.md"
+  - ".planning/workstreams/workflows/phases/114-degradation-and-documentation/114-05-PLAN.md"
+  - ".planning/workstreams/workflows/phases/114-degradation-and-documentation/114-05-SUMMARY.md"
+  - ".planning/workstreams/workflows/phases/114-degradation-and-documentation/114-CONTEXT.md"
+  - ".planning/workstreams/workflows/phases/114-degradation-and-documentation/114-REVIEW-FIX.md"
+  - ".planning/workstreams/workflows/phases/114-degradation-and-documentation/114-REVIEW.md"
+  - ".planning/workstreams/workflows/phases/114-degradation-and-documentation/deferred-items.md"
+  - "README.es.md"
+  - "README.md"
   - "tests/architecture/catalog-uat.test.ts"
+  - "tests/architecture/messaging-guide-doc-pins.test.ts"
   - "tests/architecture/no-probe-in-workflows-bridge.test.ts"
   - "tests/architecture/source-scan.ts"
   - "tests/architecture/workflows-doc-pins.test.ts"
   - "tests/architecture/workflows-marker-coverage.test.ts"
   - "tests/domain/resolver.test.ts"
   - "tests/orchestrators/plugin/install.test.ts"
-covered_digest: "v1:sha256:d9394440ee18b3e4efc0233c194241b1b8b3ae7f28dd7c5d696d475c8c6caa67"
+covered_digest: "v1:sha256:ae86e88ca7f114cad373ffe2b62be92f29f6f58523da17ca13baeeb84f4f90e7"
 behavior_unverified: 0
 overrides_applied: 0
 re_verification:
+  pass: 3
   previous_status: passed
   previous_score: 7/7
   gaps_closed: []
   gaps_remaining: []
   regressions: []
+  stale_cause: "docs/messaging-style-guide.md rewritten by 5f3cd340 and 5073e497"
+  head_at_verification: 169ea606
+  substantive: true
 ---
+
+
+## Re-verification, 2026-09-10 (third pass)
+
+Stale because `docs/messaging-style-guide.md` — one of the 44 files this report
+covers — was rewritten by `5f3cd340` and `5073e497`. The comparison was re-run
+over every covered entry: that file is the only one with a commit in the range,
+and none carries an uncommitted modification.
+
+**The staleness is substantive, not a digest artifact.** No ROADMAP success
+criterion grades that file, but `114-04-PLAN.md`'s `must_haves.truths[7]` does,
+verbatim: the guide must no longer describe a runtime `DEPENDENCIES` tuple as the
+`Dependency` declaration site, must no longer say the probe-target set has two
+members, and must no longer name `present` among the dependency-bearing variants.
+All three conjuncts were re-derived at HEAD and hold — `DEPENDENCIES` count 0, the
+guide states three probe targets with the union as sole declaration site, and
+`present` has no remaining reference. The rewrite made the claim **more** true: it
+deleted the stale union listing that still named `PluginPresentMessage`, which was
+this phase's own logged deferred item.
+
+**Criterion 7 was re-run rather than carried forward.** The previous pass graded
+it "by measurement, not re-run", resting on HEAD being `f0581b7` with no
+intervening commits. Fifteen commits and three new test files later that premise
+is void, so the whole chain was executed link by link: typecheck, lint, fallow,
+`format:check`, the three corresponding-test scripts, unit **5661/5661**, and
+integration **35/35**. All nine green. The unit count rose from 5654 by exactly
+the seven cases the three new suites add.
+
+Every other criterion was re-derived rather than inherited, including the two the
+previous pass singled out: the `Dependency` union is still exactly three members,
+and both catalog states survive with the corpus lock still at 197.
+
+### Three new gates checked for conflict — none found
+
+`messaging-guide-doc-pins.test.ts`, `workflows-update-placed-names.test.ts` and
+`no-write-in-workflows-staging-scan.test.ts` all landed after the previous pass
+and all run green. None grades a phase 114 requirement, and none contradicts a
+114 claim. The first is reinforcing rather than neutral: it enforces the
+"do not re-enumerate a count in prose" discipline this phase relied on.
+
+### Two report-integrity defects found, neither moving the score
+
+1. **`114-04-SUMMARY.md:359` records a self-measurement that is false against the
+   tree.** It states `grep -c 'requires pi-dynamic-workflows'
+   docs/messaging-style-guide.md` → 3; at HEAD it is 2. This was NOT caused by the
+   two messaging commits — the file's history was traced commit by commit and the
+   drop happened at `41b6f1a9`, **inside this phase's own review-fix pass**. So the
+   figure has been stale since the phase closed and two prior verifications missed
+   it. It grades no must-have. The SUMMARY is left unedited: it is a dated record,
+   and the correction belongs here, in the document that states current truth.
+
+2. **The `covered_files` list under-covers the phase.** `deferred-items.md` moved
+   in this window and was not tracked; `114-PATTERNS.md`, `114-RESEARCH.md`,
+   `114-SECURITY.md` and `114-VALIDATION.md` are absent while `114-CONTEXT.md`,
+   `114-REVIEW.md` and `114-REVIEW-FIX.md` are present. The inclusion rule is
+   inconsistent, and the guide was caught by luck of inclusion rather than by
+   design. Two entries are added by this pass — `deferred-items.md` and
+   `messaging-guide-doc-pins.test.ts`, the latter under the same rationale that
+   already put `workflows-doc-pins.test.ts` in the list. The broader inconsistency
+   is filed rather than fixed here, since resolving it changes what staleness
+   means for every phase.
+
+The two new architecture gates for WLIF-02 and WR-06 were deliberately NOT added:
+neither gates a phase 114 requirement.
+
+Carried forward unchanged and flagged: `114-03-PLAN.md` holds one
+`verification: backstop` truth — a real host engine started after an
+engine-absent install lists and runs the envelope with no reinstall. Its evidence
+is Spike 027, intact on disk and untouched in this window. It remains this
+phase's one non-mechanical truth.
+
 
 # Phase 114: Degradation and documentation Verification Report
 

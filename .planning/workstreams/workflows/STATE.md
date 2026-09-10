@@ -7,7 +7,7 @@ current_phase_name: Measured `agent()` failure evidence
 current_plan: 3 of 3 executed
 status: audit passed with tech debt; archive paused
 stopped_at: Milestone audit recorded tech_debt; operator chose to clear debt before the archive
-last_updated: "2026-09-10T03:05:00.000Z"
+last_updated: "2026-09-10T03:45:00.000Z"
 state_head: 2b7ffdc4cd56f08bb3a4107d05f6a27f4671c922
 progress:
   total_phases: 9
@@ -16,7 +16,7 @@ progress:
   completed_plans: 39
   percent: 100
 last_activity: 2026-09-09
-last_activity_desc: Validation contracts reconciled for 109-113; two architecture gates written
+last_activity_desc: Phase 114 re-verified passed 7/7 after the messaging edits staled it; all nine fresh
 ---
 
 # Project State
@@ -55,8 +55,8 @@ and `cleanup` have NOT run. What is owed, in the order the audit lists it:
    Four further false claims in the surviving block were found and corrected on
    the way; one more — a stale statement of the reload-hint MECHANISM, not an
    enumeration defect — became ledger entry 47, so item 2 below grew by one.
-2. **Sixteen open Broken Windows entries**, all tagged `[workflows-replay]`:
-   #34, #37, #39-#52. #44 and #51 are TODOs; #41 and #42 are the same inert
+2. **Seventeen open Broken Windows entries**, all tagged `[workflows-replay]`:
+   #34, #37, #39-#53. #44 and #51 are TODOs; #41 and #42 are the same inert
    `ENBL-08` case seen from two angles; #47 is the reload-hint mechanism claim
    the messaging quick task deliberately did not fix inline. #48-#51 are new,
    from the retroactive security audits — a containment check anchored on the
@@ -66,7 +66,10 @@ and `cleanup` have NOT run. What is owed, in the order the audit lists it:
    absent threat-flag channel across all 21 summaries of phases 109-113 (#51).
    #52 came out of the validation pass: the update record's commit-succeeded arm
    sources the prepare's staged names, and it is the same arm that reasons about
-   a placement which did not survive a successful commit.
+   a placement which did not survive a successful commit. #53 came out of
+   re-verifying phase 114: the `covered_files` inclusion rule is inconsistent,
+   so which later edit stales a phase is partly luck — the other half of the
+   defect #39 already records.
 3. ~~Phases 109-113 carry no SECURITY.md~~ — **DONE** (`2b7ffdc4`). One
    auditor per phase verified all 127 registered threats against the
    implementation; every phase returns SECURED at `threats_open: 0`, and every
