@@ -21,9 +21,11 @@
  * `tests/**` while ESLint's cognitive rule does not, so a green `npm run lint`
  * is no evidence for anything here.
  *
- * Every write path is joined from the caller's `root`, which is always a
- * `mkdtemp` return value, and disposal removes that value and nothing composed
- * from it.
+ * Every write path is resolved through `insideRoot`, so a caller-supplied
+ * relative path that climbs out of the caller's `root` is refused rather than
+ * written -- the same posture `shared/path-safety.ts::assertPathInside` takes
+ * for production writes (NFR-10). Disposal removes the `mkdtemp` return value
+ * and nothing composed from it.
  *
  * This file registers no case of its own.
  */
@@ -66,18 +68,45 @@ export async function materializeTargets(
   targets: ReadonlyArray<string>,
 ): Promise<void> {
   for (const rel of targets) {
-    const destination = path.join(root, rel);
+    const destination = insideRoot(root, rel);
 
     await mkdir(path.dirname(destination), { recursive: true });
     await copyFile(path.join(REPO_ROOT, rel), destination);
   }
 }
 
-/** Overwrite `target`'s copy under `root` with the real file plus `appended`. */
+/**
+ * The absolute path `rel` names under `root`, refused when it names anything
+ * outside it.
+ *
+ * `path.join` resolves a leading `../` happily, so joining a caller-supplied
+ * relative path is not by itself a containment guarantee. This states the
+ * property the header claims rather than trusting every caller to hold it.
+ */
+function insideRoot(root: string, rel: string): string {
+  const destination = path.join(root, rel);
+  const contained = path.relative(root, destination);
+
+  if (contained.startsWith("..") || path.isAbsolute(contained)) {
+    throw new Error(`temp-root-control: ${rel} resolves outside the temporary root`);
+  }
+
+  return destination;
+}
+
+/**
+ * Overwrite `target`'s copy under `root` with the real file plus `appended`.
+ *
+ * The directory chain is created first, so a caller that plants an offender for
+ * a target it never materialized gets the file it asked for rather than an
+ * ENOENT naming a directory it never mentioned.
+ */
 async function appendToCopy(root: string, target: string, appended: string): Promise<void> {
+  const destination = insideRoot(root, target);
   const real = await readFile(path.join(REPO_ROOT, target), "utf8");
 
-  await writeFile(path.join(root, target), `${real}\n${appended}\n`, "utf8");
+  await mkdir(path.dirname(destination), { recursive: true });
+  await writeFile(destination, `${real}\n${appended}\n`, "utf8");
 }
 
 /**
