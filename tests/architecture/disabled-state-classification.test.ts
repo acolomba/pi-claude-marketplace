@@ -8,7 +8,6 @@ import assert from "node:assert/strict";
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, test } from "node:test";
-import { fileURLToPath } from "node:url";
 
 // The import above is a MODULE SPECIFIER, not a gate target: the loader
 // resolves it, so a stale one breaks `npm run typecheck` or throws at load --
@@ -19,8 +18,7 @@ import { fileURLToPath } from "node:url";
 import { isRecordedButDisabled } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
 import { DISABLED_STATE_TARGETS, EXTENSION_ROOT_REL } from "./gate-targets.ts";
-
-const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+import { REPO_ROOT } from "./source-scan.ts";
 
 /**
  * The ENBL-05 group in its declared order: the predicate's definition site

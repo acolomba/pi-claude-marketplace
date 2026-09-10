@@ -52,9 +52,9 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
+import { REPO_ROOT } from "./source-scan.ts";
 import { materializeTargets, plantOffender, withTempRoot } from "./temp-root-control.ts";
 
-const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const EXT_ROOT = path.join(REPO_ROOT, "extensions", "pi-claude-marketplace");
 const TEST_ROOT = path.join(REPO_ROOT, "tests");
 const SELF = path.relative(REPO_ROOT, fileURLToPath(import.meta.url));

@@ -35,11 +35,10 @@ import { spawnSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
 
 import { FINDING_DISPOSITIONS_REL, UNOWNED_EXPORT_CENSUS } from "./gate-targets.ts";
+import { REPO_ROOT } from "./source-scan.ts";
 
-const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const ANALYZER = path.join(REPO_ROOT, "node_modules", "fallow", "bin", "fallow");
 
 /** The census run: production entry points only, unused exports only. */

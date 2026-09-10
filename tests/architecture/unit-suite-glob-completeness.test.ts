@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { globSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
+
+import { REPO_ROOT } from "./source-scan.ts";
 
 /**
  * COV-04 / D-117-15 -- reachability control for the unit suite itself.
@@ -24,8 +25,6 @@ import { fileURLToPath } from "node:url";
  * `e2e` and `integration` are excluded from the tree side because each has its
  * own npm script; the unit scripts are not meant to reach them.
  */
-
-const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
 const TEST_ROOT = "tests";
 
