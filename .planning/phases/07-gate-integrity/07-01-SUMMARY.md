@@ -241,3 +241,11 @@ Not attempted here and still open for later plans in this phase: the self-hostin
 ---
 *Phase: 07-gate-integrity*
 *Completed: 2026-09-10*
+
+## Self-Check: PASSED
+
+- `tests/architecture/gate-targets.ts` — present on disk.
+- `tests/architecture/temp-root-control.ts` — present on disk.
+- `.planning/phases/07-gate-integrity/07-01-SUMMARY.md` — present on disk.
+- `f0285784`, `998c2b04`, `b52ba0d5` — all reachable in `git log --oneline --all`.
+- `.planning/STATE.md` and `.planning/ROADMAP.md` — no diff against `bc34d335`; the orchestrator owns those writes.
