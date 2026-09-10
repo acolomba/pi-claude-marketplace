@@ -321,3 +321,7 @@ None — no external service configuration required.
 ---
 *Phase: 07-gate-integrity*
 *Completed: 2026-09-10*
+
+## Self-Check: PASSED
+
+All four modified files resolve on disk. All three commits (`f9304d16`, `7883c16f`, `c256fcac`) are in `git log`. `git status --short` shows no unstaged change in `extensions/`, `tests/`, or the phase directory for this plan's files.
