@@ -59,6 +59,25 @@ function registryGroups(): Array<[string, ReadonlyArray<string>]> {
   return groups.sort(([left], [right]) => left.localeCompare(right));
 }
 
+/**
+ * A repository-relative path, as every array-valued registry export is required
+ * to hold: an optional `./`, then one of the repository's own top-level
+ * directories, or a bare root-level file with a known extension.
+ *
+ * `registryGroups()` treats every array-valued export as a path list and `stat`s
+ * each element, so an export that is really a list of symbol names, rule ids or
+ * event literals would be `stat`ed as a path and reported through the
+ * resolution clause's message, which describes a different problem. The shape
+ * is checked separately, and first, so the class is named where it happens.
+ */
+const REPO_RELATIVE_ENTRY =
+  /^(?:\.\/)?(?:docs|extensions|scripts|tests|\.planning)\/[\w.-]+(?:\/[\w.-]+)*$|^[\w.-]+\.(?:js|json|md|mjs|ts)$/;
+
+/** Whether `rel` is a repository-relative path that climbs nowhere. */
+function isRepoRelativeEntry(rel: string): boolean {
+  return REPO_RELATIVE_ENTRY.test(rel) && !rel.split("/").includes("..");
+}
+
 /** `groupName`-labelled entries of `entries` that do not exist under the repository root. */
 async function unresolvedEntries(
   groupName: string,
@@ -125,6 +144,24 @@ test("D-07-05: every registry group declares at least one target", () => {
     empty,
     [],
     `D-07-05: these registry groups are empty, so every gate importing one inspects nothing and reports success over zero targets:\n  ${empty.join("\n  ")}\n${REMEDY}`,
+  );
+});
+
+test("D-07-05: every array-valued registry export holds repository-relative paths", () => {
+  // arrange
+  const groups = registryGroups();
+
+  // act
+  const nonPaths = groups.flatMap(([name, entries]) =>
+    entries.filter((rel) => !isRepoRelativeEntry(rel)).map((rel) => `${name}: ${rel}`),
+  );
+
+  // assert
+  assert.ok(groups.length > 0, "the registry exported no array-valued group at all");
+  assert.deepEqual(
+    nonPaths,
+    [],
+    `D-07-05: these registry entries are not repository-relative paths, and every array-valued export of the registry is stat'd as one:\n  ${nonPaths.join("\n  ")}\nA list of symbol names, rule ids or event literals belongs in a Record-shaped export, as UNOWNED_EXPORT_CENSUS is.`,
   );
 });
 
