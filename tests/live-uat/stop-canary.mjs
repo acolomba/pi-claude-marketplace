@@ -85,6 +85,11 @@ const MARKETPLACE_NAME = "stop-canary-mkt";
 const PLUGIN_NAME = "ralph-loop";
 const PI_DRIVE_TIMEOUT_MS = 120_000;
 
+// T-88-08: the only agent-state root this canary will churn installs against.
+// Anchored on the repository rather than on `process.cwd()`, so which directory
+// the refusal below protects does not depend on where the driver was invoked.
+const SANDBOX_ROOT = path.resolve(REPO_ROOT, "tmp", "pi-uat");
+
 // Thrown (not process.exit) by the routing helpers so main()'s `finally`
 // always uninstalls the canary from the shared sandbox before the process
 // exits non-zero. The top-level handler recognises this tag and exits 1
@@ -190,14 +195,21 @@ async function assertPreconditions() {
   }
   // T-88-08: refuse to run against a non-sandbox agent dir so the always-block
   // canary and its install/uninstall churn never touch a real Pi state dir.
-  if (!agentDir.includes(path.join("tmp", "pi-uat"))) {
+  //
+  // The comparison is containment on RESOLVED paths, never a test on the raw
+  // string. A value that merely CARRIES the `tmp/pi-uat` segment is not inside
+  // the sandbox: `.../tmp/pi-uat/../../.pi/agent` carries it, survives
+  // `existsSync`, and names a real Pi state dir. The trailing separator matters
+  // for the same reason -- a sibling `tmp/pi-uat-backup` is not a child.
+  const resolved = path.resolve(agentDir);
+  if (resolved !== SANDBOX_ROOT && !resolved.startsWith(SANDBOX_ROOT + path.sep)) {
     liveRuntimeRequired(
-      `PI_CODING_AGENT_DIR (${agentDir}) is not the tmp/pi-uat sandbox.`,
+      `PI_CODING_AGENT_DIR (${agentDir} -> ${resolved}) is not inside ${SANDBOX_ROOT}.`,
       "Refusing to install the always-block canary outside the disposable sandbox.",
     );
   }
-  if (!existsSync(agentDir)) {
-    liveRuntimeRequired(`PI_CODING_AGENT_DIR (${agentDir}) does not exist.`);
+  if (!existsSync(resolved)) {
+    liveRuntimeRequired(`PI_CODING_AGENT_DIR (${agentDir} -> ${resolved}) does not exist.`);
   }
 
   let versionOut;
@@ -216,8 +228,8 @@ async function assertPreconditions() {
       `pi ${versionOut.trim()} is below the required >= 0.80.5 (agent_settled fire-point).`,
     );
   }
-  pass(`live pi ${versionOut.trim()} >= 0.80.5, sandbox ${agentDir}`);
-  return agentDir;
+  pass(`live pi ${versionOut.trim()} >= 0.80.5, sandbox ${resolved}`);
+  return resolved;
 }
 
 /**
