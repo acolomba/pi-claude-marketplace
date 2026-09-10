@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 11
+open_count: 15
 waived_count: 14
 fixed_count: 22
-total_count: 47
-last_updated: 2026-09-09T22:31:31.534Z
+total_count: 51
+last_updated: 2026-09-10T02:05:17.644Z
 ---
 
 # Broken Windows Ledger
@@ -62,6 +62,10 @@ last_updated: 2026-09-09T22:31:31.534Z
 | 45 | 117 | unrun-verify | .planning/workstreams/workflows/milestones/workflows-phases/105-workflow-degradation-and-documentation/105-VERIFICATION.md | 91 | [workflows-replay] The W1/W2/W3 storage assertions were never driven against a live engine and their driver (tests/live-uat/workflow-storage-canary.mjs) was never re-landed on this branch, so the storage half of the host-engine route has no live coverage here. Re-landing it is a recorded deferred idea (D-117-01), not scope of WEVID-01/WEVID-02/WDOCS-02. | open |  | 2026-09-09T19:27:52.900Z |  |
 | 46 | 117 | unmet-truth | tests/live-uat/stop-canary.mjs |  | [workflows-replay] stop-canary.mjs:193 and manifest-absence-canary.mjs:142 guard PI_CODING_AGENT_DIR with agentDir.includes(path.join("tmp","pi-uat")) — a substring test on the un-normalized value, not containment. A path such as $(pwd)/tmp/pi-uat/../../../somewhere carries the substring, survives existsSync, and is then created and used as agent state outside the sandbox. workflow-agent-failure-canary.mjs was fixed in place (resolve both sides, require a path separator after the root); the two siblings share the pattern and were left alone as out of phase scope. | open |  | 2026-09-09T20:11:19.722Z |  |
 | 47 | 105 | unmet-truth | docs/messaging-style-guide.md | 90 | [workflows-replay] The Computed reload-hint trailer bullet (line 90) says notify() emits the trailer iff a plugin status is in {installed, updated, reinstalled, uninstalled}, or is 'disabled' on a cascade dispatched with the disable-cascade kind. shouldEmitReloadHint does neither: per RLD-02 / RLD-05 / D-07 it OR-reduces the caller-stamped per-row needsReload over the flattened marketplace and plugin rows, with a kind-level short-circuit that returns false for every info surface and for reconcile-applied-cascade (RECON-04) even though those rows stamp needsReload:true. Its own comment says 'no status-token or cascade-kind inference'. The PLUGIN_STATUSES bullet (line 37) repeats the same stale mechanism: 'the reload-hint distinction is carried by the cascade's disable-cascade kind, not by the token'. needsReload occurs 34 times in shared/notify.ts and once in the guide, in the RLD-04 sentence this task added. Left out of MSGDOC-01 scope because it is a mechanism claim rather than an enumeration defect; correcting it needs its own measurement of the needsReload plumbing across the producers that stamp it. | open |  | 2026-09-09T22:31:31.534Z |  |
+| 48 | 111 | unmet-truth | extensions/pi-claude-marketplace/bridges/workflows/stage.ts | 414 | [workflows-replay] the staging root gets a symlink-anchored containment check and its sibling saved directory does not. stage.ts:215 anchors assertPathInside one level ABOVE the staging segment precisely so a symlink planted at that segment is lstat'ed; commitPreparedWorkflows then calls mkdir(workflowsSavedDir, {recursive:true}) at stage.ts:414 with nothing anchored above it, and workflowArtifactPath (locations.ts:362-378) trusts workflowsSavedDir as its own boundary. A symlink at ~/.pi/workflows/saved or at projects/<key>/saved would be followed. Practical significance is low - planting it needs write access to the user's home, outside the careless-or-malicious-plugin-author model at path-safety.ts:70-74 - but the reasoning at stage.ts:207-214 was applied to one of two sibling directories and reads as deliberate. Found by the retroactive phase-111 security audit; not a register row, so it was never counted in threats_open. | open |  | 2026-09-10T02:05:16.541Z |  |
+| 49 | 113 | unmet-truth | .planning/workstreams/workflows/phases/111-workflows-bridge/111-01-PLAN.md | 206 | [workflows-replay] three threat mitigations name a regression gate that was never built. T-111-03 (111-01-PLAN.md:206) says a bare path join is kept out of the workflows bridge by 'a source assertion in the acceptance criteria' - no such criterion exists in either plan, and no architecture test scans the bridge for it (no-probe-in-workflows-bridge.test.ts covers probe surface only). T-113-08 promises 'a grep gate pins the callback's presence' - grep -rn onPlaced tests/architecture/ returns 0. T-113-20 promises 'a grep gate pins the absence of write calls in the module', which cannot exist as worded because the same module hosts the destructive sweep and imports rm. All three properties were verified TRUE at HEAD by direct read, so nothing is broken today; none is guarded against reintroduction. A durable gate belongs beside assertNoForbiddenSurface in tests/architecture/source-scan.ts. Found by the retroactive phase-111 and phase-113 security audits. | open |  | 2026-09-10T02:05:16.905Z |  |
+| 50 | 112 | unmet-truth | extensions/pi-claude-marketplace/orchestrators/plugin/workflows-staging-gc.ts | 148 | [workflows-replay] the staging sweep's containment refusal is silent, and the comment above it says otherwise. workflows-staging-gc.ts:148-154 states the refusal is 'still loud'; the WR-01 fix turned the propagating throw into a per-entry leak string (:155-164), and BOTH call sites then discard the leak array in a bare catch {} - install.ts:1740-1744 and uninstall.ts:478-482 - so a symlinked staging segment is refused with no user-visible signal on either path. The tampering vector is fully closed either way (rm never runs on a refused entry, proven by two symlink tests asserting external trees survive); what is wrong is the stated observability. Three planning artifacts still assert the superseded propagate behavior: 112-04-PLAN.md:389, 112-04-SUMMARY.md:101, and 112-VERIFICATION.md:32's citation of it. Found by the retroactive phase-112 security audit. | open |  | 2026-09-10T02:05:17.280Z |  |
+| 51 | 113 | todo | .planning/workstreams/workflows/phases |  | [workflows-replay] not one SUMMARY across phases 109-113 carries a '## Threat Flags' section - 21 summaries, zero sections. The section is ABSENT rather than empty, so the executor's new-attack-surface channel produced nothing for any security audit to cross-check against, and every register's completeness rests entirely on register_authored_at_plan_time:true. All four auditors independently flagged this and none treated the absence as evidence that no new surface appeared; each verified mitigations by reading the implementation instead. Mitigating factor for these five phases: the new surface was independently enumerated by the code-review iterations, and each finding mapped onto a register row. The fix is a template change so the section is emitted even when the answer is None. | open |  | 2026-09-10T02:05:17.644Z |  |
 
 ````json
 [
@@ -627,6 +631,54 @@ last_updated: 2026-09-09T22:31:31.534Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-09-09T22:31:31.534Z",
+    "resolved_at": null
+  },
+  {
+    "id": 48,
+    "kind": "unmet-truth",
+    "phase": "111",
+    "file": "extensions/pi-claude-marketplace/bridges/workflows/stage.ts",
+    "line": 414,
+    "description": "[workflows-replay] the staging root gets a symlink-anchored containment check and its sibling saved directory does not. stage.ts:215 anchors assertPathInside one level ABOVE the staging segment precisely so a symlink planted at that segment is lstat'ed; commitPreparedWorkflows then calls mkdir(workflowsSavedDir, {recursive:true}) at stage.ts:414 with nothing anchored above it, and workflowArtifactPath (locations.ts:362-378) trusts workflowsSavedDir as its own boundary. A symlink at ~/.pi/workflows/saved or at projects/<key>/saved would be followed. Practical significance is low - planting it needs write access to the user's home, outside the careless-or-malicious-plugin-author model at path-safety.ts:70-74 - but the reasoning at stage.ts:207-214 was applied to one of two sibling directories and reads as deliberate. Found by the retroactive phase-111 security audit; not a register row, so it was never counted in threats_open.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-10T02:05:16.541Z",
+    "resolved_at": null
+  },
+  {
+    "id": 49,
+    "kind": "unmet-truth",
+    "phase": "113",
+    "file": ".planning/workstreams/workflows/phases/111-workflows-bridge/111-01-PLAN.md",
+    "line": 206,
+    "description": "[workflows-replay] three threat mitigations name a regression gate that was never built. T-111-03 (111-01-PLAN.md:206) says a bare path join is kept out of the workflows bridge by 'a source assertion in the acceptance criteria' - no such criterion exists in either plan, and no architecture test scans the bridge for it (no-probe-in-workflows-bridge.test.ts covers probe surface only). T-113-08 promises 'a grep gate pins the callback's presence' - grep -rn onPlaced tests/architecture/ returns 0. T-113-20 promises 'a grep gate pins the absence of write calls in the module', which cannot exist as worded because the same module hosts the destructive sweep and imports rm. All three properties were verified TRUE at HEAD by direct read, so nothing is broken today; none is guarded against reintroduction. A durable gate belongs beside assertNoForbiddenSurface in tests/architecture/source-scan.ts. Found by the retroactive phase-111 and phase-113 security audits.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-10T02:05:16.905Z",
+    "resolved_at": null
+  },
+  {
+    "id": 50,
+    "kind": "unmet-truth",
+    "phase": "112",
+    "file": "extensions/pi-claude-marketplace/orchestrators/plugin/workflows-staging-gc.ts",
+    "line": 148,
+    "description": "[workflows-replay] the staging sweep's containment refusal is silent, and the comment above it says otherwise. workflows-staging-gc.ts:148-154 states the refusal is 'still loud'; the WR-01 fix turned the propagating throw into a per-entry leak string (:155-164), and BOTH call sites then discard the leak array in a bare catch {} - install.ts:1740-1744 and uninstall.ts:478-482 - so a symlinked staging segment is refused with no user-visible signal on either path. The tampering vector is fully closed either way (rm never runs on a refused entry, proven by two symlink tests asserting external trees survive); what is wrong is the stated observability. Three planning artifacts still assert the superseded propagate behavior: 112-04-PLAN.md:389, 112-04-SUMMARY.md:101, and 112-VERIFICATION.md:32's citation of it. Found by the retroactive phase-112 security audit.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-10T02:05:17.280Z",
+    "resolved_at": null
+  },
+  {
+    "id": 51,
+    "kind": "todo",
+    "phase": "113",
+    "file": ".planning/workstreams/workflows/phases",
+    "line": null,
+    "description": "[workflows-replay] not one SUMMARY across phases 109-113 carries a '## Threat Flags' section - 21 summaries, zero sections. The section is ABSENT rather than empty, so the executor's new-attack-surface channel produced nothing for any security audit to cross-check against, and every register's completeness rests entirely on register_authored_at_plan_time:true. All four auditors independently flagged this and none treated the absence as evidence that no new surface appeared; each verified mitigations by reading the implementation instead. Mitigating factor for these five phases: the new surface was independently enumerated by the code-review iterations, and each finding mapped onto a register row. The fix is a template change so the section is emitted even when the answer is None.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-10T02:05:17.644Z",
     "resolved_at": null
   }
 ]
