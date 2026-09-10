@@ -488,6 +488,20 @@ export const SCOPE_ORDER_CANONICAL_TARGETS = [
 ] as const;
 
 /**
+ * D-75-01: the three modules whose `description:` string VALUES are user-facing
+ * completion prose, scanned for the retired plugin-level vocabulary.
+ *
+ * `flag-catalog.ts` is the single source of truth the two completion modules
+ * derive from, so all three carry the same obligation and a scan of any one
+ * alone would miss where the prose actually originates.
+ */
+export const COMPLETION_DESCRIPTION_TARGETS = [
+  "extensions/pi-claude-marketplace/edge/completions/provider.ts",
+  "extensions/pi-claude-marketplace/edge/completions/data.ts",
+  "extensions/pi-claude-marketplace/edge/flag-catalog.ts",
+] as const;
+
+/**
  * Paths that MUST NOT resolve on disk.
  *
  * WR-06 fixtures for the shared scan mechanic's own gate: each one stands for a
