@@ -170,9 +170,9 @@ Roadmap creation assigns each requirement to exactly one phase.
 | TREF-04     | Phase 5                             | Complete      |
 | TREF-05     | Phase 5                             | Complete      |
 | TREF-06     | Phase 5                             | Complete      |
-| TREF-07     | Phase 6                             | Pending       |
-| TREF-08     | Phase 6                             | Pending       |
-| TREF-09     | Phase 6                             | Pending       |
+| TREF-07     | Phase 6                             | Complete      |
+| TREF-08     | Phase 6                             | Complete      |
+| TREF-09     | Phase 6                             | Complete      |
 | GGAT-01     | Phase 7                             | Pending       |
 | GGAT-02     | Evidence/history (formerly Phase 7) | Evidence only |
 | GGAT-03     | Phase 7                             | Pending       |
