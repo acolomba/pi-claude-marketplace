@@ -191,17 +191,41 @@ test("D-07-20: the same question over the committed entry points reports nothing
   );
 });
 
+/**
+ * The record row that answers for one finding: its id in the leading cell, a
+ * status naming a disposition, and a non-empty evidence cell.
+ *
+ * The row is what the check reads, not the bare id, because a record that
+ * mentions an id in a heading, a footnote or a changelog line answers nothing
+ * -- and an unanchored substring probe cannot tell those apart from a real
+ * answer. Anchoring to the leading cell also removes the aliasing hazard
+ * between ids that prefix one another (`OPEF-F01` and `OPEFR-F007` are one
+ * character apart).
+ */
+function dispositionRow(finding: string): RegExp {
+  // Every cell is spelled without `\s`, which would match a newline and let a
+  // row with an empty cell borrow the next row's text to satisfy this.
+  const cell = String.raw`[^|\n]*\S[^|\n]*`;
+  const status = String.raw`[^|\n]*\b(?:closed|open|deferred)\b[^|\n]*`;
+  const gap = String.raw`[^\S\n]*`;
+
+  return new RegExp(
+    String.raw`^\|${gap}\x60${finding}\x60${gap}\|${cell}\|${status}\|${cell}\|${cell}\|${gap}$`,
+    "m",
+  );
+}
+
 test("D-07-17: the dispositions record answers for every routed finding", async () => {
   // arrange
   const record = await readFile(path.join(REPO_ROOT, FINDING_DISPOSITIONS_REL), "utf8");
 
   // act
-  const unanswered = ROUTED_FINDINGS.filter((finding) => !record.includes(finding));
+  const unanswered = ROUTED_FINDINGS.filter((finding) => !dispositionRow(finding).test(record));
 
   // assert
   assert.deepStrictEqual(
     unanswered,
     [],
-    `D-07-17: ${FINDING_DISPOSITIONS_REL} names no disposition for ${unanswered.join(", ")}. A finding routed here is answered with a status and a command run this cycle, or it is not answered at all -- a record that drops a row reads exactly like a record whose findings were all resolved.`,
+    `D-07-17: ${FINDING_DISPOSITIONS_REL} carries no answering row for ${unanswered.join(", ")}. A finding routed here is answered by a record row naming it, a status of closed, open or deferred, the work that closed it, and evidence -- or it is not answered at all. A record that drops a row, or that only mentions an id in prose, reads exactly like a record whose findings were all resolved.`,
   );
 });
