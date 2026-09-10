@@ -321,3 +321,27 @@ ______________________________________________________________________
 *Fixed: 2026-09-09*
 *Fixer: Claude (gsd-code-fixer)*
 *Iteration: 1*
+
+---
+
+## Closure, 2026-09-10
+
+**WR-03 stays SKIPPED, and the skip is the right call.** Re-checked at the
+milestone boundary rather than carried forward on its original note.
+
+The finding asks for `scanForceInstalledBackfills` and `hasForceInstalledPlugin`
+to be renamed. `116-CONTEXT.md` closes its decisions block with the opposite
+instruction — "**Names are left alone.**" — on two grounds that both still hold:
+the rename is churn beyond what the requirements ask for, and new prose spelling
+the hyphenated `force-install` form would redden
+`partial-vocabulary-guard.test.ts`.
+
+A code-review finding does not outrank a locked decision recorded before the
+review ran. Applying it would have reversed an operator decision silently, which
+is worse than leaving a name imperfect.
+
+What the finding is right about survives separately: `hasForceInstalledPlugin`'s
+doc comment has to open by contradicting its own name, because the filter it
+describes was deleted. That half is tracked as Broken Windows entry #44 against
+the comment rather than the identifier, so the true part is carried without the
+part that reverses the decision.

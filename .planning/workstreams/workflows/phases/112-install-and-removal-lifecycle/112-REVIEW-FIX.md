@@ -436,3 +436,23 @@ ______________________________________________________________________
 *Fixed: 2026-09-05T21:10:00Z*
 *Fixer: Claude (gsd-code-fixer)*
 *Iteration: 2*
+
+---
+
+## Closure, 2026-09-10
+
+**WR-03 is CLOSED.** It was deferred to the update phase with carrier commit
+`bcadbf89`, and that carrier discharged. Verified at HEAD rather than assumed:
+`orchestrators/plugin/update.ts` imports `prepareStageWorkflows`,
+`commitPreparedWorkflows` and `abortPreparedWorkflows` (`:96-98`), calls
+`prepareStageWorkflows` at `:1385` with
+`previousWorkflowNames: record.resources.workflows` at `:1395`, and unwinds
+through `abortPreparedWorkflows` at `:1452`. So `update` re-stages workflows and
+a withdrawn workflow stops running — the two halves the finding said were
+missing.
+
+Recorded here rather than left reading `deferred`, because a record that
+advertises completed work as outstanding is the same defect `WDOCS-01` exists to
+correct. The phase's own retroactive security audit independently reached the
+same conclusion: no threat row in its register depends on WR-03, and the finding
+is moot at HEAD.

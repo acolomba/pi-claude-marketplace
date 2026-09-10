@@ -652,3 +652,32 @@ backslash marker) are untouched. IN-01..IN-06 from iteration 1 likewise.
 _Fixed: 2026-09-05T07:52:00Z_
 _Fixer: Claude (gsd-code-fixer)_
 _Iteration: 2_
+
+---
+
+## Closure, 2026-09-10
+
+Both redirected findings were checked against HEAD. Neither was dropped.
+
+**WR-09 is CLOSED — but by a later phase than the one it was deferred to.** It
+was booked to the bridge phase; what actually discharged it was the
+admission-gate work two phases further on. `domain/workflow-script.ts:331-344`
+now states the mechanism outright: `validateMeta` demands both a `meta.name` and
+a `meta.description`, every shape reaching the stem-fallback arm fails at least
+the name half, and telling the user belongs to the bridge that writes the
+envelope — which it now does, through
+`bridges/workflows/discover.ts::unrunnableWarning`, composing one `warnings[]`
+line per script in the caller's tense and naming the engine gate when the
+verdict carries one (WGATE-01). The arm reports itself rather than registering a
+dead command in silence.
+
+Worth stating plainly because the deferral target was wrong and the finding
+still closed: had anyone checked only the bridge phase, this would have read as
+an open deferral against a phase that never owned it.
+
+**WR-07 stays open, and that is the intended state.** It was rejected as scoped
+and refiled rather than fixed, with carrier commit `1df0c12a`. The carrier is
+intact: `NAMEFOLD-01` is present in `.planning/BACKLOG.md`. The underlying
+observation — generated names are filenames, and case-only or normalization-only
+differences fold on APFS/HFS+ and NTFS — was never disputed. It is future work
+with a home, not an unresolved finding.
