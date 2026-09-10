@@ -39,10 +39,11 @@ import assert from "node:assert/strict";
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
 
-const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-const ORCHESTRATORS_ROOT = path.join(REPO_ROOT, "extensions/pi-claude-marketplace/orchestrators");
+import { ORCHESTRATORS_REL } from "./gate-targets.ts";
+import { REPO_ROOT } from "./source-scan.ts";
+
+const ORCHESTRATORS_ROOT = path.join(REPO_ROOT, ORCHESTRATORS_REL);
 
 // No caller cast-reads `.autoupdate` off `Record<string, unknown>`; the
 // field is read through `MergedConfig` instead, so the allow-list below is
@@ -83,9 +84,31 @@ async function* walkTsFiles(dir: string): AsyncGenerator<string> {
   }
 }
 
+/**
+ * Every orchestrator module the two walking clauses inspect.
+ *
+ * D-07-03: the walk is this gate's target list, so it answers the visitation
+ * question here rather than in each clause -- a walk rooted at a directory that
+ * stopped existing enumerates nothing and would report zero offenders without
+ * raising.
+ */
+async function collectOrchestratorFiles(): Promise<readonly string[]> {
+  const files: string[] = [];
+  for await (const file of walkTsFiles(ORCHESTRATORS_ROOT)) {
+    files.push(file);
+  }
+
+  assert.ok(
+    files.length > 0,
+    `D-07-03: the walk of ${ORCHESTRATORS_REL} enumerated no file, so this gate inspected nothing and would report zero offenders over zero modules.`,
+  );
+
+  return files;
+}
+
 test("SPLIT-01 baseline: every cast-read of autoupdate is in the allow-list", async () => {
   const offenders: string[] = [];
-  for await (const file of walkTsFiles(ORCHESTRATORS_ROOT)) {
+  for (const file of await collectOrchestratorFiles()) {
     const rel = path.relative(REPO_ROOT, file);
     if (ALLOWED_SPLIT_01_AUTOUPDATE_CAST_FILES.has(rel)) {
       continue;
@@ -110,7 +133,7 @@ test("SPLIT-01 whitelist: exactly 0 files may read autoupdate via Record<string,
 
 test("SPLIT-01 / WR-05: no orchestrator assigns `.autoupdate =` on a state record (assignment-form gate, allow-list empty)", async () => {
   const offenders: string[] = [];
-  for await (const file of walkTsFiles(ORCHESTRATORS_ROOT)) {
+  for (const file of await collectOrchestratorFiles()) {
     const rel = path.relative(REPO_ROOT, file);
     const source = await readFile(file, "utf8");
     if (SPLIT_01_AUTOUPDATE_ASSIGNMENT_PATTERN.test(source)) {
