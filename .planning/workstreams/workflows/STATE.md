@@ -7,8 +7,8 @@ current_phase_name: Measured `agent()` failure evidence
 current_plan: 3 of 3 executed
 status: audit passed with tech debt; archive paused
 stopped_at: Milestone audit recorded tech_debt; operator chose to clear debt before the archive
-last_updated: "2026-09-09T22:47:00.000Z"
-state_head: a39ba7a49f09681b245cdb32e677016044f19ada
+last_updated: "2026-09-10T02:10:00.000Z"
+state_head: 2b7ffdc4cd56f08bb3a4107d05f6a27f4671c922
 progress:
   total_phases: 9
   completed_phases: 9
@@ -16,7 +16,7 @@ progress:
   completed_plans: 39
   percent: 100
 last_activity: 2026-09-09
-last_activity_desc: Closed the last open deferred item and bound the messaging guide to its source
+last_activity_desc: Retroactive threat verification landed for phases 109-113; all nine now verified
 ---
 
 # Project State
@@ -55,12 +55,20 @@ and `cleanup` have NOT run. What is owed, in the order the audit lists it:
    Four further false claims in the surviving block were found and corrected on
    the way; one more — a stale statement of the reload-hint MECHANISM, not an
    enumeration defect — became ledger entry 47, so item 2 below grew by one.
-2. **Eleven open Broken Windows entries**, all tagged `[workflows-replay]`:
-   #34, #37, #39, #40, #41, #42, #43, #44, #45, #46, #47. #44 is a plain TODO;
-   #41 and #42 are the same inert `ENBL-08` case seen from two angles; #47 is
-   the reload-hint mechanism claim the quick task above deliberately did not
-   fix inline.
-3. **Phases 109-113 carry no SECURITY.md** — `/gsd-secure-phase N` each.
+2. **Fifteen open Broken Windows entries**, all tagged `[workflows-replay]`:
+   #34, #37, #39-#51. #44 and #51 are TODOs; #41 and #42 are the same inert
+   `ENBL-08` case seen from two angles; #47 is the reload-hint mechanism claim
+   the messaging quick task deliberately did not fix inline. #48-#51 are new,
+   from the retroactive security audits — a containment check anchored on the
+   staging root but not its sibling saved directory (#48), three mitigations
+   naming a regression gate that was never built (#49), a sweep refusal
+   documented as loud that both call sites discard silently (#50), and an
+   absent threat-flag channel across all 21 summaries of phases 109-113 (#51).
+3. ~~Phases 109-113 carry no SECURITY.md~~ — **DONE** (`2b7ffdc4`). One
+   auditor per phase verified all 127 registered threats against the
+   implementation; every phase returns SECURED at `threats_open: 0`, and every
+   register parse matched an independently measured row count. All nine phases
+   of the milestone now read `status: verified`.
 4. **Phases 109-113 sit at VALIDATION.md `status: draft`** — never reconciled by
    validate-phase, so `nyquist_compliant` is not authoritative there.
    `/gsd-validate-phase N` each. Per #2117 this is a coverage TODO, not a
@@ -635,8 +643,8 @@ debt work, then the archive:
 - Work or waive the ten open `[workflows-replay]` Broken Windows entries; #44 is
   a plain TODO, #41 and #42 are one inert test case seen twice, and #46 is a
   substring guard in two live-UAT canaries
-- Run `/gsd-secure-phase N` for 109, 110, 111, 112, 113 — none carries a
-  SECURITY.md
+- ~~Run `/gsd-secure-phase N` for 109-113~~ — done; all nine phases now carry a
+  verified SECURITY.md at `threats_open: 0`
 - Run `/gsd-validate-phase N` for the same five — each sits at VALIDATION.md
   `status: draft`, so its `nyquist_compliant` value is not authoritative
 - Turn Phase 112's WR-03 ledger status (Phase 113 already closed it) and waive
