@@ -139,3 +139,19 @@ export const NETWORK_FREE_TARGETS = [
  */
 export const NETWORK_FREE_CONTROL_TARGET: (typeof NETWORK_FREE_TARGETS)[number] =
   "extensions/pi-claude-marketplace/orchestrators/marketplace/autoupdate.ts";
+
+/**
+ * Paths that MUST NOT resolve on disk.
+ *
+ * WR-06 fixtures for the shared scan mechanic's own gate: each one stands for a
+ * target that was renamed, deleted, or not yet written, and the scan is expected
+ * to fail (or to waive it explicitly) rather than green over zero inspected
+ * files. If any of these ever becomes a real module, its case stops proving
+ * anything -- rename the probe instead of reusing the collision.
+ */
+export const MISSING_TARGET_PROBES = [
+  "extensions/pi-claude-marketplace/orchestrators/plugin/renamed-away.ts",
+  "extensions/pi-claude-marketplace/orchestrators/plugin/not-yet-written.ts",
+  "extensions/pi-claude-marketplace/orchestrators/plugin/other-missing.ts",
+  "extensions/pi-claude-marketplace/orchestrators/plugin/not-this-one.ts",
+] as const;
