@@ -551,3 +551,47 @@ test("the assembly rule does not report the shared scan mechanic itself", async 
     assert.deepEqual(survey.named, []);
   });
 });
+
+/** A repository-relative path under the extension tree. */
+const PRODUCTION_PREFIX = /^(?:\.\/)?extensions\/pi-claude-marketplace\//;
+
+/**
+ * Every path the registry EXPORTS at runtime, read from the module namespace.
+ *
+ * Array groups, named scalars, and the keys of a path-keyed record are all
+ * declarations of a target, and each arrives by a different shape. Reading them
+ * from the namespace rather than from the file text is the point: it is a second
+ * instrument on the same file, and the clause below compares the two.
+ */
+function declaredRegistryPaths(): string[] {
+  const declared: string[] = [];
+  for (const exported of Object.values(registry)) {
+    if (Array.isArray(exported)) {
+      declared.push(...(exported as ReadonlyArray<string>));
+    } else if (typeof exported === "string") {
+      declared.push(exported);
+    } else if (typeof exported === "object" && exported !== null) {
+      declared.push(...Object.keys(exported));
+    }
+  }
+
+  return declared;
+}
+
+test("T-07-48: every production path the registry exports is visible to a literal scan of it", async () => {
+  // arrange
+  const registered = await registeredProductionPaths(REPO_ROOT);
+  const declared = declaredRegistryPaths().filter((rel) => PRODUCTION_PREFIX.test(rel));
+
+  // act
+  const invisible = [...new Set(declared.filter((rel) => !registered.has(rel)))].sort();
+
+  // assert
+  assert.ok(declared.length > 0, "the registry exported no production path at all");
+  assert.ok(registered.size > 0, "the literal scan of the registry module found nothing");
+  assert.deepEqual(
+    invisible,
+    [],
+    `D-07-05: these targets are reachable at runtime but invisible to the literal scan the registry exists to serve, so the two rules above would green over them:\n  ${invisible.join("\n  ")}\nSpell the whole repository-relative path as one string literal.`,
+  );
+});
