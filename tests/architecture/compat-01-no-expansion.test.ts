@@ -101,7 +101,7 @@ import type { LedgerDegradationSignals } from "../../extensions/pi-claude-market
 import type { InstallPluginOutcome } from "../../extensions/pi-claude-marketplace/orchestrators/types.ts";
 
 const NOTIFICATION_GRAMMAR_REL = "extensions/pi-claude-marketplace/shared/notification-grammar.ts";
-const NETWORK_GATE_REL = "tests/architecture/no-orchestrator-network.test.ts";
+const NETWORK_GATE_REL = "tests/architecture/gate-targets.ts";
 
 /**
  * WR-07: one glyph-declaration pattern in two flavours -- `GLYPH_DECLARATIONS`
@@ -517,8 +517,9 @@ test("COMPAT-01: the default state still declares the current schema version", (
 test("COMPAT-01: the network clause is covered by the orchestrator-network gate", async () => {
   // arrange
   // DELEGATION (D-98-09): the NFR-5 gate runs the actual assertion. This clause
-  // only proves the two info surfaces are still in its target list, so removing
-  // one there fails here rather than silently uncovering the clause. WR-06: that
+  // only proves the two info surfaces are still in its target list, which
+  // D-07-05 keeps in the registry module, so removing one there fails here
+  // rather than silently uncovering the clause. WR-06: that
   // the named files still EXIST is the shared scanner's job -- it fails on a
   // missing target rather than skipping it, so a rename cannot leave both gates
   // green over a file neither read.

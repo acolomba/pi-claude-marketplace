@@ -17,6 +17,16 @@
  * it never actually inspected; `readFile(..., "utf8")` either yields the text or
  * throws, so no target can be silently skipped.
  *
+ * The scan names its base through `opts.root`, which defaults to the repository
+ * (D-07-01), and reports the repository-relative paths it actually opened in
+ * `ScanReport.visited` (D-07-03). Both halves of the answer come from that one
+ * root: a report whose paths were resolved against a different base than the
+ * read would be a wrong answer wearing the shape of a pass. A target waived
+ * through `allowMissing` is deliberately absent from `visited` and appears in
+ * `waived` instead, so a gate that deep-compares `visited` against its declared
+ * target list sees a target drop out the moment it stops resolving -- which is
+ * what WR-06 alone cannot report, since a waived target raises nothing.
+ *
  * This file registers no case of its own.
  */
 
@@ -45,6 +55,14 @@ export function stripComments(src: string): string {
     .replace(/^\s*\/\/.*$/gm, ""); // line comments
 }
 
+/** What one `assertNoForbiddenSurface` run actually looked at. */
+export interface ScanReport {
+  /** Repository-relative paths really opened, in declared target order. */
+  readonly visited: ReadonlyArray<string>;
+  /** Repository-relative targets absent from disk and waived by `allowMissing`. */
+  readonly waived: ReadonlyArray<string>;
+}
+
 /**
  * Read every repository-relative `targets` entry, strip its comments, and
  * accumulate one offender string per forbidden pattern match. Makes a SINGLE
@@ -62,19 +80,30 @@ export function stripComments(src: string): string {
  * door. A gate authored ahead of the file it will guard names that file in
  * `opts.allowMissing`, which makes the wait explicit and temporary instead of
  * implicit and permanent.
+ *
+ * D-07-03: the returned `ScanReport` is the visitation half of the answer. A
+ * gate deep-compares `report.visited` against its own declared target list, so a
+ * shortened, reordered, or waived-away list fails instead of greening.
  */
 export async function assertNoForbiddenSurface(
   targets: ReadonlyArray<string>,
   patterns: ReadonlyArray<{ readonly name: string; readonly pattern: RegExp }>,
   describeViolation: (offenders: ReadonlyArray<string>) => string,
-  opts: { readonly allowMissing?: ReadonlyArray<string> } = {},
-): Promise<void> {
+  opts: {
+    readonly allowMissing?: ReadonlyArray<string>;
+    /** Scan root. Defaults to the repository; a temp-root control injects its own. */
+    readonly root?: string;
+  } = {},
+): Promise<ScanReport> {
   const offenders: string[] = [];
+  const visited: string[] = [];
+  const waived: string[] = [];
+  const scanRoot = opts.root ?? REPO_ROOT;
 
   for (const rel of targets) {
     let src: string;
     try {
-      src = await readFile(path.join(REPO_ROOT, rel), "utf8");
+      src = await readFile(path.join(scanRoot, rel), "utf8");
     } catch (err) {
       const code = (err as NodeJS.ErrnoException).code;
       if (code === "ENOENT") {
@@ -82,11 +111,14 @@ export async function assertNoForbiddenSurface(
           opts.allowMissing?.includes(rel),
           `source-scan: target ${rel} does not exist, so this gate inspected nothing for it. A renamed or deleted target silently uncovers the gate; add it to allowMissing only while it is genuinely unwritten.`,
         );
+        waived.push(rel);
         continue;
       }
 
       throw err;
     }
+
+    visited.push(rel);
 
     const stripped = stripComments(src);
     for (const { name, pattern } of patterns) {
@@ -97,4 +129,6 @@ export async function assertNoForbiddenSurface(
   }
 
   assert.deepEqual(offenders, [], describeViolation(offenders));
+
+  return { visited, waived };
 }
