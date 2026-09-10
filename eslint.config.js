@@ -173,7 +173,7 @@ export default tseslint.config(
     },
   },
   {
-    // BLOCK C (D-11): Import-direction enforcement. 9-zone no-restricted-paths
+    // BLOCK C (D-11): Import-direction enforcement. 8-zone no-restricted-paths
     // mapping: each folder declares which sibling folders MUST NOT import from
     // it (i.e. enforces the upward/inward direction of the dep graph).
     files: ["extensions/pi-claude-marketplace/**/*.ts"],
@@ -294,13 +294,6 @@ export default tseslint.config(
         },
       ],
     },
-  },
-  {
-    // BLOCK D: Test fixtures override. Canary fixtures under
-    // tests/fixtures/bad-imports/ INTENTIONALLY violate the import-x rules;
-    // the canary test (Plan 05) spawns eslint manually on them, so normal CI
-    // lint must skip them.
-    ignores: ["tests/fixtures/bad-imports/**"],
   },
   {
     // Tests deliberately do defensive checking after operations that "should"
