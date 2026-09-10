@@ -348,6 +348,25 @@ async function stateSnapshot(target: string): Promise<{
   return Object.freeze({ bytes, inode: metadata.ino, mtimeNs: metadata.mtimeNs });
 }
 
+/**
+ * Hold the scope's cross-process state lock for the length of one case, the way
+ * a second Pi process would. `withScopeLock` takes this same lock BEFORE it
+ * loads state or reads any record, so an operation that reaches for the
+ * re-materialize under a held lock fails at the lock rather than on anything it
+ * would have decided afterwards. Callers release it inside the case body rather
+ * than in an `after` hook, so it can never race the hook that removes the scope
+ * root it lives under.
+ */
+function holdScopeLock(locations: ScopedLocations): Promise<() => Promise<void>> {
+  return lockfile.lock(locations.extensionRoot, {
+    lockfilePath: locations.stateLockFile,
+    realpath: false,
+    retries: 0,
+    stale: 10_000,
+    update: 2_000,
+  });
+}
+
 /** A seeded scope that has been read but not re-materialized. */
 function seededScopeTree(): readonly string[] {
   return ["pi-claude-marketplace/", "pi-claude-marketplace/state.json"];
@@ -709,13 +728,7 @@ describe("applyBackfillForScopeIsolated", () => {
       },
     };
     await seedState(locations, seeded);
-    const release = await lockfile.lock(locations.extensionRoot, {
-      lockfilePath: locations.stateLockFile,
-      realpath: false,
-      retries: 0,
-      stale: 10_000,
-      update: 2_000,
-    });
+    const release = await holdScopeLock(locations);
     const { ctx, pi, verifyBoundary } = createSilentBoundary();
     const { gitOps, clonedUrls } = createOfflineGitOps();
     const outcomes: PerEntryOutcome[] = [
@@ -1716,7 +1729,25 @@ describe("scanForceInstalledBackfills", () => {
     verifyBoundary();
   });
 
-  test("ENBL-08: skips a disabled record whose supported set grew", async (t) => {
+  // ENBL-08: the pair below measures the filter against a fully LIVE fixture --
+  // a readable manifest and a real strict-superset growth -- which the
+  // poisoned-manifest pair cannot do, because poisoning the manifest denies the
+  // growth test its input. Everything up to the re-materialize therefore runs,
+  // and the filter is the only thing that can stop the scan short of it.
+  //
+  // The observable is the per-scope state lock, held by a concurrent process for
+  // the length of the act. It is the discriminator this claim needs because
+  // `reinstallPlugin` acquires that lock BEFORE it reads the record and refuses a
+  // disabled one (`with-state-guard.ts` wraps `runLockedReinstall`): under a held
+  // lock the ENBL-05 refusal is unreachable, so it cannot stand in for the
+  // filter and produce the same silence. Reaching the re-materialize at all
+  // therefore costs a failure row and a held-open gate, and the measured zero
+  // below is a fact about the filter rather than about reinstall.
+  //
+  // It also bounds one step further downstream than the manifest read does: the
+  // lock sits after the offline resolve, so a change that resolved before
+  // filtering reddens this pair too.
+  test("ENBL-08: leaves the scope lock untaken for a disabled record whose supported set grew", async (t) => {
     // arrange
     const { cwd, locations } = await createHermeticProjectScope(t, "disabled-partial");
     const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
@@ -1738,6 +1769,7 @@ describe("scanForceInstalledBackfills", () => {
       },
     };
     await seedState(locations, seeded);
+    const release = await holdScopeLock(locations);
     const { ctx, pi, verifyBoundary } = createSilentBoundary();
     const { gitOps, clonedUrls } = createOfflineGitOps();
     const outcomes: PerEntryOutcome[] = [];
@@ -1749,10 +1781,77 @@ describe("scanForceInstalledBackfills", () => {
       seeded,
       outcomes,
     );
+    await release();
 
-    // assert
+    // assert -- silence AND no failure. A scan that reached the re-materialize
+    // would have collided with the held lock, pushed a plugin-scoped failure row
+    // and returned `true`, which is what the enabled twin below records.
     assert.strictEqual(anyFailure, false);
     assert.deepStrictEqual(outcomes, []);
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), seeded);
+    assert.deepStrictEqual(await retryTree(locations.scopeRoot), seededScopeTree());
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("ENBL-08: collides with the held scope lock when the same grown fixture is enabled", async (t) => {
+    // arrange -- the twin of the case above in every respect but the disabled
+    // flag, so the held lock is proved VISIBLE rather than assumed. Without this
+    // half the measured zero could be measuring a lock nothing would have hit.
+    const { cwd, locations } = await createHermeticProjectScope(t, "enabled-lock-held");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      hello: { skill: "clean", command: true, lsp: true },
+    });
+    const seeded: ExtensionState = {
+      schemaVersion: 2,
+      lastReconciledExtensionVersion: STALE_STAMP,
+      marketplaces: {
+        mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
+          hello: pluginRecord({
+            pluginRoot: path.join(marketplaceRoot, "plugins", "hello"),
+            installable: false,
+            supported: ["skills"],
+            unsupported: ["lspServers"],
+          }),
+        }),
+      },
+    };
+    await seedState(locations, seeded);
+    const release = await holdScopeLock(locations);
+    const { ctx, pi, verifyBoundary } = createSilentBoundary();
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+    const outcomes: PerEntryOutcome[] = [];
+
+    // act
+    const anyFailure = await scanForceInstalledBackfills(
+      backfillOptions(ctx, pi, cwd, gitOps),
+      "project",
+      seeded,
+      outcomes,
+    );
+    await release();
+
+    // assert -- the reach happened: a plugin-scoped failure row, and `true` so
+    // the caller holds the version gate open for the next load.
+    //
+    // The token is `unreadable` rather than `lock held` because the collision is
+    // caught inside `reinstallPlugin`, which returns a `failed` outcome whose
+    // pre-narrowed reason `narrowReasons` derived from the message text
+    // (`reinstall.messaging.ts` last-resort fallback); the `failed` arm prefers
+    // that reason over `classifyOrchestratorThrow`, which maps
+    // `StateLockHeldError` to the `lock held` member of the same closed set. So
+    // one cause reaches the cascade under two tokens depending on which layer
+    // catches it. Pinned as observed, not as endorsed.
+    assert.strictEqual(anyFailure, true);
+    assert.deepStrictEqual(outcomes, [
+      {
+        kind: "plugin-install-failed",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "hello",
+        reason: "unreadable",
+      },
+    ]);
     assert.deepStrictEqual(await loadState(locations.extensionRoot), seeded);
     assert.deepStrictEqual(await retryTree(locations.scopeRoot), seededScopeTree());
     assert.deepStrictEqual(clonedUrls(), []);

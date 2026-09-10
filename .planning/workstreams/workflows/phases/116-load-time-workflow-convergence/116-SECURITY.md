@@ -30,7 +30,7 @@ created: "2026-09-09"
 | Threat ID | Category | Component | Severity | Disposition | Mitigation | Status |
 |-----------|----------|-----------|----------|-------------|------------|--------|
 | T-116-01 | Elevation of privilege | `backfillOnePluginIsolated` disabled-record filter | high | mitigate | `isRecordedButDisabled` left byte-identical (`backfill.ts:297`); reinstall's own refusal is the second layer (`reinstall.ts:927`). Deleting the filter reddens 2/34 | closed |
-| T-116-02 | Tampering | `applyBackfillForScope` state-file-absent guard | high | mitigate | `hasForceInstalledPlugin` not touched (D-116-04, `backfill.ts:175-185`); the WR-01 control reddens if it is widened | closed |
+| T-116-02 | Tampering | `applyBackfillForScope` state-file-absent guard | high | mitigate | `hasForceInstalledPlugin` not touched (D-116-04, `backfill.ts:175-185`); the WR-01 control `WR-01: brings no state.json into existence for a state-file-absent scope with nothing to promote` reddens if it is widened | closed |
 | T-116-03 | Information disclosure | `resolveRecordedPluginOffline` → `reinstallPlugin` | high | mitigate | No clone-cache resolver passed (`backfill.ts:460`); `deriveSourcePluginRoot` returns `unavailable` for every git shape (`resolver.ts:812`) before any clone | closed |
 | T-116-08 | Tampering | `alreadyTouched` dedupe (`backfill.ts:233-238`, `:303`) | high | mitigate | A record disabled by `applyPlan` in the same load is not re-materialized behind it; removing the dedupe reddens 2/34 | closed |
 | T-116-SC | Tampering | npm/pip/cargo installs | high | accept | The phase adds, upgrades and removes no package; `git diff --stat` on `package.json`/`package-lock.json` across the phase is empty | closed |
@@ -121,9 +121,13 @@ no-growth reason.
   but distinct from T-116-13 and T-116-05. Bounded by the version stamp. Register it if a
   follow-up phase touches the gate.
 - **Two citation-drift errors**, documentation only; the mitigations were verified at their
-  true locations. T-116-02's mitigation and `116-04-SUMMARY.md` §7 cite the WR-01 control at
-  `backfill.test.ts:529`; it is at `:557`. `.planning/WINDOWS.md` entry 41 cites `:1445` for
-  the `ENBL-08` case; it is at `:1582`.
+  true locations. Both cited a line number in `backfill.test.ts` that had since moved, so
+  both are re-cited by case NAME — a name survives edits above it, a line number does not.
+  T-116-02's mitigation and `116-04-SUMMARY.md` §7 name the WR-01 control as
+  `WR-01: brings no state.json into existence for a state-file-absent scope with nothing to
+  promote`. `.planning/WINDOWS.md` entry 41's `ENBL-08` case is
+  `ENBL-08: leaves the scope lock untaken for a disabled record whose supported set grew`
+  (retitled when that case was rewritten to gate the filter it names).
 
 ---
 
