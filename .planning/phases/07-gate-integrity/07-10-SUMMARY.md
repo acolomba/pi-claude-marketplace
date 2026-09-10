@@ -300,3 +300,8 @@ None.
 on. `07-12` still owns the two `__deps` members in `reinstall-flow.ts:138,151` — this plan
 deliberately changed nothing else in that file, so `07-12`'s behaviour regressions stay
 attributable. Ready for `07-11`.
+
+## Self-Check: PASSED
+
+All five declared files exist on disk. Both commits (`73209a94`, `7ead6d6f`) resolve in
+`git log --all`. `.planning/STATE.md` and `.planning/ROADMAP.md` carry no commit from this plan.
