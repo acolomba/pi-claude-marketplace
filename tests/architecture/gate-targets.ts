@@ -502,3 +502,363 @@ export const MISSING_TARGET_PROBES = [
   "extensions/pi-claude-marketplace/orchestrators/plugin/other-missing.ts",
   "extensions/pi-claude-marketplace/orchestrators/plugin/not-this-one.ts",
 ] as const;
+
+/** One export that no production module outside its own file consumes. */
+export interface UnownedExport {
+  /** The repository-relative file that declares or re-exports it. */
+  readonly path: string;
+  /** The exported binding's own name; `default` for a default export. */
+  readonly exportName: string;
+}
+
+/**
+ * D-07-19 / GGAT-04: every export the repository publishes that no production
+ * consumer reads.
+ *
+ * THIS IS A MEASUREMENT, NOT AN ALLOW-LIST. Nothing here is approved, accepted,
+ * or waived. Each entry is a fact about the tree as it stands, and the gate that
+ * reads it (`unowned-exports-census.test.ts`) compares the measured set to this
+ * one for EXACT equality -- so an addition fails, a removal fails, and a
+ * one-in-one-out swap fails. An allow-list forgives its named entries silently
+ * and forever; a pinned set forces whoever changes the shape of the tree to
+ * change this list in the same commit and say why.
+ *
+ * Many members are legitimate design. The `create*` factories exist for the
+ * dependency-injection pattern `CONVENTIONS.md` prescribes, the closed tuples in
+ * `shared/notification-types.ts` derive their union types in the file that
+ * declares them, and the barrel re-export rows are chains whose only reader is a
+ * test. Membership is therefore not an accusation -- it is the statement that
+ * production does not read this, which is exactly the fact a reader needs when
+ * they wonder whether deleting it is safe.
+ *
+ * Ordered by path, then by export name. The order is part of the pin: the gate
+ * sorts the measured set the same way, so a reordering can never be mistaken for
+ * a change, and a change can never hide inside a reordering.
+ */
+export const UNOWNED_EXPORT_CENSUS: readonly UnownedExport[] = [
+  { exportName: "MODEL_MAP", path: "extensions/pi-claude-marketplace/bridges/agents/convert.ts" },
+  {
+    exportName: "THINKING_VALUES",
+    path: "extensions/pi-claude-marketplace/bridges/agents/convert.ts",
+  },
+  { exportName: "TOOL_MAP", path: "extensions/pi-claude-marketplace/bridges/agents/convert.ts" },
+  {
+    exportName: "GENERATED_AGENT_MARKER",
+    path: "extensions/pi-claude-marketplace/bridges/agents/frontmatter.ts",
+  },
+  {
+    exportName: "emitYamlScalar",
+    path: "extensions/pi-claude-marketplace/bridges/agents/frontmatter.ts",
+  },
+  {
+    exportName: "sanitizeProvenanceValue",
+    path: "extensions/pi-claude-marketplace/bridges/agents/frontmatter.ts",
+  },
+  {
+    exportName: "GENERATED_AGENT_MARKER",
+    path: "extensions/pi-claude-marketplace/bridges/agents/index.ts",
+  },
+  {
+    exportName: "GENERATED_AGENT_MARKER_LEGACY",
+    path: "extensions/pi-claude-marketplace/bridges/agents/index.ts",
+  },
+  {
+    exportName: "GENERATED_AGENT_MARKER_LEGACY",
+    path: "extensions/pi-claude-marketplace/bridges/agents/marker.ts",
+  },
+  {
+    exportName: "GENERATED_AGENT_PREFIX",
+    path: "extensions/pi-claude-marketplace/bridges/agents/marker.ts",
+  },
+  {
+    exportName: "ASYNC_REWAKE_PIDS_FILENAME",
+    path: "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/pid-table.ts",
+  },
+  {
+    exportName: "ASYNC_REWAKE_PID_TABLE_VERSION",
+    path: "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/pid-table.ts",
+  },
+  {
+    exportName: "MARKER_ENV",
+    path: "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts",
+  },
+  {
+    exportName: "createBeforeAgentStartHandler",
+    path: "extensions/pi-claude-marketplace/bridges/hooks/event-router.ts",
+  },
+  {
+    exportName: "bashSubcommandFires",
+    path: "extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts",
+  },
+  {
+    exportName: "compileBashGlob",
+    path: "extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts",
+  },
+  {
+    exportName: "compilePathGlob",
+    path: "extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts",
+  },
+  {
+    exportName: "parseBashSubcommands",
+    path: "extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts",
+  },
+  {
+    exportName: "createWriteHookConfig",
+    path: "extensions/pi-claude-marketplace/bridges/hooks/stage.ts",
+  },
+  {
+    exportName: "hookConfigPathFor",
+    path: "extensions/pi-claude-marketplace/bridges/hooks/stage.ts",
+  },
+  {
+    exportName: "MCP_COLLISION_SLOTS",
+    path: "extensions/pi-claude-marketplace/bridges/mcp/collision-slots.ts",
+  },
+  {
+    exportName: "resolvePluginMcpServers",
+    path: "extensions/pi-claude-marketplace/bridges/mcp/index.ts",
+  },
+  { exportName: "readMarker", path: "extensions/pi-claude-marketplace/bridges/mcp/marker.ts" },
+  { exportName: "parseMcpServers", path: "extensions/pi-claude-marketplace/bridges/mcp/parse.ts" },
+  {
+    exportName: "resolvePluginMcpServers",
+    path: "extensions/pi-claude-marketplace/bridges/mcp/parse.ts",
+  },
+  {
+    exportName: "MalformedMcpServersError",
+    path: "extensions/pi-claude-marketplace/bridges/mcp/stage.ts",
+  },
+  {
+    exportName: "deepSubstitute",
+    path: "extensions/pi-claude-marketplace/bridges/mcp/substitute.ts",
+  },
+  {
+    exportName: "createUnstagePluginSkills",
+    path: "extensions/pi-claude-marketplace/bridges/skills/unstage.ts",
+  },
+  {
+    exportName: "GITLAB_PROVIDER",
+    path: "extensions/pi-claude-marketplace/domain/auth-registry.ts",
+  },
+  {
+    exportName: "HOOKS_CONFIG_SCHEMA",
+    path: "extensions/pi-claude-marketplace/domain/components/hooks.ts",
+  },
+  {
+    exportName: "HOOKS_VALIDATOR",
+    path: "extensions/pi-claude-marketplace/domain/components/hooks.ts",
+  },
+  {
+    exportName: "HOOKS_CONFIG_SCHEMA",
+    path: "extensions/pi-claude-marketplace/domain/components/hooks/schema.ts",
+  },
+  {
+    exportName: "resolveLoose",
+    path: "extensions/pi-claude-marketplace/domain/plugin-resolver.ts",
+  },
+  {
+    exportName: "ResolvedPluginSchema",
+    path: "extensions/pi-claude-marketplace/domain/resolver-types.ts",
+  },
+  {
+    exportName: "SUPPORTED_COMPONENT_KINDS",
+    path: "extensions/pi-claude-marketplace/domain/unsupported-components.ts",
+  },
+  {
+    exportName: "UNSUPPORTED_COMPONENT_KINDS",
+    path: "extensions/pi-claude-marketplace/domain/unsupported-components.ts",
+  },
+  { exportName: "buildItem", path: "extensions/pi-claude-marketplace/edge/completions/data.ts" },
+  {
+    exportName: "getPluginToMarketplacesMap",
+    path: "extensions/pi-claude-marketplace/edge/completions/data.ts",
+  },
+  { exportName: "CATALOG_VERBS", path: "extensions/pi-claude-marketplace/edge/flag-catalog.ts" },
+  {
+    exportName: "parseFetchTarget",
+    path: "extensions/pi-claude-marketplace/edge/handlers/plugin/fetch.ts",
+  },
+  {
+    exportName: "projectRowStatus",
+    path: "extensions/pi-claude-marketplace/edge/handlers/tools.ts",
+  },
+  { exportName: "MARKETPLACE_USAGE", path: "extensions/pi-claude-marketplace/edge/router.ts" },
+  { exportName: "TOP_LEVEL_USAGE", path: "extensions/pi-claude-marketplace/edge/router.ts" },
+  { exportName: "default", path: "extensions/pi-claude-marketplace/index.ts" },
+  {
+    exportName: "planMarketplaceSourcesForRefs",
+    path: "extensions/pi-claude-marketplace/orchestrators/import/marketplaces.ts",
+  },
+  {
+    exportName: "parseEnabledPluginRef",
+    path: "extensions/pi-claude-marketplace/orchestrators/import/refs.ts",
+  },
+  {
+    exportName: "mergeClaudeSettings",
+    path: "extensions/pi-claude-marketplace/orchestrators/import/settings.ts",
+  },
+  {
+    exportName: "resolveClaudeSettingsPaths",
+    path: "extensions/pi-claude-marketplace/orchestrators/import/settings.ts",
+  },
+  {
+    exportName: "resolveScopeFromState",
+    path: "extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts",
+  },
+  {
+    exportName: "collectBinDirs",
+    path: "extensions/pi-claude-marketplace/orchestrators/plugin-path.ts",
+  },
+  {
+    exportName: "createSetPluginEnabled",
+    path: "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts",
+  },
+  {
+    exportName: "createFetchPlugins",
+    path: "extensions/pi-claude-marketplace/orchestrators/plugin/fetch.ts",
+  },
+  {
+    exportName: "createGetPluginInfo",
+    path: "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts",
+  },
+  {
+    exportName: "createInstallPlugin",
+    path: "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts",
+  },
+  {
+    exportName: "narrowResolverReasons",
+    path: "extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts",
+  },
+  {
+    exportName: "createReinstallPlugin",
+    path: "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts",
+  },
+  {
+    exportName: "finalizeReinstalledPlugin",
+    path: "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-replace.ts",
+  },
+  {
+    exportName: "replaceReinstalledPlugin",
+    path: "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-replace.ts",
+  },
+  {
+    exportName: "rollbackReinstalledPlugin",
+    path: "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-replace.ts",
+  },
+  {
+    exportName: "runPostSuccessMaintenance",
+    path: "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-replace.ts",
+  },
+  {
+    exportName: "outcomeToPluginMessage",
+    path: "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts",
+  },
+  {
+    exportName: "createUninstallPlugin",
+    path: "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts",
+  },
+  {
+    exportName: "createApplyReconcile",
+    path: "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts",
+  },
+  {
+    exportName: "scanForceInstalledBackfills",
+    path: "extensions/pi-claude-marketplace/orchestrators/reconcile/backfill.ts",
+  },
+  {
+    exportName: "PENDING_STATUSES",
+    path: "extensions/pi-claude-marketplace/orchestrators/reconcile/reconcile.messaging.ts",
+  },
+  {
+    exportName: "CONFIG_VALIDATOR",
+    path: "extensions/pi-claude-marketplace/persistence/config-io.ts",
+  },
+  {
+    exportName: "PLUGIN_INSTALL_RECORD_SCHEMA",
+    path: "extensions/pi-claude-marketplace/persistence/state-io.ts",
+  },
+  { exportName: "STATE_SCHEMA", path: "extensions/pi-claude-marketplace/persistence/state-io.ts" },
+  {
+    exportName: "STATE_VALIDATOR",
+    path: "extensions/pi-claude-marketplace/persistence/state-io.ts",
+  },
+  {
+    exportName: "createCredentialOps",
+    path: "extensions/pi-claude-marketplace/platform/git-credential.ts",
+  },
+  { exportName: "buildAuthCallbacks", path: "extensions/pi-claude-marketplace/platform/git.ts" },
+  { exportName: "listBranches", path: "extensions/pi-claude-marketplace/platform/git.ts" },
+  { exportName: "listRemotes", path: "extensions/pi-claude-marketplace/platform/git.ts" },
+  {
+    exportName: "hasLoadedPiMcpAdapter",
+    path: "extensions/pi-claude-marketplace/platform/pi-api.ts",
+  },
+  {
+    exportName: "hasLoadedPiSubagents",
+    path: "extensions/pi-claude-marketplace/platform/pi-api.ts",
+  },
+  {
+    exportName: "MARKETPLACE_NAMES_CACHE_SCHEMA",
+    path: "extensions/pi-claude-marketplace/shared/completion-cache.ts",
+  },
+  {
+    exportName: "PLUGIN_INDEX_CACHE_SCHEMA",
+    path: "extensions/pi-claude-marketplace/shared/completion-cache.ts",
+  },
+  {
+    exportName: "AgentForeignContentError",
+    path: "extensions/pi-claude-marketplace/shared/errors-bridges.ts",
+  },
+  {
+    exportName: "ConcurrentUninstallError",
+    path: "extensions/pi-claude-marketplace/shared/errors.ts",
+  },
+  {
+    exportName: "STATE_LOCK_HELD_PREFIX",
+    path: "extensions/pi-claude-marketplace/shared/markers.ts",
+  },
+  {
+    exportName: "emitWithSummary",
+    path: "extensions/pi-claude-marketplace/shared/notification-dispatch.ts",
+  },
+  {
+    exportName: "ICON_PARTIALLY_AVAILABLE",
+    path: "extensions/pi-claude-marketplace/shared/notification-grammar.ts",
+  },
+  {
+    exportName: "ICON_REMOTE",
+    path: "extensions/pi-claude-marketplace/shared/notification-grammar.ts",
+  },
+  {
+    exportName: "MARKETPLACE_STATUSES",
+    path: "extensions/pi-claude-marketplace/shared/notification-types.ts",
+  },
+  {
+    exportName: "PLUGIN_STATUSES",
+    path: "extensions/pi-claude-marketplace/shared/notification-types.ts",
+  },
+  { exportName: "REASONS", path: "extensions/pi-claude-marketplace/shared/notification-types.ts" },
+  {
+    exportName: "STATUS_TOKENS",
+    path: "extensions/pi-claude-marketplace/shared/notification-types.ts",
+  },
+  {
+    exportName: "LexicalTraversalError",
+    path: "extensions/pi-claude-marketplace/shared/path-safety.ts",
+  },
+  {
+    exportName: "createPathSafetyGuard",
+    path: "extensions/pi-claude-marketplace/shared/path-safety.ts",
+  },
+  { exportName: "buildDecisionDossier", path: "scripts/revalidation.mjs" },
+  { exportName: "deriveScopeImpact", path: "scripts/revalidation.mjs" },
+  { exportName: "enumerateCorpus", path: "scripts/revalidation.mjs" },
+  { exportName: "main", path: "scripts/revalidation.mjs" },
+  { exportName: "mergeShards", path: "scripts/revalidation.mjs" },
+  { exportName: "parseAssignments", path: "scripts/revalidation.mjs" },
+  { exportName: "publishRevalidation", path: "scripts/revalidation.mjs" },
+  { exportName: "renderRevalidation", path: "scripts/revalidation.mjs" },
+  { exportName: "reportCliError", path: "scripts/revalidation.mjs" },
+  { exportName: "validateLedger", path: "scripts/revalidation.mjs" },
+  { exportName: "validateShard", path: "scripts/revalidation.mjs" },
+];
