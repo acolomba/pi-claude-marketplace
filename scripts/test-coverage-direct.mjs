@@ -17,9 +17,9 @@ const specialTests = new Map(
   [...specialPairs].map(([sourcePath, testPath]) => [testPath, sourcePath]),
 );
 
-function toProjectPath(inputPath) {
-  const absolutePath = path.resolve(projectRoot, inputPath);
-  const projectPath = path.relative(projectRoot, absolutePath);
+function toProjectPath(inputPath, selectedProjectRoot = projectRoot) {
+  const absolutePath = path.resolve(selectedProjectRoot, inputPath);
+  const projectPath = path.relative(selectedProjectRoot, absolutePath);
 
   if (projectPath.startsWith("..") || path.isAbsolute(projectPath)) {
     throw new Error(`Path is outside the project: ${inputPath}`);
@@ -59,8 +59,16 @@ function testToSource(testPath) {
   return `${productionRoot}/${relativePath}.ts`;
 }
 
-export function pairForPath(inputPath) {
-  const projectPath = toProjectPath(inputPath);
+/**
+ * The source-test pair a path names, resolved inside the selected repository.
+ *
+ * `selectedProjectRoot` governs BOTH halves of the answer: the path is made repository-relative
+ * against it and both pair members are checked for existence under it. A root that reached only one
+ * of the two would report a pair that exists in the selected repository as missing, which is a wrong
+ * answer shaped like a refusal.
+ */
+export function pairForPath(inputPath, selectedProjectRoot = projectRoot) {
+  const projectPath = toProjectPath(inputPath, selectedProjectRoot);
   let sourcePath;
   let testPath;
 
@@ -81,7 +89,7 @@ export function pairForPath(inputPath) {
   }
 
   for (const pairPath of [sourcePath, testPath]) {
-    if (!existsSync(path.join(projectRoot, pairPath))) {
+    if (!existsSync(path.join(selectedProjectRoot, pairPath))) {
       throw new Error(`Missing source-test pair member: ${pairPath}`);
     }
   }
@@ -238,7 +246,10 @@ export function changedPaths(selectedProjectRoot = projectRoot) {
 
   const sorted = [...paths].sort();
   const skipped = sorted
-    .map((projectPath) => ({ path: projectPath, reason: pairabilityRefusal(projectPath) }))
+    .map((projectPath) => ({
+      path: projectPath,
+      reason: pairabilityRefusal(projectPath, selectedProjectRoot),
+    }))
     .filter((entry) => entry.reason !== undefined);
 
   return { ok: true, paths: sorted, skipped, base: base.candidate };
@@ -254,8 +265,12 @@ const nonCorrespondingRoots = new Set(["architecture", "e2e", "integration", "sc
  * a production module -- mirroring the exemption of the same name in the correspondence gate. Both
  * companions have to be present, so a suite that merely happens to be named `*-fake.test.ts` is
  * still treated as a pair member and still has to map.
+ *
+ * Both companions are looked for under `selectedProjectRoot`, because the classification has to be
+ * made in the repository the change set came from: judged against another tree, a supplement reads
+ * as a pair member and the run aborts on a module that was never meant to exist.
  */
-function isStructuralSupplement(projectPath) {
+function isStructuralSupplement(projectPath, selectedProjectRoot) {
   const match = /^tests\/(?:domain|platform)\/(?<name>.+)-fake\.test\.ts$/.exec(projectPath);
 
   if (match === null) {
@@ -264,8 +279,8 @@ function isStructuralSupplement(projectPath) {
 
   const prefix = projectPath.slice(0, -".test.ts".length);
   return (
-    existsSync(path.join(projectRoot, `${prefix}.ts`)) &&
-    existsSync(path.join(projectRoot, `${prefix.slice(0, -"-fake".length)}-contract.ts`))
+    existsSync(path.join(selectedProjectRoot, `${prefix}.ts`)) &&
+    existsSync(path.join(selectedProjectRoot, `${prefix.slice(0, -"-fake".length)}-contract.ts`))
   );
 }
 
@@ -282,7 +297,7 @@ function isStructuralSupplement(projectPath) {
  * zero-pair run report which paths it passed over and why. A run that reports nothing cannot be told
  * from a run that resolved nothing.
  */
-function pairabilityRefusal(projectPath) {
+function pairabilityRefusal(projectPath, selectedProjectRoot) {
   if (specialPairs.has(projectPath) || specialTests.has(projectPath)) {
     return undefined;
   }
@@ -307,11 +322,13 @@ function pairabilityRefusal(projectPath) {
     return `under the non-corresponding test root ${firstSegment}`;
   }
 
-  return isStructuralSupplement(projectPath) ? "a structural supplement suite" : undefined;
+  return isStructuralSupplement(projectPath, selectedProjectRoot)
+    ? "a structural supplement suite"
+    : undefined;
 }
 
-function isPairablePath(projectPath) {
-  return pairabilityRefusal(projectPath) === undefined;
+function isPairablePath(projectPath, selectedProjectRoot) {
+  return pairabilityRefusal(projectPath, selectedProjectRoot) === undefined;
 }
 
 /**
@@ -327,8 +344,10 @@ export function pairsForChangedPaths(selectedProjectRoot = projectRoot) {
 
   const pairs = new Map();
 
-  for (const projectPath of changed.paths.filter(isPairablePath)) {
-    const pair = pairForPath(projectPath);
+  for (const projectPath of changed.paths.filter((changedPath) =>
+    isPairablePath(changedPath, selectedProjectRoot),
+  )) {
+    const pair = pairForPath(projectPath, selectedProjectRoot);
     pairs.set(pair.sourcePath, pair);
   }
 
@@ -568,7 +587,7 @@ export async function runPair({ sourcePath, testPath }) {
 
 async function runAllPairs(reportPath) {
   const modulePaths = productionPaths();
-  const pairs = modulePaths.map(pairForPath);
+  const pairs = modulePaths.map((modulePath) => pairForPath(modulePath));
   const records = [];
   const startedAt = process.hrtime.bigint();
 

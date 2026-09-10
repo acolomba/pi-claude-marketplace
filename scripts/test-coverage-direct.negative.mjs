@@ -59,8 +59,15 @@ function lcovRecord(recordSourcePath, counts) {
 function fixtureGit(cwd, args) {
   const run = spawnSync("git", args, { cwd, encoding: "utf8" });
 
+  // A launch failure leaves `status`, `stdout` and `stderr` all null, so reading stderr first would
+  // report a TypeError from this helper instead of the reason git never ran.
+  if (run.error !== undefined) {
+    throw new Error(`Fixture git ${args.join(" ")} could not run in ${cwd}: ${run.error.message}`);
+  }
+
   if (run.status !== 0) {
-    throw new Error(`Fixture git ${args.join(" ")} failed in ${cwd}: ${run.stderr.trim()}`);
+    const stderr = typeof run.stderr === "string" ? run.stderr.trim() : "";
+    throw new Error(`Fixture git ${args.join(" ")} exited ${run.status} in ${cwd}: ${stderr}`);
   }
 
   return run.stdout.trim();
@@ -460,6 +467,46 @@ try {
   assert.deepEqual(docsOnlyPairs.pairs, []);
   assert.deepEqual(docsOnlyPairs.skipped, docsOnlyChangedPaths.skipped);
 
+  // The pairing state, and the one that decides whether the injected root reached BOTH halves of the
+  // answer. The fixture carries a real source-test pair and a real structural supplement, so a root
+  // threaded only as far as the change-set query would check the repository this harness runs in for
+  // both of them: the pair member would come back missing though it exists here, and the supplement
+  // would be classified as a pair member and abort the run on a module nobody wrote.
+  const pairedSource = "extensions/pi-claude-marketplace/domain/probe.ts";
+  const pairedTest = "tests/domain/probe.test.ts";
+  const supplementSuite = "tests/domain/probe-fake.test.ts";
+  const pairedRepository = await buildFixtureRepository("paired", "main", [
+    {
+      files: {
+        "README.md": "base\n",
+        [pairedSource]: "export const probe = 1;\n",
+        [pairedTest]: "export const probeTest = 1;\n",
+        "tests/domain/probe-fake.ts": "export const probeFake = 1;\n",
+        "tests/domain/probe-contract.ts": "export const probeContract = 1;\n",
+        [supplementSuite]: "export const probeFakeTest = 1;\n",
+      },
+      message: "base",
+    },
+  ]);
+
+  fixtureGit(pairedRepository, ["checkout", "-q", "-b", "feature"]);
+  await writeFile(path.join(pairedRepository, pairedSource), "export const probe = 2;\n");
+  await writeFile(
+    path.join(pairedRepository, supplementSuite),
+    "export const probeFakeTest = 2;\n",
+  );
+  fixtureGit(pairedRepository, ["add", "--all"]);
+  fixtureGit(pairedRepository, ["commit", "-q", "-m", "change the pair and the supplement"]);
+
+  const pairedPairs = pairsForChangedPaths(pairedRepository);
+
+  assert.equal(pairedPairs.ok, true);
+  assert.equal(pairedPairs.base, "main");
+  assert.deepEqual(pairedPairs.pairs, [{ sourcePath: pairedSource, testPath: pairedTest }]);
+  assert.deepEqual(pairedPairs.skipped, [
+    { path: supplementSuite, reason: "a structural supplement suite" },
+  ]);
+
   // A git invocation that failed is a refusal, not an empty change set. This is the state that a
   // selector swallowing git's exit status cannot tell apart from the docs-only pass above.
   const notARepository = path.join(gitFixtureRoot, "not-a-repository");
@@ -474,7 +521,7 @@ try {
   assert.equal(pairsForChangedPaths(notARepository).ok, false);
 
   process.stdout.write(
-    "Base-selection negative controls passed: chain head with no origin/main, chain tail in a shallow clone, resolved-but-empty docs-only change set, failed selection outside a repository.\n",
+    "Base-selection negative controls passed: chain head with no origin/main, chain tail in a shallow clone, resolved-but-empty docs-only change set, a fixture pair and supplement resolved under the injected root, failed selection outside a repository.\n",
   );
 } finally {
   await rm(fixtureRoot, { force: true, recursive: true });
