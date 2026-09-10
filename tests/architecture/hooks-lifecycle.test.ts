@@ -32,6 +32,9 @@ import { createHooksHydration } from "../../extensions/pi-claude-marketplace/bri
 import { createHooksRuntime } from "../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 
+import { HOOKS_LIFECYCLE_TARGETS, PLUGIN_ORCHESTRATORS_REL } from "./gate-targets.ts";
+import { REPO_ROOT } from "./source-scan.ts";
+
 import type { HooksHydrationReader } from "../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
 import type { ExtensionState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type {
@@ -39,21 +42,38 @@ import type {
   ExtensionContext,
 } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
-// Repo-relative paths to the four orchestrators we pin + the event-router
-// where the WR-01 prefix lives.
-const ORCH_DIR = path.join(
-  import.meta.dirname,
-  "../../extensions/pi-claude-marketplace/orchestrators/plugin",
-);
-const EVENT_ROUTER_PATH = path.join(
-  import.meta.dirname,
-  "../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts",
-);
+// D-07-05: the four orchestrators this gate pins and the event-router where the
+// WR-01 prefix lives come from `HOOKS_LIFECYCLE_TARGETS`, so a literal-match
+// stale-path scan of the registry sees every one of them. The group is a tuple,
+// so destructuring binds by POSITION -- which is why every read below states the
+// basename it expects and `readTargetSource` proves it.
+const [INSTALL_REL, UNINSTALL_REL, REINSTALL_REL, UPDATE_REL, EVENT_ROUTER_REL] =
+  HOOKS_LIFECYCLE_TARGETS;
 
-const INSTALL_PATH = path.join(ORCH_DIR, "install-flow.ts");
-const UNINSTALL_PATH = path.join(ORCH_DIR, "uninstall.ts");
-const REINSTALL_PATH = path.join(ORCH_DIR, "reinstall-flow.ts");
-const UPDATE_PATH = path.join(ORCH_DIR, "update-swap.ts");
+/**
+ * Read one registry target, proving first that the constant bound here really
+ * addresses the module the caller names and second that the read produced text.
+ *
+ * D-07-05: the basename check is the positive control for a positionally-bound
+ * name. Reordering the registry group rebinds all five local names at once, and
+ * every block below would go on passing over the wrong file with no signal.
+ *
+ * D-07-03: an empty read means the block matched its patterns against nothing,
+ * which is a gate reporting success over a target it never really inspected.
+ */
+async function readTargetSource(rel: string, expectedBasename: string): Promise<string> {
+  assert.strictEqual(
+    path.posix.basename(rel),
+    expectedBasename,
+    `D-07-05: this block pins ${expectedBasename}, but the registry target bound to it is ${rel}`,
+  );
+  const raw = await readFile(path.join(REPO_ROOT, rel), "utf8");
+  assert.ok(
+    raw.length > 0,
+    `D-07-03: ${rel} read as empty, so this block scanned nothing and would report success over an uninspected target`,
+  );
+  return raw;
+}
 
 /**
  * Read a TypeScript source file from disk and return its lines after
@@ -66,8 +86,8 @@ const UPDATE_PATH = path.join(ORCH_DIR, "update-swap.ts");
  * statement inside a block comment, that diff will surface in the
  * accompanying behavioral test rather than this static pin.
  */
-async function readNonCommentLines(filePath: string): Promise<string[]> {
-  const raw = await readFile(filePath, "utf8");
+async function readNonCommentLines(rel: string, expectedBasename: string): Promise<string[]> {
+  const raw = await readTargetSource(rel, expectedBasename);
   return raw
     .split("\n")
     .map((line) => line)
@@ -134,7 +154,7 @@ function assertMutatorFollowedByRebuilder(
 // ──────────────────────────────────────────────────────────────────────────
 
 test("WR-03 Block A: install flow pairs the cache-mutation site with rebuildRoutingTables in lockstep", async () => {
-  const lines = await readNonCommentLines(INSTALL_PATH);
+  const lines = await readNonCommentLines(INSTALL_REL, "install-flow.ts");
 
   // install-flow.ts wraps the cache-add in the bridge helper
   // `readAndCachePluginHooks` because the call ALSO performs the disk read
@@ -165,7 +185,7 @@ test("WR-03 Block A: install flow pairs the cache-mutation site with rebuildRout
 // ──────────────────────────────────────────────────────────────────────────
 
 test("WR-03 Block B: uninstall.ts pairs removePluginConfigFromCache with rebuildRoutingTables in lockstep", async () => {
-  const lines = await readNonCommentLines(UNINSTALL_PATH);
+  const lines = await readNonCommentLines(UNINSTALL_REL, "uninstall.ts");
   assertMutatorFollowedByRebuilder(
     lines,
     "removePluginConfigFromCache(",
@@ -183,7 +203,7 @@ test("WR-03 Block B: uninstall.ts pairs removePluginConfigFromCache with rebuild
 // ──────────────────────────────────────────────────────────────────────────
 
 test("WR-03 Block C: reinstall-flow.ts wires remove + add + rebuildRoutingTables in its per-plugin lock", async () => {
-  const lines = await readNonCommentLines(REINSTALL_PATH);
+  const lines = await readNonCommentLines(REINSTALL_REL, "reinstall-flow.ts");
 
   // Both cache mutators must appear as call sites (not just imports). The
   // add-side may flow through the bridge helper `readAndCachePluginHooks`
@@ -222,7 +242,7 @@ test("WR-03 Block C: reinstall-flow.ts wires remove + add + rebuildRoutingTables
 // ──────────────────────────────────────────────────────────────────────────
 
 test("WR-03 Block D: update-swap.ts wires remove + add + rebuildRoutingTables in its per-plugin lock", async () => {
-  const lines = await readNonCommentLines(UPDATE_PATH);
+  const lines = await readNonCommentLines(UPDATE_REL, "update-swap.ts");
 
   const hasRemove = lines.some(
     (l) => l.includes("removePluginConfigFromCache(") && !/\bimport\b/.test(l),
@@ -259,7 +279,7 @@ test("WR-03 Block D: update-swap.ts wires remove + add + rebuildRoutingTables in
 // ──────────────────────────────────────────────────────────────────────────
 
 test("WR-01 Block E: event-router.ts::hydrateProjectScopeForCwdWith opens with a deleteParsedConfig prefix", async () => {
-  const raw = await readFile(EVENT_ROUTER_PATH, "utf8");
+  const raw = await readTargetSource(EVENT_ROUTER_REL, "event-router.ts");
 
   // Locate the function body. The function is declared as
   // `async function hydrateProjectScopeForCwdWith(...) { ... }`.
@@ -304,12 +324,22 @@ test("WR-01 Block E: event-router.ts::hydrateProjectScopeForCwdWith opens with a
 // ──────────────────────────────────────────────────────────────────────────
 
 test("WR-03 Block F: every orchestrators/plugin/*.ts that mutates the cache also calls rebuildRoutingTables", async () => {
-  const entries = await readdir(ORCH_DIR);
+  const orchestratorDir = path.join(REPO_ROOT, PLUGIN_ORCHESTRATORS_REL);
+  const entries = await readdir(orchestratorDir);
   const tsFiles = entries.filter((e) => e.endsWith(".ts") && !e.endsWith(".test.ts"));
+
+  // D-07-03: a walk is a legitimate way to reach a set with no fixed
+  // membership, but a walk over zero files is a gate reporting success over
+  // nothing. Prove the directory really yielded modules before concluding that
+  // none of them broke the invariant.
+  assert.ok(
+    tsFiles.length > 0,
+    `D-07-03: walked ${PLUGIN_ORCHESTRATORS_REL} and found no .ts files, so this block inspected nothing`,
+  );
 
   let scanned = 0;
   for (const file of tsFiles) {
-    const filePath = path.join(ORCH_DIR, file);
+    const filePath = path.join(orchestratorDir, file);
     const raw = await readFile(filePath, "utf8");
 
     // Identify cache-mutator call sites that are NOT inside import
@@ -334,9 +364,9 @@ test("WR-03 Block F: every orchestrators/plugin/*.ts that mutates the cache also
     scanned += 1;
   }
 
-  // Guard against a future refactor that empties the directory or moves
-  // the call sites elsewhere: the scan MUST find at least the four files
-  // wired in this phase (install, uninstall, reinstall, update).
+  // Guard against a future refactor that moves the call sites elsewhere: the
+  // scan MUST find at least the four wired lifecycle verbs (install,
+  // uninstall, reinstall, update).
   assert.ok(
     scanned >= 4,
     `WR-03 Block F: expected at least 4 orchestrators with cache mutations + rebuild; found ${String(scanned)}`,
