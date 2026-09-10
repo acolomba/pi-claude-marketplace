@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readdir, readFile } from "node:fs/promises";
+import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 
@@ -246,6 +246,12 @@ test("D-11: npm run fallow runs dead-code unfiltered, so cycles are gated", asyn
 const PLUGIN_LEDGERS = PLUGIN_LEDGER_TARGETS.map((rel) => path.basename(rel, ".ts"));
 const MARKETPLACE_LEDGERS = MARKETPLACE_LEDGER_TARGETS.map((rel) => path.basename(rel, ".ts"));
 
+/** How many plugin ledgers the registry is expected to carry. */
+const EXPECTED_PLUGIN_LEDGER_COUNT = 5;
+
+/** How many marketplace ledgers the registry is expected to carry. */
+const EXPECTED_MARKETPLACE_LEDGER_COUNT = 4;
+
 // Non-global on purpose: a /g regex carries `lastIndex` across `.test()` calls
 // and would skip every second file in the walk below.
 const PLUGIN_LEDGER_IMPORT = new RegExp(
@@ -254,6 +260,23 @@ const PLUGIN_LEDGER_IMPORT = new RegExp(
 const MARKETPLACE_LEDGER_IMPORT = new RegExp(
   `from\\s+"\\.\\./marketplace/(?:${MARKETPLACE_LEDGERS.join("|")})\\.ts"`,
 );
+
+// The static form above misses `await import("...")` and the
+// `type T = import("...").X` position, both measured. A ledger reached
+// dynamically is coupled exactly as tightly as one reached statically, so each
+// direction carries a companion pattern for the call form.
+const PLUGIN_LEDGER_DYNAMIC_IMPORT = new RegExp(
+  `import\\(\\s*"\\.\\./plugin/(?:${PLUGIN_LEDGERS.join("|")})\\.ts"\\s*\\)`,
+);
+const MARKETPLACE_LEDGER_DYNAMIC_IMPORT = new RegExp(
+  `import\\(\\s*"\\.\\./marketplace/(?:${MARKETPLACE_LEDGERS.join("|")})\\.ts"\\s*\\)`,
+);
+
+/** A real plugin module that is not a ledger -- the seam a ledger may reach. */
+const PLUGIN_NON_LEDGER_SPECIFIER = "../plugin/clone-cache.ts";
+
+/** The one marketplace module a plugin ledger is allowed to import. */
+const MARKETPLACE_NON_LEDGER_SPECIFIER = "../marketplace/shared.ts";
 
 /**
  * The marketplace orchestrator folder, walked in full rather than named file by
@@ -276,7 +299,7 @@ test("D-11: no orchestrators/marketplace file imports a plugin LEDGER module", a
   const offenders: string[] = [];
   for (const rel of files) {
     const stripped = stripComments(await readFile(path.join(REPO_ROOT, rel), "utf8"));
-    if (PLUGIN_LEDGER_IMPORT.test(stripped)) {
+    if (PLUGIN_LEDGER_IMPORT.test(stripped) || PLUGIN_LEDGER_DYNAMIC_IMPORT.test(stripped)) {
       offenders.push(rel);
     }
   }
@@ -294,7 +317,10 @@ test("D-11: no orchestrators/plugin LEDGER imports a marketplace ledger module",
     // A renamed or deleted ledger must fail loudly rather than silently
     // uncovering this direction of the gate.
     const stripped = stripComments(await readFile(path.join(REPO_ROOT, rel), "utf8"));
-    if (MARKETPLACE_LEDGER_IMPORT.test(stripped)) {
+    if (
+      MARKETPLACE_LEDGER_IMPORT.test(stripped) ||
+      MARKETPLACE_LEDGER_DYNAMIC_IMPORT.test(stripped)
+    ) {
       offenders.push(rel);
     }
   }
@@ -304,6 +330,97 @@ test("D-11: no orchestrators/plugin LEDGER imports a marketplace ledger module",
     [],
     `D-11 violation -- these plugin ledgers import a marketplace ledger module:\n  ${offenders.join("\n  ")}\nonly orchestrators/marketplace/shared.ts is reachable from a plugin ledger.`,
   );
+});
+
+/**
+ * D-07-08: a joined regex reports success by omission.
+ *
+ * `PLUGIN_LEDGER_IMPORT` and its dynamic companion are built by joining the bare
+ * ledger names into one alternation. A name that drops out of the list stops
+ * being matched, and the scan above then walks every file and finds nothing --
+ * green, over a ledger it no longer guards. The only way to see that is to
+ * synthesize the exact specifier a violation naming each ledger would use and
+ * assert the pattern still matches it.
+ *
+ * Both halves live in one loop on purpose. The specifier match answers "does the
+ * pattern still fire for this name"; the on-disk read answers "is there still a
+ * module behind this name". A pattern that matches a module which no longer
+ * exists guards nothing, and a module that exists but no longer matches is
+ * unguarded -- either alone reports success.
+ */
+test("D-11: the plugin-ledger patterns match a violation naming each plugin ledger", async () => {
+  // arrange
+  assert.strictEqual(
+    PLUGIN_LEDGERS.length,
+    EXPECTED_PLUGIN_LEDGER_COUNT,
+    `PLUGIN_LEDGER_TARGETS carries ${PLUGIN_LEDGERS.length} ledgers rather than ${EXPECTED_PLUGIN_LEDGER_COUNT}. A name removed from the group takes its positive control with it, so the count is pinned here rather than derived -- otherwise the proof shrinks silently alongside the pattern it proves.`,
+  );
+
+  // act & assert
+  for (const rel of PLUGIN_LEDGER_TARGETS) {
+    const name = path.basename(rel, ".ts");
+    assert.match(
+      `import { x } from "../plugin/${name}.ts";`,
+      PLUGIN_LEDGER_IMPORT,
+      `the joined pattern no longer matches a static import naming ${name} -- the regex drifted from its name list while still reporting success`,
+    );
+    assert.match(
+      `const ledger = await import("../plugin/${name}.ts");`,
+      PLUGIN_LEDGER_DYNAMIC_IMPORT,
+      `the companion pattern no longer matches a dynamic import naming ${name}`,
+    );
+    await stat(path.join(REPO_ROOT, rel));
+  }
+});
+
+test("D-11: the marketplace-ledger patterns match a violation naming each marketplace ledger", async () => {
+  // arrange
+  assert.strictEqual(
+    MARKETPLACE_LEDGERS.length,
+    EXPECTED_MARKETPLACE_LEDGER_COUNT,
+    `MARKETPLACE_LEDGER_TARGETS carries ${MARKETPLACE_LEDGERS.length} ledgers rather than ${EXPECTED_MARKETPLACE_LEDGER_COUNT}. A name removed from the group takes its positive control with it, so the count is pinned here rather than derived.`,
+  );
+
+  // act & assert
+  for (const rel of MARKETPLACE_LEDGER_TARGETS) {
+    const name = path.basename(rel, ".ts");
+    assert.match(
+      `import { x } from "../marketplace/${name}.ts";`,
+      MARKETPLACE_LEDGER_IMPORT,
+      `the joined pattern no longer matches a static import naming ${name} -- the regex drifted from its name list while still reporting success`,
+    );
+    assert.match(
+      `const ledger = await import("../marketplace/${name}.ts");`,
+      MARKETPLACE_LEDGER_DYNAMIC_IMPORT,
+      `the companion pattern no longer matches a dynamic import naming ${name}`,
+    );
+    await stat(path.join(REPO_ROOT, rel));
+  }
+});
+
+/**
+ * The negative half of the same obligation: the widened patterns must be
+ * precise, not merely eager.
+ *
+ * Each specifier below names a real module that is deliberately NOT a ledger and
+ * is the sanctioned route across the boundary. A pattern that matched one of
+ * them would turn the legal import into a reported violation, which is how a
+ * gate gets suppressed rather than fixed.
+ */
+test("D-11: neither ledger pattern matches a specifier naming a non-ledger module", () => {
+  // act & assert
+  for (const pattern of [PLUGIN_LEDGER_IMPORT, PLUGIN_LEDGER_DYNAMIC_IMPORT]) {
+    assert.doesNotMatch(`import { x } from "${PLUGIN_NON_LEDGER_SPECIFIER}";`, pattern);
+    assert.doesNotMatch(`const seam = await import("${PLUGIN_NON_LEDGER_SPECIFIER}");`, pattern);
+  }
+
+  for (const pattern of [MARKETPLACE_LEDGER_IMPORT, MARKETPLACE_LEDGER_DYNAMIC_IMPORT]) {
+    assert.doesNotMatch(`import { x } from "${MARKETPLACE_NON_LEDGER_SPECIFIER}";`, pattern);
+    assert.doesNotMatch(
+      `const seam = await import("${MARKETPLACE_NON_LEDGER_SPECIFIER}");`,
+      pattern,
+    );
+  }
 });
 
 test(
