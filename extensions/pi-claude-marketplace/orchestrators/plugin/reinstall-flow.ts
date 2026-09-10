@@ -115,13 +115,6 @@ export type ReinstallHooksRouting = Pick<
   "readAndCachePluginHooks" | "rebuildRoutingTables" | "removePluginConfigFromCache"
 >;
 
-/** Test seams threaded through the public reinstall flow. */
-export interface ReinstallPluginDeps {
-  readonly stateTransaction?: LockedStateTransactionDeps;
-  readonly removeDataDir?: RemoveDataDirFn;
-  readonly cloneCacheSeam?: ReinstallCloneCacheSeam;
-}
-
 /** Complete inputs for one installed plugin reinstall. */
 export interface ReinstallPluginOptions {
   readonly ctx: NotificationContext;
@@ -135,7 +128,20 @@ export interface ReinstallPluginOptions {
   readonly credentialOps?: CredentialOps;
   readonly deviceFlowHttp?: DeviceFlowHttp;
   readonly authMemo?: Map<string, AuthAttemptResult>;
-  readonly __deps?: ReinstallPluginDeps;
+  /**
+   * Locked-state transaction seam for this reinstall's load/save pair.
+   * Production callers leave this undefined and get the real state I/O.
+   */
+  readonly stateTransaction?: LockedStateTransactionDeps;
+  /**
+   * Post-success plugin-data-directory removal seam. Production callers leave
+   * this undefined; `reinstall-replace.ts` owns the fallback.
+   */
+  readonly removeDataDir?: RemoveDataDirFn;
+  /**
+   * Test-only clone-cache seam override; production uses the real imports.
+   */
+  readonly cloneCacheSeam?: ReinstallCloneCacheSeam;
 }
 
 /** Complete inputs for targeted or bulk plugin reinstall. */
@@ -148,7 +154,21 @@ export interface ReinstallPluginsOptions {
   readonly local?: boolean;
   readonly credentialOps?: CredentialOps;
   readonly deviceFlowHttp?: DeviceFlowHttp;
-  readonly __deps?: ReinstallPluginDeps;
+  /**
+   * Locked-state transaction seam, forwarded unchanged to every per-plugin
+   * reinstall in the cascade. Production callers leave this undefined.
+   */
+  readonly stateTransaction?: LockedStateTransactionDeps;
+  /**
+   * Plugin-data-directory removal seam, forwarded unchanged to every
+   * per-plugin reinstall in the cascade. Production callers leave it undefined.
+   */
+  readonly removeDataDir?: RemoveDataDirFn;
+  /**
+   * Test-only clone-cache seam override, forwarded unchanged to every
+   * per-plugin reinstall in the cascade; production uses the real imports.
+   */
+  readonly cloneCacheSeam?: ReinstallCloneCacheSeam;
 }
 
 /** One plugin reinstall bound to a transaction and lifecycle routing owner. */
@@ -254,7 +274,7 @@ async function reinstallPluginWithTransaction(
     locked = await transaction.withLockedStateTransaction(
       locations,
       (tx) => runLockedReinstall(owners, transaction, hooksRouting, tx, locations, opts),
-      opts.__deps?.stateTransaction,
+      opts.stateTransaction,
     );
   } catch (err) {
     return handleSinglePluginFailure(owners, opts, err as Error, render);
@@ -393,8 +413,8 @@ function maintenanceInput(opts: ReinstallPluginOptions): ReinstallMaintenanceInp
     scope: opts.scope,
     marketplace: opts.marketplace,
     plugin: opts.plugin,
-    ...(opts.__deps?.removeDataDir !== undefined && {
-      removeDataDir: opts.__deps.removeDataDir,
+    ...(opts.removeDataDir !== undefined && {
+      removeDataDir: opts.removeDataDir,
     }),
   };
 }
@@ -528,7 +548,9 @@ async function reinstallPluginsWith(
         ...(opts.credentialOps !== undefined && { credentialOps: opts.credentialOps }),
         ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
         authMemo,
-        ...(opts.__deps !== undefined && { __deps: opts.__deps }),
+        ...(opts.stateTransaction !== undefined && { stateTransaction: opts.stateTransaction }),
+        ...(opts.removeDataDir !== undefined && { removeDataDir: opts.removeDataDir }),
+        ...(opts.cloneCacheSeam !== undefined && { cloneCacheSeam: opts.cloneCacheSeam }),
       }),
     );
   }
@@ -711,8 +733,8 @@ async function runLockedReinstall(
     marketplaceRoot: mp.marketplaceRoot,
     locations,
     recordedSha: oldSnapshot.resolvedSha,
-    ...(opts.__deps?.cloneCacheSeam !== undefined && {
-      seam: opts.__deps.cloneCacheSeam,
+    ...(opts.cloneCacheSeam !== undefined && {
+      seam: opts.cloneCacheSeam,
     }),
     ctx: opts.ctx,
     credentialOps: opts.credentialOps ?? DEFAULT_CREDENTIAL_OPS,
