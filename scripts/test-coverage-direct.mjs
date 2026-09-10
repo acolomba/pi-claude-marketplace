@@ -163,11 +163,11 @@ function upstreamCandidate(selectedProjectRoot) {
  *
  * The returned candidate is the auditable artifact, not a debug aid (`D-07-13`): a reader of a gate
  * run has to be able to tell which of `origin/main`, `main`, the upstream tracking ref, or `HEAD~1`
- * the answer rests on, because the four disagree about what counts as changed. When every candidate
- * fails, `attempted` carries the reason each one was rejected, so the failure names what was tried
- * rather than reporting an absence.
+ * the answer rests on, because the four disagree about what counts as changed. `attempted` carries
+ * the reason every earlier candidate was rejected and is present on both outcomes, so a selection
+ * that succeeded still records what it passed over rather than reporting only its winner.
  */
-function selectBase(selectedProjectRoot = projectRoot) {
+export function selectBase(selectedProjectRoot = projectRoot) {
   const attempted = [];
   const candidates = [
     { label: "origin/main", name: "origin/main" },
@@ -188,7 +188,7 @@ function selectBase(selectedProjectRoot = projectRoot) {
     );
 
     if (resolved.ok && resolved.lines[0] !== undefined) {
-      return { ok: true, candidate: candidate.name, commit: resolved.lines[0] };
+      return { ok: true, candidate: candidate.name, commit: resolved.lines[0], attempted };
     }
 
     attempted.push({
@@ -210,7 +210,7 @@ function selectBase(selectedProjectRoot = projectRoot) {
  * empty because base selection or a git invocation failed. Propagating the first failing invocation
  * rather than folding it into an empty list is what keeps those two apart.
  */
-function changedPaths(selectedProjectRoot = projectRoot) {
+export function changedPaths(selectedProjectRoot = projectRoot) {
   const base = selectBase(selectedProjectRoot);
 
   if (!base.ok) {
@@ -318,7 +318,7 @@ function isPairablePath(projectPath) {
  * The source-test pairs the selected change set names, carrying the base that produced it and the
  * paths it passed over so a zero-pair answer can still say what it looked at.
  */
-function pairsForChangedPaths(selectedProjectRoot = projectRoot) {
+export function pairsForChangedPaths(selectedProjectRoot = projectRoot) {
   const changed = changedPaths(selectedProjectRoot);
 
   if (!changed.ok) {

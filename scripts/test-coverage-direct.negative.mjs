@@ -5,12 +5,21 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { assertCompleteCoverage, assertReportComplete } from "./test-coverage-direct.mjs";
+import {
+  assertCompleteCoverage,
+  assertReportComplete,
+  changedPaths,
+  pairsForChangedPaths,
+  selectBase,
+} from "./test-coverage-direct.mjs";
 import { verdictFor } from "./test-coverage-direct.report.mjs";
 
 const fixtureRoot = await mkdtemp(path.join(tmpdir(), "direct-coverage-gate-"));
 const sourceDirectory = path.join(fixtureRoot, "extensions/pi-claude-marketplace/domain");
 const sourcePath = "extensions/pi-claude-marketplace/domain/types.ts";
+// The git fixtures live under the same temporary root as every other fixture here, so the top-level
+// `finally` disposes them with the single `rm` it already performs on the `mkdtemp` return value.
+const gitFixtureRoot = path.join(fixtureRoot, "git");
 
 const projectRoot = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const gatePath = fileURLToPath(new URL("./test-coverage-direct.mjs", import.meta.url));
@@ -43,6 +52,64 @@ function lcovRecord(recordSourcePath, counts) {
   ];
 
   return `${lines.join("\n")}\n`;
+}
+
+// Every fixture git call is checked, because a fixture that failed to build would otherwise plant a
+// state nobody asked for and the assertion below it would pass or fail for the wrong reason.
+function fixtureGit(cwd, args) {
+  const run = spawnSync("git", args, { cwd, encoding: "utf8" });
+
+  if (run.status !== 0) {
+    throw new Error(`Fixture git ${args.join(" ")} failed in ${cwd}: ${run.stderr.trim()}`);
+  }
+
+  return run.stdout.trim();
+}
+
+/**
+ * A git repository under the harness's temporary root, carrying one commit per requested change set.
+ *
+ * Identity is configured on the repository itself rather than inherited, so no fixture reads or
+ * writes the developer's global git configuration, and signing is turned off so a globally-signed
+ * setup does not turn a fixture build into an unrelated failure.
+ */
+async function buildFixtureRepository(name, branch, commits) {
+  const root = path.join(gitFixtureRoot, name);
+
+  await mkdir(root, { recursive: true });
+  fixtureGit(root, ["init", "-q", "-b", branch]);
+  fixtureGit(root, ["config", "user.email", "fixture@example.invalid"]);
+  fixtureGit(root, ["config", "user.name", "Direct coverage fixture"]);
+  fixtureGit(root, ["config", "commit.gpgsign", "false"]);
+
+  for (const commit of commits) {
+    for (const [filePath, contents] of Object.entries(commit.files)) {
+      await mkdir(path.dirname(path.join(root, filePath)), { recursive: true });
+      await writeFile(path.join(root, filePath), contents);
+    }
+
+    fixtureGit(root, ["add", "--all"]);
+    fixtureGit(root, ["commit", "-q", "-m", commit.message]);
+  }
+
+  return root;
+}
+
+/** A depth-1 clone of a fixture repository, reached over `file://` so the clone is really shallow. */
+function cloneShallow(sourceRepository, name) {
+  const root = path.join(gitFixtureRoot, name);
+
+  fixtureGit(gitFixtureRoot, [
+    "clone",
+    "-q",
+    "--depth",
+    "1",
+    "--no-local",
+    `file://${sourceRepository}`,
+    root,
+  ]);
+
+  return root;
 }
 
 const completeCounts = {
@@ -287,6 +354,128 @@ try {
   );
 
   process.stdout.write("Direct-coverage negative controls passed.\n");
+
+  // The base-selection states, planted against real git repositories built under this harness's own
+  // temporary root. Every one calls the exported selector directly rather than spawning the gate, so
+  // the selected candidate is a return value to assert on rather than stdout to scrape.
+  await mkdir(gitFixtureRoot, { recursive: true });
+
+  // The head of the chain, and the passing state of this group. It comes first and is not
+  // decoration: without it the refusals below could all be firing on a fixture git never built
+  // rather than on the property each one claims.
+  const noRemoteRepository = await buildFixtureRepository("no-remote", "main", [
+    { files: { "README.md": "base\n" }, message: "base" },
+    { files: { "README.md": "second\n" }, message: "second" },
+  ]);
+  const noRemoteBase = selectBase(noRemoteRepository);
+
+  assert.equal(noRemoteBase.ok, true);
+  assert.equal(noRemoteBase.candidate, "main");
+  assert.deepEqual(
+    noRemoteBase.attempted.map((entry) => entry.candidate),
+    ["origin/main"],
+  );
+  assert.match(noRemoteBase.attempted[0].reason, /origin\/main/);
+
+  // A repository with no `origin/main` still selects a base rather than falling through to an empty
+  // change set, and the chain records that `origin/main` was tried before `main` was taken.
+  const noRemoteChangedPaths = changedPaths(noRemoteRepository);
+
+  assert.equal(noRemoteChangedPaths.ok, true);
+  assert.equal(noRemoteChangedPaths.base, "main");
+
+  // The tail of the chain. A depth-1 clone still resolves `origin/main` and still merge-bases
+  // against it, so the candidate a shallow checkout actually breaks is the last one, `HEAD~1`. One
+  // fixture asked to prove both ends would prove neither, which is why the head is planted above in
+  // a repository that has no remote at all.
+  const shallowRepository = cloneShallow(noRemoteRepository, "shallow");
+  const shallowBase = selectBase(shallowRepository);
+
+  assert.equal(shallowBase.ok, true);
+  assert.equal(shallowBase.candidate, "origin/main");
+  assert.notEqual(
+    spawnSync("git", ["rev-parse", "--verify", "HEAD~1"], {
+      cwd: shallowRepository,
+      encoding: "utf8",
+    }).status,
+    0,
+  );
+
+  // With `origin/main`, `main`, and an upstream ref all absent, the chain falls through to its last
+  // candidate instead of giving up.
+  const fallthroughRepository = await buildFixtureRepository("fallthrough", "work", [
+    { files: { "README.md": "base\n" }, message: "base" },
+    { files: { "README.md": "second\n" }, message: "second" },
+  ]);
+  const fallthroughBase = selectBase(fallthroughRepository);
+
+  assert.equal(fallthroughBase.ok, true);
+  assert.equal(fallthroughBase.candidate, "HEAD~1");
+
+  // Every candidate failing is the only state that may refuse. Dropping the remote from a shallow
+  // clone of the fall-through repository is what removes the upstream candidate as well, leaving the
+  // shallow `HEAD~1` as the last to fail.
+  const exhaustedRepository = cloneShallow(fallthroughRepository, "exhausted");
+
+  fixtureGit(exhaustedRepository, ["remote", "remove", "origin"]);
+
+  const exhaustedBase = selectBase(exhaustedRepository);
+
+  assert.equal(exhaustedBase.ok, false);
+  assert.deepEqual(
+    exhaustedBase.attempted.map((entry) => entry.candidate),
+    ["origin/main", "main", "@{upstream}", "HEAD~1"],
+  );
+
+  for (const entry of exhaustedBase.attempted) {
+    assert.notEqual(entry.reason, undefined);
+    assert.notEqual(entry.reason, "");
+  }
+
+  // A change set that resolved and simply held nothing pairable is a pass that still says what it
+  // looked at. Committing the docs file on a branch off `main` is what leaves `main` selectable as
+  // the base while the only change against it is unpairable.
+  const docsOnlyRepository = await buildFixtureRepository("docs-only", "main", [
+    { files: { "README.md": "base\n" }, message: "base" },
+  ]);
+
+  fixtureGit(docsOnlyRepository, ["checkout", "-q", "-b", "feature"]);
+  await mkdir(path.join(docsOnlyRepository, "docs"), { recursive: true });
+  await writeFile(path.join(docsOnlyRepository, "docs/guide.md"), "guidance\n");
+  fixtureGit(docsOnlyRepository, ["add", "--all"]);
+  fixtureGit(docsOnlyRepository, ["commit", "-q", "-m", "document the thing"]);
+
+  const docsOnlyChangedPaths = changedPaths(docsOnlyRepository);
+
+  assert.equal(docsOnlyChangedPaths.ok, true);
+  assert.equal(docsOnlyChangedPaths.base, "main");
+  assert.deepEqual(docsOnlyChangedPaths.paths, ["docs/guide.md"]);
+  assert.deepEqual(docsOnlyChangedPaths.skipped, [
+    { path: "docs/guide.md", reason: "outside both the production root and the test root" },
+  ]);
+
+  const docsOnlyPairs = pairsForChangedPaths(docsOnlyRepository);
+
+  assert.equal(docsOnlyPairs.ok, true);
+  assert.deepEqual(docsOnlyPairs.pairs, []);
+  assert.deepEqual(docsOnlyPairs.skipped, docsOnlyChangedPaths.skipped);
+
+  // A git invocation that failed is a refusal, not an empty change set. This is the state that a
+  // selector swallowing git's exit status cannot tell apart from the docs-only pass above.
+  const notARepository = path.join(gitFixtureRoot, "not-a-repository");
+
+  await mkdir(notARepository, { recursive: true });
+
+  const notARepositoryChangedPaths = changedPaths(notARepository);
+
+  assert.equal(notARepositoryChangedPaths.ok, false);
+  assert.match(notARepositoryChangedPaths.reason, /rev-parse/);
+  assert.match(notARepositoryChangedPaths.reason, /not a git repository/);
+  assert.equal(pairsForChangedPaths(notARepository).ok, false);
+
+  process.stdout.write(
+    "Base-selection negative controls passed: chain head with no origin/main, chain tail in a shallow clone, resolved-but-empty docs-only change set, failed selection outside a repository.\n",
+  );
 } finally {
   await rm(fixtureRoot, { force: true, recursive: true });
 }
