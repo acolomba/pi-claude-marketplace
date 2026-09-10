@@ -312,7 +312,14 @@ test("keeps PreToolUse hook environments equal across sync and async lanes excep
     const asyncEnvironment = processes.calls[1]?.options.env ?? {};
 
     // assert
-    assert.strictEqual(processes.calls.length, 2);
+    // D-07-03: the parity claims below read `processes.calls`, and an empty
+    // harness would satisfy every one of them vacuously. Pin the spawn count
+    // first so the gate cannot report parity over two environments it never saw.
+    assert.strictEqual(
+      processes.calls.length,
+      2,
+      "D-07-03: expected one sync and one async spawn; lane parity over an unspawned lane proves nothing",
+    );
     assertLaneParity(syncEnvironment, asyncEnvironment);
     assert.strictEqual(asyncEnvironment[MARKER_ENV], "dispatch-pretool-parity");
     assert.strictEqual(Object.hasOwn(syncEnvironment, "CLAUDE_ENV_FILE"), false);
@@ -357,7 +364,13 @@ test("keeps SessionStart env-file identity equal across sync and async lanes", a
     const asyncEnvironment = processes.calls[1]?.options.env ?? {};
 
     // assert
-    assert.strictEqual(processes.calls.length, 2);
+    // D-07-03: same visitation obligation as the PreToolUse lane -- an empty
+    // spawn harness would green every parity assertion below.
+    assert.strictEqual(
+      processes.calls.length,
+      2,
+      "D-07-03: expected one sync and one async spawn; lane parity over an unspawned lane proves nothing",
+    );
     assertLaneParity(syncEnvironment, asyncEnvironment);
     assert.strictEqual(asyncEnvironment[MARKER_ENV], "dispatch-session-parity");
     assert.strictEqual(
@@ -414,6 +427,15 @@ test("prevents a pre-reload async child from affecting the advanced routing epoc
     shutdownInMemoryChildren(runtime);
 
     // assert
+    // D-07-03: "the pre-reload child raised nothing" is trivially true when no
+    // child was ever spawned. Pin the spawn before concluding the advanced
+    // epoch suppressed it.
+    assert.strictEqual(
+      processes.calls.length,
+      1,
+      "D-07-03: no pre-reload child was spawned, so the epoch-isolation claim below holds over nothing",
+    );
+    assert.notStrictEqual(child, undefined, "D-07-03: the spawn harness recorded no child process");
     assert.deepStrictEqual(pi.messages, []);
     assert.deepStrictEqual(context.notifications, []);
     assert.deepStrictEqual(child?.signals, []);
