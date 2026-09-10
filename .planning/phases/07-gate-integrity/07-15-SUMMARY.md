@@ -456,3 +456,11 @@ meta-gate, and two things here bear on it: the census is already in
 `gate-targets.ts` so it will not read as an off-registry list of production
 paths, and the meta-gate's existing resolution clause only reaches array-valued
 exports — worth knowing before it grows a scan that assumes otherwise.
+
+## Self-Check: PASSED
+
+All created files exist on disk (`tests/architecture/unowned-exports-census.test.ts`,
+`07-FINDING-DISPOSITIONS.md`, this summary). All four commits resolve
+(`188da750`, `504194a7`, `f2561477`, `7b0f5a34`). `.fallowrc.json` is unchanged
+and `git diff 8b8ce2e2..HEAD -- .planning/STATE.md .planning/ROADMAP.md` lists no
+files, so neither state document was touched.
