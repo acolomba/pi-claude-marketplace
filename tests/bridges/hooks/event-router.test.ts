@@ -2155,3 +2155,157 @@ test("session_start contains a lazy project cwd failure and still delegates safe
   assert.deepStrictEqual(messages, []);
   assert.strictEqual(registrations.length, 11);
 });
+
+/** Collects the OBS-01 debug lines a case emits, restoring the flag afterwards. */
+function observeRouterDebug(t: TestContext): () => string[] {
+  const previousDebug = process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+  process.env.PI_CLAUDE_MARKETPLACE_DEBUG = "1";
+  t.after(() => {
+    if (previousDebug === undefined) {
+      delete process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+    } else {
+      process.env.PI_CLAUDE_MARKETPLACE_DEBUG = previousDebug;
+    }
+  });
+  const diagnostics: string[] = [];
+  t.mock.method(console, "error", (diagnostic: unknown) => {
+    diagnostics.push(String(diagnostic));
+  });
+  return () => [...diagnostics];
+}
+
+/** An empty-state reader, so registration hydrates without touching disk state. */
+const EMPTY_STATE_READER: HooksHydrationReader = {
+  loadState(): Promise<ExtensionState> {
+    return Promise.resolve({ schemaVersion: 2, marketplaces: {} });
+  },
+};
+
+function preToolUseEntry(pluginId: string, cwd: string): RoutingEntry {
+  return {
+    scope: "project",
+    marketplace: "catalog",
+    pluginId,
+    resolvedSource: asAbsolutePluginRoot(path.join(cwd, pluginId)),
+    claudeEvent: "PreToolUse",
+    matcher: parseMatcher("Bash"),
+    rawMatcher: "Bash",
+    handlerDecl: { type: "command", command: `run-${pluginId}` },
+    declarationIndex: 0,
+    ifPredicate: MATCH_ALL_IF,
+  };
+}
+
+/**
+ * A tool call whose `input` accessor refuses. The bridge's own default
+ * executor reads `input` while translating and announces the refusal through
+ * OBS-01 before it reaches the process boundary, so a case can tell the
+ * default apart from a supplied executor by an observed line rather than by an
+ * absence.
+ */
+function refusingToolCall(): ToolCallEvent {
+  return {
+    type: "tool_call",
+    toolCallId: "executor-seam-call",
+    toolName: "bash",
+    get input(): never {
+      throw new Error("executor seam input refused");
+    },
+  } satisfies ToolCallEvent;
+}
+
+test(
+  "registerHooksBridge routes through a supplied executor and through its own default without one",
+  { concurrency: false },
+  async (t) => {
+    // arrange
+    const root = await mkdtemp(path.join(tmpdir(), "hooks-router-executor-seam-"));
+    t.after(() => rm(root, { recursive: true, force: true, maxRetries: 3 }));
+    ownAgentRoot(t, path.join(root, "agent"));
+    const readDiagnostics = observeRouterDebug(t);
+    const suppliedRuntime = createHooksRuntime();
+    const defaultedRuntime = createHooksRuntime();
+    const suppliedPi = makeRecordingPi();
+    const defaultedPi = makeRecordingPi();
+    const dispatched: string[] = [];
+    const executor: HookExecutor = (entry) => {
+      dispatched.push(entry.pluginId);
+      return Promise.resolve({ kind: "noop" });
+    };
+
+    const suppliedCwd = path.join(root, "supplied");
+    const defaultedCwd = path.join(root, "defaulted");
+    await createHooksHydration(suppliedRuntime, EMPTY_STATE_READER).registerHooksBridge(
+      suppliedPi.pi,
+      { ctx: makeContext(suppliedCwd, root), cwd: suppliedCwd, executor },
+    );
+    await createHooksHydration(defaultedRuntime, EMPTY_STATE_READER).registerHooksBridge(
+      defaultedPi.pi,
+      { ctx: makeContext(defaultedCwd, root), cwd: defaultedCwd },
+    );
+    suppliedRuntime.setRoutingBucket("PreToolUse", [
+      preToolUseEntry("supplied-executor-plugin", suppliedCwd),
+    ]);
+    defaultedRuntime.setRoutingBucket("PreToolUse", [
+      preToolUseEntry("defaulted-executor-plugin", defaultedCwd),
+    ]);
+    const registrationDiagnostics = readDiagnostics().length;
+
+    // act
+    const suppliedOutput = await registeredHandler(suppliedPi.registrations, "tool_call")(
+      refusingToolCall(),
+      makeContext(suppliedCwd, root),
+    );
+    const afterSupplied = readDiagnostics().slice(registrationDiagnostics);
+    const defaultedOutput = await registeredHandler(defaultedPi.registrations, "tool_call")(
+      refusingToolCall(),
+      makeContext(defaultedCwd, root),
+    );
+    const afterDefaulted = readDiagnostics().slice(registrationDiagnostics + afterSupplied.length);
+
+    // assert
+    assert.deepStrictEqual([suppliedOutput, defaultedOutput], [undefined, undefined]);
+    assert.deepStrictEqual(dispatched, ["supplied-executor-plugin"]);
+    assert.deepStrictEqual(afterSupplied, []);
+    assert.deepStrictEqual(afterDefaulted, [
+      "[hooks] exec: caught (defaulted-executor-plugin/PreToolUse): executor seam input refused",
+    ]);
+    assert.deepStrictEqual(suppliedPi.messages, []);
+    assert.deepStrictEqual(defaultedPi.messages, []);
+  },
+);
+
+test("propagates a rejecting supplied executor out of the registered tool_call callback", async (t) => {
+  // arrange
+  const root = await mkdtemp(path.join(tmpdir(), "hooks-router-executor-refusal-"));
+  t.after(() => rm(root, { recursive: true, force: true, maxRetries: 3 }));
+  ownAgentRoot(t, path.join(root, "agent"));
+  const runtime = createHooksRuntime();
+  const { pi, registrations, messages } = makeRecordingPi();
+  const cwd = path.join(root, "project");
+  // The never-throws contract belongs to the default this seam falls back to.
+  // A caller that substitutes a rejecting executor leaves that contract, and
+  // the registered callback surfaces the refusal instead of hiding it.
+  const executor: HookExecutor = () => Promise.reject(new Error("supplied executor refused"));
+  await createHooksHydration(runtime, EMPTY_STATE_READER).registerHooksBridge(pi, {
+    ctx: makeContext(cwd, root),
+    cwd,
+    executor,
+  });
+  runtime.setRoutingBucket("PreToolUse", [preToolUseEntry("refusing-executor-plugin", cwd)]);
+  const toolCall = {
+    type: "tool_call",
+    toolCallId: "executor-refusal-call",
+    toolName: "bash",
+    input: { command: "printf refused" },
+  } satisfies ToolCallEvent;
+
+  // act & assert
+  await assert.rejects(
+    Promise.resolve(
+      registeredHandler(registrations, "tool_call")(toolCall, makeContext(cwd, root)),
+    ),
+    { message: "supplied executor refused" },
+  );
+  assert.deepStrictEqual(messages, []);
+});

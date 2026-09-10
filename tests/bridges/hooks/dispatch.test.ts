@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { describe, test } from "node:test";
+import { describe, test, type TestContext } from "node:test";
 
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 
@@ -2066,5 +2066,246 @@ describe("composite per-event adapters", () => {
 
     // assert
     assert.deepStrictEqual(executorCalls, expectedCalls);
+  });
+});
+
+/**
+ * A real `ExtensionAPI` value for the optional `pi` collaborator. Every member
+ * throws on call: `dispatch.ts` forwards the inventory to the executor and
+ * never reads it, so a read from inside dispatch is itself the defect this
+ * value detects.
+ */
+function createPiInventory(): ExtensionAPI {
+  return {
+    on(_event: string, _handler: unknown): void {
+      throw new Error("composite dispatch must not register Pi listeners");
+    },
+    sendMessage(_message: unknown, _options: unknown): void {
+      throw new Error("composite dispatch must not send Pi messages");
+    },
+  } as ExtensionAPI;
+}
+
+/** Records the inventory each dispatch hands its executor, in call order. */
+function createPiObservingExecutor(observed: Array<ExtensionAPI | undefined>): HookExecutor {
+  return (_entry, _event, _context, pi) => {
+    observed.push(pi);
+    return Promise.resolve({ kind: "noop" });
+  };
+}
+
+/** Collects the OBS-01 debug lines a case's dispatch emits, restoring the flag after. */
+function observeHookDebug(t: TestContext): () => string[] {
+  const previous = {
+    existed: Object.hasOwn(process.env, "PI_CLAUDE_MARKETPLACE_DEBUG"),
+    value: process.env.PI_CLAUDE_MARKETPLACE_DEBUG,
+  };
+  t.after(() => {
+    if (previous.existed && previous.value !== undefined) {
+      process.env.PI_CLAUDE_MARKETPLACE_DEBUG = previous.value;
+    } else {
+      Reflect.deleteProperty(process.env, "PI_CLAUDE_MARKETPLACE_DEBUG");
+    }
+  });
+  process.env.PI_CLAUDE_MARKETPLACE_DEBUG = "1";
+  const diagnostics: string[] = [];
+  t.mock.method(console, "error", (diagnostic: unknown) => {
+    diagnostics.push(String(diagnostic));
+  });
+  return () => [...diagnostics];
+}
+
+describe("optional Pi inventory collaborator", () => {
+  test("compositeHandlerFor hands a supplied inventory to the executor and undefined without one", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    const context = createExtensionContext("/workspace/dispatch-pi-composite");
+    runtime.setRoutingBucket("PreToolUse", [
+      createRoutingEntry({
+        pluginId: "pi-observer",
+        claudeEvent: "PreToolUse",
+        rawMatcher: "Bash",
+        declarationIndex: 0,
+      }),
+    ]);
+    const inventory = createPiInventory();
+    const observed: Array<ExtensionAPI | undefined> = [];
+    const executor = createPiObservingExecutor(observed);
+    const withInventory = compositeHandlerFor(
+      runtime,
+      "PreToolUse",
+      runtime.currentGeneration(),
+      inventory,
+      executor,
+    );
+    const withoutInventory = compositeHandlerFor(
+      runtime,
+      "PreToolUse",
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+    );
+
+    // act
+    const suppliedOutput = await withInventory(createToolCallEvent(), context);
+    const omittedOutput = await withoutInventory(createToolCallEvent(), context);
+
+    // assert
+    assert.deepStrictEqual([suppliedOutput, omittedOutput], [undefined, undefined]);
+    assert.strictEqual(observed.length, 2);
+    assert.strictEqual(observed[0], inventory);
+    assert.strictEqual(observed[1], undefined);
+  });
+
+  test("toolResultCompositeHandler hands a supplied inventory to the executor and undefined without one", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    const context = createExtensionContext("/workspace/dispatch-pi-tool-result");
+    runtime.setRoutingBucket("PostToolUse", [
+      createRoutingEntry({
+        pluginId: "pi-result-observer",
+        claudeEvent: "PostToolUse",
+        rawMatcher: "Bash",
+        declarationIndex: 0,
+      }),
+    ]);
+    const inventory = createPiInventory();
+    const observed: Array<ExtensionAPI | undefined> = [];
+    const executor = createPiObservingExecutor(observed);
+    const withInventory = toolResultCompositeHandler(
+      runtime,
+      runtime.currentGeneration(),
+      inventory,
+      executor,
+    );
+    const withoutInventory = toolResultCompositeHandler(
+      runtime,
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+    );
+
+    // act
+    const suppliedOutput = await withInventory(createToolResultEvent(false), context);
+    const omittedOutput = await withoutInventory(createToolResultEvent(false), context);
+
+    // assert
+    assert.deepStrictEqual([suppliedOutput, omittedOutput], [undefined, undefined]);
+    assert.strictEqual(observed.length, 2);
+    assert.strictEqual(observed[0], inventory);
+    assert.strictEqual(observed[1], undefined);
+  });
+
+  test("collectBucketOutcomes hands a supplied inventory to the executor and undefined without one", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    const context = createExtensionContext("/workspace/dispatch-pi-outcomes");
+    const bucket = [
+      createRoutingEntry({
+        pluginId: "pi-outcome-observer",
+        claudeEvent: "PreToolUse",
+        rawMatcher: "Bash",
+        declarationIndex: 0,
+      }),
+    ];
+    const inventory = createPiInventory();
+    const observed: Array<ExtensionAPI | undefined> = [];
+    const executor = createPiObservingExecutor(observed);
+    const event = createToolCallEvent();
+
+    // act
+    const suppliedOutcomes = await collectBucketOutcomes(
+      runtime,
+      bucket,
+      event,
+      context,
+      inventory,
+      () => true,
+      executor,
+    );
+    const omittedOutcomes = await collectBucketOutcomes(
+      runtime,
+      bucket,
+      event,
+      context,
+      undefined,
+      () => true,
+      executor,
+    );
+
+    // assert
+    assert.deepStrictEqual(suppliedOutcomes, omittedOutcomes);
+    assert.strictEqual(observed.length, 2);
+    assert.strictEqual(observed[0], inventory);
+    assert.strictEqual(observed[1], undefined);
+  });
+
+  test("refuses an asyncRewake spawn through its own executor default when no inventory is supplied", async (t) => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    const context = createExtensionContext("/workspace/dispatch-pi-async-rewake");
+    runtime.setRoutingBucket("PreToolUse", [
+      createRoutingEntry({
+        pluginId: "async-rewake-plugin",
+        claudeEvent: "PreToolUse",
+        rawMatcher: "Bash",
+        declarationIndex: 0,
+        asyncRewake: true,
+      }),
+    ]);
+    const readDiagnostics = observeHookDebug(t);
+    // No executor: the module's own `dispatchHookExec` default runs, which is
+    // where an absent inventory stops being a forwarded value and starts
+    // deciding whether the async lane may spawn at all.
+    const handler = compositeHandlerFor(
+      runtime,
+      "PreToolUse",
+      runtime.currentGeneration(),
+      undefined,
+    );
+
+    // act
+    const output = await handler(createToolCallEvent(), context);
+
+    // assert
+    assert.strictEqual(output, undefined);
+    assert.deepStrictEqual(readDiagnostics(), [
+      "[hooks] async-rewake: pi missing on async dispatch (async-rewake-plugin/PreToolUse); skipping spawn",
+    ]);
+  });
+
+  test("propagates a rejecting executor rather than absorbing it into the reducer", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    const context = createExtensionContext("/workspace/dispatch-pi-throwing-executor");
+    runtime.setRoutingBucket("PreToolUse", [
+      createRoutingEntry({
+        pluginId: "throwing-executor-plugin",
+        claudeEvent: "PreToolUse",
+        rawMatcher: "Bash",
+        declarationIndex: 0,
+      }),
+    ]);
+    // The never-throws contract belongs to `dispatchHookExec`, the default this
+    // seam is defaulted to. A caller that substitutes a rejecting executor is
+    // outside that contract, and the reducer says so instead of hiding it.
+    const executor: HookExecutor = () => Promise.reject(new Error("injected executor refused"));
+    const handler = compositeHandlerFor(
+      runtime,
+      "PreToolUse",
+      runtime.currentGeneration(),
+      createPiInventory(),
+      executor,
+    );
+
+    // act & assert
+    await assert.rejects(handler(createToolCallEvent(), context), {
+      message: "injected executor refused",
+    });
   });
 });
