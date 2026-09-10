@@ -2591,11 +2591,11 @@ test("WR-04: successful update populates stagedAgentNames + stagedMcpServerNames
   });
 });
 
-// ─── SEV-03 / D-69-01: autoupdate cascade TAKES the force path ────────────────
+// ─── SEV-03 / D-69-01: autoupdate cascade TAKES the partial path ─────────────
 
-test("SEV-03 / D-69-01: autoupdate cascade (updateSinglePlugin) TAKES the force path -- an `unsupported` candidate degrades to partition='updated' carrying unsupportedKinds (NOT skipped)", async () => {
+test("SEV-03 / D-69-01: autoupdate cascade (updateSinglePlugin) TAKES the partial path -- a `partially-available` candidate degrades to partition='updated' carrying unsupportedKinds (NOT skipped)", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-sev03-force-"));
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-sev03-partial-"));
     try {
       const seeded = await seedPathMarketplace({
         cwd,
@@ -2604,10 +2604,10 @@ test("SEV-03 / D-69-01: autoupdate cascade (updateSinglePlugin) TAKES the force 
         manifestPlugins: { hello: { version: "1.0.1", hasSkill: true } },
         installedVersions: { hello: "1.0.0" },
       });
-      // Make the candidate re-resolve `unsupported`: an `lspServers` component
+      // Make the candidate re-resolve `partially-available`: an `lspServers` component
       // (the `.lsp.json` convention) is a known-but-unsupported kind. The skill
       // stays supported, so the candidate DEGRADES rather than going
-      // structurally `unavailable` -- the force path can materialize it.
+      // structurally `unavailable` -- the partial path can materialize it.
       await writeFile(
         path.join(seeded.marketplaceRoot, "plugins", "hello", ".lsp.json"),
         JSON.stringify({ servers: {} }),
@@ -2644,8 +2644,9 @@ test("SEV-03 / FORCE-05: autoupdate cascade does NOT bypass a hard failure -- an
         marketplaceRoot: path.join(cwd, "mp-src"),
         marketplaceName: "mp",
         // MM-3 / PR-2: an npm-source entry from a path marketplace is
-        // structurally `unavailable` -- `requireForceInstallable` blocks it even
-        // on the force path (force degrades `unsupported`, never `unavailable`).
+        // structurally `unavailable` -- `requirePartialInstallable` blocks it even
+        // on the partial path (`--partial` degrades `partially-available`, never
+        // `unavailable`).
         manifestPlugins: {
           hello: {
             version: "1.1.0",
@@ -2678,7 +2679,7 @@ test("SEV-03 / FORCE-05: autoupdate cascade does NOT bypass a hard failure -- an
   });
 });
 
-test("XSURF-03 / SEV-04: the manual `update` path (no --force) of a force-upgradable candidate declines with `(partially-upgradable) {lsp}` + the --force trailer at warning", async () => {
+test("XSURF-03 / SEV-04: the manual `update` path (no --partial) of a partially-upgradable candidate declines with `(partially-upgradable) {lsp}` + the --partial trailer at warning", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "update-sev03-manual-"));
     try {
@@ -2703,10 +2704,10 @@ test("XSURF-03 / SEV-04: the manual `update` path (no --force) of a force-upgrad
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
       });
 
-      // XSURF-03: the manual no-`--force` decline of a force-upgradable
+      // XSURF-03: the manual no-`--partial` decline of a partially-upgradable
       // candidate flips to the resolver-state-driven `(partially-upgradable)` token
       // (consistent with how `list` describes the same plugin) carrying the
-      // list-consistent `{lsp}` degrade reason + the update-worded `--force`
+      // list-consistent `{lsp}` degrade reason + the update-worded `--partial`
       // trailer. SEV-04: a targeted decline stays warning.
       assert.equal(notifications.length, 1);
       assert.equal(
@@ -2757,7 +2758,7 @@ test("SEV-03 / D-69-01: prior-state read -- a previously-CLEAN plugin (persisted
   });
 });
 
-test("SEV-03 / D-69-01: prior-state read -- an ALREADY force-installed plugin (persisted unsupported non-empty) degraded again carries newlyDegraded=false", async () => {
+test("SEV-03 / D-69-01: prior-state read -- an ALREADY partially-installed plugin (persisted unsupported non-empty) degraded again carries newlyDegraded=false", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "update-sev03-already-"));
     try {
@@ -2773,7 +2774,7 @@ test("SEV-03 / D-69-01: prior-state read -- an ALREADY force-installed plugin (p
         JSON.stringify({ servers: {} }),
       );
 
-      // Pre-stamp the persisted record as ALREADY force-installed: a non-empty
+      // Pre-stamp the persisted record as ALREADY partially-installed: a non-empty
       // `compatibility.unsupported` is the prior-state the auto-update reads.
       const locations = locationsFor("project", cwd);
       const before = await loadState(locations.extensionRoot);
@@ -4708,9 +4709,9 @@ test("WR-02 / NFR-3: an already-current disabled record does not take the scope 
 test("WR-08 / NFR-3: the lock-free skip survives multi-element compatibility lists", async () => {
   // The WR-02 skip compares a projection of the PERSISTED compatibility block
   // against a projection of a FRESHLY RESOLVED one. `disabledPinProjection`
-  // stringifies `notes` / `supported` / `unsupported` positionally, so the skip
-  // holds only while the resolver emits those lists in the same order on every
-  // resolution of the same input. That contingency is invisible: if any list
+  // stringifies the `notes` / `supported` / `unsupported` array fields
+  // positionally, so the skip holds only while the resolver emits those lists in
+  // the same order on every resolution of the same input. That contingency is invisible: if any list
   // ever became set-derived, `readdir`-ordered, or `Promise.all`-ordered, the
   // projections would differ on every run of every disabled plugin, the
   // `retries: 0` lock would be acquired unconditionally again, and the
@@ -6205,17 +6206,17 @@ test("LIFE-01 (update): version A (no hooks) -> version B (with hooks) writes th
   });
 });
 
-// ─── FORCE-02/03/04/05: --force degrades an unsupported CANDIDATE ──────────────
+// ─── FORCE-02/03/04/05: --partial degrades a partial CANDIDATE ────────────────
 //
-// D-65-04: `update --force` is gated on the RESOLVED CANDIDATE (the synced
+// D-65-04: `update --partial` is gated on the RESOLVED CANDIDATE (the synced
 // clone's current entry), not the installed version. An `experimental
 // themes/monitors` declaration on the candidate plugin.json resolves the
-// force-degradable `unsupported` arm (no structural defect) while the
-// supported `skills/` component still materializes.
+// `partially-available` arm (no structural defect) while the supported
+// `skills/` component still materializes.
 
 /**
  * Overwrite the candidate plugin.json so the resolver resolves the
- * force-degradable `unsupported` arm: an `experimental` themes/monitors
+ * `partially-available` arm: an `experimental` themes/monitors
  * declaration is an unsupported component kind with no structural defect.
  * The supported `skills/` dir is left intact so the degraded update still
  * materializes the skill.
@@ -6236,7 +6237,7 @@ async function makeCandidateUnsupported(
   );
 }
 
-test("FORCE-02: --force on a candidate that became unsupported degrades (skill materializes, version bumps)", async () => {
+test("FORCE-02: --partial on a candidate that became partially available degrades (skill materializes, version bumps)", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "update-force02-"));
     try {
@@ -6273,13 +6274,13 @@ test("FORCE-02: --force on a candidate that became unsupported degrades (skill m
         "supported skill must materialize",
       );
 
-      // FSTAT-07 / D-66-04: a `--force` update whose candidate re-resolved
-      // `unsupported` reports `(partially-installed)` with the ◉ glyph + the
-      // dropped-component detail (the same derived signal the list deriver
-      // reads), not `(updated)`. force-installed is a realized transition --
+      // FSTAT-07 / D-66-04: a `--partial` update whose candidate re-resolved
+      // `partially-available` reports `(partially-installed)` with the ◉ glyph +
+      // the dropped-component detail (the same derived signal the list deriver
+      // reads), not `(updated)`. partially-installed is a realized transition --
       // info severity + reload-hint.
       assert.equal(notifications.length, 1);
-      assert.equal(notifications[0]?.severity, undefined, "force-installed is info, not error");
+      assert.equal(notifications[0]?.severity, undefined, "partially-installed is info, not error");
       assert.equal(
         notifications[0]?.message,
         "● mp [project]\n" +
@@ -6293,7 +6294,7 @@ test("FORCE-02: --force on a candidate that became unsupported degrades (skill m
   });
 });
 
-test("XSURF-03 / FORCE-03: without --force the force-upgradable candidate declines `(partially-upgradable)` + the --force trailer at warning", async () => {
+test("XSURF-03 / FORCE-03: without --partial the partially-upgradable candidate declines `(partially-upgradable)` + the --partial trailer at warning", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "update-force03-"));
     try {
@@ -6313,15 +6314,15 @@ test("XSURF-03 / FORCE-03: without --force the force-upgradable candidate declin
         pi,
         scope: "project",
         cwd,
-        // No `force` -> the candidate gate stays `requireInstallable`.
+        // No `--partial` -> the candidate gate stays `requireInstallable`.
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
       });
 
       assert.equal(notifications.length, 1);
       const body = notifications[0]?.message ?? "";
-      // XSURF-03: the targeted no-`--force` decline of a force-upgradable
+      // XSURF-03: the targeted no-`--partial` decline of a partially-upgradable
       // candidate renders the `(partially-upgradable)` token + the update-worded
-      // `--force` trailer; SEV-04 keeps the targeted decline at warning.
+      // `--partial` trailer; SEV-04 keeps the targeted decline at warning.
       assert.match(body, /\(partially-upgradable\)/);
       assert.match(body, /Re-run with --partial to update with the supported components\./);
       assert.doesNotMatch(body, /\{no longer installable\}/);
@@ -6337,12 +6338,13 @@ test("XSURF-03 / FORCE-03: without --force the force-upgradable candidate declin
 });
 
 // SEV-04 / D-69-02 / XSURF-03: a BULK (`@marketplace`) update that skips a
-// force-upgradable candidate the user did not target is benign -> info (contrast
-// FORCE-03, the TARGETED decline that stays warning). Same `(partially-upgradable)`
-// per-row token + `--force` trailer; only the severity (and the summary tally)
-// move. The SEV-04 split is now keyed on the force-upgradable STATUS arm, NOT
-// the reason string -- this pair (warning here vs FORCE-03) proves it holds.
-test("XSURF-03 / SEV-04: bulk update skipping a force-upgradable candidate -> info (untargeted decline)", async () => {
+// partially-upgradable candidate the user did not target is benign -> info
+// (contrast FORCE-03, the TARGETED decline that stays warning). Same
+// `(partially-upgradable)` per-row token + `--partial` trailer; only the severity
+// (and the summary tally) move. The SEV-04 split is now keyed on the
+// partially-upgradable STATUS arm, NOT the reason string -- this pair (warning
+// here vs FORCE-03) proves it holds.
+test("XSURF-03 / SEV-04: bulk update skipping a partially-upgradable candidate -> info (untargeted decline)", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "update-sev04-bulk-"));
     try {
@@ -6369,8 +6371,8 @@ test("XSURF-03 / SEV-04: bulk update skipping a force-upgradable candidate -> in
       const body = notifications[0]?.message ?? "";
       // UGRM-01/UGRM-02: full-body lock. A bulk update whose only non-`updated`
       // row is a benign info `(partially-upgradable)` decline (0 updated, 0
-      // failures/warnings) renders the cascade BODY (the Phase-73 row +
-      // `--force` trailer) AND the never-silent `Plugin update: nothing to
+      // failures/warnings) renders the cascade BODY (the row +
+      // `--partial` trailer) AND the never-silent `Plugin update: nothing to
       // update` headline below it -- the summary line does NOT vanish. The
       // degrade reason `{unsupported component}` is the `makeCandidateUnsupported`
       // (experimental manifest) form sourced through `narrowUnsupportedKinds`
@@ -6392,7 +6394,7 @@ test("XSURF-03 / SEV-04: bulk update skipping a force-upgradable candidate -> in
   });
 });
 
-test("FORCE-04: the force-degrade update path emits no warning severity and no `Warning:` summary", async () => {
+test("FORCE-04: the partial-degrade update path emits no warning severity and no `Warning:` summary", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "update-force04-"));
     try {
@@ -6433,7 +6435,7 @@ test("FORCE-04: the force-degrade update path emits no warning severity and no `
   });
 });
 
-test("FORCE-05: --force cannot bypass an unavailable (non-path source) candidate", async () => {
+test("FORCE-05: --partial cannot bypass an unavailable (non-path source) candidate", async () => {
   await withHermeticHome(async () => {
     // arrange
     const cwd = await mkdtemp(path.join(tmpdir(), "update-force05-unavail-"));
@@ -6444,7 +6446,7 @@ test("FORCE-05: --force cannot bypass an unavailable (non-path source) candidate
         marketplaceRoot: path.join(cwd, "mp-src"),
         marketplaceName: "mp",
         // An npm source resolves `unavailable` (non-path source),
-        // which `requireForceInstallable` still rejects.
+        // which `requirePartialInstallable` still rejects.
         manifestPlugins: {
           hello: {
             version: "1.1.0",
@@ -6480,7 +6482,7 @@ test("FORCE-05: --force cannot bypass an unavailable (non-path source) candidate
   });
 });
 
-test("FORCE-05: --force cannot bypass a missing marketplace", async () => {
+test("FORCE-05: --partial cannot bypass a missing marketplace", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "update-force05-nomp-"));
     try {
@@ -6495,7 +6497,7 @@ test("FORCE-05: --force cannot bypass a missing marketplace", async () => {
       });
 
       // The missing-marketplace short-circuit fires BEFORE the candidate gate,
-      // so `--force` is inert here.
+      // so `--partial` is inert here.
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, "error");
       assert.equal(
@@ -6552,13 +6554,13 @@ test("UGRM-02 / SEV-01: bulk @mp update of a plugin with an UNLOADED declared co
   });
 });
 
-test("UGRM-02 / FSTAT-07: bulk @mp --force counts a force-installed degrade as a realized transition -> `2 updated`, no `nothing to update` headline", async () => {
-  // One clean bump + one force-degrading candidate. Both land in partition
-  // `updated` (the force-installed arm is emitted from the `updated` case), so
-  // the realized-transition count is 2. The never-silent `nothing to update`
-  // headline must be ABSENT -- a force-installed degrade IS a realized update.
+test("UGRM-02 / FSTAT-07: bulk @mp --partial counts a partially-installed degrade as a realized transition -> `2 updated`, no `nothing to update` headline", async () => {
+  // One clean bump + one degrading candidate. Both land in partition `updated`
+  // (the partially-installed arm is emitted from the `updated` case), so the
+  // realized-transition count is 2. The never-silent `nothing to update`
+  // headline must be ABSENT -- a partially-installed degrade IS a realized update.
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "update-tally-force-2updated-"));
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-tally-partial-2updated-"));
     try {
       const seeded = await seedPathMarketplace({
         cwd,
@@ -6567,7 +6569,7 @@ test("UGRM-02 / FSTAT-07: bulk @mp --force counts a force-installed degrade as a
         manifestPlugins: {
           // clean: bumps cleanly (installable candidate).
           clean: { version: "1.0.1", hasSkill: true },
-          // degrade: candidate re-resolves `unsupported` -> `--force`
+          // degrade: candidate re-resolves `partially-available` -> `--partial`
           // degrade-updates it (partially-installed), still a realized transition.
           degrade: { version: "1.1.0", hasSkill: true },
         },
@@ -6588,7 +6590,7 @@ test("UGRM-02 / FSTAT-07: bulk @mp --force counts a force-installed degrade as a
       const body = notifications[0]?.message ?? "";
       // Both partitions are `updated` -> the tally counts 2 realized transitions.
       assert.match(body, /Plugin update: 2 updated/);
-      // A force-installed degrade is a realized update, so the no-op headline
+      // A partially-installed degrade is a realized update, so the no-op headline
       // must NOT fire.
       assert.doesNotMatch(body, /nothing to update/);
     } finally {

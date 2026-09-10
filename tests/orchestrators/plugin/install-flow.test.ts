@@ -485,7 +485,7 @@ function buildSeededPluginManifest(
       ? { version: "0.0.1" }
       : opts.pluginJsonVersion !== null && { version: opts.pluginJsonVersion }),
     // D-64-06: declaring experimental kinds drives `resolveStrict` to the
-    // `unsupported` (force-degradable) arm without a structural defect.
+    // `partially-available` arm without a structural defect.
     ...(opts.experimental !== undefined && { experimental: opts.experimental }),
     ...(opts.pluginJsonDefaultEnabled !== undefined && {
       defaultEnabled: opts.pluginJsonDefaultEnabled,
@@ -588,9 +588,9 @@ async function seedPathMarketplaceWithPlugin(opts: {
   /**
    * D-64-06: declare unsupported component kinds in the plugin's own
    * plugin.json so `resolveStrict` returns `state: "partially-available"` with NO
-   * structural defect (force-degradable). E.g.
+   * structural defect. E.g.
    * `{ themes: "./themes", monitors: "./monitors.json" }`. The referenced paths
-   * need not exist -- the declaration alone drives the `unsupported` arm.
+   * need not exist -- the declaration alone drives the `partially-available` arm.
    */
   experimental?: object;
   /** Skills to seed -- each `{ sourceName, body? }` becomes <pluginRoot>/skills/<sourceName>/SKILL.md. */
@@ -871,8 +871,8 @@ test("PI-4: unsupported source (npm) -> V2 unavailable/{unsupported source}", as
       // per D-15-01 -- the reason text carries the explanation; no
       // cause-chain trailer. D-70-02 / SEV-02: the structural `unavailable`
       // install failure stamps `severity: "error"` (so the leading summary
-      // line fires), but carries NO `--force` hint trailer -- force cannot
-      // degrade-install a structural defect.
+      // line fires), but carries NO `--partial` hint trailer -- `--partial`
+      // cannot degrade-install a structural defect.
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, "error");
       assert.equal(
@@ -4231,7 +4231,7 @@ test("D-03-INV :: install invalidates plugin cache for the target marketplace", 
 });
 
 // ───────────────────────────────────────────────────────────────────────────
-// PHOOK-04 -- partial-hook `install --force` stages a STRICT SUBSET of the
+// PHOOK-04 -- partial-hook `install --partial` stages a STRICT SUBSET of the
 // source `hooks.json`: the dropped event / matcher group is absent from the
 // written file, while the supported group is present. The bridge stages
 // `parseHooksConfig.value` (the pure filtered subset), so the staged file can
@@ -4239,7 +4239,7 @@ test("D-03-INV :: install invalidates plugin cache for the target marketplace", 
 // change to install-outcome.ts / stage.ts -- the subset is inherited from the partition.
 // ───────────────────────────────────────────────────────────────────────────
 
-test("PHOOK-04: install --force stages a strict-subset hooks.json -- dropped Notification event absent, supported PostToolUse group present", async () => {
+test("PHOOK-04: install --partial stages a strict-subset hooks.json -- dropped Notification event absent, supported PostToolUse group present", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-phook04-event-"));
     try {
@@ -4293,7 +4293,7 @@ test("PHOOK-04: install --force stages a strict-subset hooks.json -- dropped Not
   });
 });
 
-test("PHOOK-04 / D-71-02: install --force drops only the unsupportable matcher group within a supported event", async () => {
+test("PHOOK-04 / D-71-02: install --partial drops only the unsupportable matcher group within a supported event", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-phook04-matcher-"));
     try {
@@ -4344,13 +4344,13 @@ test("PHOOK-04 / D-71-02: install --force drops only the unsupportable matcher g
 
 // ───────────────────────────────────────────────────────────────────────────
 // SEV-01 / SEV-02 / D-71-06 -- the partial-hook plugin now resolves
-// `unsupported` (force-degradable), so it flows through the force-degradation
-// gates with no severity-layer source change: WITHOUT `--force` it blocks at error
-// severity carrying the `--force` hint (SEV-02); WITH `--force` it degrades to
-// an info `force-installed` row with NO summary line (SEV-01 / D-71-06).
+// `partially-available`, so it flows through the partial-degradation gates
+// with no severity-layer source change: WITHOUT `--partial` it blocks at error
+// severity carrying the `--partial` hint (SEV-02); WITH `--partial` it degrades
+// to an info `partially-installed` row with NO summary line (SEV-01 / D-71-06).
 // ───────────────────────────────────────────────────────────────────────────
 
-test("SEV-01 / SEV-02 / FSTAT-07 / D-71-06: partial-hook install blocks without --force (error + hint), degrades to info force-installed with --force", async () => {
+test("SEV-01 / SEV-02 / FSTAT-07 / D-71-06: partial-hook install blocks without --partial (error + hint), degrades to info partially-installed with --partial", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-phook-sev-"));
     try {
@@ -4371,9 +4371,9 @@ test("SEV-01 / SEV-02 / FSTAT-07 / D-71-06: partial-hook install blocks without 
         },
       });
 
-      // SEV-02: no `--force`. The force-degradable `unsupported` verdict blocks
-      // the install at error severity and the row points at `--force`. Nothing
-      // is staged and no state record is written (force is never implied).
+      // SEV-02: no `--partial`. The `partially-available` verdict blocks the
+      // install at error severity and the row points at `--partial`. Nothing is
+      // staged and no state record is written (the opt-in is never implied).
       const noForce = makeCtx();
       await installPlugin({
         ctx: noForce.ctx,
@@ -4385,10 +4385,10 @@ test("SEV-01 / SEV-02 / FSTAT-07 / D-71-06: partial-hook install blocks without 
       });
       assert.equal(noForce.notifications.length, 1);
       assert.equal(noForce.notifications[0]?.severity, "error");
-      // SEV-02 / XSURF-01 contract: the force-degradable verdict renders the
-      // resolver-state-driven `(unsupported)` row at error severity and carries
-      // the `--force` hint trailer (consistent with how `list` / `info`
-      // describe the same plugin). IN-02 / RSTATE-05: the no-force failure row
+      // SEV-02 / XSURF-01 contract: the partially-available verdict renders
+      // the resolver-state-driven `(partially-available)` row at error severity
+      // and carries the `--partial` hint trailer (consistent with how `list` /
+      // `info` describe the same plugin). IN-02 / RSTATE-05: the failure row
       // renders the typed `{unsupported hooks}` marker -- byte-identical to the
       // success / list / info surfaces -- because the resolver threads its typed
       // `unsupported[]` list onto the thrown `PluginShapeError` and the composer
@@ -4404,19 +4404,19 @@ test("SEV-01 / SEV-02 / FSTAT-07 / D-71-06: partial-hook install blocks without 
         /Re-run with --partial to install the supported components\./,
       );
       const stagedPath = path.join(locations.hooksDir, "hook-plugin", "hooks.json");
-      await assert.rejects(readFile(stagedPath, "utf8"), "no-force install must stage nothing");
+      await assert.rejects(readFile(stagedPath, "utf8"), "a bare install must stage nothing");
       const afterBlocked = await loadState(locations.extensionRoot);
       assert.equal(
         "hook-plugin" in (afterBlocked.marketplaces["mp"]?.plugins ?? {}),
         false,
-        "no-force install must not record the plugin",
+        "a bare install must not record the plugin",
       );
 
-      // SEV-01 / D-71-06: with `--force` the supported components install, the
+      // SEV-01 / D-71-06: with `--partial` the supported components install, the
       // Notification event degrades, and the success row reads `(partially-installed)
       // {unsupported hooks}` at info severity with NO summary line (the body
       // begins at the marketplace header, not a `... failed.` / `... attention.`
-      // summary). FSTAT-07: the row reads `force-installed`.
+      // summary). FSTAT-07: the row reads `partially-installed`.
       const forced = makeCtx();
       await installPlugin({
         ctx: forced.ctx,
@@ -4435,12 +4435,12 @@ test("SEV-01 / SEV-02 / FSTAT-07 / D-71-06: partial-hook install blocks without 
       assert.match(forcedMsg, /\{unsupported hooks\}/);
       assert.ok(
         forcedMsg.startsWith("●"),
-        "info force-installed body starts at the mp header, no summary line",
+        "info partially-installed body starts at the mp header, no summary line",
       );
       const afterForced = await loadState(locations.extensionRoot);
       assert.ok(
         "hook-plugin" in (afterForced.marketplaces["mp"]?.plugins ?? {}),
-        "force install must record the plugin",
+        "a partial install must record the plugin",
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -5428,7 +5428,7 @@ test("SURF-05: installPlugin of a hooks-declaring plugin with rewakeMessage AND 
 });
 
 // ───────────────────────────────────────────────────────────────────────────
-// FORCE-01/03/04/05 -- `--force` degrade gate selection
+// FORCE-01/03/04/05 -- `--partial` degrade gate selection
 // ───────────────────────────────────────────────────────────────────────────
 
 test("FORCE-01: force on an unsupported plugin installs the supported components and skips the unsupported ones", async () => {
@@ -5442,7 +5442,7 @@ test("FORCE-01: force on an unsupported plugin installs the supported components
         marketplaceName: "mp",
         pluginName: "p1",
         // Supported component (a skill) alongside experimental unsupported
-        // kinds -> the resolver returns the force-degradable `unsupported` arm.
+        // kinds -> the resolver returns the `partially-available` arm.
         skills: [{ sourceName: "tool" }],
         experimental: { themes: "./themes", monitors: "./monitors.json" },
       });
@@ -5473,7 +5473,7 @@ test("FORCE-01: force on an unsupported plugin installs the supported components
       // captured in compatibility but NOT materialized as resources.
       const after = await loadState(locations.extensionRoot);
       const record = after.marketplaces["mp"]?.plugins["p1"];
-      assert.ok(record !== undefined, "state record must be written on force-degrade");
+      assert.ok(record !== undefined, "state record must be written on partial degrade");
       assert.deepEqual([...record.resources.skills], ["p1-tool"]);
       assert.ok(
         record.compatibility.unsupported.includes("themes"),
@@ -5520,7 +5520,7 @@ test("FORCE-01: force on a fully-supported plugin is inert and installs as (inst
       const record = after.marketplaces["mp"]?.plugins["p1"];
       assert.ok(record !== undefined, "fully-supported plugin installs under force");
       assert.deepEqual([...record.resources.skills], ["p1-tool"]);
-      // Inert: no unsupported kinds, identical to a non-force install.
+      // Inert: no unsupported kinds, identical to a plain install.
       assert.deepEqual([...record.compatibility.unsupported], []);
 
       // `(installed)` row, no `(unavailable)` / `(skipped)` token.
@@ -5532,9 +5532,9 @@ test("FORCE-01: force on a fully-supported plugin is inert and installs as (inst
   });
 });
 
-test("FSTAT-07 / D-66-04: force install of an unsupported plugin emits a (partially-installed) success row", async () => {
+test("FSTAT-07 / D-66-04: a partial install of a partially-available plugin emits a (partially-installed) success row", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "install-force-installed-"));
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-partially-installed-"));
     try {
       await seedPathMarketplaceWithPlugin({
         cwd,
@@ -5544,8 +5544,8 @@ test("FSTAT-07 / D-66-04: force install of an unsupported plugin emits a (partia
         pluginVersion: "1.0.0",
         pluginJsonVersion: "1.0.0",
         skills: [{ sourceName: "tool" }],
-        // D-64-06: experimental unsupported kinds drive the force-degradable
-        // `unsupported` arm; the success row reports (partially-installed) with the
+        // D-64-06: experimental unsupported kinds drive the
+        // `partially-available` arm; the success row reports (partially-installed) with the
         // dropped-component detail rather than (installed).
         experimental: { themes: "./themes", monitors: "./monitors.json" },
       });
@@ -5561,11 +5561,11 @@ test("FSTAT-07 / D-66-04: force install of an unsupported plugin emits a (partia
         partial: true,
       });
 
-      // FSTAT-07 / D-66-04: force-installed is a realized install transition --
+      // FSTAT-07 / D-66-04: partially-installed is a realized install transition --
       // info severity, reload-hint (TRANSITION_STATUS_LIST membership), and the
       // ◉ glyph distinct from the clean (installed) row.
       assert.equal(notifications.length, 1);
-      assert.equal(notifications[0]?.severity, undefined, "force-installed is info, not error");
+      assert.equal(notifications[0]?.severity, undefined, "partially-installed is info, not error");
       assert.equal(
         notifications[0]?.message,
         "● mp [project]\n" +
@@ -5656,12 +5656,12 @@ test("WR-03: a (partially-installed) success row renders soft-dep markers when a
         pluginName: "p1",
         pluginVersion: "1.0.0",
         pluginJsonVersion: "1.0.0",
-        // The force-degradable `unsupported` arm still stages the SUPPORTED
+        // The `partially-available` arm still stages the SUPPORTED
         // components, so the staged agent populates `dependencies: ["agents"]`.
         skills: [{ sourceName: "tool" }],
         agents: [{ sourceName: "bot" }],
-        // D-64-06: experimental unsupported kinds drive the force-degradable
-        // `unsupported` arm -> the row is (partially-installed) {unsupported component}.
+        // D-64-06: experimental unsupported kinds drive the `partially-available`
+        // arm -> the row is (partially-installed) {unsupported component}.
         experimental: { themes: "./themes", monitors: "./monitors.json" },
       });
 
@@ -5678,7 +5678,7 @@ test("WR-03: a (partially-installed) success row renders soft-dep markers when a
         partial: true,
       });
 
-      // SEV-01: the force-degraded install stages an agent while `pi-subagents`
+      // SEV-01: the partial install stages an agent while `pi-subagents`
       // is unloaded -> the missing-companion ladder raises the success row to
       // warning, so the cascade gains the `needs attention` summary line.
       assert.equal(notifications.length, 1);
@@ -5756,8 +5756,8 @@ test("FORCE-03: without force an unsupported plugin still blocks and writes no s
       });
 
       const { ctx, pi, notifications } = makeCtx();
-      // No `force` -> the default `requireInstallable` gate still blocks the
-      // `unsupported` arm.
+      // No `--partial` -> the default `requireInstallable` gate still blocks
+      // the `partially-available` arm.
       await installPlugin({
         ctx,
         pi,
@@ -5772,14 +5772,14 @@ test("FORCE-03: without force an unsupported plugin still blocks and writes no s
       // ... and no state record was written.
       const after = await loadState(locations.extensionRoot);
       const record = after.marketplaces["mp"]?.plugins["p1"];
-      assert.equal(record, undefined, "unsupported plugin must not be recorded without --force");
+      assert.equal(record, undefined, "a partial plugin must not be recorded without --partial");
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
   });
 });
 
-test("FORCE-04: the force-degrade path emits no warning-severity notification and no Warning: summary", async () => {
+test("FORCE-04: the partial-degrade path emits no warning-severity notification and no Warning: summary", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-force04-"));
     try {
@@ -5870,7 +5870,7 @@ test("FORCE-05: force cannot bypass a missing marketplace", async () => {
 
       const { ctx, pi, notifications } = makeCtx();
       // No marketplace seeded -> the marketplace-absent precondition
-      // short-circuits BEFORE the gate; `--force` cannot conjure a source.
+      // short-circuits BEFORE the gate; `--partial` cannot conjure a source.
       await installPlugin({
         ctx,
         pi,

@@ -180,8 +180,8 @@ interface SeedMarketplaceOpts {
       /**
        * FSTAT-01 / D-66-01: seed the persisted `compatibility.unsupported`
        * component-kind list. A non-empty value reproduces a recorded-installed
-       * plugin that resolved `unsupported` at install time (the force-installed
-       * signal the deriver reads, with `installable: false`).
+       * plugin that resolved `partially-available` at install time (the
+       * partially-installed signal the deriver reads, with `installable: false`).
        */
       unsupported?: readonly string[];
       /**
@@ -1175,18 +1175,20 @@ test("T-80-08 / D-78-04: an INSTALLED git plugin with a missing clone stays `(in
 
 // ──────────────────────────────────────────────────────────────────────────
 // LIST-01 / D-67-01: the four list filters partition cleanly.
-//   --unsupported  -> NOT-installed plugins that resolve `unsupported`
-//                     (the force-installable candidates); keyed on the internal
-//                     resolver bucket, which is independent of the render token.
-//   --installed    -> installed + force-installed + force-upgradable (all
-//                     installed-inventory render statuses) (A1).
+//   --partial      -> NOT-installed plugins that resolve `partially-available`
+//                     (the partially-installable candidates); keyed on the
+//                     internal resolver bucket, which is independent of the
+//                     render token.
+//   --installed    -> installed + partially-installed + partially-upgradable
+//                     (all installed-inventory render statuses) (A1).
 //   --unavailable  -> structural-unavailable ONLY; excludes the not-installed
-//                     `unsupported` rows (A2 partition).
-// USTAT-01 / D-64-01: a not-installed `unsupported` plugin renders the
-// de-collapsed `(unsupported)` / `⊖` token; the filter buckets are unchanged.
+//                     `partially-available` rows (A2 partition).
+// USTAT-01 / D-64-01: a not-installed partially-available plugin renders the
+// de-collapsed `(partially-available)` / `⊖` token; the filter buckets are
+// unchanged.
 // ──────────────────────────────────────────────────────────────────────────
 
-test("LIST-01 / D-67-01: a not-installed plugin resolving `unsupported` shows under --unsupported (the `(unsupported)` row token) and is ABSENT under --unavailable and --available", async () => {
+test("LIST-01 / D-67-01: a not-installed plugin resolving `partially-available` shows under --partial (the `(partially-available)` row token) and is ABSENT under --unavailable and --available", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange
     const userRoot = path.join(home, ".pi", "agent");
@@ -1199,7 +1201,8 @@ test("LIST-01 / D-67-01: a not-installed plugin resolving `unsupported` shows un
         name: "mp1",
         plugins: [
           // unsup: declares lspServers with an on-disk dir -> resolveStrict
-          // yields `unsupported` (force-installable candidate, not installed).
+          // yields `partially-available` (a partially-installable candidate,
+          // not installed).
           { name: "unsup", source: "./unsup", version: "1.0.0", lspServers: { ls: {} } },
           // clean: on-disk dir, no unsupported kinds -> `available`. (Named to
           // avoid colliding with the `unavailable` substring in assertions.)
@@ -1211,8 +1214,9 @@ test("LIST-01 / D-67-01: a not-installed plugin resolving `unsupported` shows un
       installablePluginDirs: ["unsup", "clean"],
     });
 
-    // --unsupported: the unsupported row appears, rendered with the de-collapsed
-    // `(unsupported)` / `⊖` token (USTAT-01). clean/gone are excluded.
+    // --partial: the partially-available row appears, rendered with the
+    // de-collapsed `(partially-available)` / `⊖` token (USTAT-01). clean/gone
+    // are excluded.
     {
       const { ctx, pi, notifications, ui } = makeCtx();
       // act
@@ -1260,7 +1264,7 @@ test("LIST-01 / D-67-01: a not-installed plugin resolving `unsupported` shows un
   });
 });
 
-test("LIST-01 / D-67-01: a structurally-unavailable plugin shows under --unavailable and is ABSENT under --unsupported", async () => {
+test("LIST-01 / D-67-01: a structurally-unavailable plugin shows under --unavailable and is ABSENT under --partial", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange
     const userRoot = path.join(home, ".pi", "agent");
@@ -1302,7 +1306,7 @@ test("LIST-01 / D-67-01: a structurally-unavailable plugin shows under --unavail
   });
 });
 
-test("LIST-01 / D-67-01: a force-installed plugin shows under --installed (A1) and is ABSENT under --unsupported", async () => {
+test("LIST-01 / D-67-01: a partially-installed plugin shows under --installed (A1) and is ABSENT under --partial", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange
     const userRoot = path.join(home, ".pi", "agent");
@@ -1315,7 +1319,8 @@ test("LIST-01 / D-67-01: a force-installed plugin shows under --installed (A1) a
         name: "mp1",
         plugins: [{ name: "forced", source: "./forced", version: "1.0.0" }],
       },
-      // Recorded-installed with persisted unsupported -> derives force-installed.
+      // Recorded-installed with persisted unsupported kinds -> derives
+      // partially-installed.
       installed: { forced: { version: "1.0.0", unsupported: ["lspServers"] } },
       installablePluginDirs: ["forced"],
     });
@@ -1346,7 +1351,7 @@ test("LIST-01 / D-67-01: a force-installed plugin shows under --installed (A1) a
   });
 });
 
-test("PHOOK-05 / D-71-04: a force-installed partial-hook plugin renders the single aggregate {unsupported hooks} marker on the list row", async () => {
+test("PHOOK-05 / D-71-04: a partially-installed partial-hook plugin renders the single aggregate {unsupported hooks} marker on the list row", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange
     const userRoot = path.join(home, ".pi", "agent");
@@ -1361,7 +1366,7 @@ test("PHOOK-05 / D-71-04: a force-installed partial-hook plugin renders the sing
       },
       // Recorded-installed with persisted `unsupported: ["hooks"]` (one or more
       // hook events / matcher groups dropped at install) derives
-      // `force-installed`. The `hooks` kind maps to the SINGLE aggregate
+      // `partially-installed`. The `hooks` kind maps to the SINGLE aggregate
       // `{unsupported hooks}` marker via the shared `narrowUnsupportedKinds`
       // helper -- byte-identical to the install / info surfaces (D-71-04).
       installed: { hookplug: { version: "1.0.0", unsupported: ["hooks"] } },
@@ -1381,7 +1386,7 @@ test("PHOOK-05 / D-71-04: a force-installed partial-hook plugin renders the sing
   });
 });
 
-test("LIST-01 / D-67-01 (A1): a force-upgradable plugin shows under --installed", async () => {
+test("LIST-01 / D-67-01 (A1): a partially-upgradable plugin shows under --installed", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange
     const userRoot = path.join(home, ".pi", "agent");
@@ -1391,8 +1396,8 @@ test("LIST-01 / D-67-01 (A1): a force-upgradable plugin shows under --installed"
       cwd,
       mpName: "mp1",
       manifest: {
-        // Newer candidate that resolves `unsupported` -> clean record derives
-        // force-upgradable (an installed-inventory render status).
+        // Newer candidate that resolves `partially-available` -> clean record
+        // derives partially-upgradable (an installed-inventory render status).
         name: "mp1",
         plugins: [{ name: "fup", source: "./fup", version: "1.0.1", lspServers: { ls: {} } }],
       },
@@ -1417,16 +1422,16 @@ test("LIST-01 / D-67-01 (A1): a force-upgradable plugin shows under --installed"
 // only runs when two rows share a name (byName === 0). The orphan fold is the
 // producer: a plugin installed in BOTH scopes under a CLONED marketplace
 // (same marketplaceRoot) yields the user-side row PLUS the folded project-side
-// row, both same-named, in one block. Seeding the derived force statuses into
-// that pair drives the `force-installed` / `force-upgradable` sort arms.
-test("FSTAT-02 / FSTAT-04: same-name force-installed + force-upgradable rows across scopes exercise the force scope-sort arms", async () => {
+// row, both same-named, in one block. Seeding the derived partial statuses into
+// that pair drives the `partially-installed` / `partially-upgradable` sort arms.
+test("FSTAT-02 / FSTAT-04: same-name partially-installed + partially-upgradable rows across scopes exercise the partial scope-sort arms", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange
     const userRoot = path.join(home, ".pi", "agent");
 
-    // User scope: `fi` force-installed (persisted unsupported) + `fu` clean
-    // installed whose newer manifest candidate resolves `unsupported`
-    // (partially-upgradable). The seed writes the shared manifest + plugin dirs.
+    // User scope: `fi` partially-installed (persisted unsupported kinds) + `fu`
+    // clean installed whose newer manifest candidate resolves
+    // `partially-available`. The seed writes the shared manifest + plugin dirs.
     await seedMarketplace({
       scope: "user",
       scopeRoot: userRoot,
@@ -1437,7 +1442,7 @@ test("FSTAT-02 / FSTAT-04: same-name force-installed + force-upgradable rows acr
         plugins: [
           { name: "fi", source: "./fi", version: "1.0.0" },
           // Newer candidate declaring an unsupported kind -> a CLEAN installed
-          // record derives force-upgradable.
+          // record derives partially-upgradable.
           { name: "fu", source: "./fu", version: "1.0.1", lspServers: { ls: {} } },
         ],
       },
@@ -1469,7 +1474,8 @@ test("FSTAT-02 / FSTAT-04: same-name force-installed + force-upgradable rows acr
             fi: {
               version: "1.0.0",
               resolvedSource: "./placeholder",
-              // Persisted unsupported -> force-installed (installable: false).
+              // Persisted unsupported kinds -> partially-installed
+              // (installable: false).
               compatibility: {
                 installable: false,
                 notes: [],
@@ -1491,7 +1497,7 @@ test("FSTAT-02 / FSTAT-04: same-name force-installed + force-upgradable rows acr
               version: "1.0.0",
               resolvedSource: "./placeholder",
               // Clean record; the newer manifest candidate resolves
-              // `unsupported` -> force-upgradable.
+              // `partially-available` -> partially-upgradable.
               compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
               resources: {
                 skills: ["fu-skill"],
@@ -1531,10 +1537,10 @@ test("FSTAT-02 / FSTAT-04: same-name force-installed + force-upgradable rows acr
 
 // USTAT-01 / SNM-11 / D-64-01: two NOT-installed manifest entries that share a
 // name (the manifest schema carries no name-uniqueness constraint) both
-// resolve `unsupported`, so two `(unsupported)` rows land in one block. The
-// in-block sort compares them (byName === 0), invoking `scopeOf` on the
-// `unsupported` status -- the only list-surface producer of that sort arm.
-test("USTAT-01 / SNM-11: two same-name not-installed unsupported rows exercise the unsupported scope-sort arm", async () => {
+// resolve `partially-available`, so two `(partially-available)` rows land in one
+// block. The in-block sort compares them (byName === 0), invoking `scopeOf` on
+// the `partially-available` status -- the only list-surface producer of that arm.
+test("USTAT-01 / SNM-11: two same-name not-installed partially-available rows exercise the partially-available scope-sort arm", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange
     const userRoot = path.join(home, ".pi", "agent");
@@ -1568,7 +1574,7 @@ test("USTAT-01 / SNM-11: two same-name not-installed unsupported rows exercise t
   });
 });
 
-test("LIST-01 / D-67-01: passive (no filter flag) shows every bucket and the not-installed unsupported row renders the `(unsupported)` byte form", async () => {
+test("LIST-01 / D-67-01: passive (no filter flag) shows every bucket and the not-installed partial row renders the `(partially-available)` byte form", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange
     const userRoot = path.join(home, ".pi", "agent");
@@ -1598,8 +1604,8 @@ test("LIST-01 / D-67-01: passive (no filter flag) shows every bucket and the not
     assert.match(out, /● inst v1\.0\.0 \(installed\)/, out);
     assert.match(out, /○ avail v2\.0\.0 \(available\)/, out);
     assert.match(out, /⊘ gone v3\.0\.0 \(unavailable\)/, out);
-    // USTAT-01 / D-64-01: the not-installed `unsupported` row renders the
-    // de-collapsed `(unsupported)` / `⊖` token, distinct from structural `⊘`.
+    // USTAT-01 / D-64-01: the not-installed `partially-available` row renders
+    // the de-collapsed `(partially-available)` / `⊖` token, distinct from `⊘`.
     assert.match(out, /⊖ unsup v4\.0\.0 \(partially-available\) \{lsp\}/, out);
 
     verify(ctx);
@@ -2292,9 +2298,9 @@ test("PL-5: hash-* versions string-compare (any difference -> upgradable; NOT se
 });
 
 // ──────────────────────────────────────────────────────────────────────────
-// FSTAT-01 / FSTAT-03 / FSTAT-04 / FSTAT-05 / D-66-01 / D-66-02 force-state
-// deriver matrix: purity (no state write), A4 ordering (force-installed wins),
-// no-network candidate split, and auto-return-to-installed.
+// FSTAT-01 / FSTAT-03 / FSTAT-04 / FSTAT-05 / D-66-01 / D-66-02 partial-state
+// deriver matrix: purity (no state write), A4 ordering (partially-installed
+// wins), no-network candidate split, and auto-return-to-installed.
 // ──────────────────────────────────────────────────────────────────────────
 
 test("FSTAT-01 / D-66-01: recorded-installed with compatibility.unsupported derives `(partially-installed)` without mutating the workspace", async () => {
@@ -2310,7 +2316,8 @@ test("FSTAT-01 / D-66-01: recorded-installed with compatibility.unsupported deri
         name: "mp1",
         plugins: [{ name: "plug", source: "./plug", version: "1.0.0" }],
       },
-      // Degraded record: persisted `unsupported` non-empty -> force-installed.
+      // Degraded record: a non-empty persisted `unsupported` array ->
+      // partially-installed.
       installed: { plug: { version: "1.0.0", unsupported: ["lspServers"] } },
       installablePluginDirs: ["plug"],
     });
@@ -2352,7 +2359,7 @@ test("WR-02 / D-66-01: non-path (npm) recorded-installed plugin with persisted u
         plugins: [
           {
             name: "remote",
-            // Non-path source -- list derives force state purely from the
+            // Non-path source -- list derives the partial state purely from the
             // persisted record, identically to the non-path `info` surface.
             source: { source: "npm", package: "@scope/remote-plugin", version: "1.0.0" },
             version: "1.0.0",
@@ -2390,7 +2397,7 @@ test("FSTAT-04 / D-66-02 (A4): a degraded record with a newer candidate derives 
       mpName: "mp1",
       manifest: {
         // Newer candidate that ALSO resolves unsupported (declares lspServers).
-        // A4 ordering: force-installed is checked first, so the candidate
+        // A4 ordering: partially-installed is checked first, so the candidate
         // resolve never runs / never wins.
         name: "mp1",
         plugins: [{ name: "plug", source: "./plug", version: "2.0.0", lspServers: { ls: {} } }],
@@ -2413,7 +2420,7 @@ test("FSTAT-04 / D-66-02 (A4): a degraded record with a newer candidate derives 
   });
 });
 
-test("FSTAT-04 / D-66-02: clean record + candidate resolving `unsupported` derives `(partially-upgradable)`", async () => {
+test("FSTAT-04 / D-66-02: clean record + candidate resolving `partially-available` derives `(partially-upgradable)`", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange
     const userRoot = path.join(home, ".pi", "agent");
@@ -2424,7 +2431,7 @@ test("FSTAT-04 / D-66-02: clean record + candidate resolving `unsupported` deriv
       mpName: "mp1",
       manifest: {
         // Newer candidate version AND declares lspServers -> resolveStrict
-        // yields `unsupported`, newly degrading a currently-clean plugin.
+        // yields `partially-available`, newly degrading a currently-clean plugin.
         name: "mp1",
         plugins: [{ name: "plug", source: "./plug", version: "1.0.1", lspServers: { ls: {} } }],
       },
@@ -2449,7 +2456,7 @@ test("FSTAT-04 / D-66-02: clean record + candidate resolving `unsupported` deriv
   });
 });
 
-test("FSTAT-03 / FSTAT-04: clean record + candidate resolving `installable` derives `(upgradable)` (no force state)", async () => {
+test("FSTAT-03 / FSTAT-04: clean record + candidate resolving `installable` derives `(upgradable)` (no partial state)", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange
     const userRoot = path.join(home, ".pi", "agent");
@@ -2482,7 +2489,7 @@ test("FSTAT-03 / FSTAT-04: clean record + candidate resolving `installable` deri
 });
 
 test("CR-01 / FSTAT-04 / NFR-5: a candidate resolveStrict throw degrades to `(upgradable)`, never blanks the whole list", async () => {
-  // Regression guard for the force-upgradable candidate resolve. A plugin name
+  // Regression guard for the partially-upgradable candidate resolve. A plugin name
   // with a path separator passes the manifest's `Type.String()` name field but
   // makes `resolveStrict` throw via `assertSafeName`. Before the guard, that
   // throw escaped the row builder and the top-level `listPlugins` catch
@@ -2533,7 +2540,7 @@ test("CR-01 / FSTAT-04 / NFR-5: a candidate resolveStrict throw degrades to `(up
   });
 });
 
-test("FSTAT-03: clean record + no newer candidate derives `(installed)` (auto-return, no lingering force state)", async () => {
+test("FSTAT-03: clean record + no newer candidate derives `(installed)` (auto-return, no lingering partial state)", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange
     const userRoot = path.join(home, ".pi", "agent");
@@ -2564,7 +2571,7 @@ test("FSTAT-03: clean record + no newer candidate derives `(installed)` (auto-re
   });
 });
 
-test("FSTAT-01 / D-64-02: the force-installed row's reasons are the narrowUnsupportedKinds dropped-component markers", async () => {
+test("FSTAT-01 / D-64-02: the partially-installed row's reasons are the narrowUnsupportedKinds dropped-component markers", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange
     const userRoot = path.join(home, ".pi", "agent");
