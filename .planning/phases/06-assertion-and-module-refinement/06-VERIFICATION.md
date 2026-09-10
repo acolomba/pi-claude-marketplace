@@ -137,8 +137,41 @@ none is a relayed claim. Severity is the reviewing agent's, retained.
 | G11 | important | `tests/shared/notification-dispatch.test.ts:5833` | `emitContextCascade`: the renderRow callback contract is unasserted. `renderOwnedRow` became a plain two-parameter function, so the `(row, probe, mpScope)` forwarding order, the truthful probe derivation, and the marketplace-level scope are no longer pinned — though all four production call sites pass three arguments. |
 | G12 | important | `tests/shared/notification-dispatch.test.ts:5877,5899` | "Empty cascade must not invoke the row renderer" dropped from all three emitters. Because `renderOwnedRow` is no longer a `t.mock.fn`, a call-count assertion is not even expressible in the new file — the mechanism by which G11 and G12 both leaked. |
 
+| G13 | important | `.planning/codebase/{ARCHITECTURE,CONVENTIONS,STACK}.md` | TREF-09 requires "documentation ... repointing" as part of the split; it was not done. ~18 references to the seven retired hubs remain, with stale line numbers beside them, and `ARCHITECTURE.md:78,151` claim a "5-phase ledger (skills, commands, agents, hooks, mcp)" where `install-outcome.ts:963-968` holds six — `statePhase` follows `mcpPhase`. These documents are `@`-imported into the project CLAUDE.md, so the stale text is served to every session as ground truth. |
+
 Minor, recorded but not counted: the reinstall happy path dropped its `PRL-08`/`PRL-11` title anchors,
 which now have zero occurrences under `tests/` — CONVENTIONS.md requires durable spec IDs in titles.
+
+### G1 disposition — partially closed, remainder blocked
+
+G1 cannot be closed as written, and the reason is a requirement conflict rather than an oversight.
+The deleted fault injection patched `node:fs/promises` through `createRequire` +
+`syncBuiltinESMExports`. **TREF-08 — a requirement this same phase closes — forbids exactly that**:
+"Global prototype and builtin-module patching ... are removed through real case-owned state or
+narrow production-owned ports without ignore pragmas." So the deletion was correct in mechanism and
+wrong only in leaving the coverage unreplaced. The closure gate's residual patch census (2 files/2
+`createRequire`, 2 files/18 `syncBuiltinESMExports`) independently pins that removal.
+
+Closed: the skills -> commands -> agents ordering proof, reshaped as a per-phase staging census taken
+through the existing `transactionControl.runPhases` seam. It proves what the leak order was a proxy
+for — each bridge creates AND reclaims its staging root inside its own phase, in that order. Verified
+to fire by two production mutations: swapping the skills/commands phases, and making
+`commitPreparedSkills` skip its cleanup.
+
+The test's `retry proof:` prefix was also dropped. With no injected fault it was a false claim; the
+other twelve `retry proof:` titles in that file each name a real fault.
+
+Still open, blocked: the interleaved leak-message array and the leaked-residue count. Both require
+observing a `cleanupStaging` FAILURE, and `shared/fs-utils.ts:40` calls `fs.rm` directly with no
+injectable port. A real-permission route (`chmod 0o500`) cannot reach it either — the staging root's
+parent must be writable when the bridge creates the per-call directory and read-only when it removes
+it, and both happen inside one phase closure with no seam between them. Adding the port means
+threading it through ~40 call sites across three bridges and two orchestrators, which is a production
+refactor, not a narrow port.
+
+**Routing:** the port belongs to `RCOV` in the Direct Coverage phase, whose remit is resolving
+coverage shortfalls. Recorded there rather than forced here — the alternative was reintroducing the
+exact builtin patching TREF-08 exists to remove.
 
 ### What the audit confirmed CLEAN (auditable negatives)
 

@@ -31,11 +31,31 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: 06 (Assertion and Module Refinement) — EXECUTED, awaiting verification
-Next: Verify Phase 6, then discuss Phase 7 (Gate Integrity)
+Phase: 06 (Assertion and Module Refinement) — EXECUTED, verification `gaps_found` (4/5)
+Next: close the 12 contract-weakening gaps in `06-VERIFICATION.md`, re-verify, then discuss Phase 7
 Plan: 52 of 52 complete
-Status: Full gate green — 5881 unit plus 32 integration tests, `npm run check` exit 0
-Last activity: 2026-09-09 — Phase 06 closure sealed on a green gate
+Status: Gate was green (5881 unit + 32 integration, exit 0) but an independent contract-weakening
+audit found 12 real gaps the suite cannot see. Gap closure in progress.
+Last activity: 2026-09-09 — Phase 06 verification downgraded to gaps_found
+
+### Gap closure in flight
+
+The audit found that **sequence and invocation-count assertions did not survive the seven-family
+split; end-state assertions did.** End-state assertions are order-insensitive, so a rollback that
+unwinds forward leaves every byte identical and the suite green. Full table: `06-VERIFICATION.md`
+Gaps Summary, G1..G12.
+
+| Gap | Owner file | State |
+|---|---|---|
+| G4, G5 (NFR-5 gate covered 2 of 11 split owners) | `tests/architecture/no-orchestrator-network.test.ts` | DONE — 9 targets added, both directions proven to fire on planted `gitOps` |
+| G10, G11, G12 (notify emitter guarantees vacuous) | `tests/shared/notification-dispatch.test.ts` | DONE — `t.mock.fn` restored, 198/198, reload-suppression proven to fire |
+| G1 (critical: install cleanup fault injection deleted) | `tests/orchestrators/plugin/install-flow.test.ts` | in flight |
+| G2, G3 (reinstall LIFO schedule + `remove:hooks` pin) | `tests/orchestrators/plugin/reinstall-flow.test.ts` | in flight |
+| G8, G9 (catalog seam binding + XSURF-03 brace parity) | `catalog-uat/fixtures/`, `cross-surface-reason-parity.test.ts` | in flight |
+| G6, G7 (update laundering cast + `fromVersion` guard) | `orchestrators/plugin/update-{flow,preflight}.ts` | in flight |
+
+TREF-07..TREF-09 are `Pending` in both `REQUIREMENTS.md` and `scripts/revalidation.mjs` until gap
+closure re-verifies. Flipping either file alone re-reddens `RVAL-04`.
 
 ## Performance Metrics
 

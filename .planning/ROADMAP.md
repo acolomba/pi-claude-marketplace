@@ -735,6 +735,19 @@ It can return only after current revalidation; it is not marked implemented.
 3. The same strict changed-pair gate runs in scoped local pre-commit and a
    dedicated authoritative CI job with fail-closed base and pair selection;
    coverage remains reachability evidence only.
+4. `cleanupStaging` gains a narrow production-owned removal port, and the staging
+   leak-message and leaked-residue cases it currently blocks are covered through
+   that port. `shared/fs-utils.ts` calls `fs.rm` directly, so a cleanup FAILURE
+   is unobservable without builtin-module patching -- which `TREF-08` removed and
+   the residual patch census pins at two files. A real-permission route cannot
+   substitute: the staging root's parent must be writable when the bridge creates
+   the per-call directory and read-only when it removes it, and both happen inside
+   one phase closure. The port must reach the ~40 `cleanupStaging` call sites
+   across `bridges/{skills,commands,agents}/stage.ts`,
+   `orchestrators/marketplace/add.ts`, and `orchestrators/plugin/clone-cache.ts`,
+   which is why this is a phase of its own and not a gap fix. Closing it restores
+   the interleaved-warning ordering and residue-count proofs recorded as the open
+   remainder of `06-VERIFICATION.md` G1.
 
 **Evidence/history:** `RCOV-04`/`COV-01` retains its stable identity and former
 Phase 8 trace. Its standalone remeasurement is superseded by `RCOV-01`'s full
