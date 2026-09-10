@@ -2,10 +2,11 @@
 phase: "112"
 slug: "install-and-removal-lifecycle"
 # status lifecycle: draft (seeded by plan-phase) → validated (set by validate-phase §6)
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: validated
+nyquist_compliant: true
+wave_0_complete: true
 created: "2026-09-05"
+validated: "2026-09-10"
 ---
 
 # Phase 112 — Validation Strategy
@@ -46,20 +47,20 @@ for accepting a shortfall.
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| TBD | TBD | TBD | prerequisite | V5 | `state.json` records carry a `resources.workflows` array, validated by `PLUGIN_INSTALL_RECORD_SCHEMA` on every read | unit | `node --test tests/persistence/state-io.test.ts` | ✏️ extend | ⬜ pending |
-| TBD | TBD | TBD | WLIF-01 | — | install writes envelopes as the sixth ledger phase | unit | `node --test tests/orchestrators/plugin/install.test.ts` | ✏️ extend | ⬜ pending |
-| TBD | TBD | TBD | WLIF-01 | V12 | **a later (state) phase failure removes every placed envelope from disk** — assert on disk state, not on the rejection | unit | `node --test tests/orchestrators/plugin/install.test.ts` | ✏️ extend | ⬜ pending |
-| TBD | TBD | TBD | WLIF-01 | — | an undo that cannot remove a name raises `[workflows] (rollback failed)` | unit | `node --test tests/orchestrators/plugin/install.test.ts` | ✏️ extend | ⬜ pending |
-| TBD | TBD | TBD | WLIF-01 | V12 | a containment refusal from the undo propagates **verbatim**, with no rollback-partial marker | unit | `node --test tests/orchestrators/plugin/install.test.ts` | ✏️ extend | ⬜ pending |
-| TBD | TBD | TBD | criterion 2 | — | all three closed sets carry `workflows` and the exhaustiveness pin holds | unit + type | `npm run typecheck && node --test tests/orchestrators/types.test.ts` | ✏️ extend | ⬜ pending |
-| TBD | TBD | TBD | WLIF-03 | V12 | `uninstall` leaves no envelope in `workflowsSavedDir` | unit | `node --test tests/orchestrators/plugin/uninstall.test.ts` | ✏️ extend | ⬜ pending |
-| TBD | TBD | TBD | WLIF-03 | — | `disable` removes envelopes and **retains** `resources.workflows` | unit | `node --test tests/orchestrators/plugin/enable-disable.test.ts` | ✏️ extend | ⬜ pending |
-| TBD | TBD | TBD | WLIF-03 | V12 | `marketplace remove --cascade` removes envelopes for every plugin | unit | `node --test tests/orchestrators/marketplace/remove.test.ts` | ✏️ extend | ⬜ pending |
-| TBD | TBD | TBD | WLIF-03 | — | a partial removal reports per-name reasons through a typed error **and folds the record** | unit | `node --test tests/orchestrators/marketplace/shared.test.ts` | ✏️ extend | ⬜ pending |
-| TBD | TBD | TBD | criterion 4 | — | `reinstall` replaces envelopes and records the names it actually wrote | unit | `node --test tests/orchestrators/plugin/reinstall.test.ts` | ✏️ extend | ⬜ pending |
-| TBD | TBD | TBD | criterion 6 | V12 | an **aged** orphan staging tree is removed; a **fresh** one is not | unit | `node --test tests/orchestrators/plugin/workflows-staging-gc.test.ts` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | fallow edge | — | the `orchestrators` zone allows `bridges-workflows`; omitting it exits 1 naming the edge | gate | `npm run fallow` | ✅ | ⬜ pending |
-| TBD | TBD | TBD | criterion 7 | — | whole chain green | gate | `npm run check` | ✅ | ⬜ pending |
+| — | — | — | prerequisite | V5 | `state.json` records carry a `resources.workflows` array, validated by `PLUGIN_INSTALL_RECORD_SCHEMA` on every read | unit | `node --test tests/persistence/state-io.test.ts` | ✅ extended | ✅ green |
+| — | — | — | WLIF-01 | — | install writes envelopes as the sixth ledger phase | unit | `node --test tests/orchestrators/plugin/install.test.ts` | ✅ extended | ✅ green |
+| — | — | — | WLIF-01 | V12 | **a later (state) phase failure removes every placed envelope from disk** — assert on disk state, not on the rejection | unit | `node --test tests/orchestrators/plugin/install.test.ts` | ✅ extended | ✅ green |
+| — | — | — | WLIF-01 | — | an undo that cannot remove a name raises `[workflows] (rollback failed)` | unit | `node --test tests/orchestrators/plugin/install.test.ts` | ✅ extended | ✅ green |
+| — | — | — | WLIF-01 | V12 | a containment refusal from the undo propagates **verbatim**, with no rollback-partial marker | unit | `node --test tests/orchestrators/plugin/install.test.ts` | ✅ extended | ✅ green |
+| — | — | — | criterion 2 | — | all three closed sets carry `workflows` and the exhaustiveness pin holds | unit + type | `npm run typecheck && node --test tests/orchestrators/types.test.ts` | ✅ extended | ✅ green |
+| — | — | — | WLIF-03 | V12 | `uninstall` leaves no envelope in `workflowsSavedDir` | unit | `node --test tests/orchestrators/plugin/uninstall.test.ts` | ✅ extended | ✅ green |
+| — | — | — | WLIF-03 | — | `disable` removes envelopes and **retains** `resources.workflows` | unit | `node --test tests/orchestrators/plugin/enable-disable.test.ts` | ✅ extended | ✅ green |
+| — | — | — | WLIF-03 | V12 | `marketplace remove --cascade` removes envelopes for every plugin | unit | `node --test tests/orchestrators/marketplace/remove.test.ts` | ✅ extended | ✅ green |
+| — | — | — | WLIF-03 | — | a partial removal reports per-name reasons through a typed error **and folds the record** | unit | `node --test tests/orchestrators/marketplace/shared.test.ts` | ✅ extended | ✅ green |
+| — | — | — | criterion 4 | — | `reinstall` replaces envelopes and records the names it actually wrote | unit | `node --test tests/orchestrators/plugin/reinstall.test.ts` | ✅ extended | ✅ green |
+| — | — | — | criterion 6 | V12 | an **aged** orphan staging tree is removed; a **fresh** one is not | unit | `node --test tests/orchestrators/plugin/workflows-staging-gc.test.ts` | ✅ landed | ✅ green |
+| — | — | — | fallow edge | — | the `orchestrators` zone allows `bridges-workflows`; omitting it exits 1 naming the edge | gate | `npm run fallow` | ✅ | ✅ green |
+| — | — | — | criterion 7 | — | whole chain green | gate | `npm run check` | ✅ | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -67,9 +68,9 @@ for accepting a shortfall.
 
 ## Wave 0 Requirements
 
-- [ ] `tests/orchestrators/plugin/workflows-staging-gc.test.ts` — new; covers criterion 6. Must land in the **same commit** as its module (`test:corresponding` runs before `npm test`).
-- [ ] A `workflows?: { sourceName: string; body?: string }[]` arm on each of the **six** per-file seeding helpers. No shared `tests/helpers/` exists (deleted by PR #167), so this is six independent edits, not one.
-- [ ] Framework install: none.
+- [x] `tests/orchestrators/plugin/workflows-staging-gc.test.ts` — new; covers criterion 6. Must land in the **same commit** as its module (`test:corresponding` runs before `npm test`).
+- [x] A `workflows?: { sourceName: string; body?: string }[]` arm on each of the **six** per-file seeding helpers. No shared `tests/helpers/` exists (deleted by PR #167), so this is six independent edits, not one.
+- [x] Framework install: none.
 
 ---
 
@@ -84,13 +85,87 @@ Everything else has automated verification.
 
 ---
 
+## Validation Audit 2026-09-10
+
+| Metric | Count |
+|--------|-------|
+| Map rows audited | 14 |
+| Covered | 14 |
+| Partial | 0 |
+| Missing | 0 |
+| Manual-only rows audited | 2 |
+| Gaps found | 0 |
+| Tests generated | 0 |
+
+Run retroactively; this file was seeded by plan-phase and never reconciled. The
+audit ran fourteen owner test files live rather than trusting the map — several
+hundred cases, all green, including `state-io` (42/42), `install` (157/157),
+`uninstall` (65/65), `enable-disable` (77/77), `reinstall` (127/127),
+`marketplace/shared` (61/61), `marketplace/remove` (23/23), `plugin/shared`
+(81/81) and `workflows-staging-gc` (23/23).
+
+**Task ID and Plan columns read `—` rather than retrofitted values** — the
+planner never filled them and inventing a mapping now would fabricate one.
+
+### The red-then-green fold claim: real, with an honest limit on the proof
+
+The mechanism is real and was verified by reading the type declarations rather
+than accepting the narration. `applyPartialCascadeFold`'s `dropped` parameter and
+`remove.ts`'s hand-rolled equivalent are both structural TypeScript parameters, so
+deleting a filter line produces NO compile error — a six-axis object still
+satisfies a five-axis shape structurally. That is precisely why a hand-written
+case is needed, and the case at `plugin/shared.test.ts:1697` documents in its own
+comment why it exists and asserts the post-fold value rather than the pre-fold
+one. It would go red if the filter line were removed.
+
+The limit, stated rather than glossed: the audit did **not** re-enact the
+delete-and-observe cycle, because doing so requires editing a production file and
+that run was read-only. The historical observation is accepted on the summary's
+narration; what was independently established is that the test is non-vacuous
+today and capable of catching the regression.
+
+### The partial-cascade ordering is load-bearing and pinned
+
+`marketplace/shared.ts:407` assigns `dropped.workflows` before the throw at
+`:415`. The case at `marketplace/shared.test.ts:794` asserts
+`outcome.dropped.workflows` on the THROWN-and-caught outcome, so reversing the two
+statements would leave that array empty and turn the assertion red. Ordering
+dependence confirmed rather than assumed.
+
+### One documentation-precision note, and why it is not a gap here
+
+`workflows-staging-gc.ts:148-154` calls a containment refusal "still loud", while
+both call sites discard the returned leak array in a bare `catch {}`. That is
+accurate as a comment-precision complaint, and it is filed separately. It is NOT
+a validation gap: the silence is deliberate under the decision that hygienic
+cleanup never becomes the primary user-facing path, and **no row in this file
+claims user-visible loudness**. The tests correctly exercise the function's own
+return value in isolation, which is the contract that actually exists.
+
+---
+
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 15s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags
+- [x] Feedback latency < 15s
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+`nyquist_compliant: true` is set with both Manual-Only rows adjudicated as
+genuinely un-automatable rather than declined:
+
+1. **A crash-orphaned staging tree older than the age bound is swept on a real
+   machine.** Un-automatable as literally stated — it wants a real crash and a
+   real 24-hour wait. The equivalent behavior IS automated today through
+   controlled mtime manipulation, with both the aged-sweep and the
+   fresh-is-spared directions passing. The manual row is honestly scoped to the
+   real-machine residue alone.
+2. **The version bump repairs a stale `--partial` record end to end.** Needs a
+   record persisted by a previously released version plus a reload, which a
+   hermetic test cannot construct without faking prior-version behavior.
+   Legitimately deferred to live UAT. It is arguably mis-filed here rather than
+   in the phase that owns the bump — a filing quibble, not a coverage gap.
+
+**Approval:** validated 2026-09-10
