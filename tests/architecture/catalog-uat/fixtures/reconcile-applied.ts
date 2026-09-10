@@ -1,3 +1,4 @@
+import { narrowUnsupportedKinds } from "../../../../extensions/pi-claude-marketplace/shared/probe-classifiers.ts";
 import { piWithBothLoaded, piWithNothingLoaded } from "../mock-pi.ts";
 
 import type { FixtureMap } from "../fixture-types.ts";
@@ -196,7 +197,7 @@ export const RECONCILE_APPLIED_FIXTURES: FixtureMap = {
                 name: "hello",
                 version: "1.0.0",
                 dependencies: [],
-                reasons: ["lsp"],
+                reasons: narrowUnsupportedKinds(["lspServers"]),
                 severity: "info",
                 needsReload: true,
               },

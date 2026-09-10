@@ -1,3 +1,4 @@
+import { narrowUnsupportedKinds } from "../../../../extensions/pi-claude-marketplace/shared/probe-classifiers.ts";
 import { piWithBothLoaded, piWithNothingLoaded } from "../mock-pi.ts";
 
 import type { FixtureMap } from "../fixture-types.ts";
@@ -52,7 +53,7 @@ export const PLUGIN_ENABLE_FIXTURES: FixtureMap = {
                 name: "foo-plugin",
                 version: "1.2.3",
                 dependencies: [],
-                reasons: ["lsp"],
+                reasons: narrowUnsupportedKinds(["lspServers"]),
               },
             ],
           },
@@ -260,7 +261,7 @@ export const PLUGIN_ENABLE_FIXTURES: FixtureMap = {
                 needsReload: false,
                 name: "foo-plugin",
                 version: "1.2.3",
-                reasons: ["lsp"],
+                reasons: narrowUnsupportedKinds(["lspServers"]),
                 partialHint: true,
                 cause: new Error('Plugin "foo-plugin" is not installable: contains lspServers'),
               },

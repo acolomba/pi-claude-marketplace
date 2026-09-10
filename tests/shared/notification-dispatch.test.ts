@@ -5841,6 +5841,7 @@ test("context dispatch preserves ordered rows and stamped reload hint", (t) => {
   // arrange
   const ctx = createContext(t);
   const pi = piWithBothLoaded();
+  const renderRow = t.mock.fn<Parameters<typeof emitContextCascade>[3]>(renderOwnedRow);
   const message = {
     marketplaces: [
       {
@@ -5866,11 +5867,61 @@ test("context dispatch preserves ordered rows and stamped reload hint", (t) => {
   } satisfies CascadeNotificationMessage;
 
   // act
-  emitContextCascade(ctx as never, pi, message, renderOwnedRow);
+  emitContextCascade(ctx as never, pi, message, renderRow);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
     "● official [user]\n  first (installed)\n  second (available)\n\n/reload to pick up changes",
+  ]);
+  assert.equal(renderRow.mock.callCount(), 2);
+});
+
+test("context dispatch forwards the row, the probe, and the enclosing marketplace scope", (t) => {
+  // arrange
+  // The renderer is an argument, so `(row, probe, mpScope)` is a contract of the
+  // emitter: the probe must be the one derived from the `pi` handle and the
+  // scope must be the ENCLOSING marketplace's, not the row's.
+  const ctx = createContext(t);
+  const pi = piWithBothLoaded();
+  const renderCalls: Array<{ name: string; scope: string; probe: SoftDepStatus }> = [];
+  const renderRow = t.mock.fn<Parameters<typeof emitContextCascade>[3]>((row, probe, scope) => {
+    renderCalls.push({ name: row.name, scope, probe: { ...probe } });
+    return `controlled ${row.status} ${row.name}`;
+  });
+  const message = {
+    kind: "cascade",
+    cardinality: "plural",
+    label: "Plugin install",
+    marketplaces: [
+      {
+        name: "official",
+        scope: "user",
+        plugins: [
+          {
+            status: "installed",
+            name: "alpha",
+            dependencies: [],
+            severity: "info",
+            needsReload: true,
+          },
+        ],
+      },
+    ],
+  } satisfies CascadeNotificationMessage;
+
+  // act
+  emitContextCascade(ctx as never, pi, message, renderRow);
+
+  // assert
+  assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    "● official [user]\n  controlled installed alpha\n\nPlugin install: 1 success\n\n/reload to pick up changes",
+  ]);
+  assert.deepStrictEqual(renderCalls, [
+    {
+      name: "alpha",
+      scope: "user",
+      probe: { piSubagentsLoaded: true, piMcpAdapterLoaded: true },
+    },
   ]);
 });
 
@@ -5879,21 +5930,25 @@ test("context dispatch keeps independent parallel captures", async (t) => {
   const first = createContext(t);
   const second = createContext(t);
   const pi = piWithBothLoaded();
+  const renderRow = t.mock.fn<Parameters<typeof emitContextCascade>[3]>(renderOwnedRow);
   const message = { marketplaces: [] } satisfies CascadeNotificationMessage;
 
   // act
   await Promise.all([
     Promise.resolve().then(() => {
-      emitContextCascade(first as never, pi, message, renderOwnedRow);
+      emitContextCascade(first as never, pi, message, renderRow);
     }),
     Promise.resolve().then(() => {
-      emitContextCascade(second as never, pi, message, renderOwnedRow);
+      emitContextCascade(second as never, pi, message, renderRow);
     }),
   ]);
 
   // assert
   assert.deepStrictEqual(first.ui.notify.mock.calls[0]!.arguments, ["(no marketplaces)"]);
   assert.deepStrictEqual(second.ui.notify.mock.calls[0]!.arguments, ["(no marketplaces)"]);
+  // The `(no marketplaces)` sentinel is composed without any row, so a renderer
+  // call here would mean a phantom row the emitted bytes cannot reveal.
+  assert.equal(renderRow.mock.callCount(), 0);
 });
 
 test("update no-op dispatch preserves empty and non-empty folds", (t) => {
@@ -5901,6 +5956,8 @@ test("update no-op dispatch preserves empty and non-empty folds", (t) => {
   const empty = createContext(t);
   const nonEmpty = createContext(t);
   const pi = piWithBothLoaded();
+  const emptyRenderRow = t.mock.fn<Parameters<typeof emitUpdateNoOpCascade>[3]>(renderOwnedRow);
+  const nonEmptyRenderRow = t.mock.fn<Parameters<typeof emitUpdateNoOpCascade>[3]>(renderOwnedRow);
   const emptyMessage = { marketplaces: [] } satisfies CascadeNotificationMessage;
   const message = {
     marketplaces: [
@@ -5920,8 +5977,8 @@ test("update no-op dispatch preserves empty and non-empty folds", (t) => {
   } satisfies CascadeNotificationMessage;
 
   // act
-  emitUpdateNoOpCascade(empty as never, pi, emptyMessage, renderOwnedRow);
-  emitUpdateNoOpCascade(nonEmpty as never, pi, message, renderOwnedRow);
+  emitUpdateNoOpCascade(empty as never, pi, emptyMessage, emptyRenderRow);
+  emitUpdateNoOpCascade(nonEmpty as never, pi, message, nonEmptyRenderRow);
 
   // assert
   assert.deepStrictEqual(empty.ui.notify.mock.calls[0]!.arguments, [
@@ -5930,12 +5987,16 @@ test("update no-op dispatch preserves empty and non-empty folds", (t) => {
   assert.deepStrictEqual(nonEmpty.ui.notify.mock.calls[0]!.arguments, [
     "● official [user]\n  alpha (available)\n\nPlugin update: nothing to update",
   ]);
+  assert.equal(emptyRenderRow.mock.callCount(), 0);
+  assert.equal(nonEmptyRenderRow.mock.callCount(), 1);
 });
 
 test("reconcile context dispatch keeps its tally and omits reload", (t) => {
   // arrange
   const ctx = createContext(t);
   const pi = piWithBothLoaded();
+  const renderRow =
+    t.mock.fn<Parameters<typeof emitReconcileAppliedContextCascade>[3]>(renderOwnedRow);
   const message = {
     kind: "reconcile-applied-cascade",
     cardinality: "plural",
@@ -5953,10 +6014,55 @@ test("reconcile context dispatch keeps its tally and omits reload", (t) => {
   } as const;
 
   // act
-  emitReconcileAppliedContextCascade(ctx as never, pi, message, renderOwnedRow);
+  emitReconcileAppliedContextCascade(ctx as never, pi, message, renderRow);
 
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
     "● official [user] (added)\n\nReconcile: 1 success",
   ]);
+  assert.equal(renderRow.mock.callCount(), 0);
+});
+
+test("reconcile context dispatch suppresses reload and stamps error severity", (t) => {
+  // arrange
+  // RECON-04: the reconcile ran ON /reload, so a row that asks for a reload must
+  // still produce no reload-hint trailer. The standalone `notify()` arm is gated
+  // in tests/architecture/notify-grammar-invariant.test.ts; production reaches
+  // this emitter from shared/notify-context.ts, so the suppression, the
+  // failure tally, and the stamped severity argument are pinned here.
+  const ctx = createContext(t);
+  const pi = piWithBothLoaded();
+  const renderRow = t.mock.fn<Parameters<typeof emitReconcileAppliedContextCascade>[3]>(
+    () => "⊘ alpha (failed) {not found}",
+  );
+  const message = {
+    kind: "reconcile-applied-cascade",
+    cardinality: "plural",
+    label: "Reconcile",
+    marketplaces: [
+      {
+        name: "official",
+        scope: "user",
+        plugins: [
+          {
+            status: "failed",
+            name: "alpha",
+            reasons: ["not found"],
+            severity: "error",
+            needsReload: true,
+          },
+        ],
+      },
+    ],
+  } satisfies Parameters<typeof emitReconcileAppliedContextCascade>[2];
+
+  // act
+  emitReconcileAppliedContextCascade(ctx as never, pi, message, renderRow);
+
+  // assert
+  assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    "A plugin operation has failed.\n\n● official [user]\n  ⊘ alpha (failed) {not found}\n\nReconcile: 1 failure",
+    "error",
+  ]);
+  assert.equal(renderRow.mock.callCount(), 1);
 });

@@ -6,11 +6,41 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
+import {
+  abortPreparedAgents,
+  finalizeAgentsReplacement,
+  prepareStagePluginAgents,
+  replacePreparedAgents,
+  rollbackAgentsReplacement,
+} from "../../../extensions/pi-claude-marketplace/bridges/agents/index.ts";
 import { GENERATED_AGENT_PREFIX } from "../../../extensions/pi-claude-marketplace/bridges/agents/marker.ts";
+import {
+  abortPreparedCommands,
+  finalizeCommandsReplacement,
+  prepareStageCommands,
+  replacePreparedCommands,
+  rollbackCommandsReplacement,
+} from "../../../extensions/pi-claude-marketplace/bridges/commands/index.ts";
 import {
   createHooksRouting,
   createHooksRuntime,
+  removeHookConfig,
+  writeHookConfig,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
+import {
+  abortPreparedMcp,
+  finalizeMcpReplacement,
+  prepareStageMcpServers,
+  replacePreparedMcp,
+  rollbackMcpReplacement,
+} from "../../../extensions/pi-claude-marketplace/bridges/mcp/index.ts";
+import {
+  abortPreparedSkills,
+  finalizeSkillsReplacement,
+  prepareStageSkills,
+  replacePreparedSkills,
+  rollbackSkillsReplacement,
+} from "../../../extensions/pi-claude-marketplace/bridges/skills/index.ts";
 import {
   pluginCloneKey,
   pluginMirrorKey,
@@ -57,6 +87,10 @@ import type {
   ReinstallPluginOptions,
   ReinstallPluginsOptions,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts";
+import type {
+  ReinstallReplaceOperations,
+  ReinstallTransaction,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-replace.ts";
 import type {
   NotificationContext,
   ToolInventory,
@@ -5538,6 +5572,159 @@ test("a pinned git-subdir reinstall reports a missing cached subdirectory", asyn
   });
 });
 
+// ──────────────────────────────────────────────────────────────────────────
+// Retry-proof observation helpers (NFR-3)
+//
+// Mechanical observation only: these wrap the real bridge operations the
+// reinstall transaction already takes as a port and record the order it calls
+// them in. They choose no expected value and derive no assertion -- every
+// retry case authors its own literal schedule, tree, and byte expectations.
+// ──────────────────────────────────────────────────────────────────────────
+
+/**
+ * The real bridge operations, each recording one event on the active schedule
+ * before it runs:
+ *
+ *   prepare:<bridge>   a staging handle was prepared
+ *   replace:<bridge>   staged content was swapped in behind a backup
+ *   rollback:<bridge>  a committed replacement was undone
+ *   abort:<bridge>     a prepared, uncommitted handle was discarded
+ *   finalize:<bridge>  a backup was dropped after state persistence committed
+ *   commit:hooks       the staged hooks config was written
+ *   remove:hooks       the staged hooks config was removed
+ *
+ * Every event is recorded before its operation runs and names only the
+ * operation issued -- including one that throws -- so a repeated, extra,
+ * missing, or out-of-order call moves the schedule. The derived vocabulary
+ * lives in each case's literal, not here: whether an `abort:` belongs to a
+ * prepare failure or to a replacement refusal is what the surrounding order
+ * shows, and deciding it inside the observer would let an out-of-order
+ * cleanup be relabelled or dropped instead of failing.
+ *
+ * `armBeforePrepareCommands` runs in the one window where a prepared skills
+ * handle exists and no replacement has been committed, so a case can arm a
+ * fixture only the abort path can reach.
+ */
+function observeReinstallOperations(
+  schedule: { current: string[] },
+  armBeforePrepareCommands?: () => Promise<void>,
+): ReinstallReplaceOperations {
+  const record = (event: string): void => {
+    schedule.current.push(event);
+  };
+
+  return {
+    prepareStageSkills: (...args) => {
+      record("prepare:skills");
+      return prepareStageSkills(...args);
+    },
+    prepareStageCommands: async (...args) => {
+      record("prepare:commands");
+      if (armBeforePrepareCommands !== undefined) {
+        await armBeforePrepareCommands();
+      }
+
+      return prepareStageCommands(...args);
+    },
+    prepareStagePluginAgents: (...args) => {
+      record("prepare:agents");
+      return prepareStagePluginAgents(...args);
+    },
+    prepareStageMcpServers: (...args) => {
+      record("prepare:mcp");
+      return prepareStageMcpServers(...args);
+    },
+    replacePreparedSkills: (...args) => {
+      record("replace:skills");
+      return replacePreparedSkills(...args);
+    },
+    replacePreparedCommands: (...args) => {
+      record("replace:commands");
+      return replacePreparedCommands(...args);
+    },
+    replacePreparedAgents: (...args) => {
+      record("replace:agents");
+      return replacePreparedAgents(...args);
+    },
+    replacePreparedMcp: (...args) => {
+      record("replace:mcp");
+      return replacePreparedMcp(...args);
+    },
+    writeHookConfig: (...args) => {
+      record("commit:hooks");
+      return writeHookConfig(...args);
+    },
+    removeHookConfig: (...args) => {
+      record("remove:hooks");
+      return removeHookConfig(...args);
+    },
+    rollbackSkillsReplacement: (...args) => {
+      record("rollback:skills");
+      return rollbackSkillsReplacement(...args);
+    },
+    rollbackCommandsReplacement: (...args) => {
+      record("rollback:commands");
+      return rollbackCommandsReplacement(...args);
+    },
+    rollbackAgentsReplacement: (...args) => {
+      record("rollback:agents");
+      return rollbackAgentsReplacement(...args);
+    },
+    rollbackMcpReplacement: (...args) => {
+      record("rollback:mcp");
+      return rollbackMcpReplacement(...args);
+    },
+    abortPreparedSkills: (...args) => {
+      record("abort:skills");
+      return abortPreparedSkills(...args);
+    },
+    abortPreparedCommands: (...args) => {
+      record("abort:commands");
+      return abortPreparedCommands(...args);
+    },
+    abortPreparedAgents: (...args) => {
+      record("abort:agents");
+      return abortPreparedAgents(...args);
+    },
+    abortPreparedMcp: (...args) => {
+      record("abort:mcp");
+      abortPreparedMcp(...args);
+    },
+    finalizeSkillsReplacement: (...args) => {
+      record("finalize:skills");
+      return finalizeSkillsReplacement(...args);
+    },
+    finalizeCommandsReplacement: (...args) => {
+      record("finalize:commands");
+      return finalizeCommandsReplacement(...args);
+    },
+    finalizeAgentsReplacement: (...args) => {
+      record("finalize:agents");
+      return finalizeAgentsReplacement(...args);
+    },
+    finalizeMcpReplacement: (...args) => {
+      record("finalize:mcp");
+      return finalizeMcpReplacement(...args);
+    },
+  };
+}
+
+/**
+ * The production transaction, with replacement routed through observed bridge
+ * operations when a case supplies them.
+ */
+function reinstallTransactionWith(operations?: ReinstallReplaceOperations): ReinstallTransaction {
+  if (operations === undefined) {
+    return REAL_REINSTALL_TRANSACTION;
+  }
+
+  return {
+    ...REAL_REINSTALL_TRANSACTION,
+    replaceReinstalledPlugin: (input) =>
+      REAL_REINSTALL_TRANSACTION.replaceReinstalledPlugin({ ...input, __operations: operations }),
+  };
+}
+
 /**
  * Fresh maintenance/persistence collaborator set for one retry case. Each
  * call returns new closures bound to that case's schedule and fault cells;
@@ -5574,15 +5761,20 @@ function observeRetryDeps(
   };
 }
 
-function createRetryReinstall(schedule: {
-  current: string[];
-}): ReturnType<typeof createNodeReinstallPlugin> {
+function createRetryReinstall(
+  schedule: { current: string[] },
+  operations?: ReinstallReplaceOperations,
+): ReturnType<typeof createNodeReinstallPlugin> {
   const delegate = createCompletionCache();
   const completionCache = createCompletionCacheWithDrop(async (cachePath, scope, marketplace) => {
     schedule.current.push("drop:cache");
     await delegate.dropMarketplaceCache(cachePath, scope, marketplace);
   });
-  return createNodeReinstallPlugin(createHooksRouting(createHooksRuntime()), completionCache);
+  return createReinstallPlugin(
+    reinstallTransactionWith(operations),
+    createHooksRouting(createHooksRuntime()),
+    completionCache,
+  );
 }
 
 /** The doubled `<message>\n\ncause: <message>` shape reinstall folds onto `notes`. */
@@ -6025,6 +6217,173 @@ test("retry proof: reinstall: a rollback cleanup leak reports manual recovery an
   });
 });
 
+test("retry proof: reinstall: an abort cleanup leak reports manual recovery and the leak survives the retry", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-retry-abort-leak-"));
+    let abortCleanupFault = true;
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { command: "old command", skill: "old skill" },
+        install: true,
+      });
+      await writePluginTree(seeded.pluginRoot, "hello", {
+        command: "new command",
+        skill: "new skill",
+      });
+      const stateBytes = await readFile(locations.stateJsonPath, "utf8");
+      await rm(locations.commandsStagingDir, { force: true, recursive: true });
+      await writeFile(locations.commandsStagingDir, "fault: commands staging is not a directory");
+      const firstSchedule: string[] = [];
+      const secondSchedule: string[] = [];
+      const activeSchedule = { current: firstSchedule };
+      const deps = observeRetryDeps(activeSchedule);
+      // The abort of the prepared skills handle is the only removal aimed at
+      // the skills staging root, and it happens after the commands prepare
+      // fails, so sealing the root in that window refuses exactly that one
+      // cleanup and leaves the prepared directory behind.
+      const reinstall = createRetryReinstall(
+        activeSchedule,
+        observeReinstallOperations(activeSchedule, async () => {
+          if (abortCleanupFault) {
+            await chmod(locations.skillsStagingDir, 0o000);
+          }
+        }),
+      );
+      const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
+
+      // act
+      const first = await reinstall({
+        __deps: deps,
+        ctx,
+        cwd,
+        marketplace: "mp",
+        pi,
+        plugin: "hello",
+        scope: "project",
+      });
+      await chmod(locations.skillsStagingDir, 0o700);
+      const firstTree = await retryTree(locations.scopeRoot);
+      const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const firstNotifications = [...notifications];
+      abortCleanupFault = false;
+      await rm(locations.commandsStagingDir, { force: true });
+      activeSchedule.current = secondSchedule;
+      const second = await reinstall({
+        __deps: deps,
+        ctx,
+        cwd,
+        marketplace: "mp",
+        pi,
+        plugin: "hello",
+        scope: "project",
+      });
+
+      // assert
+      assert.equal(first.partition, "failed");
+      assert.equal(first.failureClass, "manual-recovery");
+      assert.deepStrictEqual(first.reasons, ["rollback partial"]);
+      assert.equal(firstNotifications.length, 1);
+      assert.equal(firstNotifications[0]?.severity, "warning");
+      assert.match(
+        firstNotifications[0]?.message ?? "",
+        /^A plugin operation needs attention\.\n\n● mp \[project\]\n {2}⊘ hello \(manual recovery\) \{rollback partial\}\n {4}cause: ENOTDIR/,
+      );
+      assert.match(
+        firstNotifications[0]?.message ?? "",
+        new RegExp(
+          `\\n {4}leaked: skills: failed to clean up skills staging directory at ${locations.skillsStagingDir}/[0-9a-f-]+: EACCES: permission denied`,
+        ),
+      );
+      assert.equal(second.partition, "reinstalled");
+      assert.deepStrictEqual(notifications.slice(1), [
+        {
+          message: "● mp [project]\n  ● hello v1.0.0 (reinstalled)\n\n/reload to pick up changes",
+        },
+      ]);
+      assert.equal(firstStateBytes, stateBytes);
+      assert.deepStrictEqual(firstSchedule, ["prepare:skills", "prepare:commands", "abort:skills"]);
+      assert.deepStrictEqual(secondSchedule, [
+        "prepare:skills",
+        "prepare:commands",
+        "prepare:agents",
+        "prepare:mcp",
+        "replace:skills",
+        "replace:commands",
+        "replace:agents",
+        "remove:hooks",
+        "replace:mcp",
+        "save:state",
+        "finalize:skills",
+        "finalize:commands",
+        "finalize:agents",
+        "finalize:mcp",
+        "drop:cache",
+        "remove:data",
+      ]);
+      const isLeakedStagingEntry = (entry: string): boolean =>
+        entry.startsWith("pi-claude-marketplace/skills-staging/") &&
+        entry !== "pi-claude-marketplace/skills-staging/";
+      assert.equal(
+        firstTree.filter((entry) =>
+          /^pi-claude-marketplace\/skills-staging\/[0-9a-f-]+\/$/.test(entry),
+        ).length,
+        1,
+      );
+      assert.deepStrictEqual(
+        firstTree.filter((entry) => !isLeakedStagingEntry(entry)),
+        [
+          "claude-plugins.json",
+          "pi-claude-marketplace/",
+          "pi-claude-marketplace/commands-staging",
+          "pi-claude-marketplace/data/",
+          "pi-claude-marketplace/data/mp/",
+          "pi-claude-marketplace/data/mp/hello/",
+          "pi-claude-marketplace/resources/",
+          "pi-claude-marketplace/resources/prompts/",
+          "pi-claude-marketplace/resources/prompts/hello:deploy.md",
+          "pi-claude-marketplace/resources/skills/",
+          "pi-claude-marketplace/resources/skills/hello-tool/",
+          "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+          "pi-claude-marketplace/skills-staging/",
+          "pi-claude-marketplace/state.json",
+        ],
+      );
+      const finalTree = await retryTree(locations.scopeRoot);
+      assert.deepStrictEqual(
+        finalTree.filter(isLeakedStagingEntry),
+        firstTree.filter(isLeakedStagingEntry),
+      );
+      assert.deepStrictEqual(
+        finalTree.filter((entry) => !isLeakedStagingEntry(entry)),
+        [
+          "claude-plugins.json",
+          "pi-claude-marketplace/",
+          "pi-claude-marketplace/commands-staging/",
+          "pi-claude-marketplace/data/",
+          "pi-claude-marketplace/data/mp/",
+          "pi-claude-marketplace/resources/",
+          "pi-claude-marketplace/resources/prompts/",
+          "pi-claude-marketplace/resources/prompts/hello:deploy.md",
+          "pi-claude-marketplace/resources/skills/",
+          "pi-claude-marketplace/resources/skills/hello-tool/",
+          "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+          "pi-claude-marketplace/skills-staging/",
+          "pi-claude-marketplace/state.json",
+        ],
+      );
+      assert.match(await readSkill(cwd), /new skill/);
+    } finally {
+      abortCleanupFault = false;
+      await chmod(locationsFor("project", cwd).skillsStagingDir, 0o700).catch(() => undefined);
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
 test("retry proof: reinstall: MCP prepare failure aborts three prepared handles newest first", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-retry-mcp-prepare-"));
@@ -6326,7 +6685,10 @@ test("retry proof: reinstall: commands replacement refusal unwinds the committed
       const secondSchedule: string[] = [];
       const activeSchedule = { current: firstSchedule };
       const deps = observeRetryDeps(activeSchedule);
-      const reinstall = createRetryReinstall(activeSchedule);
+      const reinstall = createRetryReinstall(
+        activeSchedule,
+        observeReinstallOperations(activeSchedule),
+      );
       const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
 
       // act
@@ -6374,8 +6736,37 @@ test("retry proof: reinstall: commands replacement refusal unwinds the committed
       assert.equal(firstSkill, oldSkill);
       assert.equal(firstCommand, oldCommand);
       assert.equal(firstForeign, "foreign command bytes\n");
-      assert.deepStrictEqual(firstSchedule, []);
-      assert.deepStrictEqual(secondSchedule, ["save:state", "drop:cache", "remove:data"]);
+      assert.deepStrictEqual(firstSchedule, [
+        "prepare:skills",
+        "prepare:commands",
+        "prepare:agents",
+        "prepare:mcp",
+        "replace:skills",
+        "replace:commands",
+        "rollback:skills",
+        "abort:mcp",
+        "abort:agents",
+        "abort:commands",
+        "abort:skills",
+      ]);
+      assert.deepStrictEqual(secondSchedule, [
+        "prepare:skills",
+        "prepare:commands",
+        "prepare:agents",
+        "prepare:mcp",
+        "replace:skills",
+        "replace:commands",
+        "replace:agents",
+        "remove:hooks",
+        "replace:mcp",
+        "save:state",
+        "finalize:skills",
+        "finalize:commands",
+        "finalize:agents",
+        "finalize:mcp",
+        "drop:cache",
+        "remove:data",
+      ]);
       assert.deepStrictEqual(firstTree, [
         "claude-plugins.json",
         "pi-claude-marketplace/",
@@ -6571,7 +6962,10 @@ test("retry proof: reinstall: a persistence failure after four committed replace
       const secondSchedule: string[] = [];
       const activeSchedule = { current: firstSchedule };
       const deps = observeRetryDeps(activeSchedule, { persistence: persistenceFault });
-      const reinstall = createRetryReinstall(activeSchedule);
+      const reinstall = createRetryReinstall(
+        activeSchedule,
+        observeReinstallOperations(activeSchedule),
+      );
       const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
 
       // act
@@ -6619,8 +7013,40 @@ test("retry proof: reinstall: a persistence failure after four committed replace
       assert.equal(firstAgent, oldAgent);
       assert.equal(firstSkill, oldSkill);
       assert.equal(firstCommand, oldCommand);
-      assert.deepStrictEqual(firstSchedule, ["save:state"]);
-      assert.deepStrictEqual(secondSchedule, ["save:state", "drop:cache", "remove:data"]);
+      assert.deepStrictEqual(firstSchedule, [
+        "prepare:skills",
+        "prepare:commands",
+        "prepare:agents",
+        "prepare:mcp",
+        "replace:skills",
+        "replace:commands",
+        "replace:agents",
+        "remove:hooks",
+        "replace:mcp",
+        "save:state",
+        "rollback:mcp",
+        "rollback:agents",
+        "rollback:commands",
+        "rollback:skills",
+      ]);
+      assert.deepStrictEqual(secondSchedule, [
+        "prepare:skills",
+        "prepare:commands",
+        "prepare:agents",
+        "prepare:mcp",
+        "replace:skills",
+        "replace:commands",
+        "replace:agents",
+        "remove:hooks",
+        "replace:mcp",
+        "save:state",
+        "finalize:skills",
+        "finalize:commands",
+        "finalize:agents",
+        "finalize:mcp",
+        "drop:cache",
+        "remove:data",
+      ]);
       assert.deepStrictEqual(firstTree, [
         "agents/",
         `agents/${GENERATED_AGENT_PREFIX}hello-bot.md`,
@@ -7383,7 +7809,7 @@ test("retry proof: reinstall: a bulk cascade keeps the earlier committed target 
   });
 });
 
-test("preserves state, tree, cleanup, and exact notification through the flow owner", async () => {
+test("PRL-08 / PRL-11: preserves state, tree, cleanup, and exact notification through the flow owner", async () => {
   await withHermeticEnvironment("reinstall-flow-", async () => {
     // arrange
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-flow-success-"));

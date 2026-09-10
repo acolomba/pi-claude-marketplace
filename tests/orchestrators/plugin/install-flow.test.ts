@@ -7526,9 +7526,9 @@ test("plugin install authentication: classifies a cancelled Device Flow clone wi
   });
 });
 
-test("retry proof: install: ordered bridge warnings remain explicit and retry is idempotent", async () => {
-  await withHermeticHome(async ({ installPlugin }) => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "install-bridge-leaks-"));
+test("install cleans up each bridge staging root inside its own phase and a repeat install changes nothing", async () => {
+  await withHermeticHome(async ({ installPlugin, transactionControl }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-bridge-staging-"));
     try {
       // arrange
       const locations = locationsFor("project", cwd);
@@ -7543,6 +7543,38 @@ test("retry proof: install: ordered bridge warnings remain explicit and retry is
       });
       const stateBytes = await readFile(locations.stateJsonPath, "utf8");
       const manifestBytes = await readFile(manifestPath, "utf8");
+      // PI-8: `absent` until the owning bridge's phase has created its
+      // per-call staging root, `empty` once that phase's post-commit
+      // `cleanupStaging` has removed it again, and the surviving inventory
+      // when anything is left behind.
+      const stagingState = async (root: string): Promise<string> => {
+        if (!(await pathExists(root))) {
+          return "absent";
+        }
+
+        const survivors = await retryTree(root);
+        return survivors.length === 0 ? "empty" : survivors.join(",");
+      };
+
+      const stagingCensus = async (phase: string): Promise<string> =>
+        [
+          `before:${phase}`,
+          `skills=${await stagingState(locations.skillsStagingDir)}`,
+          `commands=${await stagingState(locations.commandsStagingDir)}`,
+          `agents=${await stagingState(locations.agentsStagingDir)}`,
+        ].join(" ");
+      const stagingLedger: string[] = [];
+      transactionControl.runPhases = async <C>(phases: readonly Phase<C>[], ctx: C) =>
+        runPhases(
+          phases.map((phase): Phase<C> => ({
+            ...phase,
+            do: async (phaseCtx: C) => {
+              stagingLedger.push(await stagingCensus(phase.name));
+              await phase.do(phaseCtx);
+            },
+          })),
+          ctx,
+        );
       const { ctx, notifications, pi } = makeCtx({ toolNames: ["subagent"] });
 
       // act
@@ -7568,6 +7600,20 @@ test("retry proof: install: ordered bridge warnings remain explicit and retry is
       });
 
       // assert
+      // Each bridge creates AND cleans up its staging root within its own
+      // phase, so a root reads `absent` until its phase has run and `empty`
+      // from the next phase onward. The census therefore pins the
+      // skills -> commands -> agents cleanup order the phase array fixes,
+      // and any staging tree a bridge failed to reclaim would appear here as
+      // a surviving inventory instead of `empty`.
+      assert.deepStrictEqual(stagingLedger, [
+        "before:skills skills=absent commands=absent agents=absent",
+        "before:commands skills=empty commands=absent agents=absent",
+        "before:agents skills=empty commands=empty agents=absent",
+        "before:hooks skills=empty commands=empty agents=empty",
+        "before:mcp skills=empty commands=empty agents=empty",
+        "before:state skills=empty commands=empty agents=empty",
+      ]);
       assert.deepStrictEqual(first, {
         declaresAgents: true,
         declaresMcp: false,

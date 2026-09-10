@@ -79,7 +79,24 @@ const FORBIDDEN_TARGETS: ReadonlyArray<string> = [
   "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts",
   "extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts",
   // PL-3 + NFR-5: list is read-only against state + manifest; no network.
+  // Every list owner is gated, not just the flow: candidate-row owns the
+  // cold/warm `(remote)` vs `(available)` classification and installed-row
+  // drives the upgrade probe, so both are the sites where a "refresh the
+  // mirror" edit would land. Keep all four so splitting row composition and
+  // orphan folding out of the flow cannot weaken the original gate.
   "extensions/pi-claude-marketplace/orchestrators/plugin/list-flow.ts",
+  "extensions/pi-claude-marketplace/orchestrators/plugin/list-candidate-row.ts",
+  "extensions/pi-claude-marketplace/orchestrators/plugin/list-installed-row.ts",
+  "extensions/pi-claude-marketplace/orchestrators/plugin/list-orphan-fold.ts",
+  "extensions/pi-claude-marketplace/orchestrators/plugin/list.messaging.ts",
+  // PUP-2 + NFR-5: the update family splits its Git seam across exactly two
+  // owners, so the other four are gated. update-swap.ts matters most: it
+  // performs the physical replace inside the window where the old tree is
+  // already gone, which is where a stray fetch would do the most damage.
+  "extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts",
+  "extensions/pi-claude-marketplace/orchestrators/plugin/update-cascade.ts",
+  "extensions/pi-claude-marketplace/orchestrators/plugin/update-row.ts",
+  "extensions/pi-claude-marketplace/orchestrators/plugin/update.messaging.ts",
   // PRL-07: the public reinstall flow uses cached manifests only -- which is
   // also why refreshGitHubClone is one of the gated patterns. The flow owner
   // contains the complete sequencing body, so this one target guards the full
@@ -133,6 +150,6 @@ test("NFR-5 + PI-2 + PL-3 + PRL-07: network-free orchestrators have zero gitOps 
     FORBIDDEN_TARGETS,
     FORBIDDEN_PATTERNS,
     (offenders) =>
-      `NFR-5 / PI-2 / PL-3 / PRL-07 violation: gitOps surface detected in network-free module(s):\n  ${offenders.join("\n  ")}\n  (every gated target is network-free by contract; among the gated orchestrator candidates, only update-flow.ts is permitted to import gitOps via Pattern S-9.)`,
+      `NFR-5 / PI-2 / PL-3 / PRL-07 violation: gitOps surface detected in network-free module(s):\n  ${offenders.join("\n  ")}\n  (every gated target is network-free by contract; among the update owners only update-flow.ts and update-preflight.ts may name gitOps via Pattern S-9 -- the flow to invoke the seam, the preflight to declare the injected \`gitOps?\` field it is handed. Every other update and list owner is gated.)`,
   );
 });
