@@ -20,7 +20,7 @@ affects: [07-02, 07-03, 07-04, 07-05, 07-06, 07-07, gate-integrity, architecture
 actuals:
   tokens: 13000
   tasks: 3
-  commits: 2
+  commits: 4
   plan_head_before: bc34d335
 
 tech-stack:
@@ -220,6 +220,8 @@ Both required manual checks were performed and reverted:
 **Task 3's `mkdtemp` locality criterion reads narrower than the tree allows.** The criterion is `grep -l "mkdtemp" tests/architecture/*.ts` returning only `temp-root-control.ts`; it actually returns six files. The other five (`hooks-async-rewake`, `hooks-lifecycle`, `integration-materialization-gate`, `config-state-consistency`, `revalidation`) are pre-existing gates that build synthetic fixture trees; none of them names `copyFile` or `REPO_ROOT`, so none copies or mutates a real target. The criterion's stated substance — "the mkdtemp-copy-mutate sequence appears in exactly one file" — holds: `grep -rl "copyFile" tests/architecture/*.ts` returns `tests/architecture/temp-root-control.ts` and nothing else. `fallow dupes` reports the same 873 duplicated lines across 38 files as before this plan, so the new module introduced no clone group. Migrating the five pre-existing gates onto the shared control is out of this plan's scope and belongs with whichever later plan touches them.
 
 **Task 3 produced no commit.** The task is a verification sweep with an explicit "fix anything they report" instruction. Nothing was reported: typecheck, ESLint (both the five-file invocation and the whole `tests/architecture` directory), all three Fallow sub-gates, Prettier, the corresponding-test gate and its negative harness, the direct-coverage negative harness, the unit-suite glob gate, and the full 5892-case unit suite all exit 0. There was therefore nothing to commit.
+
+**The `WINDOWS.md` ledger could not be appended to.** `gsd-tools windows append` refuses with `Ledger table … disagrees with the fenced JSON entries (the sole source of truth) for row id(s): 30, 9`. That desync predates this plan and is not caused by anything here; ledger population is best-effort and does not block execution, so the three deviations are recorded in this SUMMARY only. Someone should reconcile the rendered table against the fenced JSON before the ship gate reads it.
 
 ## User Setup Required
 
