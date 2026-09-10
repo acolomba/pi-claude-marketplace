@@ -727,16 +727,19 @@ async function runLockedReinstall(
   );
 
   const pluginDataDir = await locations.pluginDataDir(marketplace, plugin);
-  const replacement = await transaction.replaceReinstalledPlugin({
-    locations,
-    cwd,
-    marketplace,
-    plugin,
-    installable,
-    pluginDataDir,
-    oldRecord: oldSnapshot,
-    agentsDirs: generated.agentsDirs,
-  });
+  const replacement = await transaction.replaceReinstalledPlugin(
+    {
+      locations,
+      cwd,
+      marketplace,
+      plugin,
+      installable,
+      pluginDataDir,
+      oldRecord: oldSnapshot,
+      agentsDirs: generated.agentsDirs,
+    },
+    transaction.replaceOperations,
+  );
 
   let invalidConfigWriteBack: boolean;
   let outcome: ReinstallPluginOutcome;

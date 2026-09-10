@@ -5714,14 +5714,9 @@ function observeReinstallOperations(
  * operations when a case supplies them.
  */
 function reinstallTransactionWith(operations?: ReinstallReplaceOperations): ReinstallTransaction {
-  if (operations === undefined) {
-    return REAL_REINSTALL_TRANSACTION;
-  }
-
   return {
     ...REAL_REINSTALL_TRANSACTION,
-    replaceReinstalledPlugin: (input) =>
-      REAL_REINSTALL_TRANSACTION.replaceReinstalledPlugin({ ...input, __operations: operations }),
+    replaceOperations: operations ?? REAL_REINSTALL_TRANSACTION.replaceOperations,
   };
 }
 

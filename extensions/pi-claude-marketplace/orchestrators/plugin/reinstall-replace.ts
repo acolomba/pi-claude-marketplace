@@ -86,7 +86,7 @@ export interface ReinstallReplacement {
   readonly hookEntries: readonly HookSummaryEntry[] | undefined;
   readonly discoveryWarnings: readonly string[];
   readonly bridgeWarnings: readonly string[];
-  /** @internal Operations retained so compensation uses the same transaction owner. */
+  /** Operations retained so compensation uses the same transaction owner. */
   readonly operations: ReinstallReplaceOperations;
 }
 
@@ -100,8 +100,6 @@ export interface ReplaceReinstalledPluginInput {
   readonly pluginDataDir: string;
   readonly oldRecord: PluginInstallRecord;
   readonly agentsDirs: readonly string[];
-  /** @internal Test-only bridge operations; production callers omit this. */
-  readonly __operations?: ReinstallReplaceOperations;
 }
 
 /** Physical bridge operations consumed by the atomic replacement schedule. */
@@ -141,20 +139,16 @@ export interface ReinstallMaintenanceInput {
 /** Owns reinstall's prepare, replacement, compensation, and commit schedule. */
 export interface ReinstallTransaction {
   readonly finalizeReinstalledPlugin: typeof finalizeReinstalledPlugin;
+  /**
+   * D-05-01: the transaction owns which physical bridges the replacement
+   * schedule drives, so replacement and compensation reach the same owner.
+   */
+  readonly replaceOperations: ReinstallReplaceOperations;
   readonly replaceReinstalledPlugin: typeof replaceReinstalledPlugin;
   readonly rollbackReinstalledPlugin: typeof rollbackReinstalledPlugin;
   readonly runPostSuccessMaintenance: typeof runPostSuccessMaintenance;
   readonly withLockedStateTransaction: typeof withLockedStateTransaction;
 }
-
-/** The production reinstall transaction composed from all physical bridges. */
-export const REAL_REINSTALL_TRANSACTION: ReinstallTransaction = {
-  finalizeReinstalledPlugin,
-  replaceReinstalledPlugin,
-  rollbackReinstalledPlugin,
-  runPostSuccessMaintenance,
-  withLockedStateTransaction,
-};
 
 const REAL_REINSTALL_REPLACE_OPERATIONS: ReinstallReplaceOperations = {
   abortPreparedAgents,
@@ -181,6 +175,16 @@ const REAL_REINSTALL_REPLACE_OPERATIONS: ReinstallReplaceOperations = {
   writeHookConfig,
 };
 
+/** The production reinstall transaction composed from all physical bridges. */
+export const REAL_REINSTALL_TRANSACTION: ReinstallTransaction = {
+  finalizeReinstalledPlugin,
+  replaceOperations: REAL_REINSTALL_REPLACE_OPERATIONS,
+  replaceReinstalledPlugin,
+  rollbackReinstalledPlugin,
+  runPostSuccessMaintenance,
+  withLockedStateTransaction,
+};
+
 const defaultRemoveDataDir: RemoveDataDirFn = async (dataDir) => {
   await rm(dataDir, { recursive: true, force: true });
 };
@@ -188,8 +192,8 @@ const defaultRemoveDataDir: RemoveDataDirFn = async (dataDir) => {
 /** Prepare every bridge, then replace them as one compensatable operation. */
 export async function replaceReinstalledPlugin(
   input: ReplaceReinstalledPluginInput,
+  operations: ReinstallReplaceOperations,
 ): Promise<ReinstallReplacement> {
-  const operations = input.__operations ?? REAL_REINSTALL_REPLACE_OPERATIONS;
   const handles = await prepareAllHandles(input, operations);
   const { replacements, hookEntries } = await replaceAll(
     handles,

@@ -114,10 +114,7 @@ test("uses the real recursive data removal when no seam is supplied", async () =
   }
 });
 
-function replacementInput(
-  operations?: ReinstallReplaceOperations,
-  pluginRoot = "/plugin",
-): ReplaceReinstalledPluginInput {
+function replacementInput(pluginRoot = "/plugin"): ReplaceReinstalledPluginInput {
   return {
     locations: {} as ScopedLocations,
     cwd: "/workspace",
@@ -140,7 +137,6 @@ function replacementInput(
       resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
     } as unknown as ReplaceReinstalledPluginInput["oldRecord"],
     agentsDirs: [],
-    ...(operations !== undefined && { __operations: operations }),
   };
 }
 
@@ -195,7 +191,7 @@ test("replaces, rolls back, and finalizes every bridge in atomic order", async (
   const operations = fakeOperations(calls);
 
   // act
-  const replacement = await replaceReinstalledPlugin(replacementInput(operations));
+  const replacement = await replaceReinstalledPlugin(replacementInput(), operations);
   const rollbackLeaks = await rollbackReinstalledPlugin(replacement);
   const finalizeLeaks = await finalizeReinstalledPlugin(replacement);
 
@@ -244,7 +240,7 @@ test("aborts prepared bridges and reports leaks when replacement fails", async (
 
   // act & assert
   await assert.rejects(
-    replaceReinstalledPlugin(replacementInput(operations)),
+    replaceReinstalledPlugin(replacementInput(), operations),
     (error: Error) =>
       error instanceof Error &&
       error.message === "replace denied" &&
@@ -267,7 +263,7 @@ test("aborts partial preparation in reverse order", async () => {
 
   // act & assert
   await assert.rejects(
-    replaceReinstalledPlugin(replacementInput(operations)),
+    replaceReinstalledPlugin(replacementInput(), operations),
     /mcp prepare denied/u,
   );
   assert.deepStrictEqual(calls.slice(-3), ["abort agents", "abort commands", "abort skills"]);
@@ -287,12 +283,12 @@ test("writes parsed hooks between agents and MCP replacement", async () => {
       },
     }),
   );
-  const input = replacementInput(operations, root);
+  const input = replacementInput(root);
   const installable = { ...input.installable, hooksConfigPath: "hooks/hooks.json" };
 
   try {
     // act
-    const replacement = await replaceReinstalledPlugin({ ...input, installable });
+    const replacement = await replaceReinstalledPlugin({ ...input, installable }, operations);
 
     // assert
     assert.deepStrictEqual(replacement.hookEntries, [{ event: "SessionStart" }]);
@@ -310,13 +306,13 @@ test("rejects malformed hooks and compensates completed replacements", async () 
   const root = await mkdtemp(path.join(tmpdir(), "reinstall-replace-bad-hooks-"));
   await mkdir(path.join(root, "hooks"), { recursive: true });
   await writeFile(path.join(root, "hooks", "hooks.json"), JSON.stringify({ hooks: 42 }));
-  const input = replacementInput(operations, root);
+  const input = replacementInput(root);
   const installable = { ...input.installable, hooksConfigPath: "hooks/hooks.json" };
 
   try {
     // act & assert
     await assert.rejects(
-      replaceReinstalledPlugin({ ...input, installable }),
+      replaceReinstalledPlugin({ ...input, installable }, operations),
       /hooks\.json re-parse failed/u,
     );
     assert.deepStrictEqual(calls.slice(-7), [
@@ -333,10 +329,12 @@ test("rejects malformed hooks and compensates completed replacements", async () 
   }
 });
 
-test("normalizes a default bridge preparation failure", async () => {
+test("normalizes a real bridge preparation failure", async () => {
   // arrange
   const input = replacementInput();
 
   // act & assert
-  await assert.rejects(replaceReinstalledPlugin(input));
+  await assert.rejects(
+    replaceReinstalledPlugin(input, REAL_REINSTALL_TRANSACTION.replaceOperations),
+  );
 });
