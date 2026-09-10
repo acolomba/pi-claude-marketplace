@@ -94,9 +94,19 @@ must inherit from; `/gsd-validate-phase` fills the Task ID / Plan / Wave columns
       gate files a hard failure.
 - [ ] `tests/architecture/eslint-effective-config.test.ts` — replaces the `hooks-dispatch.test.ts`
       scrape (`D-07-12`).
-- [ ] `tests/fixtures/eslint-probe/{blanket-no-console,zone-substitution,rule-off}.config.js` —
-      three committed offender configs, each the real config plus exactly one appended block.
-      The zone-substitution config must carry at least one zone; `zones: []` is rejected by the
+- [ ] Three in-memory offender configs — blanket `no-console:"off"`, zone substitution, and
+      rule-off — each supplied as `new ESLint({ cwd, overrideConfigFile: "eslint.config.js",
+      overrideConfig: [oneBlock] })`. **Superseded route:** this file originally called for three
+      committed files under `tests/fixtures/eslint-probe/`. Planning measured that route as
+      impossible here and `07-07-PLAN.md` records the evidence — `fallow dead-code` flags the
+      fixture's `export default` as an unused export, importing it from a `.ts` gate to give it a
+      consumer fails `tsc` with `TS7016`, and `npm run lint`'s type-aware project service refuses
+      a `.js` file outside `tsconfig.json`. The in-memory form still satisfies `D-07-10` (the real
+      config file through ESLint's own loader, plus exactly one appended block) and is stronger:
+      the one-mutation property becomes mechanically assertable as `overrideConfig.length === 1`.
+      It is NOT the synthetic form `D-07-02` rejects — that form passed `overrideConfigFile: true`,
+      which discards the config file entirely, and the plans prohibit it explicitly.
+      The zone-substitution block must carry at least one zone; `zones: []` is rejected by the
       rule schema.
 - [ ] A closed-set enrollment gate for `ClaudeHookEvent` / `Dependency`, plus the
       `Exclude<ClaudeHookEvent, BucketAEvent> extends never` compile-time proof and a correction
