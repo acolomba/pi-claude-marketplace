@@ -1,4 +1,4 @@
-import { execFileSync, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -103,47 +103,145 @@ export function productionPaths() {
   return [...productionModules, ...specialPairs.keys()].sort();
 }
 
-function gitLines(args) {
-  try {
-    return execFileSync("git", args, {
-      cwd: projectRoot,
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
-    })
+/**
+ * One git invocation's outcome, kept discriminated so that a command which failed and a command
+ * which legitimately produced no lines are never the same value.
+ *
+ * `D-07-14` turns on this distinction: an empty line list that came back because `git` exited
+ * non-zero has to reach the caller as a failure, because otherwise a broken selector and a
+ * docs-only commit are byte-identical outcomes. The exit status and stderr are therefore both read
+ * and carried, and `args` is always an argument array so no ref name is ever word-split by a shell.
+ */
+function gitLines(args, selectedProjectRoot = projectRoot) {
+  const run = spawnSync("git", args, { cwd: selectedProjectRoot, encoding: "utf8" });
+
+  if (run.error !== undefined) {
+    return { ok: false, reason: `git ${args.join(" ")} could not run: ${run.error.message}` };
+  }
+
+  if (run.status !== 0) {
+    const stderr = typeof run.stderr === "string" ? run.stderr.trim() : "";
+    return { ok: false, reason: `git ${args.join(" ")} exited ${run.status}: ${stderr}` };
+  }
+
+  return {
+    ok: true,
+    lines: run.stdout
       .split("\n")
       .map((line) => line.trim())
-      .filter(Boolean);
-  } catch {
-    return [];
-  }
+      .filter(Boolean),
+  };
 }
 
-function changedPaths() {
-  const paths = new Set();
-  const mergeBase = gitLines(["merge-base", "HEAD", "origin/main"])[0];
+// The one base candidate whose name comes from git output rather than from a literal. Anything
+// outside this character set is refused rather than passed to a later invocation, so a ref name is
+// never able to become an argument the selector did not intend.
+const baseCandidateName = /^[A-Za-z0-9._/-]+$/;
 
-  if (mergeBase !== undefined) {
-    for (const projectPath of gitLines([
-      "diff",
-      "--name-only",
-      "--diff-filter=ACMR",
-      `${mergeBase}...HEAD`,
-    ])) {
-      paths.add(projectPath);
-    }
+function upstreamCandidate(selectedProjectRoot) {
+  const resolved = gitLines(["rev-parse", "--abbrev-ref", "@{upstream}"], selectedProjectRoot);
+
+  if (!resolved.ok) {
+    return { label: "@{upstream}", reason: resolved.reason };
   }
 
+  const name = resolved.lines[0];
+
+  if (name === undefined) {
+    return { label: "@{upstream}", reason: "git named no upstream ref" };
+  }
+
+  if (!baseCandidateName.test(name)) {
+    return { label: "@{upstream}", reason: `upstream ref name is not a plain ref name: ${name}` };
+  }
+
+  return { label: "@{upstream}", name };
+}
+
+/**
+ * The base commit the changed-pair selection diffs against, chosen from an ordered candidate chain.
+ *
+ * The returned candidate is the auditable artifact, not a debug aid (`D-07-13`): a reader of a gate
+ * run has to be able to tell which of `origin/main`, `main`, the upstream tracking ref, or `HEAD~1`
+ * the answer rests on, because the four disagree about what counts as changed. When every candidate
+ * fails, `attempted` carries the reason each one was rejected, so the failure names what was tried
+ * rather than reporting an absence.
+ */
+function selectBase(selectedProjectRoot = projectRoot) {
+  const attempted = [];
+  const candidates = [
+    { label: "origin/main", name: "origin/main" },
+    { label: "main", name: "main" },
+    upstreamCandidate(selectedProjectRoot),
+    { label: "HEAD~1", name: "HEAD~1" },
+  ];
+
+  for (const candidate of candidates) {
+    if (candidate.name === undefined) {
+      attempted.push({ candidate: candidate.label, reason: candidate.reason });
+      continue;
+    }
+
+    const resolved = gitLines(
+      ["rev-parse", "--verify", `${candidate.name}^{commit}`],
+      selectedProjectRoot,
+    );
+
+    if (resolved.ok && resolved.lines[0] !== undefined) {
+      return { ok: true, candidate: candidate.name, commit: resolved.lines[0] };
+    }
+
+    attempted.push({
+      candidate: candidate.label,
+      reason: resolved.ok ? "resolved to no commit" : resolved.reason,
+    });
+  }
+
+  const detail = attempted.map((entry) => `${entry.candidate}: ${entry.reason}`).join("; ");
+  return { ok: false, attempted, reason: `No base candidate resolved -- ${detail}` };
+}
+
+/**
+ * Every path the working tree reports as changed against the selected base, plus the ones that
+ * carry no source-test pair and the reason each was passed over.
+ *
+ * The result is discriminated because zero pairs has two causes that `D-07-14` requires the gate to
+ * tell apart: a change set that resolved and simply held nothing pairable, and a change set that is
+ * empty because base selection or a git invocation failed. Propagating the first failing invocation
+ * rather than folding it into an empty list is what keeps those two apart.
+ */
+function changedPaths(selectedProjectRoot = projectRoot) {
+  const base = selectBase(selectedProjectRoot);
+
+  if (!base.ok) {
+    return { ok: false, reason: base.reason };
+  }
+
+  const paths = new Set();
+
   for (const args of [
+    ["diff", "--name-only", "--diff-filter=ACMR", `${base.commit}...HEAD`],
     ["diff", "--name-only", "--diff-filter=ACMR", "HEAD"],
     ["diff", "--cached", "--name-only", "--diff-filter=ACMR"],
     ["ls-files", "--others", "--exclude-standard"],
   ]) {
-    for (const projectPath of gitLines(args)) {
+    const run = gitLines(args, selectedProjectRoot);
+
+    if (!run.ok) {
+      return { ok: false, reason: run.reason };
+    }
+
+    for (const projectPath of run.lines) {
       paths.add(projectPath);
     }
   }
 
-  return [...paths].sort();
+  const sorted = [...paths].sort();
+  const skipped = sorted
+    .map((projectPath) => ({ path: projectPath, reason: pairabilityRefusal(projectPath) }))
+    .filter((entry) => entry.reason !== undefined);
+
+  return { ok: true, paths: sorted, skipped, base: base.candidate };
 }
 
 // The test roots that hold no corresponding tests, mirroring the correspondence gate's set of the
@@ -172,40 +270,74 @@ function isStructuralSupplement(projectPath) {
 }
 
 /**
- * Whether a changed path names one member of a source-test pair.
+ * Why a changed path names no member of a source-test pair, or `undefined` when it names one.
  *
  * Both halves have to be tight, because `pairForPath` throws rather than skips: a path admitted here
  * that cannot be mapped aborts the whole run. On the production side that means requiring `.ts`, so
  * a changed README or JSON fixture under the production root is passed over instead of refused. On
  * the test side it means excluding the non-corresponding roots and the structural supplements, so
  * the suites that have no pair by design do not compose a module path that does not exist.
+ *
+ * The reason is a return value rather than a discarded intermediate because `D-07-14` makes a
+ * zero-pair run report which paths it passed over and why. A run that reports nothing cannot be told
+ * from a run that resolved nothing.
  */
-function isPairablePath(projectPath) {
+function pairabilityRefusal(projectPath) {
   if (specialPairs.has(projectPath) || specialTests.has(projectPath)) {
-    return true;
+    return undefined;
   }
 
   if (projectPath.startsWith(`${productionRoot}/`)) {
-    return projectPath.endsWith(".ts");
+    return projectPath.endsWith(".ts")
+      ? undefined
+      : "under the production root but not a TypeScript module";
   }
 
-  if (!projectPath.startsWith(`${testRoot}/`) || !projectPath.endsWith(".test.ts")) {
-    return false;
+  if (!projectPath.startsWith(`${testRoot}/`)) {
+    return "outside both the production root and the test root";
+  }
+
+  if (!projectPath.endsWith(".test.ts")) {
+    return "under the test root but not a corresponding test path";
   }
 
   const firstSegment = projectPath.slice(`${testRoot}/`.length).split("/", 1)[0];
-  return !nonCorrespondingRoots.has(firstSegment) && !isStructuralSupplement(projectPath);
+
+  if (nonCorrespondingRoots.has(firstSegment)) {
+    return `under the non-corresponding test root ${firstSegment}`;
+  }
+
+  return isStructuralSupplement(projectPath) ? "a structural supplement suite" : undefined;
 }
 
-function pairsForChangedPaths() {
+function isPairablePath(projectPath) {
+  return pairabilityRefusal(projectPath) === undefined;
+}
+
+/**
+ * The source-test pairs the selected change set names, carrying the base that produced it and the
+ * paths it passed over so a zero-pair answer can still say what it looked at.
+ */
+function pairsForChangedPaths(selectedProjectRoot = projectRoot) {
+  const changed = changedPaths(selectedProjectRoot);
+
+  if (!changed.ok) {
+    return changed;
+  }
+
   const pairs = new Map();
 
-  for (const projectPath of changedPaths().filter(isPairablePath)) {
+  for (const projectPath of changed.paths.filter(isPairablePath)) {
     const pair = pairForPath(projectPath);
     pairs.set(pair.sourcePath, pair);
   }
 
-  return [...pairs.values()];
+  return {
+    ok: true,
+    base: changed.base,
+    pairs: [...pairs.values()],
+    skipped: changed.skipped,
+  };
 }
 
 function parseLcov(lcovText) {
@@ -477,6 +609,40 @@ async function runAllPairs(reportPath) {
   );
 }
 
+function skippedReport(skipped) {
+  if (skipped.length === 0) {
+    return "No changed source-test pairs. No changed path was passed over.\n";
+  }
+
+  const rows = skipped.map((entry) => `  ${entry.path} -- ${entry.reason}`).join("\n");
+  return `No changed source-test pairs. Passed over ${skipped.length} changed path(s):\n${rows}\n`;
+}
+
+// Zero pairs is reported as a pass only once the change set is known to have resolved; a selection
+// that failed sets a non-zero exit code and names the git invocation that failed (`D-07-14`). The
+// selected base candidate is written before either outcome, because it is what makes the answer
+// auditable (`D-07-13`).
+async function runChangedPairs() {
+  const selected = pairsForChangedPaths();
+
+  if (!selected.ok) {
+    process.stderr.write(`Changed-pair selection failed: ${selected.reason}\n`);
+    process.exitCode = 1;
+    return;
+  }
+
+  process.stdout.write(`Changed-pair base: ${selected.base}\n`);
+
+  if (selected.pairs.length === 0) {
+    process.stdout.write(skippedReport(selected.skipped));
+    return;
+  }
+
+  for (const pair of selected.pairs) {
+    await runPair(pair);
+  }
+}
+
 async function main() {
   const args = process.argv.slice(2);
 
@@ -490,24 +656,16 @@ async function main() {
     return;
   }
 
-  let pairs;
-
   if (args.length === 1) {
-    pairs = [pairForPath(args[0])];
-  } else if (args.length === 0) {
-    pairs = pairsForChangedPaths();
-  } else {
-    throw new Error("Pass one source or test path, --all, --all --report <path>, or no arguments");
-  }
-
-  if (pairs.length === 0) {
-    process.stdout.write("No changed source-test pairs.\n");
+    await runPair(pairForPath(args[0]));
     return;
   }
 
-  for (const pair of pairs) {
-    await runPair(pair);
+  if (args.length !== 0) {
+    throw new Error("Pass one source or test path, --all, --all --report <path>, or no arguments");
   }
+
+  await runChangedPairs();
 }
 
 const invokedPath = process.argv[1] === undefined ? undefined : path.resolve(process.argv[1]);
