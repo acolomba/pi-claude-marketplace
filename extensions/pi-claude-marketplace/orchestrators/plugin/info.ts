@@ -2479,7 +2479,3 @@ const NODE_PLUGIN_INFO_READER: PluginInfoReader = {
 
 /** Reads plugin information through the Node-backed reader capability. */
 export const getPluginInfo = createGetPluginInfo(NODE_PLUGIN_INFO_READER);
-
-// Test-only re-export of the shared classifier so callers exercising
-// this orchestrator's behavior can verify the closed-set ladder without
-// reaching into `shared/probe-classifiers.ts` directly.

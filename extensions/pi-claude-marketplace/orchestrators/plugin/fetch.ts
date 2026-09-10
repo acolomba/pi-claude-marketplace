@@ -27,6 +27,7 @@
 // the clone seam's, which lives in clone-cache.ts.
 
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
+import { resolveStrict } from "../../domain/plugin-resolver.ts";
 import { parsePluginSource } from "../../domain/source.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
@@ -480,8 +481,6 @@ async function reasonedRow(
   meta: { version?: string; description?: string },
   status: FetchStatus,
 ): Promise<FetchMsg> {
-  const { resolveStrict } = await import("../../domain/plugin-resolver.ts");
-
   try {
     // `reasonedRow` is reached only after `fetchOne` has materialized a git
     // source and `freshRow` has classified that warm source as reason-bearing.
