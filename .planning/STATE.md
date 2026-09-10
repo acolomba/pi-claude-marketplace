@@ -5,14 +5,14 @@ milestone_name: Refine Unit Tests
 current_phase: 06
 current_phase_name: Assertion and Module Refinement
 status: executing
-stopped_at: Completed 06-52-PLAN.md; Phase 06 executed 52/52, awaiting verification
+stopped_at: Phase 06 complete; re-verified passed 5/5 with one recorded override
 last_updated: "2026-09-09T23:05:00.000Z"
-last_activity: 2026-09-09
-last_activity_desc: Phase 06 execution complete, full gate green
+last_activity: 2026-09-10
+last_activity_desc: Phase 06 complete after contract-weakening gap closure
 state_head: 3aa84c210bec6192645be9ba58b95162d967e144
 progress:
   total_phases: 9
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 180
   completed_plans: 180
   percent: 11
@@ -31,31 +31,39 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: 06 (Assertion and Module Refinement) — EXECUTED, verification `gaps_found` (4/5)
-Next: close the 12 contract-weakening gaps in `06-VERIFICATION.md`, re-verify, then discuss Phase 7
+Phase: 06 (Assertion and Module Refinement) — COMPLETE, re-verified `passed` 5/5 (1 override)
+Next: Discuss Phase 7 (Gate Integrity)
 Plan: 52 of 52 complete
-Status: Gate was green (5881 unit + 32 integration, exit 0) but an independent contract-weakening
-audit found 12 real gaps the suite cannot see. Gap closure in progress.
-Last activity: 2026-09-09 — Phase 06 verification downgraded to gaps_found
+Status: `npm run check` exit 0 at 5885 unit plus 32 integration. TREF-07..TREF-09 Complete.
+Last activity: 2026-09-10 — Phase 06 closed after contract-weakening gap closure
 
-### Gap closure in flight
+### What closing this phase actually took
 
-The audit found that **sequence and invocation-count assertions did not survive the seven-family
+The phase reached a green gate and a `passed` 5/5 verification, then an independent
+contract-weakening audit found **13 findings the suite could not see**. The cause is worth
+carrying forward: **sequence and invocation-count assertions did not survive the seven-family
 split; end-state assertions did.** End-state assertions are order-insensitive, so a rollback that
-unwinds forward leaves every byte identical and the suite green. Full table: `06-VERIFICATION.md`
-Gaps Summary, G1..G12.
+unwinds forward leaves every byte identical and the suite stays green. The verification was
+downgraded to `gaps_found`, the gaps closed, and re-verification planted each regression to prove
+the restored assertions actually fire.
 
-| Gap | Owner file | State |
-|---|---|---|
-| G4, G5 (NFR-5 gate covered 2 of 11 split owners) | `tests/architecture/no-orchestrator-network.test.ts` | DONE — 9 targets added, both directions proven to fire on planted `gitOps` |
-| G10, G11, G12 (notify emitter guarantees vacuous) | `tests/shared/notification-dispatch.test.ts` | DONE — `t.mock.fn` restored, 198/198, reload-suppression proven to fire |
-| G1 (critical: install cleanup fault injection deleted) | `tests/orchestrators/plugin/install-flow.test.ts` | in flight |
-| G2, G3 (reinstall LIFO schedule + `remove:hooks` pin) | `tests/orchestrators/plugin/reinstall-flow.test.ts` | in flight |
-| G8, G9 (catalog seam binding + XSURF-03 brace parity) | `catalog-uat/fixtures/`, `cross-surface-reason-parity.test.ts` | in flight |
-| G6, G7 (update laundering cast + `fromVersion` guard) | `orchestrators/plugin/update-{flow,preflight}.ts` | in flight |
+Twelve closed. One accepted as an override: G1's leak-message and leaked-residue proofs need a
+cleanup failure to be observable, and `shared/fs-utils.ts` calls `fs.rm` directly with no port. The
+`rename` that empties the staging directory needs the same parent-write permission as the `rm` that
+follows, so no permission state makes cleanup fail while the rename succeeds — and the patch-based
+route is exactly what TREF-08 removes. Carried to Direct Coverage criterion 4.
 
-TREF-07..TREF-09 are `Pending` in both `REQUIREMENTS.md` and `scripts/revalidation.mjs` until gap
-closure re-verifies. Flipping either file alone re-reddens `RVAL-04`.
+Two findings were also carried to Phase 7's criteria: gates that address targets by composed path
+are invisible to a literal-match scan, and one direction of the D-11 pair had gone silently inert
+while still reporting success.
+
+### Known artifact, not a regression
+
+`gsd-tools query verification.status` reports Phase 06 as `stale` while the report reads
+`passed`. Its `covered_files` includes `.planning/REQUIREMENTS.md`, and the verification's own
+recommended action was to flip TREF-07..TREF-09 in that file — so acting on it staled it. The same
+artifact explains phases 3, 4, and 5 reading `stale` with `passed` reports. Read the file, not the
+query.
 
 ## Performance Metrics
 
