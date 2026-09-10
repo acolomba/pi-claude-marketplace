@@ -606,9 +606,25 @@ function debugLines(errorSpy: ReturnType<typeof observeDebug>): string[] {
   return errorSpy.mock.calls.map(({ arguments: values }) => values.map(String).join(" "));
 }
 
+/**
+ * One dispatchable event's translator probe.
+ *
+ * `diagnosedOmissions` and `benignOmission` are drivers, not expectations:
+ * each names a field the case deletes from an otherwise complete envelope so
+ * that `buildPayload`'s own WR-03 debug output can say whether the module
+ * treats that field as required. The expectation is the wording the module
+ * emits, so an edit to its required-field table changes the observed lines and
+ * fails the case, rather than agreeing with a second copy of the table.
+ *
+ * `benignOmission` is the control for the same probe: a field the envelope
+ * carries that the module does not require. Its omission must stay silent,
+ * which is also the whole contract for the six events whose required set is
+ * empty -- an empty required set is a real state, not an untested one.
+ */
 interface TranslatorCase {
   readonly claudeEvent: DispatchableEvent;
-  readonly requiredFields: readonly string[];
+  readonly diagnosedOmissions: readonly string[];
+  readonly benignOmission: string;
   readonly createEvent: () => unknown;
   readonly eventFields: Readonly<Record<string, unknown>>;
 }
@@ -616,7 +632,8 @@ interface TranslatorCase {
 const TRANSLATOR_CASES: readonly TranslatorCase[] = [
   {
     claudeEvent: "SessionStart",
-    requiredFields: [],
+    diagnosedOmissions: [],
+    benignOmission: "reason",
     createEvent: () =>
       ({
         type: "session_start",
@@ -626,7 +643,8 @@ const TRANSLATOR_CASES: readonly TranslatorCase[] = [
   },
   {
     claudeEvent: "UserPromptSubmit",
-    requiredFields: ["text"],
+    diagnosedOmissions: ["text"],
+    benignOmission: "source",
     createEvent: () =>
       ({
         type: "input",
@@ -637,7 +655,8 @@ const TRANSLATOR_CASES: readonly TranslatorCase[] = [
   },
   {
     claudeEvent: "PreToolUse",
-    requiredFields: ["toolName", "input"],
+    diagnosedOmissions: ["toolName", "input"],
+    benignOmission: "toolCallId",
     createEvent: () =>
       ({
         type: "tool_call",
@@ -652,7 +671,8 @@ const TRANSLATOR_CASES: readonly TranslatorCase[] = [
   },
   {
     claudeEvent: "PostToolUse",
-    requiredFields: ["toolName", "input"],
+    diagnosedOmissions: ["toolName", "input"],
+    benignOmission: "toolCallId",
     createEvent: () =>
       ({
         type: "tool_result",
@@ -671,7 +691,8 @@ const TRANSLATOR_CASES: readonly TranslatorCase[] = [
   },
   {
     claudeEvent: "PostToolUseFailure",
-    requiredFields: ["toolName", "input"],
+    diagnosedOmissions: ["toolName", "input"],
+    benignOmission: "toolCallId",
     createEvent: () =>
       ({
         type: "tool_result",
@@ -690,7 +711,8 @@ const TRANSLATOR_CASES: readonly TranslatorCase[] = [
   },
   {
     claudeEvent: "PreCompact",
-    requiredFields: [],
+    diagnosedOmissions: [],
+    benignOmission: "customInstructions",
     createEvent: () =>
       ({
         type: "session_before_compact",
@@ -722,7 +744,8 @@ const TRANSLATOR_CASES: readonly TranslatorCase[] = [
   },
   {
     claudeEvent: "PostCompact",
-    requiredFields: [],
+    diagnosedOmissions: [],
+    benignOmission: "fromExtension",
     createEvent: () =>
       ({
         type: "session_compact",
@@ -743,7 +766,8 @@ const TRANSLATOR_CASES: readonly TranslatorCase[] = [
   },
   {
     claudeEvent: "SessionEnd",
-    requiredFields: [],
+    diagnosedOmissions: [],
+    benignOmission: "type",
     createEvent: () =>
       ({
         type: "session_shutdown",
@@ -753,7 +777,8 @@ const TRANSLATOR_CASES: readonly TranslatorCase[] = [
   },
   {
     claudeEvent: "Stop",
-    requiredFields: [],
+    diagnosedOmissions: [],
+    benignOmission: "stop_hook_active",
     createEvent: () =>
       ({
         last_assistant_message: "completed response",
@@ -766,7 +791,8 @@ const TRANSLATOR_CASES: readonly TranslatorCase[] = [
   },
   {
     claudeEvent: "StopFailure",
-    requiredFields: [],
+    diagnosedOmissions: [],
+    benignOmission: "error_details",
     createEvent: () =>
       ({
         error: "server_error",
@@ -821,53 +847,103 @@ for (const translatorCase of TRANSLATOR_CASES) {
   );
 }
 
+/**
+ * One dispatch of `translatorCase`'s envelope with `omittedField` deleted (or
+ * of the complete envelope when `omittedField` is `undefined`), reported
+ * through the module's own observable surface: the WR-03 required-field lines
+ * it emitted, the arm it resolved to, and whether the translator still reached
+ * the process boundary after the probe.
+ */
+interface OmissionObservation {
+  readonly missingFieldLines: readonly string[];
+  readonly outcome: HookExecResult;
+  readonly spawnCount: number;
+}
+
+async function observeFieldOmission(
+  t: import("node:test").TestContext,
+  errorSpy: ReturnType<typeof observeDebug>,
+  caseRoot: string,
+  translatorCase: TranslatorCase,
+  omittedField: string | undefined,
+): Promise<OmissionObservation> {
+  const runtime = createHooksRuntime();
+  const processChild = makeInjectedChild(t);
+  const processBoundary = observeSpawn(t, processChild);
+  const entry = makeEntry(caseRoot, { claudeEvent: translatorCase.claudeEvent });
+  const event = translatorCase.createEvent() as Record<string, unknown>;
+  if (omittedField !== undefined) {
+    Reflect.deleteProperty(event, omittedField);
+  }
+
+  errorSpy.mock.resetCalls();
+  const pendingOutcome = dispatchHookExec(entry, event, makeContext(caseRoot), undefined, runtime, {
+    spawnImpl: processBoundary.spawnImpl,
+  });
+  await processBoundary.spawned;
+  await processChild.close(0);
+  const outcome = await pendingOutcome;
+
+  return {
+    missingFieldLines: debugLines(errorSpy).filter((line) =>
+      line.includes("missing required field"),
+    ),
+    outcome,
+    spawnCount: processBoundary.calls.length,
+  };
+}
+
 for (const translatorCase of TRANSLATOR_CASES) {
   test(
-    "diagnoses the " +
+    "probes each " +
       translatorCase.claudeEvent +
-      " required-field list as " +
-      JSON.stringify(translatorCase.requiredFields),
+      " envelope field against buildPayload's own required-field diagnostic",
     async (t) => {
       // arrange
-      const runtime = createHooksRuntime();
-      const caseRoot = await makeCaseRoot(t, "dispatch-required-fields-");
       const errorSpy = observeDebug(t);
-      const processChild = makeInjectedChild(t);
-      const processBoundary = observeSpawn(t, processChild);
-      const entry = makeEntry(caseRoot, { claudeEvent: translatorCase.claudeEvent });
+      const caseRoot = await makeCaseRoot(t, "dispatch-required-fields-");
+      const missingFieldLine = (omittedField: string): string =>
+        `[hooks] buildPayload: ${translatorCase.claudeEvent} event missing required field ` +
+        `"${omittedField}"; partial envelope likely`;
+      const expectedDiagnosed = translatorCase.diagnosedOmissions.map((omittedField) => [
+        missingFieldLine(omittedField),
+      ]);
+      // Every probe leaves the never-throws contract intact: the translator
+      // still runs after a miss and the child still receives an envelope.
+      const expectedSurvival = Array.from(
+        { length: translatorCase.diagnosedOmissions.length + 2 },
+        () => ({ outcome: { kind: "noop" }, spawnCount: 1 }),
+      );
 
       // act
-      const pendingOutcome = dispatchHookExec(
-        entry,
-        {},
-        makeContext(caseRoot),
-        undefined,
-        runtime,
-        {
-          spawnImpl: processBoundary.spawnImpl,
-        },
-      );
-      await processBoundary.spawned;
-      await processChild.close(0);
-      const hookOutcome = await pendingOutcome;
-      const missingFieldLines = debugLines(errorSpy).filter((line) =>
-        line.includes("missing required field"),
-      );
-
-      // assert
-      assert.deepStrictEqual(hookOutcome, { kind: "noop" });
-      assert.strictEqual(missingFieldLines.length, translatorCase.requiredFields.length);
-      for (const requiredField of translatorCase.requiredFields) {
-        assert.strictEqual(
-          missingFieldLines.some(
-            (line) =>
-              line.includes(translatorCase.claudeEvent) &&
-              line.includes('"' + requiredField + '"') &&
-              line.includes("partial envelope"),
-          ),
-          true,
+      const complete = await observeFieldOmission(t, errorSpy, caseRoot, translatorCase, undefined);
+      const diagnosed: OmissionObservation[] = [];
+      for (const omittedField of translatorCase.diagnosedOmissions) {
+        diagnosed.push(
+          await observeFieldOmission(t, errorSpy, caseRoot, translatorCase, omittedField),
         );
       }
+
+      const benign = await observeFieldOmission(
+        t,
+        errorSpy,
+        caseRoot,
+        translatorCase,
+        translatorCase.benignOmission,
+      );
+      const survival = [complete, ...diagnosed, benign].map((observation) => ({
+        outcome: observation.outcome,
+        spawnCount: observation.spawnCount,
+      }));
+
+      // assert
+      assert.deepStrictEqual(complete.missingFieldLines, []);
+      assert.deepStrictEqual(
+        diagnosed.map((observation) => observation.missingFieldLines),
+        expectedDiagnosed,
+      );
+      assert.deepStrictEqual(benign.missingFieldLines, []);
+      assert.deepStrictEqual(survival, expectedSurvival);
     },
   );
 }
