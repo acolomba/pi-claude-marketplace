@@ -435,3 +435,13 @@ None. No hardcoded empty value, placeholder string, `TODO`, `FIXME`, `test.only`
 ## Next Step
 
 This is the last plan of Phase 7. The phase closes on a green `npm run check`, a fired-controls ledger covering every gate it created or modified, and a criterion-by-criterion answer backed by commands run this cycle. Ready for phase verification.
+
+## Self-Check: PASSED
+
+- All three modified files exist on disk.
+- Both task commits resolve in `git log --all`: `f7997ff9`, `f677bff4`.
+- `node --test tests/architecture/gate-targets.test.ts` → 14 pass / 0 fail.
+- `npm run check` → exit 0.
+- `git status --short` shows no modification outside this plan's files apart from
+  `.claude/settings.json` and `.codex/config.toml`, both already modified by the
+  operator before this plan started and untouched here.
