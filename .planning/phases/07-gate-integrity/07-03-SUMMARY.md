@@ -19,8 +19,10 @@ affects: [07-08, gate-integrity, direct-coverage]
 actuals:
   tokens: 5411
   tasks: 3
-  commits: 3
+  commits: 5
   plan_head_before: f25c8b5fc6bb5e186a687645200feb2aea99b2d2
+  commits_instrument: "git rev-list --count --grep='(07-03)' f25c8b5f..HEAD"
+  commits_instrument_note: "Five executors committed to this one working tree concurrently, so the unfiltered `f25c8b5f..HEAD` count mixes in sibling plans. The scope-filtered count above is the measurement for this plan."
 
 tech-stack:
   added: []
