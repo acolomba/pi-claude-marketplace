@@ -54,14 +54,14 @@
 
 - `.fallowrc.json` at repo root; entry point `extensions/pi-claude-marketplace/index.ts`; `production: false`
 - `npm run fallow` runs three sub-gates in sequence, each `--fail-on-issues`: `fallow dead-code`, `fallow health`, `fallow dupes`
-- `npm run check` is `typecheck && lint && fallow && format:check && test && test:integration` — **fallow is a mandatory member of the check chain, not an optional extra.** Always mention it when describing "the gate."
+- `npm run check` is `typecheck && lint && fallow && format:check && test:corresponding && test:corresponding:negative && test:coverage:direct:negative && test && test:integration` — **fallow is a mandatory member of the check chain, not an optional extra.** Always mention it when describing "the gate."
 - `health` thresholds: `maxCyclomatic: 20`, `maxCognitive: 15`, `maxUnitSize: 60`, `maxCrap: 0`. **This is a second, independently-computed cognitive-complexity ceiling layered on top of ESLint's `sonarjs/cognitive-complexity: 15`** — the two tools use different algorithms and do not agree on a given function's score. A function can pass one and fail the other; both gates must be satisfied. Currently there are **zero** `health.thresholdOverrides` entries in `.fallowrc.json` — no function has an approved exception.
 - `boundaries.zones` (13 zones: entry, edge, orchestrators, bridges-agents, bridges-commands, bridges-mcp, bridges-skills, bridges-hooks, domain, transaction, persistence, platform, shared) is a **finer-grained** architecture-boundary gate than ESLint's `import-x/no-restricted-paths` (which only distinguishes the coarser `bridges` as one zone). It is the only mechanism that forbids one bridge kind from importing a sibling bridge kind (e.g. `bridges-skills` importing `bridges-agents`).
 - `boundaries.calls.forbidden` also re-enforces the `process.stdout.*`/`process.stderr.*` ban per zone, independently of the ESLint `no-restricted-syntax` rule.
 - `duplicates.threshold: 3`; `duplicates.ignoredClones` currently holds exactly two entries (`dup:cc950b18:2`, `dup:6d8c002d:2`) — both retained clones live in `tests/live-uat/manifest-absence-canary.mjs` and `tests/live-uat/stop-canary.mjs`, and each is justified with an inline comment header in **both** files (fallow's `ignoredClones` is typed `string[]`, so the per-clone justification cannot live in the JSON and lives in the source instead). **Fingerprint keys are content-addressed (`dup:<hash>`) and stable; do not use the index-suffixed `dup:<hash>-NN` form anywhere — it is not stable across runs.**
 - Suppressions: exactly **11** `fallow-ignore` markers exist repo-wide as of this analysis (verify with `rg -n "fallow-ignore" extensions tests scripts`). Ten are scoped to `unused-type`/`unused-export`/`private-type-leak`/`unused-file`: two standalone operator-run UAT drivers, seven compile-time proof/pin types, and one published compatibility type. The remaining marker is a temporary, function-scoped complexity exception on `validateScopeChangeStructure` in `scripts/revalidation.mjs`; its inline comment records the removal target. No duplication finding is suppressed.
 - `npm run fallow:audit` gates PRs on newly-introduced findings only (delta mode), distinct from the full `npm run fallow` gate used locally and in `npm run check`.
-- **A gate wants a test that plants the violation, not one that reads the config.** `import-x/no-cycle` (the ESLint half of the circular-import gate) was configured-but-inert for a period while a test that merely re-read the rule config from `eslint.config.js` stayed green. `tests/architecture/import-boundaries.test.ts` and `tests/architecture/no-orchestrator-network.test.ts` now verify by **planting**: they either scan real source files for forbidden import/call tokens (`assertNoForbiddenSurface`, `tests/helpers/source-scan.ts`) or programmatically load the flat config and assert its zones match an independently-maintained expected matrix — never a bare "the rule object exists" check. Apply this pattern to any new architectural gate: prove the rule actually fires on a real (or planted) violation, not just that its configuration is present.
+- **A gate wants a test that plants the violation, not one that reads the config.** `import-x/no-cycle` (the ESLint half of the circular-import gate) was configured-but-inert for a period while a test that merely re-read the rule config from `eslint.config.js` stayed green. `tests/architecture/import-boundaries.test.ts` and `tests/architecture/no-orchestrator-network.test.ts` now verify by **planting**: they either scan real source files for forbidden import/call tokens (`assertNoForbiddenSurface`, `tests/architecture/source-scan.ts`) or programmatically load the flat config and assert its zones match an independently-maintained expected matrix — never a bare "the rule object exists" check. Apply this pattern to any new architectural gate: prove the rule actually fires on a real (or planted) violation, not just that its configuration is present.
 
 ## Import Organization
 
@@ -103,7 +103,7 @@ All domain errors live in `extensions/pi-claude-marketplace/shared/errors.ts` (b
 - Carries typed, readonly public fields for structured data callers need (never encode structured data only in the message string)
 - Has a doc comment citing the requirement/decision ID it implements (e.g. `MA-6`, `D-48-A`, `ATTR-07`)
 
-Example (`extensions/pi-claude-marketplace/shared/errors.ts:140`):
+Example (`extensions/pi-claude-marketplace/shared/errors.ts`, `StaleSourceCloneError`):
 
 ```ts
 export class StaleSourceCloneError extends Error {
@@ -120,9 +120,9 @@ export class StaleSourceCloneError extends Error {
 }
 ```
 
-Errors that wrap an underlying cause pass `{ cause }` through the `Error` constructor's second argument rather than swallowing or re-stringifying it (`MarketplaceUpdateError`, `extensions/pi-claude-marketplace/shared/errors.ts:180`).
+Errors that wrap an underlying cause pass `{ cause }` through the `Error` constructor's second argument rather than swallowing or re-stringifying it (`MarketplaceUpdateError`, `extensions/pi-claude-marketplace/shared/errors.ts`).
 
-**Discrimination:** callers narrow on `instanceof`, never on message substring matching or `error.name` string comparison (per the `InvalidMarketplaceManifestError` doc comment at `extensions/pi-claude-marketplace/shared/errors.ts:189`, which explicitly replaced legacy `SyntaxError`/substring-matched failures with a typed class).
+**Discrimination:** callers narrow on `instanceof`, never on message substring matching or `error.name` string comparison (per the `InvalidMarketplaceManifestError` doc comment in `extensions/pi-claude-marketplace/shared/errors.ts`, which explicitly replaced legacy `SyntaxError`/substring-matched failures with a typed class).
 
 **Optional fields:** constructors accept `opts?: { cause?: unknown; retryHint?: string }`-shaped option bags for errors with more than 2 optional fields, rather than long positional parameter lists.
 
@@ -130,7 +130,7 @@ Errors that wrap an underlying cause pass `{ cause }` through the `Error` constr
 
 **Framework:** No logging library. `console.warn` is the single sanctioned exception (load-time legacy-migration save failure per project constraint IL-3); `no-console` is `"warn"` at lint level everywhere else.
 
-**User-visible output:** All output goes through `ctx.ui.notify(message, severity)` (`extensions/pi-claude-marketplace/shared/notify.ts`, `notify-context.ts`, `notify-reasons.ts`). Direct `process.stdout`/`process.stderr` writes are forbidden inside `extensions/pi-claude-marketplace/**` by **two independent gates**: the ESLint `no-restricted-syntax` rule and fallow's `boundaries.calls.forbidden` per-zone rule (see Fallow section above).
+**User-visible output:** All output goes through `ctx.ui.notify(message, severity)` inside `extensions/pi-claude-marketplace/shared/notification-dispatch.ts` — the sole sanctioned call site — fed by `notification-types.ts`, `notification-grammar.ts`, `notification-summary.ts`, `notify-context.ts`, and `notify-reasons.ts`. Direct `process.stdout`/`process.stderr` writes are forbidden inside `extensions/pi-claude-marketplace/**` by **two independent gates**: the ESLint `no-restricted-syntax` rule and fallow's `boundaries.calls.forbidden` per-zone rule (see Fallow section above).
 
 ## Comments
 
@@ -161,7 +161,7 @@ Errors that wrap an underlying cause pass `{ cause }` through the `Error` constr
 
 **Exports:** Named exports only observed — no default exports in sampled files.
 
-**Barrel Files:** Barrels exist per bridge kind (`bridges/<kind>/index.ts`, plus the aggregate `bridges/index.ts`) and under `orchestrators/{import,marketplace,plugin}/`. The layer-level barrels (`domain/`, `edge/`, `orchestrators/`, `persistence/`, `transaction/`) were removed as unreachable from the extension entry point. Barrels are not universally used across every directory (check per-directory before assuming one exists).
+**Barrel Files:** Barrels exist per bridge kind (`bridges/<kind>/index.ts`, all five) and at `orchestrators/import/index.ts`. The aggregate `bridges/index.ts`, the `orchestrators/{marketplace,plugin}/` barrels, and the layer-level barrels (`domain/`, `edge/`, `orchestrators/`, `persistence/`, `transaction/`) were all removed as unreachable from the extension entry point. Barrels are not universally used across every directory (check per-directory before assuming one exists).
 
 ---
 

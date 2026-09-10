@@ -17,7 +17,7 @@
 //                            git-source sha, then the 3-tier precedence
 //                            (plugin.json > entry.version > hash) delegated
 //                            to `shared.ts::resolvePluginVersion`
-//       runPhases(phases, ctx)                             // D-01 5-phase ledger
+//       runPhases(phases, ctx)                             // D-01 6-phase ledger
 //       format rollback result, capture rows, throw error  // D-02 PI-14 bypass
 //   })
 //
@@ -207,7 +207,7 @@ export type InstallLedgerResult =
   | { readonly kind: "marketplace-absent" };
 
 /**
- * Local context type for the 5-phase ledger. Carries every value the
+ * Local context type for the 6-phase ledger. Carries every value the
  * phases read or mutate. Per D-01 corollary "second-consumer rule" this
  * shape is NOT promoted to `orchestrators/types.ts` until/unless another
  * orchestrator needs it.
@@ -467,7 +467,7 @@ async function preflightInstallResolve(
 
 /**
  * CR-01: the guard-FREE install ledger body -- the
- * complete PI-15 / PI-3 / PI-2 / PI-4 / PI-6 / PI-7 + 5-phase ledger
+ * complete PI-15 / PI-3 / PI-2 / PI-4 / PI-6 / PI-7 + 6-phase ledger
  * sequence.
  *
  * Locking contract: the CALLER owns the per-scope state lock and the

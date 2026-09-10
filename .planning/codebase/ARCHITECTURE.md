@@ -29,18 +29,18 @@
 └───────┬───────────────┬───────────────┬───────────────┬───────────────┘
         │                │               │               │
         ▼                ▼               ▼               ▼
-┌───────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────────┐
-│  bridges/       │ │  domain/     │ │ transaction/│ │  persistence/     │
-│ agents/commands/│ │ resolver.ts  │ │ phase-ledger │ │ state-io.ts       │
-│ mcp/skills/hooks│ │ manifest.ts  │ │ with-state-  │ │ config-io.ts      │
-│ (stage/commit/  │ │ source.ts    │ │ guard.ts     │ │ locations.ts      │
-│ unstage triplet)│ │ version.ts   │ │ rollback.ts  │ │ migrate.ts        │
-└───────┬─────────┘ └──────┬──────┘ └──────┬──────┘ └────────┬──────────┘
-        │                  │               │                 │
-        ▼                  ▼               ▼                 ▼
+┌───────────────┐ ┌───────────────────┐ ┌─────────────┐ ┌─────────────────┐
+│  bridges/       │ │  domain/           │ │ transaction/│ │  persistence/     │
+│ agents/commands/│ │ plugin-resolver.ts │ │ phase-ledger │ │ state-io.ts       │
+│ mcp/skills/hooks│ │ manifest.ts        │ │ with-state-  │ │ config-io.ts      │
+│ (stage/commit/  │ │ source.ts          │ │ guard.ts     │ │ locations.ts      │
+│ unstage triplet)│ │ version.ts         │ │ rollback.ts  │ │ migrate.ts        │
+└───────┬─────────┘ └──────┬────────────┘ └──────┬──────┘ └────────┬──────────┘
+        │                  │                     │                 │
+        ▼                  ▼                     ▼                 ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │                platform/ + shared/ (leaf utilities)                   │
-│  `platform/pi-api.ts` `platform/git.ts` `shared/notify.ts`            │
+│  `platform/pi-api.ts` `platform/git.ts` `shared/notification-*.ts`    │
 │  `shared/path-safety.ts` `shared/errors.ts` `shared/atomic-json.ts`   │
 └─────────────────────────────────────────────────────────────────────┘
                 │
@@ -75,11 +75,11 @@
 **Overall:** Layered architecture with strict one-directional import boundaries (edge → orchestrators → {bridges, domain, transaction, persistence} → {platform, shared}), organized around a **command/resource translation pipeline**: Claude plugin artifacts on disk are resolved (domain), staged, and committed (bridges) into Pi-native equivalents under transactional control (transaction), with all disk mutation funneled through a single path-containment chokepoint (`shared/path-safety.ts`) and a single atomic-write primitive (`shared/atomic-json.ts` / `write-file-atomic`).
 
 **Key Characteristics:**
-- The install flow is a named 5-phase ledger (`transaction/phase-ledger.ts`'s `runPhases<C>`) with symmetric `do`/`undo` per phase (skills, commands, agents, hooks, mcp), guaranteeing all-or-nothing materialization. `runPhases` has exactly ONE production call site: `orchestrators/plugin/install.ts:1260`. `orchestrators/plugin/enable-disable.ts` reaches the same materialization logic indirectly, by calling the guard-free `runInstallLedger` exported from `install.ts` (its enable branch, `enable-disable.ts:251`), not `runPhases` directly. `orchestrators/plugin/update.ts` deliberately does NOT use `runPhases` — its own header (`update.ts:11`) documents a heterogeneous-undo flow instead. `uninstall.ts` and `reinstall.ts` carry no ledger at all.
+- The install flow is a named 6-phase ledger (`transaction/phase-ledger.ts`'s `runPhases<C>`) with symmetric `do`/`undo` per phase (skills, commands, agents, hooks, mcp, state), guaranteeing all-or-nothing materialization. `runPhases` has exactly ONE production consumer: `orchestrators/plugin/install-outcome.ts`, which invokes it through the injected `InstallLedgerTransaction.runPhases` seam (`orchestrators/plugin/install-flow.ts` binds the real implementation via `REAL_INSTALL_TRANSACTION`). `orchestrators/plugin/enable-disable.ts` reaches the same materialization logic indirectly, by calling the guard-free `runInstallLedger` exported from `install-outcome.ts` (its enable branch, `runEnableBranch`), not `runPhases` directly. The update family (`orchestrators/plugin/update-flow.ts` + `update-swap.ts`) deliberately does NOT use `runPhases` — their shared header documents a hand-rolled heterogeneous-undo flow instead. `uninstall.ts` and the reinstall family (`reinstall-flow.ts` + its `reinstall-*` leaves) carry no ledger at all.
 - A single cross-process advisory lock (`proper-lockfile`, `retries: 0`) guards the load→mutate→save critical section per scope (`transaction/with-state-guard.ts`); nesting two guards on the same lock file self-deadlocks, so guard-free "ledger body" functions (e.g. `runInstallLedger`, `runInstallLedgerBody`) are extracted for reuse by callers that already hold the lock.
-- Discriminated-union resolution (`installable | partially-available | unavailable`) means TypeScript enforces that non-installable plugins cannot have their `pluginRoot` read (NFR-7). `InstallCtx` (the ledger's working context type in `install.ts`) is module-private; `runInstallLedger` returns only a readonly `InstallLedgerSummary` projection to callers — it never hands out its internal mutable context.
-- Orchestrators never touch the network directly for the read-only/no-network paths (NFR-5); an architectural test (`tests/architecture/no-orchestrator-network.test.ts`) source-greps `orchestrators/plugin/install.ts`, `list.ts`, `reinstall.ts`, `info.ts`, and `orchestrators/marketplace/info.ts` for forbidden `gitOps`/`platform/git`/`DEFAULT_GIT_OPS` surface. `update.ts` is explicitly exempt (PUP-2 `syncClone` legitimately needs `gitOps` via the `marketplace/shared.ts` re-export); `uninstall.ts` is also explicitly exempt — the test's header notes it is "implicitly clean… but is not gated here" because gating install + list already covers the orchestrator-tier NFR-5 obligation.
-- All user-visible output flows through `shared/notify.ts`'s `notify()` / `notifyWithContext()` — direct `ctx.ui.notify` calls outside that file are forbidden by an ESLint rule and a grep gate.
+- Discriminated-union resolution (`installable | partially-available | unavailable`) means TypeScript enforces that non-installable plugins cannot have their `pluginRoot` read (NFR-7). `InstallLedgerContext` (the ledger's working context type in `install-outcome.ts`) is module-private; `runInstallLedger` returns only a readonly `InstallLedgerSummary` projection to callers — it never hands out its internal mutable context.
+- Orchestrators never touch the network directly for the read-only/no-network paths (NFR-5); an architectural test (`tests/architecture/no-orchestrator-network.test.ts`) source-greps a `FORBIDDEN_TARGETS` list — both install owners (`install-flow.ts`, `install-outcome.ts`), all four list owners plus `list.messaging.ts`, four of the six update owners (`update-swap.ts`, `update-cascade.ts`, `update-row.ts`, `update.messaging.ts`), `reinstall-flow.ts`, `fetch.ts`, `enable-disable.ts`, `info.ts`, `orchestrators/marketplace/info.ts`, the reconcile `pending.ts`/`plan.ts`/`notify.ts` family, and `domain/plugin-resolver.ts` — for forbidden `gitOps`/`platform/git`/`DEFAULT_GIT_OPS`/`refreshGitHubClone` surface. `update-flow.ts` and `update-preflight.ts` are explicitly exempt (PUP-2 `syncClone` legitimately needs `gitOps` via the `marketplace/shared.ts` re-export); `uninstall.ts` is also explicitly exempt — the test's header notes it is "implicitly clean… but is not gated here" because gating install + list already covers the orchestrator-tier NFR-5 obligation.
+- All user-visible output flows through `shared/notification-dispatch.ts`'s `notify()` and `shared/notify-context.ts`'s `notifyWithContext()` — `notification-dispatch.ts` is the SOLE sanctioned `ctx.ui.notify` call site, and direct calls anywhere else are forbidden by the ESLint `no-restricted-syntax` selector at `eslint.config.js:130`, turned back off only for that one file (`eslint.config.js:143`).
 
 ## Layers
 
@@ -93,7 +93,7 @@
 **orchestrators/:**
 - Purpose: own the business logic for install/uninstall/update/reinstall/enable-disable, marketplace lifecycle, bulk import, and load-time reconcile
 - Location: `extensions/pi-claude-marketplace/orchestrators/`
-- Contains: per-verb files (`install.ts`, `uninstall.ts`, ...) each paired with a `*.messaging.ts` file holding its notification-message builder; `shared.ts` per subdirectory for cross-verb helpers
+- Contains: per-verb owners — the split verbs pair a `<verb>-flow.ts` composition root with extracted leaf modules (`install-flow.ts` + `install-outcome.ts`/`install-clone-probe.ts`/`install-declared-enabled.ts`/`install-disable-cascade.ts`; `update-flow.ts` + `update-swap.ts`/`update-preflight.ts`/`update-cascade.ts`/`update-row.ts`; `reinstall-flow.ts` + `reinstall-clone-probe.ts`/`reinstall-record.ts`/`reinstall-replace.ts`/`reinstall-targets.ts`; `list-flow.ts` + `list-candidate-row.ts`/`list-installed-row.ts`/`list-orphan-fold.ts`), while `uninstall.ts`, `info.ts`, `fetch.ts`, and `enable-disable.ts` remain single-file owners; most verbs are paired with a `*.messaging.ts` file holding the notification-message builder; `shared.ts` per subdirectory for cross-verb helpers
 - Depends on: bridges/, domain/, transaction/, persistence/, platform/, shared/
 - Used by: edge/handlers/*, orchestrators/import/ (cascades plugin orchestrator calls), index.ts (`applyReconcile`, `updateSinglePlugin`)
 
@@ -108,7 +108,7 @@
 **domain/:**
 - Purpose: pure, network-free resolution and validation of plugin/marketplace shapes — no disk writes
 - Location: `extensions/pi-claude-marketplace/domain/`
-- Contains: `resolver.ts` (the discriminated `installable | partially-available | unavailable` resolver, 1545 lines — the largest domain file), `manifest.ts`/`manifest-cache.ts`/`manifest-lookup.ts` (marketplace.json parsing + cache), `source.ts` (plugin source URL parsing: path/github/git-subdir/url), `version.ts` (hash-version derivation), `name.ts` (safe-name assertions), `plugin-root.ts`, `clone-key.ts`, `auth-registry.ts`/`github-auth.ts`, `components/*.ts` (typebox schemas for plugin.json, hooks.json, mcp.json fragments)
+- Contains: the resolver family — `plugin-resolver.ts` (`resolveStrict` plus the `requireInstallable`/`requirePartialInstallable` narrowing guards, 743 lines — the largest domain file), `resolver-types.ts` (the discriminated `installable | partially-available | unavailable` union), `unsupported-components.ts`, `component-paths.ts`, `mcp-resolution.ts`, `hooks-resolution.ts` — plus `manifest.ts`/`manifest-cache.ts`/`manifest-lookup.ts` (marketplace.json parsing + cache), `source.ts` (plugin source URL parsing: path/github/git-subdir/url), `version.ts` (hash-version derivation), `name.ts` (safe-name assertions), `plugin-root.ts`, `clone-key.ts`, `auth-registry.ts`/`github-auth.ts`, `components/*.ts` (typebox schemas for plugin.json, hooks.json, mcp.json fragments)
 - Depends on: shared/ only
 - Used by: orchestrators/, bridges/, edge/
 
@@ -117,7 +117,7 @@
 - Location: `extensions/pi-claude-marketplace/transaction/`
 - Contains: `phase-ledger.ts` (`runPhases<C>`, `Phase<C>`, `RollbackPartial`), `with-state-guard.ts` (`withLockedStateTransaction`, `proper-lockfile`-backed), `rollback.ts` (`formatRollbackError`)
 - Depends on: persistence/ (state-io), shared/errors.ts
-- Used by: `orchestrators/plugin/install.ts` (sole `runPhases` caller), `orchestrators/plugin/enable-disable.ts` (via `runInstallLedger`), other orchestrators for `withLockedStateTransaction`
+- Used by: `orchestrators/plugin/install-outcome.ts` (sole `runPhases` consumer), `orchestrators/plugin/enable-disable.ts` (via `runInstallLedger`), other orchestrators for `withLockedStateTransaction`
 
 **persistence/:**
 - Purpose: typed, scope-rooted, atomic reads/writes of every on-disk artifact the extension owns
@@ -136,7 +136,7 @@
 **shared/:**
 - Purpose: cross-cutting leaf utilities with no upward dependencies
 - Location: `extensions/pi-claude-marketplace/shared/`
-- Contains: `notify.ts` (4039 lines — the largest source file in the extension; the single sanctioned UI-output surface)/`notify-context.ts`/`notify-reasons.ts`, `errors.ts`/`errors-bridges.ts` (typed error classes: `PluginShapeError`, `ConcurrentInstallError`, `StateLockHeldError`, `PathContainmentError`), `path-safety.ts` (`assertPathInside` chokepoint, NFR-10), `atomic-json.ts` (JSON write-file-atomic wrapper), `fs-utils.ts`, `concerns/soft-dep.ts` (`Dependency` type + companion-extension probing), `concerns/hooks.ts`, `debug-log.ts`, `types.ts` (`Scope` union), `vars.ts` (`${CLAUDE_PLUGIN_DATA}`/`${CLAUDE_PROJECT_DIR}` substitution), `git-failure-classifiers.ts`, `probe-classifiers.ts`, `extension-version.ts`, `markers.ts`, `session-env.ts`, `completion-cache.ts`
+- Contains: the notification family — `notification-types.ts` (the closed message/reason/severity vocabulary), `notification-grammar.ts` (1618 lines — the largest module in `shared/`; deterministic row and block rendering), `notification-summary.ts` (severity, tally, reload, and cascade-summary folding), `notification-dispatch.ts` (the single sanctioned UI-output surface and sole `ctx.ui.notify` call site) — plus `notify-context.ts`/`notify-reasons.ts`, `compare-name-scope.ts` (canonical name-then-scope row ordering), `redact-absolute-paths.ts`, `errors.ts`/`errors-bridges.ts` (typed error classes: `PluginShapeError`, `ConcurrentInstallError`, `StateLockHeldError`, `PathContainmentError`), `path-safety.ts` (`assertPathInside` chokepoint, NFR-10), `atomic-json.ts` (JSON write-file-atomic wrapper), `fs-utils.ts`, `concerns/soft-dep.ts` (`Dependency` type + companion-extension probing), `concerns/hooks.ts`, `debug-log.ts`, `types.ts` (`Scope` union), `vars.ts` (`${CLAUDE_PLUGIN_DATA}`/`${CLAUDE_PROJECT_DIR}` substitution), `git-failure-classifiers.ts`, `probe-classifiers.ts`, `extension-version.ts`, `markers.ts`, `session-env.ts`, `completion-cache.ts`
 - Depends on: nothing internal (leaf layer)
 - Used by: every other layer
 
@@ -146,11 +146,11 @@
 
 1. Pi dispatches the command string to `registerClaudePluginCommand`'s handler (`extensions/pi-claude-marketplace/edge/register.ts`), which calls `routeClaudePlugin` (`extensions/pi-claude-marketplace/edge/router.ts`)
 2. Router peels the `install` token and calls `handlers.install(rest, ctx)`, resolved to `edge/handlers/plugin/install.ts`, which parses flags (`--scope`, `--map-model`, `--partial`, `--local`) via `edge/args.ts`
-3. Handler calls `installPlugin` (`extensions/pi-claude-marketplace/orchestrators/plugin/install.ts`), which opens `withLockedStateTransaction` (`transaction/with-state-guard.ts`) over the target scope's `state.json`
-4. Inside the lock: `runInstallLedgerBody` resolves the marketplace source, loads the cached `marketplace.json` (no network, PI-2), runs `resolveStrict` (`domain/resolver.ts`) to produce a discriminated `installable | partially-available | unavailable` verdict, then gates on `requireInstallable`/`requirePartialInstallable`
-5. `runPhases` (`transaction/phase-ledger.ts:153`) executes 5 phases in order — skills, commands, agents, hooks, mcp — each calling its bridge's `prepareStage*`/`commitPrepared*` (e.g. `bridges/skills/stage.ts`); any phase throw triggers `undo` on all previously-committed phases (`bridges/*/unstage*`)
-6. On success, the state phase mutates the in-memory `ExtensionState` snapshot; the outer `withLockedStateTransaction` persists it via `persistence/state-io.ts::saveState` (atomic write)
-7. `notify()` (`shared/notify.ts`) renders a single `PluginInstalledMessage` (or `PluginFailedMessage` on error) to `ctx.ui.notify`
+3. Handler builds the orchestrator entry point with `createNodeInstallPlugin` (`extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts`) and calls it; `installPluginWithTransaction` opens `withLockedStateTransaction` (`transaction/with-state-guard.ts`) over the target scope's `state.json`
+4. Inside the lock: `runInstallLedgerBody` (`orchestrators/plugin/install-outcome.ts`) resolves the marketplace source, loads the cached `marketplace.json` (no network, PI-2), runs `resolveStrict` (`domain/plugin-resolver.ts`) to produce a discriminated `installable | partially-available | unavailable` verdict, then gates on `requireInstallable`/`requirePartialInstallable`
+5. `runPhases` (`transaction/phase-ledger.ts`) executes 6 phases in order — skills, commands, agents, hooks, mcp, state — the five bridge phases each calling their bridge's `prepareStage*`/`commitPrepared*` (e.g. `bridges/skills/stage.ts`); any phase throw triggers `undo` on all previously-committed phases (`bridges/*/unstage*`)
+6. The sixth phase (`statePhase`) mutates the in-memory `ExtensionState` snapshot; on success the outer `withLockedStateTransaction` persists it via `persistence/state-io.ts::saveState` (atomic write)
+7. `notify()` (`shared/notification-dispatch.ts`) renders a single `PluginInstalledMessage` (or `PluginFailedMessage` on error) to `ctx.ui.notify`
 
 ### Load-Time Reconcile Flow (`resources_discover`)
 
@@ -173,13 +173,13 @@
 
 **Phase<C> ledger:**
 - Purpose: an ordered array of `{ name, do, undo }` phases executed in sequence; any `do` throw unwinds all prior `undo`s in reverse order
-- Examples: `extensions/pi-claude-marketplace/transaction/phase-ledger.ts`. Sole production consumer: `orchestrators/plugin/install.ts` (`runPhases` at line 1260, building the literal 5-element `skillsPhase, commandsPhase, agentsPhase, hooksPhase, mcpPhase` array)
-- Pattern: `enable-disable.ts` reuses the same materialization by calling `install.ts`'s exported `runInstallLedger`, not by constructing its own `Phase<C>` array. `update.ts` intentionally bypasses `runPhases` for a heterogeneous-undo flow of its own design.
+- Examples: `extensions/pi-claude-marketplace/transaction/phase-ledger.ts`. Sole production consumer: `orchestrators/plugin/install-outcome.ts` (`runInstallLedgerBody` builds the literal 6-element `skillsPhase, commandsPhase, agentsPhase, hooksPhase, mcpPhase, statePhase` array and hands it to `transaction.runPhases`; the header calls the array order part of the contract and forbids replacing it with a dynamic builder)
+- Pattern: `enable-disable.ts` reuses the same materialization by calling `install-outcome.ts`'s exported `runInstallLedger`, not by constructing its own `Phase<C>` array. The update family (`update-flow.ts`/`update-swap.ts`) intentionally bypasses `runPhases` for a hand-rolled heterogeneous-undo flow of its own design.
 
 **Resolver discriminated union:**
 - Purpose: encode "can this plugin be materialized" as a type-level discriminant so consumers cannot read `pluginRoot` off a plugin that isn't installable
-- Examples: `extensions/pi-claude-marketplace/domain/resolver.ts` (`ResolvedPlugin` union: `installable | partially-available | unavailable`)
-- Pattern: `requireInstallable`/`requirePartialInstallable` narrow the union and throw `PluginShapeError` on the disqualified arm; TypeScript strict mode + `assertNever` enforce exhaustiveness at every switch
+- Examples: `extensions/pi-claude-marketplace/domain/resolver-types.ts` (`ResolvedPlugin` union: `installable | partially-available | unavailable`), produced by `domain/plugin-resolver.ts`
+- Pattern: `requireInstallable`/`requirePartialInstallable` (`domain/plugin-resolver.ts`) narrow the union and throw `PluginShapeError` on the disqualified arm; TypeScript strict mode + `assertNever` enforce exhaustiveness at every switch
 
 **Bridge stage/commit/unstage triplet:**
 - Purpose: uniform per-component-kind lifecycle so install/enable orchestration can treat all 5 bridges symmetrically
@@ -208,23 +208,23 @@
 - **Threading:** Single-threaded Node.js event loop; concurrency across separate OS processes (not threads) is what `proper-lockfile` guards against (two Pi instances editing the same scope's `state.json`)
 - **Global state:** None at the module level in `extensions/pi-claude-marketplace/` proper for business state; `shared/completion-cache.ts` holds a process-lifetime cache explicitly invalidated by mutating orchestrators, and `bridges/hooks/routing-state.ts` holds the process-lifetime hooks routing table, parsed-config cache, and epoch counter
 - **Circular imports:** Cycle detection is now whole-repo and gated by the bare `fallow dead-code` run inside `npm run fallow` (`.fallowrc.json` entry: `extensions/pi-claude-marketplace/index.ts`). `tests/architecture/import-boundaries.test.ts` ("D-11: npm run fallow runs dead-code unfiltered, so cycles are gated") asserts the `fallow` npm script invokes `fallow dead-code --fail-on-issues` with no per-issue-class filter flag (fallow's per-issue flags are only-report filters — naming one narrows the run and silently stops gating cycles). The ESLint `import-x/no-cycle` rule that used to cover this was REMOVED after being measured to report nothing on a deliberate two-file cycle while `fallow dead-code` correctly exited 1 on the same case.
-  - A second, narrower grep gate in the same test file covers what whole-repo cycle detection cannot: a cycle is reported only once it is *already* circular, so the *first* directed edge of a two-edge cycle lands green. `orchestrators/plugin/` ledger modules (`install`/`update`/`uninstall`/`reinstall`/`enable-disable`) and `orchestrators/marketplace/` ledger modules (`add`/`remove`/`update`/`autoupdate`) must not import each other, in either direction, including `import type`. A plugin ledger reaches marketplace code only through `orchestrators/marketplace/shared.ts`; a marketplace file reaches plugin code only through leaf composers (`orchestrators/plugin/update-row.ts`, `clone-cache.ts`, `clone-gc.ts`), shared types in `orchestrators/types.ts`, or the injected `pluginUpdate` seam.
+  - A second, narrower grep gate in the same test file covers what whole-repo cycle detection cannot: a cycle is reported only once it is *already* circular, so the *first* directed edge of a two-edge cycle lands green. `orchestrators/plugin/` ledger modules (`install-flow`/`update-flow`/`uninstall`/`reinstall-flow`/`enable-disable` — the test's `PLUGIN_LEDGERS` list) and `orchestrators/marketplace/` ledger modules (`add`/`remove`/`update`/`autoupdate`) must not import each other, in either direction, including `import type`. The split verbs carry a `-flow` suffix on the ledger entry point; their sibling `*-probe`/`*-swap`/`*-record`/`*-row`/`*-outcome` modules are extracted helpers and leaf composers, not ledgers, and are deliberately absent from the list. A plugin ledger reaches marketplace code only through `orchestrators/marketplace/shared.ts`; a marketplace file reaches plugin code only through leaf composers (`orchestrators/plugin/update-row.ts`, `clone-cache.ts`, `clone-gc.ts`), shared types in `orchestrators/types.ts`, or the injected `pluginUpdate` seam.
   - Not covered by either gate: `orchestrators/plugin/bootstrap.ts` imports `marketplace/add.ts` and `marketplace/autoupdate.ts` by design — it is a composer, not a ledger.
-- **Network boundary:** `orchestrators/plugin/install.ts`, `list.ts`, `reinstall.ts`, `info.ts`, and `orchestrators/marketplace/info.ts` MUST NOT import `platform/git.ts`/`gitOps`/`DEFAULT_GIT_OPS` — enforced by `tests/architecture/no-orchestrator-network.test.ts`, a source-grep architectural test (NFR-5), NOT by fallow (fallow's zone-level boundary rule cannot express a 3-of-N-files-in-a-folder exception; see the test's own "Why this test is NOT replaceable by a fallow boundary rule" note). `update.ts` is an explicit, documented exemption; `uninstall.ts` is exempt but "implicitly clean."
+- **Network boundary:** every file named in `no-orchestrator-network.test.ts`'s `FORBIDDEN_TARGETS` — the install owners (`install-flow.ts`, `install-outcome.ts`), the list owners (`list-flow.ts`, `list-candidate-row.ts`, `list-installed-row.ts`, `list-orphan-fold.ts`, `list.messaging.ts`), four update owners (`update-swap.ts`, `update-cascade.ts`, `update-row.ts`, `update.messaging.ts`), `reinstall-flow.ts`, `fetch.ts`, `enable-disable.ts`, `orchestrators/plugin/info.ts`, `orchestrators/marketplace/info.ts`, `orchestrators/reconcile/{pending,plan,notify}.ts`, and the one non-orchestrator target `domain/plugin-resolver.ts` — MUST NOT import `platform/git.ts`/`gitOps`/`DEFAULT_GIT_OPS` or name `refreshGitHubClone`. Enforced by `tests/architecture/no-orchestrator-network.test.ts`, a source-grep architectural test (NFR-5), NOT by fallow (fallow's zone-level boundary rule cannot express a some-files-in-a-folder exception; see the test's own "Why this test is NOT replaceable by a fallow boundary rule" note). `update-flow.ts` and `update-preflight.ts` are explicit, documented exemptions; `uninstall.ts` is exempt but "implicitly clean."
 - **Boundary zones:** `.fallowrc.json` defines 13 zones (`entry`, `edge`, `orchestrators`, `bridges-agents`, `bridges-commands`, `bridges-mcp`, `bridges-skills`, `bridges-hooks`, `domain`, `transaction`, `persistence`, `platform`, `shared`) with an explicit `allow`-list per zone — finer-grained than the single `bridges/` folder the ESLint `import-x/no-restricted-paths` rule (`tests/architecture/import-boundaries.test.ts`) treats as one unit, so fallow additionally forbids cross-bridge-kind imports (e.g. `bridges-skills` importing `bridges-mcp`) that the ESLint gate cannot see.
 - **Lock re-entrancy:** `proper-lockfile` is configured `retries: 0` and is NOT re-entrant; nesting two `withLockedStateTransaction` calls on the same scope's lock file self-deadlocks (`ELOCKED` → `StateLockHeldError`) — guard-free ledger bodies (`runInstallLedgerBody`, etc.) exist specifically so callers that already hold the lock (e.g. `setPluginEnabled`'s enable branch) can invoke the ledger without re-acquiring
 
 ## Anti-Patterns
 
-### Direct `ctx.ui.notify` calls outside `shared/notify.ts`
+### Direct `ctx.ui.notify` calls outside `shared/notification-dispatch.ts`
 
-**What happens:** Code outside `shared/notify.ts` calling `ctx.ui.notify(...)` directly instead of going through `notify()`/`notifyWithContext()`/`notifyUsageError()`.
-**Why it's wrong:** Bypasses the single point that computes severity, soft-dependency markers, and the reload-hint trailer (IL-2); breaks the notify-discipline grep gate and an ESLint custom rule.
-**Do this instead:** Import and call the exported helpers from `extensions/pi-claude-marketplace/shared/notify.ts`.
+**What happens:** Code outside `shared/notification-dispatch.ts` calling `ctx.ui.notify(...)` directly instead of going through `notify()`/`notifyWithContext()`/`notifyUsageError()`.
+**Why it's wrong:** Bypasses the single point that computes severity, soft-dependency markers, and the reload-hint trailer (IL-2); trips the ESLint `no-restricted-syntax` selector that names `ctx.ui.notify` explicitly.
+**Do this instead:** Import and call the exported helpers from `extensions/pi-claude-marketplace/shared/notification-dispatch.ts` (or `shared/notify-context.ts` for the `*WithContext` variants).
 
 ### Orchestrator files importing git/network surfaces
 
-**What happens:** A file under `orchestrators/plugin/install.ts` (or `list.ts`/`reinstall.ts`/`info.ts`) importing `platform/git.ts`, the default git ops, or declaring a `gitOps` field.
+**What happens:** A gated file under `orchestrators/plugin/` (`install-flow.ts`/`install-outcome.ts`, any `list-*` owner, `reinstall-flow.ts`, `info.ts`, …) importing `platform/git.ts`, the default git ops, or declaring a `gitOps` field.
 **Why it's wrong:** Violates NFR-5 — these commands must be network-free; a hidden git import would silently make an offline-guaranteed operation require network.
 **Do this instead:** Route any needed git materialization through the sibling `clone-cache.ts` seam (`orchestrators/plugin/clone-cache.ts`), which is exempt and is the sole named consumer of git ops in the install path.
 
@@ -241,7 +241,7 @@
 
 **Logging:** `shared/debug-log.ts::hookDebugLog(message, category)` — a debug-only trace channel, distinct from user-facing `notify()`; no `console.log`/`process.stdout` writes anywhere in command/bridge code (IL-2), with one sanctioned `console.warn` for legacy-migration save failures (IL-3)
 
-**Validation:** `typebox` schemas throughout `domain/components/*.ts` (plugin.json, hooks.json, mcp fragment shapes) compiled once and reused as validator constants; re-validated defensively at consumption sites even after an earlier validation pass (defense-in-depth, e.g. `install.ts`'s re-check of the manifest entry)
+**Validation:** `typebox` schemas throughout `domain/components/*.ts` (plugin.json, hooks.json, mcp fragment shapes) compiled once and reused as validator constants; re-validated defensively at consumption sites even after an earlier validation pass (defense-in-depth, e.g. `install-outcome.ts`'s `PLUGIN_ENTRY_VALIDATOR.Check` re-check of the manifest entry)
 
 **Authentication:** `orchestrators/auth-host.ts` builds a host-keyed credential bundle via `platform/git-credential.ts`, memoized once-per-host per command invocation (`authMemo`) to avoid repeated device-flow prompts during a bulk import cascade
 
