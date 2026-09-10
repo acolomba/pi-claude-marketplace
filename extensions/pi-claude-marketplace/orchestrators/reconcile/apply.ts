@@ -918,7 +918,7 @@ async function rebuildScopeRoutingTableIsolated(
   await runScopeIsolated(scope, outcomes, () => rebuildScopeRoutingTable(scope, cwd, hooksRouting));
 }
 
-export function surfacePostCommitWarnings(
+function surfacePostCommitWarnings(
   opts: ApplyReconcileOptions,
   outcomes: readonly PerEntryOutcome[],
 ): void {

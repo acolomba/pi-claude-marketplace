@@ -37,7 +37,7 @@ const MARKETPLACE_SCHEMA = Type.Object({
 export type MarketplaceManifest = Type.Static<typeof MARKETPLACE_SCHEMA>;
 
 /** JIT-compiled validator (D-07). Call its `Check` (or coercing `Parse`) method. */
-export const MARKETPLACE_VALIDATOR = Compile(MARKETPLACE_SCHEMA);
+const MARKETPLACE_VALIDATOR = Compile(MARKETPLACE_SCHEMA);
 
 /**
  * NFR-8 / D-14: the sole marketplace.json read+parse+validate. This is the ONLY

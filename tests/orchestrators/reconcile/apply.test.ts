@@ -66,7 +66,6 @@ import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/sou
 import {
   applyReconcile as applyReconcileWithRouting,
   createApplyReconcile,
-  surfacePostCommitWarnings,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
@@ -84,15 +83,10 @@ import type {
   HooksRuntime,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
-import type { PerEntryOutcome } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts";
 import type { ReconcileStateReader } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
 import type { ApplyReconcileOptions } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import type {
-  ExtensionAPI,
-  ExtensionContext,
-} from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { TestContext } from "node:test";
 
 type MarketplaceRecord = ExtensionState["marketplaces"][string];
@@ -3210,114 +3204,58 @@ describe("applyReconcile", () => {
     ]);
     verifyBoundary();
   });
-});
 
-describe("surfacePostCommitWarnings", () => {
-  /** The options bundle the cascade hands the diagnostic channel. */
-  function diagnosticOptions(ctx: ExtensionContext, pi: ExtensionAPI, gitOps: GitOps) {
-    return {
-      ctx,
-      completionCache: createCompletionCache(),
-      cwd: "/work/project",
-      gitOps,
-      hooksRouting: createHooksRouting(createHooksRuntime()),
-      pi,
-      scope: "project" as const,
-    };
-  }
-
-  test("IL-2: says nothing when no outcome carries a post-commit warning", () => {
+  test("WR-06: a planned uninstall whose record another process already removed converges without a row", async (t) => {
     // arrange
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
-    const { gitOps } = createOfflineGitOps();
-    const outcomes: readonly PerEntryOutcome[] = [
-      {
-        dependencies: [],
-        kind: "plugin-installed",
-        marketplace: "mp",
-        plugin: "hello",
-        scope: "project",
+    const { cwd, project } = await createHermeticScopes(t, "uninstall-converged");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      hello: { skill: "clean" },
+    });
+    await writeUnder(
+      project.configJsonPath,
+      configBytes({ marketplaces: { mp: { source: marketplaceRoot } }, plugins: {} }),
+    );
+    const competingState: ExtensionState = {
+      schemaVersion: 2,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+        }),
       },
-      { kind: "plugin-uninstalled", marketplace: "mp", plugin: "gone", scope: "project" },
-      { kind: "plugin-disabled", marketplace: "mp", plugin: "quiet", scope: "project" },
-    ];
+    };
+    await seedState(project, {
+      ...competingState,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+          plugins: {
+            hello: pluginRecord({ pluginRoot: path.join(marketplaceRoot, "plugins", "hello") }),
+          },
+        }),
+      },
+    });
+    const applyWithRace = applyAfterSelectedStateRace(project, competingState);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
-    surfacePostCommitWarnings(diagnosticOptions(ctx, pi, gitOps), outcomes);
+    await applyWithRace({ ctx, pi, cwd, scope: "project", gitOps });
 
     // assert
     assert.deepStrictEqual(notifications, []);
-    verifyBoundary();
-  });
-
-  test("S2: reports a single warning under the singular header", () => {
-    // arrange
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
-    const { gitOps } = createOfflineGitOps();
-    const outcomes: readonly PerEntryOutcome[] = [
-      {
-        dependencies: [],
-        kind: "plugin-installed",
-        marketplace: "mp",
-        plugin: "hello",
-        postCommitWarnings: ["data dir creation deferred"],
-        scope: "project",
-      },
-    ];
-
-    // act
-    surfacePostCommitWarnings(diagnosticOptions(ctx, pi, gitOps), outcomes);
-
-    // assert
-    assert.deepStrictEqual(notifications, [
-      {
-        message:
-          "1 post-install warning surfaced from reconcile installs.\n\ndata dir creation deferred",
-        severity: "warning",
-      },
-    ]);
-    verifyBoundary();
-  });
-
-  test("S2 / NFR-9: collects warnings from an installed row and a disabled row under the plural header and reduces every absolute path to its basename", () => {
-    // arrange
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
-    const { gitOps } = createOfflineGitOps();
-    const outcomes: readonly PerEntryOutcome[] = [
-      {
-        dependencies: [],
-        kind: "plugin-installed",
-        marketplace: "mp",
-        plugin: "hello",
-        postCommitWarnings: [
-          "hello/bad-skill: could not parse frontmatter of /home/user/plugins/hello/skills/bad/SKILL.md",
-        ],
-        scope: "project",
-      },
-      { kind: "mp-added", marketplace: "other", scope: "user" },
-      {
-        kind: "plugin-disabled",
-        marketplace: "mp",
-        plugin: "quiet",
-        postCommitWarnings: ["quiet: preserved foreign agent at /home/user/agents/quiet-bot.md"],
-        scope: "project",
-      },
-    ];
-
-    // act
-    surfacePostCommitWarnings(diagnosticOptions(ctx, pi, gitOps), outcomes);
-
-    // assert
-    assert.deepStrictEqual(notifications, [
-      {
-        message:
-          "2 post-install warnings surfaced from reconcile installs.\n" +
-          "\n" +
-          "hello/bad-skill: could not parse frontmatter of SKILL.md\n" +
-          "quiet: preserved foreign agent at quiet-bot.md",
-        severity: "warning",
-      },
-    ]);
+    assert.strictEqual(await recordFor(project, "mp", "hello"), undefined);
+    assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
   });
 });
