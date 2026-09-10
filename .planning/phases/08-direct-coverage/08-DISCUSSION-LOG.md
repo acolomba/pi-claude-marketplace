@@ -5,7 +5,7 @@
 
 **Date:** 2026-09-10
 **Phase:** 8-direct-coverage
-**Areas discussed:** Shortfall ledger form, Eighth shortfall and stale counts, `cleanupStaging` port shape, Gate wiring and Lint blocker
+**Areas discussed:** Shortfall ledger form, Stale counts and unenumerated shortfalls, `cleanupStaging` port shape, Gate wiring and Lint blocker
 
 **Mode note:** four gray areas were offered for selection. The operator answered
 "choose the recommended option, prefer doing the right thing even if it is more
@@ -26,9 +26,10 @@ selected.
 
 **User's choice:** Recommended option, taking the more-effort path.
 **Notes:** Must-be-zero is not reachable. `ER-F05` and `ER-F19` establish that
-only two of the eight guards yield to a behavior-preserving rewrite; the other
-six are compiler-forced narrowing arms that cannot be removed without `!` or
-`as`, neither of which is available under this project's rules. Prose alone
+exactly two of the known guards yield to a behavior-preserving rewrite; the rest
+are narrowing arms that cannot be removed without `!` or `as`, neither of which is
+available under this project's rules. (How many "the rest" is stays open — see the
+next area.) Prose alone
 cannot survive `RCOV-03`, which requires a fail-closed CI job — and
 `CONTRIBUTING.md`'s current rationale for not teaching the gate rests explicitly
 on there being no CI job ("a job that is red every run reports nothing"). That
@@ -49,31 +50,46 @@ JSON source of truth" Phase 7 named in its own deferred idea.
 
 ---
 
-## Eighth shortfall and stale counts
+## Stale counts and unenumerated shortfalls
 
 | Option | Description | Selected |
 |--------|-------------|----------|
-| Treat `discover.ts` as a regression and restore coverage | Re-cover the arm and keep the roadmap's "seven" | |
-| Classify it compiler-forced, correct the counts | Add it to the pin under `BC-019`, amend 204→230 and seven→eight in ROADMAP, REQUIREMENTS, CONTRIBUTING, and `scripts/revalidation.mjs` | ✓ |
-| Leave the counts alone and note the divergence | Ship against the stale numbers with a footnote | |
+| Keep the roadmap's numbers, note the divergence | Ship against "204 pairs" and "seven shortfalls" with a footnote | |
+| Correct to a new fixed count | Amend to 230 pairs and eight shortfalls, classify the eighth, plan against that | |
+| Correct the pair count; make the shortfall set an output, not an input | 230 is measurable now; the shortfall set is not knowable until a full report run, so no plan carries a number | ✓ |
 
 **User's choice:** Recommended option, taking the more-effort path.
-**Notes:** Measured live during discussion, not inherited:
-`productionPaths()` returns **230**, not 204;
-`bridges/commands/discover.ts` reads `branches 55/57, lines 412/414` with lines
-289-290 uncovered; and the retained `coverage/all-pairs.jsonl` holds **83 of 230**
-rows dated 2026-09-07, having stopped at the first shortfall.
+**Notes:** This area was decided twice, and the second decision is the one that
+matters.
 
-Restoring coverage on the eighth is the wrong move: lines 289-290 are the
-`if (!(err instanceof CommandNameError)) { throw err; }` narrowing arm, and the
-only thing that ever reached it was the `Symbol.hasInstance` surgery that
+The first pass measured `productionPaths()` at **230** (not 204), found
+`bridges/commands/discover.ts` short at `branches 55/57, lines 412/414`, and
+concluded the answer was "eight shortfalls, correct the counts." The retained
+`coverage/all-pairs.jsonl` was also found to hold **83 of 230** rows dated
+2026-09-07, having stopped at its first refusal.
+
+Then, while repairing `STATE.md`, a `STATE.md` note named a module the discussion
+had not probed: `bridges/hooks/event-router.ts`. Measured, it reads
+`branches 107/111, lines 959/967` — uncovered at four separate sites. A **ninth**.
+
+That is what changed the decision. Both gate arms stop at the first refusal, so
+every count in circulation — the roadmap's seven, `CONTRIBUTING.md`'s table, and
+this discussion's own "eight" — is a count of what was found before the
+instrument halted, and hand-probing has no claim to have found the last one. So
+`D-08-02` and `D-08-10` refuse to fix a number at all: the enumerating report run
+is the answer, and it runs **before** anything is classified, with a second run
+after the work lands to generate the pin (`D-08-08`). Two full sweeps, roughly
+twenty minutes, which is the price of measuring instead of inheriting.
+
+`bridges/commands/discover.ts` is still classified compiler-forced under
+`BC-019` — re-covering it would mean reinstating the `Symbol.hasInstance` surgery
 `6527a944 test(06-02): remove bridge builtin mutation` deleted to satisfy
-`TREF-08`. Re-covering it means reinstating exactly the patching `TREF-08`
-forbids. `BC-019`'s ledger disposition already ruled it compiler-forced.
+`TREF-08`. `bridges/hooks/event-router.ts` is deliberately left **unclassified**
+(`D-08-03a`): four sites with lines as well as branches is not the
+single-narrowing-arm signature, no ledger finding authorizes it, and "split
+casualty" is a cause rather than a classification.
 
-Leaving the counts alone was rejected on the phase's own contract: `RCOV-01`
-requires a baseline "without stale counts," so this phase cannot ship carrying
-one. Recorded as `D-08-01` through `D-08-04` and `D-08-10`.
+Recorded as `D-08-01` through `D-08-04a`, `D-08-09a`, and `D-08-10`.
 
 ---
 

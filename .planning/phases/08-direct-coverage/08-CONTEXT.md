@@ -42,9 +42,9 @@ binding on planning.
 
 ### Measured Corrections to the Phase's Own Premises
 
-Three of this phase's stated premises are stale against the live tree. All three
-were reproduced during discussion, and correcting them is inside scope precisely
-because `RCOV-01`'s contract is a baseline "without stale counts."
+This phase's stated premises are stale against the live tree. Each correction
+below was reproduced during discussion, and correcting them is inside scope
+precisely because `RCOV-01`'s contract is a baseline "without stale counts."
 
 - **D-08-01:** The pair count is **230**, not 204. `productionPaths()` in
   `scripts/test-coverage-direct.mjs` returns 230 entries on the milestone branch;
@@ -53,12 +53,40 @@ because `RCOV-01`'s contract is a baseline "without stale counts."
   `RCOV-01` — is corrected to the measured count in this phase, together with the
   reproduction command. A count is a claim; this phase does not get to ship a stale
   one while requiring the baseline not to carry any.
-- **D-08-02:** There are **eight** current shortfalls, not seven. The eighth is
-  `extensions/pi-claude-marketplace/bridges/commands/discover.ts`, reading
-  `branches 55/57, lines 412/414` with lines 289-290 uncovered. Reproduced with
-  `node scripts/test-coverage-direct.mjs extensions/pi-claude-marketplace/bridges/commands/discover.ts`.
-- **D-08-03:** The eighth shortfall is classified **compiler-forced, accepted**,
-  not a regression to repair. Lines 289-290 are the
+
+- **D-08-02:** The shortfall count is an **output of this phase, not an input to
+  it**, and no plan may carry a fixed number forward from the roadmap, from
+  `CONTRIBUTING.md`, or from this document. At least **nine** modules fall short
+  today, which is already two more than the roadmap's "seven," and the true set is
+  unknown until the full report runs to completion.
+
+  The reason the number cannot be known in advance is the instrument itself: both
+  gate arms stop at the **first** refusal, so every count anyone has quoted is a
+  count of shortfalls found before the run halted. Two were discovered during this
+  discussion by probing single modules by hand, one of them named only in a
+  `STATE.md` note. There is no reason to believe hand-probing found the last one.
+
+  Known shortfalls at discussion time, all reproduced with
+  `node scripts/test-coverage-direct.mjs <source path>`:
+
+  | module (under `extensions/pi-claude-marketplace/`) | reading | status |
+  | --- | --- | --- |
+  | `edge/args.ts` | `branches 28/29, lines 86/89` | rewrite per `D-08-09` |
+  | `edge/handlers/shared.ts` | `branches 14/15, lines 83/85` | rewrite per `D-08-09` |
+  | `edge/completions/data.ts` | `branches 109/110` | compiler-forced, pin |
+  | `edge/completions/provider.ts` | `branches 79/80` | compiler-forced, pin |
+  | `edge/handlers/marketplace/update.ts` | `branches 11/12` | compiler-forced, pin |
+  | `edge/handlers/plugin/import.ts` | `branches 11/12` | compiler-forced, pin |
+  | `edge/handlers/plugin/pending.ts` | `branches 9/10` | compiler-forced, pin |
+  | `bridges/commands/discover.ts` | `branches 55/57, lines 412/414` | classified by `D-08-03` |
+  | `bridges/hooks/event-router.ts` | `branches 107/111, lines 959/967` | **unclassified**, see `D-08-03a` |
+
+  The first seven readings come from `CONTRIBUTING.md` and were themselves measured
+  at an earlier commit; the last two were measured live during this discussion.
+  Treat all nine as candidates to re-measure, not as established fact.
+
+- **D-08-03:** `bridges/commands/discover.ts` is classified **compiler-forced,
+  accepted**, not a regression to repair. Lines 289-290 are the
   `if (!(err instanceof CommandNameError)) { throw err; }` narrowing arm.
   `BC-019`'s ledger disposition already ruled it: "the arm is unreachable, but
   deleting the narrowing check without restructure still breaks typing — treat as
@@ -66,13 +94,35 @@ because `RCOV-01`'s contract is a baseline "without stale counts."
   when `6527a944 test(06-02): remove bridge builtin mutation` deleted the
   `Symbol.hasInstance` surgery that was the only thing reaching it. It is the honest
   reading `TREF-08` left behind, and re-covering it would mean reinstating the exact
-  patching `TREF-08` forbids. `RCOV-02`'s "seven" is amended to eight with this
-  evidence recorded as a scope change under `RVAL-04`, in the coordinated
-  `REQUIREMENTS.md` + `scripts/revalidation.mjs` form that requirement demands.
+  patching `TREF-08` forbids.
+
+- **D-08-03a:** `bridges/hooks/event-router.ts` is **not classified here**, and no
+  plan may assume it is compiler-forced. Four branches and eight lines are
+  uncovered across four separate sites (553-554, 587-588, 615-616, 872-873). That
+  shape — several sites, lines as well as branches — is not the single-narrowing-arm
+  signature the other accepted cases share, and it has no ledger finding
+  authorizing an accepted reading. `STATE.md` records it as one of three Phase 6
+  splits that dropped coverage, alongside `reconcile/apply.ts` (closed during
+  Phase 7) and `discover.ts`.
+
+  Its disposition is decided **inside this phase, from measurement**: each of the
+  four sites is either genuinely unreachable — in which case it is pinned with its
+  own recorded reason — or it is reachable and gets a test. "It was a split
+  casualty" is a cause, not a classification, and it does not authorize a pin.
+  This is the same class `.claude` memory records as splits dropping sequence and
+  coverage assertions while end-state assertions survive, which is why a title
+  census would not have caught it and a measured sweep did.
+
 - **D-08-04:** The retained artifact `coverage/all-pairs.jsonl` holds **83 of 230**
   rows, dated 2026-09-07, ending at `edge/args-schema.ts` — the run stopped at the
   first shortfall, `edge/args.ts`. It is not a baseline and must not be read as one.
   The regenerated baseline supersedes it entirely.
+
+- **D-08-04a:** Every count and shortfall list in `.planning/ROADMAP.md` §"Phase 8",
+  `.planning/REQUIREMENTS.md` (`RCOV-01`, `RCOV-02`), `CONTRIBUTING.md`, and
+  `scripts/revalidation.mjs` is rewritten from the completed report run, in the
+  coordinated form `RVAL-04` requires. `RCOV-02`'s "all seven terminal shortfalls"
+  becomes the measured set with its evidence recorded as a scope change.
 
 ### The Accepted-Shortfall Pin
 
@@ -110,11 +160,24 @@ because `RCOV-01`'s contract is a baseline "without stale counts."
   compared as the gate's own formatted string so the pin cannot drift from the
   gate's vocabulary.
 
-- **D-08-08:** The pin is **generated by measurement, not hand-authored**, and it
-  is regenerated **after** the two loop rewrites and the removal port land, so the
-  committed artifact reflects the final tree rather than an intermediate one. Order
-  within the phase is therefore: rewrite and port first, full report last, pin
-  committed from that run.
+- **D-08-08:** The pin is **generated by measurement, not hand-authored**, and the
+  phase runs the full report **twice**:
+
+  1. **Enumerate, before anything is decided.** `npm run test:coverage:direct:report`
+     over all 230 pairs, on the milestone branch, unmodified. This is the only
+     instrument that can answer "which modules fall short" — both gate arms stop at
+     the first refusal, which is why `D-08-02` refuses to fix a count in advance.
+     Classification of every `accepted-shortfall` row happens against this run, not
+     against `CONTRIBUTING.md`'s table.
+  2. **Re-measure, after the work lands.** A second full run after the rewrites,
+     the removal port, and any tests written for reachable arms. The committed pin
+     is generated from **this** run, so the artifact reflects the final tree rather
+     than an intermediate one.
+
+  Two full sweeps is roughly twenty minutes of wall clock. That is the price of a
+  baseline that is measured rather than inherited, and this phase exists to stop
+  inheriting. Ordering within the phase follows from it: enumerate, classify,
+  rewrite and port, re-measure, pin.
 
 ### Rewriting the Two Removable Guards
 
@@ -131,14 +194,24 @@ because `RCOV-01`'s contract is a baseline "without stale counts."
   `ER-F05` names that as the operator's choice and the operator has taken it: the
   accepted "compiler-forced" premise is false for these two iterable shapes, so the
   honest resolution is to remove the guards, not to keep pinning readings that a
-  rewrite can make complete. The remaining six keep `D-116-01a` untouched.
+  rewrite can make complete. Every other module keeps `D-116-01a` untouched.
   — **Reversibility:** reversible — each rewrite is one loop body with its owner
   test unchanged in contract.
 
-- **D-08-10:** Expected end state: **230 pairs, 2 rewritten to complete, 6 pinned
-  compiler-forced**. If measurement after the rewrites disagrees with that shape,
-  the measurement wins and the divergence is recorded — this number is a
-  prediction, not a target to make the instrument report.
+- **D-08-09a:** The same test applies to every shortfall the enumeration run
+  returns, including ones nobody has named yet: **prefer removing an unreachable
+  guard, or covering a reachable one, over pinning its reading.** A row enters the
+  pin only after a plan has recorded why neither a behavior-preserving rewrite nor
+  a real test can reach it. The pin is the residue of that examination, not its
+  starting point.
+
+- **D-08-10:** No end-state count is predicted, and no plan may treat one as a
+  target. `RCOV-01` asks for an honest baseline; a phase that decides the answer
+  first and then measures has written a target, and an instrument aimed at a target
+  is the failure mode this milestone has now hit twice — once in the roadmap's
+  "seven," once in this document's own first draft, which said "eight" before
+  `bridges/hooks/event-router.ts` was measured. The completed report run is the
+  answer, whatever it says.
 
 ### The `cleanupStaging` Removal Port
 
@@ -299,8 +372,9 @@ because `RCOV-01`'s contract is a baseline "without stale counts."
 - Whether the pin comparison lives in `test-coverage-direct.mjs` or a sibling
   module it imports, provided `assertCompleteCoverage` stays pure per `D-08-19`.
 - Plan granularity and wave membership, provided the port migration is atomic per
-  `D-08-12`, and provided the full report run that generates the pin is serialized
-  after the rewrites and the port per `D-08-08`.
+  `D-08-12`, and provided both full report runs sit where `D-08-08` puts them —
+  the enumeration run before any classification, the pin-generating run after the
+  rewrites and the port.
 - Whether the two loop rewrites are one plan or two.
 
 </decisions>
@@ -314,17 +388,20 @@ because `RCOV-01`'s contract is a baseline "without stale counts."
 
 - `.planning/ROADMAP.md` §"Phase 8: Direct Coverage" — goal, boundary, and the four
   success criteria, including criterion 4's `cleanupStaging` port obligation and its
-  full rationale. Its "204 pairs" and "seven shortfalls" are corrected by `D-08-01`
-  and `D-08-02`.
+  full rationale. Its "204 pairs" is corrected by `D-08-01`, and its "seven
+  shortfalls" by `D-08-02` — at least nine are live and the true set is an output
+  of this phase.
 - `.planning/REQUIREMENTS.md` §"Direct Coverage" — the active `RCOV-01`, `RCOV-02`,
   and `RCOV-03` contracts, and the `RCOV-04`/`COV-01` evidence-only record.
 - `.planning/phases/01-live-evidence-revalidation/01-REVALIDATION.json` — the
   terminal finding routes. Authority over historical review prose. The findings this
-  phase acts on are `AUDIT-011` (the seven measured shortfalls and the two loop
-  rewrites), `ER-F05` and `ER-F19` (the two rewritable dense-index guards),
-  `EHR-F16` (`edge/handlers/shared.ts` routed to the same decision), `BC-019` (the
-  eighth shortfall's compiler-forced disposition), and `TXA-F022` (the gating
-  omission). Note that the ledger's `route` strings use an earlier phase numbering
+  phase acts on are `AUDIT-011` (the seven shortfalls measured at the time and the
+  two loop rewrites), `ER-F05` and `ER-F19` (the two rewritable dense-index
+  guards), `EHR-F16` (`edge/handlers/shared.ts` routed to the same decision),
+  `BC-019` (`bridges/commands/discover.ts`'s compiler-forced disposition), and
+  `TXA-F022` (the gating omission). No ledger finding covers
+  `bridges/hooks/event-router.ts`, which is why `D-08-03a` leaves it unclassified
+  rather than pinning it by analogy. Note that the ledger's `route` strings use an earlier phase numbering
   and are not the current roadmap's phase numbers — read the finding, not the route.
 - `.planning/phases/01-live-evidence-revalidation/01-REVALIDATION-SCHEMA.md` —
   interpretation rules for the live evidence ledger.
@@ -432,7 +509,10 @@ because `RCOV-01`'s contract is a baseline "without stale counts."
   `edge/handlers/shared.ts` — the two dense-index loops `D-08-09` rewrites.
   `args.ts`'s uncovered region is lines 35-37.
 - `extensions/pi-claude-marketplace/bridges/commands/discover.ts:287-290` — the
-  eighth shortfall's `CommandNameError` narrowing arm.
+  `CommandNameError` narrowing arm `D-08-03` pins.
+- `extensions/pi-claude-marketplace/bridges/hooks/event-router.ts` — uncovered at
+  lines 553-554, 587-588, 615-616, and 872-873. Four separate sites awaiting the
+  per-site classification `D-08-03a` requires.
 - `.pre-commit-config.yaml` — the four `npm-*` local hooks are the shape
   `D-08-17` copies, and the `fix-unicode-dashes` exclusion at the texthooks block
   is what `D-08-20` widens.
@@ -459,9 +539,14 @@ because `RCOV-01`'s contract is a baseline "without stale counts."
   able to tell anyone what is actually there.
 - A pin earns its place only if it can fail in both directions. Prove that by
   planting each direction, not by describing it in a comment.
-- Prefer removing an unreachable guard over pinning its reading, wherever a
-  behavior-preserving rewrite exists. Two of the eight yield to typed iteration; the
-  correct outcome is six pinned rows, not eight.
+- Prefer removing an unreachable guard, or covering a reachable one, over pinning
+  its reading. The pin should be the residue of that examination, and it should be
+  as small as honest measurement allows.
+- Do not carry a shortfall count into this phase from anywhere, including from this
+  document. The roadmap said seven; this file's own first draft said eight; the
+  ninth turned up in a `STATE.md` note during the same discussion. Every one of
+  those numbers came from an instrument that halts at the first refusal. Run the
+  report to completion and read the answer off it.
 
 </specifics>
 
