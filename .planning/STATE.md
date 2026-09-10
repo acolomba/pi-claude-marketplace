@@ -5,14 +5,14 @@ milestone_name: Refine Unit Tests
 current_phase: 07
 current_phase_name: Gate Integrity
 status: executing
-stopped_at: Phase 7 context gathered
-last_updated: "2026-09-10T13:12:12.628Z"
+stopped_at: Phase 7 complete; verified passed 7/7 on planted evidence
+last_updated: "2026-09-10T20:00:00.000Z"
 last_activity: 2026-09-10
-last_activity_desc: Phase 7 context gathered
-state_head: 42bc4dc476b8810152d509220ad9f86b59df26c3
+last_activity_desc: Phase 7 closed; run paused before Phase 8 on context budget
+state_head: 3d98902864f7679f06faf5a61bc7dfa104d2eb49
 progress:
   total_phases: 9
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 180
   completed_plans: 180
   percent: 11
@@ -31,39 +31,43 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: 06 (Assertion and Module Refinement) — COMPLETE, re-verified `passed` 5/5 (1 override)
-Next: Discuss Phase 7 (Gate Integrity)
-Plan: 52 of 52 complete
-Status: `npm run check` exit 0 at 5885 unit plus 32 integration. TREF-07..TREF-09 Complete.
-Last activity: 2026-09-10 — Phase 06 closed after contract-weakening gap closure
+Phase: 07 (Gate Integrity) — COMPLETE, verified `passed` 7/7
+Next: Discuss Phase 8 (Direct Coverage)
+Plan: 16 of 16 complete
+Status: `npm run check` exit 0 at 5952 unit plus 32 integration. GGAT-01, GGAT-03, GGAT-04 complete.
+Last activity: 2026-09-10 — Phase 07 closed; autonomous run paused before Phase 8 on context budget
 
-### What closing this phase actually took
+### What this phase actually found
 
-The phase reached a green gate and a `passed` 5/5 verification, then an independent
-contract-weakening audit found **13 findings the suite could not see**. The cause is worth
-carrying forward: **sequence and invocation-count assertions did not survive the seven-family
-split; end-state assertions did.** End-state assertions are order-insensitive, so a rollback that
-unwinds forward leaves every byte identical and the suite stays green. The verification was
-downgraded to `gaps_found`, the gaps closed, and re-verification planted each regression to prove
-the restored assertions actually fire.
+The phase predicted gates that report success without scanning. It found **six of them, live**:
+three in `no-credential-leak.test.ts` (two cases returning early with
+`assert.ok(true, "... not yet authored")`, two loops doing `if (!exists) continue;` — a rename of
+`platform/git-credential.ts` would have greened the AUTH-09 gate over zero inspected bytes), one in
+`integration-materialization-gate.test.ts` (asserting nothing was materialized without checking
+anything was ever offered), one in `hooks-async-rewake.test.ts` (asserting a child raised nothing
+with no proof a child spawned), and a **sixth found by code review inside the phase's own
+remediation of the fifth** — `fullTemplateLiteralsAfter` was written to close a bypass the file
+itself called proven, then wired into two of six scans.
 
-Twelve closed. One accepted as an override: G1's leak-message and leaked-residue proofs need a
-cleanup failure to be observable, and `shared/fs-utils.ts` calls `fs.rm` directly with no port. The
-`rename` that empties the staging directory needs the same parent-write permission as the `rm` that
-follows, so no permission state makes cleanup fail while the rename succeeds — and the patch-based
-route is exactly what TREF-08 removes. Carried to Direct Coverage criterion 4.
+**The remediation introduces its own hazard, five times over.** Centralising target lists into a
+registry makes any pin that compared a gate literal against an independent source collapse into
+comparing a value to itself: green forever, pinning nothing. Found and fixed in
+`config-state-write-seams.test.ts`, `no-shell-out.test.ts`, and `import-boundaries.test.ts`;
+anticipated and refused in `compat-01-no-expansion.test.ts`; one more during the fix pass. Any later
+phase that centralises a source must re-ask whether its pins still compare two independent things.
 
-Two findings were also carried to Phase 7's criteria: gates that address targets by composed path
-are invisible to a literal-match scan, and one direction of the D-11 pair had gone silently inert
-while still reporting success.
+**Two measurements corrected the plans they came from.** A meta-gate keyed on `path.join` would fire
+on `source-scan.ts`, the scan mechanic every gate runs on — 350 sites match the token, fewer than 20
+assemble a production path. And a namespace import does NOT blanket-satisfy `fallow dead-code`;
+member access through `import * as` is tracked individually.
 
-### Known artifact, not a regression
+### Three Phase 6 splits dropped coverage
 
-`gsd-tools query verification.status` reports Phase 06 as `stale` while the report reads
-`passed`. Its `covered_files` includes `.planning/REQUIREMENTS.md`, and the verification's own
-recommended action was to flip TREF-07..TREF-09 in that file — so acting on it staled it. The same
-artifact explains phases 3, 4, and 5 reading `stale` with `passed` reports. Read the file, not the
-query.
+`bridges/commands/discover.ts` (branches 55/57, `41f23c09`) and `bridges/hooks/event-router.ts`
+(branches 107/111) remain open and **block Phase 8's `RCOV-03`** — the changed-pair gate cannot be
+enabled in pre-commit or CI until the first is closed. `reconcile/apply.ts` (`8394ba21`) was closed
+during Phase 7. Same class as the assertion loss Phase 6 recorded: end-state assertions survive a
+split, sequence and coverage do not.
 
 ## Performance Metrics
 
@@ -997,16 +1001,47 @@ audit, or clear them deliberately with the resume commands above.
 
 ## Autonomous Run Parameters
 
-Resume the milestone with `/gsd-autonomous --from 7`.
+Resume with `/gsd-autonomous --from 8`.
 
-Queue is **7 → 8 → 9**. Phases 01 and 03-05 are skipped via the Deferred Verification table above;
-phase 02 is complete and phase 06 closed on 2026-09-10.
+Queue is **8 → 9**. Phases 01 and 03-05 stay skipped via the Deferred Verification table above;
+02, 06 and 07 are complete.
 
-Two things a fresh run will hit:
+The run was paused after Phase 7 on context budget, not on a blocker. Phase 8 is comparable in size
+to Phase 7 (a regenerated 204-pair baseline plus a production-owned removal port threaded through
+~40 `cleanupStaging` call sites), and Phase 7's best results came from agents measuring rather than
+inheriting assumptions — that wants a fresh context.
+
+**Two blockers are already waiting for Phase 8, both reproduced during Phase 7:**
+
+1. `bridges/commands/discover.ts` direct coverage is `branches 55/57, lines 412/414`. The
+   zero-argument `node scripts/test-coverage-direct.mjs` exits 1 on it today. `RCOV-03` cannot turn
+   that gate on in pre-commit or CI until it closes. Pre-existing, traced to
+   `41f23c09 feat(06-05)`, which removed 112 test lines.
+2. `pre-commit run --all-files` fails, and CI's Lint job runs exactly that.
+   `.pre-commit-config.yaml:56` excludes `scripts/revalidation.mjs` from `fix-unicode-dashes` but
+   not `tests/architecture/revalidation.test.ts`, which pins the six em-dashes that script emits.
+   Reproduced: the hook rewrites 16 lines and 2 of 136 cases fail. Two valid fixes — widen the
+   exclusion, or drop the em-dash from both sides in one commit — and choosing is an operator call.
+   Belongs to phase 9's `CLOSE-01`; until then any PR from this branch fails Lint.
+
+Carried forward for Phase 9 closure: `.planning/codebase/CONVENTIONS.md` says "exactly 11
+fallow-ignore markers" and the measured count is 12; `shared/concerns/hooks.ts:20-24` repeats a
+`satisfies` claim the compiler does not honour; `.planning/PROJECT.md` promises
+`tests/architecture/no-legacy-markers.test.ts`, which was never written; and
+`markers-snapshot.test.ts` keeps three agents-bridge byte pins that `tests/bridges/agents/marker.test.ts`
+already owns.
+
+Two things a fresh run will still hit:
 
 1. The lifecycle audit step looks for `.planning/v<version>-MILESTONE-AUDIT.md`. This milestone is
    named `refine-unit-tests`, not a `vX.Y` version, so that path never exists and the audit will
-   read as missing. Locate the audit artifact by name instead of by that template before treating it
-   as a failure.
-2. `gsd-tools query verification.status` disagrees with the report files for phases 03-06, per the
+   read as missing. Locate the audit artifact by name instead of by that template.
+2. `gsd-tools query verification.status` disagrees with the report files for phases 03-07, per the
    staleness artifact described above. Read the file's `status:` field, not the query.
+
+Executor dispatch note: `workflow.use_worktrees=false`, so `ISOLATION=none`. Phase 7 ran executors
+**parallel within each wave** on the shared tree — safe because the plan-checker verified disjoint
+`files_modified` per wave. Executors were told not to write STATE.md or ROADMAP.md (the orchestrator
+does it at wave boundaries), to stage explicit paths only, and to treat whole-repo hook failures
+naming files they do not own as sibling noise. That worked across 22 concurrent-agent commits with
+no cross-contamination.
