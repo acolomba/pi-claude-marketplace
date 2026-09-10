@@ -266,3 +266,10 @@ area this plan could touch — is clean.
 
 Phase 07 continues with its remaining plans. This plan closes the `HHD-027` and `HHD-028` half of
 `GGAT-04`.
+
+## Self-Check: PASSED
+
+All three modified test files exist on disk, all three commits resolve
+(`41f63b4d`, `8be86d7d`, `e07819cf`), and `git status --porcelain` is empty for
+`tests/bridges/hooks/`, `extensions/pi-claude-marketplace/bridges/hooks/`,
+`.planning/STATE.md`, and `.planning/ROADMAP.md`.
