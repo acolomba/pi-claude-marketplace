@@ -125,6 +125,43 @@ function fullTemplateLiteralsAfter(src: string, marker: RegExp): string[] {
   return literals;
 }
 
+/** Every credential field name a message literal may never carry. */
+const CREDENTIAL_IN_LITERAL =
+  /\b(access_?token|cred\.[a-z]+|r\.accessToken|password|accessToken|githubToken|gitToken)\b/i;
+
+/**
+ * Asserts that no COMPLETE template literal reached by `callSite` names a
+ * credential field. `callSite` is a global regex whose capture group 1 matches
+ * the whole backtick-delimited literal that follows the call form being
+ * guarded.
+ *
+ * Every scan in this file pairs its bounded-prefix regex with this check,
+ * because the bounded form alone stops at the first literal `)` or `}` it
+ * meets and therefore cannot see an interpolation that follows a nested call
+ * or a preceding `${...}` (AUTH-09).
+ */
+function assertNoCredentialInLiterals(rel: string, stripped: string, callSite: RegExp): void {
+  const offenders = fullTemplateLiteralsAfter(stripped, callSite).filter((lit) =>
+    CREDENTIAL_IN_LITERAL.test(lit),
+  );
+  assert.deepEqual(
+    offenders,
+    [],
+    `AUTH-09 violation: a message template literal in ${rel} interpolates a credential field past a literal ) or beyond the first interpolation: ${offenders.join(", ")}`,
+  );
+}
+
+/** The `new Error(\`...\`)` call form, capturing the whole literal. */
+const ERROR_LITERAL_CALL_SITE = /new\s+Error\s*\(\s*(`(?:[^`\\]|\\.)*`)/g;
+
+/** The `new Error(\`...\`)` / `notifyFn(\`...\`)` call forms. */
+const ERROR_OR_NOTIFY_FN_LITERAL_CALL_SITE =
+  /(?:new\s+Error\s*\(|notifyFn\s*\()\s*(`(?:[^`\\]|\\.)*`)/g;
+
+/** The `new Error(\`...\`)` / `ctx.ui.notify(\`...\`)` call forms. */
+const ERROR_OR_UI_NOTIFY_LITERAL_CALL_SITE =
+  /(?:new\s+Error\s*\(|ctx\.ui\.notify\s*\()\s*(`(?:[^`\\]|\\.)*`)/g;
+
 test("AUTH-09: no credential field name appears in any state-write code path", async () => {
   assert.ok(
     CREDENTIAL_LEAK_TARGETS.length > 0,
@@ -181,6 +218,8 @@ test("AUTH-09: platform/git-credential.ts never interpolates a password in an Er
     false,
     "Error constructor in git-credential.ts interpolates a credential field (AUTH-09 violation)",
   );
+
+  assertNoCredentialInLiterals(GIT_CREDENTIAL_FILE, stripped, ERROR_LITERAL_CALL_SITE);
 });
 
 test("AUTH-09: domain/github-auth.ts never interpolates a token in an Error or notifyFn message", async () => {
@@ -208,6 +247,8 @@ test("AUTH-09: domain/github-auth.ts never interpolates a token in an Error or n
     false,
     "Error or notifyFn in domain/github-auth.ts interpolates a token field (AUTH-09 violation)",
   );
+
+  assertNoCredentialInLiterals(GITHUB_AUTH_FILE, stripped, ERROR_OR_NOTIFY_FN_LITERAL_CALL_SITE);
 });
 
 test("AUTH-09: describeDeviceCodeErrorBody never references a credential field", async () => {
@@ -267,15 +308,7 @@ test("AUTH-09: domain/github-auth.ts reason: fields never interpolate a token", 
     "a reason: field in domain/github-auth.ts interpolates a token field (AUTH-09 violation)",
   );
 
-  const forbiddenInLiteral =
-    /\b(access_?token|cred\.[a-z]+|r\.accessToken|password|accessToken)\b/i;
-  const reasonLiterals = fullTemplateLiteralsAfter(stripped, /reason:\s*(`(?:[^`\\]|\\.)*`)/g);
-  const literalOffenders = reasonLiterals.filter((lit) => forbiddenInLiteral.test(lit));
-  assert.deepEqual(
-    literalOffenders,
-    [],
-    `a reason: template literal in domain/github-auth.ts interpolates a credential field beyond the first interpolation (AUTH-09 violation): ${literalOffenders.join(", ")}`,
-  );
+  assertNoCredentialInLiterals(GITHUB_AUTH_FILE, stripped, /reason:\s*(`(?:[^`\\]|\\.)*`)/g);
 });
 
 test("AUTH-09: platform/git.ts hookDebugLog calls never interpolate a credential field", async () => {
@@ -307,17 +340,10 @@ test("AUTH-09: platform/git.ts hookDebugLog calls never interpolate a credential
     "hookDebugLog in platform/git.ts interpolates a credential field (AUTH-09 violation)",
   );
 
-  const forbiddenInLiteral =
-    /\b(access_?token|cred\.[a-z]+|r\.accessToken|password|accessToken)\b/i;
-  const hookDebugLogLiterals = fullTemplateLiteralsAfter(
+  assertNoCredentialInLiterals(
+    GIT_PLATFORM_FILE,
     stripped,
     /hookDebugLog\s*\(\s*(`(?:[^`\\]|\\.)*`)/g,
-  );
-  const literalOffenders = hookDebugLogLiterals.filter((lit) => forbiddenInLiteral.test(lit));
-  assert.deepEqual(
-    literalOffenders,
-    [],
-    `a hookDebugLog template literal in platform/git.ts interpolates a credential field past a literal ) or beyond the first interpolation (AUTH-09 violation): ${literalOffenders.join(", ")}`,
   );
 });
 
@@ -345,6 +371,7 @@ test("PROV-05: every provider file is scanned for token interpolation in an Erro
       false,
       `Error or notifyFn in ${rel} interpolates a token field (AUTH-09 violation)`,
     );
+    assertNoCredentialInLiterals(rel, stripped, ERROR_OR_NOTIFY_FN_LITERAL_CALL_SITE);
   }
 
   assert.deepEqual(
@@ -387,6 +414,7 @@ test("AUTH-09: orchestrators/marketplace/{add,update}.ts never interpolate a cre
       false,
       `Error or ctx.ui.notify in ${rel} interpolates a credential field (AUTH-09 violation; closes review WR-02)`,
     );
+    assertNoCredentialInLiterals(rel, stripped, ERROR_OR_UI_NOTIFY_LITERAL_CALL_SITE);
   }
 
   assert.deepEqual(
