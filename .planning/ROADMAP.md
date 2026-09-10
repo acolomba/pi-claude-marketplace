@@ -692,7 +692,7 @@ Plans:
 **Goal:** Make structural gates prove that they scan and enforce real production contracts.
 **Depends on:** Phase 6
 **Requirements:** GGAT-01, GGAT-03, GGAT-04
-**Plans:** TBD
+**Plans:** 16 plans
 
 **Success Criteria**:
 
@@ -712,6 +712,60 @@ Plans:
    green while matching import paths that could no longer occur. A gate whose
    target list silently stops resolving is worse than a missing gate, because it
    reports success.
+
+Plans:
+
+**Wave 1**
+
+- [ ] 07-01-PLAN.md — Prove one complete gate end to end: registry, temp-root offender, injected scan root, visited-path report
+
+**Wave 2** _(blocked on Wave 1 completion)_
+
+- [ ] 07-02-PLAN.md — Seed the complete gate-target registry and gate it on resolution, non-emptiness, and non-composition
+- [ ] 07-03-PLAN.md — Make changed-pair base selection ordered, printed, and fail-closed, with three git fixture repositories
+- [ ] 07-08-PLAN.md — Enroll the ClaudeHookEvent and Dependency closed sets and correct the falsified satisfies claim
+- [ ] 07-09-PLAN.md — Derive the hooks required-field oracle from production behavior and exercise every optional collaborator
+- [ ] 07-10-PLAN.md — Replace `__operations` with a production-owned collaborator on the reinstall transaction
+- [ ] 07-11-PLAN.md — Settle the fetch import form, give each marker pin one owner, and delete the orphaned comment
+
+**Wave 3** _(blocked on Wave 2 completion)_
+
+- [ ] 07-04-PLAN.md — Re-point the manifest, credential, config-seam, shell-out, disabled-state, and scope-fence gates at the registry
+- [ ] 07-05-PLAN.md — Re-point seven more gates and prove the temp-root mechanic on a second consumer
+- [ ] 07-06-PLAN.md — Measure the composed-target census and migrate every production composer
+- [ ] 07-07-PLAN.md — Resolve effective ESLint config for both boundary gates, prove three offenders, delete the two superseded gates
+- [ ] 07-12-PLAN.md — Promote the reinstall `__deps` members to typed options fields across 54 call sites
+
+**Wave 4** _(blocked on Wave 3 completion)_
+
+- [ ] 07-13-PLAN.md — Gate the `__`-prefixed test-only surface class with a structural brand carve-out
+- [ ] 07-14-PLAN.md — Widen the vocabulary guard to the recursive unit-test sources and repair 137 lines
+
+**Wave 5** _(blocked on Wave 4 completion)_
+
+- [ ] 07-15-PLAN.md — Unexport the two named instances and pin the production-unowned-export census
+
+**Wave 6** _(blocked on Wave 5 completion)_
+
+- [ ] 07-16-PLAN.md — Land the self-hosting registry meta-gate and close the phase on a fired-controls ledger
+
+**Cross-cutting constraints:**
+
+- Gate targets live only in `tests/architecture/gate-targets.ts` as full literal repo-relative
+  paths; every gate imports and composes nothing locally (`D-07-05`, `D-07-06`).
+- Every gate this phase creates or modifies proves both visitation and firing: a visited-path
+  report deep-compared against its declared group, a temp-root offender derived from the real
+  target, and two benign controls (`D-07-01`, `D-07-03`, `D-07-04`).
+- Tool-invoking gates resolve the effective configuration through the tool's own API and vary the
+  config source through the real config plus exactly one appended block; no gate reads a config's
+  raw source or mutates one (`D-07-02`, `D-07-09`, `D-07-10`, `D-07-20`).
+- Both live `__`-prefixed offenders are removed before the gate that fires on them ships, and no
+  allow-list forgives a named entry; the unowned-export census is a pinned set that fails in both
+  directions (`D-07-18`, `D-07-19`).
+- Superseded gates are deleted rather than left beside their replacements, and no comment survives
+  the body it explained (`D-07-12`).
+- Both complexity ceilings apply independently to every new gate helper, and `duplicates.threshold: 3`
+  forces the temp-root and effective-config mechanics into shared modules.
 
 **Evidence/history:** `GGAT-02`/`AGCOL-01` retains its stable identity and former
 Phase 7 trace, but no dedicated terminal finding supports active implementation.
@@ -783,6 +837,6 @@ baseline, which still includes both pairs; neither is a terminal shortfall.
 | 4. Hermetic Test Infrastructure      | 7/7            | Complete    | 2026-09-07 |
 | 5. Injection and Ownership Design    | 34/34          | Complete    | 2026-09-08 |
 | 6. Assertion and Module Refinement   | 52/52          | Complete    | 2026-09-10 |
-| 7. Gate Integrity                    | 0/0            | Not started | —          |
+| 7. Gate Integrity                    | 0/16           | Planned     | —          |
 | 8. Direct Coverage                   | 0/0            | Not started | —          |
 | 9. Final Quality and Backlog Closure | 0/0            | Not started | —          |
