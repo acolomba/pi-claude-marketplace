@@ -5,9 +5,9 @@ milestone_name: Workflow Bridge Replay onto main
 current_phase: 117
 current_phase_name: Measured `agent()` failure evidence
 current_plan: 3 of 3 executed
-status: audit passed with tech debt; archive paused
-stopped_at: Milestone audit recorded tech_debt; operator chose to clear debt before the archive
-last_updated: "2026-09-10T03:45:00.000Z"
+status: paused for discussion; archive ready when the open questions are settled
+stopped_at: Four of five debt items cleared; twelve open questions recorded for discussion before the archive
+last_updated: "2026-09-10T05:30:00.000Z"
 state_head: 2b7ffdc4cd56f08bb3a4107d05f6a27f4671c922
 progress:
   total_phases: 9
@@ -16,7 +16,7 @@ progress:
   completed_plans: 39
   percent: 100
 last_activity: 2026-09-09
-last_activity_desc: Phase 114 re-verified passed 7/7 after the messaging edits staled it; all nine fresh
+last_activity_desc: Debt items 3-5 cleared and the remaining twelve ledger entries written up as open questions
 ---
 
 # Project State
@@ -55,21 +55,22 @@ and `cleanup` have NOT run. What is owed, in the order the audit lists it:
    Four further false claims in the surviving block were found and corrected on
    the way; one more — a stale statement of the reload-hint MECHANISM, not an
    enumeration defect — became ledger entry 47, so item 2 below grew by one.
-2. **Seventeen open Broken Windows entries**, all tagged `[workflows-replay]`:
-   #34, #37, #39-#53. #44 and #51 are TODOs; #41 and #42 are the same inert
-   `ENBL-08` case seen from two angles; #47 is the reload-hint mechanism claim
-   the messaging quick task deliberately did not fix inline. #48-#51 are new,
-   from the retroactive security audits — a containment check anchored on the
-   staging root but not its sibling saved directory (#48), three mitigations
-   naming a regression gate that was never built (#49), a sweep refusal
-   documented as loud that both call sites discard silently (#50), and an
-   absent threat-flag channel across all 21 summaries of phases 109-113 (#51).
-   #52 came out of the validation pass: the update record's commit-succeeded arm
-   sources the prepare's staged names, and it is the same arm that reasons about
-   a placement which did not survive a successful commit. #53 came out of
-   re-verifying phase 114: the `covered_files` inclusion rule is inconsistent,
-   so which later edit stales a phase is partly luck — the other half of the
-   defect #39 already records.
+2. **Twelve open Broken Windows entries**, all tagged `[workflows-replay]`:
+   #34, #37, #39, #40, #45, #47, #48, #51, #52, #53, #54, #55. **These are now
+   written up as decisions rather than a work queue** in
+   [`OPEN-QUESTIONS.md`](OPEN-QUESTIONS.md) — eleven questions in five groups,
+   each with its options, what it costs, and a recommendation. Read that file
+   rather than the ledger to discuss them; the ledger has no field for the
+   framing.
+
+   Five were closed on 2026-09-10 by the fixes below. Two of the closures
+   uncovered live defects worth more than the entries themselves: the live-UAT
+   sandbox guard was a substring test that accepted a path resolving to the
+   operator's real `~/.pi/agent` — which exists, so its own `existsSync`
+   follow-up waved it through — and building the ENBL-08 lock twin exposed that a
+   held state lock reaches the user as `unreadable` rather than `lock held`
+   (filed as #55).
+
 3. ~~Phases 109-113 carry no SECURITY.md~~ — **DONE** (`2b7ffdc4`). One
    auditor per phase verified all 127 registered threats against the
    implementation; every phase returns SECURED at `threats_open: 0`, and every
@@ -82,18 +83,21 @@ and `cleanup` have NOT run. What is owed, in the order the audit lists it:
    observed red before being trusted. The third — the abort-path call-site
    enumeration — is an accepted, named residual. `wave_0_complete` on the bridge
    phase was corrected from `false` to `true` against its nine satisfied items.
-5. **Four unresolved code-review findings**, each already filed behind a carrier:
-   Phase 110 WR-07 (refiled) and WR-09 (deferred); Phase 112 WR-03 (deferred,
-   and already closed by Phase 113's WLIF-02 — its ledger status wants turning
-   rather than working); Phase 116 WR-03 (skipped because the fix reverses an
-   operator-locked decision — this one wants waiving, not fixing).
+5. ~~Four unresolved code-review findings~~ — **DONE** (`7304e02e`). All four
+   were checked against the tree rather than read off their dispositions. Two
+   closed, one stays open as intended future work with its backlog carrier
+   intact, one stays skipped against an operator-locked decision. One had been
+   filed against the wrong phase: WR-09 was deferred to the bridge phase but
+   actually discharged by the admission-gate work two phases later.
 
 Items 3 and 4 track when each capability became active in this workstream rather
 than a phase that skipped its gate.
 
-**Resume the lifecycle with** `/gsd-autonomous`, which will re-audit and route
-again, or go straight to `/gsd-complete-milestone workflows-replay` to accept the
-remaining debt and archive.
+**Paused here for discussion.** The twelve remaining entries are written up in
+[`OPEN-QUESTIONS.md`](OPEN-QUESTIONS.md). Nothing blocks the archive — all nine
+phases are complete, verified, threat-verified and validated — so
+`/gsd-complete-milestone workflows-replay` is available whenever the questions
+are settled or explicitly carried.
 
 Phase 117 closed at 3/3 plans, `npm run check` exit 0 at 5654 unit and 35
 integration, goal verification 5/5, security SECURED at 19/19 with
