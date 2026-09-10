@@ -2,20 +2,20 @@
 gsd_state_version: "1.0"
 milestone: refine-unit-tests
 milestone_name: Refine Unit Tests
-current_phase: 07
-current_phase_name: Gate Integrity
+current_phase: 08
+current_phase_name: Direct Coverage
 status: executing
-stopped_at: Phase 7 complete; verified passed 7/7 on planted evidence
-last_updated: "2026-09-10T20:00:00.000Z"
+stopped_at: Phase 8 context gathered
+last_updated: "2026-09-10T23:12:21.645Z"
 last_activity: 2026-09-10
-last_activity_desc: Phase 7 closed; run paused before Phase 8 on context budget
-state_head: 3d98902864f7679f06faf5a61bc7dfa104d2eb49
+last_activity_desc: Phase 8 context gathered; decisions locked ahead of planning
+state_head: 888ddd8927c8d7b62992aadf8eb0da0a0ecae181
 progress:
   total_phases: 9
   completed_phases: 3
-  total_plans: 180
-  completed_plans: 180
-  percent: 11
+  total_plans: 196
+  completed_plans: 196
+  percent: 33
 ---
 
 # Project State
@@ -27,17 +27,32 @@ See: `.planning/PROJECT.md` (updated 2026-09-07 after refine-unit-tests Phase 4)
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 06 — Assertion and Module Refinement
+**Current focus:** Phase 08 — Direct Coverage
 
 ## Current Position
 
-Phase: 07 (Gate Integrity) — COMPLETE, verified `passed` 7/7
-Next: Discuss Phase 8 (Direct Coverage)
-Plan: 16 of 16 complete
-Status: `npm run check` exit 0 at 5952 unit plus 32 integration. GGAT-01, GGAT-03, GGAT-04 complete.
-Last activity: 2026-09-10 — Phase 07 closed; autonomous run paused before Phase 8 on context budget
+Phase: 08 (Direct Coverage) — context gathered, ready for planning
+Next: Plan Phase 8 from `.planning/phases/08-direct-coverage/08-CONTEXT.md`
+Plan: 0 of TBD
+Status: Phase 07 closed, verified `passed` 7/7; `npm run check` exit 0 at 5952 unit plus 32
+integration. GGAT-01, GGAT-03, GGAT-04 complete.
+Last activity: 2026-09-10 — Phase 8 context gathered; 20 decisions locked, three roadmap
+premises corrected from live measurement
 
-### What this phase actually found
+### What Phase 8 discussion measured
+
+The roadmap plans Phase 8 against "204 source-test pairs" and "seven terminal shortfalls."
+Neither number survived contact with the tree. `productionPaths()` returns **230**.
+`bridges/commands/discover.ts` reads `branches 55/57, lines 412/414` and
+`bridges/hooks/event-router.ts` reads `branches 107/111, lines 959/967` — a ninth and, on
+present evidence, not necessarily the last. The retained `coverage/all-pairs.jsonl` holds
+**83 of 230** rows and stops at its first refusal, which is exactly why no count in
+circulation can be trusted: both gate arms halt there. `D-08-02` therefore makes the
+shortfall set an **output** of the phase and forbids any plan from carrying a number into
+it; `D-08-08` runs the full report twice, once to enumerate before classification and once
+after the work lands to generate the committed pin.
+
+### What Phase 7 found (retained)
 
 The phase predicted gates that report success without scanning. It found **six of them, live**:
 three in `no-credential-leak.test.ts` (two cases returning early with
@@ -63,11 +78,19 @@ member access through `import * as` is tracked individually.
 
 ### Three Phase 6 splits dropped coverage
 
-`bridges/commands/discover.ts` (branches 55/57, `41f23c09`) and `bridges/hooks/event-router.ts`
-(branches 107/111) remain open and **block Phase 8's `RCOV-03`** — the changed-pair gate cannot be
-enabled in pre-commit or CI until the first is closed. `reconcile/apply.ts` (`8394ba21`) was closed
-during Phase 7. Same class as the assertion loss Phase 6 recorded: end-state assertions survive a
-split, sequence and coverage do not.
+`bridges/commands/discover.ts` (`branches 55/57, lines 412/414`, `41f23c09`) and
+`bridges/hooks/event-router.ts` (`branches 107/111, lines 959/967`, uncovered at 553-554,
+587-588, 615-616, 872-873) both remain open and reach Phase 8. `reconcile/apply.ts`
+(`8394ba21`) was closed during Phase 7. Same class as the assertion loss Phase 6 recorded:
+end-state assertions survive a split, sequence and coverage do not.
+
+Phase 8's discussion re-measured both on 2026-09-10 and took different dispositions:
+`discover.ts` is compiler-forced under `BC-019` and gets pinned; `event-router.ts` is left
+**unclassified** (`D-08-03a`) because four uncovered sites carrying lines as well as
+branches is not the single-narrowing-arm signature and no ledger finding authorizes an
+accepted reading. Neither blocks `RCOV-03` any longer — `D-08-05`'s bidirectional pin is
+what lets the gate be fail-closed in pre-commit and CI while genuinely unreachable arms
+stay recorded rather than excused.
 
 ## Performance Metrics
 
@@ -959,7 +982,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Phase 7 context gathered
+**Stopped at:** Phase 8 context gathered
 
 Phase 04 completed all seven plans and closed AUTH-01 and TREF-01 through
 TREF-03. Independent verification passed 4/4 with no behavioral or UAT gap;
@@ -972,14 +995,14 @@ inventory blocker. Gap-closure Plan 05-34 ratified the corrected patch inventory
 and proved the canonical repository gates from clean tracked HEAD. Fresh
 independent verification passed 6/6 with zero unverified behaviors.
 
-**Resume file:** .planning/phases/07-gate-integrity/07-CONTEXT.md
+**Resume file:** .planning/phases/08-direct-coverage/08-CONTEXT.md
 
 **Read beside it:** `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`, the
 Phase 01 terminal evidence ledger, and Phase 5's roadmap criteria.
 
-Last session: 2026-09-10T13:12:11.970Z
+Last session: 2026-09-10T23:12:20.941Z
 
-**Next:** Plan Phase 7 (Gate Integrity) from `07-CONTEXT.md`.
+**Next:** Plan Phase 8 (Direct Coverage) from `08-CONTEXT.md`.
 
 ## Deferred Verification
 
@@ -1011,18 +1034,24 @@ to Phase 7 (a regenerated 204-pair baseline plus a production-owned removal port
 ~40 `cleanupStaging` call sites), and Phase 7's best results came from agents measuring rather than
 inheriting assumptions — that wants a fresh context.
 
-**Two blockers are already waiting for Phase 8, both reproduced during Phase 7:**
+**Two blockers were recorded as waiting for Phase 8. Phase 8's discussion resolved the
+disposition of both — read `08-CONTEXT.md` rather than re-deriving them:**
 
 1. `bridges/commands/discover.ts` direct coverage is `branches 55/57, lines 412/414`. The
-   zero-argument `node scripts/test-coverage-direct.mjs` exits 1 on it today. `RCOV-03` cannot turn
-   that gate on in pre-commit or CI until it closes. Pre-existing, traced to
-   `41f23c09 feat(06-05)`, which removed 112 test lines.
+   zero-argument `node scripts/test-coverage-direct.mjs` exits 1 on it today. Pre-existing,
+   traced to `41f23c09 feat(06-05)`, which removed 112 test lines. **Resolved as a
+   disposition, not a fix:** `D-08-03` classifies it compiler-forced under `BC-019`, and
+   `D-08-05`'s bidirectional pin is what lets `RCOV-03` turn the gate on without either an
+   allow-list or a green-at-all-costs rewrite. It is no longer a blocker.
 2. `pre-commit run --all-files` fails, and CI's Lint job runs exactly that.
    `.pre-commit-config.yaml:56` excludes `scripts/revalidation.mjs` from `fix-unicode-dashes` but
    not `tests/architecture/revalidation.test.ts`, which pins the six em-dashes that script emits.
    Reproduced: the hook rewrites 16 lines and 2 of 136 cases fail. Two valid fixes — widen the
    exclusion, or drop the em-dash from both sides in one commit — and choosing is an operator call.
-   Belongs to phase 9's `CLOSE-01`; until then any PR from this branch fails Lint.
+   **Pulled into Phase 8 by `D-08-20`**, which widens the existing exclusion to cover
+   `tests/architecture/revalidation.test.ts`: this phase adds a pre-commit hook, and a new
+   hook cannot be verified inside an `--all-files` run that is already red. `CLOSE-01`
+   keeps its identity and records the early closure.
 
 Carried forward for Phase 9 closure: `.planning/codebase/CONVENTIONS.md` says "exactly 11
 fallow-ignore markers" and the measured count is 12; `shared/concerns/hooks.ts:20-24` repeats a
