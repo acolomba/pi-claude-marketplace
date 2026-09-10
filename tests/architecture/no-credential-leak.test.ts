@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { access, readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
 
-import { CREDENTIAL_LEAK_TARGETS } from "./gate-targets.ts";
+import { CREDENTIAL_LEAK_TARGETS, EXTENSION_ROOT_REL } from "./gate-targets.ts";
+import { REPO_ROOT } from "./source-scan.ts";
 
 /**
  * AUTH-09 architecture gate.
@@ -34,14 +34,14 @@ import { CREDENTIAL_LEAK_TARGETS } from "./gate-targets.ts";
  * only catches the semantic uses.
  */
 
-const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-
 /**
  * The AUTH-09 group in its declared order, split into the subsets each scan
- * below covers. Position is what aims each scan, so the module basenames are
- * pinned in the first case (D-07-03): a member reordered, added, or dropped in
- * the registry would otherwise point a regex at a file it was never written
- * for and still report success.
+ * below covers. Position is what aims each scan, so the whole subpath of each
+ * module under the extension root is pinned in the first case (D-07-03): a
+ * member reordered, added, or dropped in the registry would otherwise point a
+ * regex at a file it was never written for and still report success. A
+ * basename would leave that pin green for an entry repointed at a different
+ * module of the same name.
  */
 const [
   STATE_IO_FILE,
@@ -56,18 +56,21 @@ const [
   MARKETPLACE_UPDATE_FILE,
 ] = CREDENTIAL_LEAK_TARGETS;
 
-/** The module basenames the destructuring above binds, in registry order. */
+/**
+ * The modules the destructuring above binds, in registry order, each spelled
+ * relative to the extension root.
+ */
 const DECLARED_MODULE_ORDER: ReadonlyArray<string> = [
-  "state-io.ts",
-  "migrate.ts",
-  "with-state-guard.ts",
-  "git-credential.ts",
-  "github-auth.ts",
-  "git.ts",
-  "auth-registry.ts",
-  "auth-host.ts",
-  "add.ts",
-  "update.ts",
+  "persistence/state-io.ts",
+  "persistence/migrate.ts",
+  "transaction/with-state-guard.ts",
+  "platform/git-credential.ts",
+  "domain/github-auth.ts",
+  "platform/git.ts",
+  "domain/auth-registry.ts",
+  "orchestrators/auth-host.ts",
+  "orchestrators/marketplace/add.ts",
+  "orchestrators/marketplace/update.ts",
 ];
 
 const STATE_WRITE_FILES: ReadonlyArray<string> = [
@@ -168,7 +171,7 @@ test("AUTH-09: no credential field name appears in any state-write code path", a
     "D-07-03: an empty CREDENTIAL_LEAK_TARGETS leaves every scan in this gate reporting success over zero declared files.",
   );
   assert.deepEqual(
-    CREDENTIAL_LEAK_TARGETS.map((rel) => path.basename(rel)),
+    CREDENTIAL_LEAK_TARGETS.map((rel) => path.relative(EXTENSION_ROOT_REL, rel)),
     DECLARED_MODULE_ORDER,
     "D-07-03: every scan in this gate is aimed by POSITION in CREDENTIAL_LEAK_TARGETS. A member reordered, added, or dropped in the registry re-aims a regex at a file it was never written for, and the scan would still report success.",
   );

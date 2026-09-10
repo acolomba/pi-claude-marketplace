@@ -2,11 +2,10 @@ import assert from "node:assert/strict";
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
 
 import { EXTENSION_ROOT_REL, STATE_WRITE_SEAM_TARGETS } from "./gate-targets.ts";
+import { REPO_ROOT } from "./source-scan.ts";
 
-const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const EXTENSION_ROOT = path.join(REPO_ROOT, EXTENSION_ROOT_REL);
 
 /**
@@ -77,9 +76,11 @@ const EXTENSION_ROOT = path.join(REPO_ROOT, EXTENSION_ROOT_REL);
 /**
  * The write-seam group in its declared order: the two state-file writers, then
  * the sole config-file writer. The 'exactly N' assertions below pin each
- * allow-list by module basename, so a member reordered, added, or dropped in
- * the registry lands in the wrong allow-list loudly rather than silently
- * widening one (D-07-03).
+ * allow-list by its whole subpath under the extension root, so a member
+ * reordered, added, or dropped in the registry lands in the wrong allow-list
+ * loudly rather than silently widening one (D-07-03). A basename would not:
+ * an entry repointed at a different module of the same name re-aims the
+ * allow-list and leaves the pin green.
  */
 const [STATE_IO_REL, MIGRATE_REL, CONFIG_IO_REL] = STATE_WRITE_SEAM_TARGETS;
 
@@ -175,21 +176,22 @@ test("SPLIT-02: only saveState / persistMigratedState write state.json", async (
 // 'Exactly N' sibling assertions: the literal arrays force any future widener
 // to update BOTH the ReadonlySet allow-list above AND the matching literal
 // expectation here in the SAME commit. Silent widening is caught in CI. The
-// expectation is spelled as module basenames because the full paths are owned
-// by STATE_WRITE_SEAM_TARGETS (D-07-05); comparing the allow-list against the
-// same registry group it was built from would pin nothing.
+// expectation is spelled relative to the extension root because the full paths
+// are owned by STATE_WRITE_SEAM_TARGETS (D-07-05); comparing the allow-list
+// against the same registry group it was built from would pin nothing.
 
 test("SPLIT-02 whitelist: exactly the named writers may write state.json", () => {
-  assert.deepEqual([...ALLOWED_STATE_JSON_WRITERS].map((rel) => path.basename(rel)).sort(), [
-    "migrate.ts",
-    "state-io.ts",
-  ]);
+  assert.deepEqual(
+    [...ALLOWED_STATE_JSON_WRITERS].map((rel) => path.relative(EXTENSION_ROOT_REL, rel)).sort(),
+    ["persistence/migrate.ts", "persistence/state-io.ts"],
+  );
 });
 
 test("SPLIT-02 whitelist: exactly one file may write claude-plugins.json files", () => {
-  assert.deepEqual([...ALLOWED_CONFIG_JSON_WRITERS].map((rel) => path.basename(rel)).sort(), [
-    "config-io.ts",
-  ]);
+  assert.deepEqual(
+    [...ALLOWED_CONFIG_JSON_WRITERS].map((rel) => path.relative(EXTENSION_ROOT_REL, rel)).sort(),
+    ["persistence/config-io.ts"],
+  );
 });
 
 // Negative-test the walker itself: prove the regex catches a synthetic
