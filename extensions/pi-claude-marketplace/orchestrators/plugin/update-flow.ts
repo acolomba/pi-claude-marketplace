@@ -86,7 +86,7 @@ import {
   surfaceDiscoveryWarnings,
 } from "./shared.ts";
 import { composeUpdateCascade } from "./update-cascade.ts";
-import { preparePluginUpdate } from "./update-preflight.ts";
+import { isUpdatePreflightOutcome, preparePluginUpdate } from "./update-preflight.ts";
 import { swapPluginUpdate } from "./update-swap.ts";
 import { UPDATE_CONTEXT } from "./update.messaging.ts";
 
@@ -959,10 +959,18 @@ export interface PluginUpdateOperations {
   readonly pluginUpdate: PluginUpdateFn;
 }
 
+/**
+ * NFR-7: `UpdatePreflightOutcome` is a strict subset of `UpdateRunOutcome`, so a
+ * preflight verdict returns straight through with no cast. That assignability is
+ * the guard: a preflight row that gained a `cause`, `toVersion` or
+ * `phaseFailures` would fail to compile here, because neither failed arm of
+ * `UpdateRunOutcome` admits one, and `isPhase3aAggregateFailure` narrows on
+ * exactly that gap.
+ */
 async function runPluginUpdate(args: ThreePhaseArgs): Promise<UpdateRunOutcome> {
   const preflight = await preparePluginUpdate(args);
-  if ("partition" in preflight) {
-    return preflight as UpdateRunOutcome;
+  if (isUpdatePreflightOutcome(preflight)) {
+    return preflight;
   }
 
   return swapPluginUpdate(args, preflight);

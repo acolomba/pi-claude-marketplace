@@ -34,7 +34,7 @@ import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
 import type { GitOps } from "../marketplace/shared.ts";
 import type {
-  PluginUpdateOutcome,
+  PluginUpdateFailedOutcome,
   PluginUpdateSkippedOutcome,
   PluginUpdateUnchangedOutcome,
 } from "../types.ts";
@@ -96,6 +96,36 @@ export interface PreparePluginUpdateOptions {
 }
 
 type PluginStateRecord = PreparedPluginUpdate["record"];
+
+/**
+ * NFR-7: a `(failed)` row the preflight itself can reach. The four fields only a
+ * staged replacement can know are pinned `never`, so a preflight failure cannot
+ * claim a version transition it never attempted, nor a `phaseFailures` aggregate
+ * that only phase-3a produces -- the shape `update-flow.ts` narrows on to tell a
+ * phase-3a aggregate (already notified, `RECOVERY_PLUGIN_REINSTALL_PREFIX` hint
+ * composed from `phaseFailures`) apart from every other failure. Threading any
+ * of the four onto a preflight row therefore requires widening this type
+ * deliberately, and that widening is what forces the phase-3a narrowing to be
+ * revisited alongside it.
+ */
+export interface PreflightFailedOutcome extends Omit<
+  PluginUpdateFailedOutcome,
+  "cause" | "fromVersion" | "phaseFailures" | "reasons" | "toVersion"
+> {
+  readonly reasons: readonly ContentReason[];
+  readonly cause?: never;
+  readonly fromVersion?: never;
+  readonly phaseFailures?: never;
+  readonly toVersion?: never;
+}
+
+/**
+ * Every verdict the preflight reaches without staging a replacement. A strict
+ * subset of the swap stage's `UpdateRunOutcome`, so the update flow returns a
+ * preflight verdict straight through to its caller with no cast (NFR-7).
+ */
+export type UpdatePreflightOutcome =
+  PluginUpdateSkippedOutcome | PluginUpdateUnchangedOutcome | PreflightFailedOutcome;
 
 type PartialableUpdateShapeError = PluginShapeError & {
   readonly shape: PluginShapeError["shape"] & {
@@ -269,15 +299,40 @@ function skippedCandidate(
   };
 }
 
-function staticPreflightRow(options: {
-  readonly partition: "failed" | "skipped";
+/**
+ * A static preflight verdict -- one the update reaches without resolving a
+ * candidate.
+ *
+ * `fromVersion` is reachable on the `skipped` partition only. A `failed` row is
+ * one the plugin is absent from the manifest for, so there is no install record
+ * to read a version from; pinning the field `never` there keeps a version arrow
+ * off a row for a plugin that was never installed.
+ */
+type StaticPreflightRowOptions = {
   readonly plugin: string;
   readonly notes: readonly string[];
   readonly reason: ContentReason;
-  readonly fromVersion?: string;
-}): PluginUpdateOutcome {
+} & (
+  | { readonly partition: "failed"; readonly fromVersion?: never }
+  | { readonly partition: "skipped"; readonly fromVersion?: string }
+);
+
+function staticPreflightRow(
+  options: StaticPreflightRowOptions,
+): PluginUpdateSkippedOutcome | PreflightFailedOutcome {
+  if (options.partition === "failed") {
+    return {
+      partition: "failed",
+      name: options.plugin,
+      notes: [...options.notes],
+      reasons: [options.reason],
+      declaresAgents: false,
+      declaresMcp: false,
+    };
+  }
+
   return {
-    partition: options.partition,
+    partition: "skipped",
     name: options.plugin,
     ...(options.fromVersion !== undefined && { fromVersion: options.fromVersion }),
     notes: [...options.notes],
@@ -291,10 +346,12 @@ function triageUpdateMembership(
   plugin: string,
   record: PluginStateRecord | undefined,
   lookup: ReturnType<typeof lookupDeclaredPlugin>,
-): PluginUpdateOutcome | { readonly record: PluginStateRecord; readonly entry: PluginEntry } {
+): UpdatePreflightOutcome | { readonly record: PluginStateRecord; readonly entry: PluginEntry } {
   if (record === undefined) {
     return lookup.kind === "absent"
-      ? staticPreflightRow({
+      ? // Not installed AND absent from the manifest. No `fromVersion` -- there
+        // is no install record to read a version from.
+        staticPreflightRow({
           partition: "failed",
           plugin,
           notes: ["not in manifest"],
@@ -447,7 +504,7 @@ async function refreshDisabledPluginUpdate(
 /** Resolves, validates, and classifies one plugin before any staged replacement. */
 export async function preparePluginUpdate(
   options: PreparePluginUpdateOptions,
-): Promise<PreparedPluginUpdate | PluginUpdateOutcome> {
+): Promise<PreparedPluginUpdate | UpdatePreflightOutcome> {
   const state = await loadState(options.locations.extensionRoot);
   const marketplace = state.marketplaces[options.marketplace];
   if (marketplace === undefined) {
@@ -522,4 +579,15 @@ export async function preparePluginUpdate(
   return isRecordedButDisabled(triaged.record)
     ? refreshDisabledPluginUpdate(options, prepared)
     : prepared;
+}
+
+/**
+ * Discriminates a finished preflight verdict from a candidate ready to swap.
+ * Typed on the narrow `UpdatePreflightOutcome` so the flow's verdict arm keeps
+ * the four `never` proofs instead of widening to `PluginUpdateOutcome` (NFR-7).
+ */
+export function isUpdatePreflightOutcome(
+  value: PreparedPluginUpdate | UpdatePreflightOutcome,
+): value is UpdatePreflightOutcome {
+  return "partition" in value;
 }
