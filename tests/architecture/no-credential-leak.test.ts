@@ -4,6 +4,8 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
+import { CREDENTIAL_LEAK_TARGETS } from "./gate-targets.ts";
+
 /**
  * AUTH-09 architecture gate.
  *
@@ -20,11 +22,11 @@ import { fileURLToPath } from "node:url";
  *      constructor. Error messages reference operation name + exit code or
  *      timeout-ms only.
  *
- * Test (2) passes vacuously when
- * platform/git-credential.ts does not exist on disk; the file's
- * presence activates the test, and
- * the file-header docstring + Error-message discipline ensure it stays
- * GREEN once active.
+ * Every file each scan addresses is declared in `CREDENTIAL_LEAK_TARGETS`
+ * (`tests/architecture/gate-targets.ts`), and each scan asserts it opened what
+ * it declared. A target that stops resolving FAILS its scan rather than leaving
+ * it vacuously satisfied: a gate that greens over a file it never read buys
+ * confidence it has not earned (D-07-03).
  *
  * Comment stripping: docstrings can legitimately mention these field names
  * (this very file does). Both tests strip `/\* ... *\/` blocks and `//`
@@ -34,30 +36,63 @@ import { fileURLToPath } from "node:url";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
+/**
+ * The AUTH-09 group in its declared order, split into the subsets each scan
+ * below covers. Position is what aims each scan, so the module basenames are
+ * pinned in the first case (D-07-03): a member reordered, added, or dropped in
+ * the registry would otherwise point a regex at a file it was never written
+ * for and still report success.
+ */
+const [
+  STATE_IO_FILE,
+  MIGRATE_FILE,
+  WITH_STATE_GUARD_FILE,
+  GIT_CREDENTIAL_FILE,
+  GITHUB_AUTH_FILE,
+  GIT_PLATFORM_FILE,
+  AUTH_REGISTRY_FILE,
+  AUTH_HOST_FILE,
+  MARKETPLACE_ADD_FILE,
+  MARKETPLACE_UPDATE_FILE,
+] = CREDENTIAL_LEAK_TARGETS;
+
+/** The module basenames the destructuring above binds, in registry order. */
+const DECLARED_MODULE_ORDER: ReadonlyArray<string> = [
+  "state-io.ts",
+  "migrate.ts",
+  "with-state-guard.ts",
+  "git-credential.ts",
+  "github-auth.ts",
+  "git.ts",
+  "auth-registry.ts",
+  "auth-host.ts",
+  "add.ts",
+  "update.ts",
+];
+
 const STATE_WRITE_FILES: ReadonlyArray<string> = [
-  "extensions/pi-claude-marketplace/persistence/state-io.ts",
-  "extensions/pi-claude-marketplace/persistence/migrate.ts",
-  "extensions/pi-claude-marketplace/transaction/with-state-guard.ts",
+  STATE_IO_FILE,
+  MIGRATE_FILE,
+  WITH_STATE_GUARD_FILE,
 ];
 
 const FORBIDDEN_STATE_FIELDS = /\b(password|access_token|githubToken|gitToken)\b/i;
 
-const GIT_CREDENTIAL_FILE = "extensions/pi-claude-marketplace/platform/git-credential.ts";
-
-const GITHUB_AUTH_FILE = "extensions/pi-claude-marketplace/domain/github-auth.ts";
-
-const GIT_PLATFORM_FILE = "extensions/pi-claude-marketplace/platform/git.ts";
-
 const PROVIDER_FILES: ReadonlyArray<string> = [
-  "extensions/pi-claude-marketplace/domain/auth-registry.ts",
+  AUTH_REGISTRY_FILE,
   // buildAuthForHost binds the provider flow + notifyFn per host; a token
   // interpolation regression here would leak, so the PROV-05 scan covers it.
-  "extensions/pi-claude-marketplace/orchestrators/auth-host.ts",
+  AUTH_HOST_FILE,
 ];
 
-const PHASE_35_ORCHESTRATOR_FILES: ReadonlyArray<string> = [
-  "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts",
-  "extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts",
+/**
+ * The marketplace verbs that construct the Device Flow `onAuthRequired`
+ * closure. The closure captures `credentialOps` by reference, so both are
+ * scanned for a credential interpolated into an Error or a notify message.
+ */
+const CREDENTIAL_CAPTURING_ORCHESTRATORS: ReadonlyArray<string> = [
+  MARKETPLACE_ADD_FILE,
+  MARKETPLACE_UPDATE_FILE,
 ];
 
 function stripComments(src: string): string {
@@ -91,15 +126,32 @@ function fullTemplateLiteralsAfter(src: string, marker: RegExp): string[] {
 }
 
 test("AUTH-09: no credential field name appears in any state-write code path", async () => {
+  assert.ok(
+    CREDENTIAL_LEAK_TARGETS.length > 0,
+    "D-07-03: an empty CREDENTIAL_LEAK_TARGETS leaves every scan in this gate reporting success over zero declared files.",
+  );
+  assert.deepEqual(
+    CREDENTIAL_LEAK_TARGETS.map((rel) => path.basename(rel)),
+    DECLARED_MODULE_ORDER,
+    "D-07-03: every scan in this gate is aimed by POSITION in CREDENTIAL_LEAK_TARGETS. A member reordered, added, or dropped in the registry re-aims a regex at a file it was never written for, and the scan would still report success.",
+  );
+
   const offenders: string[] = [];
+  const visited: string[] = [];
   for (const rel of STATE_WRITE_FILES) {
     const src = await readFile(path.join(REPO_ROOT, rel), "utf8");
+    visited.push(rel);
     const stripped = stripComments(src);
     if (FORBIDDEN_STATE_FIELDS.test(stripped)) {
       offenders.push(`${rel} contains a forbidden credential-field reference`);
     }
   }
 
+  assert.deepEqual(
+    visited,
+    [...STATE_WRITE_FILES],
+    "D-07-03: the scan must have opened every declared state-write path; one that stopped resolving drops out of this list.",
+  );
   assert.deepEqual(
     offenders,
     [],
@@ -113,15 +165,10 @@ test("AUTH-09: platform/git-credential.ts never interpolates a password in an Er
     () => true,
     () => false,
   );
-  if (!exists) {
-    // Until git-credential.ts is authored, this
-    // gate is vacuously satisfied. The file's creation activates it.
-    assert.ok(
-      true,
-      "platform/git-credential.ts not yet authored; AUTH-09 Error-interpolation gate inactive until the file exists",
-    );
-    return;
-  }
+  assert.ok(
+    exists,
+    `D-07-03: ${GIT_CREDENTIAL_FILE} is declared in CREDENTIAL_LEAK_TARGETS but does not resolve, so the scan below would report success having opened nothing.`,
+  );
 
   const src = await readFile(absPath, "utf8");
   const stripped = stripComments(src);
@@ -142,16 +189,10 @@ test("AUTH-09: domain/github-auth.ts never interpolates a token in an Error or n
     () => true,
     () => false,
   );
-  if (!exists) {
-    // Until domain/github-auth.ts is
-    // authored, this gate is vacuously satisfied. The file's creation
-    // activates the gate automatically.
-    assert.ok(
-      true,
-      "domain/github-auth.ts not yet authored; AUTH-09 gate inactive until the file exists",
-    );
-    return;
-  }
+  assert.ok(
+    exists,
+    `D-07-03: ${GITHUB_AUTH_FILE} is declared in CREDENTIAL_LEAK_TARGETS but does not resolve, so the scan below would report success having opened nothing.`,
+  );
 
   const src = await readFile(absPath, "utf8");
   const stripped = stripComments(src);
@@ -288,19 +329,16 @@ test("PROV-05: every provider file is scanned for token interpolation in an Erro
   const errorOrNotifyWithToken =
     /(new\s+Error\s*\(|notifyFn\s*\()(?:[^)]*\$\{[^}]*(access_?token|cred\.[a-z]+|r\.accessToken)|[^)]*\+\s*(access_?token|cred\.[a-z]+|r\.accessToken))/i;
 
+  assert.ok(
+    PROVIDER_FILES.length > 0,
+    "D-07-03: with no provider file declared, the PROV-05 scan reports success having opened nothing.",
+  );
+
+  const visited: string[] = [];
   for (const rel of PROVIDER_FILES) {
     const absPath = path.join(REPO_ROOT, rel);
-    const exists = await access(absPath).then(
-      () => true,
-      () => false,
-    );
-    if (!exists) {
-      // A not-yet-authored provider file leaves the gate vacuously satisfied
-      // for that file; its creation activates the scan.
-      continue;
-    }
-
     const src = await readFile(absPath, "utf8");
+    visited.push(rel);
     const stripped = stripComments(src);
     assert.equal(
       errorOrNotifyWithToken.test(stripped),
@@ -308,10 +346,16 @@ test("PROV-05: every provider file is scanned for token interpolation in an Erro
       `Error or notifyFn in ${rel} interpolates a token field (AUTH-09 violation)`,
     );
   }
+
+  assert.deepEqual(
+    visited,
+    [...PROVIDER_FILES],
+    "D-07-03: the scan must have opened every declared provider file; one that stopped resolving drops out of this list.",
+  );
 });
 
 test("AUTH-09: orchestrators/marketplace/{add,update}.ts never interpolate a credential field in an Error or ctx.ui.notify message", async () => {
-  // Closes review WR-02. add.ts and update.ts construct the Device Flow
+  // Closes review WR-02. The two marketplace verbs construct the Device Flow
   // onAuthRequired closure. The closure captures `credentialOps` by
   // reference -- a future regression that interpolates
   // `credentialOps.fill(...).then(c => ctx.ui.notify(\`got ${c.password}\`))`
@@ -327,19 +371,16 @@ test("AUTH-09: orchestrators/marketplace/{add,update}.ts never interpolate a cre
   const forbidden =
     /(new\s+Error\s*\(|ctx\.ui\.notify\s*\()(?:[^)]*\$\{[^}]*(access_?token|cred\.[a-z]+|r\.accessToken)|[^)]*\+\s*(access_?token|cred\.[a-z]+|r\.accessToken))/i;
 
-  for (const rel of PHASE_35_ORCHESTRATOR_FILES) {
-    const absPath = path.join(REPO_ROOT, rel);
-    const exists = await access(absPath).then(
-      () => true,
-      () => false,
-    );
-    if (!exists) {
-      // If a file doesn't exist yet on disk, this gate is vacuously
-      // satisfied for that file.
-      continue;
-    }
+  assert.ok(
+    CREDENTIAL_CAPTURING_ORCHESTRATORS.length > 0,
+    "D-07-03: with no credential-capturing orchestrator declared, this scan reports success having opened nothing.",
+  );
 
+  const visited: string[] = [];
+  for (const rel of CREDENTIAL_CAPTURING_ORCHESTRATORS) {
+    const absPath = path.join(REPO_ROOT, rel);
     const src = await readFile(absPath, "utf8");
+    visited.push(rel);
     const stripped = stripComments(src);
     assert.equal(
       forbidden.test(stripped),
@@ -347,4 +388,10 @@ test("AUTH-09: orchestrators/marketplace/{add,update}.ts never interpolate a cre
       `Error or ctx.ui.notify in ${rel} interpolates a credential field (AUTH-09 violation; closes review WR-02)`,
     );
   }
+
+  assert.deepEqual(
+    visited,
+    [...CREDENTIAL_CAPTURING_ORCHESTRATORS],
+    "D-07-03: the scan must have opened both credential-capturing orchestrators; one that stopped resolving drops out of this list.",
+  );
 });

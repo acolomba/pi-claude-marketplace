@@ -4,8 +4,10 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
+import { EXTENSION_ROOT_REL, STATE_WRITE_SEAM_TARGETS } from "./gate-targets.ts";
+
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-const EXTENSION_ROOT = path.join(REPO_ROOT, "extensions/pi-claude-marketplace");
+const EXTENSION_ROOT = path.join(REPO_ROOT, EXTENSION_ROOT_REL);
 
 /**
  * SPLIT-02 -- write-seam ownership for the user config file
@@ -72,14 +74,18 @@ const EXTENSION_ROOT = path.join(REPO_ROOT, "extensions/pi-claude-marketplace");
  * in ALLOWED_CONFIG_JSON_WRITERS).
  */
 
-const ALLOWED_STATE_JSON_WRITERS: ReadonlySet<string> = new Set([
-  "extensions/pi-claude-marketplace/persistence/state-io.ts",
-  "extensions/pi-claude-marketplace/persistence/migrate.ts",
-]);
+/**
+ * The write-seam group in its declared order: the two state-file writers, then
+ * the sole config-file writer. The 'exactly N' assertions below pin each
+ * allow-list by module basename, so a member reordered, added, or dropped in
+ * the registry lands in the wrong allow-list loudly rather than silently
+ * widening one (D-07-03).
+ */
+const [STATE_IO_REL, MIGRATE_REL, CONFIG_IO_REL] = STATE_WRITE_SEAM_TARGETS;
 
-const ALLOWED_CONFIG_JSON_WRITERS: ReadonlySet<string> = new Set([
-  "extensions/pi-claude-marketplace/persistence/config-io.ts",
-]);
+const ALLOWED_STATE_JSON_WRITERS: ReadonlySet<string> = new Set([STATE_IO_REL, MIGRATE_REL]);
+
+const ALLOWED_CONFIG_JSON_WRITERS: ReadonlySet<string> = new Set([CONFIG_IO_REL]);
 
 async function* walkTsFiles(dir: string): AsyncGenerator<string> {
   const entries = await readdir(dir, { withFileTypes: true });
@@ -104,8 +110,15 @@ const FORBIDDEN_CONFIG_JSON_PATTERN = /atomicWriteJson\(\s*(?:\w+\.)?configJsonP
 const FORBIDDEN_CONFIG_LOCAL_JSON_PATTERN = /atomicWriteJson\(\s*(?:\w+\.)?configLocalJsonPath\b/;
 
 test("SPLIT-02: only saveConfig writes claude-plugins.json / claude-plugins.local.json", async () => {
+  assert.ok(
+    STATE_WRITE_SEAM_TARGETS.length > 0,
+    "D-07-03: an empty STATE_WRITE_SEAM_TARGETS leaves both allow-lists empty, so the walk below would flag every file or exempt none of the real seams.",
+  );
+
   const offenders: string[] = [];
+  let walked = 0;
   for await (const file of walkTsFiles(EXTENSION_ROOT)) {
+    walked += 1;
     const rel = path.relative(REPO_ROOT, file);
     if (ALLOWED_CONFIG_JSON_WRITERS.has(rel)) {
       continue;
@@ -121,6 +134,10 @@ test("SPLIT-02: only saveConfig writes claude-plugins.json / claude-plugins.loca
     }
   }
 
+  assert.ok(
+    walked > 0,
+    `D-07-03: walked ${EXTENSION_ROOT_REL} and found no .ts files -- a walk over zero files is a gate reporting success over nothing.`,
+  );
   assert.deepEqual(
     offenders,
     [],
@@ -130,7 +147,9 @@ test("SPLIT-02: only saveConfig writes claude-plugins.json / claude-plugins.loca
 
 test("SPLIT-02: only saveState / persistMigratedState write state.json", async () => {
   const offenders: string[] = [];
+  let walked = 0;
   for await (const file of walkTsFiles(EXTENSION_ROOT)) {
+    walked += 1;
     const rel = path.relative(REPO_ROOT, file);
     if (ALLOWED_STATE_JSON_WRITERS.has(rel)) {
       continue;
@@ -142,6 +161,10 @@ test("SPLIT-02: only saveState / persistMigratedState write state.json", async (
     }
   }
 
+  assert.ok(
+    walked > 0,
+    `D-07-03: walked ${EXTENSION_ROOT_REL} and found no .ts files -- a walk over zero files is a gate reporting success over nothing.`,
+  );
   assert.deepEqual(
     offenders,
     [],
@@ -151,18 +174,21 @@ test("SPLIT-02: only saveState / persistMigratedState write state.json", async (
 
 // 'Exactly N' sibling assertions: the literal arrays force any future widener
 // to update BOTH the ReadonlySet allow-list above AND the matching literal
-// expectation here in the SAME commit. Silent widening is caught in CI.
+// expectation here in the SAME commit. Silent widening is caught in CI. The
+// expectation is spelled as module basenames because the full paths are owned
+// by STATE_WRITE_SEAM_TARGETS (D-07-05); comparing the allow-list against the
+// same registry group it was built from would pin nothing.
 
 test("SPLIT-02 whitelist: exactly the named writers may write state.json", () => {
-  assert.deepEqual([...ALLOWED_STATE_JSON_WRITERS].sort(), [
-    "extensions/pi-claude-marketplace/persistence/migrate.ts",
-    "extensions/pi-claude-marketplace/persistence/state-io.ts",
+  assert.deepEqual([...ALLOWED_STATE_JSON_WRITERS].map((rel) => path.basename(rel)).sort(), [
+    "migrate.ts",
+    "state-io.ts",
   ]);
 });
 
 test("SPLIT-02 whitelist: exactly one file may write claude-plugins.json files", () => {
-  assert.deepEqual([...ALLOWED_CONFIG_JSON_WRITERS].sort(), [
-    "extensions/pi-claude-marketplace/persistence/config-io.ts",
+  assert.deepEqual([...ALLOWED_CONFIG_JSON_WRITERS].map((rel) => path.basename(rel)).sort(), [
+    "config-io.ts",
   ]);
 });
 
