@@ -9,6 +9,7 @@ import {
   assertCompleteCoverage,
   assertReportComplete,
   changedPaths,
+  enforcePairs,
   pairForPath,
   pairsForChangedPaths,
   selectBase,
@@ -676,6 +677,88 @@ try {
     },
   );
 
+  // The gate ARM, not the comparator. Every state above drives `assertPinnedReadings` directly, so
+  // all six of them keep passing if an arm stops calling it -- and an arm that stops calling it
+  // enforces nothing, because `measurePair` records a shortfall and lets the loop continue. The
+  // three states below drive the real `enforcePairs` both arms run, with a stub runner standing in
+  // for `runPair` so a reading can be planted without spawning a focused test.
+  //
+  // The stub answers the gate's own refusal message, because that string is what `measurePair`
+  // parses; a stub that threw some other shape would prove the arm refuses errors in general rather
+  // than that it records coverage readings and compares them.
+  const completeRecordFor = (pair) => ({
+    ...pair,
+    coverage: "branches 4/4, lines 9/9",
+    typeOnly: false,
+    runtime: process.version,
+    elapsedMs: 0,
+  });
+  const pinnedPair = { sourcePath: pinnedRow.sourcePath, testPath: "tests/domain/alpha.test.ts" };
+  const unpinnedPair = { sourcePath: unpinnedModule, testPath: "tests/domain/beta.test.ts" };
+  const stubRunner = (shortfalls) => (pair) => {
+    const reading = shortfalls[pair.sourcePath];
+
+    if (reading !== undefined) {
+      throw new Error(`Incomplete direct coverage for ${pair.sourcePath}: ${reading}`);
+    }
+
+    return completeRecordFor(pair);
+  };
+
+  // The control. The pinned module falls short with exactly its pinned reading and the other
+  // measures complete, which is the state every green run of either arm is in. It comes first for
+  // the same reason the comparator's control does, and it carries a second obligation the comparator
+  // cannot: it fails if the arm stops RECORDING a shortfall, because an unrecorded pinned reading
+  // reads as a stale row.
+  const measured = await enforcePairs(
+    [pinnedPair, unpinnedPair],
+    [pinnedRow],
+    pinEnumeratedModules,
+    stubRunner({ [pinnedRow.sourcePath]: pinnedRow.reading }),
+  );
+
+  assert.deepEqual(
+    measured.map((record) => [record.sourcePath, record.coverage]),
+    [
+      [pinnedRow.sourcePath, pinnedRow.reading],
+      [unpinnedModule, "branches 4/4, lines 9/9"],
+    ],
+  );
+
+  // The plant. One unpinned module falls short and the arm has to refuse it. Nothing in the loop
+  // can: `measurePair` returns a normal record for a shortfall. Delete the comparison from
+  // `enforcePairs` and this is the assertion that goes red.
+  await assert.rejects(
+    () =>
+      enforcePairs(
+        [pinnedPair, unpinnedPair],
+        [pinnedRow],
+        pinEnumeratedModules,
+        stubRunner({
+          [pinnedRow.sourcePath]: pinnedRow.reading,
+          [unpinnedModule]: "branches 3/4",
+        }),
+      ),
+    {
+      message: [
+        "D-08-05: the measured direct-coverage shortfalls no longer match scripts/test-coverage-direct.pin.json",
+        `  fell short but is not pinned (1): ${unpinnedModule}`,
+        "  pinned but no longer falls short (0): none",
+        pinUpdateInstruction,
+      ].join("\n"),
+    },
+  );
+
+  // A failure that is not a coverage verdict ends the arm where it happened. Swallowing it would
+  // compare a measurement that never completed against the pin and report the difference as drift.
+  await assert.rejects(
+    () =>
+      enforcePairs([pinnedPair], [pinnedRow], pinEnumeratedModules, () => {
+        throw new Error(`Focused test failed: ${pinnedPair.testPath}`);
+      }),
+    { message: `Focused test failed: ${pinnedPair.testPath}` },
+  );
+
   // The loader's half, planted against the injected root. This is what proves the root is genuinely
   // injectable -- which is the whole reason the loader takes one, and the reason the pin is read and
   // parsed rather than imported as a hoisted, module-cached JSON module.
@@ -698,7 +781,7 @@ try {
   );
 
   process.stdout.write(
-    "Base-selection, pair-enumeration and coverage-pin negative controls passed: chain head with no origin/main, chain tail in a shallow clone, resolved-but-empty docs-only change set, a fixture pair and supplement resolved under the injected root, failed selection outside a repository, a report pair-enumeration callback handing an array index to the selected root, an explicitly named base resolved exactly and refused without a fallback when it does not resolve or is not a plain ref name, an unpinned shortfall, a moved pinned reading, a stale pin row, an emptied pin with a shortfall present, a pin row naming a module the tree no longer enumerates, and a malformed pin refused under an injected root.\n",
+    "Base-selection, pair-enumeration and coverage-pin negative controls passed: chain head with no origin/main, chain tail in a shallow clone, resolved-but-empty docs-only change set, a fixture pair and supplement resolved under the injected root, failed selection outside a repository, a report pair-enumeration callback handing an array index to the selected root, an explicitly named base resolved exactly and refused without a fallback when it does not resolve or is not a plain ref name, an unpinned shortfall, a moved pinned reading, a stale pin row, an emptied pin with a shortfall present, a pin row naming a module the tree no longer enumerates, the gate arm both commands run refusing an unpinned shortfall under a stub runner and passing on a pinned one, the same arm propagating a non-coverage failure, and a malformed pin refused under an injected root.\n",
   );
 } finally {
   await rm(fixtureRoot, { force: true, recursive: true });

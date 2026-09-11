@@ -668,12 +668,14 @@ export async function runPair({ sourcePath, testPath }) {
  *
  * A refused pair still answers a record of the same shape `runPair` returns, so the caller retaining
  * a report keeps one row per pair whatever the verdict was.
+ *
+ * `run` is the seam `enforcePairs` needs to be plantable; see that function's note.
  */
-async function measurePair(pair, observed) {
+async function measurePair(pair, observed, run) {
   const startedAt = process.hrtime.bigint();
 
   try {
-    return await runPair(pair);
+    return await run(pair);
   } catch (error) {
     const reading = shortfallReadingOf(error, pair.sourcePath);
 
@@ -694,11 +696,43 @@ async function measurePair(pair, observed) {
   }
 }
 
+/**
+ * Measure every pair, then compare what fell short against the pin. This is the gate's entire
+ * enforcement edge, and every arm reaches it.
+ *
+ * The extraction is the point. `measurePair` records a shortfall and continues, so no arm's loop
+ * refuses anything by itself -- the comparison below is the only thing that does. Left inline at
+ * each call site, that comparison was a line nothing could plant: deleting it left `npm run check`,
+ * the hook and the CI job all green with enforcement gone. Exported, it can be driven with a stub
+ * runner that answers a synthesized shortfall, so a control watches the arm refuse instead of
+ * reading the call site and assuming.
+ *
+ * The two hooks exist so the all-pair arm keeps properties it had inline and nothing more:
+ * `onRecord` writes its report row by row (an interrupted run still leaves a readable partial
+ * result), and `beforeCompare` keeps its completeness check AHEAD of the pin comparison. That order
+ * is load-bearing -- a run that skipped rows produces a short `observed` array too, and the pin
+ * would name it as a stale row rather than as the skipped run it is.
+ */
+export async function enforcePairs(pairs, pinRows, enumeratedModules, run = runPair, hooks = {}) {
+  const observed = [];
+  const records = [];
+
+  for (const pair of pairs) {
+    const record = await measurePair(pair, observed, run);
+
+    records.push(record);
+    hooks.onRecord?.(record);
+  }
+
+  hooks.beforeCompare?.(records);
+  assertPinnedReadings(observed, pinRows, enumeratedModules);
+
+  return records;
+}
+
 async function runAllPairs(reportPath) {
   const modulePaths = productionPaths();
   const pairs = modulePaths.map((modulePath) => pairForPath(modulePath));
-  const records = [];
-  const observed = [];
   const startedAt = process.hrtime.bigint();
 
   // Line-oriented and written as each pair lands, so an interrupted run still leaves a readable
@@ -707,29 +741,29 @@ async function runAllPairs(reportPath) {
     writeFileSync(reportPath, "");
   }
 
-  for (const pair of pairs) {
-    const record = await measurePair(pair, observed);
-    records.push(record);
-
-    if (reportPath !== undefined) {
-      appendFileSync(reportPath, `${JSON.stringify(record)}\n`);
-    }
-  }
-
-  // Read the retained report back instead of trusting the array the loop above just appended to, so
-  // the completeness check has a witness the loop did not produce. See the note on
-  // `assertReportComplete` for why the report-less arm cannot fail.
-  const written =
-    reportPath === undefined
-      ? records
-      : readFileSync(reportPath, "utf8")
-          .split("\n")
-          .filter(Boolean)
-          .map((line) => JSON.parse(line));
-
-  // Unconditional: a report is how the result is retained, not what makes the run a gate.
-  assertReportComplete(written, modulePaths);
-  assertPinnedReadings(observed, loadCoveragePin(), modulePaths);
+  const records = await enforcePairs(pairs, loadCoveragePin(), modulePaths, runPair, {
+    onRecord: (record) => {
+      if (reportPath !== undefined) {
+        appendFileSync(reportPath, `${JSON.stringify(record)}\n`);
+      }
+    },
+    // Read the retained report back instead of trusting the array the loop just appended to, so the
+    // completeness check has a witness the loop did not produce. See the note on
+    // `assertReportComplete` for why the report-less arm cannot fail.
+    //
+    // Unconditional: a report is how the result is retained, not what makes the run a gate.
+    beforeCompare: (measured) => {
+      assertReportComplete(
+        reportPath === undefined
+          ? measured
+          : readFileSync(reportPath, "utf8")
+              .split("\n")
+              .filter(Boolean)
+              .map((line) => JSON.parse(line)),
+        modulePaths,
+      );
+    },
+  });
 
   const elapsedMs = Number((process.hrtime.bigint() - startedAt) / 1000000n);
   const elapsedSeconds = (elapsedMs / 1000).toFixed(1);
@@ -797,13 +831,12 @@ async function runChangedPairs(explicitBase) {
 
   const enumeratedModules = productionPaths();
   const pinRows = loadCoveragePin();
-  const observed = [];
 
-  for (const pair of pairsWithPinned(selected.pairs, pinRows, enumeratedModules)) {
-    await measurePair(pair, observed);
-  }
-
-  assertPinnedReadings(observed, pinRows, enumeratedModules);
+  await enforcePairs(
+    pairsWithPinned(selected.pairs, pinRows, enumeratedModules),
+    pinRows,
+    enumeratedModules,
+  );
 }
 
 async function main() {
