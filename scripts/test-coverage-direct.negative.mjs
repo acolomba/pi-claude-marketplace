@@ -13,6 +13,7 @@ import {
   pairsForChangedPaths,
   selectBase,
 } from "./test-coverage-direct.mjs";
+import { assertPinnedReadings, loadCoveragePin } from "./test-coverage-direct.pin.mjs";
 import { verdictFor } from "./test-coverage-direct.report.mjs";
 
 const fixtureRoot = await mkdtemp(path.join(tmpdir(), "direct-coverage-gate-"));
@@ -538,8 +539,166 @@ try {
   assert.match(notARepositoryChangedPaths.reason, /not a git repository/);
   assert.equal(pairsForChangedPaths(notARepository).ok, false);
 
+  // A named base is resolved exactly and the chain is not consulted at all. The contrast is what
+  // makes that assertable: the same repository selects `main` through the chain only after passing
+  // over `origin/main`, so an empty `attempted` here is evidence no candidate was tried.
+  const explicitMain = selectBase(noRemoteRepository, "main");
+
+  assert.equal(explicitMain.ok, true);
+  assert.equal(explicitMain.candidate, "main");
+  assert.deepEqual(explicitMain.attempted, []);
+
+  // A named base that does not resolve is a refusal carrying no candidate. Falling through to the
+  // chain here would answer a change set against some other ref, which reads as a pass over work
+  // nobody asked about.
+  const explicitMissing = selectBase(noRemoteRepository, "refs/heads/absent");
+
+  assert.equal(explicitMissing.ok, false);
+  assert.equal(explicitMissing.candidate, undefined);
+  assert.match(explicitMissing.reason, /refs\/heads\/absent/);
+  assert.match(explicitMissing.reason, /never replaced by a fallback/);
+
+  // A value that is not a plain ref name is refused before git is invoked on it, which is why the
+  // reason names the pattern rather than a git exit status.
+  const explicitUnsafe = selectBase(noRemoteRepository, "a ref with spaces");
+
+  assert.equal(explicitUnsafe.ok, false);
+  assert.equal(explicitUnsafe.candidate, undefined);
+  assert.match(explicitUnsafe.reason, /a ref with spaces/);
+  assert.match(explicitUnsafe.reason, /not a plain ref name/);
+
+  // The coverage pin's comparison. These are string-and-array values only -- the comparator reads no
+  // disk -- so the fixture modules deliberately do not exist in the tree, and no fixture repository,
+  // temporary root or LCOV text is built for any of the six states below.
+  const pinnedRow = {
+    sourcePath: "extensions/pi-claude-marketplace/domain/alpha.ts",
+    reading: "branches 1/2",
+    findingIds: ["AAA-001"],
+    reasons: ["the narrowing arm is compiler-forced and cannot be reached at runtime"],
+  };
+  const unpinnedModule = "extensions/pi-claude-marketplace/domain/beta.ts";
+  const pinEnumeratedModules = [pinnedRow.sourcePath, unpinnedModule];
+  const matchingObservation = [{ sourcePath: pinnedRow.sourcePath, reading: pinnedRow.reading }];
+  // Typed out here rather than imported, so a change to the refusal's trailer has to be made in this
+  // file too and cannot pass by being recomputed from the code under test.
+  const pinUpdateInstruction = [
+    "  Update scripts/test-coverage-direct.pin.json in this same change and record why the tree's",
+    "  coverage surface moved. The record is a measurement, not an allow-list:",
+    "  it forgives nothing, in either direction.",
+  ].join("\n");
+
+  // The passing state comes first and is not decoration: without it the five refusals below could
+  // all be firing on a malformed literal rather than on the property each one claims.
+  assert.doesNotThrow(() =>
+    assertPinnedReadings(matchingObservation, [pinnedRow], pinEnumeratedModules),
+  );
+
+  // A module that fell short and is not pinned. The pinned module still reads exactly as pinned, so
+  // only the addition direction can refuse this.
+  assert.throws(
+    () =>
+      assertPinnedReadings(
+        [...matchingObservation, { sourcePath: unpinnedModule, reading: "branches 3/4" }],
+        [pinnedRow],
+        pinEnumeratedModules,
+      ),
+    {
+      message: [
+        "D-08-05: the measured direct-coverage shortfalls no longer match scripts/test-coverage-direct.pin.json",
+        `  fell short but is not pinned (1): ${unpinnedModule}`,
+        "  pinned but no longer falls short (0): none",
+        pinUpdateInstruction,
+      ].join("\n"),
+    },
+  );
+
+  // A pinned reading that moved. Membership is unchanged, so nothing but the whole-string reading
+  // comparison can refuse it -- and it refuses a reading that IMPROVED, which is the direction an
+  // allow-list would absorb silently.
+  assert.throws(
+    () =>
+      assertPinnedReadings(
+        [{ sourcePath: pinnedRow.sourcePath, reading: "branches 2/2, lines 9/9" }],
+        [pinnedRow],
+        pinEnumeratedModules,
+      ),
+    {
+      message: [
+        `Pinned direct-coverage reading moved for ${pinnedRow.sourcePath}`,
+        "  pinned: branches 1/2",
+        "  measured: branches 2/2, lines 9/9",
+        pinUpdateInstruction,
+      ].join("\n"),
+    },
+  );
+
+  // A stale row: the pinned module produced no shortfall at all. This is the opposite direction from
+  // the addition above, and the only one that catches a pin nobody updated after the tree improved.
+  assert.throws(() => assertPinnedReadings([], [pinnedRow], pinEnumeratedModules), {
+    message: [
+      "D-08-05: the measured direct-coverage shortfalls no longer match scripts/test-coverage-direct.pin.json",
+      "  fell short but is not pinned (0): none",
+      `  pinned but no longer falls short (1): ${pinnedRow.sourcePath}`,
+      pinUpdateInstruction,
+    ].join("\n"),
+  });
+
+  // An emptied pin with a shortfall present. Different from the addition state above: that one
+  // proves a populated pin rejects a new row, this one proves a pin that lost all its rows cannot
+  // read as success.
+  assert.throws(() => assertPinnedReadings(matchingObservation, [], pinEnumeratedModules), {
+    message: [
+      "The coverage pin holds no rows, but 1 module(s) fell short:",
+      `  ${pinnedRow.sourcePath}`,
+      pinUpdateInstruction,
+    ].join("\n"),
+  });
+
+  // A row naming a module the enumeration no longer holds. This is the one refusal that needs no
+  // test run at all: without it a deleted module would leave a row nothing could ever contradict,
+  // because nothing would ever measure it again.
+  assert.throws(
+    () =>
+      assertPinnedReadings(
+        matchingObservation,
+        [
+          pinnedRow,
+          { ...pinnedRow, sourcePath: "extensions/pi-claude-marketplace/domain/gone.ts" },
+        ],
+        pinEnumeratedModules,
+      ),
+    {
+      message: [
+        "Coverage pin rows name 1 module(s) the tree no longer enumerates:",
+        "  extensions/pi-claude-marketplace/domain/gone.ts",
+        pinUpdateInstruction,
+      ].join("\n"),
+    },
+  );
+
+  // The loader's half, planted against the injected root. This is what proves the root is genuinely
+  // injectable -- which is the whole reason the loader takes one, and the reason the pin is read and
+  // parsed rather than imported as a hoisted, module-cached JSON module.
+  const fixturePinPath = path.join(fixtureRoot, "scripts/test-coverage-direct.pin.json");
+
+  await mkdir(path.dirname(fixturePinPath), { recursive: true });
+  await writeFile(fixturePinPath, JSON.stringify({ version: 1, rows: [pinnedRow] }, null, 2));
+
+  assert.deepEqual(loadCoveragePin(fixtureRoot), [pinnedRow]);
+
+  // A malformed row is refused rather than coerced, and the refusal names the file to go and fix.
+  await writeFile(
+    fixturePinPath,
+    JSON.stringify({ version: 1, rows: [{ ...pinnedRow, reasons: undefined }] }, null, 2),
+  );
+
+  assert.throws(
+    () => loadCoveragePin(fixtureRoot),
+    /Coverage pin .*test-coverage-direct\.pin\.json is malformed: row extensions\/.+alpha\.ts has no reasons array/,
+  );
+
   process.stdout.write(
-    "Base-selection and pair-enumeration negative controls passed: chain head with no origin/main, chain tail in a shallow clone, resolved-but-empty docs-only change set, a fixture pair and supplement resolved under the injected root, failed selection outside a repository, and a report pair-enumeration callback handing an array index to the selected root.\n",
+    "Base-selection, pair-enumeration and coverage-pin negative controls passed: chain head with no origin/main, chain tail in a shallow clone, resolved-but-empty docs-only change set, a fixture pair and supplement resolved under the injected root, failed selection outside a repository, a report pair-enumeration callback handing an array index to the selected root, an explicitly named base resolved exactly and refused without a fallback when it does not resolve or is not a plain ref name, an unpinned shortfall, a moved pinned reading, a stale pin row, an emptied pin with a shortfall present, a pin row naming a module the tree no longer enumerates, and a malformed pin refused under an injected root.\n",
   );
 } finally {
   await rm(fixtureRoot, { force: true, recursive: true });
