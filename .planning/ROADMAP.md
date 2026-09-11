@@ -780,12 +780,21 @@ It can return only after current revalidation; it is not marked implemented.
 
 **Success Criteria**:
 
-1. The milestone branch has one regenerated baseline for all 204 current source-
-   test pairs, including the two historical `COV-01` orchestrators, and every
-   refusal is reported without stale counts or a false pass.
-2. All seven terminal shortfalls are reclassified; the two removable dense-
-   index guards are honestly rewritten and the five genuinely compiler-forced
-   cases retain current evidence without an allowlist or exclusion.
+1. The milestone branch has one regenerated baseline for every current source-
+   test pair — 230 of them, as `npm run test:coverage:direct:report` measures
+   and reports in its own `All-pair report written:` row count — including the
+   two historical `COV-01` orchestrators, and every refusal is reported without
+   stale counts or a false pass.
+2. Every measured terminal shortfall is reclassified: the dense-index guards in
+   `edge/args.ts`, `edge/handlers/shared.ts`, and
+   `edge/handlers/plugin/pending.ts` are honestly rewritten to typed iteration;
+   `bridges/hooks/event-router.ts` and
+   `orchestrators/plugin/update-preflight.ts` are closed by real owner tests;
+   and `bridges/commands/discover.ts` (`branches 55/57, lines 412/414`) and
+   `orchestrators/plugin/install-outcome.ts`
+   (`branches 109/111, lines 1034/1040`) retain current evidence in the
+   committed pin `scripts/test-coverage-direct.pin.json`, without an allowlist
+   or exclusion.
 3. The same strict changed-pair gate runs in scoped local pre-commit and a
    dedicated authoritative CI job with fail-closed base and pair selection;
    coverage remains reachability evidence only.
