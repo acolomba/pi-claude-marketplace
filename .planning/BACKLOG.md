@@ -22,7 +22,57 @@ Candidate directions for later brainstorming:
 
 Workaround today: run `/claude:plugin pending` before reloading, or `list` after.
 
-## REASON-01: unify malformed-input failures under a "malformed X" reason family
+## ~~REASON-01: unify malformed-input failures under a "malformed X" reason family~~ -- CLOSED
+
+Closed 2026-09-11 by the `refine-unit-tests` milestone. Disposition:
+`implemented` for the terminal route the milestone carried -- `PDEF-03` ("The
+terminal malformed-MCP input case returns its typed stable failure without an
+unexpected throw or configuration write") and `PDEF-05` ("Terminal
+lock-contention, sibling-sweep, and malformed-input reasons use explicit typed
+classifications instead of message-substring flow"). The `{malformed <feature>}`
+family this item asked for does exist and is closed-set.
+
+The scope was measured before this disposition was written, not after. Verbatim
+output of `grep -n 'malformed'
+extensions/pi-claude-marketplace/shared/notification-types.ts` on 2026-09-11:
+
+```
+44:  "malformed mcp",
+45:  "malformed skill",
+46:  "malformed command",
+```
+
+Three members, inside the `REASONS` closed set, each reached by a typed
+classification rather than by a message-substring test.
+
+NOT closed by the same change: **both** of the two mislabeled cases this item
+named by hand. Each was re-read the same day in
+`extensions/pi-claude-marketplace/shared/probe-classifiers.ts::classifyResolverNote`,
+and each still reaches the token the item complained about.
+
+- Inline malformed `mcpServers` still reaches `{unsupported source}`. The note
+  is emitted as `malformed mcpServers[: detail]`
+  (`domain/mcp-resolution.ts:34,36`), and `classifyResolverNote` matches the
+  FULL `malformed mcp reference` prefix deliberately, so that the inline note
+  does NOT match -- its own comment states that a bare `malformed mcp` match
+  "would also match the inline `malformed mcpServers` note and silently reroute
+  it away from `unsupported source`". The note therefore falls through to the
+  permissive catch-all arm, exactly as this item reported.
+- Malformed `hooks.json` still reaches `{unsupported hooks}`. The note is
+  emitted as `malformed hooks.json: <reason>`
+  (`domain/hooks-resolution.ts:42`), and `classifyResolverNote`'s `isHooksNote`
+  arm matches `startsWith("malformed hooks.json:")`. There is no
+  `malformed hooks` member in `REASONS` for it to reach -- see the grep above.
+
+So the family exists and the terminal malformed-input cases route into it, but
+the re-audit of `narrowResolverNotes` this item asked for -- rerouting the two
+named supported-feature parse failures out of the unsupported family -- was not
+done. That residual is a product change with no terminal finding inside the
+unit-test-quality boundary, and `D-22` bars it from creating milestone work
+here.
+
+Original report follows.
+
 
 Surfaced during v1.14 Phase 85 discuss (2026-07-22). The `UNSUPPORTED_REASONS`
 tokens (`unsupported hooks`, `lsp`, `unsupported source`) semantically mean a
@@ -417,7 +467,35 @@ can recover real unused-code detection without reintroducing the false-positive
 wall. Measured at filing: that form yields 4 unused files, 192 unused exports,
 93 unused types and 4 duplicate pairs, so it is not a small triage.
 
-## FLOW-07: is the ESLint `no-restricted-paths` zone matrix now redundant?
+## ~~FLOW-07: is the ESLint `no-restricted-paths` zone matrix now redundant?~~ -- CLOSED
+
+Closed 2026-09-11 by the `refine-unit-tests` milestone. Disposition:
+`implemented`, carried by `GGAT-03` (Phase 7), whose clause names this item by
+ID: "`FLOW-07` varies effective config sources and broad overrides across the
+terminal ESLint/Fallow boundary gaps and proves target visitation."
+
+This is the one route of the four items closed here that a requirement clause
+names by ID, so it rests on a record rather than on inference. The three weaker
+routes say so in their own entries; the difference between a named route and a
+derived one is the point of recording it.
+
+`.planning/phases/07-gate-integrity/07-16-SUMMARY.md` carries the satisfaction
+row: plan `07-07` resolved both boundary gates through
+`ESLint#calculateConfigForFile` and deleted the two gates it replaced, verified
+by `node --test tests/architecture/eslint-effective-config.test.ts` and by
+`npm run lint` inside `npm run check`.
+`.planning/phases/07-gate-integrity/07-VERIFICATION.md` reads `status: passed`,
+7/7, with the `GGAT-03` row `SATISFIED`.
+
+The edge-by-edge matrix comparison this entry said removal would need was
+therefore never what settled it, and the removal question was not the thing that
+got answered. What got answered is the question underneath it: the ESLint gate
+now proves its own effective config and its target visitation, which is what
+makes two boundary gates independently trustworthy rather than nominally
+redundant.
+
+Original report follows.
+
 
 Filed 2026-08-16 alongside the FLOW-04 closure (quick task 260816-qov).
 
@@ -537,7 +615,42 @@ fallow coverage on all five barrels.
 Distinct from FLOW-09: that one is about internals exported for TESTS, a
 different cause with a different fix.
 
-## FLOW-09: internals exported only for tests
+## ~~FLOW-09: internals exported only for tests~~ -- CLOSED
+
+Closed 2026-09-11 by the `refine-unit-tests` milestone. Disposition:
+`implemented`, carried by `TREF-05` and `TREF-06` (Phases 5-6), with the
+standing `no-test-only-production-surface` gate under `GGAT-04` keeping the
+surface at zero.
+
+The clause fragments that make the match, quoted from `.planning/REQUIREMENTS.md`:
+
+- `TREF-05`: "Terminal mutable module state moves to legitimate lifecycle or
+  factory ownership without reset exports created only for tests." That is this
+  item's `_*ForTest` state-accessor half, in its own terms.
+- `TREF-06`: "Tests exercise public contracts, and terminal test-only exports,
+  reset hooks, and test-shaped branches follow the trace-preserving removal
+  disposition." That is the `__test_*` re-export half.
+- `GGAT-04`: "Terminal closed-set and delegated-contract gates cover their real
+  production consumers and any public seams created by approved splits, with
+  visitation, offender, and benign controls."
+  `tests/architecture/no-test-only-production-surface.test.ts` is the standing
+  gate that stops the count returning above zero.
+
+**This route is derived from clause text, not from a record that names
+`FLOW-09` against a requirement ID.** No artifact states the mapping in one
+place; it is read off the clauses above, whose wording matches this item's two
+halves almost verbatim. An honest "derived from clause text" is a record; an
+unqualified assertion would be a hope.
+
+NOT closed by the same change: this item's OTHER population, which its own
+status note below already separates out -- the roughly 94 ordinary internal
+helpers exported so a test can reach them, which is what still stands between
+this repository and `production: true` under fallow. The 27 seams this item
+tracked are at zero; the `production: true` payoff it was named for is not
+unlocked, and nothing in this milestone claims otherwise.
+
+Original report follows.
+
 
 **Status 2026-08-18: the seams are at ZERO. The item is NOT closed -- see the
 `production: true` measurement below, which is what it was actually named
@@ -2377,7 +2490,47 @@ second justification that makes the move cheap to argue. [FMBOM-01]
 deliberately does NOT count toward it -- its recommended fix avoids the floor
 precisely so the bump stays optional.
 
-## TESTQ-01: act on the two-pass unit-test review corpus -- IMPORTANT
+## ~~TESTQ-01: act on the two-pass unit-test review corpus~~ -- CLOSED
+
+Closed 2026-09-11 by the `refine-unit-tests` milestone, which was cut from this
+item. Disposition: `implemented`.
+
+This is an umbrella item, so "the whole milestone carried it" is not a claim a
+reader can check. The mapping from this item's own five numbered workstreams
+onto the requirement IDs that carried each one, so the route can be walked
+rather than trusted:
+
+| this item's workstream | requirement IDs that carried it |
+| --- | --- |
+| 1. Production bugs -- 14 confirmed | `PDEF-01` through `PDEF-08` (Phases 2-3), plus `AUTH-01` for the authentication cluster |
+| 2. The 9 operator decisions in `META-FINDINGS.md` | `RVAL-03` (Phase 1), which resolves them only after their current premises are revalidated |
+| 3. The 13 ranked leverage items | `TREF-01` through `TREF-09` (Phases 4-6): hermeticity is `TREF-01`, the `git-ops-fake.ts` auth strip is `TREF-02`, the cast clusters are `TREF-03`, the injection seams are `TREF-04`, the fragment-assertion sweep is `TREF-07`, the approved splits are `TREF-09` |
+| 4. Re-arm the inert gates (36 rows) | the `GGAT` family -- `GGAT-01`, `GGAT-03`, `GGAT-04` (Phase 7) |
+| 5. Wire `test:coverage:direct` into the check chain | `RCOV-03` (Phase 8), with `RCOV-01` and `RCOV-02` supplying the honest baseline it gates against |
+
+The framing requirements `RVAL-01` through `RVAL-04` (Phase 1) are what made
+the corpus usable at all: all 110 files individually inspected, every report and
+recorded finding mapped to a current disposition with live source and test
+references, and stale, struck or displaced claims moved out of active scope with
+explicit current evidence before any implementation was planned.
+`.planning/phases/01-live-evidence-revalidation/01-67-SUMMARY.md:128` records
+the routing: "`TESTQ-01`, `FLOW-09`, `REASON-01`, and `FLOW-07` retain exact
+routes through their terminal findings."
+
+**This route is assembled, not stated.** No single artifact says "TESTQ-01 is
+closed by these IDs"; the table above is read off this item's own workstream
+list and the requirement clause text. Where a row rests on that inference it
+rests on it, and a reader checking the route should start from
+`.planning/REQUIREMENTS.md` and the per-phase verification reports rather than
+from this table.
+
+This item's own calibration warning survives its closure and is now repository
+policy rather than a caveat: per-pair coverage is not evidence of assertion
+strength. `CONTRIBUTING.md` and `RCOV-03` both hold coverage to reachability
+evidence only.
+
+Original report follows.
+
 
 Filed 2026-09-04 at the close of the unit-test-refactor review sweep. Deferred
 by operator decision until the branch merges to main. This is ONE umbrella item
