@@ -5,15 +5,15 @@ milestone_name: Refine Unit Tests
 current_phase: 09
 current_phase_name: Final Quality and Backlog Closure
 status: executing
-stopped_at: Phase 9 executing; 6 plans planned and verified, wave 1 dispatched
-last_updated: "2026-09-11T19:00:00.000Z"
+stopped_at: Completed 09-01-PLAN.md
+last_updated: "2026-09-11T20:42:11.828Z"
 last_activity: 2026-09-11
-last_activity_desc: Phase 9 planned; plan-checker passed 6 plans, execution started
-state_head: f79839f32b2642d93d865de29b2f3d7d8baf42eb
+last_activity_desc: Phase 9 plan 01 complete; hooks read port landed and the staleness case simplified
+state_head: c6a6758c3bace41ee1149beecf1a382c767b318d
 progress:
   total_phases: 9
   completed_phases: 4
-  total_plans: 205
+  total_plans: 211
   completed_plans: 205
   percent: 44
 ---
@@ -32,13 +32,17 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 09 (Final Quality and Backlog Closure) — executing
-Next: Execute waves 1-6 in order
-Plan: 0 of 6 complete
+Next: Execute 09-02 (wave 2)
+Plan: 1 of 6 complete
 Status: `npm run check` exit 0 and `npm run test:coverage:direct:all` exit 0 as of Phase 8's close —
 230 pairs, two pinned rows matching the committed pin exactly. Both must be re-measured on the
 final tree before the seal flips, because Phase 9 changes production code (D-09-05, D-09-09).
 Resume file: `.planning/phases/09-final-quality-and-backlog-closure/09-CONTEXT.md`
-Last activity: 2026-09-11 — Phase 9 discussed; decisions D-09-01 through D-09-18 recorded
+Last activity: 2026-09-11 — 09-01 landed the injected hooks read port (D-09-05, D-09-07):
+`event-router.ts` holds zero static `readFile`, both factories take a required reader, and the
+composition root supplies the real `readHooksJson`. `event-router.ts` direct coverage now reads
+`branches 114/114, functions 43/43, lines 1002/1002` — the line count moved, so D-09-09's
+re-measurement obligation is live.
 
 ### Two handoff claims the Phase 9 discussion corrected
 
@@ -451,6 +455,7 @@ stay recorded rather than excused.
 | Phase 08 P03 | 19min | 2 tasks | 2 files |
 | Phase 08 P05 | 57min | 3 tasks | 19 files |
 | Phase 08 P06 | 84min | 3 tasks | 5 files |
+| Phase 09 P01 | 30 min | 2 tasks | 39 files |
 
 ## Accumulated Context
 
@@ -991,6 +996,9 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 08]: ReinstallReplacement retains removalOps so compensation cleans up through the collaborator the forward pass used
 - [Phase 08]: The leaked-residue partition is read from real disk through a delegating removal collaborator; the in-memory fake removes nothing, so the unfaulted half is unstatable through it
 - [Phase 08]: A restore whose source path is minted by an unported forward call is faulted on its rename DESTINATION, the one key the case can know before the act
+- [Phase 09]: D-09-08 shape: a one-member HooksFileReader, with HooksHydrationReader extending it — Rejected the merged HooksReader that hands createHooksRouting a loadState it never calls; extends keeps one read port, one member set, and no unused member at either factory
+- [Phase 09]: readHooksJson lives in bridges/hooks/stage.ts — stage.ts already owns the hooks file primitives and an injected read-only fs port; a new reader.ts would add a 231st source-test pair for one function
+- [Phase 09]: Tests pass the production readHooksJson at every pre-existing call site — Those sites read the real file today, so the port must change no behavior; only the staleness case substitutes a reader, and it delegates to the production one
 
 ### Pending Todos
 
@@ -1044,7 +1052,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 08-09-PLAN.md -- the last plan of Phase 8
+**Stopped at:** Completed 09-01-PLAN.md
 
 Phase 04 completed all seven plans and closed AUTH-01 and TREF-01 through
 TREF-03. Independent verification passed 4/4 with no behavioral or UAT gap;
@@ -1062,7 +1070,7 @@ independent verification passed 6/6 with zero unverified behaviors.
 **Read beside it:** `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`, the
 Phase 01 terminal evidence ledger, and Phase 5's roadmap criteria.
 
-Last session: 2026-09-11T13:56:00.000Z
+Last session: 2026-09-11T20:41:58.983Z
 
 **Next:** Verify Phase 8, then execute Phase 9 (Final Quality and Backlog Closure).
 
