@@ -89165,24 +89165,24 @@
     {
       "id": "SCOPE-REQ-RCOV-01",
       "requirementId": "RCOV-01",
-      "requirementSignature": "sha256:a12a5b4343156b81943a818a81f02cf07dc8b6e39ca785137762702789dbe1fd",
+      "requirementSignature": "sha256:0a8845cbd4259de95597c07a5efdd02b16c709d2550953dc9b34d37ea84564bf",
       "action": "narrow/split",
       "beforeAnchor": ".planning/REQUIREMENTS.md :: Direct Coverage :: RCOV-01 — regenerate per-pair baseline from milestone branch",
-      "afterAnchor": ".planning/REQUIREMENTS.md :: Direct Coverage :: RCOV-01 — regenerate one honest baseline for all 204 current pairs and record every refusal",
+      "afterAnchor": ".planning/REQUIREMENTS.md :: Direct Coverage :: RCOV-01 — regenerate one honest baseline for every current pair, measured at 230, and record every refusal",
       "findingIds": ["AUDIT-010", "TXA-F022"],
       "decisionIds": ["MF-DEC-09"],
-      "rationale": "Move the absent historical retained report to evidence-only closure and regenerate one honest baseline over all 204 current source-test pairs from the milestone branch. Record every refusal; do not reuse stale counts or convert the report into a false pass."
+      "rationale": "Move the absent historical retained report to evidence-only closure and regenerate one honest baseline over every current source-test pair from the milestone branch. Record every refusal; do not reuse stale counts or convert the report into a false pass. The inherited 204 was replaced by the measured 230, which the named reproduction command reports (D-08-A02)."
     },
     {
       "id": "SCOPE-REQ-RCOV-02",
       "requirementId": "RCOV-02",
-      "requirementSignature": "sha256:31b8511e6d7c060bffd047fef07e0b536ef6f61e7df81f8ff04653231af6a40d",
+      "requirementSignature": "sha256:075ab63a708d0efb431f12b4bdd0e462cf03af6c130f33c107fe6e3983f28ac1",
       "action": "narrow/split",
       "beforeAnchor": ".planning/REQUIREMENTS.md :: Direct Coverage :: RCOV-02 — reclassify seven shortfalls and rewrite removable branches",
-      "afterAnchor": ".planning/REQUIREMENTS.md :: Direct Coverage :: RCOV-02 — rewrite two dense-index guards and retain current evidence for five compiler-forced cases without allowlists",
+      "afterAnchor": ".planning/REQUIREMENTS.md :: Direct Coverage :: RCOV-02 — name the measured membership: three rewritten dense-index guards, two modules closed by owner tests, and two pinned readings, without allowlists",
       "findingIds": ["AUDIT-011", "BC-004", "SHC-F023"],
       "decisionIds": ["MF-DEC-01", "MF-DEC-09"],
-      "rationale": "Retain the seven terminal direct-coverage shortfalls: honestly rewrite the two removable dense-index guards selected by MF-DEC-01 and preserve current evidence for the five genuinely compiler-forced cases. No allowlist, exclusion, or flattering suppression is authorized."
+      "rationale": "Retain every terminal direct-coverage shortfall the report measures: honestly rewrite the removable dense-index guards selected by MF-DEC-01 and preserve current evidence for the cases no rewrite and no test can reach. No allowlist, exclusion, or flattering suppression is authorized. The measured membership replaced the inherited one, which named a different set of the same size, so the clause names modules and readings and restates no count (D-08-A02)."
     },
     {
       "id": "SCOPE-REQ-RCOV-03",
@@ -89198,7 +89198,7 @@
     {
       "id": "SCOPE-REQ-RCOV-04",
       "requirementId": "RCOV-04",
-      "requirementSignature": "sha256:f52861e75e225ee7629e13fc24a9e4b490535a7baac84ea9e4785946c9c0fd8b",
+      "requirementSignature": "sha256:301729d0a8d910d7ddfbafce811280e5966236aa097a48ccf639426f5b89be30",
       "action": "move-to-evidence",
       "beforeAnchor": ".planning/REQUIREMENTS.md :: Direct Coverage :: RCOV-04 — active standalone remeasurement of two COV-01 orchestrators in Phase 8",
       "afterAnchor": ".planning/REQUIREMENTS.md :: Evidence and History :: RCOV-04 — stable COV-01 history retained and both pairs included by RCOV-01, with no standalone task",

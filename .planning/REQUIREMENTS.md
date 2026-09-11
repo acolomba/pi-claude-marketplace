@@ -90,11 +90,20 @@ component as a working Pi artifact.
 ### Direct Coverage
 
 - [ ] **RCOV-01**: One honest per-pair coverage baseline is regenerated from the
-      milestone branch for all 204 current source-test pairs and records every
-      refusal without stale counts or a false pass.
-- [ ] **RCOV-02**: All seven terminal shortfalls are reclassified; the two
-      removable dense-index guards are honestly rewritten and the five genuinely
-      compiler-forced cases retain current explicit evidence without an allowlist.
+      milestone branch for every current source-test pair, a set
+      `npm run test:coverage:direct:report` measures at 230 and reports in its
+      own `All-pair report written:` row count, and records every refusal
+      without stale counts or a false pass.
+- [ ] **RCOV-02**: Every measured terminal shortfall is reclassified. The
+      dense-index guards in `edge/args.ts`, `edge/handlers/shared.ts`, and
+      `edge/handlers/plugin/pending.ts` are honestly rewritten to typed
+      iteration; `bridges/hooks/event-router.ts` and
+      `orchestrators/plugin/update-preflight.ts` are closed by real owner tests;
+      and `bridges/commands/discover.ts` (`branches 55/57, lines 412/414`) and
+      `orchestrators/plugin/install-outcome.ts`
+      (`branches 109/111, lines 1034/1040`) retain current explicit evidence in
+      the committed pin `scripts/test-coverage-direct.pin.json`, which records
+      one reason per uncovered site and is not an allowlist.
 - [ ] **RCOV-03**: The same strict changed-pair gate runs in scoped local
       pre-commit and dedicated authoritative CI with fail-closed base and pair
       selection, while coverage remains reachability evidence only.
@@ -119,7 +128,7 @@ history remains here and in the canonical scope-impact records.
   dedicated terminal finding for that premise. Revalidation is required before
   this requirement can return to active scope; it is not implemented.
 - **RCOV-04** (`SCOPE-REQ-RCOV-04`, formerly Phase 8): the standalone `COV-01`
-  remeasurement is superseded by `RCOV-01`'s complete 204-pair baseline. Its two
+  remeasurement is superseded by `RCOV-01`'s complete all-pair baseline. Its two
   orchestrators remain included in that baseline and neither is a terminal
   current shortfall; this is not a flattering exclusion or an implementation
   claim.
