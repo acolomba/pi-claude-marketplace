@@ -28,3 +28,9 @@ blocked.
 **Who should absorb it:** whichever plan next writes `.planning/WINDOWS.md`. 08-08 is the
 natural home — it already owns the stale `CONTRIBUTING.md` shortfall rows for the same three
 modules, so one plan can retire both records of the same removed defect.
+
+**Re-checked during 08-08, still blocked, not absorbed.** `windows fixed 19` refuses with the
+same rows 9 and 30 message, so entries 19, 21, and 22 stay `open` while being false. 08-08 did
+retire the stale `CONTRIBUTING.md` rows for those three modules, but it did not repair rows 9
+and 30: regenerating the table destroys the prose side of the ledger, and which of the two
+sides wins is an operator decision, not an executor's. Re-routed to the operator.

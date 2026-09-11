@@ -32,8 +32,35 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 08 (Direct Coverage) — EXECUTING
-Next: /gsd-execute-phase 08 (08-08 and 08-09 remain)
-Plan: 7 of 9 complete
+Next: /gsd-execute-phase 08 (08-09 remains)
+Plan: 8 of 9 complete
+Status: 08-08 complete. **The second full sweep is in and every coverage claim in the repository
+now equals it.** 230 rows in 486.9s, `Verdicts: accepted-shortfall 2, complete 221, type-only 7`,
+run in this checkout after every code plan landed (`D-08-A10`). The pin was REGENERATED from that
+sweep -- not hand-authored, not carried forward on trust -- and came back **byte-identical** to the
+artifact 08-04 generated at its own head, so `git status --porcelain` on it is empty and task 1 has
+no commit. The strict arm then exited 0 on the final tree: `All-pair run complete: 230 pairs in
+492.4s`. Against 08-01's `accepted-shortfall 7`: five rows CLOSED (`edge/args.ts`,
+`edge/handlers/shared.ts`, `edge/handlers/plugin/pending.ts` by 08-02's rewrites;
+`bridges/hooks/event-router.ts`, `orchestrators/plugin/update-preflight.ts` by 08-03's tests), two
+STAYED and are pinned (`bridges/commands/discover.ts` unmoved at `branches 55/57, lines 412/414`;
+`orchestrators/plugin/install-outcome.ts` moved to `branches 109/111, lines 1034/1040`), and **none
+appeared** -- so `D-08-09a`'s escalation path has no members and nothing is escalated. Five records
+were rewritten in one change and all three signature carriers re-sealed:
+`node scripts/revalidation.mjs scope-impact --check` prints exactly `Scope impact valid: 40
+records.` **`RCOV-04` had to be rewritten too** -- its evidence clause carried `RCOV-01`'s 204 as a
+live cross-reference, so task 2's own `grep -c 204 == 0` criterion and its "exactly two keys"
+criterion contradicted each other; `D-08-01` broke the tie and `RCOV-04` lost the number rather
+than gaining the new one. **`CONTRIBUTING.md` says the hook and the CI job are NOT wired yet,
+because they are not** -- 08-09 owns `RCOV-03`, `.pre-commit-config.yaml` has no
+`npm-coverage-direct`, and no workflow mentions the gate; writing the present tense would have
+added a fourth false claim in the commit that removed three. **08-09 must delete that one clause**
+when it lands the wiring. The whole-tree cost is stated as ~8 min, the measured value (479.8s /
+486.9s / 492.4s), not the inherited nine. `RCOV-01` and `RCOV-02` stay Pending: both are sealed at
+`Phase 8` / `Pending` in `SEALED_REQUIREMENT_ROUTES`, so flipping a checkbox fails
+`scope-impact --check` on the route contract. `npm run check` exits 0. `.planning/WINDOWS.md`
+entries 19/21/22 remain false-but-unwritable (rows 9/30 desync) and were re-routed to the operator
+in `deferred-items.md` rather than absorbed.
 Status: 08-04 complete. **`npm run test:coverage:direct:all` exits 0 for the first time** -- 230
 pairs in 489.4s, 228 complete-or-type-only, and exactly two refused rows that match a committed pin.
 `scripts/test-coverage-direct.pin.json` holds those two rows, sorted by `sourcePath`, each carrying
