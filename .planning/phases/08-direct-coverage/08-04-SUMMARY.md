@@ -22,10 +22,11 @@ affects: [08-08, 08-09, direct-coverage, pre-commit-hook, ci-coverage-job]
 actuals:
   tokens: 9180
   tasks: 3
-  commits: 2
+  commits: 3
   plan_head_before: c61b6ce5f567a3d78993718510dbb287cc9587aa
-  # `commits` is MEASURED (`git rev-list --count c61b6ce5..HEAD` at SUMMARY write), not narrated.
-  # It is 2 rather than 3 because tasks 1 and 2 could not be committed apart -- see deviation 1.
+  # `commits` is MEASURED (`git rev-list --count c61b6ce5..HEAD`), not narrated: two task commits
+  # plus this plan's metadata commit. Two rather than three TASK commits because tasks 1 and 2
+  # could not be committed apart -- see deviation 1.
   # `tokens` is estimateTokens (chars/4) over `git diff c61b6ce5..HEAD -- scripts/`, the same scale
   # 08-06 and 08-07 used.
 
