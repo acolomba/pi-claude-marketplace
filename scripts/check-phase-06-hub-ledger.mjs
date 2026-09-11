@@ -257,7 +257,7 @@ export const CENSUS_ROWS = Object.freeze([
     graph: "tool arguments -> dense iteration -> parsed edge request",
     route: "phase-08",
     evidence:
-      "Phase 8 RCOV-02 owns typed-iteration rewrites for both D-116-01a shortfalls; no Phase 6 edit is authorized.",
+      "Phase 8 RCOV-02 owns typed-iteration rewrites for all three D-116-01a shortfalls; no Phase 6 edit is authorized.",
   },
   {
     id: "HIF-037",
