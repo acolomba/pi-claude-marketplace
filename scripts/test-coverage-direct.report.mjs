@@ -109,7 +109,10 @@ async function main() {
   // still leaves a readable partial result.
   writeFileSync(reportPath, "");
 
-  for (const pair of modulePaths.map(pairForPath)) {
+  // The callback passes exactly one argument. `pairForPath` takes a repository root as its second
+  // parameter, and `Array.prototype.map` supplies the element index there, which resolves a path
+  // against a number.
+  for (const pair of modulePaths.map((modulePath) => pairForPath(modulePath))) {
     const record = await rowFor(pair);
     appendFileSync(reportPath, `${JSON.stringify(record)}\n`);
 

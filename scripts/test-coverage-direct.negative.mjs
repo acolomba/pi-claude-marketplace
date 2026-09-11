@@ -9,6 +9,7 @@ import {
   assertCompleteCoverage,
   assertReportComplete,
   changedPaths,
+  pairForPath,
   pairsForChangedPaths,
   selectBase,
 } from "./test-coverage-direct.mjs";
@@ -360,6 +361,23 @@ try {
     { message: `Focused test failed: ${unmappablePath}` },
   );
 
+  // The report's pair enumeration, planted against the exported lookup the enumeration loop calls.
+  // `pairForPath` takes the repository root to resolve against as a second parameter, so reaching it
+  // through an array-iteration callback as a bare reference hands the element index to that
+  // parameter and resolves every path against a number. Nothing else in `npm run check` refuses this
+  // state, because nothing in the check chain invokes the report at all.
+  //
+  // The control comes first and is not decoration: without it the refusal below could be firing on a
+  // path that cannot be paired at all rather than on the second argument.
+  assert.doesNotThrow(() => pairForPath(realSourcePath));
+
+  // Matched as a pattern rather than as a whole string, because the text is Node's own
+  // `path.resolve` refusal and not this repository's vocabulary.
+  assert.throws(
+    () => pairForPath(realSourcePath, 0),
+    /The "paths\[0\]" argument must be of type string\. Received type number/,
+  );
+
   process.stdout.write("Direct-coverage negative controls passed.\n");
 
   // The base-selection states, planted against real git repositories built under this harness's own
@@ -521,7 +539,7 @@ try {
   assert.equal(pairsForChangedPaths(notARepository).ok, false);
 
   process.stdout.write(
-    "Base-selection negative controls passed: chain head with no origin/main, chain tail in a shallow clone, resolved-but-empty docs-only change set, a fixture pair and supplement resolved under the injected root, failed selection outside a repository.\n",
+    "Base-selection and pair-enumeration negative controls passed: chain head with no origin/main, chain tail in a shallow clone, resolved-but-empty docs-only change set, a fixture pair and supplement resolved under the injected root, failed selection outside a repository, and a report pair-enumeration callback handing an array index to the selected root.\n",
   );
 } finally {
   await rm(fixtureRoot, { force: true, recursive: true });
