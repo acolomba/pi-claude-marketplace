@@ -644,13 +644,15 @@ try {
     ].join("\n"),
   });
 
-  // An emptied pin with a shortfall present. Different from the addition state above: that one
-  // proves a populated pin rejects a new row, this one proves a pin that lost all its rows cannot
-  // read as success.
+  // An emptied pin with a shortfall present. This is the SAME refusal as the addition above, not a
+  // fifth direction: with no rows left, every reading is an addition and the membership message
+  // names it as one. The state is planted anyway because zero rows is the input a comparison is
+  // likeliest to short-circuit on, and this asserts it does not.
   assert.throws(() => assertPinnedReadings(matchingObservation, [], pinEnumeratedModules), {
     message: [
-      "The coverage pin holds no rows, but 1 module(s) fell short:",
-      `  ${pinnedRow.sourcePath}`,
+      "D-08-05: the measured direct-coverage shortfalls no longer match scripts/test-coverage-direct.pin.json",
+      `  fell short but is not pinned (1): ${pinnedRow.sourcePath}`,
+      "  pinned but no longer falls short (0): none",
       pinUpdateInstruction,
     ].join("\n"),
   });
@@ -781,7 +783,7 @@ try {
   );
 
   process.stdout.write(
-    "Base-selection, pair-enumeration and coverage-pin negative controls passed: chain head with no origin/main, chain tail in a shallow clone, resolved-but-empty docs-only change set, a fixture pair and supplement resolved under the injected root, failed selection outside a repository, a report pair-enumeration callback handing an array index to the selected root, an explicitly named base resolved exactly and refused without a fallback when it does not resolve or is not a plain ref name, an unpinned shortfall, a moved pinned reading, a stale pin row, an emptied pin with a shortfall present, a pin row naming a module the tree no longer enumerates, the gate arm both commands run refusing an unpinned shortfall under a stub runner and passing on a pinned one, the same arm propagating a non-coverage failure, and a malformed pin refused under an injected root.\n",
+    "Base-selection, pair-enumeration and coverage-pin negative controls passed: chain head with no origin/main, chain tail in a shallow clone, resolved-but-empty docs-only change set, a fixture pair and supplement resolved under the injected root, failed selection outside a repository, a report pair-enumeration callback handing an array index to the selected root, an explicitly named base resolved exactly and refused without a fallback when it does not resolve or is not a plain ref name, an unpinned shortfall, a moved pinned reading, a stale pin row, an emptied pin reporting its readings as additions, a pin row naming a module the tree no longer enumerates, the gate arm both commands run refusing an unpinned shortfall under a stub runner and passing on a pinned one, the same arm propagating a non-coverage failure, and a malformed pin refused under an injected root.\n",
   );
 } finally {
   await rm(fixtureRoot, { force: true, recursive: true });
