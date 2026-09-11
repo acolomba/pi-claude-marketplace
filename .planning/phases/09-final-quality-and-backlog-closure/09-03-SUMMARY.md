@@ -23,7 +23,7 @@ affects: [09-04 window ledger, 09-05 backlog dispositions, 09-06 closure ledger,
 actuals:
   tokens: 5100
   tasks: 3
-  commits: 2
+  commits: 4
 plan_head_before: 5bc0e71f8c62b266137fccc293a11060f0c82d1f
 
 # Tech tracking
@@ -344,8 +344,12 @@ That is the one condition under which this plan's central assertion would need r
   `git hash-object … 01-REVALIDATION.json` → `66218013acf1a69bd28b2380fdcf0c531556dff0`; the bare
   `Pending` scan → `0` for `.planning/REQUIREMENTS.md` and `4` structural non-status hits for
   `scripts/revalidation.mjs`, dispositioned as deviation 2 above.
-- **Commit accounting.** `commits: 2` is the measured value from `plan_head_before` (`5bc0e71f`):
-  `git rev-list --count 5bc0e71f..HEAD` returned `2` at SUMMARY-write time. The documentation commit
-  carrying this file and the state pointer follows it.
+- **Commit accounting.** `commits: 4` is the measured value from `plan_head_before` (`5bc0e71f`):
+  `git rev-list --count 5bc0e71f..HEAD` returns `4`. Two carry the seal itself and two carry the
+  record of it:
+  - `da08a749` — `docs(requirements): mark the gate-integrity and coverage IDs complete` (change A)
+  - `d391d058` — `docs(requirements): mark the closure IDs complete` (change B)
+  - `a3138330` — `docs(requirements): record the seal flip and its suite measurement` (this file)
+  - `51e0b469` — `docs(requirements): advance the plan pointer past the seal flip` (STATE, ROADMAP)
 - **No stubs, no skipped tests, no unrun `<verify>`.** Every `<verify>` command in all three tasks
   was executed on this tree and its real output is recorded above.
