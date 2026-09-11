@@ -1879,6 +1879,41 @@ test(
   },
 );
 
+test("project hydration parses a plugin's hooks.json into the parsed-config cache", async (t) => {
+  // arrange
+  const fixture = await makeProjectHookFixture(t, "live-project-hydration", "PreToolUse");
+  ownAgentRoot(t, path.join(fixture.root, "agent"));
+  const reader: HooksHydrationReader = {
+    loadState(extensionRoot: string): Promise<ExtensionState> {
+      return Promise.resolve(
+        extensionRoot === fixture.locations.extensionRoot
+          ? fixture.state
+          : { schemaVersion: 2, marketplaces: {} },
+      );
+    },
+  };
+  const runtime = createHooksRuntime();
+
+  // act
+  await createHooksHydration(runtime, reader).hydrateProjectScopeForCwd(fixture.projectRoot);
+
+  // assert
+  assert.deepStrictEqual(
+    Array.from(runtime.parsedConfigEntries().values()).map((entry) => ({
+      scope: entry.scope,
+      marketplace: entry.marketplace,
+      pluginId: entry.pluginId,
+    })),
+    [{ scope: "project", marketplace: "catalog", pluginId: "owner" }],
+  );
+  // The routing bucket stays empty on purpose: `hydrateProjectScopeForCwd` fills
+  // the parsed-config cache, and registration is what builds the routing table
+  // from it. The bucket is therefore NOT a discriminator for this entrypoint --
+  // it reads empty on a hydration that completed and on one that stopped at the
+  // first guard alike.
+  assert.deepStrictEqual(runtime.getRoutingBucket("PreToolUse"), []);
+});
+
 test("project hydration stops before parsing a plugin's hooks.json read under a stale generation", async (t) => {
   // arrange
   const fixture = await makeProjectHookFixture(t, "stale-after-hooks-read", "PreToolUse");
@@ -1896,12 +1931,33 @@ test("project hydration stops before parsing a plugin's hooks.json read under a 
     },
   };
   const runtime = createHooksRuntime();
-  // One plugin's hydrate consults the generation guard once after the
-  // containment check and once after the hooks.json read, and no injected
-  // collaborator runs between those two consultations, so the consultation
-  // itself is the only trigger that can single out the second one. Counted
-  // from the injected state read, the consultations are: after the state read
-  // (1), after the containment check (2), after the hooks.json read (3).
+  // KNOWN CONFLICT, recorded rather than hidden: `D-08-A04` says "do not couple
+  // the new tests to a `currentGeneration()` call index", and this case does.
+  // Every alternative was built and measured: `tryHydrateOnePlugin` runs exactly
+  // two things between the containment guard and the guard after the hooks.json
+  // read -- a synchronous `asAbsolutePluginRoot` and the `readFile` itself --
+  // and neither is an injected collaborator. `readFile` is a direct
+  // `node:fs/promises` import that `TREF-08` forbids patching, and advancing
+  // inside `reader.loadState` lands on the containment guard instead, because
+  // the reader is called once per scope and always before this function.
+  //
+  // The one remaining route is a `readHooksJson` member on
+  // `HooksHydrationReader`. It is not taken here: it would port one of this
+  // module's two `readFile` call sites and leave the other, which is a port
+  // shaped by one test's reach rather than by a responsibility -- the shape
+  // `D-08-13` refused for the removal port, and the same trade `D-08-A14`
+  // records Plan 08-07 declining for `install-outcome.ts`. Removing this
+  // coupling is therefore a production-design decision, not a test edit.
+  //
+  // What the case CAN establish it now does, next door: the sibling above
+  // hydrates this same fixture with an undecorated runtime and reads back one
+  // parsed-config entry. So the empty `parsedConfigEntries()` below is a
+  // hydration that was stopped, not a fixture that never hydrates. That sibling
+  // also records why `getRoutingBucket` is not a discriminator for this
+  // entrypoint.
+  //
+  // Counted from the injected state read, the consultations are: after the state
+  // read (1), after the containment check (2), after the hooks.json read (3).
   const GUARDS_FROM_THE_STATE_READ_TO_THE_HOOKS_READ = 3;
   const runtimeGoingStaleAfterTheHooksRead: HooksRuntime = {
     ...runtime,
