@@ -52,8 +52,12 @@ repos:
       # `.planning/` documents carry, and `.planning/` is excluded here, so
       # rewriting its dash literals to `--` breaks the planning-contract
       # parser (its RVAL-04 record scan stops matching every row).
+      # `tests/architecture/revalidation.test.ts` pins the exact bytes that
+      # script emits, so the same rewrite applied to the pinned side breaks the
+      # parser just as surely, from the other direction. One convention, one
+      # exclusion, matching reasons (D-08-20).
       - id: fix-unicode-dashes
-        exclude: ^(\.planning/|scripts/revalidation\.mjs$)
+        exclude: ^(\.planning/|scripts/revalidation\.mjs$|tests/architecture/revalidation\.test\.ts$)
       - id: fix-ligatures
         exclude: ^\.planning/
       - id: forbid-bidi-controls
