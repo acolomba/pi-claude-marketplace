@@ -4,11 +4,11 @@ milestone: refine-unit-tests
 milestone_name: Refine Unit Tests
 current_phase: 09
 current_phase_name: Final Quality and Backlog Closure
-status: planning
-stopped_at: Phase 9 context gathered; eight sealed IDs read Pending, not the three the handoff named
-last_updated: "2026-09-11T17:30:00.000Z"
+status: executing
+stopped_at: Phase 9 executing; 6 plans planned and verified, wave 1 dispatched
+last_updated: "2026-09-11T19:00:00.000Z"
 last_activity: 2026-09-11
-last_activity_desc: Phase 9 discussed; closure decisions D-09-01 through D-09-18 recorded
+last_activity_desc: Phase 9 planned; plan-checker passed 6 plans, execution started
 state_head: f79839f32b2642d93d865de29b2f3d7d8baf42eb
 progress:
   total_phases: 9
@@ -31,9 +31,9 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: 09 (Final Quality and Backlog Closure) — context gathered, ready for planning
-Next: Plan Phase 9
-Plan: 0 of TBD
+Phase: 09 (Final Quality and Backlog Closure) — executing
+Next: Execute waves 1-6 in order
+Plan: 0 of 6 complete
 Status: `npm run check` exit 0 and `npm run test:coverage:direct:all` exit 0 as of Phase 8's close —
 230 pairs, two pinned rows matching the committed pin exactly. Both must be re-measured on the
 final tree before the seal flips, because Phase 9 changes production code (D-09-05, D-09-09).
