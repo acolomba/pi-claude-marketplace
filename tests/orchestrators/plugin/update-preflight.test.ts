@@ -5,7 +5,10 @@ import path from "node:path";
 import test from "node:test";
 
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
-import { preparePluginUpdate } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts";
+import {
+  isUpdatePreflightOutcome,
+  preparePluginUpdate,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   loadState,
@@ -242,6 +245,38 @@ test("returns the complete prepared candidate for a version transition", async (
   assert.strictEqual(prepared.fromVersion, "1.0.0");
   assert.strictEqual(prepared.toVersion, "2.0.0");
   assert.strictEqual(prepared.resolvedSha, undefined);
+});
+
+test("reads a partitioned preflight answer as a finished outcome", async (t) => {
+  // arrange
+  const seed = await seedUpdate({ installed: pluginRecord("2.0.0") });
+  t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+  const unchanged = await prepare(seed);
+
+  // act
+  const finished = isUpdatePreflightOutcome(unchanged);
+  const partition = finished ? unchanged.partition : undefined;
+
+  // assert
+  assert.strictEqual(finished, true);
+  assert.strictEqual(partition, "unchanged");
+});
+
+test("reads a prepared candidate as unfinished so the update flow swaps it", async (t) => {
+  // arrange
+  const seed = await seedUpdate({ installed: pluginRecord("1.0.0") });
+  t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+  const candidate = await prepare(seed);
+
+  // act
+  const finished = isUpdatePreflightOutcome(candidate);
+  const transition = finished
+    ? undefined
+    : { from: candidate.fromVersion, to: candidate.toVersion };
+
+  // assert
+  assert.strictEqual(finished, false);
+  assert.deepStrictEqual(transition, { from: "1.0.0", to: "2.0.0" });
 });
 
 test("keeps an unsupported candidate skipped with and without partial permission", async (t) => {
