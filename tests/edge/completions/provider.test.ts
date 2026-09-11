@@ -51,24 +51,17 @@
 // claim. A deleted arm is a behavior change, not a compiler diagnostic, and a
 // missing-arm plant has no target here.
 //
-// D-116-01a: this pair lands one branch short of complete. The empty-object
-// side of the conditional at provider.ts:125 -- the `description === undefined`
-// arm of `optionalDescription` -- cannot be entered at runtime. The only two
-// producers of the entry list in `flagCompletions` are a written-out literal
-// that carries a description and `completionFlagEntries`, whose every element
-// is built from a `FlagEntry` whose `description` field is REQUIRED. The
-// declared element type keeps `description` optional, so the guard must exist;
-// nothing reachable through the module's single export can supply an entry
-// without one. The reason is structural, not a compiler setting.
+// This pair reads COMPLETE: `branches 78/78, functions 19/19, lines 340/340`.
+// It used to carry one uncovered branch, the `description === undefined` arm of
+// an `optionalDescription` conditional that existed because the declared element
+// type kept `description` optional while nothing reachable could omit it. The
+// conditional is gone: `flagCompletions` now builds its entry list as
+// `{ name: string; description: string }[]`, with `description` required, so the
+// arm the paragraph justified has no source left.
 //
-// The claim is measured, not inspected: a plant replacing the empty-object arm
-// with a distinguishable description left every case green, and an independent
-// route drove every top-level head, every marketplace subcommand and two
-// unknown heads at a long-flag cursor and found every emitted item carrying a
-// description. The shortfall is pinned by its identity -- functions and lines
-// complete, exactly ONE uncovered branch -- never by an absolute branch pair,
-// because the branch denominator tracks suite strength rather than the source.
-// No coverage exception is added and no production file is changed.
+// Which pairs fall short is recorded in one place, `scripts/test-coverage-direct.pin.json`,
+// and a pair absent from it reads complete. This one is absent from it.
+//
 
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";

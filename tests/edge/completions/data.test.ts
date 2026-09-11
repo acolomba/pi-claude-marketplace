@@ -26,23 +26,16 @@
 // the classification it is checking. Likewise every expected candidate list is
 // hand-authored, compared unsorted, and compared whole.
 //
-// D-116-01a: this pair lands one branch short of complete. The right-hand side
-// of the nullish fallback at data.ts:188 -- the `?? ""` in
-// `allTokens.at(-1) ?? ""` -- cannot be entered at runtime.
-// `splitCompletionInput` has already returned for an empty input and for any
-// input whose last character is whitespace, so every input reaching line 188
-// ends in a non-whitespace character and the filtered token list is non-empty.
-// The fallback exists only because the standard library types
-// `Array.prototype.at()` as `T | undefined`; removing it needs a non-null
-// assertion or a type assertion, both barred throughout `extensions/`.
+// This pair reads COMPLETE: `branches 109/109, functions 36/36, lines 631/631`.
+// It used to carry one uncovered branch, the right-hand side of a
+// `allTokens.at(-1) ?? ""` fallback. That expression is gone from the source --
+// `data.ts:188` now reads `const [current] = allTokens.slice(-1) as [string]`,
+// which has no second arm for V8 to report. The header paragraph that described
+// the fallback, and the brute force that measured it unreachable, both outlived
+// the code they were about.
 //
-// The claim is measured, not inspected: a brute force over all 65,536 BMP code
-// points in five input shapes found zero inputs that reach the fallback, and a
-// plant that replaced its value left all 66 cases green. The shortfall is
-// pinned by its identity -- functions and lines complete, and exactly ONE
-// uncovered branch -- never by an absolute branch pair, because the branch
-// denominator tracks suite strength rather than the source. No coverage
-// exception is added and no production file is changed.
+// Which pairs fall short is recorded in one place, `scripts/test-coverage-direct.pin.json`,
+// and a pair absent from it reads complete. This one is absent from it.
 //
 // No exhaustiveness claim rides on this pair: `edge/completions/data.ts`
 // contains no `switch` and no closed-union dispatch, so a deleted-arm plant has

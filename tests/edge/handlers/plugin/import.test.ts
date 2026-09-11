@@ -41,17 +41,14 @@
 // before the scope value is ever consulted. The case states that measured
 // outcome rather than a rejection the module does not perform.
 //
-// D-116-01a: this pair lands one branch short of complete, with lines and
-// functions both complete. The `String(err)` arm of `err instanceof Error ?
-// err.message : String(err)` at import.ts:31 cannot be entered at runtime. The
-// only throw that reaches that catch comes from `parseArgs`, which throws
-// `new Error(...)` at both of its throw sites, so no input can deliver a
-// non-error value there. The arm exists only because a `catch (err)` binding is
-// typed `unknown` under `useUnknownInCatchVariables`; narrowing it needs a type
-// assertion, which is barred throughout this tree. The claim is measured, not
-// inspected: a brute force over the reachable argument space produced an `Error`
-// at every throw, and a plant that replaced the arm's expression left the whole
-// suite green. No coverage exception is added and no production file is changed.
+// This pair reads COMPLETE: `branches 11/11, functions 2/2, lines 75/75`. It
+// used to carry one uncovered branch, the `String(err)` arm of an inline
+// `err instanceof Error ? err.message : String(err)`. That expression is gone
+// from `import.ts`; the catch now calls the shared `errorMessage(err)`, so the
+// `unknown`-narrowing arm belongs to that helper's own pair and not to this one.
+//
+// Which pairs fall short is recorded in one place, `scripts/test-coverage-direct.pin.json`,
+// and a pair absent from it reads complete. This one is absent from it.
 //
 // No exhaustiveness claim: the module holds no switch and no closed-union
 // dispatch, so a missing-arm plant has no target here. No case asserts the

@@ -69,27 +69,17 @@
 // the offline `(will install)` row beside it is what says the workflow answered
 // from disk.
 //
-// D-116-01a: this pair lands with functions and lines COMPLETE and exactly ONE
-// uncovered branch, at edge/handlers/plugin/pending.ts:39 -- the `?? ""` fallback
-// on the first positional. The guard on the line above has already proven the
-// positional list non-empty, and `parseArgs` pushes only non-undefined tokens
-// onto that list, so the index read always yields a string and the fallback arm
-// cannot be entered at runtime. It exists only because `noUncheckedIndexedAccess`
-// (tsconfig.json:12) types the index read as possibly undefined; removing it
-// needs a non-null assertion or a type assertion, both barred throughout
-// `extensions/`. Measured, not inspected: deleting the fallback raises TS18048
-// at its consumption site on the line below, replacing the fallback literal with
-// an OBSERVABLE long-flag-shaped token leaves the whole suite green, and a brute
-// force driving the handler over all 19530 argument strings of up to six
-// characters drawn from the tokenizer's own significant alphabet never produced
-// that token in any emission -- while the same brute force with the index moved
-// out of range reports it for most of them, so the probe is live. No
-// coverage-exception pragma is added and no production file changes. The branch
-// NUMBERS are deliberately not pinned anywhere: V8 emits a branch range only when
-// its count diverges from the enclosing block, so strengthening a suite raises
-// numerator and denominator together. What is pinned, in this plan's verify
-// block, is the shortfall's IDENTITY -- exactly one uncovered branch and no
-// `lines` or `functions` clause on the verdict line.
+// D-08-A03: this pair reads COMPLETE. It used to carry one uncovered branch, at
+// the `?? ""` fallback on the first positional, which existed only because
+// `noUncheckedIndexedAccess` (tsconfig.json:12) types a dense index read as
+// possibly undefined. Destructuring removed the read rather than the guard:
+// `const [first] = parsed.positional` already yields `string | undefined`, so
+// `if (first !== undefined)` narrows it with no fallback literal, no non-null
+// assertion and no type assertion. The uncovered arm is gone because the code
+// that produced it is gone.
+//
+// Which pairs fall short is recorded in one place, `scripts/test-coverage-direct.pin.json`,
+// and a pair absent from it reads complete. This one is absent from it.
 //
 // This pair makes no exhaustiveness claim: `edge/handlers/plugin/pending.ts`
 // contains no `switch` and no closed-union dispatch, so a missing-arm plant has
