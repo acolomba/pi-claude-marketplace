@@ -1832,6 +1832,159 @@ test("runtime hydration stops before mirroring when registration advances its ge
   assert.deepStrictEqual(runtime.getRoutingBucket("PreToolUse"), []);
 });
 
+test(
+  "factory hydration stops at the containment guard when a concurrent registration advances the generation",
+  { concurrency: false },
+  async (t) => {
+    // arrange
+    const fixture = await makeProjectHookFixture(t, "stale-factory-hydration", "PreToolUse");
+    ownAgentRoot(t, path.join(fixture.root, "agent"));
+    const readStarted = createDeferred<undefined>();
+    const releaseRead = createDeferred<undefined>();
+    let deferProjectRead = true;
+    const reader: HooksHydrationReader = {
+      loadState(extensionRoot: string): Promise<ExtensionState> {
+        if (deferProjectRead && extensionRoot === fixture.locations.extensionRoot) {
+          deferProjectRead = false;
+          readStarted.resolve(undefined);
+          return releaseRead.promise.then(() => fixture.state);
+        }
+
+        return Promise.resolve({ schemaVersion: 2, marketplaces: {} });
+      },
+    };
+    const runtime = createHooksRuntime();
+    const hydration = createHooksHydration(runtime, reader);
+    const { pi, messages } = makeRecordingPi();
+    const context = makeContext(fixture.projectRoot, fixture.root);
+    const staleRegistration = hydration.registerHooksBridge(pi, {
+      ctx: context,
+      cwd: fixture.projectRoot,
+    });
+    await readStarted.promise;
+    // The second registration reads from `factoryRoot`, where no state
+    // declares a hooks plugin, so the only thing it contributes to the
+    // assertions below is the generation advance.
+    await hydration.registerHooksBridge(pi, { ctx: context, cwd: fixture.factoryRoot });
+
+    // act
+    releaseRead.resolve(undefined);
+    await staleRegistration;
+
+    // assert
+    assert.strictEqual(runtime.currentGeneration(), 2);
+    assert.deepStrictEqual(Array.from(runtime.parsedConfigEntries()), []);
+    assert.deepStrictEqual(runtime.getRoutingBucket("PreToolUse"), []);
+    assert.deepStrictEqual(messages, []);
+  },
+);
+
+test("project hydration stops before parsing a plugin's hooks.json read under a stale generation", async (t) => {
+  // arrange
+  const fixture = await makeProjectHookFixture(t, "stale-after-hooks-read", "PreToolUse");
+  ownAgentRoot(t, path.join(fixture.root, "agent"));
+  let stateRead = false;
+  let guardsAfterTheStateRead = 0;
+  const reader: HooksHydrationReader = {
+    loadState(extensionRoot: string): Promise<ExtensionState> {
+      if (extensionRoot !== fixture.locations.extensionRoot) {
+        return Promise.resolve({ schemaVersion: 2, marketplaces: {} });
+      }
+
+      stateRead = true;
+      return Promise.resolve(fixture.state);
+    },
+  };
+  const runtime = createHooksRuntime();
+  // One plugin's hydrate consults the generation guard once after the
+  // containment check and once after the hooks.json read, and no injected
+  // collaborator runs between those two consultations, so the consultation
+  // itself is the only trigger that can single out the second one. Counted
+  // from the injected state read, the consultations are: after the state read
+  // (1), after the containment check (2), after the hooks.json read (3).
+  const GUARDS_FROM_THE_STATE_READ_TO_THE_HOOKS_READ = 3;
+  const runtimeGoingStaleAfterTheHooksRead: HooksRuntime = {
+    ...runtime,
+    currentGeneration(): number {
+      if (stateRead) {
+        guardsAfterTheStateRead += 1;
+        if (guardsAfterTheStateRead === GUARDS_FROM_THE_STATE_READ_TO_THE_HOOKS_READ) {
+          runtime.advanceGeneration();
+        }
+      }
+
+      return runtime.currentGeneration();
+    },
+  };
+  const hydration = createHooksHydration(runtimeGoingStaleAfterTheHooksRead, reader);
+
+  // act
+  await hydration.hydrateProjectScopeForCwd(fixture.projectRoot);
+
+  // assert
+  assert.strictEqual(runtime.currentGeneration(), 1);
+  assert.deepStrictEqual(Array.from(runtime.parsedConfigEntries()), []);
+  assert.deepStrictEqual(runtime.getRoutingBucket("PreToolUse"), []);
+});
+
+test(
+  "SessionStart stops after preparing the shared data dir when the routing read advances the generation",
+  { concurrency: false },
+  async (t) => {
+    // arrange
+    const fixture = await makeProjectHookFixture(t, "stale-session-shared-dir", "SessionStart");
+    ownAgentRoot(t, path.join(fixture.root, "agent"));
+    const reader: HooksHydrationReader = {
+      loadState(extensionRoot: string): Promise<ExtensionState> {
+        return Promise.resolve(
+          extensionRoot === fixture.locations.extensionRoot
+            ? fixture.state
+            : { schemaVersion: 2, marketplaces: {} },
+        );
+      },
+    };
+    const runtime = createHooksRuntime();
+    let advanceOnTheSessionStartRead = false;
+    // The SessionStart routing bucket is read immediately before the shared
+    // data dir is awaited, so delegating that read and then advancing the
+    // generation leaves only the guard after the await for this case to
+    // measure. Registration reads the same bucket once per hydrated scope, so
+    // the advance is armed only for the dispatch.
+    const runtimeGoingStaleOnTheSessionStartRead: HooksRuntime = {
+      ...runtime,
+      getRoutingBucket(event: BucketAEvent): readonly RoutingEntry[] {
+        const entries = runtime.getRoutingBucket(event);
+        if (advanceOnTheSessionStartRead && event === "SessionStart") {
+          runtime.advanceGeneration();
+        }
+
+        return entries;
+      },
+    };
+    const hydration = createHooksHydration(runtimeGoingStaleOnTheSessionStartRead, reader);
+    const { pi, registrations, messages } = makeRecordingPi();
+    const context = makeContext(fixture.projectRoot, fixture.root);
+    const dispatched: string[] = [];
+    const executor: HookExecutor = (entry) => {
+      dispatched.push(entry.pluginId);
+      return Promise.resolve({ kind: "noop" });
+    };
+
+    await hydration.registerHooksBridge(pi, { ctx: context, cwd: fixture.projectRoot, executor });
+    const sessionStart = registeredHandler(registrations, "session_start");
+    advanceOnTheSessionStartRead = true;
+
+    // act
+    const update = await sessionStart({ type: "session_start", reason: "startup" }, context);
+
+    // assert
+    assert.strictEqual(update, undefined);
+    assert.strictEqual(runtime.currentGeneration(), 2);
+    assert.deepStrictEqual(dispatched, []);
+    assert.deepStrictEqual(messages, []);
+  },
+);
+
 test("separate runtimes keep their current callbacks live and route through their own buckets", async (t) => {
   // arrange
   const root = await mkdtemp(path.join(tmpdir(), "hooks-router-runtime-isolation-"));
