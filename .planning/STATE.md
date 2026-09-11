@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 08
 current_phase_name: Direct Coverage
 status: executing
-stopped_at: Completed 08-03-PLAN.md
-last_updated: "2026-09-11T03:14:22.385Z"
+stopped_at: Completed 08-05-PLAN.md
+last_updated: "2026-09-11T04:21:48.207Z"
 last_activity: 2026-09-11
-last_activity_desc: 08-03 complete; the hooks event-router and update-preflight pairs read complete, shortfall set down to two
-state_head: 80b8e0be96a0d51ebb2bbfa3daea77e393f3c6ff
+last_activity_desc: 08-05 complete; the removal port landed atomically and one staging cleanup is now faultable from commitPreparedSkills
+state_head: 53c4ac76915e5c7b8e44fda361d919b69f942123
 progress:
   total_phases: 9
   completed_phases: 3
   total_plans: 205
-  completed_plans: 199
+  completed_plans: 200
   percent: 33
 ---
 
@@ -33,8 +33,25 @@ component as a working Pi artifact.
 
 Phase: 08 (Direct Coverage) — EXECUTING
 Next: /gsd-execute-phase 08 (wave 2)
-Plan: 3 of 9 complete
-Status: 08-03 complete. Two more rows leave the accepted-shortfall set by being covered rather than
+Plan: 4 of 9 complete
+Status: 08-05 complete. The removal port landed as one atomic change: `RemovalOps` + `createRemovalOps`
+live in `shared/fs-utils.ts`, `cleanupStaging` and `rollbackReplacementCommon` perform every `rm` and
+`rename` through the injected collaborator, and all 21 bridge and orchestrator signatures carry it as
+a REQUIRED parameter with no default anywhere (`D-08-12`). 42 production call sites across 11 files
+moved in one commit; `npm run check` exits 0. Six composition roots construct the real operations —
+`reinstall-replace`, `update-swap`, `clone-cache`, `marketplace/add`, plus `install-flow` and
+`enable-disable` for the install path, so `InstallLedgerOptions.removalOps` is required and
+`install-outcome.ts` constructs nothing. That is what makes the three `commitPrepared*` leak arms
+faultable from their owner test, which is what 08-07 needs. `createRemovalOpsFake` keys faults per
+target path and `removalOpsContract` is passed by both the real adapter and the fake, with a
+silent-removal fake as its negative control. One G1 case in `tests/bridges/skills/stage.test.ts` now
+drives its cleanup failure through the port with no builtin patched; mis-keying the planted fault
+fails exactly that case. `fs-utils.ts` reads `branches 52/52, functions 10/10, lines 394/394`.
+**The residual builtin-patching census is measured, not inherited:** `D-08-14` claims two files; the
+tree holds at least ten across three classes, and six `fs-utils.test.ts` sites plus two
+`skills/stage.test.ts` cases are port-reachable and still patch a builtin. The deferred-conversion
+list for the plan that owns `D-08-14` is in `08-05-SUMMARY.md`. 08-04 has not run.
+08-03 complete. Two more rows leave the accepted-shortfall set by being covered rather than
 pinned: `bridges/hooks/event-router.ts` reads `branches 114/114, functions 43/43, lines 967/967` and
 `orchestrators/plugin/update-preflight.ts` reads `branches 97/97, functions 21/21, lines 593/593`.
 All four `generationIsCurrent` guards are reached through injected collaborators — two through a
@@ -454,6 +471,7 @@ stay recorded rather than excused.
 | Phase 08 P01 | 39min | 3 tasks | 9 files |
 | Phase 08 P02 | 20min | 3 tasks | 5 files |
 | Phase 08 P03 | 19min | 2 tasks | 2 files |
+| Phase 08 P05 | 57min | 3 tasks | 19 files |
 
 ## Accumulated Context
 
@@ -981,6 +999,9 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 08]: bridges/hooks/event-router.ts gets tests, not a pin: all four generationIsCurrent guards reached through injected collaborators (D-08-A04 discharged by measurement)
 - [Phase 08]: Site 614-616 is the one guard with no named trigger: nothing injected runs between the containment guard and the hooks.json-read guard, so its case keys the advance on the third guard consultation after the injected state read and asserts the consequence
 - [Phase 08]: Sites 586-588 and 552-554 need the factory-time hydrate, not hydrateProjectScopeForCwd: only hydrateCacheFromDisk lacks a guard between the state read and hydrateScopeFromState
+- [Phase 08]: RemovalOps is the only required *Ops in the tree: no optional marker, no DEFAULT_REMOVAL_OPS, composition roots supply it (D-08-12)
+- [Phase 08]: clone-cache.ts and marketplace/add.ts construct the removal port locally rather than taking it on their public args, which would have broken five files outside the plan's blast radius
+- [Phase 08]: ReinstallReplacement retains removalOps so compensation cleans up through the collaborator the forward pass used
 
 ### Pending Todos
 
@@ -1034,7 +1055,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 08-03-PLAN.md
+**Stopped at:** Completed 08-05-PLAN.md
 
 Phase 04 completed all seven plans and closed AUTH-01 and TREF-01 through
 TREF-03. Independent verification passed 4/4 with no behavioral or UAT gap;
@@ -1052,7 +1073,7 @@ independent verification passed 6/6 with zero unverified behaviors.
 **Read beside it:** `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`, the
 Phase 01 terminal evidence ledger, and Phase 5's roadmap criteria.
 
-Last session: 2026-09-11T03:14:21.670Z
+Last session: 2026-09-11T04:21:47.549Z
 
 **Next:** Execute Phase 8 (Direct Coverage) — `/gsd-execute-phase 08`.
 
