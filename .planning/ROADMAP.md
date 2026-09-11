@@ -853,7 +853,7 @@ baseline, which still includes both pairs; neither is a terminal shortfall.
 **Goal:** Prove the confirmed work as a whole and close the bundled backlog with an audit trail.
 **Depends on:** Phase 8
 **Requirements:** CLOSE-01, CLOSE-02
-**Plans:** TBD
+**Plans:** 6 plans
 
 **Success Criteria**:
 
@@ -867,6 +867,18 @@ baseline, which still includes both pairs; neither is a terminal shortfall.
 3. Final milestone artifacts distinguish implemented fixes from stale,
    unsupported, and evidence-only records and verify the selected local and CI
    coverage controls without treating reachability as assertion strength.
+
+Plans:
+
+The six plans run strictly in sequence. Each wave depends on the one before it
+because a seal may never precede the measurement it asserts.
+
+- [ ] 09-01-PLAN.md — Thread one injected read port through both hooks call chains, end to end
+- [ ] 09-02-PLAN.md — Re-measure whole-tree coverage, regenerate and compare the pin, reconcile CONTRIBUTING.md
+- [ ] 09-03-PLAN.md — Flip the eight sealed requirement IDs in two changes, with the suite measured green between them
+- [ ] 09-04-PLAN.md — Repair the window ledger desync losslessly and close the three false-open entries
+- [ ] 09-05-PLAN.md — Write the seven backlog items' and one todo's terminal dispositions in place
+- [ ] 09-06-PLAN.md — Measure the final tree, verify the two pin claims, write 09-CLOSURE-LEDGER.md
 
 ## Progress
 
