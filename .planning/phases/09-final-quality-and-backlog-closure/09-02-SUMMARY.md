@@ -366,3 +366,22 @@ the measurement those flips will cite, not the flip.
 ---
 *Phase: 09-final-quality-and-backlog-closure*
 *Completed: 2026-09-11*
+
+## Self-Check: PASSED
+
+`.planning/phases/09-final-quality-and-backlog-closure/09-02-SUMMARY.md` exists on disk. Both
+plan-level verification commands were re-run after the last measurement and again after the docs
+commits: `git status --porcelain scripts/test-coverage-direct.pin.json` and
+`git status --porcelain CONTRIBUTING.md` both print nothing, and
+`npm run test:coverage:direct:all` exited 0 over 230 pairs at 21:05:02Z.
+
+**Commit accounting.** `commits: 0` in the frontmatter is the measured value at SUMMARY-write time
+from `plan_head_before` (`2734c30f`): this plan changed no code, because both artifacts came back
+unchanged and the plan forbids an empty commit standing in for that. Two documentation commits
+follow it and are the only commits in `2734c30f..HEAD`:
+
+- `dd52b104` — `docs(coverage): record the re-measured whole-tree coverage surface` (this SUMMARY)
+- `be51b8ba` — `docs(coverage): advance the plan pointer past the re-measurement` (STATE.md, ROADMAP.md)
+
+`requirements.ready-ids` reports `0/1 requirement(s) ready to mark complete` for `CLOSE-01`, so
+`.planning/REQUIREMENTS.md` was not touched — correct, since 09-03 and 09-06 also declare it.
