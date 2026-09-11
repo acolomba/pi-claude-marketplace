@@ -117,9 +117,61 @@ jobs:
       - name: Run pinned e2e tests
         run: npm run test:e2e
 
+  # RCOV-03 asks for a dedicated authoritative job rather than a step folded
+  # into `check` (D-08-16). The gate spawns one focused test run per changed
+  # pair, so it wants its own timeout and its own legible red signal instead of
+  # sitting behind a typecheck failure in the fifteen-minute composite.
+  direct-coverage:
+    name: direct coverage (changed pairs, Node 24)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          # D-08-15: origin/main must exist as a ref. actions/checkout defaults
+          # to a depth-1 clone in which it does not, so the gate's ordered
+          # candidate chain falls through to HEAD~1 and diffs a single commit
+          # while still reporting a resolved base. Fail-closed base selection
+          # is worth nothing if the base it closes on is the wrong one. The
+          # fallow-audit job in lint.yml sets this for the same reason.
+          fetch-depth: 0
+
+      - name: Setup Node 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Whether actions/checkout at fetch-depth 0 creates
+      # refs/remotes/origin/main on a pull_request event cannot be verified
+      # outside GitHub Actions. This step turns a wrong assumption into a loud
+      # failure rather than a silent HEAD~1 diff (D-08-15).
+      - name: Assert the base candidate resolved
+        run: git rev-parse --verify origin/main^{commit}
+
+      - name: Run the changed-pair direct-coverage gate
+        # `pipefail` is set explicitly: GitHub's default shell is `bash -e`,
+        # which does NOT set it, so without this the pipeline would exit with
+        # tee's status and a red gate would report green.
+        run: |
+          set -o pipefail
+          npm run test:coverage:direct | tee coverage-direct.log
+
+      # The gate writes its selected base before either outcome, so the job can
+      # assert the choice rather than trust the checkout. A regression to
+      # HEAD~1 fails here instead of passing quietly (D-08-15).
+      # A block scalar, because a plain YAML scalar cannot carry `: `.
+      - name: Assert the gate selected origin/main
+        run: |
+          grep -qx 'Changed-pair base: origin/main' coverage-direct.log
+
   package:
     name: package manifest
-    needs: [check, integration-tests, e2e-tests]
+    needs: [check, integration-tests, e2e-tests, direct-coverage]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
