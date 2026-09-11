@@ -92,8 +92,8 @@ const SEALED_REQUIREMENT_SIGNATURES = Object.freeze({
 const SEALED_REQUIREMENT_IDS = new Set(Object.keys(SEALED_REQUIREMENT_SIGNATURES));
 const SEALED_REQUIREMENT_ROUTES = Object.freeze({
   "AUTH-01": Object.freeze({ route: "Phase 4", status: "Complete" }),
-  "CLOSE-01": Object.freeze({ route: "Phase 9", status: "Pending" }),
-  "CLOSE-02": Object.freeze({ route: "Phase 9", status: "Pending" }),
+  "CLOSE-01": Object.freeze({ route: "Phase 9", status: "Complete" }),
+  "CLOSE-02": Object.freeze({ route: "Phase 9", status: "Complete" }),
   "GGAT-01": Object.freeze({ route: "Phase 7", status: "Complete" }),
   "GGAT-02": Object.freeze({
     route: "Evidence/history (formerly Phase 7)",

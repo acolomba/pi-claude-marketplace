@@ -1023,7 +1023,7 @@ test("RVAL-04 scope-impact ignores content after a four-space fence pseudo-close
   const projectRoot = await createScopeImpactFixture(t);
   const contractPath = path.join(projectRoot, ".planning/REQUIREMENTS.md");
   const contract = await readFile(contractPath, "utf8");
-  const traceabilityRow = "| CLOSE-02 | Phase 9 | Pending |";
+  const traceabilityRow = "| CLOSE-02 | Phase 9 | Complete |";
   await writeFile(
     contractPath,
     contract.replace(

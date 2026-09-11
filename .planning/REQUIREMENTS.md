@@ -110,10 +110,10 @@ component as a working Pi artifact.
 
 ### Closure
 
-- [ ] **CLOSE-01**: The complete project quality suite passes after all terminal
+- [x] **CLOSE-01**: The complete project quality suite passes after all terminal
       work, selected controls, focused owner tests, and independent assertion-
       strength requirements are complete.
-- [ ] **CLOSE-02**: `TESTQ-01`, `FLOW-09`, `REASON-01`, and `FLOW-07` record their
+- [x] **CLOSE-02**: `TESTQ-01`, `FLOW-09`, `REASON-01`, and `FLOW-07` record their
       shipped terminal routes; `COV-01`, `AGCOL-01`, the unused-type-member todo, and
       the named `GAUTH-01` prescription retain explicit evidence-only or deferred
       histories without being described as implemented.
@@ -190,8 +190,8 @@ Roadmap creation assigns each requirement to exactly one phase.
 | RCOV-02     | Phase 8                             | Complete      |
 | RCOV-03     | Phase 8                             | Complete      |
 | RCOV-04     | Evidence/history (formerly Phase 8) | Evidence only |
-| CLOSE-01    | Phase 9                             | Pending       |
-| CLOSE-02    | Phase 9                             | Pending       |
+| CLOSE-01    | Phase 9                             | Complete      |
+| CLOSE-02    | Phase 9                             | Complete      |
 
 **Coverage:**
 
