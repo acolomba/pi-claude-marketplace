@@ -23,10 +23,11 @@ affects: [09-close, CLOSE-01, direct-coverage, ci-coverage-job, pre-commit-hook]
 actuals:
   tokens: 3693
   tasks: 3
-  commits: 3
+  commits: 4
   plan_head_before: 4e0f3a6eac6dabdeec5564df9a24b58b6573fa52
   # `commits` is MEASURED (`git rev-list --count 4e0f3a6e..HEAD`), not narrated: three task
-  # commits. The plan metadata commit lands after this file is written and is not counted here.
+  # commits plus this plan's metadata commit, which is the same instrument and the same
+  # convention 08-08 used, so a later `rev-list` over the same range agrees with this number.
   # `tokens` is estimateTokens (chars/4) over `git diff 4e0f3a6e..HEAD` across the four changed
   # files -- the same scale 08-04, 08-06, 08-07 and 08-08 used.
 
