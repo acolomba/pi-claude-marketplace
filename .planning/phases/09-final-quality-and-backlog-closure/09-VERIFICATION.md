@@ -1,6 +1,6 @@
 ---
 phase: 09-final-quality-and-backlog-closure
-verified: 2026-09-11T22:45:00Z
+verified: 2026-09-11T23:05:00Z
 status: passed
 score: 10/10 must-haves verified
 behavior_unverified: 0
@@ -37,16 +37,24 @@ covered_files:
   - "extensions/pi-claude-marketplace/index.ts"
   - "scripts/revalidation.mjs"
   - "scripts/test-coverage-direct.pin.json"
-covered_digest: "v1:sha256:e3e6054c876e8317b9da9466816225b387685bd5d28f16e4c008a9e80bc45843"
+covered_digest: "v1:sha256:70d5024ff2ea6fec394c4a6f0a0bb901c3a6f7ccbd7ef7804f41f1d18c6f6618"
+re_verification:
+  previous_status: passed
+  previous_score: "10/10"
+  gaps_closed:
+    - "IN-V1 (info finding, not a gap): 09-CLOSURE-LEDGER.md's CLOSE-01 evidence row and its measurement section named d83a6dc3, three code-review-fix commits behind HEAD. Commit afdc6dc6 corrected this: the CLOSE-01 row now cites the shipped-tree measurement at 53b7e83f, the old d83a6dc3 run is explicitly marked superseded and retained for the audit trail (not deleted), and the section that claimed only planning documents land after the measurement now names the three fix commits and explains why the earlier claim did not hold (scripts/revalidation.mjs is a specialPairs direct-coverage entry, so the WR-03 fix genuinely invalidated the old reading)."
+  gaps_remaining: []
+  regressions: []
+  known_future_staleness: "This report's covered_files include .planning/STATE.md and .planning/ROADMAP.md. The phase-close step will rewrite both, which will stale this report's digest again by construction — a timestamp/digest mismatch, not a reopened finding. STATE.md already documents the identical pattern for phases 03, 04, and 05. A later reader should re-run the fingerprint rather than read a digest mismatch as a regression."
 ---
 
 # Phase 9: Final Quality and Backlog Closure Verification Report
 
 **Phase Goal:** Prove the confirmed work as a whole and close the bundled backlog with an
 audit trail.
-**Verified:** 2026-09-11T22:45:00Z
+**Verified:** 2026-09-11T23:05:00Z (re-verification)
 **Status:** passed
-**Re-verification:** No — initial verification
+**Re-verification:** Yes — IN-V1 raised in the initial pass, acted on by commit `afdc6dc6`, re-checked here
 
 ## Goal Achievement
 
@@ -62,7 +70,7 @@ audit trail.
 | 6 | `CLOSE-02`'s four "implemented" backlog items record shipped terminal routes without overclaiming; four evidence-only/deferred items are never described as implemented | ✓ VERIFIED | `TESTQ-01`, `FLOW-09`, `REASON-01`, `FLOW-07` carry struck-through `## ~~ID~~ -- CLOSED` headings with named requirement routes. `COV-01` (`superseded`), `AGCOL-01` (`evidence-only`), `GAUTH-01` (`deferred`), and the todo (`deferred`) carry no struck-through heading and explicit "It is not implemented" language. Independently re-traced `REASON-01`'s residual against `probe-classifiers.ts`/`mcp-resolution.ts`/`hooks-resolution.ts`: both named residual cases (`malformed mcpServers` → `unsupported source`; `malformed hooks.json` → `unsupported hooks`) are confirmed still unrerouted, matching the backlog's disclosed negative exactly. |
 | 7 | The closure ledger uses one five-word disposition vocabulary and never describes a coverage reading as proof of assertion strength | ✓ VERIFIED | `grep -c 'reachability evidence only' 09-CLOSURE-LEDGER.md` → `1`; scanned the full document — every use of "stronger"/"strong" refers to a source-trace argument being logically tighter than the pin's own prose, never to a coverage percentage. 24 rows, all disposition words drawn from the closed 5-word set. |
 | 8 | The two human-checkable coverage-pin reachability claims (discover.ts `CommandNameError` arm; install-outcome.ts's two re-check arms) were traced against current source, not inherited, with residuals named | ✓ VERIFIED | Independently re-ran the key greps: `grep -rn nameCommandInDir extensions/ tests/ scripts/` returns only the declaration and its one call site — confirms module-private, single-throw-path claim. Confirmed the `PLUGIN_ENTRY_SCHEMA`/`readHooksJson` two-read argument by reading `manifest.ts`, `manifest-cache.ts`, `hooks-resolution.ts`, `install-outcome.ts` directly — all cited line numbers and logic check out. Both rows correctly disposed `evidence-only`, not `implemented`. |
-| 9 (Success Criterion 1 / CLOSE-01) | The complete project quality suite passes on the tree that ships | ✓ VERIFIED | Per task instructions, the orchestrator measured `npm run check` (exit 0, 246s; unit 6009/6009; integration 32/32) and `npm run test:coverage:direct:all` (exit 0, 230 pairs) on commit `53b7e83f`, which this verification confirms is current `HEAD` (`git log -1 HEAD` = `53b7e83f`; `git log --oneline 53b7e83f..HEAD` empty). `node scripts/revalidation.mjs scope-impact --check` re-run now → `Scope impact valid: 40 records.` |
+| 9 (Success Criterion 1 / CLOSE-01) | The complete project quality suite passes on the tree that ships, and the closure ledger's own CLOSE-01 evidence row cites that measurement rather than a superseded one | ✓ VERIFIED | `09-CLOSURE-LEDGER.md`'s `CLOSE-01` row and its `### The re-measurement on the shipped tree` section (added by `afdc6dc6`) now cite `53b7e83f` directly: `npm run check` exit 0, 246s, unit `6009/6009`, integration `32/32`; `npm run test:coverage:direct:all` exit 0, 230 pairs, `485.9s`. Confirmed `53b7e83f` is current `HEAD` (`git log -1 --format='%H' HEAD` = `53b7e83f...`; `git log --oneline 53b7e83f..HEAD` empty except for `afdc6dc6` itself, which touches only `09-CLOSURE-LEDGER.md` and `09-VERIFICATION.md` — confirmed via `git diff --stat afdc6dc6~1 afdc6dc6 -- extensions tests scripts package.json package-lock.json eslint.config.js .fallowrc.json tsconfig.json .prettierrc.json` returning empty). Independently re-ran `node scripts/revalidation.mjs scope-impact --check` → `Scope impact valid: 40 records.`, and `node scripts/test-coverage-direct.mjs scripts/revalidation.mjs` → `branches 789/789, functions 202/202, lines 2669/2669`, matching the ledger's cited figure exactly (this is a single-pair, ~18s check, not the forbidden full suite/all-pair re-run). The old `d83a6dc3` run is retained in the ledger, explicitly labeled superseded, not deleted — an honest audit trail rather than a silent overwrite. |
 | 10 | Window entries from phases 86/88/115/117 (and the 5 remaining phase-116 entries) were correctly left open, not closed on narrative, per `D-22`/D-09-13 | ✓ VERIFIED | Directly parsed `.planning/WINDOWS.md`'s fenced JSON — 19 open entries distributed exactly `{86:1, 88:2, 115:6, 116:5, 117:5}`; none outside {19,21,22,30} changed status this phase (frontmatter `fixed_count: 12`, up from 9 by exactly 3). |
 
 **Score:** 10/10 truths verified (0 present, behavior-unverified)
@@ -95,7 +103,7 @@ audit trail.
 
 | Requirement | Source Plan | Description | Status | Evidence |
 | ----------- | ---------- | ----------- | ------ | -------- |
-| `CLOSE-01` | 09-01 through 09-06 | Complete quality suite passes after all terminal work | ✓ SATISFIED | Verified true on `HEAD` (`53b7e83f`) per orchestrator's pre-taken measurement; sealed `Complete` in all three carriers |
+| `CLOSE-01` | 09-01 through 09-06 | Complete quality suite passes after all terminal work | ✓ SATISFIED | Verified true on `HEAD` (`53b7e83f`); the closure ledger's own `CLOSE-01` row now cites this measurement directly (post `afdc6dc6`), not a superseded one; sealed `Complete` in all three carriers |
 | `CLOSE-02` | 09-03, 09-04, 09-05, 09-06 | Backlog/window records carry honest terminal dispositions in one vocabulary | ✓ SATISFIED | All eight backlog/todo dispositions and the ledger verified against source; sealed `Complete` in all three carriers |
 
 No orphaned requirements — `grep -E "Phase 9" .planning/REQUIREMENTS.md` names only `CLOSE-01`/`CLOSE-02`, both claimed by plans.
@@ -117,7 +125,13 @@ None. No `TBD`/`FIXME`/`XXX`/`TODO`/`HACK`/`PLACEHOLDER` markers in any producti
 
 ### Info Findings (non-blocking)
 
-**IN-V1: `09-CLOSURE-LEDGER.md`'s quoted "final tree measurement" (`d83a6dc3`) predates three code-review-fix commits that changed production code and tests.** After plan 09-06 wrote the closure ledger, the phase's code-review pass (`09-REVIEW.md`) found three warnings and fixed them (`1228b178`, `064398e5`, `0ac328a0`), touching `bridges/hooks/stage.ts`, `scripts/revalidation.mjs`, and adding tests (unit count moved 6007→6009, `revalidation.test.ts` 136→138). The ledger's own prose ("no measurement quoted from an earlier phase or plan") is therefore not literally true of the very final tree — three more commits landed after it, before `53b7e83f`. This is not a substantive gap: `53b7e83f` is confirmed to be `HEAD`, its own `09-REVIEW-FIX.md` records a full green gate table at that commit, and the orchestrator's independent measurement at `53b7e83f` (unit 6009/6009, integration 32/32, exit 0) confirms `CLOSE-01`'s actual claim — the suite passes on the tree that ships — is true. The gap is between the *ledger document's own quoted figures* and the true final commit, not between `CLOSE-01`'s claim and reality. Recorded for the record; does not block the phase goal.
+**IN-V1 — RESOLVED by commit `afdc6dc6`.** The initial pass of this verification flagged that `09-CLOSURE-LEDGER.md`'s quoted "final tree measurement" (`d83a6dc3`) predated three code-review-fix commits (`1228b178`, `064398e5`, `0ac328a0`) that changed production code and tests, one of which (`0ac328a0`) touched `scripts/revalidation.mjs` — a `specialPairs` entry in the direct-coverage gate, so the earlier reading genuinely stopped describing the shipped tree, not merely predated it cosmetically. Commit `afdc6dc6` (`docs(closure): re-measure the shipped tree after the review fixes`) corrected this, verified directly against the diff (`git show afdc6dc6`):
+
+1. The `CLOSE-01` evidence row now cites the shipped-tree measurement at `53b7e83f` instead of `d83a6dc3` — confirmed by reading the diff hunk.
+2. `## The final-tree measurement` was renamed `## The quality-suite measurements` and now holds two runs: the `d83a6dc3` plan-09-06 run, explicitly labeled `(superseded by the re-measurement below)` and kept for the audit trail rather than deleted, and a new `### The re-measurement on the shipped tree` section at `53b7e83f` with the figures quoted in Truth 9 above.
+3. The section that claimed "only planning documents that no test reads land after the measurement" was rewritten to say the claim did not survive the phase, naming all three fix commits and stating the `specialPairs` mechanism by which `scripts/revalidation.mjs`'s inclusion invalidated it — confirmed by reading the new prose, which matches this description exactly rather than overstating or softening it.
+
+Independently re-verified beyond trusting the diff: re-ran the single-file coverage check for `scripts/revalidation.mjs` (`branches 789/789, functions 202/202, lines 2669/2669`) and it matches the ledger's cited figure exactly; confirmed `53b7e83f` predates `afdc6dc6` and that `afdc6dc6` itself touches no file under `extensions/`, `tests/`, `scripts/`, or the `npm run check` config chain. The correction does not overstate anything — it explicitly retains the superseded run rather than erasing history, matching this project's own "never overwrite a prior measurement, disclose supersession" convention used elsewhere in this same ledger (window entry 30). No residual finding remains.
 
 **IN-V2: Three commits in this phase (`f0fa6adb`, `3ef41e24`, `d7a7fe39`) used phase-scoped commit messages (`fix(09-04)`, `docs(09-04)`), against `CLAUDE.md`'s "avoid GSD milestone/phases mentions" convention.** Self-disclosed in `09-CLOSURE-LEDGER.md`'s "Process notes" section; history is not rewritten. Every later commit in the phase corrected to a semantic scope. No action needed — already documented.
 
@@ -140,11 +154,16 @@ departures from the reviewer's proposed remedy are backed by measured evidence i
 `09-REVIEW-FIX.md` (a real crash reproduced for WR-03; a pinned export-census/barrel-exclusion
 trade-off named for WR-02) and hold up as reasoned engineering decisions, not corner-cutting.
 
-One non-blocking documentation staleness is noted (IN-V1): the closure ledger's own quoted
-measurement predates three code-review-fix commits. The substantive claim it exists to support
-(`CLOSE-01`) is nonetheless independently confirmed true on the actual final tree.
+The one info finding from the initial pass (IN-V1 — the closure ledger's quoted measurement
+predating three code-review-fix commits) was acted on in commit `afdc6dc6` and is now resolved:
+the ledger's `CLOSE-01` row and measurement section cite the true shipped-tree run at `53b7e83f`,
+the superseded `d83a6dc3` run is retained and labeled rather than erased, and the reason the old
+reading stopped holding (`scripts/revalidation.mjs` is a `specialPairs` direct-coverage entry) is
+now stated in the ledger itself. This re-verification independently confirmed the correction's
+wording against the actual diff and re-measured one of its cited figures directly, rather than
+trusting the coordinator's description of the edit.
 
 ---
 
-*Verified: 2026-09-11T22:45:00Z*
+*Verified: 2026-09-11T23:05:00Z (re-verification, following IN-V1's resolution in `afdc6dc6`)*
 *Verifier: Claude (gsd-verifier)*
