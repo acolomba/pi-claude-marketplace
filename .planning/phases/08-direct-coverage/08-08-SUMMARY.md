@@ -25,10 +25,11 @@ affects: [08-09, direct-coverage, ci-coverage-job, pre-commit-hook]
 actuals:
   tokens: 4507
   tasks: 3
-  commits: 2
+  commits: 3
   plan_head_before: 06d2660a53dc0debc4db476e06081253e17bc53a
-  # `commits` is MEASURED (`git rev-list --count 06d2660a..HEAD`), not narrated. Two, not three,
-  # because task 1's artifact came back byte-identical to the committed one -- see deviation 1.
+  # `commits` is MEASURED (`git rev-list --count 06d2660a..HEAD`), not narrated: two TASK commits
+  # plus this plan's metadata commit. Two rather than three task commits because task 1's artifact
+  # came back byte-identical to the committed one, so there was nothing to commit -- deviation 1.
   # `tokens` is estimateTokens (chars/4) over `git diff 06d2660a..HEAD` across the five changed
   # files, the same scale 08-04, 08-06 and 08-07 used and NOT the scale 08-05's 157916 used.
 
