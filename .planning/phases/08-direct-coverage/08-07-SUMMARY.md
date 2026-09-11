@@ -13,7 +13,7 @@ provides:
   - "the three `commitPrepared*` staging-leak arms covered through the removal port, each asserted as the complete `bridgeWarnings` array by its exact bytes"
   - "owner cases for seventeen of the nineteen uncovered runs, driven through `runInstallLedger` rather than through `install-flow.ts`"
   - "`createRemovalOpsFake.rmParentErrors` -- parent-keyed fault injection for a target minted inside the call being faulted"
-  - "a measured escalation packet: the two residual branches, why each resists, and the smallest named change that would reach it"
+  - "a pin instruction for 08-04: the gate's exact reading string and one `reasons` entry per residual site, with the regeneration caveat that the string is an intermediate measurement"
 affects: [08-08, 08-09, direct-coverage, install-outcome-coverage]
 
 actuals:
@@ -38,7 +38,8 @@ key-files:
 key-decisions:
   - "`createRemovalOpsFake` gained `rmParentErrors` because a bridge staging root is `<stagingDir>/<randomUUID()>` minted inside the prepare the case faults -- the plan's per-target key cannot be named in advance, and `ScopedLocations` publishes one staging directory per bridge kind, which makes the parent key select exactly one bridge"
   - "Three leak cases share one mechanical arrange helper and keep their own titles and assertions, so `fallow dupes` sees no clone while each case still targets a different bridge, label and staging root"
-  - "The two residual branches are escalated, not pinned and not reached by a trick: both are defense-in-depth re-checks of a value the same validator already accepted in the same pass"
+  - "Checkpoint answered `defer` + pinned (`D-08-A14`): the two residual branches become one pin row with a `reasons` entry each, reversing `D-08-A06`'s prohibition now that the residue is explained per site rather than 19 unexplained runs"
+  - "Neither residual branch is reached by a trick: the `RemovalOps`-corrupts-`hooks.json` route was found, is available today with no production change, and stays declined"
   - "`RCOV-02` stays Pending -- 08-09 still carries it, and this phase's convention is that the last contributing plan flips it"
 
 patterns-established:
@@ -85,22 +86,22 @@ coverage:
         status: pass
     human_judgment: false
   - id: D4
-    description: "The module's residual reading, its remaining uncovered runs, and the smallest named change that would reach each are recorded rather than pinned"
+    description: "The module's residual reading and one recorded reason per residual site, handed to 08-04 as the pin row to generate"
     requirement: RCOV-02
     verification:
       - kind: other
-        ref: "this SUMMARY's 'The escalation packet' section, read off a focused LCOV run of the owner test"
+        ref: "this SUMMARY's 'Pin instruction for 08-04' section, read off a focused LCOV run of the owner test"
         status: pass
-    human_judgment: true
-    rationale: "The disposition of the residue is the developer's to choose at this plan's checkpoint. Whether `818-820` and `422-426` are worth a production change, a deferral, or nothing at all is a judgment about this codebase's testability budget, not a measurement."
+    human_judgment: false
   - id: D5
-    description: "`orchestrators/plugin/install-outcome.ts` carries no pin row"
+    description: "This plan authors no pin file; 08-04 generates the row from the second sweep rather than copying this reading"
     requirement: RCOV-02
     verification:
       - kind: automated_ui
-        ref: "no pin artifact exists on this branch (plan 08 generates it from the second sweep) and this plan created none"
+        ref: "no pin artifact exists on this branch (git ls-files matches no pin.json/pin.mjs) and this plan created none"
         status: pass
-    human_judgment: false
+    human_judgment: true
+    rationale: "Whether 08-04 honours the regeneration caveat, or copies this intermediate string into the committed pin, is the thing a reviewer should actually check at that plan's boundary."
 
 duration: 96min
 completed: 2026-09-11
@@ -173,7 +174,7 @@ Every uncovered run from the task 1 measurement, with what closed it.
 | 393-395 | CMP-3 clone-and-adopt of a user-scope marketplace record | new owner case |
 | 404-408 | PI-5 already-installed throw | relocated; asserted as the typed shape at the owner boundary |
 | 416-417 | PI-3 not-in-manifest throw | relocated; asserted as the typed shape at the owner boundary |
-| **423-426** | **entry re-validation throw** | **CARRIED to the checkpoint** |
+| **423-426** | **entry re-validation throw** | **PINNED** per `D-08-A14`, with its own `reasons` entry |
 | 444-456 | the `resolveGitPluginRoot` callback body | two new owner cases, one per arm of `opts.cloneProbe ?? probeInstallClone` |
 | 464 | `--partial` widening the installability gate | new owner case, paired with the default gate refusing the same fixture |
 | 633 | `resolvedSha` spread into the ledger context | git-source case |
@@ -192,7 +193,7 @@ Every uncovered run from the task 1 measurement, with what closed it.
 | 916 / 920 / 948 | `statePhase`'s `resolvedSha`, `hookEntries` and hooks-slug arms | git-source case and hooks case |
 | 665 / 709 / 768 / 858 (`FNDA:0`) | the four `recorded.map` name projections | every bridge now has a component to stage |
 | `resolveGitPluginRoot` (`FNDA:0`) | the resolver callback | git-source cases |
-| **818-820** | **hooks re-parse guard** | **CARRIED to the checkpoint** |
+| **818-820** | **hooks re-parse guard** | **PINNED** per `D-08-A14`, with its own `reasons` entry |
 
 ## The final reading, verbatim
 
@@ -202,9 +203,14 @@ Incomplete direct coverage for extensions/pi-claude-marketplace/orchestrators/pl
 
 Functions no longer appear in the refusal string: the module reads `functions 27/27`.
 
-## The escalation packet
+## Pin instruction for 08-04
 
-Two regions remain. Both are defense-in-depth re-checks of a value an earlier validation in the **same pass** already accepted, which is why neither yields to a fixture.
+**Read this as an instruction, not an escalation.** It was written as an escalation packet; the
+checkpoint has since been answered `defer` + pinned under `D-08-A14`, so the two sites below are
+pin rows to generate, not open questions.
+
+Two regions remain. Both are defense-in-depth re-checks of a value an earlier validation in the
+**same pass** already accepted, which is why neither yields to a fixture.
 
 ### 1. Lines 423-426, branch 422 — the manifest entry re-validation throw
 
@@ -235,19 +241,67 @@ if (!parsed.ok) {
 
 **One route was available and deliberately not taken.** The removal collaborator is called during the skills phase, which runs before the hooks phase, so a `RemovalOps` whose `rm` also corrupted the plugin's `hooks.json` would reach this arm today with no production change. That would dress a timing trick as a removal: the arrange would read "when the skills bridge cleans up its staging, corrupt an unrelated file", which is not a removal contract and not a fact about the system. The plan forbids reaching an arm by a test-only device, and this is one wearing a collaborator's clothes.
 
-### Neither is a pin row
+### The row 08-04 generates
 
-`D-08-A06` excludes this module from the pin, and `D-08-07` requires a recorded reason per uncovered site. Both residual sites now have one — but recording them here is the escalation the decision asks for, not a licence to open a row. No pin artifact exists on this branch (plan 08 generates it from the second sweep) and this plan created none.
+`D-08-A14` reverses `D-08-A06`'s prohibition on this module, deliberately and on the record.
+`D-08-A06` refused a row on a stated premise — "75 uncovered lines across 19 disjoint runs have no
+such single reason." This plan closed 17 of the 19. The objection was to pinning a residue nobody
+could explain, not to this module's identity, and `D-08-A05` had already given each row a `reasons`
+array for exactly the multi-site case this is.
+
+**This plan authors no pin file.** None exists on this branch; 08-04 builds it and generates its
+rows from measurement. What follows is the handoff, verbatim.
+
+The `reading` field must be the gate's own formatted string, which `assertCompleteCoverage` emits in
+one place:
+
+```
+branches 109/111, lines 1034/1040
+```
+
+The two `reasons` entries, one per site:
+
+1. `422-426 (branch 422): re-validation of a manifest entry that the identical compiled schema already accepted in the same pass. MARKETPLACE_SCHEMA.plugins is Type.Array(PLUGIN_ENTRY_SCHEMA) and PLUGIN_ENTRY_VALIDATOR is Compile(PLUGIN_ENTRY_SCHEMA), so an entry reaching the re-check was already validated by that exact schema, in this process, from this parse. ARCHITECTURE.md records the re-check as deliberate defense-in-depth.`
+2. `818-820 (branch 818): the hooks re-parse guard, over bytes on which the resolver already ran both of parseHooksConfig's {ok:false} arms at install-entry under D-57-04. The only difference between the two calls is skipIfMap, and D-61-02 records that every compileIfPredicate failure collapses to MATCH_ALL_IF, so no if-field issue can produce a refusal. The guard fires only on a mutation between the resolve and the phase.`
+
+The authorizing decision for both is `D-08-A14`; 08-04 owns the `findingId` field's final spelling,
+since neither site carries a pre-existing finding id the way `discover.ts` carries `BC-019`.
+
+### The reading above is a measurement at `4549df42`, not a constant
+
+**Do not copy `branches 109/111, lines 1034/1040` into the pin.** `D-08-08` requires the committed
+pin to be generated from the SECOND full sweep, after every plan in this phase has landed, precisely
+so the artifact reflects the final tree rather than an intermediate one. This number is an
+intermediate one: 08-04 has not run, and its work is in this repository.
+
+The caution is not theoretical. Every plan in this phase has found at least one predicted figure
+that did not reproduce, and this plan found four — including its own starting reading, where
+research's `lines 956/1031` had already expired because 08-05's port added nine lines before task 1
+began. A pin row copied from a summary rather than measured is the same defect one layer up: an
+artifact that reports a number nobody re-derived.
+
+If the regenerated sweep disagrees with the string above, the sweep is right.
 
 ## Decisions Made
 
-1. **`createRemovalOpsFake` gained `rmParentErrors`.** The plan directs the three leak cases to fault "exactly ONE staging root" with a per-target key. No case can supply that key: the staging root is `path.join(locations.<kind>StagingDir, randomUUID())`, minted inside the prepare call being faulted. The parent is knowable — `ScopedLocations` publishes one staging directory per bridge kind — and keying on it selects exactly one bridge's cleanup while leaving its siblings' alone, which is the property the plan actually asks for. This follows the precedent 08-06 set with `renameDestinationErrors`, added for the same class of problem with the same reasoning recorded in the same place. Each case still reads the target the port was *given* out of the call log and asserts that exactly one removal under that directory was attempted, so the expected message cannot be built from another bridge's call.
+1. **The checkpoint was answered `defer` + pinned (`D-08-A14`).** The module closes the phase at
+   its measured reading, and the strict all-pair arm is left green by pinning it with one `reasons`
+   entry per site. This reverses `D-08-A06`, which had excluded this module from the pin — but the
+   premise `D-08-A06` argued from ("75 uncovered lines across 19 disjoint runs have no such single
+   reason") no longer holds: 17 of the 19 are closed and the remaining two each have a precise,
+   recordable reason. The two alternatives were rejected on cost, not difficulty. Leaving it
+   unpinned keeps `npm run test:coverage:direct:all` permanently red, which is the never-green-gate
+   failure `CONTRIBUTING.md` already argues against and the one this phase exists to stop repeating.
+   Adding the two injectable readers that would reach the arms creates production surface whose only
+   consumer is a test — `MF-DEC-07` forbids it, and Phase 7 spent itself removing that exact class.
 
-2. **The three leak cases share a mechanical arrange helper.** The plan asks for three independent cases rather than rows in a loop, and they are: three `test()` calls, three titles, three bridges, three assertion blocks. What they share is `installWithFaultedStagingCleanup`, which does the hermetic setup, the fault, the act, and the "exactly one removal under this root" check. Three thirty-line near-identical blocks would have been a `fallow dupes` finding at the configured threshold of 3, and the tree's own convention (`assertRetryFailure` and friends in `install-flow.test.ts`) is to factor the mechanics and keep the claims inline.
+2. **`createRemovalOpsFake` gained `rmParentErrors`.** The plan directs the three leak cases to fault "exactly ONE staging root" with a per-target key. No case can supply that key: the staging root is `path.join(locations.<kind>StagingDir, randomUUID())`, minted inside the prepare call being faulted. The parent is knowable — `ScopedLocations` publishes one staging directory per bridge kind — and keying on it selects exactly one bridge's cleanup while leaving its siblings' alone, which is the property the plan actually asks for. This follows the precedent 08-06 set with `renameDestinationErrors`, added for the same class of problem with the same reasoning recorded in the same place. Each case still reads the target the port was *given* out of the call log and asserts that exactly one removal under that directory was attempted, so the expected message cannot be built from another bridge's call.
 
-3. **Preflight refusals are asserted as typed shapes, not as notification rows.** The sibling cases for PI-3 and PI-5 assert the rendered row, because `install-flow.ts` owns the rendering. At this owner's boundary the contract is the thrown `PluginShapeError` and its `shape` discriminant, so each relocated case asserts the whole shape object and the message text. This is not a weakening: it is the same contract observed where it is actually produced.
+3. **The three leak cases share a mechanical arrange helper.** The plan asks for three independent cases rather than rows in a loop, and they are: three `test()` calls, three titles, three bridges, three assertion blocks. What they share is `installWithFaultedStagingCleanup`, which does the hermetic setup, the fault, the act, and the "exactly one removal under this root" check. Three thirty-line near-identical blocks would have been a `fallow dupes` finding at the configured threshold of 3, and the tree's own convention (`assertRetryFailure` and friends in `install-flow.test.ts`) is to factor the mechanics and keep the claims inline.
 
-4. **`RCOV-02` stays Pending.** 08-09 still carries it and has not run. 08-02, 08-03, 08-05 and 08-06 all reverted the automatic flip; this plan does not flip it either, and `requirements-completed` is empty rather than asserting a completion this plan does not own.
+4. **Preflight refusals are asserted as typed shapes, not as notification rows.** The sibling cases for PI-3 and PI-5 assert the rendered row, because `install-flow.ts` owns the rendering. At this owner's boundary the contract is the thrown `PluginShapeError` and its `shape` discriminant, so each relocated case asserts the whole shape object and the message text. This is not a weakening: it is the same contract observed where it is actually produced.
+
+5. **`RCOV-02` stays Pending.** 08-09 still carries it and has not run. 08-02, 08-03, 08-05 and 08-06 all reverted the automatic flip; this plan does not flip it either, and `requirements-completed` is empty rather than asserting a completion this plan does not own.
 
 ## Deviations from Plan
 
@@ -273,7 +327,7 @@ if (!parsed.ok) {
 
 - **Found during:** Task 3
 - **Issue:** The plan's verify runs `import("./scripts/test-coverage-direct.pin.mjs")` and calls `loadCoveragePin()`. Neither `scripts/test-coverage-direct.pin.mjs` nor `scripts/test-coverage-direct.pin.json` exists on this branch — per `D-08-08` the pin is generated by plan 08, from the second full sweep, after this plan's work lands. The command fails with `ERR_MODULE_NOT_FOUND`, which is not a coverage answer.
-- **Fix:** Verified the underlying prohibition directly instead: `git ls-files | grep -i "pin\.json\|pin\.mjs"` returns nothing, so there is no pin to hold a row and this plan created none. The prohibition is satisfied; the acceptance criterion ("contains no row whose `sourcePath` is …") is vacuously true.
+- **Fix:** Verified the underlying prohibition directly instead: `git ls-files | grep -i "pin\.json\|pin\.mjs"` returns nothing, so there is no pin to hold a row and this plan created none. The acceptance criterion ("contains no row whose `sourcePath` is …") is vacuously true, and stays true after the checkpoint: `D-08-A14` moves the row's authorship to 08-04 rather than to this plan.
 - **Files modified:** none
 - **Verification:** `git ls-files` shows no pin artifact; `grep -rn "install-outcome" scripts/` returns one unrelated hit in `check-phase-06-hub-ledger.mjs`.
 - **Committed in:** not a code change
@@ -303,7 +357,7 @@ if (!parsed.ok) {
 | `git diff $PLAN_BASE..HEAD --stat -- tests/orchestrators/plugin/install-flow.test.ts` | empty |
 | `git status --porcelain -- tests/orchestrators/plugin/install-flow.test.ts` | empty |
 | `git diff $PLAN_BASE..HEAD --name-only` | 2 files, neither under `extensions/` |
-| pin artifact holds a row for this module | no pin artifact exists; none created |
+| pin artifact holds a row for this module | no pin artifact exists; none created. 08-04 generates the row per `D-08-A14` |
 | **`npm run check`** | **exit 0** — typecheck, lint, fallow, format, both corresponding gates, the direct-coverage negative control, 6,003 unit cases, 32 integration cases |
 
 `SKIP=trufflehog pre-commit run --files` passed clean before each commit, including `npm fallow` — no new clone finding from the three leak cases, and no dead export from the new fake option.
@@ -315,9 +369,19 @@ if (!parsed.ok) {
 
 ## Next Phase Readiness
 
-- **08-08's second sweep will see this module at `branches 109/111, lines 1034/1040`.** It is not complete, so the strict all-pair arm still refuses it. What plan 08 does about that is the decision this plan's checkpoint puts to the developer.
+- **08-04 owns the pin row for this module.** `D-08-A14` authorizes it; the "Pin instruction for
+  08-04" section above carries the gate's exact reading string and one `reasons` entry per site,
+  written out verbatim so nothing has to be re-derived from prose. The row must be **generated from
+  the second sweep**, not copied from this document — see that section's regeneration caveat, which
+  is the one thing about this handoff worth checking rather than trusting.
+- **08-08's second sweep will see this module at `branches 109/111, lines 1034/1040` *if nothing
+  else in the phase moves it*.** 08-04 has not run and its work is in this repository, so treat that
+  string as an intermediate reading with a pin instruction attached, not as the phase's answer.
 - **`RCOV-02` is still Pending** and belongs to 08-09, the last plan carrying it.
-- **One open judgment for a reviewer:** deviation 1. If the intent was that the leak cases key on the exact staging root, that key is not obtainable from a `runInstallLedger` caller, and the alternative — letting the install run once, reading the staging root off disk, then running it again — would fault a different install than the one it measured.
+- **One open judgment for a reviewer:** deviation 1. If the intent was that the leak cases key on
+  the exact staging root, that key is not obtainable from a `runInstallLedger` caller, and the
+  alternative — letting the install run once, reading the staging root off disk, then running it
+  again — would fault a different install than the one it measured.
 
 ---
 *Phase: 08-direct-coverage*

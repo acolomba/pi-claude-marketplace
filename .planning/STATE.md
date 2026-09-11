@@ -5,10 +5,10 @@ milestone_name: Refine Unit Tests
 current_phase: 08
 current_phase_name: Direct Coverage
 status: executing
-stopped_at: 08-07 tasks 1-3 complete; its blocking checkpoint:decision is OPEN and awaits the developer
-last_updated: "2026-09-11T08:45:00.000Z"
+stopped_at: Completed 08-07-PLAN.md; its checkpoint was answered defer + pinned (D-08-A14)
+last_updated: "2026-09-11T09:10:00.000Z"
 last_activity: 2026-09-11
-last_activity_desc: 08-07 closed the three commitPrepared leak arms and relocated the install ledger's owner coverage; two defense-in-depth branches are escalated, not pinned
+last_activity_desc: 08-07 closed the three commitPrepared leak arms and relocated the install ledger's owner coverage; its two residual defense-in-depth branches are pinned per D-08-A14, with the row left for 08-04 to generate
 state_head: 75e39aec
 progress:
   total_phases: 9
@@ -32,9 +32,9 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 08 (Direct Coverage) — EXECUTING
-Next: ANSWER 08-07's open checkpoint, then /gsd-execute-phase 08
+Next: /gsd-execute-phase 08 (08-04 has not run)
 Plan: 6 of 9 complete
-Status: 08-07 complete through task 3, **with its blocking `checkpoint:decision` still OPEN**.
+Status: 08-07 complete; its checkpoint was answered **`defer` + pinned** (`D-08-A14`).
 `orchestrators/plugin/install-outcome.ts` — the phase's largest and only open-ended shortfall —
 moved from `branches 60/83, functions 22/27, lines 965/1040` to
 `branches 109/111, functions 27/27, lines 1034/1040`. Note the starting reading: research recorded
@@ -49,10 +49,16 @@ complete `bridgeWarnings` array by its exact bytes and each pinning that the ins
 `MARKETPLACE_SCHEMA.plugins` already enforced on the same bytes in the same pass. `818-820`
 re-parses a `hooks.json` the resolver already validated; the only difference between the two calls
 is `skipIfMap`, and D-61-02 records that no `if`-field failure can produce a refusal. Both need an
-injectable reader on the phase that reads them, and `08-07-SUMMARY.md` names each one. One route WAS
-available and deliberately declined: the removal collaborator runs before the hooks phase, so an
-`rm` that also corrupted `hooks.json` would reach `818-820` today — a timing trick wearing a
-collaborator's clothes, which the plan forbids. `createRemovalOpsFake` gained `rmParentErrors`
+injectable reader on the phase that reads them. One route WAS available and deliberately declined:
+the removal collaborator runs before the hooks phase, so an `rm` that also corrupted `hooks.json`
+would reach `818-820` today — a timing trick wearing a collaborator's clothes; the operator
+confirmed it stays declined. **`D-08-A14` reverses `D-08-A06`'s pin prohibition for this module**:
+its premise was 19 unexplained runs, and 17 are now closed with each of the two survivors carrying a
+precise reason, so the module is pinned with one `reasons` entry per site rather than left to keep
+`test:coverage:direct:all` permanently red or to grow production surface whose only consumer is a
+test (`MF-DEC-07`). **08-04 authors that row, generating it from the second sweep (`D-08-08`) — the
+reading above is an intermediate measurement and must not be copied**; `08-07-SUMMARY.md`
+§"Pin instruction for 08-04" carries the exact reading string and both `reasons` strings verbatim. `createRemovalOpsFake` gained `rmParentErrors`
 because a staging root is `<stagingDir>/<randomUUID()>` minted inside the prepare being faulted,
 the same class `renameDestinationErrors` was added for in 08-06. `npm run check` exits 0 (6,003
 unit cases, 32 integration cases). `RCOV-02` stays Pending for 08-09. 08-04 has not run.
