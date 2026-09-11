@@ -890,6 +890,6 @@ because a seal may never precede the measurement it asserts.
 | 4. Hermetic Test Infrastructure      | 7/7            | Complete    | 2026-09-07 |
 | 5. Injection and Ownership Design    | 34/34          | Complete    | 2026-09-08 |
 | 6. Assertion and Module Refinement   | 52/52          | Complete    | 2026-09-10 |
-| 7. Gate Integrity                    | 16/16 | Complete   | 2026-09-10 |
-| 8. Direct Coverage                   | 9/9 | In Progress|  |
-| 9. Final Quality and Backlog Closure | 6/6 | In Progress|  |
+| 7. Gate Integrity                    | 16/16          | Complete    | 2026-09-10 |
+| 8. Direct Coverage                   | 9/9            | Complete    | 2026-09-11 |
+| 9. Final Quality and Backlog Closure | 6/6            | Complete    | 2026-09-11 |

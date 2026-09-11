@@ -4,18 +4,18 @@ milestone: refine-unit-tests
 milestone_name: Refine Unit Tests
 current_phase: 09
 current_phase_name: Final Quality and Backlog Closure
-status: executing
-stopped_at: Completed 09-06-PLAN.md
-last_updated: "2026-09-11T22:14:00.000Z"
+status: phase_complete
+stopped_at: Phase 9 complete and verified passed 10/10; milestone ready for audit
+last_updated: "2026-09-11T23:30:00.000Z"
 last_activity: 2026-09-11
-last_activity_desc: Phase 9 plan 06 complete; the final tree is measured green, the three coverage-pin reachability claims are traced, and 09-CLOSURE-LEDGER.md carries 24 rows in one vocabulary
-state_head: 76d604d0
+last_activity_desc: Phase 9 closed; code review fixed 3 warnings, both measurements retaken on the shipped tree, verification passed 10/10
+state_head: c962f299
 progress:
   total_phases: 9
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 211
-  completed_plans: 210
-  percent: 44
+  completed_plans: 211
+  percent: 56
 ---
 
 # Project State
@@ -31,9 +31,51 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: 09 (Final Quality and Backlog Closure) — executing
-Next: Verify phase 09 (`/gsd-verify-work 09`), then the milestone close
+Phase: 09 (Final Quality and Backlog Closure) — COMPLETE, verified `passed` 10/10
+Next: Milestone lifecycle — audit, complete, cleanup
 Plan: 6 of 6 complete
+
+### What closed after plan 09-06
+
+The code-review gate ran after the last plan and found 0 critical, 3 warning, 4 info. All three
+warnings are fixed (`1228b178`, `064398e5`, `0ac328a0`) and recorded in `09-REVIEW-FIX.md`. Two
+fixes departed from the reviewer's proposed remedy with measurement behind them: the `WR-03`
+presence check would have added an uncoverable branch to `scripts/revalidation.mjs`, a
+`specialPairs` entry measuring 789/789 with no pin row, so the lookup was made total by
+construction instead (`SEALED_REQUIREMENT_IDS` now derives from `Object.keys(SEALED_REQUIREMENT_ROUTES)`);
+and `WR-02`'s two options were not equivalent, because wiring `hookConfigPathFor` would have
+forced an edit to the exact-equality `UNOWNED_EXPORT_CENSUS` pin.
+
+Because those three commits landed after plan 09-06's measurement — and one touched a module the
+coverage gate measures — both measurements were retaken on the shipped tree at `53b7e83f`:
+`npm run check` exit 0 in 246s (unit 6009/6009, integration 32/32) and
+`npm run test:coverage:direct:all` exit 0 over 230 pairs in 485.9s, both pinned shortfalls
+matching exactly. The closure ledger's `CLOSE-01` row now cites that run; the superseded one is
+kept and labelled rather than deleted. The verifier raised this as `IN-V1` and re-checked the
+correction after it was made.
+
+`09-VERIFICATION.md` reads `status: passed`, 10/10, with the `CLOSE-01` ordering computed from
+commit timestamps rather than inferred: the suite was measured 21:17:25Z→21:21:34Z, strictly
+between seal change A (`da08a749`, 21:17:06Z) and change B (`d391d058`, 21:26:29Z).
+
+**Expect this verification to read `stale` again** once the milestone-close step writes
+`STATE.md` and `ROADMAP.md` — both are in its `covered_files`. That is a timestamp verdict, not
+an outcome verdict, and it is the same pattern already recorded below for phases 03, 04 and 05.
+Its `re_verification` block says so.
+
+### Known process debts carried out of this phase
+
+1. Three commits in wave 4 used phase-scoped messages (`fix(09-04)`, `docs(09-04)`) against
+   `CLAUDE.md`'s "avoid GSD milestone/phases mentions". History stands; waves 5 and 6 and the
+   fix pass used semantic scopes.
+2. `gsd-tools query phase.complete 9` refuses in this checkout: it sees `.planning/workstreams/`
+   and demands `--ws`, but this milestone's ROADMAP/STATE are the ROOT files and no workstream is
+   named `refine-unit-tests`. ROADMAP and STATE were hand-edited instead, which is what this
+   file already prescribes for the state verbs.
+3. The reviewer's `IN-02` is unactioned by choice: `HooksHydrationReader extends HooksFileReader`
+   asserts an is-a that is only structurally true — it is a two-member dependency bundle, not a
+   kind of file reader. Renaming touches the published bridge surface and ~171 call sites, so it
+   is an operator decision rather than a fix-pass one. It stays recorded in `09-REVIEW.md`.
 Status: the requirement seal is closed — all eight IDs read `Complete` in the checkbox, the
 traceability row and `SEALED_REQUIREMENT_ROUTES`, and `node scripts/revalidation.mjs scope-impact
 --check` prints `Scope impact valid: 40 records.` `npm run check` was measured on this tree, not
