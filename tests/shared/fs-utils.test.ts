@@ -20,12 +20,28 @@ import {
   OCCUPIED_CONTENTS,
   registerRemovalOpsContract,
 } from "../platform/removal-ops-contract.ts";
+import { createDelegatingRemovalOps, createRemovalOpsFake } from "../platform/removal-ops-fake.ts";
 
 import type {
   RollbackReplacementInput,
   RollbackReplacementLabels,
 } from "../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
-import type { PathLike, RmOptions } from "node:fs";
+import type { RemovalOpsOperation } from "../platform/removal-ops-fake.ts";
+
+// Builtin-module patching that remains in this file, and why. The removal port
+// carries `rm` and `rename` only, and only for `cleanupStaging` and
+// `rollbackReplacementCommon`, so every fault on those two verbs is injected
+// through the collaborator instead. Four faults have no port to travel
+// through:
+//
+//   - `fs.lstat` twice, for `pathExists` and for `isPlainMarkdownFile`.
+//   - `fs.stat` once, for `removeOrphanIfPresent`.
+//   - `fs.readdir` once, for `readDirEntriesTolerant`.
+//
+// D-08-13 leaves those three verbs outside the port's membership, and
+// D-08-A08 keeps `removeOrphanIfPresent` unported even though it calls
+// `fs.rm` twice: the port's obligation names `cleanupStaging`, and widening
+// it to every `fs.rm` in the module is scope nothing authorizes.
 
 const LABELS = {
   replacement: "replacement test entry",
@@ -111,14 +127,17 @@ describe("cleanupStaging", () => {
     assert.strictEqual(await pathExists(missingDirectory), false);
   });
 
-  test("accepts an ENOENT removal failure", async (t) => {
+  test("accepts an ENOENT removal failure", async () => {
     // arrange
     const removalError = Object.assign(new Error("missing"), { code: "ENOENT" });
-    t.mock.method(fs, "rm", (): Promise<never> => Promise.reject(removalError));
+    const removal = createRemovalOpsFake({
+      boundary: "memory",
+      rmErrors: [["/staging/missing", removalError]],
+    });
 
     // act
     const leak = await cleanupStaging(
-      createRemovalOps(),
+      removal.removalOps,
       "/staging/missing",
       "test staging directory",
     );
@@ -127,16 +146,19 @@ describe("cleanupStaging", () => {
     assert.strictEqual(leak, undefined);
   });
 
-  test("returns a complete leak for an adjacent unexpected removal error", async (t) => {
+  test("returns a complete leak for an adjacent unexpected removal error", async () => {
     // arrange
     const removalError = Object.assign(new Error("permission denied"), { code: "EACCES" });
-    t.mock.method(fs, "rm", (): Promise<never> => Promise.reject(removalError));
+    const removal = createRemovalOpsFake({
+      boundary: "memory",
+      rmErrors: [["/staging/blocked", removalError]],
+    });
     const expectedLeak =
       "failed to clean up test staging directory at /staging/blocked: permission denied";
 
     // act
     const leak = await cleanupStaging(
-      createRemovalOps(),
+      removal.removalOps,
       "/staging/blocked",
       "test staging directory",
     );
@@ -367,9 +389,7 @@ describe("rollbackReplacementCommon", () => {
   test("uses stable reverse input order for equal-name items", async (t) => {
     // arrange
     const directory = await fs.mkdtemp(path.join(os.tmpdir(), "fs-rollback-order-"));
-    const remove = fs.rm.bind(fs);
-    const rename = fs.rename.bind(fs);
-    t.after(() => remove(directory, { recursive: true, force: true }));
+    t.after(() => fs.rm(directory, { recursive: true, force: true }));
     const stagingRoot = path.join(directory, "staging");
     const backupRoot = path.join(directory, "backup");
     const firstReplacement = path.join(directory, "live-a.txt");
@@ -384,25 +404,20 @@ describe("rollbackReplacementCommon", () => {
     await fs.writeFile(secondReplacement, "new-b");
     await fs.writeFile(firstBackup, "old-a");
     await fs.writeFile(secondBackup, "old-b");
-    const operations: string[] = [];
-    t.mock.method(fs, "rm", async (target: PathLike, options?: RmOptions) => {
-      operations.push(`rm ${String(target)} ${JSON.stringify(options)}`);
-      await remove(target, options);
-    });
-    t.mock.method(fs, "rename", async (from: PathLike, to: PathLike) => {
-      operations.push(`rename ${String(from)} -> ${String(to)}`);
-      await rename(from, to);
+    const removal = createDelegatingRemovalOps({
+      boundary: "delegate",
+      delegate: createRemovalOps(),
     });
     const expectedOperations = [
-      `rm ${secondReplacement} {"force":true}`,
-      `rm ${firstReplacement} {"force":true}`,
-      `rename ${secondBackup} -> ${secondRestored}`,
-      `rename ${firstBackup} -> ${firstRestored}`,
-      `rm ${stagingRoot} {"recursive":true,"force":true}`,
-      `rm ${backupRoot} {"recursive":true,"force":true}`,
-    ];
+      { verb: "rm", target: secondReplacement, options: { force: true } },
+      { verb: "rm", target: firstReplacement, options: { force: true } },
+      { verb: "rename", from: secondBackup, to: secondRestored },
+      { verb: "rename", from: firstBackup, to: firstRestored },
+      { verb: "rm", target: stagingRoot, options: { recursive: true, force: true } },
+      { verb: "rm", target: backupRoot, options: { recursive: true, force: true } },
+    ] satisfies RemovalOpsOperation[];
     const input = {
-      ops: createRemovalOps(),
+      ops: removal.removalOps,
       renamed: [
         { from: path.join(stagingRoot, "a.txt"), to: firstReplacement },
         { from: path.join(stagingRoot, "b.txt"), to: secondReplacement },
@@ -422,7 +437,7 @@ describe("rollbackReplacementCommon", () => {
 
     // assert
     assert.deepStrictEqual(leaks, []);
-    assert.deepStrictEqual(operations, expectedOperations);
+    assert.deepStrictEqual(removal.operations, expectedOperations);
     assert.strictEqual(await fs.readFile(firstRestored, "utf8"), "old-a");
     assert.strictEqual(await fs.readFile(secondRestored, "utf8"), "old-b");
   });
@@ -461,8 +476,7 @@ describe("rollbackReplacementCommon", () => {
   test("returns every failure leak in execution order", async (t) => {
     // arrange
     const directory = await fs.mkdtemp(path.join(os.tmpdir(), "fs-rollback-leaks-"));
-    const remove = fs.rm.bind(fs);
-    t.after(() => remove(directory, { recursive: true, force: true }));
+    t.after(() => fs.rm(directory, { recursive: true, force: true }));
     const replacement = path.join(directory, "replacement.txt");
     const restored = path.join(directory, "restored.txt");
     const stagingRoot = path.join(directory, "staging");
@@ -476,22 +490,15 @@ describe("rollbackReplacementCommon", () => {
     const restoreError = Object.assign(new Error("restore denied"), { code: "EACCES" });
     const stagingError = Object.assign(new Error("staging denied"), { code: "EACCES" });
     const backupError = Object.assign(new Error("backup denied"), { code: "EACCES" });
-    t.mock.method(fs, "rm", (target: PathLike): Promise<never> => {
-      if (String(target) === replacement) {
-        return Promise.reject(replacementError);
-      }
-
-      if (String(target) === stagingRoot) {
-        return Promise.reject(stagingError);
-      }
-
-      if (String(target) === backupRoot) {
-        return Promise.reject(backupError);
-      }
-
-      return Promise.reject(new Error(`unexpected rm target: ${String(target)}`));
+    const removal = createRemovalOpsFake({
+      boundary: "memory",
+      rmErrors: [
+        [replacement, replacementError],
+        [stagingRoot, stagingError],
+        [backupRoot, backupError],
+      ],
+      renameErrors: [[backup, restoreError]],
     });
-    t.mock.method(fs, "rename", (): Promise<never> => Promise.reject(restoreError));
     const expectedLeaks = [
       `failed to remove replacement test entry at ${replacement}: replacement denied`,
       `failed to restore previous test entry same from ${backup} to ${restored}: restore denied`,
@@ -500,7 +507,7 @@ describe("rollbackReplacementCommon", () => {
       `failed to clean up test backup directory at ${backupRoot}: backup denied`,
     ];
     const input = {
-      ops: createRemovalOps(),
+      ops: removal.removalOps,
       renamed: [{ from: path.join(stagingRoot, "replacement.txt"), to: replacement }],
       backups: [{ name: "same", from: restored, to: backup }],
       stagingRoot,

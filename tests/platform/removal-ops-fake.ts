@@ -1,10 +1,21 @@
 // tests/platform/removal-ops-fake.ts
 //
-// In-memory double for the `RemovalOps` removal port. It records every call in
+// Two doubles for the `RemovalOps` removal port, one per question a case asks.
+//
+// `createRemovalOpsFake` is the in-memory model: it records every call in
 // order and simulates the outcome against its own entry map; it performs NO
 // real filesystem work and imports no filesystem module. That is a security
 // property rather than a style preference: a double that really removed things
 // could reach outside the fixture the case owns.
+//
+// `createDelegatingRemovalOps` is the recording decorator: it answers the
+// seeded faults itself and forwards every other call to a collaborator the
+// case supplies. A case needs it when the partition between what leaked and
+// what did not must be read from the real filesystem -- the in-memory model
+// removes nothing, so a sibling target it was asked to remove is still on
+// disk, and "this one leaked, that one did not" cannot be stated about disk
+// state through it. The decorator imports no filesystem module either; the
+// real collaborator arrives as a parameter.
 //
 // Fault injection is keyed per target path, which is the seam the removal port
 // exists for -- it is how "one cleanup fails while its siblings succeed"
@@ -153,5 +164,83 @@ export function createRemovalOpsFake(options: RemovalOpsFakeOptions): RemovalOps
     calls,
     present: (target) => entries.has(target),
     readFile: (target) => entries.get(target) ?? null,
+  };
+}
+
+export interface DelegatingRemovalOpsOptions {
+  /**
+   * Explicit acknowledgement that this double reaches the boundary its
+   * `delegate` owns, unlike the `"memory"` fake above.
+   */
+  readonly boundary: "delegate";
+  /** The collaborator every unfaulted call is forwarded to. */
+  readonly delegate: RemovalOps;
+  /** Errors `rm` rejects with, keyed by the absolute target path. */
+  readonly rmErrors?: ReadonlyArray<readonly [target: string, error: Error]>;
+  /** Errors `rename` rejects with, keyed by the absolute source path. */
+  readonly renameErrors?: ReadonlyArray<readonly [from: string, error: Error]>;
+  /**
+   * Errors `rename` rejects with, keyed by the absolute DESTINATION path. The
+   * backup-restore stage of a replacement rollback moves a backup whose path
+   * was minted inside the forward pass's own unported rename, so a case that
+   * faults the restore cannot key on a source it has not seen yet. It always
+   * knows the destination: the target the backup is restored to.
+   */
+  readonly renameDestinationErrors?: ReadonlyArray<readonly [to: string, error: Error]>;
+}
+
+/** One recorded call, in a shape that keeps `rm` and `rename` comparable. */
+export type RemovalOpsOperation =
+  | {
+      readonly verb: "rm";
+      readonly target: string;
+      readonly options: { readonly recursive?: boolean; readonly force?: boolean };
+    }
+  | { readonly verb: "rename"; readonly from: string; readonly to: string };
+
+export interface DelegatingRemovalOps {
+  readonly removalOps: RemovalOps;
+  /**
+   * Every call in the order it was received, both verbs in one list. The
+   * interleaving across verbs is itself a contract some cases pin, which the
+   * in-memory fake's per-verb `calls` cannot express.
+   */
+  readonly operations: RemovalOpsOperation[];
+}
+
+export function createDelegatingRemovalOps(
+  options: DelegatingRemovalOpsOptions,
+): DelegatingRemovalOps {
+  if (options.boundary !== "delegate") {
+    throw new Error("createDelegatingRemovalOps requires the explicit delegate boundary");
+  }
+
+  const rmErrors = byPath(options.rmErrors);
+  const renameErrors = byPath(options.renameErrors);
+  const renameDestinationErrors = byPath(options.renameDestinationErrors);
+  const operations: RemovalOpsOperation[] = [];
+
+  return {
+    operations,
+    removalOps: {
+      async rm(target, rmOptions) {
+        operations.push({ verb: "rm", target, options: { ...rmOptions } });
+        const failure = rmErrors.get(target);
+        if (failure !== undefined) {
+          throw failure;
+        }
+
+        await options.delegate.rm(target, rmOptions);
+      },
+      async rename(from, to) {
+        operations.push({ verb: "rename", from, to });
+        const failure = renameErrors.get(from) ?? renameDestinationErrors.get(to);
+        if (failure !== undefined) {
+          throw failure;
+        }
+
+        await options.delegate.rename(from, to);
+      },
+    },
   };
 }
