@@ -61,6 +61,7 @@ import { test, type TestContext } from "node:test";
 import {
   createHooksRouting,
   createHooksRuntime,
+  readHooksJson,
 } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { asAbsolutePluginRoot } from "../../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import { makeUninstallHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/uninstall.ts";
@@ -123,7 +124,7 @@ const USER_OVERRIDE_REJECTED = {
 function makeHandlerUnderTest(pi: Parameters<typeof makeUninstallHandler>[0]) {
   return makeUninstallHandler(
     pi,
-    createHooksRouting(createHooksRuntime()),
+    createHooksRouting(createHooksRuntime(), { readHooksJson }),
     createCompletionCache(),
   );
 }
@@ -145,7 +146,7 @@ async function populateRuntimeRoute(
     }),
     "utf8",
   );
-  const hooksRouting = createHooksRouting(runtime);
+  const hooksRouting = createHooksRouting(runtime, { readHooksJson });
   await hooksRouting.readAndCachePluginHooks({
     cwd: workspace.cwd,
     hooksJsonPath,

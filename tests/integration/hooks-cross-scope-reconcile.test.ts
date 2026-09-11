@@ -22,6 +22,7 @@ import {
   createHooksHydration,
   createHooksRouting,
   createHooksRuntime,
+  readHooksJson,
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { applyReconcile } from "../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -89,8 +90,8 @@ function buildStateWithSingleHooksPlugin(opts: {
 
 test("RECON / cross-scope: applyReconcile's per-scope rebuild loop preserves hooks-plugin entries in BOTH scopes", async () => {
   const runtime = createHooksRuntime();
-  const hooksRouting = createHooksRouting(runtime);
-  const hooksHydration = createHooksHydration(runtime, { loadState });
+  const hooksRouting = createHooksRouting(runtime, { readHooksJson });
+  const hooksHydration = createHooksHydration(runtime, { loadState, readHooksJson });
   const completionCache = createCompletionCache();
 
   const originalAgentDir = process.env.PI_CODING_AGENT_DIR;

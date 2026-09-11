@@ -28,6 +28,7 @@ import { test } from "node:test";
 import {
   createHooksHydration,
   createHooksRuntime,
+  readHooksJson,
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { type RoutingEntry } from "../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
 import {
@@ -179,7 +180,7 @@ async function withHermeticPiHome<T>(
 
 test("HOOK-E2E-01: registerHooksBridge boots a user-scope hooks-only plugin and dispatches SessionStart end-to-end", async () => {
   const runtime = createHooksRuntime();
-  const hooksHydration = createHooksHydration(runtime, { loadState });
+  const hooksHydration = createHooksHydration(runtime, { loadState, readHooksJson });
 
   await withHermeticPiHome(async ({ agentDir, projectCwd }) => {
     // Seed user-scope state.json + hooks.json on disk (the bytes the bridge
@@ -251,7 +252,7 @@ test("HOOK-E2E-01: registerHooksBridge boots a user-scope hooks-only plugin and 
 
 test("HOOK-E2E-02: project-scope SessionStart plugin dispatches via the session_start lazy project hydrate", async () => {
   const runtime = createHooksRuntime();
-  const hooksHydration = createHooksHydration(runtime, { loadState });
+  const hooksHydration = createHooksHydration(runtime, { loadState, readHooksJson });
 
   await withHermeticPiHome(async ({ agentDir, projectCwd }) => {
     // Seed PROJECT-scope state.json + hooks.json on disk under the real
@@ -321,7 +322,7 @@ test("HOOK-E2E-02: project-scope SessionStart plugin dispatches via the session_
 
 test("HOOK-E2E-03: WR-05 -- session_start lazy hydrate writes nothing under a pristine project cwd", async () => {
   const runtime = createHooksRuntime();
-  const hooksHydration = createHooksHydration(runtime, { loadState });
+  const hooksHydration = createHooksHydration(runtime, { loadState, readHooksJson });
 
   await withHermeticPiHome(async ({ agentDir, projectCwd }) => {
     // USER scope owns the only SessionStart-declaring plugin; the project
@@ -366,7 +367,7 @@ test("HOOK-E2E-03: WR-05 -- session_start lazy hydrate writes nothing under a pr
 
 test("HOOK-E2E-04: a throwing lazy project hydrate never blocks SessionStart dispatch", async () => {
   const runtime = createHooksRuntime();
-  const hooksHydration = createHooksHydration(runtime, { loadState });
+  const hooksHydration = createHooksHydration(runtime, { loadState, readHooksJson });
 
   await withHermeticPiHome(async ({ agentDir, projectCwd }) => {
     // USER scope owns the SessionStart-declaring plugin, so there IS an

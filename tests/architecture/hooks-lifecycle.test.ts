@@ -29,6 +29,7 @@ import path from "node:path";
 import test from "node:test";
 
 import { createHooksHydration } from "../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
+import { readHooksJson } from "../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { createHooksRuntime } from "../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 
@@ -393,6 +394,7 @@ test("same-runtime reload makes every retained registration inert before argumen
       readRoots.push(extensionRoot);
       return Promise.resolve({ schemaVersion: 2, marketplaces: {} });
     },
+    readHooksJson,
   };
   const registrations: Array<{ readonly event: string; readonly handler: unknown }> = [];
   const messages: unknown[] = [];

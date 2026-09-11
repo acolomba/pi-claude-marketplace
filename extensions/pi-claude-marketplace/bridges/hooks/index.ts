@@ -13,6 +13,7 @@
 export { createHooksHydration, createHooksRouting } from "./event-router.ts";
 
 export type {
+  HooksFileReader,
   HooksHydration,
   HooksHydrationReader,
   HooksRouting,
@@ -21,7 +22,9 @@ export type {
 export { createHooksRuntime } from "./runtime.ts";
 export type { HooksRuntime } from "./runtime.ts";
 
-// LIFE-03 / D-63-02: hooks bridge write/remove primitives. Private helpers
-// (`assertNoSymlinkEscapeInHooksSubtree`, `hookConfigPathFor`) are NOT
-// re-exported -- callers use only the two verbs below.
-export { writeHookConfig, removeHookConfig } from "./stage.ts";
+// LIFE-03 / D-63-02: hooks bridge read/write/remove primitives. Private
+// helpers (`assertNoSymlinkEscapeInHooksSubtree`, `hookConfigPathFor`) are NOT
+// re-exported -- callers use only the three verbs below. D-09-05:
+// `readHooksJson` is the real `HooksFileReader`, reached by the composition
+// root through this barrel.
+export { readHooksJson, writeHookConfig, removeHookConfig } from "./stage.ts";

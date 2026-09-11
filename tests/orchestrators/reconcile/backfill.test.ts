@@ -23,6 +23,7 @@ import { mock, verify } from "strong-mock";
 import {
   createHooksRouting,
   createHooksRuntime,
+  readHooksJson,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
@@ -296,7 +297,7 @@ function backfillOptions(
     pi,
     cwd,
     gitOps,
-    createHooksRouting(createHooksRuntime()),
+    createHooksRouting(createHooksRuntime(), { readHooksJson }),
     createCompletionCache(),
   );
 }
@@ -970,7 +971,7 @@ describe("scanForceInstalledBackfills", () => {
     const { gitOps, clonedUrls } = createOfflineGitOps();
     const ownerRuntime = createHooksRuntime();
     const peerRuntime = createHooksRuntime();
-    const hooksRouting = createHooksRouting(ownerRuntime);
+    const hooksRouting = createHooksRouting(ownerRuntime, { readHooksJson });
     const ownerCache = createCompletionCache();
     const peerCache = createCompletionCache();
     const cachePath = await locations.pluginCacheFile("mp");

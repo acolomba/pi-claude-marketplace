@@ -21,6 +21,7 @@ import {
 import {
   createHooksRouting,
   createHooksRuntime,
+  readHooksJson,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import {
   pluginCloneKey,
@@ -293,7 +294,7 @@ function makeCtx(piOverrides?: { readonly toolNames?: readonly string[] }): {
 async function withHermeticHome<T>(fn: (owner: InstallTestOwner) => Promise<T>): Promise<T> {
   return withHermeticEnvironment("install-", () => {
     const hooksRuntime = createHooksRuntime();
-    const hooksRouting = createHooksRouting(hooksRuntime);
+    const hooksRouting = createHooksRouting(hooksRuntime, { readHooksJson });
     const completionCache = createCompletionCache();
     const transactionControl: InstallTransactionControl = { runPhases };
     const transaction: InstallTransaction = {
@@ -1905,7 +1906,7 @@ for (const precedence of DFEN_PRECEDENCE_CASES) {
             cwd,
             scope: "project",
             completionCache: createCompletionCache(),
-            hooksRouting: createHooksRouting(createHooksRuntime()),
+            hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
           });
           assert.deepEqual(
             reload.notifications.filter((n) => n.severity === "error"),
@@ -2237,7 +2238,7 @@ test("D-103-16 / DFEN-06 / CFG-02: the reload after a locally-declared install p
         cwd,
         scope: "project",
         completionCache: createCompletionCache(),
-        hooksRouting: createHooksRouting(createHooksRuntime()),
+        hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
       });
       assert.deepEqual(reload.notifications, [], "a converged pass says nothing");
 
@@ -5185,7 +5186,7 @@ test("WR-03: installPlugin of a hooks-declaring plugin rebuilds the routing tabl
       const ownerRuntime = createHooksRuntime();
       const peerRuntime = createHooksRuntime();
       const runtimeInstallPlugin = createNodeInstallPlugin(
-        createHooksRouting(ownerRuntime),
+        createHooksRouting(ownerRuntime, { readHooksJson }),
         createCompletionCache(),
       );
       const locations = locationsFor("project", cwd);

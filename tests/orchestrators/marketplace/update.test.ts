@@ -8,6 +8,7 @@ import test from "node:test";
 import {
   createHooksRouting,
   createHooksRuntime,
+  readHooksJson,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import {
   githubSource,
@@ -51,7 +52,7 @@ import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/typ
 
 function createUpdateSinglePlugin(): PluginUpdateFn {
   return createPluginUpdateOperations(
-    createHooksRouting(createHooksRuntime()),
+    createHooksRouting(createHooksRuntime(), { readHooksJson }),
     createCompletionCache(),
   ).pluginUpdate;
 }

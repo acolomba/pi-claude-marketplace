@@ -60,6 +60,7 @@ import lockfile from "proper-lockfile";
 import {
   createHooksRouting,
   createHooksRuntime,
+  readHooksJson,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
@@ -143,7 +144,7 @@ function applyReconcile(
   return applyReconcileWithRouting({
     ...opts,
     completionCache: createCompletionCache(),
-    hooksRouting: createHooksRouting(createHooksRuntime()),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
   });
 }
 
@@ -444,7 +445,7 @@ async function populateRuntimeRoute(
       PreToolUse: [{ hooks: [{ command: opts.command, type: "command" }], matcher: "" }],
     }),
   );
-  const hooksRouting = createHooksRouting(runtime);
+  const hooksRouting = createHooksRouting(runtime, { readHooksJson });
   await hooksRouting.readAndCachePluginHooks({
     cwd,
     hooksJsonPath,
@@ -543,7 +544,8 @@ function applyAfterSelectedStateRace(
     applySelectedReconcile({
       ...opts,
       completionCache: opts.completionCache ?? createCompletionCache(),
-      hooksRouting: opts.hooksRouting ?? createHooksRouting(createHooksRuntime()),
+      hooksRouting:
+        opts.hooksRouting ?? createHooksRouting(createHooksRuntime(), { readHooksJson }),
     });
 }
 
@@ -1794,7 +1796,7 @@ describe("applyReconcile", () => {
     const { gitOps, clonedUrls } = createOfflineGitOps();
     const ownerRuntime = createHooksRuntime();
     const peerRuntime = createHooksRuntime();
-    const hooksRouting = createHooksRouting(ownerRuntime);
+    const hooksRouting = createHooksRouting(ownerRuntime, { readHooksJson });
 
     // act
     await applyReconcileWithRouting({
@@ -3057,7 +3059,7 @@ describe("applyReconcile", () => {
       scope: "project",
       completionCache,
       gitOps,
-      hooksRouting: createHooksRouting(createHooksRuntime()),
+      hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     });
     const retainedRows = await completionCache.getPluginIndex(
       pluginCachePath,
@@ -3144,7 +3146,7 @@ describe("applyReconcile", () => {
     const applyWithReader = createApplyReconcile(reader);
     const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
     const { gitOps, clonedUrls } = createOfflineGitOps();
-    const hooksRouting = createHooksRouting(createHooksRuntime());
+    const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
     const completionCache = createCompletionCache();
 
     // act

@@ -26,6 +26,7 @@ import test from "node:test";
 import {
   createHooksRouting,
   createHooksRuntime,
+  readHooksJson,
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { addMarketplace } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts";
 import { setMarketplaceAutoupdate } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/autoupdate.ts";
@@ -543,7 +544,7 @@ test("WB-01 SC#4 (cross-scope CMP-3 install): project-scope install via user-sco
     const ctx = { ui: { notify: (): void => undefined } } as never;
     const pi = { getAllTools: (): unknown[] => [] } as never;
     const installPlugin = createNodeInstallPlugin(
-      createHooksRouting(createHooksRuntime()),
+      createHooksRouting(createHooksRuntime(), { readHooksJson }),
       createCompletionCache(),
     );
 

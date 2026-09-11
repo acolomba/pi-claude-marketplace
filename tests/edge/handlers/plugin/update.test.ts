@@ -112,6 +112,7 @@ import { test, type TestContext } from "node:test";
 import {
   createHooksRouting,
   createHooksRuntime,
+  readHooksJson,
 } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { SCOPE_TARGET_FLAG } from "../../../../extensions/pi-claude-marketplace/edge/flag-catalog.ts";
 import { makeUpdateHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/update.ts";
@@ -151,7 +152,7 @@ const SKILL_SOURCE = "---\nname: tool\ndescription: A tool skill.\n---\n\nBody.\
 
 /** Give each handler case its own production update owner. */
 function createUpdateHandler(pi: Parameters<typeof makeUpdateHandler>[0]) {
-  const hooksRouting = createHooksRouting(createHooksRuntime());
+  const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
   const { updatePlugins } = createPluginUpdateOperations(hooksRouting, createCompletionCache());
   return makeUpdateHandler(pi, updatePlugins);
 }

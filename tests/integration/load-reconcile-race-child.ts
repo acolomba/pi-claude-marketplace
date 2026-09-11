@@ -15,6 +15,7 @@
 import {
   createHooksRouting,
   createHooksRuntime,
+  readHooksJson,
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { applyReconcile } from "../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
@@ -63,7 +64,7 @@ async function handleMessage(message: unknown): Promise<void> {
       cwd: message.cwd,
       scope: "project",
       completionCache: createCompletionCache(),
-      hooksRouting: createHooksRouting(createHooksRuntime()),
+      hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     });
     sendResult({ ok: true, notifyArgs });
   } catch (err) {

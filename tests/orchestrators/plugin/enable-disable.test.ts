@@ -18,6 +18,7 @@ import lockfile from "proper-lockfile";
 import {
   createHooksRouting,
   createHooksRuntime,
+  readHooksJson,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import { cascadeUnstagePlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
@@ -118,14 +119,14 @@ function makePi(toolNames: readonly string[] = []): ToolInventory {
 
 function createUpdatePlugins() {
   return createPluginUpdateOperations(
-    createHooksRouting(createHooksRuntime()),
+    createHooksRouting(createHooksRuntime(), { readHooksJson }),
     createCompletionCache(),
   ).updatePlugins;
 }
 
 function createReinstallPlugin() {
   return createNodeReinstallPlugin(
-    createHooksRouting(createHooksRuntime()),
+    createHooksRouting(createHooksRuntime(), { readHooksJson }),
     createCompletionCache(),
   );
 }
@@ -139,7 +140,9 @@ function setPluginEnabled(
 function setPluginEnabled(
   opts: EnableDisablePluginOptions,
 ): Promise<EnableDisablePluginOutcome | undefined> {
-  const operation = createNodeSetPluginEnabled(createHooksRouting(createHooksRuntime()));
+  const operation = createNodeSetPluginEnabled(
+    createHooksRouting(createHooksRuntime(), { readHooksJson }),
+  );
   return operation(opts);
 }
 
@@ -161,7 +164,7 @@ async function populateRuntimeRoute(
     }),
     "utf8",
   );
-  const hooksRouting = createHooksRouting(runtime);
+  const hooksRouting = createHooksRouting(runtime, { readHooksJson });
   await hooksRouting.readAndCachePluginHooks({
     cwd,
     hooksJsonPath,
@@ -1103,7 +1106,9 @@ test("publishes a freshly enabled hook only to the supplied runtime after durabl
     });
     const ownerRuntime = createHooksRuntime();
     const peerRuntime = createHooksRuntime();
-    const setPluginEnabledForOwner = createNodeSetPluginEnabled(createHooksRouting(ownerRuntime));
+    const setPluginEnabledForOwner = createNodeSetPluginEnabled(
+      createHooksRouting(ownerRuntime, { readHooksJson }),
+    );
     const configBefore = await readFile(configPath, "utf8");
     const { ctx, notifications } = makeCtx(cwd);
 
@@ -1159,7 +1164,7 @@ for (const { failure, label } of [
         version: "1.2.3",
       });
       const runtime = createHooksRuntime();
-      const hooksRouting = createHooksRouting(runtime);
+      const hooksRouting = createHooksRouting(runtime, { readHooksJson });
       const failingRouting: HooksRouting = {
         ...hooksRouting,
         async readAndCachePluginHooks(): Promise<void> {
@@ -3156,7 +3161,7 @@ test("a config-write failure leaves the state bytes unchanged and a standalone r
     };
     const setPluginEnabledForOwner = createSetPluginEnabled(
       transaction,
-      createHooksRouting(createHooksRuntime()),
+      createHooksRouting(createHooksRuntime(), { readHooksJson }),
     );
     const first = makeCtx(cwd);
 
@@ -3438,7 +3443,7 @@ test("orchestrated partial disable folds a removed hook after MCP cleanup fails"
       JSON.stringify({ mcpServers: { server: { command: "node" } } }),
     );
     const runtime = createHooksRuntime();
-    const hooksRouting = createHooksRouting(runtime);
+    const hooksRouting = createHooksRouting(runtime, { readHooksJson });
     await hooksRouting.readAndCachePluginHooks({
       cwd,
       hooksJsonPath: path.join(locations.hooksDir, "foo", "hooks.json"),
@@ -3536,7 +3541,7 @@ test("a partial disable preserves its committed fold when route publication fail
       JSON.stringify({ mcpServers: { server: { command: "node" } } }),
     );
     const runtime = createHooksRuntime();
-    const hooksRouting = createHooksRouting(runtime);
+    const hooksRouting = createHooksRouting(runtime, { readHooksJson });
     await hooksRouting.readAndCachePluginHooks({
       cwd,
       hooksJsonPath,
@@ -3681,7 +3686,7 @@ test("standalone enable exposes ordered rollback partials and retries without du
     };
     const setPluginEnabledForOwner = createSetPluginEnabled(
       transaction,
-      createHooksRouting(runtime),
+      createHooksRouting(runtime, { readHooksJson }),
     );
     const first = makeCtx(cwd);
 
@@ -3825,7 +3830,7 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable of a BASE-declared plugi
       pi,
       scope: "user",
       completionCache: createCompletionCache(),
-      hooksRouting: createHooksRouting(createHooksRuntime()),
+      hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     });
     const afterFirstReload = await observe();
     await writeFile(
@@ -3864,7 +3869,7 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable of a BASE-declared plugi
       pi,
       scope: "user",
       completionCache: createCompletionCache(),
-      hooksRouting: createHooksRouting(createHooksRuntime()),
+      hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     });
     const afterSecondReload = await observe();
 
@@ -3962,7 +3967,7 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable of a LOCALLY-declared pl
       pi,
       scope: "user",
       completionCache: createCompletionCache(),
-      hooksRouting: createHooksRouting(createHooksRuntime()),
+      hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     });
     const afterFirstReload = await observe();
     const baseAfterReload = await readConfig(configPath);
@@ -4003,7 +4008,7 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable of a LOCALLY-declared pl
       pi,
       scope: "user",
       completionCache: createCompletionCache(),
-      hooksRouting: createHooksRouting(createHooksRuntime()),
+      hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     });
     const afterSecondReload = await observe();
 

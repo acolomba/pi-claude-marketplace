@@ -13,6 +13,7 @@ import {
 import {
   createHooksRouting,
   createHooksRuntime,
+  readHooksJson,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
@@ -106,7 +107,7 @@ async function populateRuntimeRoute(
     }),
     "utf8",
   );
-  const hooksRouting = createHooksRouting(runtime);
+  const hooksRouting = createHooksRouting(runtime, { readHooksJson });
   await hooksRouting.readAndCachePluginHooks({
     cwd,
     hooksJsonPath,
@@ -127,7 +128,7 @@ test("uninstall exposes its required transaction factory", () => {
 /** Construct one production uninstall operation with fresh lifecycle owners. */
 function createUninstallOwner(): UninstallPluginOperation {
   return createNodeUninstallPlugin(
-    createHooksRouting(createHooksRuntime()),
+    createHooksRouting(createHooksRuntime(), { readHooksJson }),
     createCompletionCache(),
   );
 }
@@ -961,7 +962,7 @@ test("D-03-INV :: uninstall invalidates plugin cache for the target marketplace"
       await seedFullPlugin(locations, "mp", "hello", cwd);
       const completionCache = createCompletionCache();
       const uninstallPlugin = createNodeUninstallPlugin(
-        createHooksRouting(createHooksRuntime()),
+        createHooksRouting(createHooksRuntime(), { readHooksJson }),
         completionCache,
       );
 
@@ -3942,7 +3943,7 @@ test("retry proof: uninstall: a refused cache drop leaves the cache file and the
   await withHermeticHome(async () => {
     const completionCache = createCompletionCache();
     const uninstallWithFreshOwner = createNodeUninstallPlugin(
-      createHooksRouting(createHooksRuntime()),
+      createHooksRouting(createHooksRuntime(), { readHooksJson }),
       completionCache,
     );
     const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-retry-cache-drop-"));

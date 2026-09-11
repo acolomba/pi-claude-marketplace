@@ -7,6 +7,7 @@ import test from "node:test";
 import {
   createHooksRouting,
   createHooksRuntime,
+  readHooksJson,
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { pathSource } from "../../extensions/pi-claude-marketplace/domain/source.ts";
 import { createNodeInstallPlugin } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts";
@@ -144,7 +145,7 @@ test("LIFE-01 / LIFE-02 integration: install -> update -> reinstall -> uninstall
     const cwd = await mkdtemp(path.join(tmpdir(), "lifecycle-cascade-"));
     try {
       const hooksRuntime = createHooksRuntime();
-      const hooksRouting = createHooksRouting(hooksRuntime);
+      const hooksRouting = createHooksRouting(hooksRuntime, { readHooksJson });
       const completionCache = createCompletionCache();
       const installPlugin = createNodeInstallPlugin(hooksRouting, completionCache);
       const reinstallPlugin = createNodeReinstallPlugin(hooksRouting, completionCache);

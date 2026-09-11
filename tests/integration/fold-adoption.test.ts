@@ -49,6 +49,7 @@ import test from "node:test";
 import {
   createHooksRouting,
   createHooksRuntime,
+  readHooksJson,
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { addMarketplace } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts";
 import { createNodeInstallPlugin } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts";
@@ -189,7 +190,7 @@ test("CMC-21 / D-13-17 step 1: project-scope plugin installed from user-scope ma
     const listCtx = makeCtx(env.cwd);
     const completionCache = createCompletionCache();
     const installPlugin = createNodeInstallPlugin(
-      createHooksRouting(createHooksRuntime()),
+      createHooksRouting(createHooksRuntime(), { readHooksJson }),
       completionCache,
     );
 
@@ -278,7 +279,7 @@ test("CMC-21 / D-13-17 step 2: when an INDEPENDENT project-scope marketplace is 
     const afterListCtx = makeCtx(env.cwd);
     const completionCache = createCompletionCache();
     const installPlugin = createNodeInstallPlugin(
-      createHooksRouting(createHooksRuntime()),
+      createHooksRouting(createHooksRuntime(), { readHooksJson }),
       completionCache,
     );
 

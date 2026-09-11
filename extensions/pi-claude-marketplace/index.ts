@@ -4,6 +4,7 @@ import {
   createHooksHydration,
   createHooksRouting,
   createHooksRuntime,
+  readHooksJson,
 } from "./bridges/hooks/index.ts";
 import { registerClaudeMarketplaceTools, registerClaudePluginCommand } from "./edge/register.ts";
 import { aggregateDiscoveredResources } from "./orchestrators/discover.ts";
@@ -34,10 +35,10 @@ import type {
 // does not see the un-awaited inner Promise.
 export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Promise<void> {
   const hooksRuntime = createHooksRuntime();
-  const hooksRouting = createHooksRouting(hooksRuntime);
+  const hooksRouting = createHooksRouting(hooksRuntime, { readHooksJson });
   const completionCache = createCompletionCache();
   const pluginUpdateOperations = createPluginUpdateOperations(hooksRouting, completionCache);
-  const hooksHydration = createHooksHydration(hooksRuntime, { loadState });
+  const hooksHydration = createHooksHydration(hooksRuntime, { loadState, readHooksJson });
   const onResourcesDiscover = pi.on.bind(pi) as unknown as (
     event: "resources_discover",
     handler: (

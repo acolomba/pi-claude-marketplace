@@ -772,24 +772,27 @@ test("constructs one runtime and completion cache for edge registration, hook hy
   );
   const runtimeConstructions = source.match(/createHooksRuntime\(\)/g) ?? [];
   const cacheConstructions = source.match(/createCompletionCache\(\)/g) ?? [];
-  const routingConstructions = source.match(/createHooksRouting\(hooksRuntime\)/g) ?? [];
+  const routingConstructions =
+    source.match(/createHooksRouting\(hooksRuntime, \{ readHooksJson \}\)/g) ?? [];
   const updateConstructions =
     source.match(/createPluginUpdateOperations\(hooksRouting, completionCache\)/g) ?? [];
 
   // act
   const hydrationConstruction = source.match(
-    /createHooksHydration\(hooksRuntime, \{ loadState \}\)/g,
+    /createHooksHydration\(hooksRuntime, \{ loadState, readHooksJson \}\)/g,
   );
 
   // assert
   assert.deepStrictEqual(runtimeConstructions, ["createHooksRuntime()"]);
   assert.deepStrictEqual(cacheConstructions, ["createCompletionCache()"]);
-  assert.deepStrictEqual(routingConstructions, ["createHooksRouting(hooksRuntime)"]);
+  assert.deepStrictEqual(routingConstructions, [
+    "createHooksRouting(hooksRuntime, { readHooksJson })",
+  ]);
   assert.deepStrictEqual(updateConstructions, [
     "createPluginUpdateOperations(hooksRouting, completionCache)",
   ]);
   assert.deepStrictEqual(hydrationConstruction, [
-    "createHooksHydration(hooksRuntime, { loadState })",
+    "createHooksHydration(hooksRuntime, { loadState, readHooksJson })",
   ]);
 });
 

@@ -45,6 +45,7 @@ import test from "node:test";
 import {
   createHooksRouting,
   createHooksRuntime,
+  readHooksJson,
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { setMarketplaceAutoupdate } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/autoupdate.ts";
 import { removeMarketplace } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts";
@@ -80,14 +81,14 @@ function createGitOps() {
 
 function createUpdatePlugins() {
   return createPluginUpdateOperations(
-    createHooksRouting(createHooksRuntime()),
+    createHooksRouting(createHooksRuntime(), { readHooksJson }),
     createCompletionCache(),
   ).updatePlugins;
 }
 
 function createReinstallPlugins() {
   return createNodeReinstallPlugins(
-    createHooksRouting(createHooksRuntime()),
+    createHooksRouting(createHooksRuntime(), { readHooksJson }),
     createCompletionCache(),
   );
 }
@@ -154,14 +155,14 @@ const INVOKERS: Record<string, Invoker> = {
   // install ALWAYS carries a resolved scope -> explicit only. install-flow.test.ts M1.
   install: async ({ ctx, pi, cwd }) => {
     await createNodeInstallPlugin(
-      createHooksRouting(createHooksRuntime()),
+      createHooksRouting(createHooksRuntime(), { readHooksJson }),
       createCompletionCache(),
     )({ ctx, pi, scope: "project", cwd, marketplace: NAME, plugin: "anything" });
   },
   // uninstall. uninstall.test.ts ATTR-04 / D-03.
   uninstall: async ({ ctx, pi, cwd, mode }) => {
     await createNodeUninstallPlugin(
-      createHooksRouting(createHooksRuntime()),
+      createHooksRouting(createHooksRuntime(), { readHooksJson }),
       createCompletionCache(),
     )({
       ctx,

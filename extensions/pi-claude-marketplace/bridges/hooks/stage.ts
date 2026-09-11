@@ -1,6 +1,6 @@
 // bridges/hooks/stage.ts
 //
-// Hooks bridge write/remove primitives (LIFE-03 / D-63-02).
+// Hooks bridge read/write/remove primitives (LIFE-03 / D-63-02).
 //
 // The hooks bridge owns exactly one file per installed plugin:
 //   <scopeRoot>/pi-claude-marketplace/hooks/<plugin>/hooks.json
@@ -12,7 +12,7 @@
 // `assertSafeName` guard on the plugin name. `removeHookConfig` is a single
 // `fs.rm(..., { recursive: true, force: true })` and is idempotent (NFR-3).
 
-import { lstat, readdir, readlink, realpath, rm } from "node:fs/promises";
+import { lstat, readFile, readdir, readlink, realpath, rm } from "node:fs/promises";
 import path from "node:path";
 
 import { assertSafeName } from "../../domain/name.ts";
@@ -41,6 +41,23 @@ export interface HooksTreeInspector {
  */
 export function hookConfigPathFor(locations: ScopedLocations, plugin: string): string {
   return path.join(locations.hooksDir, plugin, "hooks.json");
+}
+
+/**
+ * The real implementation of the hooks bridge's read port (`HooksFileReader`):
+ * one utf-8 read of the path it is given and nothing else.
+ *
+ * The composition root supplies it to both hooks factories and it is never
+ * defaulted into a parameter (D-09-05), so a call site that forgets the port
+ * fails to compile rather than falling back to a live filesystem boundary.
+ *
+ * NFR-10: the path arrives already contained. This function performs no
+ * resolution, joining or normalization, so containment stays where it is --
+ * the caller's `assertPathInside` chokepoint -- and an injected reader buys no
+ * path authority.
+ */
+export function readHooksJson(hooksJsonPath: string): Promise<string> {
+  return readFile(hooksJsonPath, "utf8");
 }
 
 /**

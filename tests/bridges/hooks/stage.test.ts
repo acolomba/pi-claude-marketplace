@@ -19,6 +19,7 @@ import test from "node:test";
 import {
   createWriteHookConfig,
   hookConfigPathFor,
+  readHooksJson,
   removeHookConfig,
   writeHookConfig,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/stage.ts";
@@ -870,6 +871,39 @@ test("rejects an unsafe plugin name before removal", async () => {
         return true;
       },
     );
+  } finally {
+    await rm(scopeRoot, { recursive: true, force: true, maxRetries: 3 });
+  }
+});
+
+test("reads back the exact bytes written to a hooks.json path", async () => {
+  const { scopeRoot } = await allocateCasePaths("hooks-stage-read-bytes-");
+  try {
+    // arrange
+    const hooksJsonPath = path.join(scopeRoot, "hooks.json");
+    await writeFile(hooksJsonPath, EXPECTED_HOOKS_BYTES, "utf8");
+
+    // act
+    const raw = await readHooksJson(hooksJsonPath);
+
+    // assert
+    assert.strictEqual(raw, EXPECTED_HOOKS_BYTES);
+  } finally {
+    await rm(scopeRoot, { recursive: true, force: true, maxRetries: 3 });
+  }
+});
+
+test("rejects when the hooks.json path does not exist", async () => {
+  const { scopeRoot } = await allocateCasePaths("hooks-stage-read-missing-");
+  try {
+    // arrange
+    const absentPath = path.join(scopeRoot, "absent", "hooks.json");
+
+    // act & assert
+    await assert.rejects(readHooksJson(absentPath), (error: unknown) => {
+      assert.strictEqual(filesystemErrorCode(error), "ENOENT");
+      return true;
+    });
   } finally {
     await rm(scopeRoot, { recursive: true, force: true, maxRetries: 3 });
   }

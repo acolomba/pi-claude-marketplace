@@ -47,6 +47,7 @@ import { It, mock, verify, when } from "strong-mock";
 import {
   createHooksRouting,
   createHooksRuntime,
+  readHooksJson,
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import {
   registerClaudeMarketplaceTools,
@@ -273,7 +274,7 @@ function createEdgeDeps(
  */
 function registerCommandWithCache(
   completionCache: CompletionCache,
-  hooksRouting = createHooksRouting(createHooksRuntime()),
+  hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson }),
   importClaudeSettings?: ImportDelegate,
   expectedNotifications = 0,
   gitOps?: EdgeDeps["gitOps"],
@@ -412,7 +413,7 @@ describe("registerClaudePluginCommand", () => {
       value: cwd,
       reads: 1,
     });
-    const hooksRouting = createHooksRouting(createHooksRuntime());
+    const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
     let forwardedHooksRouting: unknown;
     const importClaudeSettings: ImportDelegate = (options) => {
       forwardedHooksRouting = Reflect.get(options, "hooksRouting");
@@ -551,7 +552,7 @@ describe("registerClaudePluginCommand", () => {
     await rm(path.dirname(path.dirname(pluginCachePath)), { force: true, recursive: true });
     const owner = registerCommandWithCache(
       completionCache,
-      createHooksRouting(createHooksRuntime()),
+      createHooksRouting(createHooksRuntime(), { readHooksJson }),
       undefined,
       2,
       createBootstrapGitOps(sourceTree),
@@ -676,7 +677,7 @@ test("rebuilds completion rows through the cache that owns a successful register
   await rm(cachePath, { force: true });
   const owner = registerCommandWithCache(
     ownerCache,
-    createHooksRouting(createHooksRuntime()),
+    createHooksRouting(createHooksRuntime(), { readHooksJson }),
     undefined,
     1,
   );
@@ -766,7 +767,7 @@ test("rebuilds completion rows through the cache that owns a successful register
   await rm(unrelatedCachePath, { force: true });
   const owner = registerCommandWithCache(
     ownerCache,
-    createHooksRouting(createHooksRuntime()),
+    createHooksRouting(createHooksRuntime(), { readHooksJson }),
     undefined,
     1,
   );
@@ -874,7 +875,7 @@ test("rebuilds completion rows through the cache that owns a successful register
   await rm(unrelatedCachePath, { force: true });
   const owner = registerCommandWithCache(
     ownerCache,
-    createHooksRouting(createHooksRuntime()),
+    createHooksRouting(createHooksRuntime(), { readHooksJson }),
     undefined,
     1,
   );
@@ -978,7 +979,7 @@ test("rebuilds completion rows through the cache that owns a successful register
   await rm(unrelatedCachePath, { force: true });
   const owner = registerCommandWithCache(
     ownerCache,
-    createHooksRouting(createHooksRuntime()),
+    createHooksRouting(createHooksRuntime(), { readHooksJson }),
     undefined,
     2,
   );
@@ -1094,7 +1095,7 @@ test("rebuilds completion rows through the cache that owns a successful register
   await rm(cachePath, { force: true });
   const owner = registerCommandWithCache(
     ownerCache,
-    createHooksRouting(createHooksRuntime()),
+    createHooksRouting(createHooksRuntime(), { readHooksJson }),
     undefined,
     1,
   );
@@ -1198,7 +1199,7 @@ test("rebuilds completion rows through the cache that owns a successful register
   await rm(unrelatedCachePath, { force: true });
   const owner = registerCommandWithCache(
     ownerCache,
-    createHooksRouting(createHooksRuntime()),
+    createHooksRouting(createHooksRuntime(), { readHooksJson }),
     undefined,
     1,
   );

@@ -7,6 +7,7 @@ import { test } from "node:test";
 import {
   createHooksRouting,
   createHooksRuntime,
+  readHooksJson,
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { registerClaudePluginCommand } from "../../extensions/pi-claude-marketplace/edge/register.ts";
 import { createPluginUpdateOperations } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts";
@@ -119,7 +120,7 @@ function registerImportCommand(cwd: string, gitOps: GitOps) {
     { name: "subagent" },
     { name: "mcp", sourceInfo: { source: "pi-mcp-adapter" } },
   ]);
-  const hooksRouting = createHooksRouting(createHooksRuntime());
+  const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
   const completionCache = createCompletionCache();
   registerClaudePluginCommand(
     mock.pi,

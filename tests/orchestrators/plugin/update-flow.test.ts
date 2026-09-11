@@ -21,6 +21,7 @@ import { GENERATED_AGENT_PREFIX } from "../../../extensions/pi-claude-marketplac
 import {
   createHooksRouting,
   createHooksRuntime,
+  readHooksJson,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import {
   pluginCloneKey,
@@ -77,7 +78,7 @@ import type {
 
 function createUpdateOperations() {
   return createPluginUpdateOperations(
-    createHooksRouting(createHooksRuntime()),
+    createHooksRouting(createHooksRuntime(), { readHooksJson }),
     createCompletionCache(),
   );
 }
@@ -741,7 +742,7 @@ test("PUP-3: version equality -> outcome.partition='unchanged'; no bridge state 
       const completionCache = createCompletionCache();
       const drop = testContext.mock.method(completionCache, "dropMarketplaceCache");
       const operations = createPluginUpdateOperations(
-        createHooksRouting(createHooksRuntime()),
+        createHooksRouting(createHooksRuntime(), { readHooksJson }),
         completionCache,
       );
 
@@ -808,7 +809,7 @@ test("PUP-4: source overridden to unsupported npm -> outcome.partition='skipped'
       const completionCache = createCompletionCache();
       const drop = testContext.mock.method(completionCache, "dropMarketplaceCache");
       const operations = createPluginUpdateOperations(
-        createHooksRouting(createHooksRuntime()),
+        createHooksRouting(createHooksRuntime(), { readHooksJson }),
         completionCache,
       );
 
@@ -2317,7 +2318,7 @@ test("PUP-6 phase-3 failure: bridge commit throws -> aggregate error carries 'pl
       const completionCache = createCompletionCache();
       const drop = testContext.mock.method(completionCache, "dropMarketplaceCache");
       const operations = createPluginUpdateOperations(
-        createHooksRouting(createHooksRuntime()),
+        createHooksRouting(createHooksRuntime(), { readHooksJson }),
         completionCache,
       );
       await operations.updatePlugins({
@@ -3565,7 +3566,7 @@ test("successful update finalizes routes before dropping only its captured cache
 
       const completionCache = createCompletionCache();
       const peerCache = createCompletionCache();
-      const hooksRouting = createHooksRouting(createHooksRuntime());
+      const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
       const events: string[] = [];
       const rebuildRoutingTables = hooksRouting.rebuildRoutingTables.bind(hooksRouting);
       testContext.mock.method(hooksRouting, "rebuildRoutingTables", () => {
@@ -3673,7 +3674,7 @@ test("dropCache-fail: captured cache failure stays silent after successful updat
       const { ctx, pi, notifications } = makeCtx();
       const completionCache = createCompletionCache();
       const operations = createPluginUpdateOperations(
-        createHooksRouting(createHooksRuntime()),
+        createHooksRouting(createHooksRuntime(), { readHooksJson }),
         completionCache,
       );
       await operations.updatePlugins({
@@ -4909,7 +4910,7 @@ test("DFEN-07 / D-103-10: update against a flipped defaultEnabled moves the vers
       // disabled record leaves empty.
       const seed = makeCtx();
       const installPlugin = createNodeInstallPlugin(
-        createHooksRouting(createHooksRuntime()),
+        createHooksRouting(createHooksRuntime(), { readHooksJson }),
         createCompletionCache(),
       );
       await installPlugin({
@@ -5031,7 +5032,7 @@ test("DFEN-08: a declared-true entry and a silent entry render identical update 
       // apply pass both set. The whole point is that it changes nothing for two
       // of the three.
       const installPlugin = createNodeInstallPlugin(
-        createHooksRouting(createHooksRuntime()),
+        createHooksRouting(createHooksRuntime(), { readHooksJson }),
         createCompletionCache(),
       );
       const install = async (plugin: string): Promise<void> => {
@@ -5889,7 +5890,7 @@ test("WR-03: one update owner refreshes direct and cascade routes without leakin
     const cwd = await mkdtemp(path.join(tmpdir(), "update-wr03-"));
     try {
       const runtime = createHooksRuntime();
-      const hooksRouting = createHooksRouting(runtime);
+      const hooksRouting = createHooksRouting(runtime, { readHooksJson });
       const operations = createPluginUpdateOperations(hooksRouting, createCompletionCache());
       const peerRuntime = createHooksRuntime();
       const locations = locationsFor("user", cwd);
@@ -8886,7 +8887,7 @@ test("NREG-01: a clean update outcome omits the notes key entirely", async () =>
 test("owns plugin update flow composition", () => {
   // arrange
   const operations = createPluginUpdateOperations(
-    createHooksRouting(createHooksRuntime()),
+    createHooksRouting(createHooksRuntime(), { readHooksJson }),
     createCompletionCache(),
   );
 
@@ -8908,7 +8909,7 @@ test("routes cascade-safe preflight outcomes through the flow owner", async () =
         manifestPlugins: { present: { version: "1.0.0" } },
       });
       const operations = createPluginUpdateOperations(
-        createHooksRouting(createHooksRuntime()),
+        createHooksRouting(createHooksRuntime(), { readHooksJson }),
         createCompletionCache(),
       );
       process.chdir(cwd);
@@ -8950,7 +8951,7 @@ test("PUP-6 happy: flow composes preflight, swap, state, tree, and notification"
       });
       const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 4);
       const operations = createPluginUpdateOperations(
-        createHooksRouting(createHooksRuntime()),
+        createHooksRouting(createHooksRuntime(), { readHooksJson }),
         createCompletionCache(),
       );
 

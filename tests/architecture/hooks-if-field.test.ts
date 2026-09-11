@@ -6,6 +6,7 @@ import {
   compileIfPredicate,
   MATCH_ALL_IF,
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts";
+import { readHooksJson } from "../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { createRoutingStateOperations } from "../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
 import { createHooksRuntime } from "../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import { parseHooksConfig } from "../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
@@ -15,7 +16,7 @@ test("parseHooksConfig side-map flows into RoutingEntry predicates in declaratio
   // arrange
   const runtime = createHooksRuntime();
   const routingState = createRoutingStateOperations(runtime);
-  const hooksRouting = createHooksRouting(runtime);
+  const hooksRouting = createHooksRouting(runtime, { readHooksJson });
   const compileContext = {
     homedir: "/home/plugin-user",
     cwd: "/workspace/plugin",

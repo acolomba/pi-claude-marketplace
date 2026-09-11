@@ -102,6 +102,7 @@ import { test, type TestContext } from "node:test";
 import {
   createHooksRouting,
   createHooksRuntime,
+  readHooksJson,
 } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { makeReinstallHandler as makeReinstallHandlerWithOperation } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/reinstall.ts";
 import { createNodeReinstallPlugins } from "../../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts";
@@ -125,7 +126,10 @@ function makeReinstallHandler(
 ): ReturnType<typeof makeReinstallHandlerWithOperation> {
   return makeReinstallHandlerWithOperation(
     pi,
-    createNodeReinstallPlugins(createHooksRouting(createHooksRuntime()), createCompletionCache()),
+    createNodeReinstallPlugins(
+      createHooksRouting(createHooksRuntime(), { readHooksJson }),
+      createCompletionCache(),
+    ),
   );
 }
 
@@ -442,7 +446,7 @@ test("re-materialises only the named plugin when a plugin reference is supplied 
   });
   const calls: ReinstallPluginsOptions[] = [];
   const reinstallPlugins = createNodeReinstallPlugins(
-    createHooksRouting(createHooksRuntime()),
+    createHooksRouting(createHooksRuntime(), { readHooksJson }),
     createCompletionCache(),
   );
   const reinstallPluginsSpy: ReinstallPluginsFn = async (opts) => {

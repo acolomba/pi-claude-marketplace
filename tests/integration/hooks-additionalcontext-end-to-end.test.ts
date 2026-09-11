@@ -29,6 +29,7 @@ import { test } from "node:test";
 import {
   createHooksHydration,
   createHooksRuntime,
+  readHooksJson,
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import {
   loadState,
@@ -136,7 +137,7 @@ function makeBeforeAgentStartEvent(systemPrompt: string): BeforeAgentStartEvent 
 
 test("HOOK-E2E-03: SessionStart hook stdout additionalContext reaches before_agent_start.systemPrompt end-to-end", async () => {
   const runtime = createHooksRuntime();
-  const hooksHydration = createHooksHydration(runtime, { loadState });
+  const hooksHydration = createHooksHydration(runtime, { loadState, readHooksJson });
 
   await withHermeticPiHome(async ({ extensionRoot, sourcesPluginRoot }) => {
     // Lay out the source plugin tree the way the install pipeline would
@@ -264,7 +265,7 @@ JSON
 
 test("HOOK-E2E-04: registerHooksBridge clears the pending buffer on /reload (re-entry)", async () => {
   const runtime = createHooksRuntime();
-  const hooksHydration = createHooksHydration(runtime, { loadState });
+  const hooksHydration = createHooksHydration(runtime, { loadState, readHooksJson });
 
   await withHermeticPiHome(async ({ extensionRoot, sourcesPluginRoot }) => {
     const handlersDir = path.join(sourcesPluginRoot, "hooks-handlers");

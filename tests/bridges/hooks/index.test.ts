@@ -4,11 +4,13 @@ import { describe, test } from "node:test";
 import { createHooksHydration as definingCreateHooksHydration } from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
 import {
   createHooksHydration,
+  readHooksJson,
   removeHookConfig,
   writeHookConfig,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { createHooksRuntime as definingCreateHooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import {
+  readHooksJson as definingReadHooksJson,
   removeHookConfig as definingRemoveHookConfig,
   writeHookConfig as definingWriteHookConfig,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/stage.ts";
@@ -20,6 +22,7 @@ type Public<Name extends keyof typeof HooksBarrel> = Name;
 
 void ({
   loadState: () => Promise.resolve({ schemaVersion: 2, marketplaces: {} }),
+  readHooksJson: () => Promise.resolve("{}"),
 } satisfies HooksHydrationReader);
 
 // @ts-expect-error the barrel keeps accumulateStream internal
@@ -92,6 +95,19 @@ describe("createHooksRuntime", () => {
 
     // assert
     assert.strictEqual(hooksCreateHooksRuntime, expectedCreateHooksRuntime);
+  });
+});
+
+describe("readHooksJson", () => {
+  test("re-exports the defining binding", () => {
+    // arrange
+    const expectedReadHooksJson = definingReadHooksJson;
+
+    // act
+    const hooksReadHooksJson = readHooksJson;
+
+    // assert
+    assert.strictEqual(hooksReadHooksJson, expectedReadHooksJson);
   });
 });
 

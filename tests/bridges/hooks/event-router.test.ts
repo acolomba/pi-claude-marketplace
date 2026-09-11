@@ -27,6 +27,7 @@ import {
   createHooksRouting,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
 import { MATCH_ALL_IF } from "../../../extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts";
+import { readHooksJson } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import {
   createRoutingStateOperations,
   type RoutingEntry,
@@ -202,6 +203,7 @@ test(
 
         return loadState(extensionRoot);
       },
+      readHooksJson,
     });
     const userHooksPath = path.join(userLocations.hooksDir, "user-hooks", "hooks.json");
     const projectHooksPath = path.join(projectLocations.hooksDir, "project-hooks", "hooks.json");
@@ -968,7 +970,7 @@ test("readAndCachePluginHooks reads and parses one case-owned config", async (t)
   );
 
   // act
-  await createHooksRouting(runtime).readAndCachePluginHooks({
+  await createHooksRouting(runtime, { readHooksJson }).readAndCachePluginHooks({
     scope: "project",
     marketplace: "catalog",
     plugin: "reader",
@@ -1015,7 +1017,7 @@ test("runtime-bound routing mutations update only their supplied lifecycle owner
   );
   const ownerRuntime = createHooksRuntime();
   const peerRuntime = createHooksRuntime();
-  const routing = createHooksRouting(ownerRuntime);
+  const routing = createHooksRouting(ownerRuntime, { readHooksJson });
 
   // act
   await routing.readAndCachePluginHooks({
@@ -1052,7 +1054,7 @@ test("readAndCachePluginHooks leaves the cache unchanged after a read failure", 
   t.after(() => rm(root, { recursive: true, force: true }));
 
   // act
-  await createHooksRouting(runtime).readAndCachePluginHooks({
+  await createHooksRouting(runtime, { readHooksJson }).readAndCachePluginHooks({
     scope: "project",
     marketplace: "catalog",
     plugin: "missing",
@@ -1075,7 +1077,7 @@ test("readAndCachePluginHooks leaves the cache unchanged after a parse failure",
   await writeFile(hooksJsonPath, "{", "utf8");
 
   // act
-  await createHooksRouting(runtime).readAndCachePluginHooks({
+  await createHooksRouting(runtime, { readHooksJson }).readAndCachePluginHooks({
     scope: "project",
     marketplace: "catalog",
     plugin: "invalid",
@@ -1218,7 +1220,7 @@ test("rebuildRoutingTables preserves stable plugin and declaration order in all 
   );
 
   // act
-  createHooksRouting(runtime).rebuildRoutingTables();
+  createHooksRouting(runtime, { readHooksJson }).rebuildRoutingTables();
   const table = Array.from(runtime.routingTableEntries(), ([event, entries]) => ({
     event,
     entries: entries.map((entry) => ({
@@ -1308,7 +1310,7 @@ test("rebuildRoutingTables tolerates valid record keys and sparse arrays defensi
   );
 
   // act
-  createHooksRouting(runtime).rebuildRoutingTables();
+  createHooksRouting(runtime, { readHooksJson }).rebuildRoutingTables();
   const table = Array.from(runtime.routingTableEntries(), ([event, entries]) => ({
     event,
     commands: entries.map((entry) => entry.handlerDecl.command),
@@ -1424,8 +1426,10 @@ test(
     await saveState(locations.extensionRoot, state);
 
     // act
-    await createHooksHydration(runtime, { loadState }).hydrateProjectScopeForCwd(root);
-    createHooksRouting(runtime).rebuildRoutingTables();
+    await createHooksHydration(runtime, { loadState, readHooksJson }).hydrateProjectScopeForCwd(
+      root,
+    );
+    createHooksRouting(runtime, { readHooksJson }).rebuildRoutingTables();
     const cache = Array.from(runtime.parsedConfigEntries().values()).map((entry) => ({
       scope: entry.scope,
       marketplace: entry.marketplace,
@@ -1477,6 +1481,7 @@ test(
         readRoots.push(extensionRoot);
         return Promise.reject(loadError);
       },
+      readHooksJson,
     };
     const config = makeConfig([{ event: "PreToolUse", handlers: 1, prefix: "cached" }]);
     const runtime = createHooksRuntime();
@@ -1560,6 +1565,7 @@ test(
 
         return Promise.resolve({ schemaVersion: 2, marketplaces: {} });
       },
+      readHooksJson,
     };
     const previousDebug = process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
     process.env.PI_CLAUDE_MARKETPLACE_DEBUG = "1";
@@ -1620,6 +1626,7 @@ test("same-runtime registration invalidates an earlier callback before lazy hydr
       readRoots.push(extensionRoot);
       return Promise.resolve({ schemaVersion: 2, marketplaces: {} });
     },
+    readHooksJson,
   };
   const runtime = createHooksRuntime();
   const hooksHydration = createHooksHydration(runtime, hydrationReader);
@@ -1713,6 +1720,7 @@ test(
 
         return Promise.resolve({ schemaVersion: 2, marketplaces: {} });
       },
+      readHooksJson,
     };
     const runtime = createHooksRuntime();
     const hydration = createHooksHydration(runtime, reader);
@@ -1756,6 +1764,7 @@ test(
             : { schemaVersion: 2, marketplaces: {} },
         );
       },
+      readHooksJson,
     };
     const runtime = createHooksRuntime();
     const hydration = createHooksHydration(runtime, reader);
@@ -1811,6 +1820,7 @@ test("runtime hydration stops before mirroring when registration advances its ge
 
       return Promise.resolve({ schemaVersion: 2, marketplaces: {} });
     },
+    readHooksJson,
   };
   const runtime = createHooksRuntime();
   const hydration = createHooksHydration(runtime, reader);
@@ -1852,6 +1862,7 @@ test(
 
         return Promise.resolve({ schemaVersion: 2, marketplaces: {} });
       },
+      readHooksJson,
     };
     const runtime = createHooksRuntime();
     const hydration = createHooksHydration(runtime, reader);
@@ -1891,6 +1902,7 @@ test("project hydration parses a plugin's hooks.json into the parsed-config cach
           : { schemaVersion: 2, marketplaces: {} },
       );
     },
+    readHooksJson,
   };
   const runtime = createHooksRuntime();
 
@@ -1929,6 +1941,7 @@ test("project hydration stops before parsing a plugin's hooks.json read under a 
       stateRead = true;
       return Promise.resolve(fixture.state);
     },
+    readHooksJson,
   };
   const runtime = createHooksRuntime();
   // KNOWN CONFLICT, recorded rather than hidden: `D-08-A04` says "do not couple
@@ -1998,6 +2011,7 @@ test(
             : { schemaVersion: 2, marketplaces: {} },
         );
       },
+      readHooksJson,
     };
     const runtime = createHooksRuntime();
     let advanceOnTheSessionStartRead = false;
@@ -2050,6 +2064,7 @@ test("separate runtimes keep their current callbacks live and route through thei
     loadState(): Promise<ExtensionState> {
       return Promise.resolve({ schemaVersion: 2, marketplaces: {} });
     },
+    readHooksJson,
   };
   const firstRuntime = createHooksRuntime();
   const secondRuntime = createHooksRuntime();
@@ -2140,7 +2155,7 @@ test(
     const context = makeContext(projectRoot, root);
 
     // act
-    await createHooksHydration(runtime, { loadState }).registerHooksBridge(pi, {
+    await createHooksHydration(runtime, { loadState, readHooksJson }).registerHooksBridge(pi, {
       ctx: context,
       cwd: projectRoot,
     });
@@ -2202,7 +2217,7 @@ test(
     const context = makeContext(projectRoot, root);
 
     // act
-    await createHooksHydration(runtime, { loadState }).registerHooksBridge(pi, {
+    await createHooksHydration(runtime, { loadState, readHooksJson }).registerHooksBridge(pi, {
       ctx: context,
       cwd: projectRoot,
     });
@@ -2265,7 +2280,7 @@ test(
       });
     };
 
-    await createHooksHydration(runtime, { loadState }).registerHooksBridge(pi, {
+    await createHooksHydration(runtime, { loadState, readHooksJson }).registerHooksBridge(pi, {
       ctx: context,
       cwd: factoryRoot,
       executor,
@@ -2339,7 +2354,7 @@ test("session_start contains a lazy project cwd failure and still delegates safe
     return Promise.resolve({ kind: "noop" });
   };
 
-  await createHooksHydration(runtime, { loadState }).registerHooksBridge(pi, {
+  await createHooksHydration(runtime, { loadState, readHooksJson }).registerHooksBridge(pi, {
     ctx: context,
     cwd: projectRoot,
     executor,
@@ -2388,6 +2403,7 @@ const EMPTY_STATE_READER: HooksHydrationReader = {
   loadState(): Promise<ExtensionState> {
     return Promise.resolve({ schemaVersion: 2, marketplaces: {} });
   },
+  readHooksJson,
 };
 
 function preToolUseEntry(pluginId: string, cwd: string): RoutingEntry {

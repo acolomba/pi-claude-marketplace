@@ -24,6 +24,7 @@ import {
 import {
   createHooksRouting,
   createHooksRuntime,
+  readHooksJson,
   removeHookConfig,
   writeHookConfig,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
@@ -106,14 +107,14 @@ interface NotifyRecord {
 
 function reinstallPlugin(opts: ReinstallPluginOptions) {
   return createNodeReinstallPlugin(
-    createHooksRouting(createHooksRuntime()),
+    createHooksRouting(createHooksRuntime(), { readHooksJson }),
     createCompletionCache(),
   )(opts);
 }
 
 function reinstallPlugins(opts: ReinstallPluginsOptions) {
   return createNodeReinstallPlugins(
-    createHooksRouting(createHooksRuntime()),
+    createHooksRouting(createHooksRuntime(), { readHooksJson }),
     createCompletionCache(),
   )(opts);
 }
@@ -125,12 +126,15 @@ function createCompletionCacheWithDrop(
 }
 
 function reinstallPluginWithCache(opts: ReinstallPluginOptions, completionCache: CompletionCache) {
-  return createNodeReinstallPlugin(createHooksRouting(createHooksRuntime()), completionCache)(opts);
+  return createNodeReinstallPlugin(
+    createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    completionCache,
+  )(opts);
 }
 
 test("owns direct and bulk plugin reinstall factories", () => {
   // arrange
-  const hooksRouting = createHooksRouting(createHooksRuntime());
+  const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
   const completionCache = createCompletionCache();
 
   // act
@@ -288,7 +292,7 @@ async function seedMarketplace(opts: {
   if (opts.install === true) {
     const { ctx, pi } = makeCtx({ toolNames: ["subagent", "mcp"] });
     const installPlugin = createNodeInstallPlugin(
-      createHooksRouting(createHooksRuntime()),
+      createHooksRouting(createHooksRuntime(), { readHooksJson }),
       createCompletionCache(),
     );
     await installPlugin({
@@ -2519,7 +2523,7 @@ test("WR-03: reinstallPlugin round-trips the plugin's routing-table entries with
     try {
       const ownerRuntime = createHooksRuntime();
       const peerRuntime = createHooksRuntime();
-      const hooksRouting = createHooksRouting(ownerRuntime);
+      const hooksRouting = createHooksRouting(ownerRuntime, { readHooksJson });
       const { pluginRoot } = await seedMarketplace({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
@@ -3006,7 +3010,7 @@ async function seedInstalledGitSourcePlugin(opts: {
   const { gitOps } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
   const { ctx, pi } = makeCtx();
   const installPlugin = createNodeInstallPlugin(
-    createHooksRouting(createHooksRuntime()),
+    createHooksRouting(createHooksRuntime(), { readHooksJson }),
     createCompletionCache(),
   );
   await installPlugin({
@@ -5742,7 +5746,7 @@ function createRetryReinstall(
   });
   return createReinstallPlugin(
     reinstallTransactionWith(operations),
-    createHooksRouting(createHooksRuntime()),
+    createHooksRouting(createHooksRuntime(), { readHooksJson }),
     completionCache,
   );
 }
@@ -7370,7 +7374,7 @@ test("retry proof: reinstall: a post-save hook-cache read failure stays silent a
         },
         skill: "new skill",
       });
-      const hooksRouting = createHooksRouting(createHooksRuntime());
+      const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
       const originalHydrate = hooksRouting.readAndCachePluginHooks.bind(hooksRouting);
       t.mock.method(
         hooksRouting,
@@ -7488,7 +7492,7 @@ test("retry proof: reinstall: a completion-cache maintenance failure notes the d
         },
       );
       const reinstall = createNodeReinstallPlugin(
-        createHooksRouting(createHooksRuntime()),
+        createHooksRouting(createHooksRuntime(), { readHooksJson }),
         completionCache,
       );
       const { ctx, notifications, pi } = makeCtx({ toolNames: ["mcp", "subagent"] });
@@ -7899,7 +7903,7 @@ test("PRL-08 / PRL-11: preserves state, tree, cleanup, and exact notification th
       assert.ok(beforeRecord !== undefined);
       const { ctx, pi, notifications } = makeCtx({ toolNames: ["subagent", "mcp"] });
       const reinstallPlugin = createNodeReinstallPlugin(
-        createHooksRouting(createHooksRuntime()),
+        createHooksRouting(createHooksRuntime(), { readHooksJson }),
         createCompletionCache(),
       );
 

@@ -33,6 +33,7 @@ import { mock, verify, when } from "strong-mock";
 import {
   createHooksRouting,
   createHooksRuntime,
+  readHooksJson,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import { importClaudeSettings as importClaudeSettingsWithCache } from "../../../extensions/pi-claude-marketplace/orchestrators/import/execute.ts";
@@ -428,7 +429,7 @@ test("declares plural cardinality when import produces zero rows", async (t) => 
       loadState: () => Promise.resolve(recordedState([])),
     }),
     pi,
-    hooksRouting: createHooksRouting(createHooksRuntime()),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     selectedScopes: ["user"],
   });
 
@@ -494,7 +495,7 @@ test("records a marketplace the state does not carry and installs its declared p
     }),
     gitOps,
     pi,
-    hooksRouting: createHooksRouting(createHooksRuntime()),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     selectedScopes: ["user"],
   });
 
@@ -516,8 +517,8 @@ test("passes the marketplace add an options object that carries the git port onl
   const withPort = createNotificationBoundary(1, 2);
   const withoutPort = createNotificationBoundary(1, 2);
   const gitOps = createOfflineGitOps();
-  const withRouting = createHooksRouting(createHooksRuntime());
-  const withoutRouting = createHooksRouting(createHooksRuntime());
+  const withRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
+  const withoutRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
   // The whole options object, not just its `gitOps` value: a conditional spread
   // OMITS the key, and an omitted key is a different object from one holding an
   // explicit undefined.
@@ -651,7 +652,7 @@ for (const { addMarketplace, cause, title } of [
         loadState: () => Promise.resolve(recordedState([])),
       }),
       pi,
-      hooksRouting: createHooksRouting(createHooksRuntime()),
+      hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
       selectedScopes: ["user"],
     });
 
@@ -740,7 +741,7 @@ for (const { addMarketplace, cause, title } of [
         loadState: () => Promise.resolve(recordedState([])),
       }),
       pi,
-      hooksRouting: createHooksRouting(createHooksRuntime()),
+      hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
       selectedScopes: ["user"],
     });
 
@@ -796,7 +797,7 @@ test("ensures every marketplace before installing any plugin and never installs 
       loadState: () => Promise.resolve(recordedState([])),
     }),
     pi,
-    hooksRouting: createHooksRouting(createHooksRuntime()),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     selectedScopes: ["project"],
   });
 
@@ -853,7 +854,7 @@ for (const { declared, stored, title } of [
           ),
       }),
       pi,
-      hooksRouting: createHooksRouting(createHooksRuntime()),
+      hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
       selectedScopes: ["user"],
     });
 
@@ -923,7 +924,7 @@ for (const { cause, declared, stored, title } of [
           ),
       }),
       pi,
-      hooksRouting: createHooksRouting(createHooksRuntime()),
+      hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
       selectedScopes: ["project"],
     });
 
@@ -986,7 +987,7 @@ test("fails a recorded marketplace whose stored source is unrecognized and rende
         ),
     }),
     pi,
-    hooksRouting: createHooksRouting(createHooksRuntime()),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     selectedScopes: ["user"],
   });
 
@@ -1042,7 +1043,7 @@ test("warns about a plugin whose marketplace declares no supported source and re
       loadState: () => Promise.resolve(recordedState([])),
     }),
     pi,
-    hooksRouting: createHooksRouting(createHooksRuntime()),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     selectedScopes: ["user"],
   });
 
@@ -1077,7 +1078,7 @@ test("carries the settings loader's own diagnostics onto the result", async (t) 
       loadState: () => Promise.resolve(recordedState([])),
     }),
     pi,
-    hooksRouting: createHooksRouting(createHooksRuntime()),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     selectedScopes: ["user"],
   });
 
@@ -1168,7 +1169,7 @@ for (const { cause, error, reason, title } of [
         loadState: () => Promise.resolve(recordedState([])),
       }),
       pi,
-      hooksRouting: createHooksRouting(createHooksRuntime()),
+      hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
       selectedScopes: ["project"],
     });
 
@@ -1253,7 +1254,7 @@ for (const { error, faulted, order, title } of [
         loadState: () => Promise.resolve(recordedState([])),
       }),
       pi,
-      hooksRouting: createHooksRouting(createHooksRuntime()),
+      hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
       selectedScopes: ["user"],
     });
 
@@ -1339,7 +1340,7 @@ for (const { cause, installPlugin, order, title } of [
         loadState: () => Promise.resolve(recordedState([])),
       }),
       pi,
-      hooksRouting: createHooksRouting(createHooksRuntime()),
+      hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
       selectedScopes: ["user"],
     });
 
@@ -1412,7 +1413,7 @@ for (const { declaresAgents, declaresMcp, marker } of [
         loadState: () => Promise.resolve(recordedState([])),
       }),
       pi,
-      hooksRouting: createHooksRouting(createHooksRuntime()),
+      hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
       selectedScopes: ["user"],
     });
 
@@ -1481,7 +1482,7 @@ test("records each post-commit warning the installed outcome carried as its own 
       loadState: () => Promise.resolve(recordedState([])),
     }),
     pi,
-    hooksRouting: createHooksRouting(createHooksRuntime()),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     selectedScopes: ["user"],
   });
 
@@ -1525,7 +1526,7 @@ test("reports no changed resources when every install left the Pi resource set a
       loadState: () => Promise.resolve(recordedState([])),
     }),
     pi,
-    hooksRouting: createHooksRouting(createHooksRuntime()),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     selectedScopes: ["user"],
   });
 
@@ -1584,7 +1585,7 @@ test("installs only the plugin the state does not already record under a recorde
         ),
     }),
     pi,
-    hooksRouting: createHooksRouting(createHooksRuntime()),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     selectedScopes: ["user"],
   });
 
@@ -1630,7 +1631,7 @@ test("installs every plugin in orchestrated mode and never opts in to the defaul
       loadState: () => Promise.resolve(recordedState([])),
     }),
     pi,
-    hooksRouting: createHooksRouting(createHooksRuntime()),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     selectedScopes: ["project"],
   });
 
@@ -1697,7 +1698,7 @@ test("abandons only the scope whose state cannot be read and records why", async
           : Promise.resolve(recordedState([])),
     }),
     pi,
-    hooksRouting: createHooksRouting(createHooksRuntime()),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     selectedScopes: ["user", "project"],
   });
 
@@ -1749,7 +1750,7 @@ test("keeps each selected scope's marketplaces and plugins independent and rende
       loadState: () => Promise.resolve(recordedState([])),
     }),
     pi,
-    hooksRouting: createHooksRouting(createHooksRuntime()),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     selectedScopes: ["user", "project"],
   });
 
@@ -1810,7 +1811,7 @@ test("declares every added marketplace and installed plugin in the persisted con
       loadState: () => Promise.resolve(recordedState([])),
     }),
     pi,
-    hooksRouting: createHooksRouting(createHooksRuntime()),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     selectedScopes: ["project"],
   });
 
@@ -1843,7 +1844,7 @@ test("leaves the config byte-identical when the batch carries nothing to declare
       loadState: () => Promise.resolve(recordedState([])),
     }),
     pi,
-    hooksRouting: createHooksRouting(createHooksRuntime()),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     selectedScopes: ["project"],
   });
 
@@ -1882,7 +1883,7 @@ test("declares only the entries whose marketplace and install both succeeded", a
       loadState: () => Promise.resolve(recordedState([])),
     }),
     pi,
-    hooksRouting: createHooksRouting(createHooksRuntime()),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     selectedScopes: ["project"],
   });
 
@@ -1934,7 +1935,7 @@ test("abandons the post-pass for a scope whose config is invalid and still write
       loadState: () => Promise.resolve(recordedState([])),
     }),
     pi,
-    hooksRouting: createHooksRouting(createHooksRuntime()),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     selectedScopes: ["user", "project"],
   });
 
@@ -1988,7 +1989,7 @@ test("declares a missing config entry for a marketplace and plugin the state alr
         ),
     }),
     pi,
-    hooksRouting: createHooksRouting(createHooksRuntime()),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     selectedScopes: ["project"],
   });
 
@@ -2033,7 +2034,7 @@ test("leaves an already-declared config byte-identical when every entry was a sk
         ),
     }),
     pi,
-    hooksRouting: createHooksRouting(createHooksRuntime()),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     selectedScopes: ["project"],
   });
 
@@ -2080,7 +2081,7 @@ test("repairs each scope's own config and never leaks the other scope's recorded
         ),
     }),
     pi,
-    hooksRouting: createHooksRouting(createHooksRuntime()),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     selectedScopes: ["user", "project"],
   });
 
@@ -2120,7 +2121,7 @@ test("skips a recorded marketplace the later scope plan never declared when buil
       loadState: () => Promise.resolve(recordedState([])),
     }),
     pi,
-    hooksRouting: createHooksRouting(createHooksRuntime()),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     selectedScopes: ["project", "project"],
   });
 
@@ -2187,7 +2188,7 @@ test("skips a repair for a marketplace the later scope plan never declared", asy
         ),
     }),
     pi,
-    hooksRouting: createHooksRouting(createHooksRuntime()),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     selectedScopes: ["project", "project"],
   });
 
@@ -2246,7 +2247,7 @@ test("records a diagnostic and keeps the result when the batched config write fa
       loadState: () => Promise.resolve(recordedState([])),
     }),
     pi,
-    hooksRouting: createHooksRouting(createHooksRuntime()),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     selectedScopes: ["project"],
   });
 
@@ -2323,8 +2324,8 @@ test("resolves every collaborator from production when the caller supplies no de
   const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(2, 4);
   const ownerRuntime = createHooksRuntime();
   const peerRuntime = createHooksRuntime();
-  const hooksRouting = createHooksRouting(ownerRuntime);
-  const peerHooksRouting = createHooksRouting(peerRuntime);
+  const hooksRouting = createHooksRouting(ownerRuntime, { readHooksJson });
+  const peerHooksRouting = createHooksRouting(peerRuntime, { readHooksJson });
   await seedHookRoute(hooksRouting, cwd, "unrelated-mp", "unrelated", "echo unrelated");
   await seedHookRoute(peerHooksRouting, cwd, "peer-mp", "peer", "echo peer");
   const marketplaceRoot = path.join(cwd, "fixture-mp");
@@ -2454,7 +2455,7 @@ test("declares a marketplace whose only plugin failed to install", async (t) => 
       loadState: () => Promise.resolve(recordedState([])),
     }),
     pi,
-    hooksRouting: createHooksRouting(createHooksRuntime()),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     selectedScopes: ["project"],
   });
 
@@ -2493,7 +2494,7 @@ test("declares a freshly installed plugin under a recorded marketplace that reco
         ),
     }),
     pi,
-    hooksRouting: createHooksRouting(createHooksRuntime()),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     selectedScopes: ["project"],
   });
 
@@ -2540,7 +2541,7 @@ test("lets a later scope plan's source mismatch supersede the header an earlier 
       ]),
     }),
     pi,
-    hooksRouting: createHooksRouting(createHooksRuntime()),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     selectedScopes: ["project", "project"],
   });
 

@@ -68,6 +68,7 @@ import { mock, verify, when } from "strong-mock";
 import {
   createHooksRouting,
   createHooksRuntime,
+  readHooksJson,
 } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import {
   makeImportHandler,
@@ -183,7 +184,7 @@ test("imports the project scope before the user scope when no scope flag narrows
   });
   const git = createGitOpsFake({ boundary: "memory" });
   const completionCache = createCompletionCache();
-  const hooksRouting = createHooksRouting(createHooksRuntime());
+  const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
   const importClaudeSettings = mock<ImportDelegate>({
     exactParams: true,
     name: "import claude settings",
@@ -224,7 +225,7 @@ test("forwards the supplied lifecycle routing owner into import execution", asyn
   });
   const git = createGitOpsFake({ boundary: "memory" });
   const completionCache = createCompletionCache();
-  const hooksRouting = createHooksRouting(createHooksRuntime());
+  const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
   let forwardedHooksRouting: unknown;
   const importClaudeSettings: ImportDelegate = (options) => {
     forwardedHooksRouting = Reflect.get(options, "hooksRouting");
@@ -258,7 +259,7 @@ for (const scope of ["project", "user"] satisfies readonly Scope[]) {
     });
     const git = createGitOpsFake({ boundary: "memory" });
     const completionCache = createCompletionCache();
-    const hooksRouting = createHooksRouting(createHooksRuntime());
+    const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
     const importClaudeSettings = mock<ImportDelegate>({
       exactParams: true,
       name: "import claude settings",
@@ -303,7 +304,7 @@ test("runs the real import workflow when the dependency object declares no deleg
   const importHandler = makeImportHandler(
     pi,
     { completionCache, gitOps: git.gitOps },
-    createHooksRouting(createHooksRuntime()),
+    createHooksRouting(createHooksRuntime(), { readHooksJson }),
   );
 
   // act
@@ -332,7 +333,7 @@ for (const { args, label, tokens } of [
     const importHandler = makeImportHandler(
       pi,
       { completionCache, gitOps: git.gitOps, importClaudeSettings },
-      createHooksRouting(createHooksRuntime()),
+      createHooksRouting(createHooksRuntime(), { readHooksJson }),
     );
 
     // act
@@ -359,7 +360,7 @@ test("reports an unrecognised scope value with the import usage block and never 
   const importHandler = makeImportHandler(
     pi,
     { completionCache, gitOps: git.gitOps, importClaudeSettings },
-    createHooksRouting(createHooksRuntime()),
+    createHooksRouting(createHooksRuntime(), { readHooksJson }),
   );
 
   // act
@@ -385,7 +386,7 @@ test("takes the scope-target flag as a positional and rejects it alongside a sco
   const importHandler = makeImportHandler(
     pi,
     { completionCache, gitOps: git.gitOps, importClaudeSettings },
-    createHooksRouting(createHooksRuntime()),
+    createHooksRouting(createHooksRuntime(), { readHooksJson }),
   );
 
   // act

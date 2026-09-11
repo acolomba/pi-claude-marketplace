@@ -37,7 +37,7 @@
 // DISP-01 / DISP-02 / DISP-03 / DISP-04 / OBS-01 anchor the contracts this
 // module enforces; D-59-01 / D-59-02 / D-59-03 anchor the decisions.
 
-import { mkdir, readFile } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 
@@ -128,12 +128,13 @@ export interface ReadAndCachePluginHooksOptions {
 }
 
 async function readAndCachePluginHooksWith(
+  reader: HooksFileReader,
   routingState: EventRouterRoutingState,
   opts: ReadAndCachePluginHooksOptions,
 ): Promise<void> {
   let raw: string;
   try {
-    raw = await readFile(opts.hooksJsonPath, "utf8");
+    raw = await reader.readHooksJson(opts.hooksJsonPath);
   } catch (err) {
     hookDebugLog(
       `${opts.logPrefix}: hooks.json read failed for ${opts.plugin}@${opts.marketplace}: ${errorMessage(err)}`,
@@ -277,12 +278,15 @@ export interface HooksRouting {
   readonly rebuildRoutingTables: () => void;
 }
 
-/** Bind install/uninstall route effects to an explicitly supplied runtime owner. */
-export function createHooksRouting(runtime: HooksRuntime): HooksRouting {
+/**
+ * Bind install/uninstall route effects to an explicitly supplied runtime owner
+ * and the one required hooks read port.
+ */
+export function createHooksRouting(runtime: HooksRuntime, reader: HooksFileReader): HooksRouting {
   const routingState = createRoutingStateOperations(runtime);
   return {
     async readAndCachePluginHooks(opts: ReadAndCachePluginHooksOptions): Promise<void> {
-      await readAndCachePluginHooksWith(routingState, opts);
+      await readAndCachePluginHooksWith(reader, routingState, opts);
     },
     removePluginConfigFromCache(scope: Scope, marketplace: string, pluginId: string): void {
       routingState.deleteParsedConfig(cacheKey(scope, marketplace, pluginId));
@@ -418,8 +422,36 @@ interface HydratedScope {
 /** True while awaited work still belongs to the lifecycle that started it. */
 type GenerationGuard = () => boolean;
 
-/** Required persisted-state operation for hooks hydration. */
-export interface HooksHydrationReader {
+/**
+ * The hooks bridge's read port: the one filesystem read both the routing and
+ * the hydration chain perform, behind one substitutable object.
+ *
+ * One member and no more (D-09-05). Widening it into a general filesystem
+ * facade would put verbs nothing asked about behind a seam; `mkdir` in
+ * `ensureSharedDataDir` keeps calling `fs` directly.
+ *
+ * The port is REQUIRED at both factories and has no `?` and no `DEFAULT_*`
+ * fallback, so a new call site cannot let the obligation go quiet -- the
+ * composition root supplies the real implementation and the compiler keeps
+ * asking everywhere else.
+ *
+ * NFR-10: the port replaces the syscall, never the `assertPathInside`
+ * containment chokepoint in front of it. Callers still own containment exactly
+ * as they did, and an injected reader buys no path authority.
+ */
+export interface HooksFileReader {
+  /**
+   * Read `hooksJsonPath` as utf-8. The path arrives already contained; an
+   * implementation performs no resolution, joining or normalization of its own.
+   */
+  readonly readHooksJson: (hooksJsonPath: string) => Promise<string>;
+}
+
+/**
+ * The hooks read port plus the one persisted-state operation hydration
+ * additionally needs.
+ */
+export interface HooksHydrationReader extends HooksFileReader {
   readonly loadState: (extensionRoot: string) => Promise<ExtensionState>;
 }
 
@@ -497,7 +529,7 @@ async function hydrateCacheFromDisk(
     // projectRoot for project scope; user-scope hydrate paths use
     // homedir-rooted paths so opts.cwd is the right "current project"
     // anchor for path globs.
-    await hydrateScopeFromState(state, loc, opts.cwd, routingState, generationIsCurrent);
+    await hydrateScopeFromState(state, loc, opts.cwd, reader, routingState, generationIsCurrent);
     hydrated.push({ state, loc });
   }
 
@@ -515,6 +547,7 @@ async function hydrateScopeFromState(
   state: ExtensionState,
   loc: ScopedLocations,
   cwd: string,
+  reader: HooksFileReader,
   routingState: EventRouterRoutingState,
   generationIsCurrent: GenerationGuard,
 ): Promise<void> {
@@ -546,6 +579,7 @@ async function hydrateScopeFromState(
           hooksJsonPath,
           loc.hooksDir,
           cwd,
+          reader,
           routingState,
           generationIsCurrent,
         );
@@ -565,6 +599,7 @@ async function tryHydrateOnePlugin(
   hooksJsonPath: string,
   hooksDir: string,
   cwd: string,
+  reader: HooksFileReader,
   routingState: EventRouterRoutingState,
   generationIsCurrent: GenerationGuard,
 ): Promise<void> {
@@ -572,8 +607,8 @@ async function tryHydrateOnePlugin(
   // extension, but the slug component (`pluginRecord.resources.hooks[i]`) is
   // state-supplied data. A corrupted state record (third-party tampering or
   // future schema mismatch) carrying a traversal slug like `"../../etc"` must
-  // not let `readFile` escape `loc.hooksDir`. Mirror the WRITE-site guard at
-  // this READ site.
+  // not let the hooks.json read escape `loc.hooksDir`. Mirror the WRITE-site
+  // guard at this READ site.
   try {
     await assertPathInside(hooksDir, hooksJsonPath, "hooks.json hydrate path");
   } catch (err) {
@@ -603,7 +638,7 @@ async function tryHydrateOnePlugin(
 
   let raw: string;
   try {
-    raw = await readFile(hooksJsonPath, "utf8");
+    raw = await reader.readHooksJson(hooksJsonPath);
   } catch (err) {
     hookDebugLog(
       `hydrate: read failed for ${scope}/${marketplace}/${pluginId} at ${hooksJsonPath}: ${errorMessage(err)}`,
@@ -700,7 +735,7 @@ async function hydrateProjectScopeForCwdWith(
     return;
   }
 
-  await hydrateScopeFromState(state, loc, cwd, routingState, generationIsCurrent);
+  await hydrateScopeFromState(state, loc, cwd, reader, routingState, generationIsCurrent);
 }
 
 /**

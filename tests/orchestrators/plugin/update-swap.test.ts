@@ -7,6 +7,7 @@ import test from "node:test";
 import {
   createHooksRouting,
   createHooksRuntime,
+  readHooksJson,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { preparePluginUpdate } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts";
 import { swapPluginUpdate } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts";
@@ -54,7 +55,7 @@ test("atomically replaces staged resources and finalizes the update ledger", asy
           scope: "project",
           cwd,
           locations,
-          hooksRouting: createHooksRouting(createHooksRuntime()),
+          hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
           completionCache: createCompletionCache(),
           cascade: true,
           cleanupClones: () => Promise.resolve(),
@@ -114,7 +115,7 @@ test("retains the intent ledger and old resource tree after a replacement failur
           scope: "project",
           cwd,
           locations,
-          hooksRouting: createHooksRouting(createHooksRuntime()),
+          hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
           completionCache: createCompletionCache(),
           cascade: true,
           cleanupClones: () => Promise.resolve(),

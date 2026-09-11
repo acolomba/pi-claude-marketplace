@@ -6,6 +6,7 @@ import { mock } from "strong-mock";
 import {
   createHooksRouting,
   createHooksRuntime,
+  readHooksJson,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import {
   emptyReconcilePlan,
@@ -42,7 +43,7 @@ const extensionApi = mock<ExtensionAPI>({
   exactParams: true,
   name: "extension API type evidence",
 });
-const hooksRouting = createHooksRouting(createHooksRuntime());
+const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
 const completionCache = createCompletionCache();
 const gitOps = mock<GitOps>({ exactParams: true, name: "Git operations type evidence" });
 
