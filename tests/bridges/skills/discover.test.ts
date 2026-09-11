@@ -84,12 +84,12 @@ test("discovers a relative skill parent in stable source-name order", async (t) 
     discovered: [
       {
         sourceName: "acme-knowledge",
-        generatedName: "acme-knowledge",
+        generatedName: "acme:knowledge",
         skillDir: knowledgeDirectory,
       },
       {
         sourceName: "helper",
-        generatedName: "acme-helper",
+        generatedName: "acme:helper",
         skillDir: helperDirectory,
       },
     ],
@@ -128,9 +128,9 @@ test("preserves declared parent order while sorting each absolute parent", async
   // assert
   assert.deepStrictEqual(discovery, {
     discovered: [
-      { sourceName: "beta", generatedName: "acme-beta", skillDir: betaDirectory },
-      { sourceName: "zeta", generatedName: "acme-zeta", skillDir: zetaDirectory },
-      { sourceName: "alpha", generatedName: "acme-alpha", skillDir: alphaDirectory },
+      { sourceName: "beta", generatedName: "acme:beta", skillDir: betaDirectory },
+      { sourceName: "zeta", generatedName: "acme:zeta", skillDir: zetaDirectory },
+      { sourceName: "alpha", generatedName: "acme:alpha", skillDir: alphaDirectory },
     ],
     warnings: [],
   });
@@ -164,7 +164,7 @@ test("discovers a declared relative path that is itself a skill directory", asyn
     discovered: [
       {
         sourceName: "implement",
-        generatedName: "mattpocock-skills-implement",
+        generatedName: "mattpocock-skills:implement",
         skillDir: skillDirectory,
       },
     ],
@@ -236,8 +236,8 @@ test("filters hidden, non-regular, nested-only, linked, and undeclared entries",
   // assert
   assert.deepStrictEqual(discovery, {
     discovered: [
-      { sourceName: "opaque", generatedName: "acme-opaque", skillDir: opaqueDirectory },
-      { sourceName: "visible", generatedName: "acme-visible", skillDir: visibleDirectory },
+      { sourceName: "opaque", generatedName: "acme:opaque", skillDir: opaqueDirectory },
+      { sourceName: "visible", generatedName: "acme:visible", skillDir: visibleDirectory },
     ],
     warnings: [],
   });
@@ -269,13 +269,13 @@ test("keeps the first generated name when sources collide within one parent", as
     discovered: [
       {
         sourceName: "acme-foo",
-        generatedName: "acme-foo",
+        generatedName: "acme:foo",
         skillDir: prefixedDirectory,
       },
     ],
     warnings: [
       `skill source "foo" in "${skillsDirectory}" elides to generated name ` +
-        `"acme-foo", already produced by skill source "acme-foo"; ignoring duplicate.`,
+        `"acme:foo", already produced by skill source "acme-foo"; ignoring duplicate.`,
     ],
   });
 });
@@ -307,13 +307,13 @@ test("keeps the first generated name when sources collide across parents", async
     discovered: [
       {
         sourceName: "acme-shared",
-        generatedName: "acme-shared",
+        generatedName: "acme:shared",
         skillDir: winningDirectory,
       },
     ],
     warnings: [
       `skill source "shared" in "${losingParent}" elides to generated name ` +
-        `"acme-shared", already produced by skill source "acme-shared"; ignoring duplicate.`,
+        `"acme:shared", already produced by skill source "acme-shared"; ignoring duplicate.`,
     ],
   });
 });
@@ -347,13 +347,13 @@ test("keeps a self skill when a later parent produces the same generated name", 
     discovered: [
       {
         sourceName: "implement",
-        generatedName: "mattpocock-skills-implement",
+        generatedName: "mattpocock-skills:implement",
         skillDir: selfDirectory,
       },
     ],
     warnings: [
       `skill source "implement" in "${parentDirectory}" elides to generated name ` +
-        `"mattpocock-skills-implement", already produced by skill source "implement"; ` +
+        `"mattpocock-skills:implement", already produced by skill source "implement"; ` +
         `ignoring duplicate.`,
     ],
   });
@@ -393,13 +393,13 @@ test("reports a self skill loss without traversing its nested directories", asyn
     discovered: [
       {
         sourceName: "mattpocock-skills-implement",
-        generatedName: "mattpocock-skills-implement",
+        generatedName: "mattpocock-skills:implement",
         skillDir: winningDirectory,
       },
     ],
     warnings: [
       `skill source "implement" in "${selfDirectory}" elides to generated name ` +
-        `"mattpocock-skills-implement", already produced by skill source ` +
+        `"mattpocock-skills:implement", already produced by skill source ` +
         `"mattpocock-skills-implement"; ignoring duplicate.`,
     ],
   });
