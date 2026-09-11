@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 08
 current_phase_name: Direct Coverage
 status: executing
-stopped_at: Completed 08-02-PLAN.md
-last_updated: "2026-09-11T02:44:51.282Z"
+stopped_at: Completed 08-03-PLAN.md
+last_updated: "2026-09-11T03:14:22.385Z"
 last_activity: 2026-09-11
-last_activity_desc: 08-02 complete; three dense-index guards removed, shortfall set down to four
-state_head: 3df79731125f6ee15d8c06fafa9da4cb9dfc80db
+last_activity_desc: 08-03 complete; the hooks event-router and update-preflight pairs read complete, shortfall set down to two
+state_head: 80b8e0be96a0d51ebb2bbfa3daea77e393f3c6ff
 progress:
   total_phases: 9
   completed_phases: 3
   total_plans: 205
-  completed_plans: 198
+  completed_plans: 199
   percent: 33
 ---
 
@@ -33,20 +33,30 @@ component as a working Pi artifact.
 
 Phase: 08 (Direct Coverage) — EXECUTING
 Next: /gsd-execute-phase 08 (wave 2)
-Plan: 2 of 9 complete
-Status: 08-02 complete. The three dense-index guards are gone: `edge/args.ts` reads
-`branches 28/28, lines 88/88`, `edge/handlers/shared.ts` reads `branches 15/15, lines 82/82`, and
-`edge/handlers/plugin/pending.ts` reads `branches 9/9, lines 56/56` — all three by typed iteration
-with an explicit skip flag, no `!`, no `as`, and no pin row. The measured shortfall set is now four
-modules: `bridges/commands/discover.ts`, `bridges/hooks/event-router.ts`,
-`orchestrators/plugin/update-preflight.ts`, `orchestrators/plugin/install-outcome.ts`. Edge suite
-657/657.
-08-01 remains the classification input for plans 03, 05 and 07: `npm run test:coverage:direct:report`
+Plan: 3 of 9 complete
+Status: 08-03 complete. Two more rows leave the accepted-shortfall set by being covered rather than
+pinned: `bridges/hooks/event-router.ts` reads `branches 114/114, functions 43/43, lines 967/967` and
+`orchestrators/plugin/update-preflight.ts` reads `branches 97/97, functions 21/21, lines 593/593`.
+All four `generationIsCurrent` guards are reached through injected collaborators — two through a
+deferred `HooksHydrationReader` read under the factory-time hydrate, two through one-member spread
+decorators over the real `createHooksRuntime()` — with no builtin patched and no production file
+touched. `D-08-A04` is discharged by measurement. One site (614-616) has no named trigger available
+and keys its advance on a guard consultation counted from the injected state read; the reason is
+recorded in `08-03-SUMMARY.md`.
+**The measured shortfall set is now two modules:** `bridges/commands/discover.ts`
+(`branches 55/57, lines 412/414`, the pin's one row, two sites per `D-08-A05`) and
+`orchestrators/plugin/install-outcome.ts` (`branches 60/83, functions 22/27, lines 956/1031`, owner
+tests after the removal port, never a pin).
+08-02 rewrote the three dense-index guards: `edge/args.ts` reads `branches 28/28, lines 88/88`,
+`edge/handlers/shared.ts` reads `branches 15/15, lines 82/82`, and
+`edge/handlers/plugin/pending.ts` reads `branches 9/9, lines 56/56`. Edge suite 657/657.
+08-01 remains the classification input for plans 05 and 07: `npm run test:coverage:direct:report`
 ran end to end for the first time — 230 rows, 479.8s, `Verdicts: accepted-shortfall 7, complete 216,
 type-only 7`, recorded in `08-01-SUMMARY.md`. `coverage/` is gitignored and carries nothing forward.
-`pre-commit run --all-files` is green with `SKIP=trufflehog`. Unit suite 5952/5952, 0 skipped.
-Last activity: 2026-09-11 — 08-02 rewrote three index loops to typed iteration and pinned the
-`--scope` lookahead both rewrites had to preserve
+`pre-commit run --all-files` is green with `SKIP=trufflehog`. Unit suite 5959/5959, 0 skipped; hooks
+bridge suite 513/513.
+Last activity: 2026-09-11 — 08-03 covered the four hooks hydration generation guards and both arms of
+`isUpdatePreflightOutcome`
 
 ### What the 08-01 sweep measured
 
@@ -443,6 +453,7 @@ stay recorded rather than excused.
 | Phase 06 P52 | 42min | 2 tasks | 6 files |
 | Phase 08 P01 | 39min | 3 tasks | 9 files |
 | Phase 08 P02 | 20min | 3 tasks | 5 files |
+| Phase 08 P03 | 19min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -967,6 +978,9 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 08]: 08-01: trufflehog cannot run in a linked worktree (no <root>/.git/index), so every --all-files green claim carries SKIP=trufflehog and CI closes the gap
 - [Phase 08]: 08-02: the three dense-index guards rewrite to typed iteration plus an explicit skip flag — entries() only where a loop reads a neighbour by index, bare for...of otherwise; no ! and no as, and no pin row for any of the three
 - [Phase 08]: 08-02: two of the four requested preservation cases already existed and were not duplicated; the property the shared.ts case pins was stated in the owner header instead, replacing a D-116-01a paragraph the rewrite made false
+- [Phase 08]: bridges/hooks/event-router.ts gets tests, not a pin: all four generationIsCurrent guards reached through injected collaborators (D-08-A04 discharged by measurement)
+- [Phase 08]: Site 614-616 is the one guard with no named trigger: nothing injected runs between the containment guard and the hooks.json-read guard, so its case keys the advance on the third guard consultation after the injected state read and asserts the consequence
+- [Phase 08]: Sites 586-588 and 552-554 need the factory-time hydrate, not hydrateProjectScopeForCwd: only hydrateCacheFromDisk lacks a guard between the state read and hydrateScopeFromState
 
 ### Pending Todos
 
@@ -1020,7 +1034,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 08-02-PLAN.md
+**Stopped at:** Completed 08-03-PLAN.md
 
 Phase 04 completed all seven plans and closed AUTH-01 and TREF-01 through
 TREF-03. Independent verification passed 4/4 with no behavioral or UAT gap;
@@ -1038,7 +1052,7 @@ independent verification passed 6/6 with zero unverified behaviors.
 **Read beside it:** `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`, the
 Phase 01 terminal evidence ledger, and Phase 5's roadmap criteria.
 
-Last session: 2026-09-11T02:43:38.346Z
+Last session: 2026-09-11T03:14:21.670Z
 
 **Next:** Execute Phase 8 (Direct Coverage) — `/gsd-execute-phase 08`.
 
