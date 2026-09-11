@@ -1216,7 +1216,7 @@ test("RVAL-04 scope-impact rejects duplicate evidence history records", async (t
 for (const row of [
   {
     title: "RVAL-04 scope-impact rejects an evidence ID with an active definition",
-    marker: "- [ ] **GGAT-03**:",
+    marker: "- [x] **GGAT-03**:",
     insertion: "- [ ] **GGAT-02**: This ID cannot return to active scope.\n",
     requirementId: "GGAT-02",
     message: "evidence requirement cannot have an active definition",

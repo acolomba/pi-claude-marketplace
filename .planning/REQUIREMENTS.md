@@ -78,23 +78,23 @@ component as a working Pi artifact.
 
 ### Gate Integrity
 
-- [ ] **GGAT-01**: Each terminal scanning-gate gap proves target visitation and
+- [x] **GGAT-01**: Each terminal scanning-gate gap proves target visitation and
       carries a synthetic offender and benign control; changed-pair discovery also
       proves deterministic base selection and a fail-closed zero-selection case.
-- [ ] **GGAT-03**: `FLOW-07` varies effective config sources and broad overrides
+- [x] **GGAT-03**: `FLOW-07` varies effective config sources and broad overrides
       across the terminal ESLint/Fallow boundary gaps and proves target visitation.
-- [ ] **GGAT-04**: Terminal closed-set and delegated-contract gates cover their
+- [x] **GGAT-04**: Terminal closed-set and delegated-contract gates cover their
       real production consumers and any public seams created by approved splits,
       with visitation, offender, and benign controls.
 
 ### Direct Coverage
 
-- [ ] **RCOV-01**: One honest per-pair coverage baseline is regenerated from the
+- [x] **RCOV-01**: One honest per-pair coverage baseline is regenerated from the
       milestone branch for every current source-test pair, a set
       `npm run test:coverage:direct:report` measures at 230 and reports in its
       own `All-pair report written:` row count, and records every refusal
       without stale counts or a false pass.
-- [ ] **RCOV-02**: Every measured terminal shortfall is reclassified. The
+- [x] **RCOV-02**: Every measured terminal shortfall is reclassified. The
       dense-index guards in `edge/args.ts`, `edge/handlers/shared.ts`, and
       `edge/handlers/plugin/pending.ts` are honestly rewritten to typed
       iteration; `bridges/hooks/event-router.ts` and
@@ -104,7 +104,7 @@ component as a working Pi artifact.
       (`branches 109/111, lines 1034/1040`) retain current explicit evidence in
       the committed pin `scripts/test-coverage-direct.pin.json`, which records
       one reason per uncovered site and is not an allowlist.
-- [ ] **RCOV-03**: The same strict changed-pair gate runs in scoped local
+- [x] **RCOV-03**: The same strict changed-pair gate runs in scoped local
       pre-commit and dedicated authoritative CI with fail-closed base and pair
       selection, while coverage remains reachability evidence only.
 
@@ -182,13 +182,13 @@ Roadmap creation assigns each requirement to exactly one phase.
 | TREF-07     | Phase 6                             | Complete      |
 | TREF-08     | Phase 6                             | Complete      |
 | TREF-09     | Phase 6                             | Complete      |
-| GGAT-01     | Phase 7                             | Pending       |
+| GGAT-01     | Phase 7                             | Complete      |
 | GGAT-02     | Evidence/history (formerly Phase 7) | Evidence only |
-| GGAT-03     | Phase 7                             | Pending       |
-| GGAT-04     | Phase 7                             | Pending       |
-| RCOV-01     | Phase 8                             | Pending       |
-| RCOV-02     | Phase 8                             | Pending       |
-| RCOV-03     | Phase 8                             | Pending       |
+| GGAT-03     | Phase 7                             | Complete      |
+| GGAT-04     | Phase 7                             | Complete      |
+| RCOV-01     | Phase 8                             | Complete      |
+| RCOV-02     | Phase 8                             | Complete      |
+| RCOV-03     | Phase 8                             | Complete      |
 | RCOV-04     | Evidence/history (formerly Phase 8) | Evidence only |
 | CLOSE-01    | Phase 9                             | Pending       |
 | CLOSE-02    | Phase 9                             | Pending       |
