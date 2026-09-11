@@ -1,3 +1,13 @@
+/**
+ * The whole-tree direct-coverage report: every source-test pair measured, one JSON object per line,
+ * no verdict filed.
+ *
+ * It reads no record of which shortfalls are accepted, which is what keeps it independent of the
+ * gate it generates the coverage pin for. `shortfallReadingOf` does not weaken that: it parses the
+ * gate's own refusal message and consults nothing, so what this tool knows is still exactly what the
+ * gate answered for the pair in front of it.
+ */
+
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -7,6 +17,7 @@ import {
   pairForPath,
   productionPaths,
   runPair,
+  shortfallReadingOf,
 } from "./test-coverage-direct.mjs";
 
 const usage = `Usage: node scripts/test-coverage-direct.report.mjs <report-path>
@@ -19,9 +30,6 @@ and its exit code is not a coverage verdict: a zero says the report was written,
 nothing more. The gate is \`npm run test:coverage:direct\` and
 \`npm run test:coverage:direct:all\`, which still refuse a shortfall.
 `;
-
-// How the gate states a shortfall, and the only refusal this report records rather than propagates.
-const shortfallPattern = /^Incomplete direct coverage for (?<sourcePath>[^:]+): (?<counts>.+)$/;
 
 /**
  * The verdict for one pair, given what the gate answered for it: the coverage summary it returned,
@@ -47,13 +55,13 @@ export function verdictFor(sourcePath, answer) {
     };
   }
 
-  const match = shortfallPattern.exec(answer.message);
+  const reading = shortfallReadingOf(answer, sourcePath);
 
-  if (match === null || match.groups.sourcePath !== sourcePath) {
+  if (reading === undefined) {
     throw answer;
   }
 
-  return { verdict: "accepted-shortfall", coverage: match.groups.counts, exitCode: 1 };
+  return { verdict: "accepted-shortfall", coverage: reading, exitCode: 1 };
 }
 
 async function rowFor(pair) {

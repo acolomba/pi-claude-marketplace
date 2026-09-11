@@ -7,6 +7,8 @@ import { fileURLToPath } from "node:url";
 
 import ts from "typescript";
 
+import { assertPinnedReadings, loadCoveragePin } from "./test-coverage-direct.pin.mjs";
+
 const projectRoot = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const productionRoot = "extensions/pi-claude-marketplace";
 const testRoot = "tests";
@@ -167,15 +169,56 @@ function upstreamCandidate(selectedProjectRoot) {
 }
 
 /**
- * The base commit the changed-pair selection diffs against, chosen from an ordered candidate chain.
+ * The base a caller named, resolved exactly or refused.
+ *
+ * An explicitly named base is never replaced by a fallback (`D-08-A07`). The candidate chain answers
+ * "what is the newest thing this checkout can diff against"; a caller that names a ref is asking a
+ * different question, so falling through to the chain would report a verdict over a change set
+ * nobody asked for. The name is tested against `baseCandidateName` before it reaches git, so a value
+ * carrying whitespace or a shell metacharacter is refused without git being invoked on it at all.
+ */
+function explicitBaseSelection(explicitBase, selectedProjectRoot) {
+  const refuse = (reason) => ({
+    ok: false,
+    attempted: [{ candidate: explicitBase, reason }],
+    reason: `Explicit base ${explicitBase} did not resolve: ${reason}. An explicitly named base is never replaced by a fallback.`,
+  });
+
+  if (!baseCandidateName.test(explicitBase)) {
+    return refuse("the value is not a plain ref name");
+  }
+
+  const resolved = gitLines(
+    ["rev-parse", "--verify", `${explicitBase}^{commit}`],
+    selectedProjectRoot,
+  );
+
+  if (resolved.ok && resolved.lines[0] !== undefined) {
+    return { ok: true, candidate: explicitBase, commit: resolved.lines[0], attempted: [] };
+  }
+
+  return refuse(resolved.ok ? "resolved to no commit" : resolved.reason);
+}
+
+/**
+ * The base commit the changed-pair selection diffs against: the one the caller named, or the first
+ * that resolves from an ordered candidate chain.
  *
  * The returned candidate is the auditable artifact, not a debug aid (`D-07-13`): a reader of a gate
  * run has to be able to tell which of `origin/main`, `main`, the upstream tracking ref, or `HEAD~1`
  * the answer rests on, because the four disagree about what counts as changed. `attempted` carries
  * the reason every earlier candidate was rejected and is present on both outcomes, so a selection
  * that succeeded still records what it passed over rather than reporting only its winner.
+ *
+ * `explicitBase` is what lets one implementation serve two named scopes at one strictness -- a
+ * branch-scoped change set for a pull request, a commit-scoped one for a hook -- and it never falls
+ * through to the chain.
  */
-export function selectBase(selectedProjectRoot = projectRoot) {
+export function selectBase(selectedProjectRoot = projectRoot, explicitBase = undefined) {
+  if (explicitBase !== undefined) {
+    return explicitBaseSelection(explicitBase, selectedProjectRoot);
+  }
+
   const attempted = [];
   const candidates = [
     { label: "origin/main", name: "origin/main" },
@@ -218,8 +261,8 @@ export function selectBase(selectedProjectRoot = projectRoot) {
  * empty because base selection or a git invocation failed. Propagating the first failing invocation
  * rather than folding it into an empty list is what keeps those two apart.
  */
-export function changedPaths(selectedProjectRoot = projectRoot) {
-  const base = selectBase(selectedProjectRoot);
+export function changedPaths(selectedProjectRoot = projectRoot, explicitBase = undefined) {
+  const base = selectBase(selectedProjectRoot, explicitBase);
 
   if (!base.ok) {
     return { ok: false, reason: base.reason };
@@ -335,8 +378,8 @@ function isPairablePath(projectPath, selectedProjectRoot) {
  * The source-test pairs the selected change set names, carrying the base that produced it and the
  * paths it passed over so a zero-pair answer can still say what it looked at.
  */
-export function pairsForChangedPaths(selectedProjectRoot = projectRoot) {
-  const changed = changedPaths(selectedProjectRoot);
+export function pairsForChangedPaths(selectedProjectRoot = projectRoot, explicitBase = undefined) {
+  const changed = changedPaths(selectedProjectRoot, explicitBase);
 
   if (!changed.ok) {
     return changed;
@@ -483,6 +526,31 @@ export function assertCompleteCoverage(sourcePath, lcovText, selectedProjectRoot
     .join(", ");
 }
 
+// How the gate states a shortfall. One declaration, read by the arms that record a refused pair and
+// by the report that files it as a row, so the two can never drift on what a reading is.
+const shortfallPattern = /^Incomplete direct coverage for (?<sourcePath>[^:]+): (?<counts>.+)$/;
+
+/**
+ * The reading inside a shortfall refusal for THIS pair, or `undefined` for anything else.
+ *
+ * The answer is `undefined` rather than a throw for every other error, because the caller is what
+ * decides whether a non-coverage failure is fatal. Both gate arms and the report rethrow on
+ * `undefined` for the same reason: a focused test that failed, or an LCOV that could not be read, is
+ * not a coverage verdict, and recording it as one would answer for a pair nothing measured. The
+ * message has to name this pair's source for the same reason -- one module's reading filed against
+ * another still looks right.
+ */
+export function shortfallReadingOf(error, sourcePath) {
+  const message = error instanceof Error ? error.message : String(error);
+  const match = shortfallPattern.exec(message);
+
+  if (match === null || match.groups.sourcePath !== sourcePath) {
+    return undefined;
+  }
+
+  return match.groups.counts;
+}
+
 function repeatedValues(records, field) {
   const seen = new Set();
   const repeated = new Set();
@@ -507,6 +575,11 @@ function repeatedValues(records, field) {
 // array the same loop just built, the check cannot fail at all -- that array has one entry per
 // enumerated module by construction -- so a report-less run degrades this to a structural invariant
 // over the loop's own output rather than a guard over the run.
+//
+// A row is recorded for a refused pair too, rather than the refusal ending the loop: what refuses an
+// unrecorded shortfall is the comparison against the pin, not the abort. The check below therefore
+// still sees one row per enumerated module on a run that measured a shortfall, and the reading that
+// shortfall produced is in the retained report where a later reader can diff it.
 //
 // The round-trip check is also the honest answer to COV-02's remaining half. Path-level ambiguity --
 // two production modules claiming one test, or one test claiming two modules -- is UNREACHABLE under
@@ -585,10 +658,47 @@ export async function runPair({ sourcePath, testPath }) {
   }
 }
 
+/**
+ * Run one pair, recording a coverage shortfall on `observed` instead of ending the run.
+ *
+ * Only a coverage verdict is recorded. `shortfallReadingOf` answers `undefined` for every other
+ * failure and this rethrows it, because a focused test that failed or an LCOV that could not be read
+ * says nothing about coverage, and an arm that swallowed it would compare an incomplete measurement
+ * against the pin and call the difference a drift.
+ *
+ * A refused pair still answers a record of the same shape `runPair` returns, so the caller retaining
+ * a report keeps one row per pair whatever the verdict was.
+ */
+async function measurePair(pair, observed) {
+  const startedAt = process.hrtime.bigint();
+
+  try {
+    return await runPair(pair);
+  } catch (error) {
+    const reading = shortfallReadingOf(error, pair.sourcePath);
+
+    if (reading === undefined) {
+      throw error;
+    }
+
+    observed.push({ sourcePath: pair.sourcePath, reading });
+
+    return {
+      sourcePath: pair.sourcePath,
+      testPath: pair.testPath,
+      coverage: reading,
+      typeOnly: false,
+      runtime: process.version,
+      elapsedMs: Number((process.hrtime.bigint() - startedAt) / 1000000n),
+    };
+  }
+}
+
 async function runAllPairs(reportPath) {
   const modulePaths = productionPaths();
   const pairs = modulePaths.map((modulePath) => pairForPath(modulePath));
   const records = [];
+  const observed = [];
   const startedAt = process.hrtime.bigint();
 
   // Line-oriented and written as each pair lands, so an interrupted run still leaves a readable
@@ -598,7 +708,7 @@ async function runAllPairs(reportPath) {
   }
 
   for (const pair of pairs) {
-    const record = await runPair(pair);
+    const record = await measurePair(pair, observed);
     records.push(record);
 
     if (reportPath !== undefined) {
@@ -619,6 +729,7 @@ async function runAllPairs(reportPath) {
 
   // Unconditional: a report is how the result is retained, not what makes the run a gate.
   assertReportComplete(written, modulePaths);
+  assertPinnedReadings(observed, loadCoveragePin(), modulePaths);
 
   const elapsedMs = Number((process.hrtime.bigint() - startedAt) / 1000000n);
   const elapsedSeconds = (elapsedMs / 1000).toFixed(1);
@@ -637,12 +748,40 @@ function skippedReport(skipped) {
   return `No changed source-test pairs. Passed over ${skipped.length} changed path(s):\n${rows}\n`;
 }
 
+/**
+ * The selected pairs, plus every pinned pair the selection did not already name.
+ *
+ * The stale direction of the pin can only fire on a pair the run measured, and a change set need not
+ * touch a pinned module at all -- so without the union, every commit that happens to miss the pinned
+ * files would treat the pin as an allow-list. The cost is one focused run per pin row.
+ *
+ * A row naming a module the tree no longer enumerates is passed over here rather than paired, so the
+ * comparison after the loop refuses it as the structural failure it is instead of `pairForPath`
+ * refusing it as a missing pair member.
+ */
+function pairsWithPinned(selectedPairs, pinRows, enumeratedModules) {
+  const enumerated = new Set(enumeratedModules);
+  const pairs = new Map(selectedPairs.map((pair) => [pair.sourcePath, pair]));
+
+  for (const row of pinRows) {
+    if (!pairs.has(row.sourcePath) && enumerated.has(row.sourcePath)) {
+      pairs.set(row.sourcePath, pairForPath(row.sourcePath));
+    }
+  }
+
+  return [...pairs.values()];
+}
+
 // Zero pairs is reported as a pass only once the change set is known to have resolved; a selection
 // that failed sets a non-zero exit code and names the git invocation that failed (`D-07-14`). The
 // selected base candidate is written before either outcome, because it is what makes the answer
 // auditable (`D-07-13`).
-async function runChangedPairs() {
-  const selected = pairsForChangedPaths();
+//
+// A zero-pair CHANGED selection still reports what it passed over and then continues into the pinned
+// pairs, because the pin is measured on every run rather than only on the runs whose change set
+// happens to name a pinned module.
+async function runChangedPairs(explicitBase) {
+  const selected = pairsForChangedPaths(projectRoot, explicitBase);
 
   if (!selected.ok) {
     process.stderr.write(`Changed-pair selection failed: ${selected.reason}\n`);
@@ -654,12 +793,17 @@ async function runChangedPairs() {
 
   if (selected.pairs.length === 0) {
     process.stdout.write(skippedReport(selected.skipped));
-    return;
   }
 
-  for (const pair of selected.pairs) {
-    await runPair(pair);
+  const enumeratedModules = productionPaths();
+  const pinRows = loadCoveragePin();
+  const observed = [];
+
+  for (const pair of pairsWithPinned(selected.pairs, pinRows, enumeratedModules)) {
+    await measurePair(pair, observed);
   }
+
+  assertPinnedReadings(observed, pinRows, enumeratedModules);
 }
 
 async function main() {
@@ -675,16 +819,24 @@ async function main() {
     return;
   }
 
+  // Ahead of the single-path form, so a ref name is never read as a path.
+  if (args.length === 2 && args[0] === "--base") {
+    await runChangedPairs(args[1]);
+    return;
+  }
+
   if (args.length === 1) {
     await runPair(pairForPath(args[0]));
     return;
   }
 
   if (args.length !== 0) {
-    throw new Error("Pass one source or test path, --all, --all --report <path>, or no arguments");
+    throw new Error(
+      "Pass one source or test path, --all, --all --report <path>, --base <ref>, or no arguments",
+    );
   }
 
-  await runChangedPairs();
+  await runChangedPairs(undefined);
 }
 
 const invokedPath = process.argv[1] === undefined ? undefined : path.resolve(process.argv[1]);
