@@ -35,7 +35,7 @@ remain barred from source comments.
 | `RCOV-01` | requirement | implemented | seal change A, `da08a749` (plan 09-03) | Same `scope-impact --check` output. `09-02-SUMMARY.md` records `All-pair report written: 230 rows in 482.5s on v26.8.2 to coverage/all-pairs-report.ndjson` and `wc -l coverage/all-pairs-report.ndjson` → `230`, re-measured on the tree carrying the injected hooks read port. |
 | `RCOV-02` | requirement | implemented | seal change A, `da08a749` (plan 09-03) | Same `scope-impact --check` output. The five reclassified modules read complete and the two retained shortfalls carry per-site reasons in `scripts/test-coverage-direct.pin.json`, regenerated in 09-02 from the fresh report's own `accepted-shortfall` enumeration and proved byte-identical (`git diff --exit-code scripts/test-coverage-direct.pin.json` → exit 0). |
 | `RCOV-03` | requirement | implemented | seal change A, `da08a749` (plan 09-03) | Same `scope-impact --check` output. The gate is wired in both places: `.pre-commit-config.yaml:144-149` (local hook `npm-coverage-direct`) and `.github/workflows/ci.yml:140-206` (the `direct-coverage` job, `fetch-depth: 0`). The CI half's first real execution is still unproven — see the `direct-coverage` caveat row below. |
-| `CLOSE-01` | requirement | implemented | seal change B, `d391d058` (plan 09-03) | The final-tree measurement in this plan, quoted verbatim below: `npm run check` exit 0 in 246s and `npm run test:coverage:direct:all` exit 0 over 230 pairs, both at `d83a6dc3`. |
+| `CLOSE-01` | requirement | implemented | seal change B, `d391d058` (plan 09-03) | The shipped-tree measurement at `53b7e83f`, quoted verbatim below: `npm run check` exit 0 in 246s (unit 6009/6009, integration 32/32) and `npm run test:coverage:direct:all` exit 0 over 230 pairs in 485.9s. The earlier `d83a6dc3` run is retained below for the audit trail; three code-review fix commits landed after it, so it is not the run this row asserts over. |
 | `CLOSE-02` | requirement | implemented | seal change B, `d391d058` (plan 09-03) | This document plus the eight terminal dispositions written in place by plan 09-05: `grep -n 'Disposition' .planning/BACKLOG.md` → lines 27, 101, 489, 637, 1779, 1936, 2547, and `.planning/todos/pending/2026-09-02-detect-unused-code-and-type-members.md:12`. |
 | `TESTQ-01` | backlog | implemented | the milestone this item was cut from | `.planning/BACKLOG.md:2544` — closed in the house struck-through form, with a five-row table mapping the item's own numbered workstreams onto `PDEF-01..08` + `AUTH-01`, `RVAL-03`, `TREF-01..09`, the `GGAT` family, and `RCOV-03`. The entry states in a sentence that the route is assembled from clause text, not stated by a record. |
 | `FLOW-09` | backlog | implemented | `TREF-05`, `TREF-06`, with `GGAT-04` holding the surface at zero | `.planning/BACKLOG.md:635` — quotes the three clause fragments that make the match and says explicitly that the route is derived from clause text rather than from a record naming `FLOW-09` against an ID. Its `NOT closed by the same change:` paragraph keeps the ~94 ordinary internal helpers visibly open. |
@@ -285,13 +285,21 @@ original text, preserved verbatim under `Original report follows.`. A verbatim-
 preservation requirement and an exactly-one-occurrence grep cannot both hold when the
 original text already contains the word. Preservation won.
 
-## The final-tree measurement
+## The quality-suite measurements
+
+This section holds two runs. The first was taken at the end of plan 09-06 and was the
+final tree **at that moment**; the code-review gate then ran and three fix commits
+landed, so the second run — on `53b7e83f`, below — is the one `CLOSE-01` asserts over.
+Both are kept: deleting a superseded measurement would leave the record unable to show
+why a second one was needed.
+
+### The plan 09-06 measurement (superseded by the re-measurement below)
 
 Both commands were run from the repository root on commit
 `d83a6dc32101aa89d828a029e2fbbc5ecf857a04` (`d83a6dc3`, "docs(backlog): close out the
 terminal-disposition plan") on 2026-09-11. Neither figure is carried over from plan
 09-02 or plan 09-03; those runs measured earlier trees and are correct statements
-about those trees. This is the run `CLOSE-01` asserts over.
+about those trees.
 
 ### `npm run check`
 
@@ -366,12 +374,44 @@ All-pair run complete: 230 pairs in 480.1s (480121ms) on v26.8.2
 
 ### What lands after the measurement
 
-Only planning documents that no test reads: this ledger, the plan summary beside it,
-and whatever the phase-close step writes to `.planning/STATE.md` and
-`.planning/ROADMAP.md`. Nothing under `extensions/`, `tests/`, `scripts/`,
-`package.json`, `eslint.config.js` or `.fallowrc.json` changes after the two runs
-above. `node scripts/revalidation.mjs scope-impact --check` was re-run after this
-ledger was committed and still prints `Scope impact valid: 40 records.`
+**This section's original claim did not survive the phase.** It said only planning
+documents would land after `d83a6dc3`, and that nothing under `extensions/`, `tests/`,
+`scripts/`, `package.json`, `eslint.config.js` or `.fallowrc.json` would change. That
+was true when written and false by the time the phase closed: the code-review gate ran
+afterwards and three fix commits changed production and test code.
+
+- `1228b178` `test(hooks): pin readHooksJson to its utf-8 decode` — `tests/bridges/hooks/stage.test.ts`
+- `064398e5` `docs(hooks): state where the hooks path join is composed` — `extensions/pi-claude-marketplace/bridges/hooks/stage.ts` (comment only)
+- `0ac328a0` `fix(revalidation): keep the sealed route lookup total` — `scripts/revalidation.mjs`, `tests/architecture/revalidation.test.ts`
+
+`scripts/revalidation.mjs` is a `specialPairs` entry in the direct-coverage gate, so
+the second measurement above genuinely stopped describing the shipped tree. Correcting
+the record rather than leaving the stale claim is the point of this artifact.
+
+### The re-measurement on the shipped tree
+
+Both commands were re-run from the repository root on
+`53b7e83f3e7ef113ad627141bdd0fd95643aa042` (`53b7e83f`, "docs(review): record the
+closure-phase fix outcomes"), which is the commit the phase's verification confirms as
+`HEAD`. **This is the run `CLOSE-01` asserts over**; the `d83a6dc3` figures above are
+correct statements about an earlier tree and are retained for the audit trail rather
+than deleted.
+
+| Command | Result |
+| --- | --- |
+| `npm run check` | exit **0**, 246s. Unit `tests 6009 / pass 6009 / fail 0 / skipped 0`; integration `tests 32 / pass 32 / fail 0` |
+| `npm run test:coverage:direct:all` | exit **0**. `2 pinned shortfall(s) matched scripts/test-coverage-direct.pin.json exactly.` / `All-pair run complete: 230 pairs in 485.9s (485945ms) on v26.8.2` |
+| `node scripts/revalidation.mjs scope-impact --check` | `Scope impact valid: 40 records.` |
+| `node --test tests/architecture/revalidation.test.ts` | tests 138, pass 138, fail 0 |
+
+The unit count moved 6007 → 6009 because `0ac328a0` added the two keyset cases that
+close `WR-03`. `scripts/revalidation.mjs` still measures `branches 789/789, functions
+202/202, lines 2669/2669` — the fix added lines and kept the pair at 100%, so it needed
+no pin row.
+
+What lands after **this** measurement is only planning documents no test reads: this
+ledger's correction, the phase's `VERIFICATION.md`, and whatever the phase-close step
+writes to `.planning/STATE.md` and `.planning/ROADMAP.md`.
 
 ### A note on the clean-tree precondition
 
