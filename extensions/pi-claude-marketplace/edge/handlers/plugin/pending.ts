@@ -35,8 +35,8 @@ export function makePendingHandler(
     // `pending` takes NO positional arguments. Any non-flag token (or an
     // unknown long flag passed through parseArgs as a positional) is a
     // usage error.
-    if (parsed.positional.length > 0) {
-      const first = parsed.positional[0] ?? "";
+    const [first] = parsed.positional;
+    if (first !== undefined) {
       if (first.startsWith("--")) {
         notifyUsageError(ctx, { message: `Unknown option: "${first}".`, usage: USAGE });
       } else {
