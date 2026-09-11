@@ -169,8 +169,8 @@ No Phase 1 requirement is orphaned. RVAL-01 through RVAL-04 appear in plan front
 | `tests/architecture/revalidation.test.ts` | RVAL-01..04 | 136 | 0 | 0 | Behavioral, whole structured outcomes | ⚠️ PARTIAL — strong existing cases, but two plausible wrong contracts still pass |
 | `scripts/revalidation.negative.mjs` | RVAL-02, RVAL-04 | standalone runner | 0 | 0 | Exact structured outcomes | ⚠️ PARTIAL — independent expectations, incomplete offender set |
 
-**Disabled tests on requirements:** 0  
-**Circular patterns detected:** 0 — filesystem writes create case-owned inputs; the ordinary-output oracle is a literal independent expected string.  
+**Disabled tests on requirements:** 0
+**Circular patterns detected:** 0 — filesystem writes create case-owned inputs; the ordinary-output oracle is a literal independent expected string.
 **Insufficient assertions:** 0 among existing cases; the problem is missing cases, not weak assertions.
 
 ### Anti-Patterns Found
@@ -204,10 +204,10 @@ Two blockers remain after the single closure attempt. The original no-op is fixe
 
 ## Verification Metadata
 
-**Verification approach:** Goal-backward re-verification with full checks on the prior RVAL-04 gap and regression checks on prior passes  
-**Must-haves source:** Previous 01-VERIFICATION.md plus non-reducing ROADMAP criteria and Plan 01-70 contract details  
-**Automated checks:** 9 truth-level passes, 2 independent false-pass probes, and 1 configured quality-gate failure  
-**Human checks required:** 0  
+**Verification approach:** Goal-backward re-verification with full checks on the prior RVAL-04 gap and regression checks on prior passes
+**Must-haves source:** Previous 01-VERIFICATION.md plus non-reducing ROADMAP criteria and Plan 01-70 contract details
+**Automated checks:** 9 truth-level passes, 2 independent false-pass probes, and 1 configured quality-gate failure
+**Human checks required:** 0
 **Review-loop state:** Three fixer passes consumed; no fourth peer review by workflow design
 
 ---

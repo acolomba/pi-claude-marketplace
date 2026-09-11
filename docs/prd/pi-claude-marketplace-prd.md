@@ -2,7 +2,7 @@
 
 **Document version:** 1.0 (derived from the existing implementation) **Status:** Reference for designing a successor architecture **Audience:** Architects, engineers, and product owners building the next iteration
 
----
+______________________________________________________________________
 
 ## Table of Contents
 
@@ -70,7 +70,7 @@
   - [Appendix B: Generated-name conventions](#appendix-b-generated-name-conventions)
   - [Appendix C: Reload-hint verbs](#appendix-c-reload-hint-verbs)
 
----
+______________________________________________________________________
 
 ## 1. Overview & Purpose
 
@@ -93,7 +93,7 @@
 - Automatic dependency resolution; declared `dependencies` produce a manual-install warning only.
 - Mutating LLM tools (install/update/uninstall) -- only listing tools are exposed.
 
----
+______________________________________________________________________
 
 ## 2. Personas, Goals, and Use Cases
 
@@ -104,7 +104,7 @@
 | **Plugin author**           | Verify plugins resolve correctly under Pi                                      | Install from a local path source; verify all components stage; verify update flow lands new version                                              |
 | **Operator / power user**   | Detect drift, recover from broken state                                        | Diagnose unavailable plugins (component or source-kind reasons); recover from non-fast-forward divergence; recover after partial-failure removal |
 
----
+______________________________________________________________________
 
 ## 3. Glossary
 
@@ -129,7 +129,7 @@
 - **Partially-installed** -- a DERIVED status (no persisted flag, no migration): a plugin recorded as installed that currently re-resolves to the `partially-available` arm -- i.e., it was installed with one or more components dropped. It renders with the `◉` glyph, distinct from a clean `(installed)` row's `●` (FSTAT-01..02). A fully-supported upgrade returns it to `(installed)` automatically (FSTAT-03).
 - **Partially-upgradable** -- a DERIVED status for a currently-clean installed plugin whose newer no-network cache candidate would NEWLY degrade it (re-resolve to `partially-available`). It wears the clean `●` glyph because it is clean today; only its candidate would degrade. A partially-installed plugin is never partially-upgradable (FSTAT-04..05).
 
----
+______________________________________________________________________
 
 ## 4. System Context
 
@@ -166,7 +166,7 @@ The extension owns three persistence surfaces:
    - `<scope>/agents/pi-claude-marketplace-*.md` (with a separate `<extension>/agents-index.json`).
    - `<scope>/mcp.json` (entries marked with `_piClaudeMarketplace: { plugin, marketplace }`).
 
----
+______________________________________________________________________
 
 ## 5. Functional Requirements -- Vertical (Per Feature)
 
@@ -493,7 +493,7 @@ flowchart LR
   chk -- ok --> stage[stageMcpServers with marker]
 ```
 
----
+______________________________________________________________________
 
 ## 6. Functional Requirements -- Horizontal (Cross-cutting)
 
@@ -681,7 +681,7 @@ These rules clarify how marketplace records and plugin install records interact 
 | **IL-4** | V1 MUST NOT emit telemetry (no metrics, no event sink, no analytics endpoint). Adding telemetry is a successor-architecture concern.                                                                                                                                                                                             |
 | **IL-5** | The successor architecture should consider: a pluggable message catalog for i18n; a structured event channel for `success` / `warning` / `error` / `cleanup-leak` / `rollback`; and severity-aware log levels separate from the user-facing notify channel.                                                                      |
 
----
+______________________________________________________________________
 
 ## 7. User Journeys
 
@@ -816,7 +816,7 @@ journey
     Stale MCP entries pruned at next mcp.json read: 5: Extension
 ```
 
----
+______________________________________________________________________
 
 ## 8. State Diagrams
 
@@ -900,7 +900,7 @@ stateDiagram-v2
   Updated --> [*]
 ```
 
----
+______________________________________________________________________
 
 ## 9. Architecture Diagrams
 
@@ -1019,7 +1019,7 @@ flowchart LR
   tools -- "neither" --> none[Soft dep unloaded → emit warning]
 ```
 
----
+______________________________________________________________________
 
 ## 10. Non-functional Requirements
 
@@ -1038,7 +1038,7 @@ flowchart LR
 | **NFR-11** | The Pi extension API dependency is declared as `@mariozechner/pi-coding-agent` peer dependency with no version pin (`*`); the extension is developed against `^0.70.6`. The successor SHOULD pin a minimum supported Pi API version once the surface stabilizes.                                                                      |
 | **NFR-12** | The Claude `marketplace.json` parser is forward-compatible: it does not check or assume any schema version field. Unknown plugin source kinds parse to `{ kind: "unknown", reason }` rather than failing. The parser targets the de-facto schema observable in `anthropics/claude-plugins-official` as of the V1 implementation date. |
 
----
+______________________________________________________________________
 
 ## 11. Out of Scope (V1)
 
@@ -1058,7 +1058,7 @@ These items are documented in `BACKLOG.md` and intentionally deferred from V1 to
 - **`info` subcommand** for plugins/marketplaces.
 - **Mutating LLM tools** for install/update/remove.
 
----
+______________________________________________________________________
 
 ## 12. Acceptance Criteria Summary
 
@@ -1083,7 +1083,7 @@ The V1 implementation has unit and integration tests covering the requirements a
 | Concurrency        | "withStateGuard sees writes that landed between caller's read and the closure"; "uninstall tolerates a concurrent uninstall by another process"; "update rejects when the marketplace record disappears between phases"                                                                                                                                                                                                                                   |
 | End-to-end         | "anthropics/claude-plugins-official: install + uninstall every supported plugin" (live integration test)                                                                                                                                                                                                                                                                                                                                                  |
 
----
+______________________________________________________________________
 
 ### Appendix A: Subcommand index
 
@@ -1123,6 +1123,6 @@ The V1 implementation has unit and integration tests covering the requirements a
 | `marketplace add` (success)           | (none)    | adding empty marketplace surfaces nothing yet |
 | `marketplace update` (autoupdate off) | (none)    | manifest pointer change is invisible to Pi    |
 
----
+______________________________________________________________________
 
 _End of document._

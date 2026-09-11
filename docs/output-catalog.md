@@ -101,7 +101,7 @@ The v2 grammar retires several v1-only free-text augmentations that are not expr
 
 The `(no marketplaces)` body sentinel (D-15-09 / D-16-17) IS retained -- it is the structural representation of an empty top-level `marketplaces: []`, emitted by the renderer for the empty list-surface case.
 
----
+______________________________________________________________________
 
 ## Severity routing
 
@@ -129,7 +129,7 @@ The summary counts the operations that drive the severity, by stamped severity, 
 
 Wording (OUT-02 / D-02): `[A|Some] <subject> operation[s] has/have failed | needs/need attention.` -- `subject` is `plugin` or `marketplace`; `A` for a single row, `Some` for more than one; `operation` / `operations` pluralized by count; `has failed` / `have failed` for error and `needs attention` / `need attention` for warning; terminal period kept. D-03: when a cascade's rows span BOTH plugin and marketplace subjects (load-time `reconcile`, `import`) the subject noun is dropped and all rows are counted uniformly (`[A|Some] operation[s] has/have failed | needs/need attention.`), detected at render time from the live row counts. Examples: `"A plugin operation has failed."`, `"Some plugin operations have failed."`, `"A marketplace operation has failed."`, `"Some operations have failed."` (mixed-subject), `"A plugin operation needs attention."`. The summary is computed structurally from the `NotificationMessage` traversal `computeSeverity` performs -- it is not caller-supplied free text, so it does not violate the "no top-level free text" principle (D-17-09).
 
----
+______________________________________________________________________
 
 ## Status token reference
 
@@ -167,7 +167,7 @@ Marketplace status tokens (drawn from the 7-member `MARKETPLACE_STATUSES` tuple;
 | `(failed)`  | ⊘    | Marketplace header -- `marketplace add` failure, `marketplace remove` partial, `marketplace update` failure, `marketplace autoupdate` failure. |
 | `(skipped)` | ●    | Marketplace header -- mp-level skip (e.g. `{up-to-date}`); the autoupdate-idempotent reasons render the marker-as-outcome form instead.        |
 
----
+______________________________________________________________________
 
 ## `/claude:plugin list`
 
@@ -535,7 +535,7 @@ Plugin list: 1 success
 
 A degraded record that is ALSO absent from a manifest that loaded prepends `not in manifest` to the dropped-component kinds (INV-02). The absence reason comes first because it describes the record's relationship to the marketplace, and the kinds describe the install itself; `narrowUnsupportedKinds` stays the sole producer of the kind tokens. The row keeps the `◉` glyph and the `partially-installed` token -- manifest absence is a separate axis from degradation and never changes the status. Severity `info`; no reload-hint (inventory row).
 
----
+______________________________________________________________________
 
 ## `/claude:plugin install <plugin>@<marketplace>`
 
@@ -776,7 +776,7 @@ The reservation is deliberate. It is what lets `/claude:plugin enable` re-take t
 
 The refusal is otherwise unexplainable from disk, because the name occupies no file. Thus the conflict line names the owner as disabled: `skill "a-foo" already owned by disabled plugin "alpha"`. An enabled owner keeps the shorter form: `skill "g-foo" already owned by plugin "gamma"`. The remedy is `/claude:plugin uninstall <owner>@<marketplace>`, which removes the record and releases the names. The row form is unchanged -- this text rides the `cause:` trailer of the `failure-runtime-with-cause` state above. Severity `error`; no reload-hint (nothing landed).
 
----
+______________________________________________________________________
 
 ## `/claude:plugin uninstall <plugin>@<marketplace>`
 
@@ -860,7 +860,7 @@ A plugin operation has failed.
   ⊘ helper (failed) {not installed, marketplace in project scope}
 ```
 
----
+______________________________________________________________________
 
 ## `/claude:plugin reinstall`
 
@@ -1072,7 +1072,7 @@ A marketplace operation has failed.
 ⊘ ghost-mp (failed) {marketplace not added}
 ```
 
----
+______________________________________________________________________
 
 ## `/claude:plugin update`
 
@@ -1322,7 +1322,7 @@ A marketplace operation has failed.
 ⊘ ghost-mp (failed) {marketplace not added}
 ```
 
----
+______________________________________________________________________
 
 ## `/claude:plugin fetch`
 
@@ -1377,7 +1377,7 @@ A plugin operation has failed.
 Plugin fetch: 1 failure, 1 success
 ```
 
----
+______________________________________________________________________
 
 ## `/claude:plugin import`
 
@@ -1471,7 +1471,7 @@ Import: 4 successes
 
 Per-scope marketplace blocks. OUT-03/D-04: two `added` marketplace rows plus two `installed` plugin rows yield `4 successes`. Reload-hint fires. Severity: info.
 
----
+______________________________________________________________________
 
 ## `/claude:plugin bootstrap`
 
@@ -1497,7 +1497,7 @@ The bootstrap path is a marketplace add; the marketplace status `added` carries 
 
 When the marketplace already exists, the bootstrap orchestrator renders the marketplace with status `updated` (the marketplace persistence record is touched but no plugins changed). No reload-hint: with no plugin children there is no Pi-visible resource change, so the touch alone does not warrant a `/reload` (SNM-33 / D-22-01). Severity: info. (Alternative implementations may render an empty `(updated)` payload as a no-op; the catalog asserts the structural shape, not the orchestrator's choice between `updated` and emitting nothing.)
 
----
+______________________________________________________________________
 
 ## `/claude:plugin marketplace list`
 
@@ -1545,7 +1545,7 @@ Marketplace list: 4 successes
 
 Four marketplace blocks joined by one blank line each (D-16-07), followed by the plural tally. Each list-surface header is SUB-BRANCH B (mp.status undefined; details set). `<autoupdate>` appears only when `details.autoupdate === true`. The `details.lastUpdatedAt` field is retained in state but is not rendered (UXG-01). Caller-supplied order is preserved (D-16-06); the catalog uses an alphabetic ordering for readability. No reload-hint, no severity arg.
 
----
+______________________________________________________________________
 
 ## `/claude:plugin marketplace add <source>`
 
@@ -1661,7 +1661,7 @@ Some operations have failed.
     cause: HTTP Error: 401 Unauthorized
 ```
 
----
+______________________________________________________________________
 
 ## `/claude:plugin marketplace info <name>`
 
@@ -1792,7 +1792,7 @@ A marketplace operation has failed.
 ⊘ my-mp [user] (failed) {marketplace not added}
 ```
 
----
+______________________________________________________________________
 
 ## `/claude:plugin info <plugin>@<marketplace>`
 
@@ -2109,7 +2109,7 @@ A marketplace operation has failed.
 ⊘ ghost-mp [user] (failed) {marketplace not added}
 ```
 
----
+______________________________________________________________________
 
 ## `/claude:plugin pending`
 
@@ -2206,7 +2206,7 @@ A marketplace operation has failed.
 ⊘ claude-plugins.json [project] (failed) {invalid manifest}
 ```
 
----
+______________________________________________________________________
 
 ## reconcile-applied-cascade
 
@@ -2351,7 +2351,7 @@ The load-time counterpart of the standalone install-disabled row: the user hand-
 Reconcile: 1 success
 ```
 
----
+______________________________________________________________________
 
 ## `/claude:plugin marketplace remove <name>`
 
@@ -2413,7 +2413,7 @@ A marketplace operation has failed.
 ⊘ ghost-mp (failed) {marketplace not added}
 ```
 
----
+______________________________________________________________________
 
 ## `/claude:plugin marketplace update [<name>]`
 
@@ -2613,7 +2613,7 @@ A marketplace operation has failed.
 ⊘ ghost-mp (failed) {marketplace not added}
 ```
 
----
+______________________________________________________________________
 
 ## `/claude:plugin enable <plugin>@<marketplace>`
 
@@ -2778,7 +2778,7 @@ A plugin operation has failed.
 
 Triggered when the target config file (`claude-plugins.json` or, with `--local`, `claude-plugins.local.json`) fails CFG-03 validation (0-byte, malformed JSON, or schema-invalid). The orchestrator aborts BEFORE entering the cascade -- state.json mtime is UNCHANGED. The `cause:` summary cites `path.basename(targetConfigPath)` (the file basename only, never the absolute path; T-53-02-02 information-disclosure mitigation reused from Phase 53). Severity `error`; no reload-hint.
 
----
+______________________________________________________________________
 
 ## `/claude:plugin disable <plugin>@<marketplace>`
 
@@ -2833,7 +2833,7 @@ A plugin operation has failed.
 
 Triggered when the target config file fails CFG-03 validation. The orchestrator aborts BEFORE entering the cascade -- state.json mtime is UNCHANGED. The `cause:` summary cites `path.basename(targetConfigPath)` (basename only; T-53-02-02 mitigation). Severity `error`.
 
----
+______________________________________________________________________
 
 ## `/claude:plugin marketplace autoupdate|noautoupdate [<name>]`
 
@@ -2943,7 +2943,7 @@ A marketplace operation has failed.
 
 The blocks above span two ladders. The severity ladder runs fresh → info, benign skipped → info, failed (and the `{marketplace not added}` precondition miss) → error (per D-16-11 + Phase 17.1's mp-level skipped extension, refined by UXG-02 / D-28-06: the two idempotent autoupdate no-ops carry benign reasons -- `already autoupdate` / `already no autoupdate` -- so they compute info, not warning; an mp-level `skipped` with non-benign or missing reasons would still route to warning). The reload-hint ladder is uniform here: every autoupdate flag flip suppresses the trailer (per SNM-33 / D-22-01 / D-22-03). The autoupdate flag lives on a marketplace record, not on any Pi-visible resource, so neither a fresh flip nor an idempotent no-op nor a missing-marketplace `{marketplace not added}` failure contributes to "/reload to pick up changes" -- only a plugin row state change does.
 
----
+______________________________________________________________________
 
 ## Manual recovery anchors
 
@@ -2963,7 +2963,7 @@ A plugin operation needs attention.
 
 The per-plugin `manual recovery` variant emits the literal `(manual recovery)` token (with the space) as the status discriminator. The `cause?: Error` trailer renders at 4-space indent below the row (D-16-08). Severity: `warning` (manual recovery triggers warning per D-16-11). No reload-hint (manual-recovery is not in the state-changing set).
 
----
+______________________________________________________________________
 
 ## Empty / no-op surfaces
 
@@ -2978,7 +2978,7 @@ Notes:
 - `(no marketplaces)` is the renderer's sentinel for an empty top-level `marketplaces: []` per D-16-17. No reload-hint, no severity arg.
 - An empty per-marketplace `plugins: []` IS the structural representation of an empty cascade per D-15-08; the renderer does not emit a `(no plugins)` body line under the header.
 
----
+______________________________________________________________________
 
 ## Usage errors
 
@@ -2994,7 +2994,7 @@ Subcommands: install, uninstall, update, reinstall, list, bootstrap, import, mar
 
 The exact wording is renderer-/orchestrator-specific; the contract is that `notifyUsageError` is called with a structured `UsageErrorMessage` and the renderer emits the two-section body separated by one blank line. The catalog's expected output mirrors the structural shape (`message` block, blank line, `usage` block).
 
----
+______________________________________________________________________
 
 ## Out-of-band notifications
 
@@ -3028,7 +3028,7 @@ Stop hook override cap reached.
 
 Emitted exactly once by the settle dispatcher (`extensions/pi-claude-marketplace/bridges/hooks/settle.ts`) via `notifyStopHookOverrideCap` when Stop hooks drive 8 consecutive bridge re-entries -- block decisions and `additionalContext` continuations share one consecutive-re-entry counter (D-88-08). The loop protection (STOP-07) suppresses the 8th re-entry so a livelocking hook cannot spin the agent forever, and this warning surfaces the override so the suppression is never silent (D-88-01 transparency). Severity: `warning` (the second arg to `ctx.ui.notify` is the magic string `"warning"`) -- the turn ended (the protection worked) but the plugin's block was overridden. The one-shot latch is per-session: a plain-allow outcome with no re-entry resets the counter and re-arms it (D-88-08), so a fresh 8-re-entry run is required before the warning fires again. The literal example names a mock `ralph-wiggum` plugin; the production string interpolates the blocking plugin's id. The byte form is locked by `tests/architecture/hooks-cap-notify.test.ts` (NOT `tests/architecture/catalog-uat/catalog-contract.test.ts`, whose driver only knows the structured `notify()` entrypoint -- this seam is a bridge diagnostic, not a `NotificationMessage`).
 
----
+______________________________________________________________________
 
 ## Cross-references
 

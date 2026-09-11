@@ -179,8 +179,8 @@ No Phase 3 requirement is orphaned from the plans, and no Phase 3 plan cites an 
 | Hook lookup, dispatch, event, and registry owners                 | PDEF-07            | Yes    | Exact unsupported values plus public producer/guard behavior and structural checks                | ✓ PASS  |
 | Notification owners, edge handlers, architecture, and catalog UAT | PDEF-01            | Yes    | Compile-time omission rejection, exact zero/one/many output, order, and state neutrality          | ✓ PASS  |
 
-**Disabled tests on requirements:** 0  
-**Circular expected-value patterns detected:** 0  
+**Disabled tests on requirements:** 0
+**Circular expected-value patterns detected:** 0
 **Insufficient behavioral assertions:** 0
 
 ## Decision Coverage
@@ -197,5 +197,5 @@ No gaps found. All five roadmap truths, all five mapped requirements, every plan
 
 ---
 
-_Verified: 2026-09-07T12:15:27Z_  
+_Verified: 2026-09-07T12:15:27Z_
 _Verifier: Codex (local goal-backward verification)_
