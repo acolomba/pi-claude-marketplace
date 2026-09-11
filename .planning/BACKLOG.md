@@ -98,6 +98,23 @@ tokens (the `narrowProbeError` path already does this for I/O errors).
 
 ## COV-01: coverage exclusion policy, and the two out-of-bound orchestrators
 
+**Disposition 2026-09-11: `superseded`** (`RCOV-04`, `SCOPE-REQ-RCOV-04`,
+formerly Phase 8). The standalone remeasurement this item asked for is subsumed
+by `RCOV-01`'s complete all-pair coverage baseline, regenerated from the
+`refine-unit-tests` branch across every current source-test pair -- 230 of them,
+reported in the run's own `All-pair report written:` row count. The two
+orchestrators named below, `orchestrators/import/execute.ts` and
+`orchestrators/marketplace/update.ts`, are both inside that baseline, and
+neither is a current terminal shortfall: neither appears in the committed pin
+`scripts/test-coverage-direct.pin.json`, which records one reason per uncovered
+site and is not an allowlist.
+
+This is not a flattering exclusion and it is not an implementation claim. No
+`sonar.coverage.exclusions` entry was added for either module, and the
+exclusion-policy reasoning in part 1 below is retained unchanged as the standing
+answer for the next low-coverage wiring module that raises the same question.
+The same wording carries in `.planning/REQUIREMENTS.md` §"Evidence and History".
+
 Promoted from the 2026-08-10 todo at the v1.18 close (2026-08-12). Both parts sit
 outside the D-99-05b bound (update / reinstall / install only), which is why the
 bounded sweep could not carry them.
@@ -1759,6 +1776,27 @@ bridge/orchestrator/NFR-10/NFR-5 impact (confirmed by spike 008).
 
 ## GAUTH-01: git host auth-failure hint coverage
 
+**Disposition 2026-09-11: `deferred` -- and it is the named prescription that is
+deferred, not the whole family.** What exists today, measured: the host-named
+diagnostic `NO_PROVIDER_CAUSE(host)` (`orchestrators/auth-host.ts`) is
+host-generic and is wired into exactly ONE of five auth-relevant call sites --
+`marketplace update`'s url-source refresh path
+(`orchestrators/marketplace/update.ts:394`). What the prescription asks for and
+did not get: the same cause line at the other four call sites -- `plugin
+install`, `plugin reinstall`, `plugin fetch`, and `marketplace add` -- each of
+which still surfaces only the bare, host-less `authentication required` token on
+a no-provider host.
+
+It is not implemented, and it is not an open defect inside this milestone's
+boundary either. It is a product change with no terminal finding inside the
+unit-test-quality boundary, which is why `D-22` bars it from creating milestone
+work here; `AUTH-01` retains only the independently terminal authentication
+findings. It is routed forward rather than closed.
+
+Do not read the family as an open pair: its sibling `GAUTH-02`, the GitLab
+Device Flow provider from the same spike, shipped separately via quick task
+`260814-a7m`. One shipped item, one deferred prescription.
+
 Surfaced by the same GitLab-parity spike (2026-08-14,
 `.planning/spikes/009-git-host-auth-hint-coverage`), prompted by the same
 upstream changelog line ("...and clone auth-failure hints name your actual
@@ -1894,6 +1932,19 @@ Code seams: `bridges/hooks/dispatch.ts` (`reduceBucket`,
 `bridges/hooks/event-router.ts` (the `session_shutdown` registration).
 
 ## AGCOL-01: the agents collision gate is dead by the same argument that retired the skills one
+
+**Disposition 2026-09-11: `evidence-only`** (`GGAT-02`, `SCOPE-REQ-GGAT-02`,
+formerly Phase 7). This item asserts that the agents-collision gate is dead by
+the same argument that retired the skills one. Exhaustive canonical mapping of
+the `refine-unit-tests` review corpus found no dedicated terminal finding behind
+that premise, so the premise was never revalidated against the post-refactor
+tree. Revalidation is required before it can return to active scope.
+
+It is not implemented. `assertNoAgentCollisions` and its call site are still in
+place, `bridges/agents/discover.ts`'s comment and PRD AG-12 still promise the
+throw, and nothing in this milestone touched any of them. The report below is
+retained for traceability and authorizes no implementation on its own. The same
+wording carries in `.planning/REQUIREMENTS.md` §"Evidence and History".
 
 Surfaced by review while landing PR #141 (2026-08-23), directly beside the
 retirement of `assertNoSkillCollisions` (D-141-04).

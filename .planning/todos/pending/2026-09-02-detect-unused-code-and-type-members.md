@@ -9,6 +9,20 @@ audit_acknowledged:
 
 # No gate detects an unused type member
 
+**Disposition 2026-09-11: `deferred` to v1.19.** `CLOSE-02` names this todo
+explicitly as one that retains a deferred history without being described as
+implemented. Its substance stands unchanged: no gate reports a type member that
+nothing reads, measured on 2026-09-02 with `npm run typecheck`, `npm run lint`
+and `npm run fallow` all passing on a planted
+`readonly neverReadAnywhere?: string` member.
+
+It creates no implementation work in this milestone. It was reviewed against
+phase 9 of `refine-unit-tests` and deliberately not folded: it has no dedicated
+terminal finding inside the unit-test-quality boundary, so `D-22` bars it from
+creating active milestone work without new terminal evidence. The candidate
+approach below is retained as a starting point, not as an authorization, and
+the closing note that phase 7 would own the gate no longer applies.
+
 Nothing in the gate stack reports a member of an exported interface that no
 call site ever reads. Measured on 2026-09-02 by planting
 `readonly neverReadAnywhere?: string` on `EdgeDeps`
