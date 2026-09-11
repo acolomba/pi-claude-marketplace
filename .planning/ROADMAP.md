@@ -776,7 +776,7 @@ It can return only after current revalidation; it is not marked implemented.
 **Goal:** Re-establish honest direct coverage for every source-test pair and resolve shortfalls.
 **Depends on:** Phase 7
 **Requirements:** RCOV-01, RCOV-02, RCOV-03
-**Plans:** 9 plans
+**Plans:** 1/9 plans executed
 
 **Success Criteria**:
 
@@ -807,7 +807,7 @@ Plans:
 
 **Wave 1**
 
-- [ ] 08-01-PLAN.md — repair the whole-tree reporter, give it a planted control, clear the dash-hook blocker, and run the enumeration sweep
+- [x] 08-01-PLAN.md — repair the whole-tree reporter, give it a planted control, clear the dash-hook blocker, and run the enumeration sweep
 
 **Wave 2** _(blocked on Wave 1 completion)_
 
@@ -870,5 +870,5 @@ baseline, which still includes both pairs; neither is a terminal shortfall.
 | 5. Injection and Ownership Design    | 34/34          | Complete    | 2026-09-08 |
 | 6. Assertion and Module Refinement   | 52/52          | Complete    | 2026-09-10 |
 | 7. Gate Integrity                    | 16/16 | Complete   | 2026-09-10 |
-| 8. Direct Coverage                   | 0/0            | Not started | —          |
+| 8. Direct Coverage                   | 1/9 | In Progress|  |
 | 9. Final Quality and Backlog Closure | 0/0            | Not started | —          |

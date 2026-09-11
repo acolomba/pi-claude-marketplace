@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 08
 current_phase_name: Direct Coverage
 status: executing
-stopped_at: Phase 8 planned; 9 plans across 7 waves, plan-checker passed
-last_updated: "2026-09-11T01:18:56.000Z"
-last_activity: 2026-09-10
-last_activity_desc: Phase 8 planned; 9 plans across 7 waves, ready to execute
-state_head: 1ada24cab348f59c397a8b2aed0680ea30403255
+stopped_at: Completed 08-01-PLAN.md
+last_updated: "2026-09-11T02:11:11.494Z"
+last_activity: 2026-09-11
+last_activity_desc: 08-01 complete; report runs end to end, 230 rows, 7 named shortfalls
+state_head: 5d5c4c29cc5f522faff5a7afb5ac50a3173d652f
 progress:
   total_phases: 9
   completed_phases: 3
   total_plans: 205
-  completed_plans: 196
+  completed_plans: 197
   percent: 33
 ---
 
@@ -31,13 +31,37 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: 08 (Direct Coverage) — PLANNED, ready to execute
-Next: /gsd-execute-phase 08
-Plan: 0 of 9 complete
-Status: Phase 07 closed, verified `passed` 7/7; `npm run check` exit 0 at 5952 unit plus 32
-integration. GGAT-01, GGAT-03, GGAT-04 complete.
-Last activity: 2026-09-10 — Phase 8 planned; 9 plans, 7 waves, 27 tasks; plan-checker passed
-with one advisory, since fixed
+Phase: 08 (Direct Coverage) — EXECUTING
+Next: /gsd-execute-phase 08 (wave 2)
+Plan: 1 of 9 complete
+Status: 08-01 complete. `npm run test:coverage:direct:report` runs end to end for the first time —
+230 rows, 479.8s, `Verdicts: accepted-shortfall 7, complete 216, type-only 7`. The enumeration is
+recorded in `08-01-SUMMARY.md`, which is the classification input for plans 02, 03, 05 and 07;
+`coverage/` is gitignored and carries nothing forward. `pre-commit run --all-files` is green with
+`SKIP=trufflehog`. Unit suite 5952/5952, 0 skipped.
+Last activity: 2026-09-11 — 08-01 repaired the report's pair enumeration, planted its arity control
+inside `npm run check`, cleared four modifying pre-commit hooks, and measured one full sweep
+
+### What the 08-01 sweep measured
+
+Seven modules fall short. The count matching the roadmap's "seven" is a coincidence — four of
+`CONTRIBUTING.md`'s rows now read complete and two modules it never named fall short. Named, with
+their exact reading strings: `bridges/commands/discover.ts` (`branches 55/57, lines 412/414`, pin
+candidate), `bridges/hooks/event-router.ts` (`branches 107/111, lines 959/967`, tests),
+`edge/args.ts` (`branches 28/29, lines 86/89`, rewrite), `edge/handlers/plugin/pending.ts`
+(`branches 9/10`, rewrite), `edge/handlers/shared.ts` (`branches 14/15, lines 83/85`, rewrite),
+`orchestrators/plugin/install-outcome.ts`
+(`branches 60/83, functions 22/27, lines 956/1031`, owner tests after the removal port, never a pin),
+`orchestrators/plugin/update-preflight.ts` (`functions 20/21, lines 589/593`, one test). No row is
+unclassified.
+
+Two measured corrections to the phase's own premises. First, `D-08-A12` is right that
+`tests/architecture/revalidation.test.ts` is the only dash offender, but wrong that widening the
+exclusion turns `--all-files` green: `trailing-whitespace`, `end-of-file-fixer` and `mdformat` also
+rewrote six committed files, all last touched inside this milestone. The research reproduced the dash
+hook in a throwaway repository holding one file, so it could not have seen them. Second,
+`trufflehog` cannot run in a linked worktree at all — it reads `<root>/.git/index`, which does not
+exist when `.git` is a file — so the local gate has a permanent hole only CI closes.
 
 ### What Phase 8 discussion measured
 
@@ -411,6 +435,7 @@ stay recorded rather than excused.
 | Phase 06 P50 | 9min | 2 tasks | 12 files |
 | Phase 06 P51 | 10min | 3 tasks | 12 files |
 | Phase 06 P52 | 42min | 2 tasks | 6 files |
+| Phase 08 P01 | 39min | 3 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -930,6 +955,9 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 06]: Vacate the legacy list.ts pair without a forwarding export; Plan 51 remains responsible for its fail-closed repointing ledger and deletion.
 - [Phase 06]: Retain list behavior in four direct owners; delete the vacated legacy hub and test with no compatibility facade.
 - [Phase 06]: Use neutral PRE-EDIT checker fixtures while production closure enforces the exact seven retired hub paths.
+- [Phase 08]: 08-01: the report's pair-enumeration control plants the arity state against exported pairForPath, proving the failure mode is refused inside npm run check rather than pinning the repaired line
+- [Phase 08]: 08-01: a green pre-commit --all-files took four hooks, not one; the six files trailing-whitespace, end-of-file-fixer and mdformat rewrite were committed as the hooks produce them
+- [Phase 08]: 08-01: trufflehog cannot run in a linked worktree (no <root>/.git/index), so every --all-files green claim carries SKIP=trufflehog and CI closes the gap
 
 ### Pending Todos
 
@@ -982,7 +1010,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Phase 8 planned
+**Stopped at:** Completed 08-01-PLAN.md
 
 Phase 04 completed all seven plans and closed AUTH-01 and TREF-01 through
 TREF-03. Independent verification passed 4/4 with no behavioral or UAT gap;
@@ -995,12 +1023,12 @@ inventory blocker. Gap-closure Plan 05-34 ratified the corrected patch inventory
 and proved the canonical repository gates from clean tracked HEAD. Fresh
 independent verification passed 6/6 with zero unverified behaviors.
 
-**Resume file:** .planning/phases/08-direct-coverage/08-CONTEXT.md
+**Resume file:** None
 
 **Read beside it:** `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`, the
 Phase 01 terminal evidence ledger, and Phase 5's roadmap criteria.
 
-Last session: 2026-09-10T23:12:20.941Z
+Last session: 2026-09-11T02:11:10.821Z
 
 **Next:** Execute Phase 8 (Direct Coverage) — `/gsd-execute-phase 08`.
 
