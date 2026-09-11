@@ -15,12 +15,11 @@
 // so every case sizes the boundary at zero probes. An accepting case sizes it at
 // zero emissions as well, which is what proves a successful scan is silent.
 //
-// D-116-01a: this pair lands one branch short of complete. The `tok === undefined`
-// guard at shared.ts:53-55 cannot be entered at runtime -- the loop indexes a
-// dense array only in range -- and exists solely because `noUncheckedIndexedAccess`
-// (tsconfig.json:12) types every index read as possibly undefined. Removing it
-// needs a non-null or type assertion, both barred throughout `extensions/`. No
-// coverage exception is added and no production file is changed.
+// ER-F19: consuming the `--scope` value is load-bearing and is the one property a
+// scanner rewrite can drop while every other case here stays green. Two cases hold
+// it: the token after `--scope` leaves the scope-target flag off even when that
+// token IS the scope-target flag, and a sole `--scope` with nothing to consume is
+// still not a usage error.
 //
 // No exhaustiveness claim: the module holds no switch and no closed-union
 // dispatch, so a missing-arm plant has no target here. No case asserts the
@@ -138,6 +137,22 @@ test("consumes the token after the scope flag as its value, so a scope-target to
   assert.deepStrictEqual(scanned, {
     local: false,
     residualArgs: "--scope alpha@official",
+  } satisfies Scan);
+  assert.deepStrictEqual(notifications, []);
+  verifyBoundary();
+});
+
+test("reports the flag off and raises no usage error when the scope flag has no value to consume", () => {
+  // arrange
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
+
+  // act
+  const scanned = extractLocalFlag("--scope", ctx, ENABLE_USAGE);
+
+  // assert
+  assert.deepStrictEqual(scanned, {
+    local: false,
+    residualArgs: "--scope",
   } satisfies Scan);
   assert.deepStrictEqual(notifications, []);
   verifyBoundary();
