@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 08
 current_phase_name: Direct Coverage
 status: executing
-stopped_at: Completed 08-06-PLAN.md
-last_updated: "2026-09-11T06:24:37.353Z"
+stopped_at: 08-07 tasks 1-3 complete; its blocking checkpoint:decision is OPEN and awaits the developer
+last_updated: "2026-09-11T08:45:00.000Z"
 last_activity: 2026-09-11
-last_activity_desc: 08-06 complete; G1's leak-order and residue-partition proofs are restored through the port and the residual patching census is re-derived
-state_head: 3d6aceedb05313549af36a3c75af1e0d534e8141
+last_activity_desc: 08-07 closed the three commitPrepared leak arms and relocated the install ledger's owner coverage; two defense-in-depth branches are escalated, not pinned
+state_head: 75e39aec
 progress:
   total_phases: 9
   completed_phases: 3
   total_plans: 205
-  completed_plans: 201
+  completed_plans: 202
   percent: 33
 ---
 
@@ -32,9 +32,31 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 08 (Direct Coverage) — EXECUTING
-Next: /gsd-execute-phase 08 (wave 2)
-Plan: 5 of 9 complete
-Status: 08-06 complete. `06-VERIFICATION.md` G1's open remainder is closed by observation, not by
+Next: ANSWER 08-07's open checkpoint, then /gsd-execute-phase 08
+Plan: 6 of 9 complete
+Status: 08-07 complete through task 3, **with its blocking `checkpoint:decision` still OPEN**.
+`orchestrators/plugin/install-outcome.ts` — the phase's largest and only open-ended shortfall —
+moved from `branches 60/83, functions 22/27, lines 965/1040` to
+`branches 109/111, functions 27/27, lines 1034/1040`. Note the starting reading: research recorded
+`956/1031`, which had already expired because 08-05's port added nine lines. Seventeen of the
+nineteen uncovered runs are closed by owner cases driven through `runInstallLedger`, including the
+three `commitPrepared*` leak arms 08-05's required `removalOps` unlocked, each asserting the
+complete `bridgeWarnings` array by its exact bytes and each pinning that the install still LANDED.
+`tests/orchestrators/plugin/install-flow.test.ts` is byte-unchanged and its own pair still reads
+`Direct coverage passed` — coverage was ADDED to the owner, never subtracted from the sibling.
+**Two branches remain and neither is pin-eligible.** `422-426` re-validates a manifest entry with
+`PLUGIN_ENTRY_VALIDATOR`, which is `Compile(PLUGIN_ENTRY_SCHEMA)` — the exact member schema
+`MARKETPLACE_SCHEMA.plugins` already enforced on the same bytes in the same pass. `818-820`
+re-parses a `hooks.json` the resolver already validated; the only difference between the two calls
+is `skipIfMap`, and D-61-02 records that no `if`-field failure can produce a refusal. Both need an
+injectable reader on the phase that reads them, and `08-07-SUMMARY.md` names each one. One route WAS
+available and deliberately declined: the removal collaborator runs before the hooks phase, so an
+`rm` that also corrupted `hooks.json` would reach `818-820` today — a timing trick wearing a
+collaborator's clothes, which the plan forbids. `createRemovalOpsFake` gained `rmParentErrors`
+because a staging root is `<stagingDir>/<randomUUID()>` minted inside the prepare being faulted,
+the same class `renameDestinationErrors` was added for in 08-06. `npm run check` exits 0 (6,003
+unit cases, 32 integration cases). `RCOV-02` stays Pending for 08-09. 08-04 has not run.
+08-06 complete. `06-VERIFICATION.md` G1's open remainder is closed by observation, not by
 override: each bridge owner test now faults three of a replacement rollback's four removals through
 the collaborator and asserts the complete leak array as one ordered value — remove the renamed
 replacement, restore the backup by rename, clean up the staging root — and the same case reads both
