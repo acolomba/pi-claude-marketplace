@@ -5,10 +5,10 @@ milestone_name: Refine Unit Tests
 current_phase: 09
 current_phase_name: Final Quality and Backlog Closure
 status: planning
-stopped_at: Phase 8 complete; verified passed 8/8, paused before Phase 9 on context budget
-last_updated: "2026-09-11T15:39:41.000Z"
+stopped_at: Phase 9 context gathered; eight sealed IDs read Pending, not the three the handoff named
+last_updated: "2026-09-11T17:30:00.000Z"
 last_activity: 2026-09-11
-last_activity_desc: Phase 8 closed; run paused before Phase 9 on context budget
+last_activity_desc: Phase 9 discussed; closure decisions D-09-01 through D-09-18 recorded
 state_head: f79839f32b2642d93d865de29b2f3d7d8baf42eb
 progress:
   total_phases: 9
@@ -31,13 +31,27 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: 08 (Direct Coverage) — COMPLETE, verified `passed` 8/8
-Next: Discuss Phase 9 (Final Quality and Backlog Closure)
-Plan: 9 of 9 complete
-Status: `npm run check` exit 0. `npm run test:coverage:direct:all` exits 0 for the first time —
-230 pairs, two pinned rows matching the committed pin exactly. RCOV-01/02/03 implemented but
-deliberately still `Pending` (see blocker below).
-Last activity: 2026-09-11 — Phase 8 closed; autonomous run paused before Phase 9 on context budget
+Phase: 09 (Final Quality and Backlog Closure) — context gathered, ready for planning
+Next: Plan Phase 9
+Plan: 0 of TBD
+Status: `npm run check` exit 0 and `npm run test:coverage:direct:all` exit 0 as of Phase 8's close —
+230 pairs, two pinned rows matching the committed pin exactly. Both must be re-measured on the
+final tree before the seal flips, because Phase 9 changes production code (D-09-05, D-09-09).
+Resume file: `.planning/phases/09-final-quality-and-backlog-closure/09-CONTEXT.md`
+Last activity: 2026-09-11 — Phase 9 discussed; decisions D-09-01 through D-09-18 recorded
+
+### Two handoff claims the Phase 9 discussion corrected
+
+1. **Eight sealed IDs read `Pending`, not three.** The blocker note below names `RCOV-01`,
+   `RCOV-02` and `RCOV-03`. `SEALED_REQUIREMENT_ROUTES` (`scripts/revalidation.mjs:93`) also
+   pins `GGAT-01`, `GGAT-03` and `GGAT-04` at `Phase 7 / Pending`, plus `CLOSE-01` and
+   `CLOSE-02` at `Phase 9 / Pending`. The three `GGAT` IDs are pinned, not unfinished:
+   `07-VERIFICATION.md` reads `status: passed`, 7/7, with all three rows `SATISFIED`.
+2. **The `WINDOWS.md` rows 9/30 desync is not prose-only.** Row 30's rendered table status
+   reads `fixed` while its fenced JSON reads `open` — a status disagreement, not only the
+   description drift `08-direct-coverage/deferred-items.md` recorded. The repair is still
+   lossless: port the table's authoritative text and status into the JSON first, then let the
+   verb regenerate (D-09-11).
 
 ### What the 08-01 sweep measured
 
