@@ -1930,62 +1930,33 @@ test("project hydration stops before parsing a plugin's hooks.json read under a 
   // arrange
   const fixture = await makeProjectHookFixture(t, "stale-after-hooks-read", "PreToolUse");
   ownAgentRoot(t, path.join(fixture.root, "agent"));
-  let stateRead = false;
-  let guardsAfterTheStateRead = 0;
+  const runtime = createHooksRuntime();
+  // The trigger is named, not counted: the generation advances from inside the
+  // injected hooks read, which runs at exactly the point this case is about, so
+  // nothing here depends on a `currentGeneration()` call index (D-09-05 /
+  // D-09-07).
+  //
+  // The sibling above hydrates this same fixture with an undecorated reader and
+  // reads back one parsed-config entry, so the empty `parsedConfigEntries()`
+  // below is a hydration that was stopped, not a fixture that never hydrates.
+  // That sibling also records why `getRoutingBucket` is not a discriminator for
+  // this entrypoint.
   const reader: HooksHydrationReader = {
     loadState(extensionRoot: string): Promise<ExtensionState> {
-      if (extensionRoot !== fixture.locations.extensionRoot) {
-        return Promise.resolve({ schemaVersion: 2, marketplaces: {} });
-      }
-
-      stateRead = true;
-      return Promise.resolve(fixture.state);
+      return Promise.resolve(
+        extensionRoot === fixture.locations.extensionRoot
+          ? fixture.state
+          : { schemaVersion: 2, marketplaces: {} },
+      );
     },
-    readHooksJson,
-  };
-  const runtime = createHooksRuntime();
-  // KNOWN CONFLICT, recorded rather than hidden: `D-08-A04` says "do not couple
-  // the new tests to a `currentGeneration()` call index", and this case does.
-  // Every alternative was built and measured: `tryHydrateOnePlugin` runs exactly
-  // two things between the containment guard and the guard after the hooks.json
-  // read -- a synchronous `asAbsolutePluginRoot` and the `readFile` itself --
-  // and neither is an injected collaborator. `readFile` is a direct
-  // `node:fs/promises` import that `TREF-08` forbids patching, and advancing
-  // inside `reader.loadState` lands on the containment guard instead, because
-  // the reader is called once per scope and always before this function.
-  //
-  // The one remaining route is a `readHooksJson` member on
-  // `HooksHydrationReader`. It is not taken here: it would port one of this
-  // module's two `readFile` call sites and leave the other, which is a port
-  // shaped by one test's reach rather than by a responsibility -- the shape
-  // `D-08-13` refused for the removal port, and the same trade `D-08-A14`
-  // records Plan 08-07 declining for `install-outcome.ts`. Removing this
-  // coupling is therefore a production-design decision, not a test edit.
-  //
-  // What the case CAN establish it now does, next door: the sibling above
-  // hydrates this same fixture with an undecorated runtime and reads back one
-  // parsed-config entry. So the empty `parsedConfigEntries()` below is a
-  // hydration that was stopped, not a fixture that never hydrates. That sibling
-  // also records why `getRoutingBucket` is not a discriminator for this
-  // entrypoint.
-  //
-  // Counted from the injected state read, the consultations are: after the state
-  // read (1), after the containment check (2), after the hooks.json read (3).
-  const GUARDS_FROM_THE_STATE_READ_TO_THE_HOOKS_READ = 3;
-  const runtimeGoingStaleAfterTheHooksRead: HooksRuntime = {
-    ...runtime,
-    currentGeneration(): number {
-      if (stateRead) {
-        guardsAfterTheStateRead += 1;
-        if (guardsAfterTheStateRead === GUARDS_FROM_THE_STATE_READ_TO_THE_HOOKS_READ) {
-          runtime.advanceGeneration();
-        }
-      }
-
-      return runtime.currentGeneration();
+    readHooksJson(hooksJsonPath: string): Promise<string> {
+      runtime.advanceGeneration();
+      // The call below is the imported production reader, not this member --
+      // an object-literal method name binds no identifier in its own body.
+      return readHooksJson(hooksJsonPath);
     },
   };
-  const hydration = createHooksHydration(runtimeGoingStaleAfterTheHooksRead, reader);
+  const hydration = createHooksHydration(runtime, reader);
 
   // act
   await hydration.hydrateProjectScopeForCwd(fixture.projectRoot);
