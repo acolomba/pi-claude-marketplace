@@ -7,7 +7,11 @@ import { fileURLToPath } from "node:url";
 
 import ts from "typescript";
 
-import { assertPinnedReadings, loadCoveragePin } from "./test-coverage-direct.pin.mjs";
+import {
+  assertPinnedReadings,
+  loadCoveragePin,
+  pinProjectPath,
+} from "./test-coverage-direct.pin.mjs";
 
 const projectRoot = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const productionRoot = "extensions/pi-claude-marketplace";
@@ -684,6 +688,11 @@ async function measurePair(pair, observed, run) {
     }
 
     observed.push({ sourcePath: pair.sourcePath, reading });
+    // `runPair` prints a line for every pair it passes. Without this one, a run that forgave two
+    // pinned shortfalls and a run in which those two pairs read complete print the same thing, and
+    // the CI log the release path retains cannot tell them apart. A gate that forgives something
+    // says what it forgave.
+    process.stdout.write(`Direct coverage shortfall recorded: ${pair.sourcePath} (${reading})\n`);
 
     return {
       sourcePath: pair.sourcePath,
@@ -726,6 +735,12 @@ export async function enforcePairs(pairs, pinRows, enumeratedModules, run = runP
 
   hooks.beforeCompare?.(records);
   assertPinnedReadings(observed, pinRows, enumeratedModules);
+
+  if (observed.length > 0) {
+    process.stdout.write(
+      `${observed.length.toString()} pinned shortfall(s) matched ${pinProjectPath} exactly.\n`,
+    );
+  }
 
   return records;
 }
@@ -859,7 +874,19 @@ async function main() {
   }
 
   if (args.length === 1) {
-    await runPair(pairForPath(args[0]));
+    // Through the same comparison as every other arm. `.claude/rules/typescript-unit-testing.md`
+    // sends a developer here while working on one pair, so this is the most-used arm; running it
+    // against `runPair` alone made it the ONE arm that does not know about the pin, and a developer
+    // editing a pinned module got a bare refusal with nothing to distinguish "you broke coverage"
+    // from "this pair reads exactly as recorded".
+    //
+    // The pin is narrowed to this pair. The whole pin cannot apply: the other rows name modules this
+    // run never measures, so comparing against them would refuse every single-path run as a set of
+    // stale rows.
+    const pair = pairForPath(args[0]);
+    const rowsForPair = loadCoveragePin().filter((row) => row.sourcePath === pair.sourcePath);
+
+    await enforcePairs([pair], rowsForPair, productionPaths());
     return;
   }
 

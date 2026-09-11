@@ -35,7 +35,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const projectRoot = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
-const pinProjectPath = "scripts/test-coverage-direct.pin.json";
+export const pinProjectPath = "scripts/test-coverage-direct.pin.json";
 
 // Repeated in every refusal, because the failure has to say what to do about it at the point it
 // fires rather than in a document the reader has to go and find.
@@ -179,22 +179,6 @@ function assertPinnedModulesEnumerated(rows, enumeratedModules) {
   }
 }
 
-/**
- * An emptied pin with a shortfall present is its own refusal, and a different direction from an
- * unpinned addition: a record that measured nothing must not read as success.
- */
-function assertPinPopulated(rows, readings) {
-  if (rows.length === 0 && readings.length > 0) {
-    throw new Error(
-      [
-        `The coverage pin holds no rows, but ${readings.length.toString()} module(s) fell short:`,
-        `  ${readings.map((reading) => reading.sourcePath).join(", ")}`,
-        updateInstruction,
-      ].join("\n"),
-    );
-  }
-}
-
 /** Both drift directions in one message, so a failure reads as a diff rather than as one half. */
 function assertPinMembership(rows, readings) {
   const pinned = new Set(rows.map((row) => row.sourcePath));
@@ -245,13 +229,17 @@ function assertPinnedReadingsUnmoved(rows, readings) {
  *
  * The structural check runs first: it is the one refusal that needs nothing measured, so a pin row
  * naming a module that is gone is refused even on a run that measured no shortfall at all.
+ *
+ * An emptied pin is NOT a fourth check. A pin that lost all its rows while modules still fall short
+ * is a membership failure in which every reading is an addition, and the membership message says so
+ * by name. A dedicated arm for it changed the wording and never the verdict, which is why it is
+ * gone: a comparison that can be described in four independent directions should not claim five.
  */
 export function assertPinnedReadings(observed, pinRows, enumeratedModules) {
   const rows = [...pinRows].sort(comparePinPath);
   const readings = [...observed].sort(comparePinPath);
 
   assertPinnedModulesEnumerated(rows, enumeratedModules);
-  assertPinPopulated(rows, readings);
   assertPinMembership(rows, readings);
   assertPinnedReadingsUnmoved(rows, readings);
 }
