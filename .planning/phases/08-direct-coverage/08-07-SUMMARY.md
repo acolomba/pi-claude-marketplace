@@ -17,10 +17,15 @@ provides:
 affects: [08-08, 08-09, direct-coverage, install-outcome-coverage]
 
 actuals:
-  tokens: 9831
-  tasks: 3
-  commits: 2
+  tokens: 20175
+  tasks: 4
+  commits: 5
   plan_head_before: 117121e0b140e9fa36636bdb93f2f8ed2c921bdf
+  # `commits` is MEASURED (`git rev-list --count 117121e0..HEAD`), not narrated, so it
+  # includes `4efa9d12` -- the operator's own `D-08-A14` commit, authored between this
+  # plan's task 3 and its checkpoint resolution. Four of the five are this plan's.
+  # `tokens` is estimateTokens (chars/4) over the realized diff, the same scale 08-06 used
+  # and NOT the scale 08-05's 157916 used; do not average the two.
 
 tech-stack:
   added: []
@@ -103,7 +108,7 @@ coverage:
     human_judgment: true
     rationale: "Whether 08-04 honours the regeneration caveat, or copies this intermediate string into the committed pin, is the thing a reviewer should actually check at that plan's boundary."
 
-duration: 96min
+duration: 130min
 completed: 2026-09-11
 status: complete
 ---
@@ -114,10 +119,10 @@ status: complete
 
 ## Performance
 
-- **Duration:** 96 min
+- **Duration:** 130 min
 - **Started:** 2026-09-11T07:05:00Z
-- **Completed:** 2026-09-11T08:41:00Z
-- **Tasks:** 3 of 3, plus a blocking checkpoint
+- **Completed:** 2026-09-11T09:15:00Z
+- **Tasks:** 4 of 4 (3 executed, 1 checkpoint answered `defer` + pinned)
 - **Files modified:** 2 (0 created, 2 modified)
 
 ## The measurement this plan started from
@@ -152,7 +157,8 @@ Plus four branch-only lines the run list does not name — `633`, `916`, `920`, 
 
 1. **Task 1: Re-measure and close the three commitPrepared leak arms** — `a2e026a6` (test)
 2. **Task 2: Relocate owner coverage for the remaining uncovered runs** — `75e39aec` (test)
-3. **Task 3: Take the final reading and record the residue** — this document; its metadata commit follows. The measured `commits: 2` counts the two task commits present when this file was written.
+3. **Task 3: Take the final reading and record the residue** — `4549df42` (docs)
+4. **Task 4: Choose the disposition of the final reading** — answered `defer` + pinned; recorded in `dcc5bfee` (docs)
 
 ## Files Created/Modified
 
