@@ -89,6 +89,12 @@ const EXPECTED_HOOKS_BYTES =
   '{\n  "PreToolUse": [\n    {\n      "matcher": "Bash",\n' +
   '      "hooks": [\n        {\n          "type": "command",\n' +
   '          "command": "echo hi"\n        }\n      ]\n    }\n  ]\n}\n';
+// The read case needs bytes no other codec reproduces, because the encoding is
+// the whole of what `readHooksJson` adds over a bare delegation. `é` (U+00E9)
+// and `✓` (U+2713) are stored as multi-byte utf-8 sequences, so a latin1, ascii
+// or utf16le read returns a different string and fails the assertion, while an
+// ASCII-only fixture would pass under every one of them.
+const NON_ASCII_HOOKS_BYTES = '{\n  "command": "echo café ✓"\n}\n';
 
 test("writes when the plugin hooks subtree is absent", async () => {
   const { locations, pluginRoot, scopeRoot } = await allocateCasePaths("hooks-stage-missing-");
@@ -881,13 +887,13 @@ test("reads back the exact bytes written to a hooks.json path", async () => {
   try {
     // arrange
     const hooksJsonPath = path.join(scopeRoot, "hooks.json");
-    await writeFile(hooksJsonPath, EXPECTED_HOOKS_BYTES, "utf8");
+    await writeFile(hooksJsonPath, NON_ASCII_HOOKS_BYTES, "utf8");
 
     // act
     const raw = await readHooksJson(hooksJsonPath);
 
     // assert
-    assert.strictEqual(raw, EXPECTED_HOOKS_BYTES);
+    assert.strictEqual(raw, NON_ASCII_HOOKS_BYTES);
   } finally {
     await rm(scopeRoot, { recursive: true, force: true, maxRetries: 3 });
   }
