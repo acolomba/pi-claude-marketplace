@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 22
+open_count: 19
 waived_count: 0
-fixed_count: 9
+fixed_count: 12
 total_count: 31
-last_updated: 2026-09-04T01:03:42.619Z
+last_updated: 2026-09-11T21:38:25.338Z
 ---
 
 # Broken Windows Ledger
@@ -33,10 +33,10 @@ last_updated: 2026-09-04T01:03:42.619Z
 | 16 | 116 | unmet-truth | extensions/pi-claude-marketplace/edge/completions/data.ts | 188 | Right-hand side of the nullish fallback on the last-token read is unreachable through the module exports, so the 116-03 pair falls one branch short of complete direct coverage. Compiler-forced: Array.prototype.at() is typed T or undefined by the standard library, so the fallback must exist though the array is non-empty on every path reaching it. Proved by construction, by a brute force over all 65,536 BMP code points in five shapes, and by a plant that stayed green. Pinned by identity under the amended D-116-01a (commit ed0e490f); closes only by a production rewrite | open |  | 2026-09-02T22:04:43.869Z |  |
 | 17 | 116 | unmet-truth | extensions/pi-claude-marketplace/edge/completions/provider.ts | 125 | Empty-object arm of the optionalDescription conditional is unreachable through the module exports, so the 116-05 pair falls one branch short of complete direct coverage. NOT compiler-forced; structural: the only two producers of the flagCompletions entry list are a written-out literal that carries a description and completionFlagEntries, whose every element derives from a FlagEntry whose description field is required. The declared element type keeps the field optional, so the guard must exist and nothing reachable can supply an entry without one. Proved by a plant that replaced the arm with a distinguishable description and stayed green, and by an independent route over 406 long-flag cursor prefixes spanning every top-level head, every marketplace subcommand, unknown heads and scope-, partial- and reference-bearing prefixes, which emitted 169 items with zero missing a description and zero carrying the marker. Pinned by identity under the amended D-116-01a; closes only by a production rewrite | open |  | 2026-09-03T00:18:38.629Z |  |
 | 18 | 116 | unmet-truth | extensions/pi-claude-marketplace/edge/handlers/plugin/import.ts | 31 | String-conversion arm of the catch-block error formatter is unreachable through the module exports, so the 116-17 pair falls one branch short of complete direct coverage. COMPILER-FORCED: the only throw reaching this catch comes from parseArgs, which constructs a new Error at both of its throw sites, but a catch binding is typed unknown under useUnknownInCatchVariables, so the residual arm must exist; narrowing it needs a type assertion, which is barred throughout extensions/. Proved by a plant that replaced the arm with a distinguishable literal and stayed green across all 8 cases, by a live-arm plant that turned the tokenizer case red, and by an independent brute force over 3615 argument strings that produced 521 throws and zero non-Error values. Pinned by identity under the amended D-116-01a; closes only by a production rewrite (routing the catch through shared/errors.ts errorMessage) | open |  | 2026-09-03T00:44:13.846Z |  |
-| 19 | 116 | unmet-truth | extensions/pi-claude-marketplace/edge/handlers/plugin/pending.ts | 39 | Nullish-fallback arm on the first positional is unreachable through the module exports, so the 116-21 pair falls one branch short of complete direct coverage. COMPILER-FORCED: the guard on the line above has already proven the positional list non-empty and parseArgs pushes only non-undefined tokens onto it, but noUncheckedIndexedAccess (tsconfig.json:12) types the index read as possibly undefined, so the fallback must exist; removing it raises TS18048 at its consumption site and narrowing it needs a non-null or type assertion, both barred throughout extensions/. Proved by a plant that replaced the fallback with a distinguishable literal and stayed green across all 15 cases, by an OBSERVABLE plant that would have named a long-flag-shaped sentinel in the emission and also stayed green, and by an independent brute force over 19530 argument strings of up to six characters drawn from the tokenizer's significant alphabet that produced zero sentinel emissions while the same brute force with the index moved out of range reported it for 136 of 155. Pinned by identity under the amended D-116-01a; closes only by a production rewrite | open |  | 2026-09-03T04:09:41.716Z |  |
+| 19 | 116 | unmet-truth | extensions/pi-claude-marketplace/edge/handlers/plugin/pending.ts | 39 | Nullish-fallback arm on the first positional is unreachable through the module exports, so the 116-21 pair falls one branch short of complete direct coverage. COMPILER-FORCED: the guard on the line above has already proven the positional list non-empty and parseArgs pushes only non-undefined tokens onto it, but noUncheckedIndexedAccess (tsconfig.json:12) types the index read as possibly undefined, so the fallback must exist; removing it raises TS18048 at its consumption site and narrowing it needs a non-null or type assertion, both barred throughout extensions/. Proved by a plant that replaced the fallback with a distinguishable literal and stayed green across all 15 cases, by an OBSERVABLE plant that would have named a long-flag-shaped sentinel in the emission and also stayed green, and by an independent brute force over 19530 argument strings of up to six characters drawn from the tokenizer's significant alphabet that produced zero sentinel emissions while the same brute force with the index moved out of range reported it for 136 of 155. Pinned by identity under the amended D-116-01a; closes only by a production rewrite | fixed |  | 2026-09-03T04:09:41.716Z | 2026-09-11T21:38:24.643Z |
 | 20 | 116 | deviation | extensions/pi-claude-marketplace/edge/register.ts | 18 | Two production comments assert a property the code does not have: register.ts:18-20 ("The cwd captured here is per-command-registration") and register.ts:104-106 ("Captured at registration time; threads through every keystroke's completion lookup via the closed-over resolver") both claim the working directory is read ONCE when the command is registered. It is not. process.cwd() is evaluated INSIDE the getArgumentCompletions arrow (register.ts:107-108), so it is read on every completion invocation and nothing is closed over. Measured by the 116-28 owner: registering under one hermetic root, moving the process into a second root, then driving the captured callback returns the SECOND root's marketplace names; Plant C, which hoists the read above pi.registerCommand into a registrationCwd binding, turns exactly that case RED. The plan's own must_haves inherited the comment's claim as a truth to prove, and its literal Plant 3 ("move the working-directory read from registration time into the completion callback") has NO TARGET because the read is already there. Behaviourally harmless today, because index.ts registers once per session and Pi does not chdir; it needs an operator decision on which of the two is authoritative. Not fixed: both production licences for this phase (116-06 flag-catalog.ts, 116-27 tools.ts) are spent and no remaining plan may edit a production file. | open |  | 2026-09-03T06:11:16.092Z |  |
-| 21 | 116 | unmet-truth | extensions/pi-claude-marketplace/edge/args.ts | 34 | Index-read guard at 34-37 is unreachable at runtime, so the 116-02 pair falls one branch short of complete direct coverage. COMPILER-FORCED: noUncheckedIndexedAccess (tsconfig.json:12) types every index read as T or undefined, so a loop whose bounds already guarantee the read must still carry a guard the loop can never enter. Removing it needs a non-null assertion, which is an error throughout extensions under strictTypeChecked. Pinned by identity in the 116-02 pair; original D-116-01a claimant | open |  | 2026-09-03T11:00:38.155Z |  |
-| 22 | 116 | unmet-truth | extensions/pi-claude-marketplace/edge/handlers/shared.ts | 53 | Cross-cutting flag scanner guard at 53-55 is unreachable at runtime, so the 116-26 pair falls one branch short of complete direct coverage. COMPILER-FORCED, same class as the args.ts claimant. Pinned by identity in the 116-26 pair; original D-116-01a claimant | open |  | 2026-09-03T11:00:38.508Z |  |
+| 21 | 116 | unmet-truth | extensions/pi-claude-marketplace/edge/args.ts | 34 | Index-read guard at 34-37 is unreachable at runtime, so the 116-02 pair falls one branch short of complete direct coverage. COMPILER-FORCED: noUncheckedIndexedAccess (tsconfig.json:12) types every index read as T or undefined, so a loop whose bounds already guarantee the read must still carry a guard the loop can never enter. Removing it needs a non-null assertion, which is an error throughout extensions under strictTypeChecked. Pinned by identity in the 116-02 pair; original D-116-01a claimant | fixed |  | 2026-09-03T11:00:38.155Z | 2026-09-11T21:38:24.999Z |
+| 22 | 116 | unmet-truth | extensions/pi-claude-marketplace/edge/handlers/shared.ts | 53 | Cross-cutting flag scanner guard at 53-55 is unreachable at runtime, so the 116-26 pair falls one branch short of complete direct coverage. COMPILER-FORCED, same class as the args.ts claimant. Pinned by identity in the 116-26 pair; original D-116-01a claimant | fixed |  | 2026-09-03T11:00:38.508Z | 2026-09-11T21:38:25.338Z |
 | 23 | 117 | deviation | extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts | 476 | Doc comment on isHooksResolverNote still cites tests/orchestrators/plugin/cross-surface-reason-parity.test.ts; 117-04 moved that suite to tests/architecture/ and may not edit production | open |  | 2026-09-03T18:15:25.451Z |  |
 | 24 | 117 | stub | docs/output-catalog.md | 2729 | Output catalog still names the deleted tests/shared/device-flow-prompt.test.ts as the AUTH-03 byte-form lock; the lock now lives in tests/domain/github-auth.test.ts | open |  | 2026-09-03T18:29:36.570Z |  |
 | 25 | 117 | deviation | .planning/codebase/TESTING.md | 124 | TESTING.md still describes tests/helpers/ as live and names four modules by their pre-move paths; the directory and both glob alternatives are gone as of 117-07 | open |  | 2026-09-03T19:17:31.820Z |  |
@@ -272,10 +272,10 @@ last_updated: 2026-09-04T01:03:42.619Z
     "file": "extensions/pi-claude-marketplace/edge/handlers/plugin/pending.ts",
     "line": 39,
     "description": "Nullish-fallback arm on the first positional is unreachable through the module exports, so the 116-21 pair falls one branch short of complete direct coverage. COMPILER-FORCED: the guard on the line above has already proven the positional list non-empty and parseArgs pushes only non-undefined tokens onto it, but noUncheckedIndexedAccess (tsconfig.json:12) types the index read as possibly undefined, so the fallback must exist; removing it raises TS18048 at its consumption site and narrowing it needs a non-null or type assertion, both barred throughout extensions/. Proved by a plant that replaced the fallback with a distinguishable literal and stayed green across all 15 cases, by an OBSERVABLE plant that would have named a long-flag-shaped sentinel in the emission and also stayed green, and by an independent brute force over 19530 argument strings of up to six characters drawn from the tokenizer's significant alphabet that produced zero sentinel emissions while the same brute force with the index moved out of range reported it for 136 of 155. Pinned by identity under the amended D-116-01a; closes only by a production rewrite",
-    "status": "open",
+    "status": "fixed",
     "reason": "",
     "recorded_at": "2026-09-03T04:09:41.716Z",
-    "resolved_at": null
+    "resolved_at": "2026-09-11T21:38:24.643Z"
   },
   {
     "id": 20,
@@ -296,10 +296,10 @@ last_updated: 2026-09-04T01:03:42.619Z
     "file": "extensions/pi-claude-marketplace/edge/args.ts",
     "line": 34,
     "description": "Index-read guard at 34-37 is unreachable at runtime, so the 116-02 pair falls one branch short of complete direct coverage. COMPILER-FORCED: noUncheckedIndexedAccess (tsconfig.json:12) types every index read as T or undefined, so a loop whose bounds already guarantee the read must still carry a guard the loop can never enter. Removing it needs a non-null assertion, which is an error throughout extensions under strictTypeChecked. Pinned by identity in the 116-02 pair; original D-116-01a claimant",
-    "status": "open",
+    "status": "fixed",
     "reason": "",
     "recorded_at": "2026-09-03T11:00:38.155Z",
-    "resolved_at": null
+    "resolved_at": "2026-09-11T21:38:24.999Z"
   },
   {
     "id": 22,
@@ -308,10 +308,10 @@ last_updated: 2026-09-04T01:03:42.619Z
     "file": "extensions/pi-claude-marketplace/edge/handlers/shared.ts",
     "line": 53,
     "description": "Cross-cutting flag scanner guard at 53-55 is unreachable at runtime, so the 116-26 pair falls one branch short of complete direct coverage. COMPILER-FORCED, same class as the args.ts claimant. Pinned by identity in the 116-26 pair; original D-116-01a claimant",
-    "status": "open",
+    "status": "fixed",
     "reason": "",
     "recorded_at": "2026-09-03T11:00:38.508Z",
-    "resolved_at": null
+    "resolved_at": "2026-09-11T21:38:25.338Z"
   },
   {
     "id": 23,
