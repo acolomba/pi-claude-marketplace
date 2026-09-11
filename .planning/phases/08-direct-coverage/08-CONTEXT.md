@@ -377,6 +377,121 @@ precisely because `RCOV-01`'s contract is a baseline "without stale counts."
   rewrites and the port.
 - Whether the two loop rewrites are one plan or two.
 
+### Amendments After Research (2026-09-10)
+
+`08-RESEARCH.md` settled every open disposition by building and re-measuring it in this
+tree rather than reasoning about it. It contradicts four decisions above on evidence. The
+amendments below **supersede** the superseded text and are equally binding; where an
+amendment and an earlier decision disagree, the amendment wins.
+
+- **D-08-A01 (supersedes nothing — new, blocking):** `npm run test:coverage:direct:report`
+  is broken and has never run to completion. `scripts/test-coverage-direct.report.mjs:112`
+  passes `pairForPath` as a bare `map` callback, so `Array.map`'s index argument lands in
+  the `selectedProjectRoot` parameter that Phase 7's own code-review fix `c0241c82` added.
+  It exits 1 after 0.6 s having measured nothing. `D-08-08`'s enumeration run depends on it,
+  so the repair is **Wave 0** and everything else waits behind it.
+
+  Note what this means about the phase's premise: the instrument `RCOV-01` names as the
+  baseline generator was inert, and nothing in `npm run check` runs it. That is the same
+  class of defect Phase 7 spent itself on — a gate that reports nothing while looking
+  healthy — surviving inside the tooling Phase 7 itself last touched.
+
+- **D-08-A02 (amends D-08-02, D-08-10):** With the reporter repaired, a full 229-row sweep
+  reads `complete 215, type-only 7, accepted-shortfall 7`. The measured shortfall set is
+  **seven modules — a different seven**. Four of `CONTRIBUTING.md`'s rows now read complete
+  (`edge/completions/data.ts`, `edge/completions/provider.ts`,
+  `edge/handlers/marketplace/update.ts`, `edge/handlers/plugin/import.ts`) and must be
+  struck. Two modules nobody had named fall short: `orchestrators/plugin/update-preflight.ts`
+  and `orchestrators/plugin/install-outcome.ts`.
+
+  The count matching the roadmap's "seven" is a coincidence, and a dangerous one — a stale
+  claim that survives a sanity check because its number still looks right. `RCOV-02`'s
+  rewrite therefore **names the modules, never the count**.
+
+- **D-08-A03 (amends D-08-09):** There are **three** dense-index guards that rewrite to
+  `for...of`, not two. The third is `edge/handlers/plugin/pending.ts` (`branches 9/10`),
+  which `D-08-09` does not name. All three were built, typechecked, and re-measured
+  complete, with no `!` and no `as`, under this repo's `noUncheckedIndexedAccess`.
+
+- **D-08-A04 (resolves D-08-03a):** `bridges/hooks/event-router.ts` gets **tests, not a
+  pin**. All four sites (553-554, 587-588, 615-616, 872-873) are reachable through
+  `createHooksHydration(runtime, …)`; three tests take the module to
+  `branches 114/114, functions 43/43, lines 967/967`. `D-08-03a` asked for per-site
+  measurement rather than classification by analogy, and the measurement came back
+  reachable. Do not couple the new tests to a `currentGeneration()` call index.
+
+- **D-08-A05 (amends D-08-03, D-08-07):** `bridges/commands/discover.ts` carries **two**
+  unreachable sites, not one: the `CommandNameError` narrowing arm at 288-290 (`BC-019`) and
+  the `err.code ?? ""` arm at 178, which `BC-019` does not cover. The pin row schema
+  therefore carries **`reasons: string[]`**, not a single `reason`. A row whose one reason
+  explains half its own reading is precisely the failure `D-08-07` exists to prevent.
+
+  Do not tighten `isErrnoException` to remove the second site in this phase: it would not
+  empty the row (site 288-290 survives under `BC-019`) and it widens the blast radius to
+  every consumer of that predicate.
+
+- **D-08-A06 (new):** `orchestrators/plugin/install-outcome.ts` is short by 75 lines, 23
+  branches, and 5 functions, and it is a **Phase 6 split casualty** — `install-flow.test.ts`
+  already covers all but six of the uncovered runs; the split moved the module and left its
+  tests behind. Three of those six runs are the `commitPrepared*` leak arms, which only
+  become reachable once the removal port lands, so **the port and this shortfall are one
+  problem** and the port is sequenced first.
+
+  It gets its **own plan, after the port**, with an explicit escalation path. It is
+  **not** eligible for a pin row: 75 uncovered lines across 19 disjoint runs have no single
+  recorded reason, and pinning it would be an allow-list wearing a pin's shape. If the work
+  cannot finish inside the phase, that is an escalation to the operator, not a pin.
+
+- **D-08-A07 (amends D-08-17) — the pre-commit hook takes a commit-scoped base.**
+  `D-08-17` estimated "a commit touching ten pairs spawns ten focused test runs." Measured
+  on this branch the changed-pair gate selects **147 pairs, about 6.5 minutes**, because
+  `changedPaths` diffs `origin/main...HEAD` and the branch is 935 commits ahead. The
+  estimate was wrong by two orders of magnitude.
+
+  The gate gains an explicit base argument. **CI keeps the default branch-scoped chain** —
+  `origin/main...HEAD` is the authoritative change set for a pull request and
+  re-verifying all of it in a dedicated job is right. **The hook passes a commit-scoped
+  base**, so it asks "do the pairs *this commit* touches hold complete coverage?"
+
+  This is one implementation with one strictness and two explicitly-named scopes, which is
+  what `D-08-17`'s actual concern was ("two implementations of one gate is how gates drift
+  apart"). `D-07-13` already prints the selected base, so the local scope is auditable
+  rather than hidden. An explicitly named base that fails to resolve is an **error**, never
+  a fallback — the fail-closed contract is unchanged.
+
+  The alternative — keep the branch-scoped base in the hook and lean on `SKIP=` — was
+  rejected on the project's own reasoning: `CONTRIBUTING.md` already argues that a job red
+  on every run reports nothing, and a six-minute hook developers routinely skip is the same
+  failure in a different costume. `CONTRIBUTING.md` states both scopes and both real costs;
+  `D-08-17`'s "ten focused test runs" sentence is never copied into it.
+
+- **D-08-A08 (amends D-08-13):** `removeOrphanIfPresent` calls `fs.rm` twice and stays
+  **unported** — criterion 4 names `cleanupStaging`, and widening the port to every `fs.rm`
+  in `fs-utils.ts` is scope this phase does not have. Record the exception in
+  `fs-utils.ts`'s header so a later reader meets a decision rather than an oversight.
+
+- **D-08-A09 (answers the reporter's own gate gap):** The reporter repair carries a negative
+  control in the existing `scripts/test-coverage-direct.negative.mjs` harness, which already
+  imports `verdictFor` from the reporter. Plant the arity bug and assert the harness refuses.
+  Nothing in `npm run check` runs the reporter today, which is exactly how `D-08-A01`'s
+  defect shipped and then survived a code review inside the phase that introduced it.
+
+- **D-08-A10 (planning obligation):** Both `D-08-08` sweeps run **in the repository**, never
+  in a copy or a bare worktree. `tests/architecture/revalidation.test.ts` reads `.planning/`,
+  and `verdictFor` rethrows a focused-test failure instead of recording it, so the report
+  aborts on row 230 in any tree without a planning directory.
+
+- **D-08-A11 (confirms D-08-11, D-08-12):** The port is **one atomic plan**: 9 production
+  files, 42 call sites, 4 test files, 205 mechanical test lines. Built end to end in a
+  scratch copy — production typechecks as a unit and `fallow health` stays clean. Two
+  gotchas to carry into the plan: `replacePreparedAgents` throws `TS1016` if `ops` is
+  appended after an optional parameter, and the `unstage*` functions need nothing. The
+  smaller leaf contract `D-06-12` would otherwise require was tried and **fails criterion 4**.
+
+- **D-08-A12 (confirms D-08-20):** `tests/architecture/revalidation.test.ts` is the only
+  dash offender in the tree, and widening the exclusion turns the hook green. No second
+  offender is being masked.
+
 </decisions>
 
 <canonical_refs>
