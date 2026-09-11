@@ -1,6 +1,8 @@
 // shared/fs-utils.ts
 //
-// Filesystem helpers used by the bridges. Three helpers:
+// Filesystem helpers used by the bridges, plus the removal port the two
+// staging-lifecycle helpers perform their destructive work through. Three
+// helpers and one port:
 //
 //   - cleanupStaging: best-effort recursive rm of a staging tree, returning
 //     a leak-message string on failure rather than throwing. Lets callers
@@ -13,6 +15,33 @@
 //     reverse order, restores backups in reverse order, and cleans up the
 //     staging + backup directories, accumulating leak messages instead of
 //     throwing.
+//   - RemovalOps / createRemovalOps: the injected `rm` + `rename` port the
+//     two helpers above route every destructive call through, so a caller can
+//     make one specific removal fail while its siblings succeed (RCOV-02,
+//     D-08-13).
+//
+// RCOV-02 / D-08-12, the port's one deliberate asymmetry: RemovalOps is the
+// only *Ops collaborator in this tree that is a REQUIRED parameter. GitOps,
+// CredentialOps, and DeviceFlowHttp all travel as an optional member with a
+// `?? DEFAULT_*` fallback at each site. A defaulted port lets the obligation
+// go quiet the moment a new call site forgets it -- the compiler stops asking
+// -- and the project's own rule is to wire real adapters in one composition
+// module rather than default a parameter to a live boundary. So the port has
+// no DEFAULT_REMOVAL_OPS and no `?`, and the composition roots supply it.
+//
+// D-08-A08, the recorded scope exception: removeOrphanIfPresent calls fs.rm
+// twice and stays UNPORTED. The port's obligation names cleanupStaging, and
+// widening it to every fs.rm in this module is scope nothing authorizes. So
+// `fs.rm` still appears directly below, by decision and not by omission.
+//
+// A second scope line, for the same reason: the fs.mkdir that re-creates a
+// backup's destination parent in rollbackReplacementCommon's restore stage
+// stays direct. The restore stage is therefore faultable through `rename`
+// but not through `mkdir`; the port is narrow, not total.
+//
+// NFR-10: the port replaces the syscall, never the assertPathInside
+// containment chokepoint in front of it. Callers still own containment
+// exactly as they did, and an injected RemovalOps buys no path authority.
 //
 // T-03-03 mitigation: cleanupStaging swallows ENOENT and never throws, so
 // callers cannot enter a cleanup retry loop. Bounded by single
@@ -27,19 +56,64 @@ import { assertPathInside, PathContainmentError } from "./path-safety.ts";
 import type { Dirent } from "node:fs";
 
 /**
+ * The removal port: the two destructive filesystem verbs the staging and
+ * replacement lifecycles traverse, behind one substitutable object.
+ *
+ * Two members and no more (D-08-13). Widening this into a general filesystem
+ * facade would put every verb in this module behind a seam nothing asked for;
+ * `pathExists`, `removeOrphanIfPresent`, `readDirEntriesTolerant`, and
+ * `isPlainMarkdownFile` keep calling `fs` directly.
+ */
+export interface RemovalOps {
+  /**
+   * RCOV-02: remove `target`. Carries every cleanupStaging removal and every
+   * replacement removal in `rollbackReplacementCommon`, so a caller can fault
+   * one staging root while its siblings succeed.
+   */
+  rm(target: string, options: { recursive?: boolean; force?: boolean }): Promise<void>;
+  /**
+   * RCOV-02: move `from` onto `to`. Carries the backup-restore stage of
+   * `rollbackReplacementCommon`, which is the second of the three stages that
+   * accumulate leak messages.
+   */
+  rename(from: string, to: string): Promise<void>;
+}
+
+/**
+ * The real removal operations: thin bindings to `fs.rm` and `fs.rename` and
+ * nothing else. Construction performs no filesystem work; only the operations
+ * do.
+ *
+ * Called by the composition roots -- the orchestrators that own a staging
+ * lifecycle -- never by a bridge, and never defaulted into a parameter
+ * (D-08-12).
+ */
+export function createRemovalOps(): RemovalOps {
+  return {
+    rm: (target, options) => fs.rm(target, options),
+    rename: (from, to) => fs.rename(from, to),
+  };
+}
+
+/**
  * Best-effort recursive removal of a staging directory. Swallows ENOENT
  * (the dir was never created) and returns a descriptive leak message
  * for any other failure so the caller can surface it via
  * appendLeakToError without throwing from the cleanup itself.
  *
+ * @param ops   Removal operations the recursive rm is performed through.
  * @param dir   Absolute path of the staging directory to remove.
  * @param label Human-readable label used in the leak message
  *              (e.g. "skill-staging", "command-staging").
  * @returns `undefined` on success or ENOENT, a leak message string otherwise.
  */
-export async function cleanupStaging(dir: string, label: string): Promise<string | undefined> {
+export async function cleanupStaging(
+  ops: RemovalOps,
+  dir: string,
+  label: string,
+): Promise<string | undefined> {
   try {
-    await fs.rm(dir, { recursive: true, force: true });
+    await ops.rm(dir, { recursive: true, force: true });
     return undefined;
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code;
@@ -140,6 +214,13 @@ export interface RollbackReplacementLabels {
 }
 
 export interface RollbackReplacementInput {
+  /**
+   * Removal operations every `rm` and `rename` below is performed through.
+   * Required with no default (D-08-12): the three leak-accumulating stages are
+   * only independently faultable while the compiler refuses a caller that
+   * omits it.
+   */
+  readonly ops: RemovalOps;
   /** New files/dirs that were renamed into place. Removed in reverse. */
   readonly renamed: readonly { readonly from: string; readonly to: string }[];
   /** Pre-replacement files/dirs moved aside. Restored in reverse. */
@@ -193,7 +274,7 @@ export async function rollbackReplacementCommon(
 
   for (const pair of [...input.renamed].reverse()) {
     try {
-      await fs.rm(pair.to, rmOptions);
+      await input.ops.rm(pair.to, rmOptions);
     } catch (err) {
       leaks.push(
         `failed to remove ${input.labels.replacement} at ${pair.to}: ${errorMessage(err)}`,
@@ -204,7 +285,7 @@ export async function rollbackReplacementCommon(
   for (const backup of [...input.backups].reverse()) {
     try {
       await fs.mkdir(path.dirname(backup.from), { recursive: true });
-      await fs.rename(backup.to, backup.from);
+      await input.ops.rename(backup.to, backup.from);
     } catch (err) {
       leaks.push(
         `failed to restore ${input.labels.previous} ${backup.name} from ${backup.to} to ${backup.from}: ${errorMessage(err)}`,
@@ -217,8 +298,8 @@ export async function rollbackReplacementCommon(
   }
 
   for (const leak of [
-    await cleanupStaging(input.stagingRoot, input.labels.stagingDir),
-    await cleanupStaging(input.backupRoot, input.labels.backupDir),
+    await cleanupStaging(input.ops, input.stagingRoot, input.labels.stagingDir),
+    await cleanupStaging(input.ops, input.backupRoot, input.labels.backupDir),
   ]) {
     if (leak !== undefined) {
       leaks.push(leak);
