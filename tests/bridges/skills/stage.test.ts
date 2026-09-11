@@ -17,9 +17,23 @@ import { locationsFor } from "../../../extensions/pi-claude-marketplace/persiste
 import { ManualRecoveryError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { createRemovalOps } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { SymlinkRefusedError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
+import { createRemovalOpsFake } from "../../platform/removal-ops-fake.ts";
 
 import type { ResolvedPluginInstallable } from "../../../extensions/pi-claude-marketplace/domain/resolver-types.ts";
 
+// Builtin-module patching that remains in this file, and why. The removal port
+// carries `rm` and `rename` for cleanupStaging and rollbackReplacementCommon
+// only, so:
+//
+//   - `cp` and `stat` are outside the port's verb set and have no injected
+//     seam to move to.
+//   - the `rm` of a previous-named target dir and the staged `rename` inside
+//     commitPreparedSkills are direct calls the port deliberately does not
+//     carry, so faulting them still needs the builtin.
+//   - the `rm` + `rename` faults in the replacement-rollback case and the two
+//     `rm` faults in the finalize case DO reach the port and await a per-site
+//     classification; they are the remaining conversions, not exemptions.
+//
 const filesystemPromises = createRequire(import.meta.url)(
   "node:fs/promises",
 ) as typeof import("node:fs/promises");
@@ -1050,34 +1064,21 @@ describe("commitPreparedSkills", () => {
       resolved,
     });
     assert.strictEqual(prepared.kind, "staged");
-    const originalRm = filesystemPromises.rm.bind(filesystemPromises);
     const cleanupError = Object.assign(new Error("staging cleanup denied"), { code: "EACCES" });
-    const removal = t.mock.method(
-      filesystemPromises,
-      "rm",
-      async (
-        target: Parameters<typeof originalRm>[0],
-        options?: Parameters<typeof originalRm>[1],
-      ) => {
-        if (String(target) === prepared.stagingRoot) {
-          throw cleanupError;
-        }
-
-        await originalRm(target, options);
-      },
-    );
-    t.after(() => {
-      removal.mock.restore();
-      syncBuiltinESMExports();
+    // The fault is keyed on this one staging root, so a sibling cleanup in the
+    // same commit would still succeed. The staged rename below is NOT a port
+    // call, so it still moves real bytes and the target read still holds.
+    const removal = createRemovalOpsFake({
+      boundary: "memory",
+      rmErrors: [[prepared.stagingRoot, cleanupError]],
     });
-    syncBuiltinESMExports();
     const expectedLeak =
       "failed to clean up skills staging directory at " +
       prepared.stagingRoot +
       ": staging cleanup denied";
 
     // act
-    const leak = await commitPreparedSkills(createRemovalOps(), prepared);
+    const leak = await commitPreparedSkills(removal.removalOps, prepared);
     const targetBytes = await readFile(
       path.join(locations.skillsTargetDir, "acme-alpha", "SKILL.md"),
       "utf8",
