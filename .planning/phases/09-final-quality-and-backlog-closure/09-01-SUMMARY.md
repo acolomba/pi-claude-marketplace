@@ -240,3 +240,15 @@ None — no external service configuration required.
 ---
 *Phase: 09-final-quality-and-backlog-closure*
 *Completed: 2026-09-11*
+
+## Self-Check: PASSED
+
+All four modified production modules exist on disk. `HooksFileReader` is declared and exported
+in `event-router.ts`; `readHooksJson` is declared and exported in `stage.ts`. All three commits
+(`73a3c85f`, `c6a6758c`, `605d0550`) are present in `git log`. Every plan-level verification
+command was re-run on the final tree after the last task commit: `npm run typecheck`,
+`npm run lint`, `npm run fallow` and `npm run format:check` exit 0; `npm test` reports
+`pass 6007 / fail 0`; `npm run test:integration` reports `pass 32 / fail 0`;
+`node scripts/test-coverage-direct.mjs` exits 0 for each of the four modules; and
+`tests/architecture/unowned-exports-census.test.ts` reports `pass 3 / fail 0`, so the new
+export did not shift the pinned census in either direction.
