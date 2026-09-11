@@ -776,7 +776,19 @@ It can return only after current revalidation; it is not marked implemented.
 **Goal:** Re-establish honest direct coverage for every source-test pair and resolve shortfalls.
 **Depends on:** Phase 7
 **Requirements:** RCOV-01, RCOV-02, RCOV-03
-**Plans:** TBD
+**Plans:** 9 plans
+
+Plans:
+
+- [ ] 08-01-PLAN.md — repair the whole-tree reporter, give it a planted control, clear the dash-hook blocker, and run the enumeration sweep
+- [ ] 08-02-PLAN.md — rewrite the three dense-index guards to typed iteration, preserving the `--scope` lookahead
+- [ ] 08-03-PLAN.md — cover the four `event-router` generation guards and the uncalled `update-preflight` predicate
+- [ ] 08-04-PLAN.md — the committed pin, its bidirectional comparator, the gate arms, and the fail-closed explicit base
+- [ ] 08-05-PLAN.md — the `cleanupStaging` removal port, migrated atomically across every production caller
+- [ ] 08-06-PLAN.md — restore G1's leak-ordering and residue-partition proofs through the port and convert the port-verb patches
+- [ ] 08-07-PLAN.md — close `install-outcome.ts`'s shortfall, with an escalation checkpoint and no pin row
+- [ ] 08-08-PLAN.md — the second sweep, the regenerated pin, and the coordinated record rewrite
+- [ ] 08-09-PLAN.md — wire the gate into a scoped pre-commit hook and a dedicated CI job
 
 **Success Criteria**:
 
