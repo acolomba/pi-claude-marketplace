@@ -150,7 +150,11 @@ function gitLines(args, selectedProjectRoot = projectRoot) {
 // The one base candidate whose name comes from git output rather than from a literal. Anything
 // outside this character set is refused rather than passed to a later invocation, so a ref name is
 // never able to become an argument the selector did not intend.
-const baseCandidateName = /^[A-Za-z0-9._/-]+$/;
+// A leading `-` is excluded so a value like `--git-dir=x` cannot reach `git rev-parse` as an
+// option-shaped argument. There is no shell and no injection here -- `spawnSync` takes an argument
+// array and the value comes from a developer's command line or from package.json -- so this closes a
+// confusing refusal, not a vulnerability.
+const baseCandidateName = /^[A-Za-z0-9._/][A-Za-z0-9._/-]*$/;
 
 function upstreamCandidate(selectedProjectRoot) {
   const resolved = gitLines(["rev-parse", "--abbrev-ref", "@{upstream}"], selectedProjectRoot);
@@ -698,6 +702,10 @@ async function measurePair(pair, observed, run) {
       sourcePath: pair.sourcePath,
       testPath: pair.testPath,
       coverage: reading,
+      // The retained artifact says which rows were refused. Without it a shortfall row and a
+      // complete row differ only by `hit !== found` inside a formatted string, which a later reader
+      // has to notice rather than read. The reporter already emits a `verdict` for the same data.
+      verdict: "shortfall",
       typeOnly: false,
       runtime: process.version,
       elapsedMs: Number((process.hrtime.bigint() - startedAt) / 1000000n),
@@ -871,6 +879,10 @@ async function main() {
   if (args.length === 2 && args[0] === "--base") {
     await runChangedPairs(args[1]);
     return;
+  }
+
+  if (args.length === 1 && args[0] === "--base") {
+    throw new Error("--base takes one ref name: --base <ref>");
   }
 
   if (args.length === 1) {
