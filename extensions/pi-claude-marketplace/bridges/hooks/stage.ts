@@ -35,9 +35,16 @@ export interface HooksTreeInspector {
 }
 
 /**
- * Single source of truth for the hooks bridge write path. Consumed by
- * `writeHookConfig` and (later) by any hydrate-side reader so the same
- * composition is never duplicated.
+ * Single source of truth for the hooks bridge WRITE path, consumed by
+ * `writeHookConfig`.
+ *
+ * The read sites do not route through it: `bridges/hooks/index.ts` keeps this
+ * helper off the barrel, so the hydrate path in `event-router.ts` and the
+ * summary read in `orchestrators/plugin/info.ts` each compose the same one-line
+ * join inline (D-57-03), as `info.ts` records at its own composition site. The
+ * three stay in step because `resources.hooks` carries the generated name this
+ * function joins. NFR-10 containment is carried by each caller's
+ * `assertPathInside` chokepoint, not by the composer.
  */
 export function hookConfigPathFor(locations: ScopedLocations, plugin: string): string {
   return path.join(locations.hooksDir, plugin, "hooks.json");
