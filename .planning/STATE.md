@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 08
 current_phase_name: Direct Coverage
 status: executing
-stopped_at: Completed 08-01-PLAN.md
-last_updated: "2026-09-11T02:11:11.494Z"
+stopped_at: Completed 08-02-PLAN.md
+last_updated: "2026-09-11T02:44:51.282Z"
 last_activity: 2026-09-11
-last_activity_desc: 08-01 complete; report runs end to end, 230 rows, 7 named shortfalls
-state_head: 5d5c4c29cc5f522faff5a7afb5ac50a3173d652f
+last_activity_desc: 08-02 complete; three dense-index guards removed, shortfall set down to four
+state_head: 3df79731125f6ee15d8c06fafa9da4cb9dfc80db
 progress:
   total_phases: 9
   completed_phases: 3
   total_plans: 205
-  completed_plans: 197
+  completed_plans: 198
   percent: 33
 ---
 
@@ -33,14 +33,20 @@ component as a working Pi artifact.
 
 Phase: 08 (Direct Coverage) — EXECUTING
 Next: /gsd-execute-phase 08 (wave 2)
-Plan: 1 of 9 complete
-Status: 08-01 complete. `npm run test:coverage:direct:report` runs end to end for the first time —
-230 rows, 479.8s, `Verdicts: accepted-shortfall 7, complete 216, type-only 7`. The enumeration is
-recorded in `08-01-SUMMARY.md`, which is the classification input for plans 02, 03, 05 and 07;
-`coverage/` is gitignored and carries nothing forward. `pre-commit run --all-files` is green with
-`SKIP=trufflehog`. Unit suite 5952/5952, 0 skipped.
-Last activity: 2026-09-11 — 08-01 repaired the report's pair enumeration, planted its arity control
-inside `npm run check`, cleared four modifying pre-commit hooks, and measured one full sweep
+Plan: 2 of 9 complete
+Status: 08-02 complete. The three dense-index guards are gone: `edge/args.ts` reads
+`branches 28/28, lines 88/88`, `edge/handlers/shared.ts` reads `branches 15/15, lines 82/82`, and
+`edge/handlers/plugin/pending.ts` reads `branches 9/9, lines 56/56` — all three by typed iteration
+with an explicit skip flag, no `!`, no `as`, and no pin row. The measured shortfall set is now four
+modules: `bridges/commands/discover.ts`, `bridges/hooks/event-router.ts`,
+`orchestrators/plugin/update-preflight.ts`, `orchestrators/plugin/install-outcome.ts`. Edge suite
+657/657.
+08-01 remains the classification input for plans 03, 05 and 07: `npm run test:coverage:direct:report`
+ran end to end for the first time — 230 rows, 479.8s, `Verdicts: accepted-shortfall 7, complete 216,
+type-only 7`, recorded in `08-01-SUMMARY.md`. `coverage/` is gitignored and carries nothing forward.
+`pre-commit run --all-files` is green with `SKIP=trufflehog`. Unit suite 5952/5952, 0 skipped.
+Last activity: 2026-09-11 — 08-02 rewrote three index loops to typed iteration and pinned the
+`--scope` lookahead both rewrites had to preserve
 
 ### What the 08-01 sweep measured
 
@@ -436,6 +442,7 @@ stay recorded rather than excused.
 | Phase 06 P51 | 10min | 3 tasks | 12 files |
 | Phase 06 P52 | 42min | 2 tasks | 6 files |
 | Phase 08 P01 | 39min | 3 tasks | 9 files |
+| Phase 08 P02 | 20min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -958,6 +965,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 08]: 08-01: the report's pair-enumeration control plants the arity state against exported pairForPath, proving the failure mode is refused inside npm run check rather than pinning the repaired line
 - [Phase 08]: 08-01: a green pre-commit --all-files took four hooks, not one; the six files trailing-whitespace, end-of-file-fixer and mdformat rewrite were committed as the hooks produce them
 - [Phase 08]: 08-01: trufflehog cannot run in a linked worktree (no <root>/.git/index), so every --all-files green claim carries SKIP=trufflehog and CI closes the gap
+- [Phase 08]: 08-02: the three dense-index guards rewrite to typed iteration plus an explicit skip flag — entries() only where a loop reads a neighbour by index, bare for...of otherwise; no ! and no as, and no pin row for any of the three
+- [Phase 08]: 08-02: two of the four requested preservation cases already existed and were not duplicated; the property the shared.ts case pins was stated in the owner header instead, replacing a D-116-01a paragraph the rewrite made false
 
 ### Pending Todos
 
@@ -972,6 +981,7 @@ None for roadmap creation.
   phase transitions will require the same guarded procedure unless workstream
   routing is repaired.
 - RESOLVED by 117-12: D-117-20 in `117-CONTEXT.md` now reads 190 complete numeric records + 7 accepted D-116-01a shortfalls + 7 type-only, matching the operator decision taken in plan 117-11 and the retained all-pair artifact. The superseded 197 + 7 wording is gone.
+- WINDOWS.md entries 19, 21 and 22 still read open after 08-02 removed the arms they describe: gsd-tools windows fixed refuses because the rendered table disagrees with the fenced JSON on unrelated rows 9 and 30, a desync predating phase 08. Logged in .planning/phases/08-direct-coverage/deferred-items.md; 08-08 is the natural owner since it also holds the stale CONTRIBUTING.md rows for the same three modules.
 
 ## Deferred Items
 
@@ -1010,7 +1020,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 08-01-PLAN.md
+**Stopped at:** Completed 08-02-PLAN.md
 
 Phase 04 completed all seven plans and closed AUTH-01 and TREF-01 through
 TREF-03. Independent verification passed 4/4 with no behavioral or UAT gap;
@@ -1028,7 +1038,7 @@ independent verification passed 6/6 with zero unverified behaviors.
 **Read beside it:** `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`, the
 Phase 01 terminal evidence ledger, and Phase 5's roadmap criteria.
 
-Last session: 2026-09-11T02:11:10.821Z
+Last session: 2026-09-11T02:43:38.346Z
 
 **Next:** Execute Phase 8 (Direct Coverage) — `/gsd-execute-phase 08`.
 
