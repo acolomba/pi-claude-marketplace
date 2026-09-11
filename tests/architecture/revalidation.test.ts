@@ -237,10 +237,14 @@ function resolveDecision(decision: Ledger["decisions"][number]): void {
   decision.downstreamConsequences = "Phase 2 removes the surface.";
 }
 
-function runCli(projectRoot: string, args: readonly string[]): CliExecution {
+function runCli(
+  projectRoot: string,
+  args: readonly string[],
+  cli: string = revalidationCli,
+): CliExecution {
   const environment = { ...process.env };
   delete environment.NODE_TEST_CONTEXT;
-  const execution = spawnSync(process.execPath, [revalidationCli, ...args, "--root", projectRoot], {
+  const execution = spawnSync(process.execPath, [cli, ...args, "--root", projectRoot], {
     encoding: "utf8",
     env: environment,
   });
@@ -300,6 +304,24 @@ async function createScopeImpactFixture(t: TestContext): Promise<string> {
   }
 
   return projectRoot;
+}
+
+/**
+ * The requirement IDs one sealed table declares, read out of the validator's
+ * own source because both tables are module-private.
+ *
+ * A scan that stopped matching would return an empty list, which two empty
+ * lists would compare equal to, so the caller pins the length as well as the
+ * membership.
+ */
+function sealedTableIds(source: string, table: string): string[] {
+  const start = source.indexOf(`const ${table} = Object.freeze({`);
+  const end = source.indexOf("\n});", start);
+  if (start === -1 || end === -1) {
+    throw new Error(`${table} is not a frozen object literal in scripts/revalidation.mjs`);
+  }
+
+  return [...source.slice(start, end).matchAll(/^ {2}"([A-Z]+-\d+)":/gm)].map((match) => match[1]!);
 }
 
 async function writeCanonical(projectRoot: string, ledger: Ledger): Promise<void> {
@@ -819,6 +841,52 @@ test("RVAL-04 scope-impact checks all live planning-contract records", () => {
     status: 0,
     stdout: "Scope impact valid: 40 records.\n",
     stderr: "",
+  });
+});
+
+test("RVAL-04 seals the same requirement IDs in the signature and route tables", async () => {
+  // arrange
+  const source = await readFile(revalidationCli, "utf8");
+
+  // act
+  const signatureIds = sealedTableIds(source, "SEALED_REQUIREMENT_SIGNATURES");
+  const routeIds = sealedTableIds(source, "SEALED_REQUIREMENT_ROUTES");
+
+  // assert
+  assert.deepStrictEqual(routeIds, signatureIds);
+  assert.strictEqual(signatureIds.length, 32);
+});
+
+// The plant is a copy of the validator with one route entry deleted, run against
+// the live contract. What it proves is that the keyset drift is REPORTED: the
+// validator names the unsealed ID on stderr instead of dying on a property of
+// `undefined`, which is what a set derived from the other table would produce.
+// A route entry that stopped matching would leave the copy byte-identical and
+// flip the expected exit status to 0, so the case cannot pass vacuously.
+test("RVAL-04 scope-impact reports a sealed requirement whose route entry is absent", async (t) => {
+  // arrange
+  const cliRoot = await mkdtemp(path.join(tmpdir(), "revalidation-sealed-drift-"));
+  t.after(() => rm(cliRoot, { recursive: true, force: true }));
+  const driftedCli = path.join(cliRoot, "revalidation.mjs");
+  const source = await readFile(revalidationCli, "utf8");
+  await writeFile(
+    driftedCli,
+    source.replace('  "AUTH-01": Object.freeze({ route: "Phase 4", status: "Complete" }),\n', ""),
+  );
+  const projectRoot = fileURLToPath(new URL("../..", import.meta.url));
+
+  // act
+  const execution = runCli(projectRoot, ["scope-impact", "--check"], driftedCli);
+
+  // assert
+  assert.deepStrictEqual(execution, {
+    status: 1,
+    stdout: "",
+    stderr:
+      "phase-requirements: PHASE-04: roadmap membership differs from sealed requirement routes\n" +
+      "unexpected-requirement-definition: AUTH-01: scope row is absent\n" +
+      "unexpected-requirement-route: AUTH-01: scope row is absent\n" +
+      "unexpected-scope-requirement: AUTH-01: requirement is absent from sealed stable-ID set\n",
   });
 });
 

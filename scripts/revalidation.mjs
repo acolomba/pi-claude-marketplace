@@ -89,7 +89,6 @@ const SEALED_REQUIREMENT_SIGNATURES = Object.freeze({
   "TREF-08": "sha256:102477e57597cff73f2f1c0c54fdff17ac06fa8fbed3377b47503638bacb6cdd",
   "TREF-09": "sha256:5d9c55f187854aade7e83229619b3f788b2a3809b3695bb249890389ecb52f94",
 });
-const SEALED_REQUIREMENT_IDS = new Set(Object.keys(SEALED_REQUIREMENT_SIGNATURES));
 const SEALED_REQUIREMENT_ROUTES = Object.freeze({
   "AUTH-01": Object.freeze({ route: "Phase 4", status: "Complete" }),
   "CLOSE-01": Object.freeze({ route: "Phase 9", status: "Complete" }),
@@ -130,6 +129,16 @@ const SEALED_REQUIREMENT_ROUTES = Object.freeze({
   "TREF-08": Object.freeze({ route: "Phase 6", status: "Complete" }),
   "TREF-09": Object.freeze({ route: "Phase 6", status: "Complete" }),
 });
+// Membership is derived from the ROUTES keys because `SEALED_REQUIREMENT_ROUTES`
+// is the table this set admits an ID to be READ FROM: deriving the two from one
+// another keeps that read total, so no keyset drift can make the validator die
+// on a property of `undefined` in place of naming a contract breach. The other
+// direction stays reported rather than thrown for the same reason --
+// `validateRequirementClause` compares `SEALED_REQUIREMENT_SIGNATURES[id]`
+// instead of reading through it, so a sealed ID with no signature emits a
+// `requirement-signature` violation. `tests/architecture/revalidation.test.ts`
+// pins the two keysets to each other so the drift is caught before either.
+const SEALED_REQUIREMENT_IDS = new Set(Object.keys(SEALED_REQUIREMENT_ROUTES));
 const PUBLISH_JOURNAL_FIELDS = new Set(["status", "records"]);
 const PUBLISH_RECORD_FIELDS = new Set(["destination", "staged", "backup", "hadDestination"]);
 const PUBLISH_STATUSES = new Set(["staged", "published"]);
