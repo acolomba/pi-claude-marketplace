@@ -776,7 +776,7 @@ It can return only after current revalidation; it is not marked implemented.
 **Goal:** Re-establish honest direct coverage for every source-test pair and resolve shortfalls.
 **Depends on:** Phase 7
 **Requirements:** RCOV-01, RCOV-02, RCOV-03
-**Plans:** 6/9 plans executed
+**Plans:** 7/9 plans executed
 
 **Success Criteria**:
 
@@ -816,7 +816,7 @@ Plans:
 
 **Wave 3** _(blocked on Wave 2 completion)_
 
-- [ ] 08-04-PLAN.md — the committed pin, its bidirectional comparator, the gate arms, and the fail-closed explicit base
+- [x] 08-04-PLAN.md — the committed pin, its bidirectional comparator, the gate arms, and the fail-closed explicit base
 
 **Wave 4** _(blocked on Wave 3 completion)_
 
@@ -870,5 +870,5 @@ baseline, which still includes both pairs; neither is a terminal shortfall.
 | 5. Injection and Ownership Design    | 34/34          | Complete    | 2026-09-08 |
 | 6. Assertion and Module Refinement   | 52/52          | Complete    | 2026-09-10 |
 | 7. Gate Integrity                    | 16/16 | Complete   | 2026-09-10 |
-| 8. Direct Coverage                   | 6/9 | In Progress|  |
+| 8. Direct Coverage                   | 7/9 | In Progress|  |
 | 9. Final Quality and Backlog Closure | 0/0            | Not started | —          |

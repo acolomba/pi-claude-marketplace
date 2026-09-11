@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 08
 current_phase_name: Direct Coverage
 status: executing
-stopped_at: Completed 08-07-PLAN.md; its checkpoint was answered defer + pinned (D-08-A14)
-last_updated: "2026-09-11T09:10:00.000Z"
+stopped_at: Completed 08-04-PLAN.md; the coverage pin is committed and both gate arms enforce it
+last_updated: "2026-09-11T12:55:00.000Z"
 last_activity: 2026-09-11
-last_activity_desc: 08-07 closed the three commitPrepared leak arms and relocated the install ledger's owner coverage; its two residual defense-in-depth branches are pinned per D-08-A14, with the row left for 08-04 to generate
-state_head: 75e39aec
+last_activity_desc: 08-04 committed the measured two-row coverage pin, wired the bidirectional comparison into both gate arms, and added the fail-closed explicit base; npm run test:coverage:direct:all exits 0 for the first time
+state_head: 9558acf3
 progress:
   total_phases: 9
   completed_phases: 3
   total_plans: 205
-  completed_plans: 202
+  completed_plans: 203
   percent: 33
 ---
 
@@ -32,8 +32,28 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 08 (Direct Coverage) — EXECUTING
-Next: /gsd-execute-phase 08 (08-04 has not run)
-Plan: 6 of 9 complete
+Next: /gsd-execute-phase 08 (08-08 and 08-09 remain)
+Plan: 7 of 9 complete
+Status: 08-04 complete. **`npm run test:coverage:direct:all` exits 0 for the first time** -- 230
+pairs in 489.4s, 228 complete-or-type-only, and exactly two refused rows that match a committed pin.
+`scripts/test-coverage-direct.pin.json` holds those two rows, sorted by `sourcePath`, each carrying
+the gate's own reading string, a `findingIds` array, and one `reasons` entry per uncovered site:
+`bridges/commands/discover.ts` at `branches 55/57, lines 412/414` (`BC-019`; line 178's `?? ""` arm
+and 288-290's narrowing arm) and `orchestrators/plugin/install-outcome.ts` at
+`branches 109/111, lines 1034/1040` (`D-08-A14`; 422-426's manifest re-check and 818-820's hooks
+re-parse guard). **Both readings and the membership were MEASURED at this plan's head, not copied**
+-- 08-07's regeneration caveat was honoured, and the full sweep run through the new arm is what
+proves the set is two rather than a third shortfall hiding somewhere. `scripts/test-coverage-direct.pin.mjs`
+carries the WHAT THIS PIN IS / IS NOT header, the root-injectable `loadCoveragePin`, and the pure
+`assertPinnedReadings`; `runAllPairs` and `runChangedPairs` each compare once after their loop, the
+changed arm measuring the union of the change set and every pinned pair so the stale direction fires
+on a commit that touches no pinned file. `assertCompleteCoverage` is byte-unchanged and reads no pin;
+the reporter LOST a duplicated regex to the shared `shortfallReadingOf` and gained nothing about the
+pin. `--base <ref>` resolves exactly and errors rather than falling back, refusing a non-ref-shaped
+value before git runs. Seven planted states in the negative harness cover every divergence class with
+the matching control first. Two commits, not three: `fallow dead-code` refuses an export with no
+consumer, so tasks 1 and 2 could not be committed apart. `npm run check`-equivalent chain exits 0
+(6,003 unit cases). `RCOV-02` stays Pending for 08-09. 08-08 and 08-09 have not run.
 Status: 08-07 complete; its checkpoint was answered **`defer` + pinned** (`D-08-A14`).
 `orchestrators/plugin/install-outcome.ts` — the phase's largest and only open-ended shortfall —
 moved from `branches 60/83, functions 22/27, lines 965/1040` to
