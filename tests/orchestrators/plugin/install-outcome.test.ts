@@ -463,6 +463,15 @@ interface FaultedCleanup {
    * reads the target the port received rather than predicting it. Exactly one
    * removal under that directory must have been attempted, or the expected
    * message could be built from some other bridge's call.
+   *
+   * This is a stated trade against
+   * `.claude/rules/typescript-unit-testing.md`'s "build expected values
+   * independently": the cases interpolate this value into their expected
+   * message, so the assertion cannot fail on a wrong path WITHIN the right
+   * staging parent. The parent is the part the case can pin and does -- the
+   * filter below accepts only a target under the bridge's own staging dir, and
+   * only one such target -- while the UUID segment is minted by production and
+   * is not predictable from outside it.
    */
   readonly stagingRoot: string;
 }
