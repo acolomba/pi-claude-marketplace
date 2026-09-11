@@ -62,6 +62,7 @@ import type {
   UnstageAgentFailure,
 } from "./types.ts";
 import type { AgentsIndexEntry } from "../../persistence/agents-index-schema.ts";
+import type { RemovalOps } from "../../shared/fs-utils.ts";
 
 type AgentsReplacementInternals = Readonly<{
   backupRoot: string;
@@ -95,6 +96,7 @@ const agentsReplacementInternals = new WeakMap<
  *  10. Aggregate warnings + index corruptions
  */
 export async function prepareStagePluginAgents(
+  ops: RemovalOps,
   input: StageAgentsInput,
 ): Promise<PreparedAgentsStaging> {
   const {
@@ -247,7 +249,7 @@ export async function prepareStagePluginAgents(
       newEntries.push(entry);
     }
   } catch (err) {
-    throw appendLeakToError(err, await cleanupStaging(stagingDir, "agents staging directory"));
+    throw appendLeakToError(err, await cleanupStaging(ops, stagingDir, "agents staging directory"));
   }
 
   // Step 10: assemble the result. recorded[] is the W-05 record the
@@ -316,6 +318,7 @@ function formatAgentWarnings(converted: ConvertedAgent): string[] {
  * via warnings[] rather than dropping it.
  */
 export async function commitPreparedAgents(
+  ops: RemovalOps,
   prepared: PreparedAgentsStaging,
 ): Promise<string | undefined> {
   if (prepared.kind === "noop") {
@@ -350,7 +353,7 @@ export async function commitPreparedAgents(
   } catch (err) {
     throw appendLeakToError(
       err,
-      await cleanupStaging(prepared.stagingDir, "agents staging directory"),
+      await cleanupStaging(ops, prepared.stagingDir, "agents staging directory"),
     );
   }
 
@@ -388,7 +391,7 @@ export async function commitPreparedAgents(
     // ManualRecoveryError -- commit-path leaks are transient IO.
     throw appendLeaks(err, [
       ...rollbackLeaks,
-      await cleanupStaging(prepared.stagingDir, "agents staging directory"),
+      await cleanupStaging(ops, prepared.stagingDir, "agents staging directory"),
     ]);
   }
 
@@ -407,7 +410,7 @@ export async function commitPreparedAgents(
 
   // Step 4: best-effort cleanup. Returns leak message (if any) for caller
   // to surface in warnings[]; never throws.
-  return cleanupStaging(prepared.stagingDir, "agents staging directory");
+  return cleanupStaging(ops, prepared.stagingDir, "agents staging directory");
 }
 
 /**
@@ -417,13 +420,14 @@ export async function commitPreparedAgents(
  * surface.
  */
 export async function abortPreparedAgents(
+  ops: RemovalOps,
   prepared: PreparedAgentsStaging,
 ): Promise<string | undefined> {
   if (prepared.kind === "noop") {
     return undefined;
   }
 
-  return cleanupStaging(prepared.stagingDir, "agents staging directory");
+  return cleanupStaging(ops, prepared.stagingDir, "agents staging directory");
 }
 
 /**
@@ -432,6 +436,7 @@ export async function abortPreparedAgents(
  * staged renames so later orchestrator failures can restore the old install.
  */
 export async function replacePreparedAgents(
+  ops: RemovalOps,
   prepared: PreparedAgentsStaging,
   options?: ReplacePreparedAgentsOptions,
 ): Promise<AgentsReplacement> {
@@ -499,6 +504,7 @@ export async function replacePreparedAgents(
     });
   } catch (err) {
     const leaks = await rollbackAgentsReplacementInternal(
+      ops,
       prepared,
       renamed,
       backups,
@@ -526,6 +532,7 @@ export async function replacePreparedAgents(
 }
 
 export async function rollbackAgentsReplacement(
+  ops: RemovalOps,
   replacement: AgentsReplacement,
 ): Promise<readonly string[]> {
   if (replacement.kind === "noop") {
@@ -534,6 +541,7 @@ export async function rollbackAgentsReplacement(
 
   const internals = requireAgentsReplacementInternals(replacement);
   return rollbackAgentsReplacementInternal(
+    ops,
     replacement.prepared,
     internals.renamed,
     internals.backups,
@@ -543,6 +551,7 @@ export async function rollbackAgentsReplacement(
 }
 
 export async function finalizeAgentsReplacement(
+  ops: RemovalOps,
   replacement: AgentsReplacement,
 ): Promise<readonly string[]> {
   if (replacement.kind === "noop") {
@@ -551,8 +560,8 @@ export async function finalizeAgentsReplacement(
 
   const internals = requireAgentsReplacementInternals(replacement);
   const leaks = [
-    await cleanupStaging(internals.backupRoot, "agents replacement backup directory"),
-    await cleanupStaging(replacement.prepared.stagingDir, "agents staging directory"),
+    await cleanupStaging(ops, internals.backupRoot, "agents replacement backup directory"),
+    await cleanupStaging(ops, replacement.prepared.stagingDir, "agents staging directory"),
   ].filter((leak): leak is string => leak !== undefined);
   return Object.freeze(leaks);
 }
@@ -569,6 +578,7 @@ function requireAgentsReplacementInternals(
 }
 
 async function rollbackAgentsReplacementInternal(
+  ops: RemovalOps,
   prepared: Extract<PreparedAgentsStaging, { kind: "staged" }>,
   renamed: readonly { from: string; to: string }[],
   backups: readonly { name: string; from: string; to: string }[],
@@ -576,6 +586,7 @@ async function rollbackAgentsReplacementInternal(
   oldIndexText: string | undefined,
 ): Promise<readonly string[]> {
   return rollbackReplacementCommon({
+    ops,
     renamed,
     backups,
     stagingRoot: prepared.stagingDir,

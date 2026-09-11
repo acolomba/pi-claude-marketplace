@@ -64,7 +64,12 @@ import {
   appendLeakToError,
   errorMessage,
 } from "../../shared/errors.ts";
-import { cleanupStaging, pathExists } from "../../shared/fs-utils.ts";
+import {
+  cleanupStaging,
+  createRemovalOps,
+  pathExists,
+  type RemovalOps,
+} from "../../shared/fs-utils.ts";
 import { classifyGitSourceAccessFailure } from "../../shared/git-failure-classifiers.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import { type Reason } from "../../shared/notification-types.ts";
@@ -318,13 +323,14 @@ class ConfigInvalidError extends InvalidMarketplaceManifestError {
  */
 async function runAddInGuard(args: {
   opts: AddMarketplaceOptions;
+  removalOps: RemovalOps;
   locations: ScopedLocations;
   source: ReturnType<typeof parsePluginSource>;
   gitOps: GitOps;
   credentialOps: CredentialOps;
   orchestrated: boolean;
 }): Promise<string> {
-  const { opts, locations, source, gitOps, credentialOps, orchestrated } = args;
+  const { opts, locations, source, gitOps, credentialOps, orchestrated, removalOps } = args;
 
   // S5a (MA-10): parser produced an unknown kind with a reason -- surface
   // verbatim on the cause, classified as `unsupported source` (D-48-C A3).
@@ -367,6 +373,7 @@ async function runAddInGuard(args: {
         source,
         gitOps,
         credentialOps,
+        removalOps,
         ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
         cwd: opts.cwd,
       });
@@ -381,6 +388,7 @@ async function runAddInGuard(args: {
         source,
         gitOps,
         credentialOps,
+        removalOps,
         ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
         cwd: opts.cwd,
       });
@@ -429,7 +437,11 @@ async function runAddInGuard(args: {
       // trips MA-6 {stale clone}. path sources have no clone dir.
       if (source.kind === "github" || source.kind === "url") {
         const finalDir = await locations.sourceCloneDir(recordedName);
-        const leak = await cleanupStaging(finalDir, `marketplace final clone ${finalDir}`);
+        const leak = await cleanupStaging(
+          removalOps,
+          finalDir,
+          `marketplace final clone ${finalDir}`,
+        );
         wrapped = appendLeakToError(wrapped, leak);
       }
 
@@ -536,6 +548,11 @@ export async function addMarketplace(
 ): Promise<AddMarketplaceOutcome | undefined> {
   const gitOps = opts.gitOps ?? DEFAULT_GIT_OPS;
   const credentialOps = opts.credentialOps ?? DEFAULT_CREDENTIAL_OPS;
+  // D-08-12: this verb owns a staging lifecycle, so it is the composition root
+  // that constructs the removal operations its in-guard helpers perform their
+  // cleanup through. The port is required with no default, so there is nothing
+  // to fall back to and no way for a new cleanup site to go uninjected.
+  const removalOps = createRemovalOps();
   const locations = locationsFor(opts.scope, opts.cwd);
   const source = parsePluginSource(opts.rawSource);
   // RECON-03: orchestrated mode suppresses every notify() call and returns the
@@ -557,6 +574,7 @@ export async function addMarketplace(
       source,
       gitOps,
       credentialOps,
+      removalOps,
       orchestrated,
     });
   } catch (err) {
@@ -641,6 +659,7 @@ export async function addMarketplace(
  */
 async function addGitClonedInGuard(args: {
   state: ExtensionState;
+  removalOps: RemovalOps;
   locations: ScopedLocations;
   source: GitHubSource | UrlSource;
   gitOps: GitOps;
@@ -648,7 +667,7 @@ async function addGitClonedInGuard(args: {
   auth?: GitAuthBundle;
   cwd: string;
 }): Promise<string> {
-  const { state, locations, source, gitOps, cloneUrl, auth, cwd } = args;
+  const { state, locations, source, gitOps, cloneUrl, auth, cwd, removalOps } = args;
   const stagingDir = await locations.sourcesStagingDir(randomUUID());
 
   // 1. Clone into staging (NFR-5: only git-cloned kinds reach gitOps.clone).
@@ -662,7 +681,7 @@ async function addGitClonedInGuard(args: {
   } catch (err) {
     // Clone itself failed -- there is no staging dir to clean up beyond a
     // potentially partial mkdir. cleanupStaging is ENOENT-tolerant.
-    const leak = await cleanupStaging(stagingDir, "marketplace clone staging");
+    const leak = await cleanupStaging(removalOps, stagingDir, "marketplace clone staging");
     throw appendLeakToError(err, leak);
   }
 
@@ -711,10 +730,14 @@ async function addGitClonedInGuard(args: {
     // MA-9: append leaks rather than mask original error.
     let wrapped: unknown = err;
     if (!stagedAtFinal) {
-      const leak = await cleanupStaging(stagingDir, "marketplace clone staging");
+      const leak = await cleanupStaging(removalOps, stagingDir, "marketplace clone staging");
       wrapped = appendLeakToError(wrapped, leak);
     } else if (finalDir !== undefined) {
-      const leak = await cleanupStaging(finalDir, `marketplace final clone ${finalDir}`);
+      const leak = await cleanupStaging(
+        removalOps,
+        finalDir,
+        `marketplace final clone ${finalDir}`,
+      );
       wrapped = appendLeakToError(wrapped, leak);
     }
 
@@ -727,12 +750,14 @@ async function addGithubInGuard(args: {
   state: ExtensionState;
   locations: ScopedLocations;
   source: GitHubSource;
+  removalOps: RemovalOps;
   gitOps: GitOps;
   credentialOps: CredentialOps;
   deviceFlowHttp?: DeviceFlowHttp;
   cwd: string;
 }): Promise<string> {
-  const { ctx, state, locations, source, gitOps, credentialOps, deviceFlowHttp, cwd } = args;
+  const { ctx, state, locations, source, gitOps, credentialOps, deviceFlowHttp, cwd, removalOps } =
+    args;
   const cloneUrl = `https://github.com/${source.owner}/${source.repo}.git`;
 
   // AUTH-01 / D-79-05: buildAuthForHost binds the GitHub provider's Device
@@ -755,6 +780,7 @@ async function addGithubInGuard(args: {
     locations,
     source,
     gitOps,
+    removalOps,
     cloneUrl,
     ...(auth !== undefined && { auth }),
     cwd,
@@ -778,12 +804,14 @@ async function addUrlInGuard(args: {
   state: ExtensionState;
   locations: ScopedLocations;
   source: UrlSource;
+  removalOps: RemovalOps;
   gitOps: GitOps;
   credentialOps: CredentialOps;
   deviceFlowHttp?: DeviceFlowHttp;
   cwd: string;
 }): Promise<string> {
-  const { ctx, state, locations, source, gitOps, credentialOps, deviceFlowHttp, cwd } = args;
+  const { ctx, state, locations, source, gitOps, credentialOps, deviceFlowHttp, cwd, removalOps } =
+    args;
   const host = hostFromCloneUrl(source.url, "url");
   const auth = buildAuthForHost({
     host,
@@ -797,6 +825,7 @@ async function addUrlInGuard(args: {
     locations,
     source,
     gitOps,
+    removalOps,
     cloneUrl: source.url,
     ...(auth !== undefined && { auth }),
     cwd,

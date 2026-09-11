@@ -59,6 +59,7 @@ import type {
   StageCommandsInput,
   StagedCommandRecord,
 } from "./types.ts";
+import type { RemovalOps } from "../../shared/fs-utils.ts";
 
 type CommandsReplacementInternals = Readonly<{
   backupRoot: string;
@@ -161,6 +162,7 @@ function contextualStagingError(pluginName: string, generatedName: string, err: 
 }
 
 export async function prepareStageCommands(
+  ops: RemovalOps,
   input: StageCommandsInput,
 ): Promise<PreparedCommandsStaging> {
   const { locations, pluginName, pluginRoot, pluginDataDir, resolved, cwd } = input;
@@ -256,7 +258,10 @@ export async function prepareStageCommands(
       }
     }
   } catch (err) {
-    throw appendLeakToError(err, await cleanupStaging(stagingRoot, "commands staging directory"));
+    throw appendLeakToError(
+      err,
+      await cleanupStaging(ops, stagingRoot, "commands staging directory"),
+    );
   }
 
   const recorded: StagedCommandRecord[] = discovered.map((command) => ({
@@ -295,6 +300,7 @@ export async function prepareStageCommands(
  * leak message when staging cleanup fails.
  */
 export async function commitPreparedCommands(
+  ops: RemovalOps,
   prepared: PreparedCommandsStaging,
 ): Promise<string | undefined> {
   if (prepared.kind === "noop") {
@@ -344,11 +350,11 @@ export async function commitPreparedCommands(
 
     throw appendLeaks(err, [
       ...rollbackLeaks,
-      await cleanupStaging(prepared.stagingRoot, "commands staging directory"),
+      await cleanupStaging(ops, prepared.stagingRoot, "commands staging directory"),
     ]);
   }
 
-  return cleanupStaging(prepared.stagingRoot, "commands staging directory");
+  return cleanupStaging(ops, prepared.stagingRoot, "commands staging directory");
 }
 
 /**
@@ -356,13 +362,14 @@ export async function commitPreparedCommands(
  * has nothing to clean.
  */
 export async function abortPreparedCommands(
+  ops: RemovalOps,
   prepared: PreparedCommandsStaging,
 ): Promise<string | undefined> {
   if (prepared.kind === "noop") {
     return undefined;
   }
 
-  return cleanupStaging(prepared.stagingRoot, "commands staging directory");
+  return cleanupStaging(ops, prepared.stagingRoot, "commands staging directory");
 }
 
 /**
@@ -371,6 +378,7 @@ export async function abortPreparedCommands(
  * later orchestrator failure can restore the old install.
  */
 export async function replacePreparedCommands(
+  ops: RemovalOps,
   prepared: PreparedCommandsStaging,
 ): Promise<CommandsReplacement> {
   if (prepared.kind === "noop") {
@@ -420,7 +428,13 @@ export async function replacePreparedCommands(
       renamed.push(pair);
     }
   } catch (err) {
-    const leaks = await rollbackCommandsReplacementInternal(prepared, renamed, backups, backupRoot);
+    const leaks = await rollbackCommandsReplacementInternal(
+      ops,
+      prepared,
+      renamed,
+      backups,
+      backupRoot,
+    );
     if (leaks.length > 0) {
       throw new ManualRecoveryError(errorMessage(err), leaks, { cause: err });
     }
@@ -441,6 +455,7 @@ export async function replacePreparedCommands(
 }
 
 export async function rollbackCommandsReplacement(
+  ops: RemovalOps,
   replacement: CommandsReplacement,
 ): Promise<readonly string[]> {
   if (replacement.kind === "noop") {
@@ -449,6 +464,7 @@ export async function rollbackCommandsReplacement(
 
   const internals = requireCommandsReplacementInternals(replacement);
   return rollbackCommandsReplacementInternal(
+    ops,
     replacement.prepared,
     internals.renamed,
     internals.backups,
@@ -457,6 +473,7 @@ export async function rollbackCommandsReplacement(
 }
 
 export async function finalizeCommandsReplacement(
+  ops: RemovalOps,
   replacement: CommandsReplacement,
 ): Promise<readonly string[]> {
   if (replacement.kind === "noop") {
@@ -465,8 +482,8 @@ export async function finalizeCommandsReplacement(
 
   const internals = requireCommandsReplacementInternals(replacement);
   const leaks = [
-    await cleanupStaging(internals.backupRoot, "commands replacement backup directory"),
-    await cleanupStaging(replacement.prepared.stagingRoot, "commands staging directory"),
+    await cleanupStaging(ops, internals.backupRoot, "commands replacement backup directory"),
+    await cleanupStaging(ops, replacement.prepared.stagingRoot, "commands staging directory"),
   ].filter((leak): leak is string => leak !== undefined);
   return Object.freeze(leaks);
 }
@@ -483,12 +500,14 @@ function requireCommandsReplacementInternals(
 }
 
 async function rollbackCommandsReplacementInternal(
+  ops: RemovalOps,
   prepared: Extract<PreparedCommandsStaging, { kind: "staged" }>,
   renamed: readonly { from: string; to: string }[],
   backups: readonly { name: string; from: string; to: string }[],
   backupRoot: string,
 ): Promise<readonly string[]> {
   return rollbackReplacementCommon({
+    ops,
     renamed,
     backups,
     stagingRoot: prepared.stagingRoot,

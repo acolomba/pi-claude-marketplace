@@ -34,6 +34,7 @@ import {
 } from "../../bridges/skills/index.ts";
 import { parseHooksConfig, projectHookSummaryEntries } from "../../domain/components/hooks.ts";
 import { errorMessage, errorWithManualRecovery } from "../../shared/errors.ts";
+import { createRemovalOps, type RemovalOps } from "../../shared/fs-utils.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 
 import { splitStagingWarnings } from "./shared.ts";
@@ -88,6 +89,12 @@ export interface ReinstallReplacement {
   readonly bridgeWarnings: readonly string[];
   /** Operations retained so compensation uses the same transaction owner. */
   readonly operations: ReinstallReplaceOperations;
+  /**
+   * D-08-12: removal operations retained for the same reason as `operations` --
+   * rollback and finalize must perform their cleanup through the collaborator the
+   * forward pass used, not a freshly constructed one.
+   */
+  readonly removalOps: RemovalOps;
 }
 
 /** Inputs required to stage and atomically replace every reinstall bridge. */
@@ -194,8 +201,13 @@ export async function replaceReinstalledPlugin(
   input: ReplaceReinstalledPluginInput,
   operations: ReinstallReplaceOperations,
 ): Promise<ReinstallReplacement> {
-  const handles = await prepareAllHandles(input, operations);
+  // D-08-12: this verb owns the replacement lifecycle, so it constructs the
+  // removal operations once and every prepare, replace, rollback, and finalize
+  // step below performs its cleanup through that one collaborator.
+  const removalOps = createRemovalOps();
+  const handles = await prepareAllHandles(removalOps, input, operations);
   const { replacements, hookEntries } = await replaceAll(
+    removalOps,
     handles,
     {
       locations: input.locations,
@@ -213,6 +225,7 @@ export async function replaceReinstalledPlugin(
     discoveryWarnings: warnings.discovery,
     bridgeWarnings: warnings.bridge,
     operations,
+    removalOps,
   };
 }
 
@@ -220,14 +233,22 @@ export async function replaceReinstalledPlugin(
 export async function rollbackReinstalledPlugin(
   replacement: ReinstallReplacement,
 ): Promise<readonly string[]> {
-  return rollbackReplacements(replacement.replacements, replacement.operations);
+  return rollbackReplacements(
+    replacement.removalOps,
+    replacement.replacements,
+    replacement.operations,
+  );
 }
 
 /** Remove bridge backups after the state transaction commits. */
 export async function finalizeReinstalledPlugin(
   replacement: ReinstallReplacement,
 ): Promise<readonly string[]> {
-  return finalizeReplacements(replacement.replacements, replacement.operations);
+  return finalizeReplacements(
+    replacement.removalOps,
+    replacement.replacements,
+    replacement.operations,
+  );
 }
 
 /** Run non-fatal cache and data-directory cleanup after commit. */
@@ -264,12 +285,13 @@ export async function runPostSuccessMaintenance(
 }
 
 async function prepareAllHandles(
+  ops: RemovalOps,
   input: ReplaceReinstalledPluginInput,
   operations: ReinstallReplaceOperations,
 ): Promise<ReinstallPreparedHandles> {
   const handles: PartialPreparedHandles = {};
   try {
-    handles.skills = await operations.prepareStageSkills({
+    handles.skills = await operations.prepareStageSkills(ops, {
       locations: input.locations,
       marketplaceName: input.marketplace,
       pluginName: input.plugin,
@@ -279,7 +301,7 @@ async function prepareAllHandles(
       previousSkillNames: input.oldRecord.resources.skills,
       cwd: input.cwd,
     });
-    handles.commands = await operations.prepareStageCommands({
+    handles.commands = await operations.prepareStageCommands(ops, {
       locations: input.locations,
       marketplaceName: input.marketplace,
       pluginName: input.plugin,
@@ -289,7 +311,7 @@ async function prepareAllHandles(
       previousCommandNames: input.oldRecord.resources.prompts,
       cwd: input.cwd,
     });
-    handles.agents = await operations.prepareStagePluginAgents({
+    handles.agents = await operations.prepareStagePluginAgents(ops, {
       locations: input.locations,
       marketplaceName: input.marketplace,
       pluginName: input.plugin,
@@ -311,13 +333,14 @@ async function prepareAllHandles(
       sourcePath: `${input.installable.pluginRoot}#mcpServers`,
     });
   } catch (error) {
-    throw errorWithManualRecovery(error, await abortPartialHandles(handles, operations));
+    throw errorWithManualRecovery(error, await abortPartialHandles(ops, handles, operations));
   }
 
   return handles as ReinstallPreparedHandles;
 }
 
 async function replaceAll(
+  ops: RemovalOps,
   handles: ReinstallPreparedHandles,
   hooks: HooksReplaceArgs,
   operations: ReinstallReplaceOperations,
@@ -328,19 +351,19 @@ async function replaceAll(
   const replacements: ReplacementEntry[] = [];
   let hookEntries: readonly HookSummaryEntry[] | undefined;
   try {
-    const skills = await operations.replacePreparedSkills(handles.skills);
+    const skills = await operations.replacePreparedSkills(ops, handles.skills);
     replacements.push({ phase: "skills", handle: skills });
-    const commands = await operations.replacePreparedCommands(handles.commands);
+    const commands = await operations.replacePreparedCommands(ops, handles.commands);
     replacements.push({ phase: "commands", handle: commands });
-    const agents = await operations.replacePreparedAgents(handles.agents, { force: true });
+    const agents = await operations.replacePreparedAgents(ops, handles.agents, { force: true });
     replacements.push({ phase: "agents", handle: agents });
     hookEntries = await commitHooks(hooks, operations);
     const mcp = await operations.replacePreparedMcp(handles.mcp);
     replacements.push({ phase: "mcp", handle: mcp });
   } catch (error) {
     const leaks = [
-      ...(await rollbackReplacements(replacements, operations)),
-      ...(await abortPartialHandles(handles, operations)),
+      ...(await rollbackReplacements(ops, replacements, operations)),
+      ...(await abortPartialHandles(ops, handles, operations)),
     ];
     throw errorWithManualRecovery(error, leaks);
   }
@@ -400,6 +423,7 @@ function splitHandleWarnings(handles: ReinstallPreparedHandles): {
 }
 
 async function abortPartialHandles(
+  ops: RemovalOps,
   handles: PartialPreparedHandles,
   operations: ReinstallReplaceOperations,
 ): Promise<readonly string[]> {
@@ -409,27 +433,28 @@ async function abortPartialHandles(
   }
 
   if (handles.agents !== undefined) {
-    pushLeak(leaks, "agents", await operations.abortPreparedAgents(handles.agents));
+    pushLeak(leaks, "agents", await operations.abortPreparedAgents(ops, handles.agents));
   }
 
   if (handles.commands !== undefined) {
-    pushLeak(leaks, "commands", await operations.abortPreparedCommands(handles.commands));
+    pushLeak(leaks, "commands", await operations.abortPreparedCommands(ops, handles.commands));
   }
 
   if (handles.skills !== undefined) {
-    pushLeak(leaks, "skills", await operations.abortPreparedSkills(handles.skills));
+    pushLeak(leaks, "skills", await operations.abortPreparedSkills(ops, handles.skills));
   }
 
   return Object.freeze(leaks);
 }
 
 async function rollbackReplacements(
+  ops: RemovalOps,
   replacements: readonly ReplacementEntry[],
   operations: ReinstallReplaceOperations,
 ): Promise<readonly string[]> {
   const leaks: string[] = [];
   for (const replacement of [...replacements].reverse()) {
-    for (const leak of await rollbackReplacement(replacement, operations)) {
+    for (const leak of await rollbackReplacement(ops, replacement, operations)) {
       leaks.push(`${replacement.phase}: ${leak}`);
     }
   }
@@ -438,28 +463,30 @@ async function rollbackReplacements(
 }
 
 async function rollbackReplacement(
+  ops: RemovalOps,
   entry: ReplacementEntry,
   operations: ReinstallReplaceOperations,
 ): Promise<readonly string[]> {
   switch (entry.phase) {
     case "skills":
-      return operations.rollbackSkillsReplacement(entry.handle);
+      return operations.rollbackSkillsReplacement(ops, entry.handle);
     case "commands":
-      return operations.rollbackCommandsReplacement(entry.handle);
+      return operations.rollbackCommandsReplacement(ops, entry.handle);
     case "agents":
-      return operations.rollbackAgentsReplacement(entry.handle);
+      return operations.rollbackAgentsReplacement(ops, entry.handle);
     case "mcp":
       return operations.rollbackMcpReplacement(entry.handle);
   }
 }
 
 async function finalizeReplacements(
+  ops: RemovalOps,
   replacements: readonly ReplacementEntry[],
   operations: ReinstallReplaceOperations,
 ): Promise<readonly string[]> {
   const leaks: string[] = [];
   for (const replacement of replacements) {
-    for (const leak of await finalizeReplacement(replacement, operations)) {
+    for (const leak of await finalizeReplacement(ops, replacement, operations)) {
       leaks.push(`${replacement.phase}: ${leak}`);
     }
   }
@@ -468,16 +495,17 @@ async function finalizeReplacements(
 }
 
 async function finalizeReplacement(
+  ops: RemovalOps,
   entry: ReplacementEntry,
   operations: ReinstallReplaceOperations,
 ): Promise<readonly string[]> {
   switch (entry.phase) {
     case "skills":
-      return operations.finalizeSkillsReplacement(entry.handle);
+      return operations.finalizeSkillsReplacement(ops, entry.handle);
     case "commands":
-      return operations.finalizeCommandsReplacement(entry.handle);
+      return operations.finalizeCommandsReplacement(ops, entry.handle);
     case "agents":
-      return operations.finalizeAgentsReplacement(entry.handle);
+      return operations.finalizeAgentsReplacement(ops, entry.handle);
     case "mcp":
       return operations.finalizeMcpReplacement(entry.handle);
   }

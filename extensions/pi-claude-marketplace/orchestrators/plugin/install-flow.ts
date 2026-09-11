@@ -14,6 +14,7 @@ import { locationsFor } from "../../persistence/locations.ts";
 import { softDepStatus } from "../../platform/pi-api.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
+import { createRemovalOps } from "../../shared/fs-utils.ts";
 import { notify } from "../../shared/notification-dispatch.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
 import { companionSeverity, malformedReasonsForKinds } from "../../shared/notify-reasons.ts";
@@ -216,6 +217,10 @@ function buildInstallLedgerOptions(
     ...(opts.pinVersionOverride !== undefined && { pinVersionOverride: opts.pinVersionOverride }),
     ...(opts.cloneCacheSeam !== undefined && { cloneCacheSeam: opts.cloneCacheSeam }),
     cloneProbe: probeInstallClone,
+    // D-08-12: the install path's composition root. The ledger options carry the
+    // port as a required member, so this assembly point is the one place the real
+    // operations enter the install path.
+    removalOps: createRemovalOps(),
     ...(opts.credentialOps !== undefined && { credentialOps: opts.credentialOps }),
     ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
     ...(opts.authMemo !== undefined && { authMemo: opts.authMemo }),

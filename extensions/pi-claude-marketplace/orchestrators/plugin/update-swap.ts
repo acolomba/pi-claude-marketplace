@@ -98,6 +98,7 @@ import {
   type CleanupLifecycle,
   type Phase3Failure,
 } from "../../shared/errors.ts";
+import { createRemovalOps, type RemovalOps } from "../../shared/fs-utils.ts";
 import { RECOVERY_PLUGIN_REINSTALL_PREFIX } from "../../shared/markers.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
@@ -217,6 +218,7 @@ type PluginPreflight = PreparedPluginUpdate;
  * warning off.
  */
 async function prepareUpdateHandles(
+  ops: RemovalOps,
   args: ThreePhaseArgs,
   preflight: PluginPreflight,
   agentsDirs: readonly string[],
@@ -227,7 +229,7 @@ async function prepareUpdateHandles(
   const handles: Partial<PrepHandles> = {};
 
   try {
-    handles.skills = await prepareStageSkills({
+    handles.skills = await prepareStageSkills(ops, {
       locations,
       marketplaceName: marketplace,
       pluginName: plugin,
@@ -238,7 +240,7 @@ async function prepareUpdateHandles(
       // SUB-02: project-scope ${CLAUDE_PROJECT_DIR} resolves to the install cwd.
       cwd,
     });
-    handles.commands = await prepareStageCommands({
+    handles.commands = await prepareStageCommands(ops, {
       locations,
       marketplaceName: marketplace,
       pluginName: plugin,
@@ -249,7 +251,7 @@ async function prepareUpdateHandles(
       // SUB-02: project-scope ${CLAUDE_PROJECT_DIR} resolves to the install cwd.
       cwd,
     });
-    handles.agents = await prepareStagePluginAgents({
+    handles.agents = await prepareStagePluginAgents(ops, {
       locations,
       marketplaceName: marketplace,
       pluginName: plugin,
@@ -276,7 +278,7 @@ async function prepareUpdateHandles(
       sourcePath: `${installable.pluginRoot}#mcpServers`,
     });
   } catch (err) {
-    throw errorWithCleanupFailures(err, await abortPartialHandles(handles, "prepare"));
+    throw errorWithCleanupFailures(err, await abortPartialHandles(ops, handles, "prepare"));
   }
 
   return handles as PrepHandles;
@@ -304,6 +306,7 @@ function collectUpdateWarnings(handles: PrepHandles, cascade: boolean): readonly
 }
 
 async function abortPartialHandles(
+  ops: RemovalOps,
   handles: Partial<PrepHandles>,
   phase: Extract<CleanupLifecycle, "prepare">,
 ): Promise<readonly CleanupFailure[]> {
@@ -314,7 +317,7 @@ async function abortPartialHandles(
       phase,
       "agents",
       agentsCleanupPath(handles.agents),
-      await abortPreparedAgents(handles.agents),
+      await abortPreparedAgents(ops, handles.agents),
     );
   }
 
@@ -324,7 +327,7 @@ async function abortPartialHandles(
       phase,
       "commands",
       commandsCleanupPath(handles.commands),
-      await abortPreparedCommands(handles.commands),
+      await abortPreparedCommands(ops, handles.commands),
     );
   }
 
@@ -334,14 +337,17 @@ async function abortPartialHandles(
       phase,
       "skills",
       skillsCleanupPath(handles.skills),
-      await abortPreparedSkills(handles.skills),
+      await abortPreparedSkills(ops, handles.skills),
     );
   }
 
   return Object.freeze(failures);
 }
 
-async function abortHandles(handles: PrepHandles): Promise<readonly CleanupFailure[]> {
+async function abortHandles(
+  ops: RemovalOps,
+  handles: PrepHandles,
+): Promise<readonly CleanupFailure[]> {
   abortPreparedMcp(handles.mcp);
   const failures: CleanupFailure[] = [];
   appendCleanupFailure(
@@ -349,21 +355,21 @@ async function abortHandles(handles: PrepHandles): Promise<readonly CleanupFailu
     "abort",
     "agents",
     agentsCleanupPath(handles.agents),
-    await abortPreparedAgents(handles.agents),
+    await abortPreparedAgents(ops, handles.agents),
   );
   appendCleanupFailure(
     failures,
     "abort",
     "commands",
     commandsCleanupPath(handles.commands),
-    await abortPreparedCommands(handles.commands),
+    await abortPreparedCommands(ops, handles.commands),
   );
   appendCleanupFailure(
     failures,
     "abort",
     "skills",
     skillsCleanupPath(handles.skills),
-    await abortPreparedSkills(handles.skills),
+    await abortPreparedSkills(ops, handles.skills),
   );
   return Object.freeze(failures);
 }
@@ -775,6 +781,7 @@ async function commitUpdateHooks(
  * mcp, write-or-remove for hooks).
  */
 async function commitUpdatePhase3a(
+  ops: RemovalOps,
   args: ThreePhaseArgs,
   preflight: PluginPreflight,
   handles: PrepHandles,
@@ -785,7 +792,7 @@ async function commitUpdatePhase3a(
   const failures: UpdatePhase3Failure[] = [];
 
   try {
-    const leak = await commitPreparedSkills(handles.skills);
+    const leak = await commitPreparedSkills(ops, handles.skills);
     if (leak !== undefined) {
       const cleanupFailure = commitCleanupFailure(
         "skills",
@@ -804,7 +811,7 @@ async function commitUpdatePhase3a(
   }
 
   try {
-    const leak = await commitPreparedCommands(handles.commands);
+    const leak = await commitPreparedCommands(ops, handles.commands);
     if (leak !== undefined) {
       const cleanupFailure = commitCleanupFailure(
         "commands",
@@ -823,7 +830,7 @@ async function commitUpdatePhase3a(
   }
 
   try {
-    const leak = await commitPreparedAgents(handles.agents);
+    const leak = await commitPreparedAgents(ops, handles.agents);
     if (leak !== undefined) {
       const cleanupFailure = commitCleanupFailure(
         "agents",
@@ -998,7 +1005,16 @@ export async function swapPluginUpdate(
   const generatedNames = await discoverGeneratedNames(plugin, installable);
   const stateForGuard = removePluginRecord(preflight.state, marketplace, plugin);
   assertNoCrossPluginConflicts(scope, generatedNames, stateForGuard);
-  const handles = await prepareUpdateHandles(args, preflight, generatedNames.agentsDirs);
+  // D-08-12: this verb owns the swap lifecycle, so it constructs the removal
+  // operations once and every prepare, commit, and abort step below performs its
+  // cleanup through that one collaborator.
+  const removalOps = createRemovalOps();
+  const handles = await prepareUpdateHandles(
+    removalOps,
+    args,
+    preflight,
+    generatedNames.agentsDirs,
+  );
 
   // ─── Phase 2a: pre-commit intent-mark (TR-04) ─────────────────────────────
   //
@@ -1018,12 +1034,13 @@ export async function swapPluginUpdate(
   } catch (err) {
     // Intent-mark failure (typically ST-9 stale-version): abort all prep
     // handles + rethrow.
-    throw errorWithCleanupFailures(err, await abortHandles(handles));
+    throw errorWithCleanupFailures(err, await abortHandles(removalOps, handles));
   }
 
   // ─── Phase 3a: physical replace; aggregate failures across bridges ────────
 
   const { failures: phase3aFailures, hookEntries } = await commitUpdatePhase3a(
+    removalOps,
     args,
     preflight,
     handles,

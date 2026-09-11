@@ -103,6 +103,7 @@ import {
 import { parsePluginSource } from "../../domain/source.ts";
 import { shaVersion } from "../../domain/version.ts";
 import { ConcurrentInstallError, PluginShapeError } from "../../shared/errors.ts";
+import { type RemovalOps } from "../../shared/fs-utils.ts";
 import { type DegradeKind } from "../../shared/notify-reasons.ts";
 import {
   runPhases,
@@ -159,6 +160,14 @@ export interface InstallLedgerOptions {
   readonly allowExistingRecord?: boolean;
   readonly cloneCacheSeam?: InstallCloneCacheSeam;
   readonly cloneProbe?: typeof probeInstallClone;
+  /**
+   * D-08-12: removal operations the three bridge phases perform their staging
+   * cleanup through. Required with no default, and deliberately NOT constructed
+   * here: `install-flow.ts` and `enable-disable.ts` are the composition roots
+   * above these options, which is what lets a caller of `runInstallLedger` fault
+   * one phase's cleanup and observe the leak the commit path returns.
+   */
+  readonly removalOps: RemovalOps;
   readonly credentialOps?: CredentialOps;
   readonly deviceFlowHttp?: DeviceFlowHttp;
   readonly authMemo?: Map<string, AuthAttemptResult>;
@@ -640,7 +649,7 @@ async function runInstallLedgerBody(
   const skillsPhase: Phase<InstallLedgerContext> = {
     name: "skills",
     do: async (c) => {
-      const prep = await prepareStageSkills({
+      const prep = await prepareStageSkills(opts.removalOps, {
         locations: c.locations,
         marketplaceName: c.marketplace,
         pluginName: c.plugin,
@@ -663,7 +672,7 @@ async function runInstallLedgerBody(
       // this array (D-141-03).
       c.discoveryWarnings.push(...prep.result.warnings);
 
-      const leak = await commitPreparedSkills(prep);
+      const leak = await commitPreparedSkills(opts.removalOps, prep);
       if (leak !== undefined) {
         c.bridgeWarnings.push(leak);
       }
@@ -685,7 +694,7 @@ async function runInstallLedgerBody(
   const commandsPhase: Phase<InstallLedgerContext> = {
     name: "commands",
     do: async (c) => {
-      const prep = await prepareStageCommands({
+      const prep = await prepareStageCommands(opts.removalOps, {
         locations: c.locations,
         marketplaceName: c.marketplace,
         pluginName: c.plugin,
@@ -706,7 +715,7 @@ async function runInstallLedgerBody(
       // As with skills, this array carries discovery warnings only.
       c.discoveryWarnings.push(...prep.result.warnings);
 
-      const leak = await commitPreparedCommands(prep);
+      const leak = await commitPreparedCommands(opts.removalOps, prep);
       if (leak !== undefined) {
         c.bridgeWarnings.push(leak);
       }
@@ -726,7 +735,7 @@ async function runInstallLedgerBody(
   const agentsPhase: Phase<InstallLedgerContext> = {
     name: "agents",
     do: async (c) => {
-      const prep = await prepareStagePluginAgents({
+      const prep = await prepareStagePluginAgents(opts.removalOps, {
         locations: c.locations,
         marketplaceName: c.marketplace,
         pluginName: c.plugin,
@@ -751,7 +760,7 @@ async function runInstallLedgerBody(
       // hygiene channel (D-19-01) rather than the D-141-03 one, keeping
       // every kind surfaced instead of any getting silently dropped.
       c.bridgeWarnings.push(...prep.result.warnings);
-      const leak = await commitPreparedAgents(prep);
+      const leak = await commitPreparedAgents(opts.removalOps, prep);
       if (leak !== undefined) {
         c.bridgeWarnings.push(leak);
       }

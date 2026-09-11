@@ -6,6 +6,7 @@ import { describe, test } from "node:test";
 
 import {
   cleanupStaging,
+  createRemovalOps,
   isPlainMarkdownFile,
   pathExists,
   readDirEntriesTolerant,
@@ -13,6 +14,12 @@ import {
   resolveGitSubdirRoot,
   rollbackReplacementCommon,
 } from "../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
+import {
+  FILE_CONTENTS,
+  NESTED_CONTENTS,
+  OCCUPIED_CONTENTS,
+  registerRemovalOpsContract,
+} from "../platform/removal-ops-contract.ts";
 
 import type {
   RollbackReplacementInput,
@@ -27,6 +34,48 @@ const LABELS = {
   backupDir: "test backup directory",
 } satisfies RollbackReplacementLabels;
 
+/** The contract's file-contents probe: a directory or an absent path reads as `null`. */
+async function readTextOrNull(target: string): Promise<string | null> {
+  try {
+    return await fs.readFile(target, "utf8");
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * `createRemovalOps` and `createRemovalOpsFake` answer one shared contract. The
+ * fake's half runs in `tests/platform/removal-ops-fake.test.ts`; this half drives
+ * the real adapter against a per-case temporary root, which is also what covers
+ * the adapter's two bindings.
+ */
+describe("createRemovalOps", () => {
+  registerRemovalOpsContract(async (t) => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "fs-removal-ops-"));
+    t.after(() => fs.rm(root, { recursive: true, force: true, maxRetries: 3 }));
+    const treePath = path.join(root, "tree");
+    const filePath = path.join(root, "file-a.md");
+    const occupiedPath = path.join(root, "file-b.md");
+    const nestedPath = path.join(treePath, "nested-a.md");
+    await fs.mkdir(treePath);
+    await fs.writeFile(filePath, FILE_CONTENTS);
+    await fs.writeFile(occupiedPath, OCCUPIED_CONTENTS);
+    await fs.writeFile(nestedPath, NESTED_CONTENTS);
+
+    return {
+      removalOps: createRemovalOps(),
+      filePath,
+      treePath,
+      nestedPath,
+      occupiedPath,
+      absentPath: path.join(root, "absent"),
+      spareDestination: path.join(root, "spare"),
+      present: (target) => pathExists(target),
+      readFile: (target) => readTextOrNull(target),
+    };
+  });
+});
+
 describe("cleanupStaging", () => {
   test("removes an existing directory tree", async (t) => {
     // arrange
@@ -37,7 +86,7 @@ describe("cleanupStaging", () => {
     await fs.writeFile(path.join(directory, "nested", "content.txt"), "content");
 
     // act
-    const leak = await cleanupStaging(directory, "test staging directory");
+    const leak = await cleanupStaging(createRemovalOps(), directory, "test staging directory");
 
     // assert
     assert.strictEqual(leak, undefined);
@@ -51,7 +100,11 @@ describe("cleanupStaging", () => {
     const missingDirectory = path.join(directory, "missing");
 
     // act
-    const leak = await cleanupStaging(missingDirectory, "test staging directory");
+    const leak = await cleanupStaging(
+      createRemovalOps(),
+      missingDirectory,
+      "test staging directory",
+    );
 
     // assert
     assert.strictEqual(leak, undefined);
@@ -64,7 +117,11 @@ describe("cleanupStaging", () => {
     t.mock.method(fs, "rm", (): Promise<never> => Promise.reject(removalError));
 
     // act
-    const leak = await cleanupStaging("/staging/missing", "test staging directory");
+    const leak = await cleanupStaging(
+      createRemovalOps(),
+      "/staging/missing",
+      "test staging directory",
+    );
 
     // assert
     assert.strictEqual(leak, undefined);
@@ -78,7 +135,11 @@ describe("cleanupStaging", () => {
       "failed to clean up test staging directory at /staging/blocked: permission denied";
 
     // act
-    const leak = await cleanupStaging("/staging/blocked", "test staging directory");
+    const leak = await cleanupStaging(
+      createRemovalOps(),
+      "/staging/blocked",
+      "test staging directory",
+    );
 
     // assert
     assert.strictEqual(leak, expectedLeak);
@@ -237,6 +298,7 @@ describe("rollbackReplacementCommon", () => {
     await fs.mkdir(stagingRoot);
     await fs.mkdir(backupRoot);
     const input = {
+      ops: createRemovalOps(),
       renamed: [],
       backups: [],
       stagingRoot,
@@ -274,6 +336,7 @@ describe("rollbackReplacementCommon", () => {
     await fs.writeFile(firstBackup, "old-a");
     await fs.writeFile(secondBackup, "old-b");
     const input = {
+      ops: createRemovalOps(),
       renamed: [
         { from: path.join(stagingRoot, "a.txt"), to: firstReplacement },
         { from: path.join(stagingRoot, "b.txt"), to: secondReplacement },
@@ -339,6 +402,7 @@ describe("rollbackReplacementCommon", () => {
       `rm ${backupRoot} {"recursive":true,"force":true}`,
     ];
     const input = {
+      ops: createRemovalOps(),
       renamed: [
         { from: path.join(stagingRoot, "a.txt"), to: firstReplacement },
         { from: path.join(stagingRoot, "b.txt"), to: secondReplacement },
@@ -375,6 +439,7 @@ describe("rollbackReplacementCommon", () => {
     await fs.mkdir(replacement);
     await fs.writeFile(path.join(replacement, "content.txt"), "content");
     const input = {
+      ops: createRemovalOps(),
       renamed: [{ from: path.join(stagingRoot, "replacement"), to: replacement }],
       backups: [],
       stagingRoot,
@@ -435,6 +500,7 @@ describe("rollbackReplacementCommon", () => {
       `failed to clean up test backup directory at ${backupRoot}: backup denied`,
     ];
     const input = {
+      ops: createRemovalOps(),
       renamed: [{ from: path.join(stagingRoot, "replacement.txt"), to: replacement }],
       backups: [{ name: "same", from: restored, to: backup }],
       stagingRoot,

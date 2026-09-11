@@ -13,6 +13,7 @@ import {
   loadState,
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { createRemovalOps } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
@@ -93,6 +94,7 @@ test("returns the marketplace-absent discriminant without mutating state", async
     marketplace: "missing",
     plugin: "empty",
     scope: "project",
+    removalOps: createRemovalOps(),
   });
 
   // assert
@@ -114,6 +116,7 @@ test("projects the complete empty-plugin summary and preserves a caller pin", as
     pinVersionOverride: "pinned-by-caller",
     plugin: "empty",
     scope: "project",
+    removalOps: createRemovalOps(),
   });
 
   // assert
@@ -230,6 +233,7 @@ test("captures the resolved version when a concurrent record aborts state commit
       marketplace: "marketplace",
       plugin: "empty",
       scope: "project",
+      removalOps: createRemovalOps(),
     },
     capture,
   );
@@ -273,6 +277,7 @@ test("unwinds when the marketplace disappears before state commit", async (t) =>
       marketplace: "marketplace",
       plugin: "empty",
       scope: "project",
+      removalOps: createRemovalOps(),
     },
     capture,
   );
@@ -300,6 +305,7 @@ test("preserves installedAt while replacing an existing disabled record", async 
     marketplace: "marketplace",
     plugin: "empty",
     scope: "project",
+    removalOps: createRemovalOps(),
   });
 
   // assert

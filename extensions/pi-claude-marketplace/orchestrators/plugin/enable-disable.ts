@@ -66,6 +66,7 @@ import { isRecordedButDisabled, toDisabledRecord } from "../../persistence/state
 import { softDepStatus } from "../../platform/pi-api.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage, StateLockHeldError } from "../../shared/errors.ts";
+import { createRemovalOps } from "../../shared/fs-utils.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import { type PluginFailedMessage, type Reason } from "../../shared/notification-types.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
@@ -322,6 +323,10 @@ async function runEnableBranch(
         pinVersionOverride: recordedVersion,
         allowExistingRecord: true,
         partial,
+        // D-08-12: the enable branch reaches the ledger without going through
+        // `install-flow.ts`, so it is the second composition root that supplies
+        // the required removal port.
+        removalOps: createRemovalOps(),
       },
       capture,
     );
