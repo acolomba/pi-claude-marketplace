@@ -85,7 +85,7 @@ test("composes generated names from every bridge in each bridge's declared order
     agents: ["pi-claude-marketplace-acme-alpha", "pi-claude-marketplace-acme-zeta"],
     agentsSourceDir: agentsDirectory,
     commands: ["acme:alpha", "acme:zeta"],
-    skills: ["acme-alpha", "acme-zeta"],
+    skills: ["acme:alpha", "acme:zeta"],
   });
 });
 
@@ -159,7 +159,7 @@ test("keeps first-wins names while deliberately dropping all bridge warnings", a
     agents: ["pi-claude-marketplace-acme-review"],
     agentsSourceDir: agentsDirectory,
     commands: ["acme:run"],
-    skills: ["acme-helper"],
+    skills: ["acme:helper"],
   });
 });
 
