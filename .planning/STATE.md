@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 09
 current_phase_name: Final Quality and Backlog Closure
 status: executing
-stopped_at: Completed 09-04-PLAN.md
-last_updated: "2026-09-11T21:41:00.000Z"
+stopped_at: Completed 09-05-PLAN.md
+last_updated: "2026-09-11T23:10:00.000Z"
 last_activity: 2026-09-11
-last_activity_desc: Phase 9 plan 04 complete; the window ledger's table and JSON agree field for field, its write verbs run again, and open_count is 19
-state_head: a3138330cc7643a6fc5b63ac2bb3f2f4b5709342
+last_activity_desc: Phase 9 plan 05 complete; all seven named backlog items and the unused-type-member todo carry terminal dispositions in the one five-word vocabulary
+state_head: 36a7a9e7
 progress:
   total_phases: 9
   completed_phases: 4
   total_plans: 211
-  completed_plans: 208
+  completed_plans: 209
   percent: 44
 ---
 
@@ -32,14 +32,26 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 09 (Final Quality and Backlog Closure) — executing
-Next: Execute 09-05 (wave 5)
-Plan: 4 of 6 complete
+Next: Execute 09-06 (wave 6)
+Plan: 5 of 6 complete
 Status: the requirement seal is closed — all eight IDs read `Complete` in the checkbox, the
 traceability row and `SEALED_REQUIREMENT_ROUTES`, and `node scripts/revalidation.mjs scope-impact
 --check` prints `Scope impact valid: 40 records.` `npm run check` was measured on this tree, not
 inherited: exit 0 in 249s at `da08a749`, unit `pass 6007 / fail 0`, integration `pass 32 / fail 0`.
 The earlier note that 09-04 would take that measurement is superseded — 09-03 took it, because
 D-09-02 requires it between the two flips.
+
+The backlog is now closed in place. `TESTQ-01`, `FLOW-09`, `REASON-01` and `FLOW-07` carry
+`implemented` verdicts in the struck-through house format with their requirement routes named;
+`COV-01` is `superseded`, `AGCOL-01` is `evidence-only`, `GAUTH-01`'s named prescription is
+`deferred`, and the unused-type-member todo is `deferred` to v1.19 — each with the explicit
+negative and none with a struck-through heading. One research expectation was corrected by
+measurement: `REASON-01`'s `{malformed <feature>}` family has exactly three members
+(`malformed mcp`, `malformed skill`, `malformed command`) and **neither** of the two cases the
+item named by hand was rerouted into it. Inline malformed `mcpServers` still reaches
+`{unsupported source}` by a deliberate full-prefix match in `classifyResolverNote`, and malformed
+`hooks.json` still reaches `{unsupported hooks}` because no `malformed hooks` member exists. The
+entry carries that grep verbatim and a `NOT closed by the same change:` paragraph.
 Resume file: `.planning/phases/09-final-quality-and-backlog-closure/09-CONTEXT.md`
 Last activity: 2026-09-11 — 09-03 flipped the seal in two commits. `da08a749` moved GGAT-01,
 GGAT-03, GGAT-04, RCOV-01, RCOV-02 and RCOV-03; `npm run check` was then measured green on that
