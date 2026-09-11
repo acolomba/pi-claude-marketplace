@@ -59,21 +59,31 @@ choice planning meets that this file does not name.
   in all three carriers again, the operation 08-08 showed fails closed if any pair
   disagrees.
 
-- **D-09-03:** Each ID's flip touches **four** carriers in the same commit, because the
-  checker compares all of them and fails on any pair disagreeing:
-  1. the `- [ ]` → `- [x]` checkbox in `.planning/REQUIREMENTS.md`,
-  2. that ID's row in the `## Traceability` table (`Pending` → `Complete`),
-  3. its entry in `SEALED_REQUIREMENT_ROUTES` in `scripts/revalidation.mjs`,
-  4. any disturbed clause signature in
-     `.planning/phases/01-live-evidence-revalidation/01-REVALIDATION.json`.
+- **D-09-03 (corrected by research, 2026-09-11):** Each ID's flip touches **four** carriers
+  in the same commit. The original clause named a different four; research measured the
+  real set by planting each one:
+  1. the `- [ ]` → `- [x]` checkbox in `.planning/REQUIREMENTS.md` — **not** read by
+     `scope-impact --check`, but required by `CLOSE-02`'s honesty obligation and by
+     carrier 4 below;
+  2. that ID's row in the `## Traceability` table (`Pending` → `Complete`) — **enforced**
+     by `scope-impact --check`;
+  3. its entry in `SEALED_REQUIREMENT_ROUTES` in `scripts/revalidation.mjs` — **enforced**;
+  4. the planted literals in `tests/architecture/revalidation.test.ts` that the flip
+     invalidates — the test copies the real `.planning/REQUIREMENTS.md` into its fixture
+     and plants against exact strings. Change A breaks `"- [ ] **GGAT-03**:"` (:1219);
+     change B breaks `"| CLOSE-02 | Phase 9 | Pending |"` (:1026). Measured 136/136 → 135
+     → 134.
 
-  Proved by planting in 08-09: flipping `RCOV-03` alone made
-  `node scripts/revalidation.mjs scope-impact --check` exit 1 with
+  **Not a carrier:** the clause signature in
+  `.planning/phases/01-live-evidence-revalidation/01-REVALIDATION.json`. A status flip
+  does not disturb it — the normalizer's capture starts after `**ID**:` and its pattern's
+  `[ x]` class accepts both checkbox states. 08-08 had to re-sign because it rewrote clause
+  TEXT; this phase does not. Do not recompute signatures for a pure status flip.
+
+  The route-contract failure mode is real and unchanged: planting in 08-09 showed flipping
+  `RCOV-03` alone makes `node scripts/revalidation.mjs scope-impact --check` exit 1 with
   `requirement-route-contract: RCOV-03: traceability route/status differs from sealed
-  requirement contract`. Signature recomputation follows 08-08's method — reproduce the
-  current sealed values with the production normalizer's exact steps *before* any edit,
-  so a normalization mistake shows up as a mismatch on known-good input rather than as
-  a sealed wrong answer.
+  requirement contract`.
 
 - **D-09-04:** The gate for every seal change is
   `node scripts/revalidation.mjs scope-impact --check` exiting 0. Baseline on entry to
@@ -93,6 +103,24 @@ choice planning meets that this file does not name.
   — **Reversibility:** costly — `createHooksRouting` and `createHooksHydration` are
   exported through `bridges/hooks/index.ts`, so the signature change reaches every
   caller and the published bridge surface.
+
+- **D-09-05a (added by research — two source-text gates the port must satisfy):** The
+  signature change is gated by tests that assert *source text*, not behavior. Both were
+  measured, and neither was known when D-09-05 was written:
+  1. `tests/index.test.ts:787-793` asserts the exact construction strings
+     `"createHooksRouting(hooksRuntime)"` and
+     `"createHooksHydration(hooksRuntime, { loadState })"` via `deepStrictEqual`. Any
+     signature change edits these literals, and they must be updated in the same change.
+  2. `tests/bridges/hooks/hooks-lifecycle.test.ts:281` matches
+     `hydrateProjectScopeForCwdWith`'s parameter list with a regex containing `[^{]*`.
+     **A new parameter typed with an inline object literal breaks it; a named type does
+     not.** The port's parameter therefore MUST use a named interface, not an inline
+     `{ readHooksJson: ... }` annotation. This is a hard constraint on D-09-08's shape,
+     not a preference.
+
+  Blast radius measured: 139 `createHooksRouting(` and 32 `createHooksHydration(` call
+  sites across 31 test files, plus 2 production lines. Complexity is NOT the binding
+  constraint — the touched functions measure 2–10 against a ceiling of 15.
 
 - **D-09-06:** **Rejected:** adding `readHooksJson` to `HooksHydrationReader` and
   porting only the hydrate site. 08-03 measured that route and it is a seam shaped by
@@ -162,13 +190,28 @@ choice planning meets that this file does not name.
 
 - **D-09-12:** With the verbs unblocked, close entries 19, 21, and 22 — the three
   unreachable arms 08-02 deleted. Each currently reads `open` while saying "closes only
-  by a production rewrite" that has already landed, so each is false.
+  by a production rewrite" that has already landed, so each is false. All three belong to
+  phase 116.
 
-- **D-09-13:** Do **not** mass-close the remaining open entries. 23 read open, from
-  phases 86, 88, 115, and 117 — most predate this milestone. Closing them on narrative
-  rather than terminal evidence is the defect class this milestone exists to retire, and
-  `D-22` bars it. Whether open windows should block `/gsd-ship` is the operator's call at
-  ship time, not something this phase forces by emptying the ledger.
+- **D-09-12a (added by research):** Flipping entry 30 to `fixed` needs a fourth edit
+  behind a second fail-closed check. `parseLedger` also refuses when the frontmatter
+  counts disagree with the entries, so the repair must hand-write `open_count: 22` /
+  `fixed_count: 9` alongside the status change. Research proved the full procedure end to
+  end in a scratch copy: after the repair plus `windows fixed 19/21/22`, the ledger reads
+  `open_count: 19` with zero table/JSON mismatches.
+
+- **D-09-12b (added by research):** Entry 9 stays `open` deliberately — its own text says
+  it is "the durable record of the residual risk rather than as a pending action." The
+  repair edits its **description only**, never its status.
+
+- **D-09-13 (enumeration corrected by research):** Do **not** mass-close the remaining
+  open entries. 23 read open, distributed `{86: 1, 88: 2, 115: 6, 116: 8, 117: 6}` —
+  phase **116** is the largest group and the original clause omitted it entirely. D-09-12
+  closes three of phase 116's eight; the other five, and every entry from 86/88/115/117,
+  stay open. Closing them on narrative rather than terminal evidence is the defect class
+  this milestone exists to retire, and `D-22` bars it. Whether open windows should block
+  `/gsd-ship` is the operator's call at ship time, not something this phase forces by
+  emptying the ledger.
 
 ### The closure audit trail
 
@@ -280,8 +323,12 @@ looking as though it had always been that way.
 ### Coverage, the pin, and its caveat
 
 - `CONTRIBUTING.md` — the pinned set, how the pin fails in three directions, both gate
-  scopes with measured costs, and the reachability boundary. 08-08 wrote it saying the
-  hook and CI job are not wired yet; that tense is now stale and this phase owns it.
+  scopes with measured costs, and the reachability boundary. **Correction:** 08-08 wrote
+  it in the "not wired yet" tense, but 08-09/08-fix already corrected that — it now reads
+  "All three run for you: the pre-commit hook runs the commit-scoped one, and the CI job
+  runs the branch-scoped one on a pull request." There is nothing to rewrite here. This
+  phase's task is to re-read it after re-measurement and confirm every stated reading
+  still matches, not to change the tense.
 - `scripts/test-coverage-direct.pin.json` — the committed pin; one reason per uncovered
   site, not an allow-list.
 - `scripts/test-coverage-direct.mjs` — `selectBase()` and the changed-pair gate.
