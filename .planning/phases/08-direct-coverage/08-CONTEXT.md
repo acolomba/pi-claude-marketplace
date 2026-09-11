@@ -492,6 +492,12 @@ amendment and an earlier decision disagree, the amendment wins.
   dash offender in the tree, and widening the exclusion turns the hook green. No second
   offender is being masked.
 
+- **D-08-A13 (corrects this document):** `scripts/test-coverage-direct.negative.mjs`'s
+  helpers — `inRepo`, `lcovRecord`, `fixtureGit`, `buildFixtureRepository`, `completeCounts`,
+  `shortfallCounts` — are **module-private**, not exported. The new cases therefore live
+  inside that file and cannot import its scaffolding from elsewhere. An earlier line in
+  `<code_context>` claimed otherwise and is corrected.
+
 </decisions>
 
 <canonical_refs>
@@ -580,7 +586,7 @@ amendment and an earlier decision disagree, the amendment wins.
   structural sibling of the new pin, and the reason `D-08-06` chose JSON: this file
   is `.ts` and the direct-coverage gate is `.mjs`.
 - `scripts/test-coverage-direct.negative.mjs` — already plants refusals against this
-  exact gate through an injected `mkdtemp` root, already exports the harness shape,
+  exact gate through an injected `mkdtemp` root, carries a reusable harness,
   and already runs inside `npm run check` via `test:coverage:direct:negative`. The
   established owner for `D-08-18`'s four cases.
 - `scripts/test-coverage-direct.mjs` — `selectBase` and `changedPaths` already
