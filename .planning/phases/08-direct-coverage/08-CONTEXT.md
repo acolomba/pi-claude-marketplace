@@ -498,6 +498,41 @@ amendment and an earlier decision disagree, the amendment wins.
   inside that file and cannot import its scaffolding from elsewhere. An earlier line in
   `<code_context>` claimed otherwise and is corrected.
 
+- **D-08-A14 (reverses D-08-A06's pin prohibition, on operator decision 2026-09-11):**
+  `orchestrators/plugin/install-outcome.ts` **is** pinned, with one `reasons` entry per site.
+
+  `D-08-A06` refused a pin row on a stated premise: "75 uncovered lines across 19 disjoint
+  runs have no such single reason." Plan 08-07 closed **17 of the 19**. The module ends at
+  `branches 109/111, lines 1034/1040` (functions 27/27), and the residue is **two named
+  sites**, each with a precise, recordable reason:
+
+  1. `422-426` — re-validation of a manifest entry that the *identical compiled schema*
+     already accepted in the same pass. `MARKETPLACE_SCHEMA.plugins` is
+     `Type.Array(PLUGIN_ENTRY_SCHEMA)` and `PLUGIN_ENTRY_VALIDATOR` is
+     `Compile(PLUGIN_ENTRY_SCHEMA)`. `ARCHITECTURE.md` documents this re-check as deliberate
+     defense-in-depth.
+  2. `818-820` — the hooks re-parse guard, over bytes on which the resolver already ran both
+     of `parseHooksConfig`'s `{ok:false}` arms. Only `skipIfMap` differs, and `D-61-02`
+     records that no `if`-field failure can produce a refusal.
+
+  The prohibition was never about this module's identity; it was about pinning a residue
+  nobody could explain. That residue is now explained per site, and `D-08-A05` already gave
+  each row a `reasons` array precisely so a multi-site reading records all of its evidence.
+  A pin here fails on any change in either direction, exactly as every other row does.
+
+  **The two alternatives were rejected on their costs, not their difficulty.** Leaving the
+  module unpinned keeps `npm run test:coverage:direct:all` permanently red, so the
+  milestone-boundary sweep `CONTRIBUTING.md` prescribes could never exit 0 — a standing red
+  that reports nothing, which is the argument `CONTRIBUTING.md` already makes against
+  never-green gates. Adding the two injectable readers that would reach the arms creates
+  production surface whose only consumer is a test: `MF-DEC-07` forbids it, and Phase 7 spent
+  itself removing exactly that class (`__operations`, `__deps`).
+
+  Plan 08-07 also found and **declined** a third route — the removal collaborator runs in the
+  skills phase, before the hooks phase, so a `RemovalOps` whose `rm` corrupted the plugin's
+  `hooks.json` would reach `818-820` with no production change. It is a timing trick wearing
+  a collaborator's clothes, and it stays declined.
+
 </decisions>
 
 <canonical_refs>
