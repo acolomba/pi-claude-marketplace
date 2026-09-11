@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 08
 current_phase_name: Direct Coverage
 status: executing
-stopped_at: Completed 08-04-PLAN.md; the coverage pin is committed and both gate arms enforce it
-last_updated: "2026-09-11T12:55:00.000Z"
+stopped_at: Completed 08-09-PLAN.md; the changed-pair gate now runs in a pre-commit hook and a dedicated CI job
+last_updated: "2026-09-11T13:56:00.000Z"
 last_activity: 2026-09-11
-last_activity_desc: 08-04 committed the measured two-row coverage pin, wired the bidirectional comparison into both gate arms, and added the fail-closed explicit base; npm run test:coverage:direct:all exits 0 for the first time
-state_head: 9558acf3
+last_activity_desc: 08-09 wired the changed-pair gate into the npm-coverage-direct pre-commit hook and the direct-coverage CI job, gated package on that job, and finished CONTRIBUTING.md with both measured costs; all nine plans of Phase 8 are complete
+state_head: 6d5cb6a0
 progress:
   total_phases: 9
   completed_phases: 3
   total_plans: 205
-  completed_plans: 203
+  completed_plans: 204
   percent: 33
 ---
 
@@ -32,8 +32,9 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 08 (Direct Coverage) — EXECUTING
-Next: /gsd-execute-phase 08 (08-09 remains)
-Plan: 8 of 9 complete
+Next: Phase 8 verification, then Phase 9 (Final Quality and Backlog Closure)
+Plan: 9 of 9 complete
+Status: 08-09 complete. **The gate is wired, and both wirings were verified by running them rather than by reading their configuration.** `test:coverage:direct:commit` is the same script with an explicitly named `HEAD` base, so the `npm-coverage-direct` pre-commit hook and the `direct-coverage` CI job are one implementation at one strictness differing only in the base each names (`D-08-A07`). The job checks out at `fetch-depth: 0`, asserts `git rev-parse --verify origin/main^{commit}` BEFORE it measures, and asserts a whole-line `Changed-pair base: origin/main` against the captured log AFTER (`D-08-15`); its gate step sets `pipefail` explicitly, because GitHub's default shell is `bash -e` and a `| tee` without it would exit with tee's status and report a red gate green. `package` now needs `direct-coverage`, so a shortfall blocks the release manifest check. The branch-scoped arm was run locally as the job's proxy -- `--base origin/main`, **147 pairs, exit 0**, and the grep the job performs matched its log -- which also re-confirms the 147 figure `CONTRIBUTING.md` states. `SKIP=trufflehog pre-commit run --all-files` exits 0 with the new hook in the pipeline and `npm run check` exits 0 in 258s. **Two deviations, both Rule 1:** the research block's assertion step is not valid YAML (a plain scalar cannot carry `: `; copied verbatim it would have made the whole workflow unparseable) and is a block scalar here, and three `CONTRIBUTING.md` sentences that counted two sweeps were corrected to three. **`RCOV-03` is NOT marked complete, and that is enforced:** planting `- [x] **RCOV-03**` plus a `Complete` traceability row makes `scope-impact --check` exit 1 with `requirement-route-contract: RCOV-03`. All three of `RCOV-01`/`RCOV-02`/`RCOV-03` are sealed at `Phase 8` / `Pending`, so **`CLOSE-01` must flip the checkboxes, the traceability rows and the sealed route entries together, in one change** -- nobody had written that down. Two things stay open by design: the job's first real execution is on the pull request (GitHub Actions cannot be exercised here; the two in-job assertions are the mitigation), and whether the job is also a *required status check* on the protected branch is a repository setting outside any tracked file, so the `RCOV-03` edge-probe row stays **unresolved** rather than being claimed closed. `.planning/WINDOWS.md` is still unwritable (rows 9/30 desync), so the append for this observation was refused and it lives in the SUMMARY.
 Status: 08-08 complete. **The second full sweep is in and every coverage claim in the repository
 now equals it.** 230 rows in 486.9s, `Verdicts: accepted-shortfall 2, complete 221, type-only 7`,
 run in this checkout after every code plan landed (`D-08-A10`). The pin was REGENERATED from that
@@ -579,6 +580,14 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - Lowercase `// act & assert` is reserved for one `assert.throws()` or `assert.rejects()` expression.
 - Type-only evidence stays module-scoped and uses `satisfies` or `@ts-expect-error` without fake runtime phases.
 - Retained commits and HEAD triage labels do not close a pair.
+- [Phase 8]: One gate implementation serves two scopes at one strictness through an explicitly
+  named base; the scope difference lives in the argument, never in a second copy of the gate.
+- [Phase 8]: A CI step that pipes a gate into a logging command sets `pipefail` explicitly --
+  GitHub's default shell is `bash -e`, which does not.
+- [Phase 8]: A pre-commit `files:` pattern for a pairing gate is deliberately wider than the
+  gate's correspondence rule: over-matching costs a pass-over, under-matching reads as a pass.
+- [Phase 8]: `RCOV-01`, `RCOV-02` and `RCOV-03` are sealed at `Phase 8` / `Pending`, so they
+  can only be completed by one coordinated change that `CLOSE-01` owns.
 - [Phase 110]: Kept agents-index-schema.ts byte-identical because its compiled validators expose the complete public contract.
 - [Phase 110]: Agents-index schema evidence uses independent literals plus module-scope satisfies and targeted @ts-expect-error checks.
 - [Phase 110]: Kept locations.ts byte-identical because its public seams expose the complete contract.
@@ -1152,7 +1161,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 08-06-PLAN.md
+**Stopped at:** Completed 08-09-PLAN.md -- the last plan of Phase 8
 
 Phase 04 completed all seven plans and closed AUTH-01 and TREF-01 through
 TREF-03. Independent verification passed 4/4 with no behavioral or UAT gap;
@@ -1170,9 +1179,9 @@ independent verification passed 6/6 with zero unverified behaviors.
 **Read beside it:** `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`, the
 Phase 01 terminal evidence ledger, and Phase 5's roadmap criteria.
 
-Last session: 2026-09-11T06:24:26.514Z
+Last session: 2026-09-11T13:56:00.000Z
 
-**Next:** Execute Phase 8 (Direct Coverage) — `/gsd-execute-phase 08`.
+**Next:** Verify Phase 8, then execute Phase 9 (Final Quality and Backlog Closure).
 
 ## Deferred Verification
 
