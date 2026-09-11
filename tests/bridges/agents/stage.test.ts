@@ -17,6 +17,7 @@ import { locationsFor } from "../../../extensions/pi-claude-marketplace/persiste
 import { AgentOwnershipConflictError } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 import { ManualRecoveryError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { createRemovalOps } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
+import { createDelegatingRemovalOps } from "../../platform/removal-ops-fake.ts";
 
 import type { AgentsReplacement } from "../../../extensions/pi-claude-marketplace/bridges/agents/types.ts";
 import type { ResolvedPluginInstallable } from "../../../extensions/pi-claude-marketplace/domain/resolver-types.ts";
@@ -2188,6 +2189,119 @@ describe("rollbackAgentsReplacement", () => {
     assert.strictEqual(Object.isFrozen(rollbackLeaks), true);
     assert.strictEqual(await exists(targetPath), false);
     assert.strictEqual(await exists(prepared.stagingDir), false);
+  });
+
+  test("reports one leak per failed stage in stage order and leaves only the blocked roots", async (t) => {
+    // arrange
+    const { pluginRoot, agentsSourceDir, locations, pluginDataDir } = await createStageTree(
+      t,
+      "agents-rollback-stage-leaks-",
+    );
+    const generatedName = "pi-claude-marketplace-acme-current";
+    const sourcePath = path.join(agentsSourceDir, "current.md");
+    const targetPath = path.join(locations.agentsDir, `${generatedName}.md`);
+    await writeFile(
+      sourcePath,
+      "---\nname: current\ndescription: Current agent\ntools: Read\n---\n\nCurrent.\n",
+    );
+    await mkdir(locations.agentsDir, { recursive: true });
+    await writeFile(
+      targetPath,
+      `---\nname: ${generatedName}\nprovenance:\n  generatedBy: pi-claude-marketplace\n---\n\nPrevious.\n`,
+    );
+    const previousIndex: AgentsIndex = {
+      schemaVersion: 1,
+      agents: [
+        {
+          plugin: "acme",
+          marketplace: "catalog",
+          sourceAgent: "current",
+          generatedName,
+          sourcePath: "/previous/current.md",
+          targetPath,
+          sourceHash: "previous-hash",
+          droppedFields: [],
+          droppedTools: [],
+          warnings: [],
+        },
+      ],
+    };
+    const previousIndexBytes = `${JSON.stringify(previousIndex, null, 2)}\n`;
+    await mkdir(locations.extensionRoot, { recursive: true });
+    await writeFile(locations.agentsIndexPath, previousIndexBytes);
+    const resolved = {
+      installable: true,
+      state: "installable",
+      name: "acme",
+      pluginRoot,
+      supported: ["agents"],
+      unsupported: [],
+      notes: [],
+      componentPaths: { skills: [], commands: [], agents: ["agents"] },
+      mcpServers: {},
+      defaultEnabled: true,
+    } satisfies ResolvedPluginInstallable;
+    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
+      locations,
+      cwd: locations.scopeRoot,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      resolved,
+      agentsDirs: [agentsSourceDir],
+    });
+    assert.strictEqual(prepared.kind, "staged");
+    const replacement = await replacePreparedAgents(createRemovalOps(), prepared);
+    assert.strictEqual(replacement.kind, "replaced");
+    const replacedBytes = await readFile(targetPath, "utf8");
+    const backupDirectory = (await readdir(locations.agentsStagingDir)).find((name) =>
+      name.startsWith("backup-"),
+    );
+    assert.notStrictEqual(backupDirectory, undefined);
+    const backupRoot = path.join(locations.agentsStagingDir, backupDirectory ?? "missing");
+    const backupPath = path.join(backupRoot, `${generatedName}.md`);
+    const removalError = Object.assign(new Error("replacement removal denied"), { code: "EACCES" });
+    const restoreError = Object.assign(new Error("previous restoration denied"), {
+      code: "EACCES",
+    });
+    const stagingError = Object.assign(new Error("staging cleanup denied"), { code: "EACCES" });
+    // Three of the rollback's four removals fault and the fourth does not: the
+    // backup root's cleanup runs for real, which is the half of the partition a
+    // collaborator that removes nothing could not state. The index restore sits
+    // between the restore stage and the cleanups and reaches no removal verb
+    // here, so it contributes no leak and the third message is the staging one.
+    const removal = createDelegatingRemovalOps({
+      boundary: "delegate",
+      delegate: createRemovalOps(),
+      rmErrors: [
+        [targetPath, removalError],
+        [prepared.stagingDir, stagingError],
+      ],
+      renameErrors: [[backupPath, restoreError]],
+    });
+    const expectedLeaks = [
+      `failed to remove replacement agent file at ${targetPath}: replacement removal denied`,
+      `failed to restore previous agent file ${generatedName} from ${backupPath} to ${targetPath}: ` +
+        "previous restoration denied",
+      `failed to clean up agents staging directory at ${prepared.stagingDir}: ` +
+        "staging cleanup denied",
+    ];
+
+    // act
+    const leaks = await rollbackAgentsReplacement(removal.removalOps, replacement);
+    const stagingPresent = await exists(prepared.stagingDir);
+    const backupPresent = await exists(backupRoot);
+    const targetBytes = await readFile(targetPath, "utf8");
+    const indexBytes = await readFile(locations.agentsIndexPath, "utf8");
+
+    // assert
+    assert.deepStrictEqual(leaks, expectedLeaks);
+    assert.strictEqual(Object.isFrozen(leaks), true);
+    assert.strictEqual(stagingPresent, true);
+    assert.strictEqual(backupPresent, false);
+    assert.strictEqual(targetBytes, replacedBytes);
+    assert.strictEqual(indexBytes, previousIndexBytes);
   });
 
   test("rejects a replaced-shaped value that was not issued by the lifecycle", async (t) => {

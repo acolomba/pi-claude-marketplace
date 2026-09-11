@@ -17,22 +17,25 @@ import { locationsFor } from "../../../extensions/pi-claude-marketplace/persiste
 import { ManualRecoveryError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { createRemovalOps } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { SymlinkRefusedError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
-import { createRemovalOpsFake } from "../../platform/removal-ops-fake.ts";
+import {
+  createDelegatingRemovalOps,
+  createRemovalOpsFake,
+} from "../../platform/removal-ops-fake.ts";
 
 import type { ResolvedPluginInstallable } from "../../../extensions/pi-claude-marketplace/domain/resolver-types.ts";
 
 // Builtin-module patching that remains in this file, and why. The removal port
 // carries `rm` and `rename` for cleanupStaging and rollbackReplacementCommon
-// only, so:
+// only. Every fault that reaches either of those two helpers is injected
+// through the collaborator; five faults land on calls the port does not carry:
 //
-//   - `cp` and `stat` are outside the port's verb set and have no injected
-//     seam to move to.
-//   - the `rm` of a previous-named target dir and the staged `rename` inside
-//     commitPreparedSkills are direct calls the port deliberately does not
+//   - `cp` in prepareStageSkills' per-skill copy, and `stat` in
+//     commitPreparedSkills' target inspection: both verbs are outside the
+//     port's membership (D-08-13), so neither has an injected seam.
+//   - the `rm` of a previous-named target dir and the staged `rename`, both
+//     inside commitPreparedSkills, and the orphan-clearing `rename` inside
+//     replacePreparedSkills: direct calls the port deliberately does not
 //     carry, so faulting them still needs the builtin.
-//   - the `rm` + `rename` faults in the replacement-rollback case and the two
-//     `rm` faults in the finalize case DO reach the port and await a per-site
-//     classification; they are the remaining conversions, not exemptions.
 //
 const filesystemPromises = createRequire(import.meta.url)(
   "node:fs/promises",
@@ -1487,67 +1490,42 @@ describe("replacePreparedSkills", () => {
       previousSkillNames: ["acme-alpha"],
     });
     assert.strictEqual(prepared.kind, "staged");
-    const originalRm = filesystemPromises.rm.bind(filesystemPromises);
-    const originalRename = filesystemPromises.rename.bind(filesystemPromises);
     const removalError = Object.assign(new Error("replacement removal denied"), { code: "EACCES" });
     const restoreError = Object.assign(new Error("previous restoration denied"), {
       code: "EACCES",
     });
-    let backupPath = "";
-    const removal = t.mock.method(
-      filesystemPromises,
-      "rm",
-      async (
-        target: Parameters<typeof originalRm>[0],
-        options?: Parameters<typeof originalRm>[1],
-      ) => {
-        if (String(target) === alphaTarget) {
-          throw removalError;
-        }
-
-        await originalRm(target, options);
-      },
-    );
-    const rename = t.mock.method(
-      filesystemPromises,
-      "rename",
-      async (
-        from: Parameters<typeof originalRename>[0],
-        to: Parameters<typeof originalRename>[1],
-      ) => {
-        if (String(from) === alphaTarget) {
-          backupPath = String(to);
-          await originalRename(from, to);
-          return;
-        }
-
-        if (String(from) === backupPath && String(to) === alphaTarget) {
-          throw restoreError;
-        }
-
-        await originalRename(from, to);
-      },
-    );
-    t.after(() => {
-      removal.mock.restore();
-      rename.mock.restore();
-      syncBuiltinESMExports();
+    // The restore fault is keyed on its destination. Its source is the backup
+    // path `replacePreparedSkills` mints inside its own unported forward
+    // rename, so the case cannot name it before the call; the target the
+    // backup is restored TO is known from the fixture.
+    const removal = createDelegatingRemovalOps({
+      boundary: "delegate",
+      delegate: createRemovalOps(),
+      rmErrors: [[alphaTarget, removalError]],
+      renameDestinationErrors: [[alphaTarget, restoreError]],
     });
-    syncBuiltinESMExports();
 
     // act
     let replacementError: unknown;
     try {
-      await replacePreparedSkills(createRemovalOps(), prepared);
+      await replacePreparedSkills(removal.removalOps, prepared);
     } catch (error) {
       replacementError = error;
     }
+
+    const restore = removal.operations.find((operation) => operation.verb === "rename");
+    const backupPath = restore?.verb === "rename" ? restore.from : "unrecorded";
 
     // assert
     assert.ok(replacementError instanceof ManualRecoveryError);
     assert.strictEqual(
       replacementError.message,
       "Cannot replace skill target with non-previous content at " + betaTarget,
+    );
+    assert.strictEqual(path.basename(backupPath), "acme-alpha");
+    assert.strictEqual(
+      path.dirname(backupPath).startsWith(path.join(locations.skillsStagingDir, "backup-")),
+      true,
     );
     assert.deepStrictEqual(replacementError.leaks, [
       "failed to remove replacement skill dir at " + alphaTarget + ": replacement removal denied",
@@ -1662,6 +1640,96 @@ describe("rollbackSkillsReplacement", () => {
     assert.strictEqual(nestedBytes, "old nested bytes\n");
     assert.strictEqual(betaState, undefined);
     assert.deepStrictEqual(stagingEntries, []);
+  });
+
+  test("reports one leak per failed stage in stage order and leaves only the blocked roots", async (t) => {
+    // arrange
+    const { locations, pluginDataDir, pluginRoot, scopeRoot } = await allocateCasePaths(
+      t,
+      "skills-rollback-stage-leaks-",
+    );
+    const skillsDirectory = path.join(pluginRoot, "skills");
+    const alphaDirectory = path.join(skillsDirectory, "alpha");
+    const alphaTarget = path.join(locations.skillsTargetDir, "acme-alpha");
+    await mkdir(alphaDirectory, { recursive: true });
+    await mkdir(alphaTarget, { recursive: true });
+    await writeFile(
+      path.join(alphaDirectory, "SKILL.md"),
+      "---\nname: alpha\ndescription: New alpha\n---\n",
+    );
+    await writeFile(path.join(alphaTarget, "SKILL.md"), "old alpha bytes\n");
+    const resolved = {
+      installable: true,
+      state: "installable",
+      name: "acme",
+      pluginRoot,
+      supported: ["skills"],
+      unsupported: [],
+      notes: [],
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      mcpServers: {},
+      defaultEnabled: true,
+    } satisfies ResolvedPluginInstallable;
+    const prepared = await prepareStageSkills(createRemovalOps(), {
+      locations,
+      cwd: scopeRoot,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      resolved,
+      previousSkillNames: ["acme-alpha"],
+    });
+    assert.strictEqual(prepared.kind, "staged");
+    const replacement = await replacePreparedSkills(createRemovalOps(), prepared);
+    assert.strictEqual(replacement.kind, "replaced");
+    const backupDirectory = (await readdir(locations.skillsStagingDir)).find((name) =>
+      name.startsWith("backup-"),
+    );
+    assert.notStrictEqual(backupDirectory, undefined);
+    const backupRoot = path.join(locations.skillsStagingDir, backupDirectory ?? "missing");
+    const backupPath = path.join(backupRoot, "acme-alpha");
+    const removalError = Object.assign(new Error("replacement removal denied"), { code: "EACCES" });
+    const restoreError = Object.assign(new Error("previous restoration denied"), {
+      code: "EACCES",
+    });
+    const stagingError = Object.assign(new Error("staging cleanup denied"), { code: "EACCES" });
+    // Three of the rollback's four removals fault and the fourth does not: the
+    // backup root's cleanup runs for real, which is the half of the partition a
+    // collaborator that removes nothing could not state.
+    const removal = createDelegatingRemovalOps({
+      boundary: "delegate",
+      delegate: createRemovalOps(),
+      rmErrors: [
+        [alphaTarget, removalError],
+        [prepared.stagingRoot, stagingError],
+      ],
+      renameErrors: [[backupPath, restoreError]],
+    });
+    const expectedLeaks = [
+      "failed to remove replacement skill dir at " + alphaTarget + ": replacement removal denied",
+      "failed to restore previous skill dir acme-alpha from " +
+        backupPath +
+        " to " +
+        alphaTarget +
+        ": previous restoration denied",
+      "failed to clean up skills staging directory at " +
+        prepared.stagingRoot +
+        ": staging cleanup denied",
+    ];
+
+    // act
+    const leaks = await rollbackSkillsReplacement(removal.removalOps, replacement);
+    const stagingState = await stat(prepared.stagingRoot).catch(() => undefined);
+    const backupState = await stat(backupRoot).catch(() => undefined);
+    const targetBytes = await readFile(path.join(alphaTarget, "SKILL.md"), "utf8");
+
+    // assert
+    assert.deepStrictEqual(leaks, expectedLeaks);
+    assert.strictEqual(Object.isFrozen(leaks), true);
+    assert.strictEqual(stagingState?.isDirectory(), true);
+    assert.strictEqual(backupState, undefined);
+    assert.strictEqual(targetBytes, "---\nname: acme-alpha\ndescription: New alpha\n---\n");
   });
 
   test("rejects a cloned replacement handle without internal identity", async (t) => {
@@ -1858,32 +1926,17 @@ describe("finalizeSkillsReplacement", () => {
     );
     assert.notStrictEqual(backupDirectory, undefined);
     const backupRoot = path.join(locations.skillsStagingDir, backupDirectory ?? "missing");
-    const originalRm = filesystemPromises.rm.bind(filesystemPromises);
     const backupError = Object.assign(new Error("backup cleanup denied"), { code: "EACCES" });
     const stagingError = Object.assign(new Error("staging cleanup denied"), { code: "EACCES" });
-    const removal = t.mock.method(
-      filesystemPromises,
-      "rm",
-      async (
-        target: Parameters<typeof originalRm>[0],
-        options?: Parameters<typeof originalRm>[1],
-      ) => {
-        if (String(target) === backupRoot) {
-          throw backupError;
-        }
-
-        if (String(target) === prepared.stagingRoot) {
-          throw stagingError;
-        }
-
-        await originalRm(target, options);
-      },
-    );
-    t.after(() => {
-      removal.mock.restore();
-      syncBuiltinESMExports();
+    // Finalization's only removals are these two cleanups, and both fault, so
+    // an in-memory collaborator reaches the whole surface the case drives.
+    const removal = createRemovalOpsFake({
+      boundary: "memory",
+      rmErrors: [
+        [backupRoot, backupError],
+        [prepared.stagingRoot, stagingError],
+      ],
     });
-    syncBuiltinESMExports();
     const expectedLeaks = [
       "failed to clean up skills replacement backup directory at " +
         backupRoot +
@@ -1894,7 +1947,7 @@ describe("finalizeSkillsReplacement", () => {
     ];
 
     // act
-    const leaks = await finalizeSkillsReplacement(createRemovalOps(), replacement);
+    const leaks = await finalizeSkillsReplacement(removal.removalOps, replacement);
     const targetBytes = await readFile(path.join(targetDirectory, "SKILL.md"), "utf8");
 
     // assert

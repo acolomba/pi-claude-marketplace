@@ -28,6 +28,7 @@ import {
   PathContainmentError,
   SymlinkRefusedError,
 } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
+import { createDelegatingRemovalOps } from "../../platform/removal-ops-fake.ts";
 
 import type { ResolvedPluginInstallable } from "../../../extensions/pi-claude-marketplace/domain/resolver-types.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -585,6 +586,73 @@ test("rolls a replacement back to exact prior prompt bytes", async (t) => {
   assert.deepStrictEqual(rollbackLeaks, []);
   assert.strictEqual(restoredDeployBytes, priorDeployBytes);
   assert.strictEqual(statusExists, false);
+});
+
+test("reports one leak per failed stage in stage order and leaves only the blocked roots", async (t) => {
+  // arrange
+  const locations = await createProjectLocations(t, "commands-rollback-stage-leaks-");
+  const pluginRoot = await createPluginRoot(t, "commands-stage-leaks-source-");
+  const commandsRoot = path.join(pluginRoot, "commands");
+  const deploySource = "---\ndescription: New deploy\n---\nNew deploy prompt.\n";
+  const deployTarget = path.join(locations.promptsTargetDir, "acme:deploy.md");
+  await mkdir(commandsRoot, { recursive: true });
+  await mkdir(locations.promptsTargetDir, { recursive: true });
+  await writeFile(path.join(commandsRoot, "deploy.md"), deploySource);
+  await writeFile(deployTarget, "prior deploy prompt bytes\n");
+  const prepared = await prepareStageCommands(createRemovalOps(), {
+    locations,
+    cwd: locations.scopeRoot,
+    marketplaceName: MARKETPLACE_NAME,
+    pluginName: PLUGIN_NAME,
+    pluginRoot,
+    pluginDataDir: path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
+    resolved: resolvedFor(pluginRoot),
+    previousCommandNames: ["acme:deploy"],
+  });
+  assert.strictEqual(prepared.kind, "staged");
+  const replacement = await replacePreparedCommands(createRemovalOps(), prepared);
+  assert.strictEqual(replacement.kind, "replaced");
+  const backupDirectory = (await readdir(locations.commandsStagingDir)).find((name) =>
+    name.startsWith("backup-"),
+  );
+  assert.notStrictEqual(backupDirectory, undefined);
+  const backupRoot = path.join(locations.commandsStagingDir, backupDirectory ?? "missing");
+  const backupPath = path.join(backupRoot, "acme:deploy.md");
+  const removalError = Object.assign(new Error("replacement removal denied"), { code: "EACCES" });
+  const restoreError = Object.assign(new Error("previous restoration denied"), { code: "EACCES" });
+  const stagingError = Object.assign(new Error("staging cleanup denied"), { code: "EACCES" });
+  // Three of the rollback's four removals fault and the fourth does not: the
+  // backup root's cleanup runs for real, which is the half of the partition a
+  // collaborator that removes nothing could not state.
+  const removal = createDelegatingRemovalOps({
+    boundary: "delegate",
+    delegate: createRemovalOps(),
+    rmErrors: [
+      [deployTarget, removalError],
+      [prepared.stagingRoot, stagingError],
+    ],
+    renameErrors: [[backupPath, restoreError]],
+  });
+  const expectedLeaks = [
+    `failed to remove replacement command file at ${deployTarget}: replacement removal denied`,
+    `failed to restore previous command file acme:deploy from ${backupPath} to ${deployTarget}: ` +
+      "previous restoration denied",
+    `failed to clean up commands staging directory at ${prepared.stagingRoot}: ` +
+      "staging cleanup denied",
+  ];
+
+  // act
+  const leaks = await rollbackCommandsReplacement(removal.removalOps, replacement);
+  const stagingPresent = await pathIsPresent(prepared.stagingRoot);
+  const backupPresent = await pathIsPresent(backupRoot);
+  const targetBytes = await readFile(deployTarget, "utf8");
+
+  // assert
+  assert.deepStrictEqual(leaks, expectedLeaks);
+  assert.strictEqual(Object.isFrozen(leaks), true);
+  assert.strictEqual(stagingPresent, true);
+  assert.strictEqual(backupPresent, false);
+  assert.strictEqual(targetBytes, deploySource);
 });
 
 test("finalizes a replacement with exact new bytes and no staging trees", async (t) => {
