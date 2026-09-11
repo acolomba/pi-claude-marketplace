@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 09
 current_phase_name: Final Quality and Backlog Closure
 status: executing
-stopped_at: Completed 09-02-PLAN.md
-last_updated: "2026-09-11T21:10:00.000Z"
+stopped_at: Completed 09-03-PLAN.md
+last_updated: "2026-09-11T21:32:00.000Z"
 last_activity: 2026-09-11
-last_activity_desc: Phase 9 plan 02 complete; whole-tree coverage re-measured and the pin proved byte-identical
-state_head: dd52b104d5db08eac5aa0b40a72be54b6656df93
+last_activity_desc: Phase 9 plan 03 complete; the eight sealed requirement IDs read Complete and npm run check was measured green between the two flips
+state_head: a3138330cc7643a6fc5b63ac2bb3f2f4b5709342
 progress:
   total_phases: 9
   completed_phases: 4
   total_plans: 211
-  completed_plans: 206
+  completed_plans: 207
   percent: 44
 ---
 
@@ -32,19 +32,22 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 09 (Final Quality and Backlog Closure) — executing
-Next: Execute 09-03 (wave 3)
-Plan: 2 of 6 complete
-Status: `npm run test:coverage:direct:all` exit 0 on the ported tree, measured 2026-09-11 — 230
-pairs in 479.4s, `2 pinned shortfall(s) matched scripts/test-coverage-direct.pin.json exactly.`
-D-09-09 step 2 is discharged, so change A may now flip. `npm run check` still carries Phase 8's
-reading and is re-measured on the final tree in 09-04, before change B.
+Next: Execute 09-04 (wave 4)
+Plan: 3 of 6 complete
+Status: the requirement seal is closed — all eight IDs read `Complete` in the checkbox, the
+traceability row and `SEALED_REQUIREMENT_ROUTES`, and `node scripts/revalidation.mjs scope-impact
+--check` prints `Scope impact valid: 40 records.` `npm run check` was measured on this tree, not
+inherited: exit 0 in 249s at `da08a749`, unit `pass 6007 / fail 0`, integration `pass 32 / fail 0`.
+The earlier note that 09-04 would take that measurement is superseded — 09-03 took it, because
+D-09-02 requires it between the two flips.
 Resume file: `.planning/phases/09-final-quality-and-backlog-closure/09-CONTEXT.md`
-Last activity: 2026-09-11 — 09-02 re-measured the whole tree after the port: the report arm read
-`accepted-shortfall 2, complete 221, type-only 7` over 230 rows, the pin regenerated from that
-enumeration came back byte-identical (`git status --porcelain` empty, so no commit), and
-CONTRIBUTING.md's two stated readings still match the pin. `event-router.ts` reads
-`branches 114/114, functions 43/43, lines 1002/1002`; the two pinned modules read
-`branches 55/57, lines 412/414` and `branches 109/111, lines 1034/1040`, unchanged.
+Last activity: 2026-09-11 — 09-03 flipped the seal in two commits. `da08a749` moved GGAT-01,
+GGAT-03, GGAT-04, RCOV-01, RCOV-02 and RCOV-03; `npm run check` was then measured green on that
+committed tree; `d391d058` moved CLOSE-01 and CLOSE-02. Each commit carried all four carriers,
+including the planted literal in `tests/architecture/revalidation.test.ts` its own flip
+invalidated, so the gate exits 0 and the control suite reads 136/136 after both. No clause
+signature was recomputed: `01-REVALIDATION.json` is still blob
+`66218013acf1a69bd28b2380fdcf0c531556dff0`.
 
 ### Two handoff claims the Phase 9 discussion corrected
 
@@ -1054,7 +1057,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 09-02-PLAN.md
+**Stopped at:** Completed 09-03-PLAN.md
 
 Phase 04 completed all seven plans and closed AUTH-01 and TREF-01 through
 TREF-03. Independent verification passed 4/4 with no behavioral or UAT gap;
@@ -1072,7 +1075,7 @@ independent verification passed 6/6 with zero unverified behaviors.
 **Read beside it:** `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`, the
 Phase 01 terminal evidence ledger, and Phase 5's roadmap criteria.
 
-Last session: 2026-09-11T21:10:00.000Z
+Last session: 2026-09-11T21:32:00.000Z
 
 **Next:** Verify Phase 8, then execute Phase 9 (Final Quality and Backlog Closure).
 
