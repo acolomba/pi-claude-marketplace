@@ -1683,11 +1683,15 @@ describe("rollbackSkillsReplacement", () => {
     assert.strictEqual(prepared.kind, "staged");
     const replacement = await replacePreparedSkills(createRemovalOps(), prepared);
     assert.strictEqual(replacement.kind, "replaced");
-    const backupDirectory = (await readdir(locations.skillsStagingDir)).find((name) =>
+    const [backupDirectory = ""] = (await readdir(locations.skillsStagingDir)).filter((name) =>
       name.startsWith("backup-"),
     );
-    assert.notStrictEqual(backupDirectory, undefined);
-    const backupRoot = path.join(locations.skillsStagingDir, backupDirectory ?? "missing");
+    // What the name IS, not merely that it is not undefined: `backup-${randomUUID()}`. The
+    // standalone `assert.notStrictEqual(backupDirectory, undefined)` this replaces passed for every
+    // value the `find` could answer except one, and left a `?? "missing"` fallback below it that
+    // nothing could reach.
+    assert.match(backupDirectory, /^backup-[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/);
+    const backupRoot = path.join(locations.skillsStagingDir, backupDirectory);
     const backupPath = path.join(backupRoot, "acme-alpha");
     const removalError = Object.assign(new Error("replacement removal denied"), { code: "EACCES" });
     const restoreError = Object.assign(new Error("previous restoration denied"), {
@@ -1921,11 +1925,15 @@ describe("finalizeSkillsReplacement", () => {
     assert.strictEqual(prepared.kind, "staged");
     const replacement = await replacePreparedSkills(createRemovalOps(), prepared);
     assert.strictEqual(replacement.kind, "replaced");
-    const backupDirectory = (await readdir(locations.skillsStagingDir)).find((name) =>
+    const [backupDirectory = ""] = (await readdir(locations.skillsStagingDir)).filter((name) =>
       name.startsWith("backup-"),
     );
-    assert.notStrictEqual(backupDirectory, undefined);
-    const backupRoot = path.join(locations.skillsStagingDir, backupDirectory ?? "missing");
+    // What the name IS, not merely that it is not undefined: `backup-${randomUUID()}`. The
+    // standalone `assert.notStrictEqual(backupDirectory, undefined)` this replaces passed for every
+    // value the `find` could answer except one, and left a `?? "missing"` fallback below it that
+    // nothing could reach.
+    assert.match(backupDirectory, /^backup-[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/);
+    const backupRoot = path.join(locations.skillsStagingDir, backupDirectory);
     const backupError = Object.assign(new Error("backup cleanup denied"), { code: "EACCES" });
     const stagingError = Object.assign(new Error("staging cleanup denied"), { code: "EACCES" });
     // Finalization's only removals are these two cleanups, and both fault, so
