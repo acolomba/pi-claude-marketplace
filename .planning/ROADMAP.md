@@ -853,7 +853,7 @@ baseline, which still includes both pairs; neither is a terminal shortfall.
 **Goal:** Prove the confirmed work as a whole and close the bundled backlog with an audit trail.
 **Depends on:** Phase 8
 **Requirements:** CLOSE-01, CLOSE-02
-**Plans:** 3/6 plans executed
+**Plans:** 4/6 plans executed
 
 **Success Criteria**:
 
@@ -876,7 +876,7 @@ because a seal may never precede the measurement it asserts.
 - [x] 09-01-PLAN.md — Thread one injected read port through both hooks call chains, end to end
 - [x] 09-02-PLAN.md — Re-measure whole-tree coverage, regenerate and compare the pin, reconcile CONTRIBUTING.md
 - [x] 09-03-PLAN.md — Flip the eight sealed requirement IDs in two changes, with the suite measured green between them
-- [ ] 09-04-PLAN.md — Repair the window ledger desync losslessly and close the three false-open entries
+- [x] 09-04-PLAN.md — Repair the window ledger desync losslessly and close the three false-open entries
 - [ ] 09-05-PLAN.md — Write the seven backlog items' and one todo's terminal dispositions in place
 - [ ] 09-06-PLAN.md — Measure the final tree, verify the two pin claims, write 09-CLOSURE-LEDGER.md
 
@@ -892,4 +892,4 @@ because a seal may never precede the measurement it asserts.
 | 6. Assertion and Module Refinement   | 52/52          | Complete    | 2026-09-10 |
 | 7. Gate Integrity                    | 16/16 | Complete   | 2026-09-10 |
 | 8. Direct Coverage                   | 9/9 | In Progress|  |
-| 9. Final Quality and Backlog Closure | 3/6 | In Progress|  |
+| 9. Final Quality and Backlog Closure | 4/6 | In Progress|  |

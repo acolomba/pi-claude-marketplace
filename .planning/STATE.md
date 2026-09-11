@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 09
 current_phase_name: Final Quality and Backlog Closure
 status: executing
-stopped_at: Completed 09-03-PLAN.md
-last_updated: "2026-09-11T21:32:00.000Z"
+stopped_at: Completed 09-04-PLAN.md
+last_updated: "2026-09-11T21:41:00.000Z"
 last_activity: 2026-09-11
-last_activity_desc: Phase 9 plan 03 complete; the eight sealed requirement IDs read Complete and npm run check was measured green between the two flips
+last_activity_desc: Phase 9 plan 04 complete; the window ledger's table and JSON agree field for field, its write verbs run again, and open_count is 19
 state_head: a3138330cc7643a6fc5b63ac2bb3f2f4b5709342
 progress:
   total_phases: 9
   completed_phases: 4
   total_plans: 211
-  completed_plans: 207
+  completed_plans: 208
   percent: 44
 ---
 
@@ -32,8 +32,8 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 09 (Final Quality and Backlog Closure) — executing
-Next: Execute 09-04 (wave 4)
-Plan: 3 of 6 complete
+Next: Execute 09-05 (wave 5)
+Plan: 4 of 6 complete
 Status: the requirement seal is closed — all eight IDs read `Complete` in the checkbox, the
 traceability row and `SEALED_REQUIREMENT_ROUTES`, and `node scripts/revalidation.mjs scope-impact
 --check` prints `Scope impact valid: 40 records.` `npm run check` was measured on this tree, not
@@ -56,11 +56,14 @@ signature was recomputed: `01-REVALIDATION.json` is still blob
    pins `GGAT-01`, `GGAT-03` and `GGAT-04` at `Phase 7 / Pending`, plus `CLOSE-01` and
    `CLOSE-02` at `Phase 9 / Pending`. The three `GGAT` IDs are pinned, not unfinished:
    `07-VERIFICATION.md` reads `status: passed`, 7/7, with all three rows `SATISFIED`.
-2. **The `WINDOWS.md` rows 9/30 desync is not prose-only.** Row 30's rendered table status
-   reads `fixed` while its fenced JSON reads `open` — a status disagreement, not only the
-   description drift `08-direct-coverage/deferred-items.md` recorded. The repair is still
-   lossless: port the table's authoritative text and status into the JSON first, then let the
-   verb regenerate (D-09-11).
+2. **The `WINDOWS.md` rows 9/30 desync is not prose-only — REPAIRED in 09-04.** Row 30's
+   rendered table status read `fixed` while its fenced JSON read `open` — a status
+   disagreement, not only the description drift `08-direct-coverage/deferred-items.md`
+   recorded. Both rows' authoritative text was ported into the JSON before any regeneration,
+   so nothing was lost; the table and JSON now agree field for field across all 31 entries.
+   One research premise was wrong: entry 30's `resolved_at` CANNOT be populated by hand,
+   because it is a rendered column and a timestamp the table's cell lacks re-creates the
+   drift (measured both ways). It stays null; its description carries the date.
 
 ### What the 08-01 sweep measured
 
