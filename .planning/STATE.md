@@ -2,20 +2,20 @@
 gsd_state_version: "1.0"
 milestone: refine-unit-tests
 milestone_name: Refine Unit Tests
-current_phase: 08
-current_phase_name: Direct Coverage
+current_phase: 09
+current_phase_name: Final Quality and Backlog Closure
 status: executing
-stopped_at: Completed 08-09-PLAN.md; the changed-pair gate now runs in a pre-commit hook and a dedicated CI job
-last_updated: "2026-09-11T13:56:00.000Z"
+stopped_at: Phase 8 complete; verified passed 8/8, paused before Phase 9 on context budget
+last_updated: "2026-09-11T15:39:41.000Z"
 last_activity: 2026-09-11
-last_activity_desc: 08-09 wired the changed-pair gate into the npm-coverage-direct pre-commit hook and the direct-coverage CI job, gated package on that job, and finished CONTRIBUTING.md with both measured costs; all nine plans of Phase 8 are complete
-state_head: 6d5cb6a0
+last_activity_desc: Phase 8 closed; run paused before Phase 9 on context budget
+state_head: f79839f32b2642d93d865de29b2f3d7d8baf42eb
 progress:
   total_phases: 9
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 205
-  completed_plans: 204
-  percent: 33
+  completed_plans: 205
+  percent: 44
 ---
 
 # Project State
@@ -27,148 +27,17 @@ See: `.planning/PROJECT.md` (updated 2026-09-07 after refine-unit-tests Phase 4)
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 08 — Direct Coverage
+**Current focus:** Phase 09 — Final Quality and Backlog Closure
 
 ## Current Position
 
-Phase: 08 (Direct Coverage) — EXECUTING
-Next: Phase 8 verification, then Phase 9 (Final Quality and Backlog Closure)
+Phase: 08 (Direct Coverage) — COMPLETE, verified `passed` 8/8
+Next: Discuss Phase 9 (Final Quality and Backlog Closure)
 Plan: 9 of 9 complete
-Status: 08-09 complete. **The gate is wired, and both wirings were verified by running them rather than by reading their configuration.** `test:coverage:direct:commit` is the same script with an explicitly named `HEAD` base, so the `npm-coverage-direct` pre-commit hook and the `direct-coverage` CI job are one implementation at one strictness differing only in the base each names (`D-08-A07`). The job checks out at `fetch-depth: 0`, asserts `git rev-parse --verify origin/main^{commit}` BEFORE it measures, and asserts a whole-line `Changed-pair base: origin/main` against the captured log AFTER (`D-08-15`); its gate step sets `pipefail` explicitly, because GitHub's default shell is `bash -e` and a `| tee` without it would exit with tee's status and report a red gate green. `package` now needs `direct-coverage`, so a shortfall blocks the release manifest check. The branch-scoped arm was run locally as the job's proxy -- `--base origin/main`, **147 pairs, exit 0**, and the grep the job performs matched its log -- which also re-confirms the 147 figure `CONTRIBUTING.md` states. `SKIP=trufflehog pre-commit run --all-files` exits 0 with the new hook in the pipeline and `npm run check` exits 0 in 258s. **Two deviations, both Rule 1:** the research block's assertion step is not valid YAML (a plain scalar cannot carry `: `; copied verbatim it would have made the whole workflow unparseable) and is a block scalar here, and three `CONTRIBUTING.md` sentences that counted two sweeps were corrected to three. **`RCOV-03` is NOT marked complete, and that is enforced:** planting `- [x] **RCOV-03**` plus a `Complete` traceability row makes `scope-impact --check` exit 1 with `requirement-route-contract: RCOV-03`. All three of `RCOV-01`/`RCOV-02`/`RCOV-03` are sealed at `Phase 8` / `Pending`, so **`CLOSE-01` must flip the checkboxes, the traceability rows and the sealed route entries together, in one change** -- nobody had written that down. Two things stay open by design: the job's first real execution is on the pull request (GitHub Actions cannot be exercised here; the two in-job assertions are the mitigation), and whether the job is also a *required status check* on the protected branch is a repository setting outside any tracked file, so the `RCOV-03` edge-probe row stays **unresolved** rather than being claimed closed. `.planning/WINDOWS.md` is still unwritable (rows 9/30 desync), so the append for this observation was refused and it lives in the SUMMARY.
-Status: 08-08 complete. **The second full sweep is in and every coverage claim in the repository
-now equals it.** 230 rows in 486.9s, `Verdicts: accepted-shortfall 2, complete 221, type-only 7`,
-run in this checkout after every code plan landed (`D-08-A10`). The pin was REGENERATED from that
-sweep -- not hand-authored, not carried forward on trust -- and came back **byte-identical** to the
-artifact 08-04 generated at its own head, so `git status --porcelain` on it is empty and task 1 has
-no commit. The strict arm then exited 0 on the final tree: `All-pair run complete: 230 pairs in
-492.4s`. Against 08-01's `accepted-shortfall 7`: five rows CLOSED (`edge/args.ts`,
-`edge/handlers/shared.ts`, `edge/handlers/plugin/pending.ts` by 08-02's rewrites;
-`bridges/hooks/event-router.ts`, `orchestrators/plugin/update-preflight.ts` by 08-03's tests), two
-STAYED and are pinned (`bridges/commands/discover.ts` unmoved at `branches 55/57, lines 412/414`;
-`orchestrators/plugin/install-outcome.ts` moved to `branches 109/111, lines 1034/1040`), and **none
-appeared** -- so `D-08-09a`'s escalation path has no members and nothing is escalated. Five records
-were rewritten in one change and all three signature carriers re-sealed:
-`node scripts/revalidation.mjs scope-impact --check` prints exactly `Scope impact valid: 40
-records.` **`RCOV-04` had to be rewritten too** -- its evidence clause carried `RCOV-01`'s 204 as a
-live cross-reference, so task 2's own `grep -c 204 == 0` criterion and its "exactly two keys"
-criterion contradicted each other; `D-08-01` broke the tie and `RCOV-04` lost the number rather
-than gaining the new one. **`CONTRIBUTING.md` says the hook and the CI job are NOT wired yet,
-because they are not** -- 08-09 owns `RCOV-03`, `.pre-commit-config.yaml` has no
-`npm-coverage-direct`, and no workflow mentions the gate; writing the present tense would have
-added a fourth false claim in the commit that removed three. **08-09 must delete that one clause**
-when it lands the wiring. The whole-tree cost is stated as ~8 min, the measured value (479.8s /
-486.9s / 492.4s), not the inherited nine. `RCOV-01` and `RCOV-02` stay Pending: both are sealed at
-`Phase 8` / `Pending` in `SEALED_REQUIREMENT_ROUTES`, so flipping a checkbox fails
-`scope-impact --check` on the route contract. `npm run check` exits 0. `.planning/WINDOWS.md`
-entries 19/21/22 remain false-but-unwritable (rows 9/30 desync) and were re-routed to the operator
-in `deferred-items.md` rather than absorbed.
-Status: 08-04 complete. **`npm run test:coverage:direct:all` exits 0 for the first time** -- 230
-pairs in 489.4s, 228 complete-or-type-only, and exactly two refused rows that match a committed pin.
-`scripts/test-coverage-direct.pin.json` holds those two rows, sorted by `sourcePath`, each carrying
-the gate's own reading string, a `findingIds` array, and one `reasons` entry per uncovered site:
-`bridges/commands/discover.ts` at `branches 55/57, lines 412/414` (`BC-019`; line 178's `?? ""` arm
-and 288-290's narrowing arm) and `orchestrators/plugin/install-outcome.ts` at
-`branches 109/111, lines 1034/1040` (`D-08-A14`; 422-426's manifest re-check and 818-820's hooks
-re-parse guard). **Both readings and the membership were MEASURED at this plan's head, not copied**
--- 08-07's regeneration caveat was honoured, and the full sweep run through the new arm is what
-proves the set is two rather than a third shortfall hiding somewhere. `scripts/test-coverage-direct.pin.mjs`
-carries the WHAT THIS PIN IS / IS NOT header, the root-injectable `loadCoveragePin`, and the pure
-`assertPinnedReadings`; `runAllPairs` and `runChangedPairs` each compare once after their loop, the
-changed arm measuring the union of the change set and every pinned pair so the stale direction fires
-on a commit that touches no pinned file. `assertCompleteCoverage` is byte-unchanged and reads no pin;
-the reporter LOST a duplicated regex to the shared `shortfallReadingOf` and gained nothing about the
-pin. `--base <ref>` resolves exactly and errors rather than falling back, refusing a non-ref-shaped
-value before git runs. Seven planted states in the negative harness cover every divergence class with
-the matching control first. Two commits, not three: `fallow dead-code` refuses an export with no
-consumer, so tasks 1 and 2 could not be committed apart. `npm run check`-equivalent chain exits 0
-(6,003 unit cases). `RCOV-02` stays Pending for 08-09. 08-08 and 08-09 have not run.
-Status: 08-07 complete; its checkpoint was answered **`defer` + pinned** (`D-08-A14`).
-`orchestrators/plugin/install-outcome.ts` — the phase's largest and only open-ended shortfall —
-moved from `branches 60/83, functions 22/27, lines 965/1040` to
-`branches 109/111, functions 27/27, lines 1034/1040`. Note the starting reading: research recorded
-`956/1031`, which had already expired because 08-05's port added nine lines. Seventeen of the
-nineteen uncovered runs are closed by owner cases driven through `runInstallLedger`, including the
-three `commitPrepared*` leak arms 08-05's required `removalOps` unlocked, each asserting the
-complete `bridgeWarnings` array by its exact bytes and each pinning that the install still LANDED.
-`tests/orchestrators/plugin/install-flow.test.ts` is byte-unchanged and its own pair still reads
-`Direct coverage passed` — coverage was ADDED to the owner, never subtracted from the sibling.
-**Two branches remain and neither is pin-eligible.** `422-426` re-validates a manifest entry with
-`PLUGIN_ENTRY_VALIDATOR`, which is `Compile(PLUGIN_ENTRY_SCHEMA)` — the exact member schema
-`MARKETPLACE_SCHEMA.plugins` already enforced on the same bytes in the same pass. `818-820`
-re-parses a `hooks.json` the resolver already validated; the only difference between the two calls
-is `skipIfMap`, and D-61-02 records that no `if`-field failure can produce a refusal. Both need an
-injectable reader on the phase that reads them. One route WAS available and deliberately declined:
-the removal collaborator runs before the hooks phase, so an `rm` that also corrupted `hooks.json`
-would reach `818-820` today — a timing trick wearing a collaborator's clothes; the operator
-confirmed it stays declined. **`D-08-A14` reverses `D-08-A06`'s pin prohibition for this module**:
-its premise was 19 unexplained runs, and 17 are now closed with each of the two survivors carrying a
-precise reason, so the module is pinned with one `reasons` entry per site rather than left to keep
-`test:coverage:direct:all` permanently red or to grow production surface whose only consumer is a
-test (`MF-DEC-07`). **08-04 authors that row, generating it from the second sweep (`D-08-08`) — the
-reading above is an intermediate measurement and must not be copied**; `08-07-SUMMARY.md`
-§"Pin instruction for 08-04" carries the exact reading string and both `reasons` strings verbatim. `createRemovalOpsFake` gained `rmParentErrors`
-because a staging root is `<stagingDir>/<randomUUID()>` minted inside the prepare being faulted,
-the same class `renameDestinationErrors` was added for in 08-06. `npm run check` exits 0 (6,003
-unit cases, 32 integration cases). `RCOV-02` stays Pending for 08-09. 08-04 has not run.
-08-06 complete. `06-VERIFICATION.md` G1's open remainder is closed by observation, not by
-override: each bridge owner test now faults three of a replacement rollback's four removals through
-the collaborator and asserts the complete leak array as one ordered value — remove the renamed
-replacement, restore the backup by rename, clean up the staging root — and the same case reads both
-halves of the residue partition off real disk, the blocked staging root still present and the
-unblocked backup root gone. Three plants confirmed it: reversing only the leak ORDER failed 5 cases
-a length check would have passed; dropping the backup-root cleanup failed the absent half; bypassing
-the port inside `cleanupStaging`'s failure arm failed the present half. All reverted, `git status
---porcelain -- extensions/` empty, `npm run check` exits 0. Every `rm`/`rename` fault that reaches
-`cleanupStaging` or `rollbackReplacementCommon` is now injected through the port in all four owner
-tests; `tests/shared/fs-utils.test.ts` retains exactly four patches (`lstat` ×2, `stat`, `readdir`)
-and `tests/bridges/skills/stage.test.ts` five (`cp`, `stat`, and three direct `rm`/`rename` calls),
-each named in a header note with its production call and decision. `createDelegatingRemovalOps` was
-added beside the in-memory fake because the fake removes nothing and so cannot state the partition's
-unfaulted half. **The census is re-derived, and larger than 08-05's** — it now covers every
-builtin-namespace, prototype, and `globalThis` patch (20 `node:https` guards, a dozen prototype
-patches); `08-06-SUMMARY.md` names every open row with the decision that leaves it open, and claims
-nothing is closed beyond the port-reachable subset. `RCOV-02` stays Pending for 08-07 and 08-09.
-08-04 has not run.
-Status: 08-05 complete. The removal port landed as one atomic change: `RemovalOps` + `createRemovalOps`
-live in `shared/fs-utils.ts`, `cleanupStaging` and `rollbackReplacementCommon` perform every `rm` and
-`rename` through the injected collaborator, and all 21 bridge and orchestrator signatures carry it as
-a REQUIRED parameter with no default anywhere (`D-08-12`). 42 production call sites across 11 files
-moved in one commit; `npm run check` exits 0. Six composition roots construct the real operations —
-`reinstall-replace`, `update-swap`, `clone-cache`, `marketplace/add`, plus `install-flow` and
-`enable-disable` for the install path, so `InstallLedgerOptions.removalOps` is required and
-`install-outcome.ts` constructs nothing. That is what makes the three `commitPrepared*` leak arms
-faultable from their owner test, which is what 08-07 needs. `createRemovalOpsFake` keys faults per
-target path and `removalOpsContract` is passed by both the real adapter and the fake, with a
-silent-removal fake as its negative control. One G1 case in `tests/bridges/skills/stage.test.ts` now
-drives its cleanup failure through the port with no builtin patched; mis-keying the planted fault
-fails exactly that case. `fs-utils.ts` reads `branches 52/52, functions 10/10, lines 394/394`.
-**The residual builtin-patching census is measured, not inherited:** `D-08-14` claims two files; the
-tree holds at least ten across three classes, and six `fs-utils.test.ts` sites plus two
-`skills/stage.test.ts` cases are port-reachable and still patch a builtin. The deferred-conversion
-list for the plan that owns `D-08-14` is in `08-05-SUMMARY.md`. 08-04 has not run.
-08-03 complete. Two more rows leave the accepted-shortfall set by being covered rather than
-pinned: `bridges/hooks/event-router.ts` reads `branches 114/114, functions 43/43, lines 967/967` and
-`orchestrators/plugin/update-preflight.ts` reads `branches 97/97, functions 21/21, lines 593/593`.
-All four `generationIsCurrent` guards are reached through injected collaborators — two through a
-deferred `HooksHydrationReader` read under the factory-time hydrate, two through one-member spread
-decorators over the real `createHooksRuntime()` — with no builtin patched and no production file
-touched. `D-08-A04` is discharged by measurement. One site (614-616) has no named trigger available
-and keys its advance on a guard consultation counted from the injected state read; the reason is
-recorded in `08-03-SUMMARY.md`.
-**The measured shortfall set is now two modules:** `bridges/commands/discover.ts`
-(`branches 55/57, lines 412/414`, the pin's one row, two sites per `D-08-A05`) and
-`orchestrators/plugin/install-outcome.ts` (`branches 60/83, functions 22/27, lines 956/1031`, owner
-tests after the removal port, never a pin).
-08-02 rewrote the three dense-index guards: `edge/args.ts` reads `branches 28/28, lines 88/88`,
-`edge/handlers/shared.ts` reads `branches 15/15, lines 82/82`, and
-`edge/handlers/plugin/pending.ts` reads `branches 9/9, lines 56/56`. Edge suite 657/657.
-08-01 remains the classification input for plans 05 and 07: `npm run test:coverage:direct:report`
-ran end to end for the first time — 230 rows, 479.8s, `Verdicts: accepted-shortfall 7, complete 216,
-type-only 7`, recorded in `08-01-SUMMARY.md`. `coverage/` is gitignored and carries nothing forward.
-`pre-commit run --all-files` is green with `SKIP=trufflehog`. Unit suite 5959/5959, 0 skipped; hooks
-bridge suite 513/513.
-Last activity: 2026-09-11 — 08-03 covered the four hooks hydration generation guards and both arms of
-`isUpdatePreflightOutcome`
+Status: `npm run check` exit 0. `npm run test:coverage:direct:all` exits 0 for the first time —
+230 pairs, two pinned rows matching the committed pin exactly. RCOV-01/02/03 implemented but
+deliberately still `Pending` (see blocker below).
+Last activity: 2026-09-11 — Phase 8 closed; autonomous run paused before Phase 9 on context budget
 
 ### What the 08-01 sweep measured
 
@@ -1203,53 +1072,88 @@ audit, or clear them deliberately with the resume commands above.
 
 ## Autonomous Run Parameters
 
-Resume with `/gsd-autonomous --from 8`.
+Resume with `/gsd-autonomous --from 9 --interactive`.
 
-Queue is **8 → 9**. Phases 01 and 03-05 stay skipped via the Deferred Verification table above;
-02, 06 and 07 are complete.
+Queue is **9 only**. Phases 01 and 03-05 stay skipped via the Deferred Verification table above;
+02, 06, 07 and 08 are complete. Phase 8 verified `passed` 8/8 on 2026-09-11.
 
-The run was paused after Phase 7 on context budget, not on a blocker. Phase 8 is comparable in size
-to Phase 7 (a regenerated 204-pair baseline plus a production-owned removal port threaded through
-~40 `cleanupStaging` call sites), and Phase 7's best results came from agents measuring rather than
-inheriting assumptions — that wants a fresh context.
+The run paused after Phase 8 on context budget, not on a blocker. Phase 9 is `CLOSE-01` +
+`CLOSE-02` and wants a fresh context, because its central task is a coordinated multi-file
+seal update that fails closed if done piecemeal.
 
-**Two blockers were recorded as waiting for Phase 8. Phase 8's discussion resolved the
-disposition of both — read `08-CONTEXT.md` rather than re-deriving them:**
+### The one hard blocker Phase 9 must solve first
 
-1. `bridges/commands/discover.ts` direct coverage is `branches 55/57, lines 412/414`. The
-   zero-argument `node scripts/test-coverage-direct.mjs` exits 1 on it today. Pre-existing,
-   traced to `41f23c09 feat(06-05)`, which removed 112 test lines. **Resolved as a
-   disposition, not a fix:** `D-08-03` classifies it compiler-forced under `BC-019`, and
-   `D-08-05`'s bidirectional pin is what lets `RCOV-03` turn the gate on without either an
-   allow-list or a green-at-all-costs rewrite. It is no longer a blocker.
-2. `pre-commit run --all-files` fails, and CI's Lint job runs exactly that.
-   `.pre-commit-config.yaml:56` excludes `scripts/revalidation.mjs` from `fix-unicode-dashes` but
-   not `tests/architecture/revalidation.test.ts`, which pins the six em-dashes that script emits.
-   Reproduced: the hook rewrites 16 lines and 2 of 136 cases fail. Two valid fixes — widen the
-   exclusion, or drop the em-dash from both sides in one commit — and choosing is an operator call.
-   **Pulled into Phase 8 by `D-08-20`**, which widens the existing exclusion to cover
-   `tests/architecture/revalidation.test.ts`: this phase adds a pre-commit hook, and a new
-   hook cannot be verified inside an `--all-files` run that is already red. `CLOSE-01`
-   keeps its identity and records the early closure.
+`SEALED_REQUIREMENT_ROUTES` in `scripts/revalidation.mjs` pins `RCOV-01`, `RCOV-02` and
+`RCOV-03` at `Phase 8` / `Pending`. **They cannot be completed one at a time.** Proved by
+planting in 08-09: setting `- [x] **RCOV-03**` plus a `Complete` traceability row makes
+`node scripts/revalidation.mjs scope-impact --check` exit 1 with
+`requirement-route-contract: RCOV-03: traceability route/status differs from sealed
+requirement contract`; reverting restores `Scope impact valid: 40 records.`
 
-Carried forward for Phase 9 closure: `.planning/codebase/CONVENTIONS.md` says "exactly 11
-fallow-ignore markers" and the measured count is 12; `shared/concerns/hooks.ts:20-24` repeats a
-`satisfies` claim the compiler does not honour; `.planning/PROJECT.md` promises
-`tests/architecture/no-legacy-markers.test.ts`, which was never written; and
-`markers-snapshot.test.ts` keeps three agents-bridge byte pins that `tests/bridges/agents/marker.test.ts`
-already owns.
+One atomic change must land: the three checkboxes, their traceability rows, the sealed route
+entries, and any disturbed clause signature. The same seal spans `.planning/REQUIREMENTS.md`,
+`scripts/revalidation.mjs` and
+`.planning/phases/01-live-evidence-revalidation/01-REVALIDATION.json` — three files that must
+agree, as 08-08 found when `RCOV-04`'s evidence clause also had to be re-sealed.
 
-Two things a fresh run will still hit:
+### Open decisions Phase 9 inherits
 
-1. The lifecycle audit step looks for `.planning/v<version>-MILESTONE-AUDIT.md`. This milestone is
-   named `refine-unit-tests`, not a `vX.Y` version, so that path never exists and the audit will
-   read as missing. Locate the audit artifact by name instead of by that template.
-2. `gsd-tools query verification.status` disagrees with the report files for phases 03-07, per the
-   staleness artifact described above. Read the file's `status:` field, not the query.
+1. **WR-04 — a production-design call, not a test edit.** The `event-router` staleness case
+   (`tests/bridges/hooks/event-router.test.ts`) still triggers on a counted
+   `currentGeneration()` consultation, which `D-08-A04` forbids by name. 08-03 built and
+   measured every alternative; nothing injected runs between the containment check and the
+   `readFile`. The only remaining route is a `readHooksJson` member on
+   `HooksHydrationReader`, which would port ONE of that module's two `readFile` sites and
+   leave the other — a port shaped by one test's reach, the shape `D-08-13` refused for the
+   removal port and `D-08-A14` records 08-07 declining for `install-outcome.ts`. A sibling
+   control was added so the empty assertion now means "a hydration that was stopped" rather
+   than "a fixture that never hydrates", and both cases record that
+   `getRoutingBucket("PreToolUse")` is vacuous for this entrypoint.
 
-Executor dispatch note: `workflow.use_worktrees=false`, so `ISOLATION=none`. Phase 7 ran executors
-**parallel within each wave** on the shared tree — safe because the plan-checker verified disjoint
-`files_modified` per wave. Executors were told not to write STATE.md or ROADMAP.md (the orchestrator
-does it at wave boundaries), to stage explicit paths only, and to treat whole-repo hook failures
-naming files they do not own as sibling noise. That worked across 22 concurrent-agent commits with
-no cross-contamination.
+2. **The pin's standing caveat, recorded by 08-04 as deliverable D5.** The comparator is
+   proved by planting and every reading is measured, but each row's `reasons` is a CLAIM
+   about why an arm cannot be reached. If a reason is wrong, the pin is an allow-list with
+   good manners, and no gate in this repository can tell the difference. Two human-checkable
+   claims carry that weight: the `CommandNameError` narrowing arm in
+   `bridges/commands/discover.ts`, and the two defense-in-depth re-checks in
+   `orchestrators/plugin/install-outcome.ts` (`D-08-A14`, operator decision 2026-09-11).
+
+3. **The `direct-coverage` CI job has never executed.** Its first real run is on the PR. The
+   local proxy proves everything except the GitHub-side ref creation the in-job base
+   assertions exist to catch. Whether it is a REQUIRED status check is a protected-branch
+   setting outside any tracked file, so the `RCOV-03` edge-probe row stays `unresolved`.
+
+### Environment debts, unchanged and still blocking
+
+1. `.planning/WINDOWS.md` entries 19, 21, 22 should read `fixed` and cannot be written.
+   Every `gsd-tools windows` verb refuses because the rendered table disagrees with the
+   fenced JSON at unrelated rows **9 and 30** — a desync predating this phase (`697d6812`).
+   Regenerating the table destroys the prose side, so it is an operator decision, not an
+   agent repair. 23 windows read open; `/gsd-ship` blocks while any remain.
+
+2. `gsd-tools` state verbs are unreliable in this workstream. `state.update-progress` and
+   `state.advance-plan` rewrite `completed_phases: 3 → 1` and `percent: 33 → 11` from a
+   roadmap they cannot read; `state.planned-phase` once reported four fields updated while
+   writing zero bytes; `roadmap.annotate-dependencies` reports the phase not found because
+   the milestone heading is the workstream form. Hand-edit STATE.md, call only
+   `roadmap.update-plan-progress`, and verify by grep.
+
+3. `trufflehog` cannot run in this checkout at all — it is a linked worktree, so `.git` is a
+   file and the hook's `<root>/.git/index` read fails. Every `pre-commit run --all-files`
+   claim in Phase 8 carries `SKIP=trufflehog`. CI's Lint job runs it on a full clone, so it
+   is unverified locally rather than known-clean.
+
+4. Commit `c4f503f0` is bisect-unsafe on its own — it carried a comparator change without its
+   matching harness change, which landed in `a2393015`. The pair is one change. Recorded
+   rather than amended, per the no-history-rewrite rule. `abf1a4c7` (08-05 task 1) is
+   likewise red on typecheck and fallow by construction, with the reason in its commit body.
+
+### Executor dispatch note
+
+`workflow.use_worktrees=false`, so `ISOLATION=none` and executors run **sequentially** on the
+shared tree. Phase 8 ran all nine plans that way with no cross-contamination. The plan index
+recomputes waves topologically from `depends_on` and IGNORES the `wave:` frontmatter field, so
+order the dispatch from `depends_on`, not from the roadmap's wave headers. Executors were told
+to stage explicit paths only and to leave `.claude/settings.json`, `.codex/config.toml`,
+`.claude/CLAUDE.md`, `.mcp.json`, `AGENTS.md`, `.codegraph/` and the untracked `01-REVIEW*`
+drafts alone — those are the operator's and are still modified in the working tree.
