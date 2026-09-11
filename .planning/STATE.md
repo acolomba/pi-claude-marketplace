@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 08
 current_phase_name: Direct Coverage
 status: executing
-stopped_at: Completed 08-05-PLAN.md
-last_updated: "2026-09-11T04:21:48.207Z"
+stopped_at: Completed 08-06-PLAN.md
+last_updated: "2026-09-11T06:24:37.353Z"
 last_activity: 2026-09-11
-last_activity_desc: 08-05 complete; the removal port landed atomically and one staging cleanup is now faultable from commitPreparedSkills
-state_head: 53c4ac76915e5c7b8e44fda361d919b69f942123
+last_activity_desc: 08-06 complete; G1's leak-order and residue-partition proofs are restored through the port and the residual patching census is re-derived
+state_head: 3d6aceedb05313549af36a3c75af1e0d534e8141
 progress:
   total_phases: 9
   completed_phases: 3
   total_plans: 205
-  completed_plans: 200
+  completed_plans: 201
   percent: 33
 ---
 
@@ -33,7 +33,26 @@ component as a working Pi artifact.
 
 Phase: 08 (Direct Coverage) — EXECUTING
 Next: /gsd-execute-phase 08 (wave 2)
-Plan: 4 of 9 complete
+Plan: 5 of 9 complete
+Status: 08-06 complete. `06-VERIFICATION.md` G1's open remainder is closed by observation, not by
+override: each bridge owner test now faults three of a replacement rollback's four removals through
+the collaborator and asserts the complete leak array as one ordered value — remove the renamed
+replacement, restore the backup by rename, clean up the staging root — and the same case reads both
+halves of the residue partition off real disk, the blocked staging root still present and the
+unblocked backup root gone. Three plants confirmed it: reversing only the leak ORDER failed 5 cases
+a length check would have passed; dropping the backup-root cleanup failed the absent half; bypassing
+the port inside `cleanupStaging`'s failure arm failed the present half. All reverted, `git status
+--porcelain -- extensions/` empty, `npm run check` exits 0. Every `rm`/`rename` fault that reaches
+`cleanupStaging` or `rollbackReplacementCommon` is now injected through the port in all four owner
+tests; `tests/shared/fs-utils.test.ts` retains exactly four patches (`lstat` ×2, `stat`, `readdir`)
+and `tests/bridges/skills/stage.test.ts` five (`cp`, `stat`, and three direct `rm`/`rename` calls),
+each named in a header note with its production call and decision. `createDelegatingRemovalOps` was
+added beside the in-memory fake because the fake removes nothing and so cannot state the partition's
+unfaulted half. **The census is re-derived, and larger than 08-05's** — it now covers every
+builtin-namespace, prototype, and `globalThis` patch (20 `node:https` guards, a dozen prototype
+patches); `08-06-SUMMARY.md` names every open row with the decision that leaves it open, and claims
+nothing is closed beyond the port-reachable subset. `RCOV-02` stays Pending for 08-07 and 08-09.
+08-04 has not run.
 Status: 08-05 complete. The removal port landed as one atomic change: `RemovalOps` + `createRemovalOps`
 live in `shared/fs-utils.ts`, `cleanupStaging` and `rollbackReplacementCommon` perform every `rm` and
 `rename` through the injected collaborator, and all 21 bridge and orchestrator signatures carry it as
@@ -472,6 +491,7 @@ stay recorded rather than excused.
 | Phase 08 P02 | 20min | 3 tasks | 5 files |
 | Phase 08 P03 | 19min | 2 tasks | 2 files |
 | Phase 08 P05 | 57min | 3 tasks | 19 files |
+| Phase 08 P06 | 84min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -1002,6 +1022,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 08]: RemovalOps is the only required *Ops in the tree: no optional marker, no DEFAULT_REMOVAL_OPS, composition roots supply it (D-08-12)
 - [Phase 08]: clone-cache.ts and marketplace/add.ts construct the removal port locally rather than taking it on their public args, which would have broken five files outside the plan's blast radius
 - [Phase 08]: ReinstallReplacement retains removalOps so compensation cleans up through the collaborator the forward pass used
+- [Phase 08]: The leaked-residue partition is read from real disk through a delegating removal collaborator; the in-memory fake removes nothing, so the unfaulted half is unstatable through it
+- [Phase 08]: A restore whose source path is minted by an unported forward call is faulted on its rename DESTINATION, the one key the case can know before the act
 
 ### Pending Todos
 
@@ -1055,7 +1077,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 08-05-PLAN.md
+**Stopped at:** Completed 08-06-PLAN.md
 
 Phase 04 completed all seven plans and closed AUTH-01 and TREF-01 through
 TREF-03. Independent verification passed 4/4 with no behavioral or UAT gap;
@@ -1073,7 +1095,7 @@ independent verification passed 6/6 with zero unverified behaviors.
 **Read beside it:** `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`, the
 Phase 01 terminal evidence ledger, and Phase 5's roadmap criteria.
 
-Last session: 2026-09-11T04:21:47.549Z
+Last session: 2026-09-11T06:24:26.514Z
 
 **Next:** Execute Phase 8 (Direct Coverage) — `/gsd-execute-phase 08`.
 

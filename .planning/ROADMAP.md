@@ -776,7 +776,7 @@ It can return only after current revalidation; it is not marked implemented.
 **Goal:** Re-establish honest direct coverage for every source-test pair and resolve shortfalls.
 **Depends on:** Phase 7
 **Requirements:** RCOV-01, RCOV-02, RCOV-03
-**Plans:** 4/9 plans executed
+**Plans:** 5/9 plans executed
 
 **Success Criteria**:
 
@@ -824,7 +824,7 @@ Plans:
 
 **Wave 5** _(blocked on Wave 4 completion)_
 
-- [ ] 08-06-PLAN.md — restore G1's leak-ordering and residue-partition proofs through the port and convert the port-verb patches
+- [x] 08-06-PLAN.md — restore G1's leak-ordering and residue-partition proofs through the port and convert the port-verb patches
 - [ ] 08-07-PLAN.md — close `install-outcome.ts`'s shortfall, with an escalation checkpoint and no pin row
 
 **Wave 6** _(blocked on Wave 5 completion)_
@@ -870,5 +870,5 @@ baseline, which still includes both pairs; neither is a terminal shortfall.
 | 5. Injection and Ownership Design    | 34/34          | Complete    | 2026-09-08 |
 | 6. Assertion and Module Refinement   | 52/52          | Complete    | 2026-09-10 |
 | 7. Gate Integrity                    | 16/16 | Complete   | 2026-09-10 |
-| 8. Direct Coverage                   | 4/9 | In Progress|  |
+| 8. Direct Coverage                   | 5/9 | In Progress|  |
 | 9. Final Quality and Backlog Closure | 0/0            | Not started | —          |
