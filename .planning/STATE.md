@@ -5,15 +5,15 @@ milestone_name: Refine Unit Tests
 current_phase: 08
 current_phase_name: Direct Coverage
 status: executing
-stopped_at: Phase 8 context gathered
-last_updated: "2026-09-10T23:12:21.645Z"
+stopped_at: Phase 8 planned; 9 plans across 7 waves, plan-checker passed
+last_updated: "2026-09-11T01:18:56.000Z"
 last_activity: 2026-09-10
-last_activity_desc: Phase 8 context gathered; decisions locked ahead of planning
-state_head: 888ddd8927c8d7b62992aadf8eb0da0a0ecae181
+last_activity_desc: Phase 8 planned; 9 plans across 7 waves, ready to execute
+state_head: 1ada24cab348f59c397a8b2aed0680ea30403255
 progress:
   total_phases: 9
   completed_phases: 3
-  total_plans: 196
+  total_plans: 205
   completed_plans: 196
   percent: 33
 ---
@@ -31,13 +31,13 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: 08 (Direct Coverage) — context gathered, ready for planning
-Next: Plan Phase 8 from `.planning/phases/08-direct-coverage/08-CONTEXT.md`
-Plan: 0 of TBD
+Phase: 08 (Direct Coverage) — PLANNED, ready to execute
+Next: /gsd-execute-phase 08
+Plan: 0 of 9 complete
 Status: Phase 07 closed, verified `passed` 7/7; `npm run check` exit 0 at 5952 unit plus 32
 integration. GGAT-01, GGAT-03, GGAT-04 complete.
-Last activity: 2026-09-10 — Phase 8 context gathered; 20 decisions locked, three roadmap
-premises corrected from live measurement
+Last activity: 2026-09-10 — Phase 8 planned; 9 plans, 7 waves, 27 tasks; plan-checker passed
+with one advisory, since fixed
 
 ### What Phase 8 discussion measured
 
@@ -982,7 +982,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Phase 8 context gathered
+**Stopped at:** Phase 8 planned
 
 Phase 04 completed all seven plans and closed AUTH-01 and TREF-01 through
 TREF-03. Independent verification passed 4/4 with no behavioral or UAT gap;
@@ -1002,7 +1002,7 @@ Phase 01 terminal evidence ledger, and Phase 5's roadmap criteria.
 
 Last session: 2026-09-10T23:12:20.941Z
 
-**Next:** Plan Phase 8 (Direct Coverage) from `08-CONTEXT.md`.
+**Next:** Execute Phase 8 (Direct Coverage) — `/gsd-execute-phase 08`.
 
 ## Deferred Verification
 

@@ -778,18 +778,6 @@ It can return only after current revalidation; it is not marked implemented.
 **Requirements:** RCOV-01, RCOV-02, RCOV-03
 **Plans:** 9 plans
 
-Plans:
-
-- [ ] 08-01-PLAN.md — repair the whole-tree reporter, give it a planted control, clear the dash-hook blocker, and run the enumeration sweep
-- [ ] 08-02-PLAN.md — rewrite the three dense-index guards to typed iteration, preserving the `--scope` lookahead
-- [ ] 08-03-PLAN.md — cover the four `event-router` generation guards and the uncalled `update-preflight` predicate
-- [ ] 08-04-PLAN.md — the committed pin, its bidirectional comparator, the gate arms, and the fail-closed explicit base
-- [ ] 08-05-PLAN.md — the `cleanupStaging` removal port, migrated atomically across every production caller
-- [ ] 08-06-PLAN.md — restore G1's leak-ordering and residue-partition proofs through the port and convert the port-verb patches
-- [ ] 08-07-PLAN.md — close `install-outcome.ts`'s shortfall, with an escalation checkpoint and no pin row
-- [ ] 08-08-PLAN.md — the second sweep, the regenerated pin, and the coordinated record rewrite
-- [ ] 08-09-PLAN.md — wire the gate into a scoped pre-commit hook and a dedicated CI job
-
 **Success Criteria**:
 
 1. The milestone branch has one regenerated baseline for all 204 current source-
@@ -814,6 +802,38 @@ Plans:
    which is why this is a phase of its own and not a gap fix. Closing it restores
    the interleaved-warning ordering and residue-count proofs recorded as the open
    remainder of `06-VERIFICATION.md` G1.
+
+Plans:
+
+**Wave 1**
+
+- [ ] 08-01-PLAN.md — repair the whole-tree reporter, give it a planted control, clear the dash-hook blocker, and run the enumeration sweep
+
+**Wave 2** _(blocked on Wave 1 completion)_
+
+- [ ] 08-02-PLAN.md — rewrite the three dense-index guards to typed iteration, preserving the `--scope` lookahead
+- [ ] 08-03-PLAN.md — cover the four `event-router` generation guards and the uncalled `update-preflight` predicate
+
+**Wave 3** _(blocked on Wave 2 completion)_
+
+- [ ] 08-04-PLAN.md — the committed pin, its bidirectional comparator, the gate arms, and the fail-closed explicit base
+
+**Wave 4** _(blocked on Wave 3 completion)_
+
+- [ ] 08-05-PLAN.md — the `cleanupStaging` removal port, migrated atomically across every production caller
+
+**Wave 5** _(blocked on Wave 4 completion)_
+
+- [ ] 08-06-PLAN.md — restore G1's leak-ordering and residue-partition proofs through the port and convert the port-verb patches
+- [ ] 08-07-PLAN.md — close `install-outcome.ts`'s shortfall, with an escalation checkpoint and no pin row
+
+**Wave 6** _(blocked on Wave 5 completion)_
+
+- [ ] 08-08-PLAN.md — the second sweep, the regenerated pin, and the coordinated record rewrite
+
+**Wave 7** _(blocked on Wave 6 completion)_
+
+- [ ] 08-09-PLAN.md — wire the gate into a scoped pre-commit hook and a dedicated CI job
 
 **Evidence/history:** `RCOV-04`/`COV-01` retains its stable identity and former
 Phase 8 trace. Its standalone remeasurement is superseded by `RCOV-01`'s full
