@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 09
 current_phase_name: Final Quality and Backlog Closure
 status: executing
-stopped_at: Completed 09-01-PLAN.md
-last_updated: "2026-09-11T20:42:11.828Z"
+stopped_at: Completed 09-02-PLAN.md
+last_updated: "2026-09-11T21:10:00.000Z"
 last_activity: 2026-09-11
-last_activity_desc: Phase 9 plan 01 complete; hooks read port landed and the staleness case simplified
-state_head: c6a6758c3bace41ee1149beecf1a382c767b318d
+last_activity_desc: Phase 9 plan 02 complete; whole-tree coverage re-measured and the pin proved byte-identical
+state_head: dd52b104d5db08eac5aa0b40a72be54b6656df93
 progress:
   total_phases: 9
   completed_phases: 4
   total_plans: 211
-  completed_plans: 205
+  completed_plans: 206
   percent: 44
 ---
 
@@ -32,17 +32,19 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 09 (Final Quality and Backlog Closure) — executing
-Next: Execute 09-02 (wave 2)
-Plan: 1 of 6 complete
-Status: `npm run check` exit 0 and `npm run test:coverage:direct:all` exit 0 as of Phase 8's close —
-230 pairs, two pinned rows matching the committed pin exactly. Both must be re-measured on the
-final tree before the seal flips, because Phase 9 changes production code (D-09-05, D-09-09).
+Next: Execute 09-03 (wave 3)
+Plan: 2 of 6 complete
+Status: `npm run test:coverage:direct:all` exit 0 on the ported tree, measured 2026-09-11 — 230
+pairs in 479.4s, `2 pinned shortfall(s) matched scripts/test-coverage-direct.pin.json exactly.`
+D-09-09 step 2 is discharged, so change A may now flip. `npm run check` still carries Phase 8's
+reading and is re-measured on the final tree in 09-04, before change B.
 Resume file: `.planning/phases/09-final-quality-and-backlog-closure/09-CONTEXT.md`
-Last activity: 2026-09-11 — 09-01 landed the injected hooks read port (D-09-05, D-09-07):
-`event-router.ts` holds zero static `readFile`, both factories take a required reader, and the
-composition root supplies the real `readHooksJson`. `event-router.ts` direct coverage now reads
-`branches 114/114, functions 43/43, lines 1002/1002` — the line count moved, so D-09-09's
-re-measurement obligation is live.
+Last activity: 2026-09-11 — 09-02 re-measured the whole tree after the port: the report arm read
+`accepted-shortfall 2, complete 221, type-only 7` over 230 rows, the pin regenerated from that
+enumeration came back byte-identical (`git status --porcelain` empty, so no commit), and
+CONTRIBUTING.md's two stated readings still match the pin. `event-router.ts` reads
+`branches 114/114, functions 43/43, lines 1002/1002`; the two pinned modules read
+`branches 55/57, lines 412/414` and `branches 109/111, lines 1034/1040`, unchanged.
 
 ### Two handoff claims the Phase 9 discussion corrected
 
@@ -1052,7 +1054,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 09-01-PLAN.md
+**Stopped at:** Completed 09-02-PLAN.md
 
 Phase 04 completed all seven plans and closed AUTH-01 and TREF-01 through
 TREF-03. Independent verification passed 4/4 with no behavioral or UAT gap;
@@ -1070,7 +1072,7 @@ independent verification passed 6/6 with zero unverified behaviors.
 **Read beside it:** `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`, the
 Phase 01 terminal evidence ledger, and Phase 5's roadmap criteria.
 
-Last session: 2026-09-11T20:41:58.983Z
+Last session: 2026-09-11T21:10:00.000Z
 
 **Next:** Verify Phase 8, then execute Phase 9 (Final Quality and Backlog Closure).
 
