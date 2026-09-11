@@ -5,16 +5,16 @@ milestone_name: Refine Unit Tests
 current_phase: 09
 current_phase_name: Final Quality and Backlog Closure
 status: executing
-stopped_at: Completed 09-05-PLAN.md
-last_updated: "2026-09-11T23:10:00.000Z"
+stopped_at: Completed 09-06-PLAN.md
+last_updated: "2026-09-11T22:14:00.000Z"
 last_activity: 2026-09-11
-last_activity_desc: Phase 9 plan 05 complete; all seven named backlog items and the unused-type-member todo carry terminal dispositions in the one five-word vocabulary
-state_head: 36a7a9e7
+last_activity_desc: Phase 9 plan 06 complete; the final tree is measured green, the three coverage-pin reachability claims are traced, and 09-CLOSURE-LEDGER.md carries 24 rows in one vocabulary
+state_head: 76d604d0
 progress:
   total_phases: 9
   completed_phases: 4
   total_plans: 211
-  completed_plans: 209
+  completed_plans: 210
   percent: 44
 ---
 
@@ -32,8 +32,8 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 09 (Final Quality and Backlog Closure) — executing
-Next: Execute 09-06 (wave 6)
-Plan: 5 of 6 complete
+Next: Verify phase 09 (`/gsd-verify-work 09`), then the milestone close
+Plan: 6 of 6 complete
 Status: the requirement seal is closed — all eight IDs read `Complete` in the checkbox, the
 traceability row and `SEALED_REQUIREMENT_ROUTES`, and `node scripts/revalidation.mjs scope-impact
 --check` prints `Scope impact valid: 40 records.` `npm run check` was measured on this tree, not
