@@ -19,7 +19,10 @@
 //
 // Fault injection is keyed per target path, which is the seam the removal port
 // exists for -- it is how "one cleanup fails while its siblings succeed"
-// becomes expressible without patching a builtin module.
+// becomes expressible without patching a builtin module. Where the target is
+// minted inside the call being faulted and so cannot be named in advance, the
+// key moves to the nearest thing the case DOES know -- the target's parent, or
+// a rename's destination -- never to a predicate that could match a sibling.
 //
 // Two fidelity limits, recorded so a case does not read the fake as total:
 //
@@ -42,6 +45,16 @@ export interface RemovalOpsFakeOptions {
   readonly directories?: readonly string[];
   /** Errors `rm` rejects with, keyed by the absolute target path. */
   readonly rmErrors?: ReadonlyArray<readonly [target: string, error: Error]>;
+  /**
+   * Errors `rm` rejects with, keyed by the absolute PARENT of the target. A
+   * bridge's staging root is `<kind>StagingDir/<randomUUID()>`, minted inside
+   * the very prepare call a ledger-level case is faulting, so that case can
+   * never name the target. It always knows the parent: `ScopedLocations`
+   * publishes one staging directory per bridge kind, which is also what makes
+   * the key select exactly one bridge's cleanup and leave its siblings'
+   * alone. Same reason `renameDestinationErrors` exists below.
+   */
+  readonly rmParentErrors?: ReadonlyArray<readonly [parent: string, error: Error]>;
   /** Errors `rename` rejects with, keyed by the absolute source path. */
   readonly renameErrors?: ReadonlyArray<readonly [from: string, error: Error]>;
 }
@@ -75,6 +88,15 @@ function byPath<T>(pairs: ReadonlyArray<readonly [string, T]> | undefined): Map<
   return new Map(pairs ?? []);
 }
 
+/**
+ * The parent of an absolute `/`-separated path, on the same separator
+ * convention `descendantsOf` uses. A path with no separator has no parent and
+ * answers the empty string, which no caller can seed as a key.
+ */
+function parentOf(target: string): string {
+  return target.slice(0, target.lastIndexOf("/"));
+}
+
 export function createRemovalOpsFake(options: RemovalOpsFakeOptions): RemovalOpsFake {
   if (options.boundary !== "memory") {
     throw new Error("createRemovalOpsFake requires the explicit memory boundary");
@@ -86,6 +108,7 @@ export function createRemovalOpsFake(options: RemovalOpsFakeOptions): RemovalOps
   }
 
   const rmErrors = byPath(options.rmErrors);
+  const rmParentErrors = byPath(options.rmParentErrors);
   const renameErrors = byPath(options.renameErrors);
   const calls: RemovalOpsFakeCalls = { rm: [], rename: [] };
 
@@ -95,7 +118,7 @@ export function createRemovalOpsFake(options: RemovalOpsFakeOptions): RemovalOps
   const removalOps: RemovalOps = {
     async rm(target, rmOptions) {
       calls.rm.push({ target, options: { ...rmOptions } });
-      const failure = rmErrors.get(target);
+      const failure = rmErrors.get(target) ?? rmParentErrors.get(parentOf(target));
       if (failure !== undefined) {
         throw failure;
       }

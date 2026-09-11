@@ -15,17 +15,57 @@ import {
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createRemovalOps } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+import { createRemovalOpsFake } from "../../platform/removal-ops-fake.ts";
 
+import type { InstallLedgerSummary } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts";
+import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { NotificationContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { TestContext } from "node:test";
 
 function notificationContext(): NotificationContext {
   return { ui: { notify: () => undefined } };
 }
 
-async function seedEmptyPlugin(
+/**
+ * The plugin component sources a case needs on disk. A bridge whose kind is
+ * absent here prepares a `noop`, and a `noop` commit returns before its
+ * cleanup runs -- so a case that drives a bridge's commit path at all must
+ * seed at least one component of that kind.
+ */
+interface SeededComponents {
+  readonly skills?: readonly string[];
+  readonly commands?: readonly string[];
+  readonly agents?: readonly string[];
+}
+
+async function writeComponents(pluginRoot: string, components: SeededComponents): Promise<void> {
+  for (const skill of components.skills ?? []) {
+    const skillDir = path.join(pluginRoot, "skills", skill);
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(path.join(skillDir, "SKILL.md"), `---\nname: ${skill}\n---\n\nBody.\n`);
+  }
+
+  for (const command of components.commands ?? []) {
+    await mkdir(path.join(pluginRoot, "commands"), { recursive: true });
+    await writeFile(path.join(pluginRoot, "commands", `${command}.md`), `# ${command}\nBody.\n`);
+  }
+
+  for (const agent of components.agents ?? []) {
+    await mkdir(path.join(pluginRoot, "agents"), { recursive: true });
+    await writeFile(
+      path.join(pluginRoot, "agents", `${agent}.md`),
+      `---\nname: ${agent}\ndescription: ${agent} agent\ntools: Read,Grep\n---\n\nBody.\n`,
+    );
+  }
+}
+
+async function seedPlugin(
   cwd: string,
-  options: { readonly preinstalled?: boolean } = {},
+  options: {
+    readonly preinstalled?: boolean;
+    readonly components?: SeededComponents;
+  } = {},
 ): Promise<{ readonly pluginRoot: string; readonly state: ExtensionState }> {
   const marketplaceRoot = path.join(cwd, "marketplace");
   const pluginRoot = path.join(marketplaceRoot, "plugins", "empty");
@@ -43,6 +83,7 @@ async function seedEmptyPlugin(
       plugins: [{ name: "empty", source: "./plugins/empty" }],
     }),
   );
+  await writeComponents(pluginRoot, options.components ?? {});
   const state: ExtensionState = {
     schemaVersion: 2,
     marketplaces: {
@@ -105,7 +146,7 @@ test("returns the marketplace-absent discriminant without mutating state", async
 test("projects the complete empty-plugin summary and preserves a caller pin", async (t) => {
   // arrange
   const environment = await createHermeticEnvironment(t, "install-outcome-summary-");
-  const seeded = await seedEmptyPlugin(environment.cwd);
+  const seeded = await seedPlugin(environment.cwd);
   const locations = locationsFor("project", environment.cwd);
 
   // act
@@ -197,7 +238,7 @@ test("projects the complete empty-plugin summary and preserves a caller pin", as
 test("captures the resolved version when a concurrent record aborts state commit", async (t) => {
   // arrange
   const environment = await createHermeticEnvironment(t, "install-outcome-plugin-race-");
-  const seeded = await seedEmptyPlugin(environment.cwd);
+  const seeded = await seedPlugin(environment.cwd);
   const locations = locationsFor("project", environment.cwd);
   const marketplace = seeded.state.marketplaces.marketplace;
   assert.ok(marketplace !== undefined);
@@ -250,7 +291,7 @@ test("captures the resolved version when a concurrent record aborts state commit
 test("unwinds when the marketplace disappears before state commit", async (t) => {
   // arrange
   const environment = await createHermeticEnvironment(t, "install-outcome-marketplace-race-");
-  const seeded = await seedEmptyPlugin(environment.cwd);
+  const seeded = await seedPlugin(environment.cwd);
   const locations = locationsFor("project", environment.cwd);
   const marketplace = seeded.state.marketplaces.marketplace;
   assert.ok(marketplace !== undefined);
@@ -294,7 +335,7 @@ test("unwinds when the marketplace disappears before state commit", async (t) =>
 test("preserves installedAt while replacing an existing disabled record", async (t) => {
   // arrange
   const environment = await createHermeticEnvironment(t, "install-outcome-existing-");
-  const seeded = await seedEmptyPlugin(environment.cwd, { preinstalled: true });
+  const seeded = await seedPlugin(environment.cwd, { preinstalled: true });
   const locations = locationsFor("project", environment.cwd);
 
   // act
@@ -323,4 +364,115 @@ test("preserves installedAt while replacing an existing disabled record", async 
     seeded.state.marketplaces.marketplace?.plugins.empty?.updatedAt,
     "2026-01-01T00:00:00.000Z",
   );
+});
+
+/**
+ * The three `commitPrepared*` leak arms, one case per bridge.
+ *
+ * `commitPrepared{Skills,Commands,Agents}` answers a leak string only when its
+ * final `cleanupStaging` fails, and the ledger pushes that string onto
+ * `bridgeWarnings`. RCOV-02 / D-08-12: `InstallLedgerOptions.removalOps` is
+ * required and this module constructs nothing, so the arm is reachable from
+ * here by handing the ledger a collaborator that faults ONE bridge's staging
+ * cleanup and leaves the other two alone.
+ *
+ * A cleanup leak is a WARNING, not a failure -- the staged bytes are already
+ * renamed into place when it fires -- so each case pins that the install still
+ * landed and that the faulted bridge's own staged name survived.
+ *
+ * The bridge under test must have at least one component source: a bridge with
+ * nothing to stage prepares a `noop`, and a `noop` commit returns before its
+ * cleanup runs at all.
+ */
+interface FaultedCleanup {
+  readonly summary: InstallLedgerSummary;
+  /**
+   * The staging root the faulted cleanup was actually given. It is
+   * `<stagingDir>/<randomUUID()>`, minted inside the prepare call, so the case
+   * reads the target the port received rather than predicting it. Exactly one
+   * removal under that directory must have been attempted, or the expected
+   * message could be built from some other bridge's call.
+   */
+  readonly stagingRoot: string;
+}
+
+async function installWithFaultedStagingCleanup(
+  t: TestContext,
+  options: {
+    readonly prefix: string;
+    readonly components: SeededComponents;
+    readonly stagingDir: (locations: ScopedLocations) => string;
+  },
+): Promise<FaultedCleanup> {
+  const environment = await createHermeticEnvironment(t, options.prefix);
+  const seeded = await seedPlugin(environment.cwd, { components: options.components });
+  const locations = locationsFor("project", environment.cwd);
+  const stagingDir = options.stagingDir(locations);
+  const removal = createRemovalOpsFake({
+    boundary: "memory",
+    rmParentErrors: [
+      [stagingDir, Object.assign(new Error("staging cleanup denied"), { code: "EACCES" })],
+    ],
+  });
+
+  const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
+    ctx: notificationContext(),
+    cwd: environment.cwd,
+    marketplace: "marketplace",
+    plugin: "empty",
+    scope: "project",
+    removalOps: removal.removalOps,
+  });
+
+  assert.ok(ledgerOutcome.kind === "installed");
+  const attempted = removal.calls.rm
+    .map((call) => call.target)
+    .filter((target) => target.startsWith(`${stagingDir}${path.sep}`));
+  assert.equal(attempted.length, 1);
+  return { summary: ledgerOutcome.summary, stagingRoot: attempted[0] ?? "" };
+}
+
+test("surfaces the skills staging cleanup leak and still lands the install", async (t) => {
+  // arrange + act
+  const installed = await installWithFaultedStagingCleanup(t, {
+    prefix: "install-outcome-skills-leak-",
+    components: { skills: ["alpha"] },
+    stagingDir: (locations) => locations.skillsStagingDir,
+  });
+
+  // assert
+  assert.deepStrictEqual(installed.summary.bridgeWarnings, [
+    `failed to clean up skills staging directory at ${installed.stagingRoot}: staging cleanup denied`,
+  ]);
+  assert.deepStrictEqual(installed.summary.stagedSkillNames, ["empty-alpha"]);
+});
+
+test("surfaces the commands staging cleanup leak and still lands the install", async (t) => {
+  // arrange + act
+  const installed = await installWithFaultedStagingCleanup(t, {
+    prefix: "install-outcome-commands-leak-",
+    components: { commands: ["beta"] },
+    stagingDir: (locations) => locations.commandsStagingDir,
+  });
+
+  // assert
+  assert.deepStrictEqual(installed.summary.bridgeWarnings, [
+    `failed to clean up commands staging directory at ${installed.stagingRoot}: staging cleanup denied`,
+  ]);
+  assert.deepStrictEqual(installed.summary.stagedCommandNames, ["empty:beta"]);
+});
+
+test("surfaces the agents staging cleanup leak and still lands the install", async (t) => {
+  // arrange + act
+  const installed = await installWithFaultedStagingCleanup(t, {
+    prefix: "install-outcome-agents-leak-",
+    components: { agents: ["gamma"] },
+    stagingDir: (locations) => locations.agentsStagingDir,
+  });
+
+  // assert
+  assert.deepStrictEqual(installed.summary.bridgeWarnings, [
+    `failed to clean up agents staging directory at ${installed.stagingRoot}: staging cleanup denied`,
+  ]);
+  assert.deepStrictEqual(installed.summary.stagedAgentNames, ["pi-claude-marketplace-empty-gamma"]);
 });
