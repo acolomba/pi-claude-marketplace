@@ -71,16 +71,8 @@ describe("createRemovalOpsFake", () => {
   });
 
   test("refuses construction without the explicit memory boundary", () => {
-    // arrange
-    const unboundedOptions = { boundary: "disk" } as unknown as Parameters<
-      typeof createRemovalOpsFake
-    >[0];
-
-    // act
-    const construction = (): unknown => createRemovalOpsFake(unboundedOptions);
-
-    // assert
-    assert.throws(construction, {
+    // act & assert
+    assert.throws(() => Reflect.apply(createRemovalOpsFake, undefined, [{ boundary: "disk" }]), {
       name: "Error",
       message: "createRemovalOpsFake requires the explicit memory boundary",
     });
