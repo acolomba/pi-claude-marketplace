@@ -48,6 +48,7 @@ import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { It, when } from "strong-mock";
 
 import claudeMarketplaceExtension from "../extensions/pi-claude-marketplace/index.ts";
+import { EXTENSION_VERSION } from "../extensions/pi-claude-marketplace/shared/extension-version.ts";
 
 import { createNotificationBoundary } from "./edge/notification-boundary.ts";
 
@@ -960,7 +961,7 @@ test(
           },
         },
       },
-      lastReconciledExtensionVersion: "0.18.1",
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
     };
     const expectedConfig = {
       schemaVersion: 1,
@@ -1215,7 +1216,7 @@ test("attempts every skipped-scope PATH warning when every host notification thr
   const invalidStateBytes = JSON.stringify({ schemaVersion: 99, marketplaces: {} });
   const validStateBytes = JSON.stringify({
     schemaVersion: 2,
-    lastReconciledExtensionVersion: "0.18.1",
+    lastReconciledExtensionVersion: EXTENSION_VERSION,
     marketplaces: {},
   });
   const staleUserBin = path.join(scope.home, "stale-user", "bin");

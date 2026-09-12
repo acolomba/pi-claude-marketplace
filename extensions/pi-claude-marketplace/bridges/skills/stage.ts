@@ -23,6 +23,7 @@ import path from "node:path";
 
 import { assertSafeName } from "../../domain/name.ts";
 import { parseFrontmatter } from "../../platform/pi-api.ts";
+import { stripBom } from "../../shared/bom.ts";
 import { appendLeakToError, errorMessage, ManualRecoveryError } from "../../shared/errors.ts";
 import {
   cleanupStaging,
@@ -37,6 +38,7 @@ import { discoverPluginSkills } from "./discover.ts";
 import {
   firstBodyParagraph,
   foldWhenToUse,
+  repairSingleLineScalars,
   setDescriptionScalar,
   synthesizeUnparseableSkill,
   truncate1536,
@@ -81,6 +83,32 @@ function extractBodyAfterFrontmatter(content: string): string {
   const normalized = content.replaceAll("\r\n", "\n").replaceAll("\r", "\n");
   const closeIndex = normalized.indexOf("\n---", 3);
   return normalized.slice(closeIndex + 4).trim();
+}
+
+/** The frontmatter and body Pi's own `parseFrontmatter` yields for a skill source. */
+type ParsedSkillFrontmatter = ReturnType<typeof parseFrontmatter>;
+
+/**
+ * SKFM-01: attempt the single-line colon repair on a source whose frontmatter
+ * failed the PARSE-01 parse, returning the repaired bytes alongside their parsed
+ * values. Returns `undefined` when the repair changed nothing (no eligible line)
+ * or when the repaired bytes still fail to parse, which routes the caller to the
+ * SKILL-01 / D-86-02 degrade carrying the ORIGINAL source error.
+ */
+function repairUnparseableFrontmatter(
+  content: string,
+): { repaired: string; parsed: ParsedSkillFrontmatter } | undefined {
+  const repaired = repairSingleLineScalars(content);
+  if (repaired === content) {
+    return undefined;
+  }
+
+  try {
+    return { repaired, parsed: parseFrontmatter(repaired) };
+  } catch {
+    // The colon was not the only defect; the caller degrades on the source error.
+    return undefined;
+  }
 }
 
 /**
@@ -236,7 +264,14 @@ export async function prepareStageSkills(
       });
 
       const skillMdPath = path.join(stagedDir, "SKILL.md");
-      let content = await readFile(skillMdPath, "utf8");
+      // FMBOM-01: strip a leading U+FEFF before anything reads these bytes. It
+      // has to precede the PARSE-01 gate-1 parse AND the SK-3 name rewrite,
+      // because `rewriteFrontmatterName` anchors on `startsWith("---")` and a
+      // marker sends it down the freshBlock path, which buries the source
+      // block in the body and drops its `description`. This same `content` is
+      // what `writeFile` emits below, so one strip keeps the parse, the
+      // rewrite, the augment and the staged bytes in agreement.
+      let content = stripBom(await readFile(skillMdPath, "utf8"));
 
       // PARSE-01: parse the SOURCE frontmatter BEFORE any rewrite/substitution
       // to establish attribution ground truth and the degrade trigger. A THROW
@@ -247,19 +282,28 @@ export async function prepareStageSkills(
       try {
         parsed = parseFrontmatter(content);
       } catch (parseErr) {
-        // SKILL-01 / D-86-02: unparseable source -> synthesize a known-good
-        // `disable-model-invocation` block (body preserved verbatim) so the
-        // skill still installs (no hard-fail), stays invocable by `/name`, and
-        // is never auto-invoked. The actionable detail (plugin, component,
-        // parse error) rides the install-time warning channel instead.
-        content = synthesizeUnparseableSkill(
-          extractBodyAfterFrontmatter(content),
-          skill.generatedName,
-        );
-        degraded.push({
-          generatedName: skill.generatedName,
-          parseError: errorMessage(parseErr),
-        });
+        // SKFM-01: an unquoted colon in a single-line scalar is the one defect
+        // class safe to rewrite. A successful repair leaves `parsed` DEFINED, so
+        // the happy arm below runs and nothing is degraded.
+        const repair = repairUnparseableFrontmatter(content);
+        if (repair === undefined) {
+          // SKILL-01 / D-86-02: unparseable source -> synthesize a known-good
+          // `disable-model-invocation` block (body preserved verbatim) so the
+          // skill still installs (no hard-fail), stays invocable by `/name`, and
+          // is never auto-invoked. The actionable detail (plugin, component,
+          // parse error) rides the install-time warning channel instead.
+          content = synthesizeUnparseableSkill(
+            extractBodyAfterFrontmatter(content),
+            skill.generatedName,
+          );
+          degraded.push({
+            generatedName: skill.generatedName,
+            parseError: errorMessage(parseErr),
+          });
+        } else {
+          content = repair.repaired;
+          parsed = repair.parsed;
+        }
       }
 
       // The parseable (gate-1 RETURN) arm keeps today's SK-3 name rewrite, then

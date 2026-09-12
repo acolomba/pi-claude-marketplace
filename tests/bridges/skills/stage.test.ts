@@ -329,6 +329,192 @@ describe("prepareStageSkills", () => {
     assert.strictEqual(stagedBytes, expectedBytes);
   });
 
+  test("SKFM-01 stages the author description when only an unquoted colon broke the parse", async (t) => {
+    // arrange
+    const { locations, pluginDataDir, pluginRoot, scopeRoot } = await allocateCasePaths(
+      t,
+      "skills-stage-colon-repair-",
+    );
+    const skillsDirectory = path.join(pluginRoot, "skills");
+    const skillDirectory = path.join(skillsDirectory, "helper");
+    await mkdir(skillDirectory, { recursive: true });
+    await writeFile(
+      path.join(skillDirectory, "SKILL.md"),
+      "---\nname: helper\ndescription: Use this: when reviewing pull requests\n---\n\nBody prose.\n",
+    );
+    const resolved = {
+      installable: true,
+      state: "installable",
+      name: "acme",
+      pluginRoot,
+      supported: ["skills"],
+      unsupported: [],
+      notes: [],
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      mcpServers: {},
+      defaultEnabled: true,
+    } satisfies ResolvedPluginInstallable;
+    const expectedBytes =
+      "---\nname: acme-helper\n" +
+      'description: "Use this: when reviewing pull requests"\n' +
+      "---\n\nBody prose.\n";
+    const expectedResult = {
+      stagedNames: ["acme-helper"],
+      recorded: [
+        {
+          generatedName: "acme-helper",
+          sourcePath: skillDirectory,
+          targetPath: path.join(locations.skillsTargetDir, "acme-helper"),
+        },
+      ],
+      warnings: [],
+      degraded: [],
+    };
+
+    // act
+    const prepared = await prepareStageSkills(createRemovalOps(), {
+      locations,
+      cwd: scopeRoot,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      resolved,
+    });
+    assert.strictEqual(prepared.kind, "staged");
+    const stagedBytes = await readFile(
+      path.join(prepared.stagingRoot, "acme-helper", "SKILL.md"),
+      "utf8",
+    );
+
+    // assert
+    assert.deepStrictEqual(prepared.result, expectedResult);
+    assert.strictEqual(stagedBytes, expectedBytes);
+  });
+
+  test("SKFM-01 degrades with the source error when the colon was not the only defect", async (t) => {
+    // arrange
+    const { locations, pluginDataDir, pluginRoot, scopeRoot } = await allocateCasePaths(
+      t,
+      "skills-stage-colon-still-broken-",
+    );
+    const skillsDirectory = path.join(pluginRoot, "skills");
+    const skillDirectory = path.join(skillsDirectory, "broken");
+    await mkdir(skillDirectory, { recursive: true });
+    await writeFile(
+      path.join(skillDirectory, "SKILL.md"),
+      "---\nname: [unterminated\ndescription: Use this: when reviewing\n---\n\n" +
+        "# Broken\n\nBody bytes survive.\n",
+    );
+    const resolved = {
+      installable: true,
+      state: "installable",
+      name: "acme",
+      pluginRoot,
+      supported: ["skills"],
+      unsupported: [],
+      notes: [],
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      mcpServers: {},
+      defaultEnabled: true,
+    } satisfies ResolvedPluginInstallable;
+    const expectedBytes =
+      "---\nname: acme-broken\n" +
+      "description: Source frontmatter could not be parsed.\n" +
+      "disable-model-invocation: true\n---\n\n# Broken\n\nBody bytes survive.";
+    const expectedResult = {
+      stagedNames: ["acme-broken"],
+      recorded: [
+        {
+          generatedName: "acme-broken",
+          sourcePath: skillDirectory,
+          targetPath: path.join(locations.skillsTargetDir, "acme-broken"),
+        },
+      ],
+      warnings: [],
+      degraded: [
+        {
+          generatedName: "acme-broken",
+          parseError:
+            "Flow sequence in block collection must be sufficiently indented and end with a ] at line 2, column 1:\n\n" +
+            "name: [unterminated\ndescription: Use this: when reviewing\n^\n",
+        },
+      ],
+    };
+
+    // act
+    const prepared = await prepareStageSkills(createRemovalOps(), {
+      locations,
+      cwd: scopeRoot,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      resolved,
+    });
+    assert.strictEqual(prepared.kind, "staged");
+    const stagedBytes = await readFile(
+      path.join(prepared.stagingRoot, "acme-broken", "SKILL.md"),
+      "utf8",
+    );
+
+    // assert
+    assert.deepStrictEqual(prepared.result, expectedResult);
+    assert.strictEqual(stagedBytes, expectedBytes);
+  });
+
+  test("SKFM-01 folds when_to_use into a repaired description", async (t) => {
+    // arrange
+    const { locations, pluginDataDir, pluginRoot, scopeRoot } = await allocateCasePaths(
+      t,
+      "skills-stage-colon-augment-",
+    );
+    const skillsDirectory = path.join(pluginRoot, "skills");
+    const skillDirectory = path.join(skillsDirectory, "helper");
+    await mkdir(skillDirectory, { recursive: true });
+    await writeFile(
+      path.join(skillDirectory, "SKILL.md"),
+      "---\nname: helper\ndescription: Use this: when reviewing\n" +
+        "when_to_use: For pull requests\n---\n\nBody.\n",
+    );
+    const resolved = {
+      installable: true,
+      state: "installable",
+      name: "acme",
+      pluginRoot,
+      supported: ["skills"],
+      unsupported: [],
+      notes: [],
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      mcpServers: {},
+      defaultEnabled: true,
+    } satisfies ResolvedPluginInstallable;
+    const expectedBytes =
+      "---\nname: acme-helper\n" +
+      'description: "Use this: when reviewing For pull requests"\n' +
+      "when_to_use: For pull requests\n---\n\nBody.\n";
+
+    // act
+    const prepared = await prepareStageSkills(createRemovalOps(), {
+      locations,
+      cwd: scopeRoot,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      resolved,
+    });
+    assert.strictEqual(prepared.kind, "staged");
+    const stagedBytes = await readFile(
+      path.join(prepared.stagingRoot, "acme-helper", "SKILL.md"),
+      "utf8",
+    );
+
+    // assert
+    assert.deepStrictEqual(prepared.result.degraded, []);
+    assert.strictEqual(stagedBytes, expectedBytes);
+  });
+
   test("fills and caps descriptions without changing sibling frontmatter", async (t) => {
     // arrange
     const { locations, pluginDataDir, pluginRoot, scopeRoot } = await allocateCasePaths(
@@ -748,6 +934,59 @@ describe("commitPreparedSkills", () => {
     // assert
     assert.strictEqual(leak, undefined);
     assert.strictEqual(targetDirectory, undefined);
+  });
+
+  test("commits a source led by a byte-order mark as one unmarked frontmatter block", async (t) => {
+    // arrange
+    // FMBOM-01: a marker makes `rewriteFrontmatterName` take the freshBlock
+    // path, which emits a name-only block and leaves the source block -- with
+    // its `description` -- as body text. The assertions read the COMMITTED
+    // bytes, not a parse result: the installed peer tolerates a leading marker
+    // in its own parser, so a parse-only check would pass without the strip.
+    const { locations, pluginDataDir, pluginRoot, scopeRoot } = await allocateCasePaths(
+      t,
+      "skills-commit-bom-",
+    );
+    const skillsDirectory = path.join(pluginRoot, "skills");
+    const skillDirectory = path.join(skillsDirectory, "reviewer");
+    await mkdir(skillDirectory, { recursive: true });
+    await writeFile(
+      path.join(skillDirectory, "SKILL.md"),
+      "\uFEFF---\nname: source-reviewer\ndescription: Reviews changes\n---\n\nReview carefully.\n",
+    );
+    const resolved = {
+      installable: true,
+      state: "installable",
+      name: "acme",
+      pluginRoot,
+      supported: ["skills"],
+      unsupported: [],
+      notes: [],
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      mcpServers: {},
+      defaultEnabled: true,
+    } satisfies ResolvedPluginInstallable;
+    const targetFile = path.join(locations.skillsTargetDir, "acme-reviewer", "SKILL.md");
+    const expectedBytes = Buffer.from(
+      "---\nname: acme-reviewer\ndescription: Reviews changes\n---\n\nReview carefully.\n",
+    );
+
+    // act
+    const prepared = await prepareStageSkills(createRemovalOps(), {
+      locations,
+      cwd: scopeRoot,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      resolved,
+    });
+    const leak = await commitPreparedSkills(createRemovalOps(), prepared);
+    const committedBytes = await readFile(targetFile);
+
+    // assert
+    assert.strictEqual(leak, undefined);
+    assert.deepStrictEqual(committedBytes, expectedBytes);
   });
 
   test("replaces previous and stale directories with complete staged trees", async (t) => {

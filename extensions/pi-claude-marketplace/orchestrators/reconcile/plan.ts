@@ -144,7 +144,7 @@ function recordedSourceCandidates(
     }
   }
 
-  return candidates.sort();
+  return candidates.sort((a, b) => a.localeCompare(b));
 }
 
 function collectMarketplaceClaim(

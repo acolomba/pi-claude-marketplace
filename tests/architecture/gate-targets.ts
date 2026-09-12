@@ -593,7 +593,11 @@ export const UNOWNED_EXPORT_CENSUS: Readonly<Record<string, readonly string[]>> 
     "bashSubcommandFires",
     "compileBashGlob",
     "compilePathGlob",
+    "compilePowerShellGlob",
+    "compilePowerShellRule",
     "parseBashSubcommands",
+    "parsePowerShellSubcommands",
+    "powerShellSubcommandFires",
   ],
   "extensions/pi-claude-marketplace/bridges/hooks/stage.ts": [
     "createWriteHookConfig",

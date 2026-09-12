@@ -157,6 +157,59 @@ test("stages recursive commands with exact names, records, substitutions, and pr
   assert.strictEqual(statusBytes, expectedStatus);
 });
 
+test("stages a source led by a byte-order mark without the marker or a duplicated fence", async (t) => {
+  // arrange
+  // FMBOM-01: a marker raises no gate-1 throw, so no CMD-01 degrade fires and
+  // the marker would ride into the staged prompt, where a peer at the
+  // `>=0.80.5` floor drops the whole block at load time. The assertion reads
+  // the COMMITTED bytes, not a parse result: the installed peer tolerates a
+  // leading marker in its own parser, so a parse-only check would pass without
+  // the strip.
+  const locations = await createProjectLocations(t, "commands-stage-bom-");
+  const pluginRoot = await createPluginRoot(t, "commands-source-bom-");
+  const commandsRoot = path.join(pluginRoot, "commands");
+  const pluginDataDir = path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME);
+  await mkdir(commandsRoot, { recursive: true });
+  await writeFile(
+    path.join(commandsRoot, "deploy.md"),
+    "\uFEFF---\ndescription: Deploy the service\nmodel: sonnet\n---\nDeploy carefully.\n",
+  );
+  const expectedDeploy =
+    "---\ndescription: Deploy the service\nmodel: sonnet\n---\nDeploy carefully.\n";
+
+  // act
+  const prepared = await prepareStageCommands(createRemovalOps(), {
+    locations,
+    cwd: locations.scopeRoot,
+    marketplaceName: MARKETPLACE_NAME,
+    pluginName: PLUGIN_NAME,
+    pluginRoot,
+    pluginDataDir,
+    resolved: resolvedFor(pluginRoot),
+  });
+  const commitLeak = await commitPreparedCommands(createRemovalOps(), prepared);
+  const deployBytes = await readFile(
+    path.join(locations.promptsTargetDir, "acme:deploy.md"),
+    "utf8",
+  );
+
+  // assert
+  assert.strictEqual(commitLeak, undefined);
+  assert.deepStrictEqual(prepared.result, {
+    stagedNames: ["acme:deploy"],
+    recorded: [
+      {
+        generatedName: "acme:deploy",
+        sourcePath: path.join(commandsRoot, "deploy.md"),
+        targetPath: path.join(locations.promptsTargetDir, "acme:deploy.md"),
+      },
+    ],
+    warnings: [],
+    degraded: [],
+  });
+  assert.strictEqual(deployBytes, expectedDeploy);
+});
+
 test("returns a complete no-op and materializes no command directories", async (t) => {
   // arrange
   const locations = await createProjectLocations(t, "commands-stage-noop-");

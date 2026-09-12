@@ -12,11 +12,13 @@
 // the collision reachable within one directory.
 //
 // Storage layout:
-//   - Staging:   <extensionRoot>/commands-staging/<uuid>/<plugin>:<command>.md
-//   - Target:    <extensionRoot>/resources/prompts/<plugin>:<command>.md
+//   - Staging:   <extensionRoot>/commands-staging/<uuid>/<generatedName>.md
+//   - Target:    <extensionRoot>/resources/prompts/<generatedName>.md
 //
-// Filenames carry the literal colon (`:`) in the basename. POSIX targets
-// allow this; Windows is explicitly not targeted.
+// Both basenames are the generated command name, whose namespace separator
+// is platform-dependent: `platform/os.ts::commandNamespaceSeparator` gives a
+// colon on POSIX, which the filesystem accepts, and a dot on Windows, where
+// NTFS forbids a colon in a filename.
 //
 // Atomicity: per-file `rename` from staging into the target dir is atomic
 // on the same filesystem (NFR-1). Staging dir lives under
@@ -33,6 +35,7 @@ import path from "node:path";
 
 import { assertSafeName } from "../../domain/name.ts";
 import { parseFrontmatter } from "../../platform/pi-api.ts";
+import { stripBom } from "../../shared/bom.ts";
 import { BridgeStagingError } from "../../shared/errors-bridges.ts";
 import {
   appendLeakToError,
@@ -204,14 +207,18 @@ export async function prepareStageCommands(
     for (const command of discovered) {
       try {
         assertSafeName(command.generatedName, "generated command name");
-        // Filename includes the colon: <plugin>:<command>.md
+        // Filename is the generated command name: <generatedName>.md
         const stagedFile = path.join(stagingRoot, command.generatedName + ".md");
         await assertPathInside(stagingRoot, stagedFile, "staged command file");
 
         const targetFile = path.join(locations.promptsTargetDir, command.generatedName + ".md");
         await assertPathInside(locations.promptsTargetDir, targetFile, "target command file");
 
-        let content = await readFile(command.commandFile, "utf8");
+        // FMBOM-01: a leading U+FEFF produces no gate-1 throw, so no CMD-01
+        // degrade fires and the marker rides `content` straight into the
+        // staged artifact below -- where a peer at the `>=0.80.5` floor drops
+        // the whole frontmatter block at load time.
+        let content = stripBom(await readFile(command.commandFile, "utf8"));
 
         // PARSE-01: parse the SOURCE frontmatter BEFORE substitution to establish
         // attribution ground truth + the degrade trigger. A THROW means a closed

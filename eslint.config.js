@@ -17,7 +17,6 @@ export default tseslint.config(
       "dist/",
       "node_modules/",
       "tmp/",
-      ".worktrees/",
       "tests/live-uat/",
     ],
   },
@@ -296,6 +295,37 @@ export default tseslint.config(
     },
   },
   {
+    // Sonar way, enforced locally. `sonarjs.configs.recommended` is the
+    // plugin's port of the Sonar way profile: 217 rules at "error" and the
+    // other 62 off. 200 of those 217 are active in the TypeScript Sonar way
+    // profile SonarCloud runs against this project, so a violation caught
+    // here is one the pull-request gate would have reported -- found before
+    // the push rather than after it.
+    //
+    // Scoped to mirror `sonar.sources` in sonar-project.properties.
+    // `sonar.test.exclusions` drops tests/**, so SonarCloud never reads the
+    // test tree; enforcing there would gate code Sonar does not grade. It
+    // would also fail on a deliberate house idiom -- the
+    // `void (x satisfies T)` compile-time assertion trips sonarjs/void-use
+    // 797 times under tests/.
+    //
+    // The rules are SPREAD rather than the config being extended, for two
+    // reasons. `recommended` re-declares the `sonarjs` plugin this file
+    // already declares above, and ESLint 10 refuses that ("Cannot redefine
+    // plugin"). It also carries no `files` key, so as a config entry it
+    // would apply to every file ESLint touches.
+    files: ["extensions/pi-claude-marketplace/**/*.ts"],
+    rules: {
+      ...sonarjs.configs.recommended.rules,
+      // Re-asserted after the spread because `recommended` sets a bare
+      // "error" here, which drops the threshold. The plugin's own default
+      // is 15 and Sonar way runs S3776 at 15, so nothing changes today --
+      // but the number is also paired with fallow's `health.maxCognitive`,
+      // and leaning on a default makes that agreement implicit.
+      "sonarjs/cognitive-complexity": ["error", 15],
+    },
+  },
+  {
     // Tests deliberately do defensive checking after operations that "should"
     // have populated state, and `node:test`'s `test(...)` returns an unawaited
     // promise by design. Relax the rules that fight that style.
@@ -305,6 +335,15 @@ export default tseslint.config(
       "@typescript-eslint/no-non-null-assertion": "off",
       "@typescript-eslint/no-unnecessary-condition": "off",
       "@typescript-eslint/dot-notation": "off",
+      // Tests use `void (expr satisfies T);` as a compile-time-only proof
+      // that a value shape matches a type, with no runtime effect intended.
+      // `no-unused-expressions` doesn't unwrap `TSSatisfiesExpression` the
+      // way it unwraps `as`, so the bare expression alone is already legal
+      // there -- `void` is what stops it being reported here instead, since
+      // typescript-eslint 8.69 tightened `no-meaningless-void-operator` to
+      // flag voiding any non-call expression, which now fires on every one
+      // of these proof statements.
+      "@typescript-eslint/no-meaningless-void-operator": "off",
       "no-restricted-syntax": "off",
       "no-console": "off",
       "sonarjs/cognitive-complexity": "off",

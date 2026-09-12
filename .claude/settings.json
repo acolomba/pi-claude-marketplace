@@ -1,7 +1,6 @@
 {
   "enabledPlugins": {
     "typescript-lsp@claude-plugins-official": true,
-    "humanizer@humanizer": true,
     "pr-review-toolkit@claude-plugins-official": true
   }
 }

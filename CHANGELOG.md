@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.18.3] - 2026-09-08
+
+- Plugin commands now install on Windows, where the generated name joins with `.` instead of `:` (`/code-review.code-review`). Windows forbids `:` in a filename, so any plugin with a `commands/` directory failed. Thanks to @ricardofrantz (#143).
+- A hook `if` field can now use the `PowerShell(...)` rule prefix. It fell open before and matched every command. Matching is case-insensitive and canonicalizes the default cmdlet aliases, like Claude Code.
+- A `Bash(...)` rule no longer fires on a `powershell` command, and a `PowerShell(...)` rule never fires on a `bash` command. Both prefixes now check the event's tool name.
+
+## [0.18.2] - 2026-09-07
+
+- An agent whose `description` uses a YAML block scalar now installs with its full text. It used to install with the bare `>` or `|` indicator, which broke auto-discovery. Thanks to @kevinkirkup (#155).
+- Indented agent frontmatter lines no longer surface as phantom keys in the generated file's `droppedFields` provenance.
+- A skill whose only frontmatter defect is an unquoted colon in a single-line value now installs with its real description instead of the generated placeholder.
+
 ## [0.18.1] - 2026-08-29
 
 - Structurally valid plugins that declare `workflows` or contain a literal `workflows/` directory now report `(partially-available) {workflows}`.

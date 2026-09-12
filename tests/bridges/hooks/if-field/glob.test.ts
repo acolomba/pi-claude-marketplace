@@ -4,6 +4,7 @@ import { describe, test } from "node:test";
 import {
   compileBashGlob,
   compilePathGlob,
+  compilePowerShellGlob,
 } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/if-field/glob.ts";
 
 describe("compileBashGlob", () => {
@@ -273,6 +274,131 @@ describe("compileBashGlob", () => {
       new Error('unreachable HookExecResult arm: {"kind":"unknown"}'),
     );
   });
+});
+
+describe("compilePowerShellGlob", () => {
+  test("folds pattern and command case while keeping the raw pattern unfolded", () => {
+    // arrange
+    const expectedMetadata = {
+      raw: "Get-ChildItem *",
+      tokens: [{ kind: "literal", text: "get-childitem " }, { kind: "star" }],
+      trailingWordBoundary: true,
+      isCommandNameOnly: true,
+    };
+    const expectedMatches = {
+      sameCase: true,
+      lowerCase: true,
+      upperCase: true,
+      differentCommand: false,
+    };
+
+    // act
+    const psGlob = compilePowerShellGlob("Get-ChildItem *");
+    const metadata = {
+      raw: psGlob.raw,
+      tokens: psGlob.tokens,
+      trailingWordBoundary: psGlob.trailingWordBoundary,
+      isCommandNameOnly: psGlob.isCommandNameOnly,
+    };
+    const matches = {
+      sameCase: psGlob.test("Get-ChildItem foo"),
+      lowerCase: psGlob.test("get-childitem foo"),
+      upperCase: psGlob.test("GET-CHILDITEM FOO"),
+      differentCommand: psGlob.test("Remove-Item foo"),
+    };
+
+    // assert
+    assert.deepStrictEqual(metadata, expectedMetadata);
+    assert.deepStrictEqual(matches, expectedMatches);
+  });
+
+  test("normalizes trailing colon sugar to a command word boundary", () => {
+    // arrange
+    const expectedMetadata = {
+      raw: "Get-ChildItem:*",
+      tokens: [{ kind: "literal", text: "get-childitem " }, { kind: "star" }],
+      trailingWordBoundary: true,
+      isCommandNameOnly: true,
+    };
+    const expectedMatches = {
+      commandOnly: true,
+      arguments: true,
+      pathArgument: true,
+      longerCommand: false,
+    };
+
+    // act
+    const psGlob = compilePowerShellGlob("Get-ChildItem:*");
+    const metadata = {
+      raw: psGlob.raw,
+      tokens: psGlob.tokens,
+      trailingWordBoundary: psGlob.trailingWordBoundary,
+      isCommandNameOnly: psGlob.isCommandNameOnly,
+    };
+    const matches = {
+      commandOnly: psGlob.test("Get-ChildItem"),
+      arguments: psGlob.test("Get-ChildItem -Path ."),
+      pathArgument: psGlob.test("Get-ChildItem C:/var/log"),
+      longerCommand: psGlob.test("Get-ChildItemX"),
+    };
+
+    // assert
+    assert.deepStrictEqual(metadata, expectedMetadata);
+    assert.deepStrictEqual(matches, expectedMatches);
+  });
+
+  test("keeps a non-trailing colon literal", () => {
+    // arrange
+    const expectedMetadata = {
+      raw: "Get-Item:* -Path",
+      tokens: [
+        { kind: "literal", text: "get-item:" },
+        { kind: "star" },
+        { kind: "literal", text: " -path" },
+      ],
+      trailingWordBoundary: false,
+      isCommandNameOnly: false,
+    };
+    const expectedMatches = {
+      literalColon: true,
+      missingColon: false,
+    };
+
+    // act
+    const psGlob = compilePowerShellGlob("Get-Item:* -Path");
+    const metadata = {
+      raw: psGlob.raw,
+      tokens: psGlob.tokens,
+      trailingWordBoundary: psGlob.trailingWordBoundary,
+      isCommandNameOnly: psGlob.isCommandNameOnly,
+    };
+    const matches = {
+      literalColon: psGlob.test("Get-Item:any -Path"),
+      missingColon: psGlob.test("Get-Item -Path"),
+    };
+
+    // assert
+    assert.deepStrictEqual(metadata, expectedMetadata);
+    assert.deepStrictEqual(matches, expectedMatches);
+  });
+
+  for (const { pattern, isCommandNameOnly } of [
+    { pattern: "%", isCommandNameOnly: true },
+    { pattern: "? *", isCommandNameOnly: true },
+    { pattern: "Get-ChildItem *", isCommandNameOnly: true },
+    { pattern: "Get-ChildItem -Path *", isCommandNameOnly: false },
+  ]) {
+    test(`classifies "${pattern}" as command-name-only ${isCommandNameOnly}`, () => {
+      // arrange
+      const expectedFlag = isCommandNameOnly;
+
+      // act
+      const psGlob = compilePowerShellGlob(pattern);
+
+      // assert
+      assert.strictEqual(psGlob.isCommandNameOnly, expectedFlag);
+    });
+  }
 });
 
 describe("compilePathGlob", () => {

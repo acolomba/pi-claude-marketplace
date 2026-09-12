@@ -13,7 +13,7 @@
   "description": "Access Claude plugin marketplaces from Pi Coding Agent. Supports Claude commands, skills, agents, hooks and MCP servers.",
   "devDependencies": {
     "@earendil-works/pi-coding-agent": "^0.84.2",
-    "@earendil-works/pi-tui": "^0.84.2",
+    "@earendil-works/pi-tui": "^0.85.0",
     "@eslint/js": "^10.0.1",
     "@stylistic/eslint-plugin": "^5.10.0",
     "@types/proper-lockfile": "^4.1.4",
@@ -97,5 +97,5 @@
     "typecheck": "tsc --noEmit"
   },
   "type": "module",
-  "version": "0.18.1"
+  "version": "0.18.3"
 }

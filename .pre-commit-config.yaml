@@ -93,6 +93,7 @@ repos:
           - mdformat-frontmatter
           - mdformat-gfm
           - mdformat-gfm-alerts
+          - mdformat-footnote
         exclude: ^(tests/fixtures/|tests/bridges/_fixtures/|\.planning/)
 
   - repo: https://github.com/DavidAnson/markdownlint-cli2

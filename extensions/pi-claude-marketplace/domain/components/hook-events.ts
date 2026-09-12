@@ -115,6 +115,12 @@ export type ToolEvent = (typeof TOOL_EVENTS)[number];
  * runtime membership guard. `Stop` / `StopFailure` are dispatched by the
  * settle handler off `agent_settled` rather than a per-Pi-event composite.
  */
+// D-87-04: the alias is structurally equal to `BucketAEvent` today but names a
+// different concept -- the key domain of the dispatch/rewake/translator tables.
+// `Record<DispatchableEvent, ...>` at three table literals states which set the table
+// must be total over; collapsing it to `BucketAEvent` would erase that at 24 call
+// sites to satisfy a structural rule.
+// eslint-disable-next-line sonarjs/redundant-type-aliases -- see the note above
 export type DispatchableEvent = BucketAEvent;
 
 /**
