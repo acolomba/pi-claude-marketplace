@@ -1145,27 +1145,41 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 09-03-PLAN.md
+**Stopped at:** All 9 phases complete and verified; `origin/main` merged and adapted;
+PR not opened by request.
 
-Phase 04 completed all seven plans and closed AUTH-01 and TREF-01 through
-TREF-03. Independent verification passed 4/4 with no behavioral or UAT gap;
-the complete quality gate passed 5,397 unit tests and 32 integration tests.
-Phase 5 planning passed independent review. Plans 05-01 through 05-32 completed
-the hidden-dependency ports, runtime and cache cores, hook registration,
-dispatch, settle, async-child, PID-operation ownership, terminal reset cleanup,
-and the final test-facing flag export removal. Plan 05-33 recorded a stale
-inventory blocker. Gap-closure Plan 05-34 ratified the corrected patch inventory
-and proved the canonical repository gates from clean tracked HEAD. Fresh
-independent verification passed 6/6 with zero unverified behaviors.
+Every phase of `refine-unit-tests` is executed and verified. Phase 9 closed with
+`09-VERIFICATION.md` reading `status: passed`, 10/10. The code-review gate ran after the
+last plan (0 critical, 3 warning, 4 info) and all three warnings are fixed. `origin/main`
+was then merged in (`059a3199`) and its incoming work adapted to this branch's conventions;
+`RCOV-01` was re-sealed 230 to 233 pairs because the merge added three production modules.
 
-**Resume file:** None
+Measured on the current tree: `npm run check` exit 0 (6109 unit, 32 integration),
+`npm run test:coverage:direct:all` exit 0 over 233 pairs,
+`node scripts/revalidation.mjs scope-impact --check` prints `Scope impact valid: 40 records.`
+The branch is 0 behind `origin/main` and merges clean.
 
-**Read beside it:** `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`, the
-Phase 01 terminal evidence ledger, and Phase 5's roadmap criteria.
+**Resume file:** `.planning/HANDOFF-refine-unit-tests-open-items.md` — READ THIS FIRST. It
+carries the two things left for an operator decision: all 19 open window entries (with a
+suggested three-tier triage) and the unresolved `IN-02` interface-naming question (with the
+five measured constraints any rename must satisfy). It is untracked by design.
 
-Last session: 2026-09-11T21:32:00.000Z
+**Read beside it:** `.planning/phases/09-final-quality-and-backlog-closure/09-CLOSURE-LEDGER.md`
+(24 rows, one vocabulary, the milestone's audit trail), `09-REVIEW.md` + `09-REVIEW-FIX.md`,
+`.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`.
 
-**Next:** Verify Phase 8, then execute Phase 9 (Final Quality and Backlog Closure).
+Last session: 2026-09-12T10:35:00.000Z
+
+**Next:** Open the PR (not done — deliberate), then milestone audit, complete, cleanup.
+
+Two snags waiting in that sequence, both already diagnosed:
+
+1. `/gsd-ship` blocks while any window reads `open` — 19 do. `D-09-13` left them deliberately;
+   see the handoff file for which are cheap and which are accepted risk.
+2. `gsd-tools query phase.complete` refuses here: it sees `.planning/workstreams/` and demands
+   `--ws`, but this milestone's ROADMAP/STATE are the ROOT files and no workstream is named
+   `refine-unit-tests`. Hand-edit and verify by diff, as this file already prescribes for the
+   state verbs.
 
 ## Deferred Verification
 
