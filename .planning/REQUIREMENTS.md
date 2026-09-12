@@ -91,7 +91,7 @@ component as a working Pi artifact.
 
 - [x] **RCOV-01**: One honest per-pair coverage baseline is regenerated from the
       milestone branch for every current source-test pair, a set
-      `npm run test:coverage:direct:report` measures at 230 and reports in its
+      `npm run test:coverage:direct:report` measures at 233 and reports in its
       own `All-pair report written:` row count, and records every refusal
       without stale counts or a false pass.
 - [x] **RCOV-02**: Every measured terminal shortfall is reclassified. The

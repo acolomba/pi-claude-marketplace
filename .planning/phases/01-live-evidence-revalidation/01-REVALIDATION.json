@@ -89165,7 +89165,7 @@
     {
       "id": "SCOPE-REQ-RCOV-01",
       "requirementId": "RCOV-01",
-      "requirementSignature": "sha256:0a8845cbd4259de95597c07a5efdd02b16c709d2550953dc9b34d37ea84564bf",
+      "requirementSignature": "sha256:2132921f3e3e17e4251051b54e36c4a9dc9d0529fa6e0908226209068a714050",
       "action": "narrow/split",
       "beforeAnchor": ".planning/REQUIREMENTS.md :: Direct Coverage :: RCOV-01 — regenerate per-pair baseline from milestone branch",
       "afterAnchor": ".planning/REQUIREMENTS.md :: Direct Coverage :: RCOV-01 — regenerate one honest baseline for every current pair, measured at 230, and record every refusal",
