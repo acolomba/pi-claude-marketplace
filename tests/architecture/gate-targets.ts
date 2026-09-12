@@ -711,17 +711,4 @@ export const UNOWNED_EXPORT_CENSUS: Readonly<Record<string, readonly string[]>> 
     "LexicalTraversalError",
     "createPathSafetyGuard",
   ],
-  "scripts/revalidation.mjs": [
-    "buildDecisionDossier",
-    "deriveScopeImpact",
-    "enumerateCorpus",
-    "main",
-    "mergeShards",
-    "parseAssignments",
-    "publishRevalidation",
-    "renderRevalidation",
-    "reportCliError",
-    "validateLedger",
-    "validateShard",
-  ],
 };

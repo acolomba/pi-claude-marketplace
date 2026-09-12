@@ -16,12 +16,6 @@ import {
 const projectRoot = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const productionRoot = "extensions/pi-claude-marketplace";
 const testRoot = "tests";
-const specialPairs = new Map([
-  ["scripts/revalidation.mjs", "tests/architecture/revalidation.test.ts"],
-]);
-const specialTests = new Map(
-  [...specialPairs].map(([sourcePath, testPath]) => [testPath, sourcePath]),
-);
 
 function toProjectPath(inputPath, selectedProjectRoot = projectRoot) {
   const absolutePath = path.resolve(selectedProjectRoot, inputPath);
@@ -35,10 +29,6 @@ function toProjectPath(inputPath, selectedProjectRoot = projectRoot) {
 }
 
 function sourceToTest(sourcePath) {
-  if (specialPairs.has(sourcePath)) {
-    return specialPairs.get(sourcePath);
-  }
-
   const prefix = `${productionRoot}/`;
 
   if (!sourcePath.startsWith(prefix) || !sourcePath.endsWith(".ts")) {
@@ -50,10 +40,6 @@ function sourceToTest(sourcePath) {
 }
 
 function testToSource(testPath) {
-  if (specialTests.has(testPath)) {
-    return specialTests.get(testPath);
-  }
-
   const prefix = `${testRoot}/`;
   const suffix = ".test.ts";
 
@@ -78,13 +64,7 @@ export function pairForPath(inputPath, selectedProjectRoot = projectRoot) {
   let sourcePath;
   let testPath;
 
-  if (specialPairs.has(projectPath)) {
-    sourcePath = projectPath;
-    testPath = sourceToTest(projectPath);
-  } else if (specialTests.has(projectPath)) {
-    testPath = projectPath;
-    sourcePath = testToSource(projectPath);
-  } else if (projectPath.startsWith(`${productionRoot}/`)) {
+  if (projectPath.startsWith(`${productionRoot}/`)) {
     sourcePath = projectPath;
     testPath = sourceToTest(projectPath);
   } else if (projectPath.startsWith(`${testRoot}/`)) {
@@ -114,7 +94,7 @@ export function productionPaths() {
     })
     .sort();
 
-  return [...productionModules, ...specialPairs.keys()].sort();
+  return productionModules;
 }
 
 /**
@@ -349,10 +329,6 @@ function isStructuralSupplement(projectPath, selectedProjectRoot) {
  * from a run that resolved nothing.
  */
 function pairabilityRefusal(projectPath, selectedProjectRoot) {
-  if (specialPairs.has(projectPath) || specialTests.has(projectPath)) {
-    return undefined;
-  }
-
   if (projectPath.startsWith(`${productionRoot}/`)) {
     return projectPath.endsWith(".ts")
       ? undefined

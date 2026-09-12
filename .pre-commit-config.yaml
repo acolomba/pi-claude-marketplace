@@ -48,16 +48,8 @@ repos:
         exclude: ^\.planning/
       - id: alphabetize-codeowners
       - id: fix-spaces
-      # `scripts/revalidation.mjs` both matches and emits the em-dash that
-      # `.planning/` documents carry, and `.planning/` is excluded here, so
-      # rewriting its dash literals to `--` breaks the planning-contract
-      # parser (its RVAL-04 record scan stops matching every row).
-      # `tests/architecture/revalidation.test.ts` pins the exact bytes that
-      # script emits, so the same rewrite applied to the pinned side breaks the
-      # parser just as surely, from the other direction. One convention, one
-      # exclusion, matching reasons (D-08-20).
       - id: fix-unicode-dashes
-        exclude: ^(\.planning/|scripts/revalidation\.mjs$|tests/architecture/revalidation\.test\.ts$)
+        exclude: ^\.planning/
       - id: fix-ligatures
         exclude: ^\.planning/
       - id: forbid-bidi-controls
@@ -134,17 +126,16 @@ repos:
       # this commit touches, plus the pinned pairs the gate always measures.
       #
       # The test-root alternative is `tests/.*\.ts`, deliberately wider than the
-      # gate's own correspondence rule (`tests/**/*.test.ts` plus the special
-      # pair). Over-matching costs a sub-second run: the gate passes over a
-      # non-test file under the test root with a stated reason and resolves zero
-      # pairs. Under-matching would skip a changed owner test silently, which is
-      # indistinguishable from a pass.
+      # gate's own correspondence rule (`tests/**/*.test.ts`). Over-matching
+      # costs a sub-second run: the gate passes over a non-test file under the
+      # test root with a stated reason and resolves zero pairs. Under-matching
+      # would skip a changed owner test silently, which is indistinguishable
+      # from a pass.
       #
-      # `scripts/revalidation.mjs` is the one pair outside the production root,
-      # and the pin file is listed so a pin edit re-runs the comparison.
+      # The pin file is listed so a pin edit re-runs the comparison.
       - id: npm-coverage-direct
         name: npm direct coverage (changed pairs)
         entry: npm run test:coverage:direct:commit
         language: system
         pass_filenames: false
-        files: '^(extensions/pi-claude-marketplace/.*\.ts|tests/.*\.ts|scripts/revalidation\.mjs|scripts/test-coverage-direct\.pin\.json)$'
+        files: '^(extensions/pi-claude-marketplace/.*\.ts|tests/.*\.ts|scripts/test-coverage-direct\.pin\.json)$'
