@@ -5,7 +5,7 @@ milestone_name: Refine Unit Tests
 current_phase: 09
 current_phase_name: Final Quality and Backlog Closure
 status: phase_complete
-stopped_at: Phase 01 gaps closed; revalidation tooling retires at milestone close; PR not yet opened
+stopped_at: Milestone audit passed with tech_debt; next is retiring the revalidation tooling
 last_updated: "2026-09-12T17:11:22.957Z"
 last_activity: 2026-09-12
 last_activity_desc: Phase 01's two verification gaps closed (complexity suppression removed, phase-title and scope-action seals added, three dead negative controls repaired)
@@ -1231,7 +1231,14 @@ One snag remains in that sequence; the window-gate snag is now cleared:
    `--ws`, but this milestone's ROADMAP/STATE are the ROOT files and no workstream is named
    `refine-unit-tests`. Hand-edit and verify by diff, as this file already prescribes for the
    state verbs.
-3. `quick-batch complete` also refused until a `## Quick Tasks Completed` section was created
+3. **The requirement seal has THREE fail-closed carriers, not four.** Phase 9's narrative and
+   this file described the seal as four carriers flipping together. The milestone audit proved
+   the `- [x]` checkbox is NOT sealed: un-ticking `CLOSE-01` while its traceability row still
+   reads `Complete` leaves `scope-impact --check` green at 40 records and the revalidation suite
+   at 147/0. The fail-closed three are the traceability row, `SEALED_REQUIREMENT_ROUTES`, and the
+   clause signature. Not fixed -- the fix would land in tooling retiring in the next step -- but
+   the claim is corrected here so no later milestone inherits it.
+4. `quick-batch complete` also refused until a `## Quick Tasks Completed` section was created
    in this file — it is the sole writer of an item's `complete` status, so the section's absence
    silently blocks every quick-batch item from advancing. The section now exists with the
    canonical `with-status` schema (`#`, `Description`, `Date`, `Commit`, `Status`, `Directory`).

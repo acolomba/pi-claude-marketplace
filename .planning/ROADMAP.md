@@ -781,7 +781,7 @@ It can return only after current revalidation; it is not marked implemented.
 **Success Criteria**:
 
 1. The milestone branch has one regenerated baseline for every current source-
-   test pair — 230 of them, as `npm run test:coverage:direct:report` measures
+   test pair — 233 of them, as `npm run test:coverage:direct:report` measures
    and reports in its own `All-pair report written:` row count — including the
    two historical `COV-01` orchestrators, and every refusal is reported without
    stale counts or a false pass.

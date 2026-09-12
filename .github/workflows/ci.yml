@@ -140,7 +140,7 @@ jobs:
   direct-coverage:
     name: direct coverage (Node 24)
     runs-on: ubuntu-latest
-    # The whole-tree scope is around eight minutes locally over 230 pairs; the
+    # The whole-tree scope is around eight minutes locally over 233 pairs; the
     # ceiling is sized for a slower runner, not for the measured time.
     timeout-minutes: 30
     steps:
