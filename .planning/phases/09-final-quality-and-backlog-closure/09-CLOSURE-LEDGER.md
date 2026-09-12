@@ -32,16 +32,16 @@ remain barred from source comments.
 | `GGAT-01` | requirement | implemented | seal change A, `da08a749` (plan 09-03) | `node scripts/revalidation.mjs scope-impact --check` → `Scope impact valid: 40 records.`, exit 0. Pinned, not unfinished: `.planning/phases/07-gate-integrity/07-VERIFICATION.md:142` reads `SATISFIED` in a report whose frontmatter is `status: passed`, 7/7. Control suite `node --test tests/architecture/revalidation.test.ts` → `pass 136 / fail 0`. |
 | `GGAT-03` | requirement | implemented | seal change A, `da08a749` (plan 09-03) | Same `scope-impact --check` output. `07-VERIFICATION.md:143` `SATISFIED`, with `node --test tests/architecture/eslint-effective-config.test.ts` → 5/5 recorded there as a live re-run. |
 | `GGAT-04` | requirement | implemented | seal change A, `da08a749` (plan 09-03) | Same `scope-impact --check` output. `07-VERIFICATION.md:144` `SATISFIED`, with `node --test tests/architecture/no-test-only-production-surface.test.ts` → 10/10 recorded there as a live re-run. |
-| `RCOV-01` | requirement | implemented | seal change A, `da08a749` (plan 09-03) | Same `scope-impact --check` output. `09-02-SUMMARY.md` records `All-pair report written: 230 rows in 482.5s on v26.8.2 to coverage/all-pairs-report.ndjson` and `wc -l coverage/all-pairs-report.ndjson` → `230`, re-measured on the tree carrying the injected hooks read port. |
+| `RCOV-01` | requirement | implemented | seal change A, `da08a749` (plan 09-03); clause re-sealed after the merge | Same `scope-impact --check` output. Measured 230 pairs on the phase tree (`09-02-SUMMARY.md`) and **233 on the merged tree** after main added three production modules — `All-pair run complete: 233 pairs in 480.4s`, exit 0. The clause was re-signed 230 → 233 across all three carriers; see "The post-merge measurement" below. |
 | `RCOV-02` | requirement | implemented | seal change A, `da08a749` (plan 09-03) | Same `scope-impact --check` output. The five reclassified modules read complete and the two retained shortfalls carry per-site reasons in `scripts/test-coverage-direct.pin.json`, regenerated in 09-02 from the fresh report's own `accepted-shortfall` enumeration and proved byte-identical (`git diff --exit-code scripts/test-coverage-direct.pin.json` → exit 0). |
 | `RCOV-03` | requirement | implemented | seal change A, `da08a749` (plan 09-03) | Same `scope-impact --check` output. The gate is wired in both places: `.pre-commit-config.yaml:144-149` (local hook `npm-coverage-direct`) and `.github/workflows/ci.yml:140-206` (the `direct-coverage` job, `fetch-depth: 0`). The CI half's first real execution is still unproven — see the `direct-coverage` caveat row below. |
-| `CLOSE-01` | requirement | implemented | seal change B, `d391d058` (plan 09-03) | The shipped-tree measurement at `53b7e83f`, quoted verbatim below: `npm run check` exit 0 in 246s (unit 6009/6009, integration 32/32) and `npm run test:coverage:direct:all` exit 0 over 230 pairs in 485.9s. The earlier `d83a6dc3` run is retained below for the audit trail; three code-review fix commits landed after it, so it is not the run this row asserts over. |
+| `CLOSE-01` | requirement | implemented | seal change B, `d391d058` (plan 09-03) | The **post-merge** measurement below: `npm run check` exit 0 (unit 6109/6109, integration 32/32) and `npm run test:coverage:direct:all` exit 0 over 233 pairs in 480.4s. Two earlier runs (`d83a6dc3`, then `53b7e83f` after the review fixes) are retained below for the audit trail; each was the shipped tree when taken and each was superseded by later work. |
 | `CLOSE-02` | requirement | implemented | seal change B, `d391d058` (plan 09-03) | This document plus the eight terminal dispositions written in place by plan 09-05: `grep -n 'Disposition' .planning/BACKLOG.md` → lines 27, 101, 489, 637, 1779, 1936, 2547, and `.planning/todos/pending/2026-09-02-detect-unused-code-and-type-members.md:12`. |
 | `TESTQ-01` | backlog | implemented | the milestone this item was cut from | `.planning/BACKLOG.md:2544` — closed in the house struck-through form, with a five-row table mapping the item's own numbered workstreams onto `PDEF-01..08` + `AUTH-01`, `RVAL-03`, `TREF-01..09`, the `GGAT` family, and `RCOV-03`. The entry states in a sentence that the route is assembled from clause text, not stated by a record. |
 | `FLOW-09` | backlog | implemented | `TREF-05`, `TREF-06`, with `GGAT-04` holding the surface at zero | `.planning/BACKLOG.md:635` — quotes the three clause fragments that make the match and says explicitly that the route is derived from clause text rather than from a record naming `FLOW-09` against an ID. Its `NOT closed by the same change:` paragraph keeps the ~94 ordinary internal helpers visibly open. |
 | `REASON-01` | backlog | implemented | `PDEF-03`, `PDEF-05` — terminal route only | `.planning/BACKLOG.md:25` — carries the verbatim `grep -n 'malformed' extensions/pi-claude-marketplace/shared/notification-types.ts` output (`44: "malformed mcp"`, `45: "malformed skill"`, `46: "malformed command"`) plus a `NOT closed by the same change:` paragraph naming both residual cases. Split disposition below. |
 | `FLOW-07` | backlog | implemented | `GGAT-03`, whose clause names this item by ID | `.planning/BACKLOG.md:487`; `.planning/REQUIREMENTS.md` `GGAT-03` reads "`FLOW-07` varies effective config sources and broad overrides across the terminal ESLint/Fallow boundary gaps and proves target visitation"; `07-VERIFICATION.md:143` `SATISFIED`. This is the one route of the four that rests on a record rather than on inference. |
-| `COV-01` | backlog | superseded | `RCOV-01`'s complete all-pair baseline, recorded as `RCOV-04` | `.planning/BACKLOG.md:99`; `.planning/REQUIREMENTS.md` §"Evidence and History" carries the same wording. Both named orchestrators are inside the 230-pair baseline and neither appears in `scripts/test-coverage-direct.pin.json`. No `sonar.coverage.exclusions` entry was added for either. |
+| `COV-01` | backlog | superseded | `RCOV-01`'s complete all-pair baseline, recorded as `RCOV-04` | `.planning/BACKLOG.md:99`; `.planning/REQUIREMENTS.md` §"Evidence and History" carries the same wording. Both named orchestrators are inside the all-pair baseline (230 pairs on the phase tree, 233 after the merge) and neither appears in `scripts/test-coverage-direct.pin.json`. No `sonar.coverage.exclusions` entry was added for either. |
 | `AGCOL-01` | backlog | evidence-only | nothing — recorded as `GGAT-02`, formerly Phase 7 | `.planning/BACKLOG.md:1934`; `.planning/REQUIREMENTS.md` §"Evidence and History". `assertNoAgentCollisions` (`bridges/agents/convert.ts:605`) and its call site (`bridges/agents/stage.ts:133`) are both still in place; nothing in this milestone touched them. The entry says "It is not implemented." |
 | `GAUTH-01` | backlog | deferred | nothing — routed forward, barred by `D-22` | `.planning/BACKLOG.md:1777`. Measured: `NO_PROVIDER_CAUSE(host)` is wired into exactly one of five auth-relevant call sites, `orchestrators/marketplace/update.ts:394`. Split disposition below. |
 | unused-type-member todo | todo | deferred | nothing — deferred to v1.19 | `.planning/todos/pending/2026-09-02-detect-unused-code-and-type-members.md:12`. Its 2026-09-02 measurement stands: `npm run typecheck`, `npm run lint` and `npm run fallow` all exit 0 on a planted `readonly neverReadAnywhere?: string` member. It creates no implementation work in this milestone. |
@@ -226,7 +226,7 @@ The job is defined at `.github/workflows/ci.yml:140-206` and **has never execute
 real run is on the pull request that carries this milestone.
 
 **What the local proxy does prove.** The gate the job invokes runs here, in full:
-`npm run test:coverage:direct:all` exits 0 over all 230 pairs (quoted below);
+`npm run test:coverage:direct:all` exits 0 over all 233 pairs (quoted below);
 `npm run test:coverage:direct:negative` exits 0 and names each planted fixture state it
 refused; `selectBase()` walks its ordered candidate chain and prints the candidate it
 chose; and `.pre-commit-config.yaml:144-149` runs the commit-scoped arm of the same
@@ -412,6 +412,49 @@ no pin row.
 What lands after **this** measurement is only planning documents no test reads: this
 ledger's correction, the phase's `VERIFICATION.md`, and whatever the phase-close step
 writes to `.planning/STATE.md` and `.planning/ROADMAP.md`.
+
+### The post-merge measurement (main merged after the phase closed)
+
+`origin/main` was merged into this branch after the phase verified, bringing sixteen commits
+including a Windows command-install fix, a leading-BOM strip, the `PowerShell(...)` if-field
+prefix, YAML block-scalar repairs, and the Sonar-way lint profile. That superseded the
+`53b7e83f` run above a second time, so both commands were run again on the merged tree.
+
+| Command | Result |
+| --- | --- |
+| `npm run check` | exit **0**. Unit `tests 6109 / pass 6109 / fail 0`; integration `tests 32 / pass 32 / fail 0` |
+| `npm run test:coverage:direct:all` | exit **0**. `2 pinned shortfall(s) matched scripts/test-coverage-direct.pin.json exactly.` / `All-pair run complete: 233 pairs in 480.4s (480414ms) on v26.8.2` |
+| `node scripts/revalidation.mjs scope-impact --check` | `Scope impact valid: 40 records.` |
+| `node --test tests/architecture/revalidation.test.ts` | tests 138, pass 138, fail 0 |
+
+**The pair count moved 230 → 233**, because main added `shared/bom.ts`, `platform/os.ts`,
+`bridges/hooks/if-field/powershell.ts` and `bridges/skills/frontmatter-degrade.ts`. All four
+measure 100% on their owner tests without adaptation, as do the eight modules main changed --
+main inherited the per-pair discipline from the preceding milestone, so nothing it brought had
+to be retrofitted to earn the gate.
+
+`RCOV-01`'s clause named 230 and stopped describing the tree it governs. **The seal stayed green
+throughout**, because it validates route/status contracts and clause signatures rather than the
+numbers inside the prose -- a green gate over a false clause, which is the defect class this
+milestone exists to retire. It was re-signed across all three carriers by 08-08's method and
+proved still fail-closed by planting a wrong count. `RCOV-02`'s two named readings were checked
+and are unchanged; neither pinned module was touched by the merge.
+
+**What the incoming code needed to meet this branch's conventions**, recorded because "it merged
+clean" would overstate it:
+
+- main's new stage tests called `prepareStage*` / `commitPrepared*` with one argument; they now
+  pass the injected `RemovalOps` port, as every other call site does
+- `reconcile/plan.ts` sorted with a bare `.sort()`; it now uses the `localeCompare` comparator
+  `bridges/skills/discover.ts` documents as the house convention
+- the unowned-export census gained main's four PowerShell exports, symmetric with the Bash
+  entries already pinned
+- `tests/index.test.ts` hardcoded an expected version; it now reads `EXTENSION_VERSION`
+- main's Sonar-way profile flagged two spots in *this branch's* code: the bare sort above, and
+  `DispatchableEvent`, which keeps a documented suppression because the alias names the key
+  domain of three dispatch tables even though it is structurally redundant
+
+Measured at `63d35406`.
 
 ### A note on the clean-tree precondition
 
