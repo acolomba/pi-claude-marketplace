@@ -5,11 +5,11 @@ milestone_name: Refine Unit Tests
 current_phase: 09
 current_phase_name: Final Quality and Backlog Closure
 status: phase_complete
-stopped_at: Phase 9 complete and verified passed 10/10; milestone ready for audit
-last_updated: "2026-09-11T23:30:00.000Z"
-last_activity: 2026-09-11
-last_activity_desc: Phase 9 closed; code review fixed 3 warnings, both measurements retaken on the shipped tree, verification passed 10/10
-state_head: c962f299
+stopped_at: Phase 9 complete and verified; origin/main merged and adapted; PR not yet opened
+last_updated: "2026-09-12T01:30:00.000Z"
+last_activity: 2026-09-12
+last_activity_desc: origin/main merged into the branch and adapted to this branch's conventions; RCOV-01 re-sealed 230 to 233 pairs
+state_head: 7924eb5d
 progress:
   total_phases: 9
   completed_phases: 5
@@ -62,6 +62,37 @@ between seal change A (`da08a749`, 21:17:06Z) and change B (`d391d058`, 21:26:29
 `STATE.md` and `ROADMAP.md` — both are in its `covered_files`. That is a timestamp verdict, not
 an outcome verdict, and it is the same pattern already recorded below for phases 03, 04 and 05.
 Its `re_verification` block says so.
+
+### The main merge (2026-09-12, after the phase verified)
+
+`origin/main` was 16 commits ahead and was merged in (`059a3199`) ahead of opening a PR — the
+branch was behind and carried two real conflicts, so GitHub would have marked it CONFLICTING and
+run zero checks.
+
+Conflicts resolved: `eslint.config.js` keeps main's Sonar-way rule block and drops the
+fixtures-ignore block `bff4ee82` retired along with the fixtures it guarded; `STATE.md` takes
+this branch's milestone state over main's archived v1.19 bookkeeping.
+
+Adaptations, because "it merged clean" would overstate it — main's tests predate this branch's
+injection work, and main's lint profile post-dates this branch's code:
+
+1. main's stage tests now pass the injected `RemovalOps` port instead of calling with one argument
+2. `reconcile/plan.ts` uses the `localeCompare` comparator the discover modules document
+3. the unowned-export census gained main's four PowerShell exports, symmetric with the Bash ones
+4. `tests/index.test.ts` reads `EXTENSION_VERSION` instead of a hardcoded literal
+5. `DispatchableEvent` keeps a documented suppression under Sonar's redundant-alias rule
+
+**`RCOV-01` was re-sealed 230 → 233.** Main added three production modules, so the enumeration
+moved and the clause stopped describing the tree it governs — while the gate stayed green, since
+it validates route/status contracts and clause signatures, not the numbers inside the prose. Re-signed
+across all three carriers by 08-08's method and proved still fail-closed by planting a wrong count.
+`RCOV-02`'s two named readings were checked and are unchanged.
+
+Post-merge measurement: `npm run check` exit 0 (6109 unit, 32 integration);
+`npm run test:coverage:direct:all` exit 0 over 233 pairs; `Scope impact valid: 40 records.`;
+`revalidation.test.ts` 138/138. Version is `0.18.3`, bumped by main — no bump was made here.
+
+**The PR is not open.** That is the next action.
 
 ### Known process debts carried out of this phase
 
