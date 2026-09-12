@@ -5,11 +5,11 @@ milestone_name: Refine Unit Tests
 current_phase: 09
 current_phase_name: Final Quality and Backlog Closure
 status: phase_complete
-stopped_at: Milestone audit passed with tech_debt; next is retiring the revalidation tooling
-last_updated: "2026-09-12T17:11:22.957Z"
+stopped_at: Revalidation tooling retired; next is the PR, then complete and cleanup
+last_updated: "2026-09-12T22:50:41.260Z"
 last_activity: 2026-09-12
-last_activity_desc: Phase 01's two verification gaps closed (complexity suppression removed, phase-title and scope-action seals added, three dead negative controls repaired)
-state_head: 63de8980c31cd7b7d230cde1c99b97f081606a3d
+last_activity_desc: milestone audit passed (tech_debt, no blockers) and the revalidation tooling retired with its couplings
+state_head: 2f2cb7c437d5978a653886727c6850db7ac1867b
 progress:
   total_phases: 9
   completed_phases: 9
@@ -1158,6 +1158,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 | 260912-fp2 | Correct three stale documentation references: docs/output-catalog.md names the deleted tests/shared/device-flow-prompt.test.ts as the AUTH-03 byte-form lock which now lives in tests/domain/github-auth.test.ts, .planning/codebase/TESTING.md describes tests/helpers/ as live and names four modules by pre-move paths although the directory and both glob alternatives are gone, and .planning/codebase/CONVENTIONS.md around line 151 claims an aggregate bridges/index.ts exists when only the five per-kind barrels do — verify each claim against the live tree first and if a passage already reads correctly report the ledger as stale rather than inventing an edit; closes WINDOWS.md entries 24, 25 and 29 | 2026-09-12 | beacfe7a | — | .planning/quick/260912-fp2-correct-three-stale-documentation-refere |
 | 260912-fp3 | Dispose every remaining open entry in the .planning/WINDOWS.md ledger so no entry reads open: mark ids 20, 23, 24, 25, 26 and 29 fixed once their corrections have landed, and waive ids 1, 2, 3, 7, 8, 9, 10, 13, 14, 15, 16, 17 and 18 with the measured reason recorded for each in the disposition spec — use the gsd-tools windows fixed and windows waive verbs only, never hand-edit the rendered table, and confirm with windows status that zero entries read open | 2026-09-12 | 408ae717 | — | .planning/quick/260912-fp3-dispose-every-remaining-open-entry-in-th |
 | 260912-hqq | Rename the published bridge interface HooksHydrationReader to HooksHydrationDeps; closes code-review finding IN-02 | 2026-09-12 | 63de8980 | — | [260912-hqq-rename-the-published-bridge-interface-ho](./quick/260912-hqq-rename-the-published-bridge-interface-ho/) |
+| 260912-pdh | Retire the revalidation tooling with the milestone: three files deleted, the sole specialPairs entry and its five guards removed, the unowned-export census entry dropped | 2026-09-12 | 2f2cb7c4 | — | [260912-pdh-retire-the-revalidation-tooling-with-the](./quick/260912-pdh-retire-the-revalidation-tooling-with-the/) |
 
 ## Session Continuity
 
@@ -1245,7 +1246,18 @@ One snag remains in that sequence; the window-gate snag is now cleared:
 
 ## At Milestone Close
 
-**Retire the revalidation tooling with this milestone** (operator decision, 2026-09-12).
+**DONE 2026-09-12 (`2f2cb7c4`).** The revalidation tooling is retired: the three files are
+deleted, the `specialPairs`/`specialTests` tables and all five consulting guards are removed
+(deleted, not emptied -- emptying would have left five permanently-false branches), and the
+`UNOWNED_EXPORT_CENSUS` entry went in the same atomic commit. `productionPaths()` reads 232;
+`npm run check` exit 0 at 5971 unit / 32 integration. `REQUIREMENTS.md` and `ROADMAP.md` are
+byte-unchanged, so `RCOV-01`'s 233 stands as the historical measurement it is.
+
+**One coupling this checklist missed:** `tests/architecture/gate-targets.ts` pinned 11 exports of
+`scripts/revalidation.mjs` in `UNOWNED_EXPORT_CENSUS`, compared by `deepStrictEqual` -- a removal
+fails as loudly as an addition. The planner found it; the checklist below did not name it.
+
+Original decision record follows.
 
 The evidence ledger `01-REVALIDATION.json` is a completed intake register, not live
 infrastructure: all 2437 findings are routed (1525 to Phases 2-8, 523 evidence-only closure,
