@@ -2,9 +2,14 @@
 gsd_state_version: "1.0"
 milestone: v1.20
 milestone_name: transitive-dependencies
+current_phase: 1
+current_phase_name: Manifest read fidelity
 status: planning
-last_updated: "2026-09-09T00:00:00.000Z"
+stopped_at: Phase 1 context gathered
+last_updated: "2026-09-12T13:45:09.298Z"
 last_activity: 2026-09-09
+last_activity_desc: v1.20 roadmap created, 25/25 requirements mapped
+state_head: 068bf5ecf009aa062256e856ea5b2179d7f8f48b
 progress:
   total_phases: 5
   completed_phases: 0
@@ -488,16 +493,15 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 117-12-PLAN.md — the closing inventory sweep; phase 117 and every v1.19
-phase are complete.
+**Stopped at:** Phase 1 context gathered
 
-**Resume file:** None
+**Resume file:** .planning/phases/01-manifest-read-fidelity/01-CONTEXT.md
 
 **Read beside it:** `.planning/phases/116-edge-surface/.continue-here.md` — phase 116's handoff. Its
 BLOCKING CONSTRAINTS, tooling defects and commit recipe still describe this checkout; only its
 per-plan wave list and its phase-117 forward-look are spent.
 
-Last session: 2026-09-03
+Last session: 2026-09-12T13:45:09.254Z
 
 **Next: milestone v1.19 close-out.** All ten phases (108-117) are complete and all 48 requirements
 are closed. `/gsd-complete-milestone` is the next step, and it will hit the workstream wall recorded
