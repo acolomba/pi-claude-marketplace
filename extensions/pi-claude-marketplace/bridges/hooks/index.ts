@@ -15,7 +15,7 @@ export { createHooksHydration, createHooksRouting } from "./event-router.ts";
 export type {
   HooksFileReader,
   HooksHydration,
-  HooksHydrationReader,
+  HooksHydrationDeps,
   HooksRouting,
   ReadAndCachePluginHooksOptions,
 } from "./event-router.ts";

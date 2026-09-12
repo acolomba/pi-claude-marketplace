@@ -47,7 +47,7 @@ import {
 
 import type { SpawnDeps } from "../../../extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts";
 import type { HookExecutor } from "../../../extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts";
-import type { HooksHydrationReader } from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
+import type { HooksHydrationDeps } from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
 import type { HooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import type { HooksConfig } from "../../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
@@ -1476,7 +1476,7 @@ test(
     const locations = locationsFor("project", root);
     const readRoots: string[] = [];
     const loadError = new Error("project state refused");
-    const hydrationReader: HooksHydrationReader = {
+    const hydrationReader: HooksHydrationDeps = {
       loadState(extensionRoot: string): Promise<ExtensionState> {
         readRoots.push(extensionRoot);
         return Promise.reject(loadError);
@@ -1556,7 +1556,7 @@ test(
     const factoryProjectLocations = locationsFor("project", factoryRoot);
     const projectLocations = locationsFor("project", projectRoot);
     const readRoots: string[] = [];
-    const hydrationReader: HooksHydrationReader = {
+    const hydrationReader: HooksHydrationDeps = {
       loadState(extensionRoot: string): Promise<ExtensionState> {
         readRoots.push(extensionRoot);
         if (extensionRoot === factoryProjectLocations.extensionRoot) {
@@ -1621,7 +1621,7 @@ test("same-runtime registration invalidates an earlier callback before lazy hydr
   const factoryRoot = path.join(root, "factory");
   const projectRoot = path.join(root, "project");
   const readRoots: string[] = [];
-  const hydrationReader: HooksHydrationReader = {
+  const hydrationReader: HooksHydrationDeps = {
     loadState(extensionRoot: string): Promise<ExtensionState> {
       readRoots.push(extensionRoot);
       return Promise.resolve({ schemaVersion: 2, marketplaces: {} });
@@ -1709,7 +1709,7 @@ test(
     } satisfies ExtensionState;
     let releaseStaleState: ((state: ExtensionState) => void) | undefined;
     let deferProjectRead = false;
-    const reader: HooksHydrationReader = {
+    const reader: HooksHydrationDeps = {
       loadState(extensionRoot: string): Promise<ExtensionState> {
         if (deferProjectRead && extensionRoot === projectLocations.extensionRoot) {
           deferProjectRead = false;
@@ -1756,7 +1756,7 @@ test(
     // arrange
     const fixture = await makeProjectHookFixture(t, "stale-session-effects", "SessionStart");
     ownAgentRoot(t, path.join(fixture.root, "agent"));
-    const reader: HooksHydrationReader = {
+    const reader: HooksHydrationDeps = {
       loadState(extensionRoot: string): Promise<ExtensionState> {
         return Promise.resolve(
           extensionRoot === fixture.locations.extensionRoot
@@ -1810,7 +1810,7 @@ test("runtime hydration stops before mirroring when registration advances its ge
   const readStarted = createDeferred<undefined>();
   const releaseRead = createDeferred<undefined>();
   let deferProjectRead = true;
-  const reader: HooksHydrationReader = {
+  const reader: HooksHydrationDeps = {
     loadState(extensionRoot: string): Promise<ExtensionState> {
       if (deferProjectRead && extensionRoot === fixture.locations.extensionRoot) {
         deferProjectRead = false;
@@ -1852,7 +1852,7 @@ test(
     const readStarted = createDeferred<undefined>();
     const releaseRead = createDeferred<undefined>();
     let deferProjectRead = true;
-    const reader: HooksHydrationReader = {
+    const reader: HooksHydrationDeps = {
       loadState(extensionRoot: string): Promise<ExtensionState> {
         if (deferProjectRead && extensionRoot === fixture.locations.extensionRoot) {
           deferProjectRead = false;
@@ -1894,7 +1894,7 @@ test("project hydration parses a plugin's hooks.json into the parsed-config cach
   // arrange
   const fixture = await makeProjectHookFixture(t, "live-project-hydration", "PreToolUse");
   ownAgentRoot(t, path.join(fixture.root, "agent"));
-  const reader: HooksHydrationReader = {
+  const reader: HooksHydrationDeps = {
     loadState(extensionRoot: string): Promise<ExtensionState> {
       return Promise.resolve(
         extensionRoot === fixture.locations.extensionRoot
@@ -1941,7 +1941,7 @@ test("project hydration stops before parsing a plugin's hooks.json read under a 
   // below is a hydration that was stopped, not a fixture that never hydrates.
   // That sibling also records why `getRoutingBucket` is not a discriminator for
   // this entrypoint.
-  const reader: HooksHydrationReader = {
+  const reader: HooksHydrationDeps = {
     loadState(extensionRoot: string): Promise<ExtensionState> {
       return Promise.resolve(
         extensionRoot === fixture.locations.extensionRoot
@@ -1974,7 +1974,7 @@ test(
     // arrange
     const fixture = await makeProjectHookFixture(t, "stale-session-shared-dir", "SessionStart");
     ownAgentRoot(t, path.join(fixture.root, "agent"));
-    const reader: HooksHydrationReader = {
+    const reader: HooksHydrationDeps = {
       loadState(extensionRoot: string): Promise<ExtensionState> {
         return Promise.resolve(
           extensionRoot === fixture.locations.extensionRoot
@@ -2031,7 +2031,7 @@ test("separate runtimes keep their current callbacks live and route through thei
   const root = await mkdtemp(path.join(tmpdir(), "hooks-router-runtime-isolation-"));
   t.after(() => rm(root, { recursive: true, force: true, maxRetries: 3 }));
   ownAgentRoot(t, path.join(root, "agent"));
-  const reader: HooksHydrationReader = {
+  const reader: HooksHydrationDeps = {
     loadState(): Promise<ExtensionState> {
       return Promise.resolve({ schemaVersion: 2, marketplaces: {} });
     },
@@ -2370,7 +2370,7 @@ function observeRouterDebug(t: TestContext): () => string[] {
 }
 
 /** An empty-state reader, so registration hydrates without touching disk state. */
-const EMPTY_STATE_READER: HooksHydrationReader = {
+const EMPTY_STATE_READER: HooksHydrationDeps = {
   loadState(): Promise<ExtensionState> {
     return Promise.resolve({ schemaVersion: 2, marketplaces: {} });
   },

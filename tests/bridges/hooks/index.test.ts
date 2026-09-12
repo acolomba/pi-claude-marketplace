@@ -16,14 +16,14 @@ import {
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/stage.ts";
 
 import type * as HooksBarrel from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
-import type { HooksHydrationReader } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
+import type { HooksHydrationDeps } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 
 type Public<Name extends keyof typeof HooksBarrel> = Name;
 
 void ({
   loadState: () => Promise.resolve({ schemaVersion: 2, marketplaces: {} }),
   readHooksJson: () => Promise.resolve("{}"),
-} satisfies HooksHydrationReader);
+} satisfies HooksHydrationDeps);
 
 // @ts-expect-error the barrel keeps accumulateStream internal
 void ("accumulateStream" satisfies Public<"accumulateStream">);

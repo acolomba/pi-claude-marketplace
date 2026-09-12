@@ -449,9 +449,10 @@ export interface HooksFileReader {
 
 /**
  * The hooks read port plus the one persisted-state operation hydration
- * additionally needs.
+ * additionally needs. The `extends` composes that port's single member into
+ * this bundle; it does not claim a dependency bundle is a kind of file reader.
  */
-export interface HooksHydrationReader extends HooksFileReader {
+export interface HooksHydrationDeps extends HooksFileReader {
   readonly loadState: (extensionRoot: string) => Promise<ExtensionState>;
 }
 
@@ -503,7 +504,7 @@ async function hydrateCacheFromDisk(
     ctx: ExtensionContext;
     cwd: string;
   },
-  reader: HooksHydrationReader,
+  reader: HooksHydrationDeps,
   routingState: EventRouterRoutingState,
   generationIsCurrent: GenerationGuard,
 ): Promise<readonly HydratedScope[]> {
@@ -690,7 +691,7 @@ async function tryHydrateOnePlugin(
  * the caller's `applyReconcile` rebuilds the routing tables per scope.
  */
 async function hydrateProjectScopeForCwdWith(
-  reader: HooksHydrationReader,
+  reader: HooksHydrationDeps,
   cwd: string,
   routingState: EventRouterRoutingState,
   generationIsCurrent: GenerationGuard,
@@ -798,7 +799,7 @@ async function ensureSharedDataDir(loc: ScopedLocations): Promise<void> {
  */
 async function registerHooksBridgeWith(
   runtime: HooksRuntime,
-  reader: HooksHydrationReader,
+  reader: HooksHydrationDeps,
   pi: ExtensionAPI,
   opts: { ctx: ExtensionContext; cwd: string; executor?: HookExecutor },
 ): Promise<void> {
@@ -981,7 +982,7 @@ async function registerHooksBridgeWith(
 /** Binds every hooks hydration path to one runtime and one required state reader. */
 export function createHooksHydration(
   runtime: HooksRuntime,
-  reader: HooksHydrationReader,
+  reader: HooksHydrationDeps,
 ): HooksHydration {
   const routingState = createRoutingStateOperations(runtime);
   return {

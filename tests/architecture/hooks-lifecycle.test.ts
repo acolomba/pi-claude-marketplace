@@ -36,7 +36,7 @@ import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence
 import { HOOKS_LIFECYCLE_TARGETS, PLUGIN_ORCHESTRATORS_REL } from "./gate-targets.ts";
 import { REPO_ROOT } from "./source-scan.ts";
 
-import type { HooksHydrationReader } from "../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
+import type { HooksHydrationDeps } from "../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
 import type { ExtensionState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type {
   ExtensionAPI,
@@ -389,7 +389,7 @@ test("same-runtime reload makes every retained registration inert before argumen
     await rm(root, { recursive: true, force: true, maxRetries: 3 });
   });
   const readRoots: string[] = [];
-  const reader: HooksHydrationReader = {
+  const reader: HooksHydrationDeps = {
     loadState(extensionRoot: string): Promise<ExtensionState> {
       readRoots.push(extensionRoot);
       return Promise.resolve({ schemaVersion: 2, marketplaces: {} });
