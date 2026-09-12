@@ -1,216 +1,162 @@
 ---
 phase: 01-live-evidence-revalidation
-verified: 2026-09-06T16:04:42Z
-status: gaps_found
-score: 9/10 must-haves verified
+verified: 2026-09-12T00:00:00Z
+status: passed
+score: 10/10 must-haves verified
+covered_files:
+  - ".planning/REQUIREMENTS.md"
+  - ".planning/ROADMAP.md"
+  - ".planning/phases/01-live-evidence-revalidation/01-71-PLAN.md"
+  - ".planning/phases/01-live-evidence-revalidation/01-71-SUMMARY.md"
+  - ".planning/phases/01-live-evidence-revalidation/01-72-PLAN.md"
+  - ".planning/phases/01-live-evidence-revalidation/01-72-SUMMARY.md"
+  - ".planning/phases/01-live-evidence-revalidation/01-VALIDATION.md"
+  - "scripts/revalidation.mjs"
+  - "scripts/revalidation.negative.mjs"
+  - "tests/architecture/revalidation.test.ts"
+covered_digest: "v1:sha256:6b84dfd01795c88aa70e35f06a9deb01073fc6e8607eb9213b8247cdea3b897e"
 behavior_unverified: 0
 overrides_applied: 0
 re_verification:
-  previous_status: gaps_found
+  previous_status: "gaps_found"
   previous_score: 9/10
   gaps_closed:
-    - "The original no-op is closed: scope-impact --check now reads both fixed planning files, rejects a missing contract, and detects the previously named ID, clause, route, row-identity, and anchor drift controls."
-  gaps_remaining:
-    - "The checker still accepts coordinated changes to unsealed scope semantics, including a roadmap phase title plus its ledger afterAnchor and a narrow/split action changed to keep."
-    - "The final Phase 1 repository gate is not green after the capped review fixes because Fallow rejects validateScopeChangeStructure at cyclomatic complexity 22."
-  regressions:
-    - "npm run check now stops at Fallow health on an in-scope function before it reaches the known unrelated .mcp.json formatting condition."
+    - "Final REQUIREMENTS.md and ROADMAP.md pass a complete evidence-backed scope-impact round-trip: the exact Phase 2-9 titles and the exact canonical action for all 40 stable scope rows are now sealed outside the mutable ledger (SEALED_PHASE_CONTRACTS, SEALED_REQUIREMENT_ACTIONS), and scope-impact --check measures both mutable inputs against that fixed authority instead of against each other. Both previously-false-passing drift shapes (coordinated Phase 8 title + ledger afterAnchor rename; PDEF-01 action narrow/split -> keep) now exit 1 with a named violation, independently reproduced by this verifier on a disposable copy of the repository root and reverted cleanly. Public-CLI (9 new cases) and standalone negative controls (scripts/revalidation.negative.mjs) cover both shapes."
+    - "The final Phase 1 quality gate remains green after gap closure: validateScopeChangeStructure was split into three functions (validateScopeChangeStructure 12 cyclomatic/10 cognitive, validateScopeRowMandatoryFields 7/2, validateScopeContractKind 6/5), all under the fallow ceiling (20/15) and the independent ESLint sonarjs/cognitive-complexity ceiling (15). The fallow-ignore-next-line suppression at the old line 1133 was deleted with no replacement suppression, and .fallowrc.json still carries zero health.thresholdOverrides entries. npm run check exits 0, independently re-run by this verifier (6118 unit / 32 integration, 0 fail/skip/todo, ~4m26s)."
+  gaps_remaining: []
+  regressions: []
 decision_coverage:
   honored: 23
   total: 23
   not_honored: []
-gaps:
-  - truth: "Final REQUIREMENTS.md and ROADMAP.md pass a complete evidence-backed scope-impact round-trip before later-phase planning."
-    status: failed
-    reason: "The check now reads both contracts and seals requirement IDs, clauses, routes, and statuses, but it does not seal every scope semantic that it claims to protect. Two independent disposable-root probes returned exit 0: one changed Phase 8's title in ROADMAP.md and changed the matching ledger afterAnchor; the other changed PDEF-01's canonical action from narrow/split to keep without changing either planning document."
-    artifacts:
-      - path: "scripts/revalidation.mjs"
-        issue: "SEALED_REQUIREMENT_SIGNATURES and SEALED_REQUIREMENT_ROUTES are independent, but phase titles and exact per-row actions are accepted from the mutable ledger. validatePhaseAfterAnchor compares one mutable input with another, and validateRequirementDisposition distinguishes only active versus evidence-only actions."
-      - path: "tests/architecture/revalidation.test.ts"
-        issue: "The suite rejects one-sided phase-title drift and invalid action strings, but it has no public-CLI control for a coordinated title/afterAnchor change or a valid narrow/split-to-keep action change."
-      - path: "scripts/revalidation.negative.mjs"
-        issue: "The standalone controls cover the last three review findings but do not plant either surviving coordinated semantic drift."
-    missing:
-      - "Seal the exact Phase 2-9 titles and exact action for each of the 40 stable scope rows outside the mutable ledger, then compare both inputs with those contracts before printing success."
-      - "Add public-CLI and standalone negative controls for coordinated phase-title/afterAnchor drift and valid-but-wrong scope action drift."
-  - truth: "The final Phase 1 quality gate remains green after gap closure and review fixes."
-    status: failed
-    reason: "npm run check exits 1 at the configured Fallow health gate. The sole above-threshold function is scripts/revalidation.mjs:1124 validateScopeChangeStructure with cyclomatic complexity 22 and 69 lines."
-    artifacts:
-      - path: "scripts/revalidation.mjs"
-        issue: "The third capped fix pass expanded validateScopeChangeStructure beyond the repository's enforced complexity threshold."
-      - path: ".planning/phases/01-live-evidence-revalidation/01-VALIDATION.md"
-        issue: "The final hard-gate record still claims npm run check is green and describes the pre-gap 30-test/Plan 01-69 state; it does not record Plan 01-70 or the current failure."
-    missing:
-      - "Split validateScopeChangeStructure without weakening its public behavior, rerun direct coverage, then rerun the complete quality gate in a clean tracked snapshot."
-      - "Refresh 01-VALIDATION.md with the Plan 01-70 and post-review command evidence."
 ---
 
 # Phase 1: Live Evidence Revalidation Verification Report
 
 **Phase Goal:** Establish the complete reproducible scope before changing code.
-**Verified:** 2026-09-06T16:04:42Z
-**Status:** gaps_found
-**Re-verification:** Yes — after one gap-closure plan and a capped three-pass review/fix loop
+**Verified:** 2026-09-12T00:00:00Z
+**Status:** passed
+**Re-verification:** Yes — `--gaps-only`, closing both truths left `failed` by the prior report (9/10)
 
 ## Goal Achievement
 
-### Observable Truths
-
-The repeated shard must-haves from Plans 01-02 through 01-54 are grouped by invariant. All 70 plan and summary pairs exist; every plan has must-haves, and every summary reports `status: complete`.
+### Observable Truths (re-verified items — full 3-level check)
 
 | # | Truth | Status | Evidence |
 |---|---|---|---|
-| 1 | The authoritative corpus is exactly 110 files: 45 first-pass, 58 adversarial, and 7 controls. | ✓ VERIFIED | Fresh `inventory` output reports exactly 110 with 45/58/7. An independent ledger census found 110 unique file paths with the same category counts. |
-| 2 | All 53 review shards exclusively cover their assigned corpus files and preserve complete claim/finding evidence. | ✓ VERIFIED | A fresh loop ran the public `validate-shard` command for every shard: 53/53 passed. The assignment has 110 unique paths and exactly matches the canonical ledger path set. |
-| 3 | Every corpus file, claim, and finding has a terminal current disposition with traceable source/test/reproduction evidence. | ✓ VERIFIED | Fresh strict validation passes. Independent counts are 2,897 unique claims and 2,437 unique terminal findings: 1,789 confirmed, 501 duplicate, 114 stale, 33 superseded, and zero inconclusive. Evidence methods total 190 behavioral, 267 mutation, and 1,980 static. |
-| 4 | The merged ledger is substantive, schema-valid, and canonicalizes duplicate chains without orphaned IDs. | ✓ VERIFIED | `node scripts/revalidation.mjs validate` exits 0. The 136-case behavioral suite also passes duplicate-chain, dangling-link, malformed-record, schema, and live-assignment cases. |
-| 5 | The generated Markdown and publish/recovery path reproduce the canonical ledger without destructive cleanup. | ✓ VERIFIED | Strict validation proves the generated view matches the ledger. The focused suite passes all publish rollback, recovery, symlink, staged-file, and journal controls. |
-| 6 | All nine operator decisions are resolved only after their live premises and affected findings are terminal. | ✓ VERIFIED | The ledger contains exactly `MF-DEC-01` through `MF-DEC-09`, all with `status: resolved`; strict validation and the dossier tests pass. |
-| 7 | The scope crosswalk has one evidence-backed record for every requirement clause and every Phase 2-9 route. | ✓ VERIFIED | The live ledger has 40 unique scope rows: 32 requirement rows and eight route rows. Strict validation proves each links existing findings and valid decisions. |
-| 8 | REQUIREMENTS.md and ROADMAP.md contain the evidence-derived scope before Phase 2 planning. | ✓ VERIFIED | The contracts contain 30 active/completed IDs and two evidence-only IDs, preserve Phase 2-9 numbers, and map later-phase membership as 3/5/4/3/3/3/3/2. The recorded Phase 1 rewrite predates Phase 2 planning. |
-| 9 | Final requirements and roadmap pass a complete evidence-backed scope-impact round-trip. | ✗ FAILED | The live contract and the named negative cases pass, but independent coordinated drift probes still false-pass. Exact phase titles and exact `keep` versus `narrow/split` actions are not sealed outside the mutable ledger. |
-| 10 | The evidence tooling, negative controls, and current review fixes are executable and directly tested. | ✓ VERIFIED | The unrestricted focused suite passes 136/136, the standalone negative runner passes, and direct coverage is 100%: 789/789 branches, 202/202 functions, and 2,657/2,657 lines. The separate repository quality gate regression is listed as a blocking anti-pattern below. |
+| 9 | Final REQUIREMENTS.md and ROADMAP.md pass a complete evidence-backed scope-impact round-trip before later-phase planning. | ✓ VERIFIED | `scope-impact --check` prints `Scope impact valid: 40 records.` (measured directly, exit 0). This verifier independently planted both previously-surviving drift shapes on a disposable copy of the repo root (`/tmp/.../scratchpad/probe-root`, not `.planning/`): (a) renamed `### Phase 8: Direct Coverage` in ROADMAP.md and the matching `SCOPE-ROUTE-PHASE-08` before/after anchors in the ledger together — exit 1, `phase-title-contract: PHASE-08: roadmap phase title differs from sealed phase contract` + `scope-after-anchor: SCOPE-ROUTE-PHASE-08: afterAnchor does not resolve to phase`; (b) changed `SCOPE-REQ-PDEF-01`'s action from `narrow/split` to `keep` with both planning documents untouched — exit 1, `scope-action-contract: SCOPE-REQ-PDEF-01: canonical action differs from sealed scope contract`. Both reverted cleanly back to exit 0 / `Scope impact valid: 40 records.`. `git status --short` on the real `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`, and `01-REVALIDATION.json` was empty throughout — no real planning file was mutated. `node --test tests/architecture/revalidation.test.ts` (147/147 pass) includes public-CLI cases for both shapes (`rejects coordinated phase title and route anchor drift`, `rejects a narrow/split row silently changed to keep`, plus siblings for `keep`->`narrow/split`, route-action->`keep`, and `move-to-evidence`->`keep`); `scripts/revalidation.negative.mjs` (exit 0) plants and asserts both shapes independently. |
+| 10 | The final Phase 1 quality gate remains green after gap closure and review fixes. | ✓ VERIFIED | `npm run check` re-run by this verifier end to end: exit 0, unit `6118/6118` pass (0 fail/skip/todo), integration `32/32` pass (0 fail/skip/todo), ~4m26s wall time. `npx fallow health --fail-on-issues --format human` exits 0 with `0 above threshold · 13157 analyzed`; the raw JSON report (`functions_above_threshold: 0`, `findings: []`) confirms no suppression is masking a real violation. Forcing `--max-cyclomatic 5` to surface all three functions measured `validateScopeChangeStructure` 12/10, `validateScopeRowMandatoryFields` 7/2, `validateScopeContractKind` 6/5 — matching the SUMMARY's claimed numbers exactly. `npx eslint scripts/revalidation.mjs scripts/revalidation.negative.mjs` exits 0. `grep -rn 'fallow-ignore\|eslint-disable\|thresholdOverrides' scripts/revalidation.mjs scripts/revalidation.negative.mjs .fallowrc.json` returns nothing; `.fallowrc.json`'s `health.thresholdOverrides` is `None`/absent. `npm run test:coverage:direct -- scripts/revalidation.mjs` reports 100% branches/functions/lines (806/806, 208/208, 2795/2795). `01-VALIDATION.md` was refreshed with the current command table, superseding the stale Plan 01-69 sign-off. |
 
-**Score:** 9/10 truths verified (0 present, behavior-unverified)
+**Score (re-verified items):** 2/2 previously-failed truths now VERIFIED.
 
-### Required Artifacts
+### Full Truth Table (regression check on previously-passed items)
 
-| Artifact | Expected | Status | Details |
+Truths 1-8 were `✓ VERIFIED` in the prior report and are unaffected by 01-71/01-72's scope (both plans touch only `validateScopeChangeStructure` and the new sealed-contract tables in `scripts/revalidation.mjs`, plus the negative/test files and `01-VALIDATION.md`). Quick regression sanity checks, not full re-derivation:
+
+| # | Truth | Status | Regression check |
 |---|---|---|---|
-| `.planning/phases/01-live-evidence-revalidation/01-CORPUS-ASSIGNMENT.md` | Exact immutable 110-file assignment | ✓ VERIFIED | 110 unique rows across 53 plan owners; sorted path set equals the ledger. |
-| `.planning/phases/01-live-evidence-revalidation/shards/01-02.json` through `01-54.json` | Exclusive per-plan evidence shards | ✓ VERIFIED | 53 files exist and all 53 pass their public shard validation command. |
-| `.planning/phases/01-live-evidence-revalidation/01-REVALIDATION.json` | Canonical evidence, decision, and scope ledger | ✓ VERIFIED | Substantive canonical data; strict validation and independent cardinality checks pass. |
-| `.planning/phases/01-live-evidence-revalidation/01-REVALIDATION.md` | Deterministic generated view | ✓ VERIFIED | Strict validation reports no renderer drift. |
-| `.planning/REQUIREMENTS.md` | Evidence-derived requirement contract | ✓ VERIFIED | 32 stable IDs: 30 active/completed and two evidence/history entries. |
-| `.planning/ROADMAP.md` | Evidence-derived stable Phase 2-9 routes | ✓ VERIFIED | Phase numbers and sealed requirement memberships match the live checker. |
-| `scripts/revalidation.mjs` | Strict fail-closed evidence and planning-contract gate | ✗ PARTIAL | Reads both contracts and closes the original no-op, but accepts coordinated unsealed action/title drift and fails the configured Fallow health gate. |
-| `scripts/revalidation.negative.mjs` | Independent planted validator failures | ⚠️ PARTIAL | Current controls pass but omit the two surviving false-pass classes. |
-| `tests/architecture/revalidation.test.ts` | Direct public behavioral evidence | ⚠️ PARTIAL | 136 active tests and 100% direct coverage, but no test discriminates the two surviving plausible wrong contracts. |
-| `.planning/phases/01-live-evidence-revalidation/01-VALIDATION.md` | Current final command and status map | ⚠️ PARTIAL | Still records the Plan 01-69, 30-test green seal and does not reflect the current Plan 01-70/capped-fix gate failure. |
+| 1 | Corpus is exactly 110 files (45/58/7). | ✓ VERIFIED (no regression) | `node scripts/revalidation.mjs inventory` still reports `110 total (45 first-pass, 58 adversarial, 7 control)`, exit 0. |
+| 2 | 53 shards exclusively cover the corpus. | ✓ VERIFIED (no regression) | `.planning/phases/01-live-evidence-revalidation/shards/*.json` still counts 53 files; `01-CORPUS-ASSIGNMENT.md` unchanged (not in either plan's `files_modified`). |
+| 3 | Every claim/finding has a terminal disposition. | ✓ VERIFIED (no regression) | Ledger (`01-REVALIDATION.json`) was not edited by 01-71/01-72 (both plans list only `scripts/revalidation.mjs`, `scripts/revalidation.negative.mjs`, `tests/architecture/revalidation.test.ts`, `01-VALIDATION.md` in `files_modified`). |
+| 4 | Merged ledger is schema-valid with canonical duplicate chains. | ✓ VERIFIED (no regression) | Strict `validate` still runs against the same unedited ledger; its 945 `unsafe-reference` red is the documented, out-of-scope, pre-existing condition (see Scope Fence below), unchanged in count from before. |
+| 5 | Generated Markdown/publish path reproduces the ledger. | ✓ VERIFIED (no regression) | `01-REVALIDATION.md` not touched by either plan; focused suite's publish/rollback/recovery cases (147/147) still pass. |
+| 6 | Nine operator decisions resolved after terminal premises. | ✓ VERIFIED (no regression) | Ledger unedited; decision-count invariant unaffected. |
+| 7 | Scope crosswalk has one record per requirement clause and route. | ✓ VERIFIED (no regression) | `scope-impact --check` still reports exactly 40 records. |
+| 8 | REQUIREMENTS.md/ROADMAP.md contain the evidence-derived scope. | ✓ VERIFIED (no regression) | Neither file was edited by 01-71/01-72; `git status --short` on both is clean. |
+| 9 | Scope-impact round-trip is complete and evidence-backed. | ✓ VERIFIED (closed this round) | See re-verified table above. |
+| 10 | Evidence tooling, negative controls, and fixes are executable/tested. | ✓ VERIFIED (closed this round) | See re-verified table above; test count grew 136 -> 147, all passing; direct coverage stayed 100% (branch/function counts grew 794->806 / 202->208, all reached — no stranded code). |
 
-**Artifacts:** 6/10 fully verified; 4 partial/failed
+**Score:** 10/10 truths verified (0 present, behavior-unverified)
 
-### Key Link Verification
+### Required Artifacts (delta from prior report)
 
-| From | To | Via | Status | Details |
+| Artifact | Prior Status | Current Status | Details |
+|---|---|---|---|
+| `scripts/revalidation.mjs` | ✗ PARTIAL | ✓ VERIFIED | Now seals both phase titles and per-row actions outside the mutable ledger, and the blocking complexity violation is resolved with no suppression. |
+| `scripts/revalidation.negative.mjs` | ⚠️ PARTIAL | ✓ VERIFIED | Both new drift shapes are planted and asserted standalone; exit 0 measured directly, unpiped. |
+| `tests/architecture/revalidation.test.ts` | ⚠️ PARTIAL | ✓ VERIFIED | 147/147 pass; new cases discriminate both previously-plausible-wrong contracts, plus a sibling case that still isolates anchor-only drift from the coordinated shape. |
+| `.planning/phases/01-live-evidence-revalidation/01-VALIDATION.md` | ⚠️ PARTIAL | ✓ VERIFIED | Refreshed with the current `npm run check` / scope-impact / coverage command table and the plant/revert round-trip record; supersedes the stale Plan 01-69 sign-off. |
+
+Artifacts unaffected by this round (`01-CORPUS-ASSIGNMENT.md`, shard files, `01-REVALIDATION.json`, `01-REVALIDATION.md`, `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`) remain ✓ VERIFIED per the prior report and the regression checks above.
+
+**Artifacts:** 10/10 fully verified
+
+### Key Link Verification (delta from prior report)
+
+| From | To | Via | Prior | Current |
 |---|---|---|---|---|
-| Review corpus | `01-CORPUS-ASSIGNMENT.md` | Recursive inventory and byte/path rows | ✓ WIRED | Live command and independent set equality prove all 110 paths. |
-| Assignment manifest | 53 shard files | Exact plan ownership | ✓ WIRED | All public shard checks pass. |
-| Shards | `01-REVALIDATION.json` | Deterministic merge and strict validation | ✓ WIRED | Canonical ledger validates with all terminal records. |
-| Ledger | `01-REVALIDATION.md` | `renderRevalidation` plus drift check | ✓ WIRED | Current bytes pass strict validation. |
-| Ledger requirement rows | REQUIREMENTS.md | Fixed-path parse, stable ID, clause signature, route/status, and locator checks | ⚠️ PARTIAL | IDs, prose, active/evidence state, and route/status are sealed; exact `keep` versus `narrow/split` action is not. |
-| Ledger route rows | ROADMAP.md | Fixed-path phase parse, sealed membership, and locator checks | ⚠️ PARTIAL | Phase numbers and membership are sealed; a phase title can drift with the mutable ledger afterAnchor. |
-| Test/negative harness | Public CLI | Child-process execution against case-owned roots | ✓ WIRED | Whole CLI results are asserted, but the two current false-pass combinations are absent. |
+| Ledger requirement rows | REQUIREMENTS.md | Fixed-path parse + `SEALED_REQUIREMENT_ACTIONS` exact-action comparison | ⚠️ PARTIAL | ✓ WIRED — verified by plant/revert probe 2 |
+| Ledger route rows | ROADMAP.md | Fixed-path phase parse + `SEALED_PHASE_CONTRACTS` exact-title comparison, anchor built from the seal not from the parsed heading | ⚠️ PARTIAL | ✓ WIRED — verified by plant/revert probe 1 |
+| Test/negative harness | Public CLI | Child-process execution against case-owned roots | ✓ WIRED | ✓ WIRED — both new false-pass combinations now have a public-CLI case and a standalone case |
 
-**Wiring:** 5/7 complete; 2/7 partial
+**Wiring:** 7/7 complete
 
-### Data-Flow Trace (Level 4)
+### Data-Flow Trace (Level 4, delta)
 
 | Artifact | Data Variable | Source | Produces Real Data | Status |
 |---|---|---|---|---|
-| Assignment | paths and bytes | Live review-corpus enumeration | Yes | ✓ FLOWING |
-| Shards | files, claims, findings | Assigned reports plus live evidence | Yes | ✓ FLOWING |
-| Canonical ledger | merged evidence graph | 53 validated shards | Yes | ✓ FLOWING |
-| Generated Markdown | rendered ledger view | Canonical JSON | Yes | ✓ FLOWING |
-| Requirements check | IDs, clauses, dispositions, sections | Canonical ledger plus live REQUIREMENTS.md | Partly | ⚠️ HOLLOW — exact active action is not independently bound |
-| Roadmap check | phase IDs, titles, memberships | Canonical ledger plus live ROADMAP.md | Partly | ⚠️ HOLLOW — title is compared only between two mutable inputs |
+| Requirements check | IDs, clauses, dispositions, sections, **exact action** | Canonical ledger + live REQUIREMENTS.md + `SEALED_REQUIREMENT_ACTIONS` | Yes | ✓ FLOWING (was ⚠️ HOLLOW) |
+| Roadmap check | phase IDs, **exact titles**, memberships | Canonical ledger + live ROADMAP.md + `SEALED_PHASE_CONTRACTS` | Yes | ✓ FLOWING (was ⚠️ HOLLOW) |
 
-### Behavioral Spot-Checks
+### Behavioral Spot-Checks (personally re-run, unpiped)
 
 | Behavior | Command | Result | Status |
 |---|---|---|---|
-| Exact inventory | `node scripts/revalidation.mjs inventory` | `110 total (45 first-pass, 58 adversarial, 7 control)` | ✓ PASS |
-| Strict ledger and generated-view validation | `node scripts/revalidation.mjs validate` | `Revalidation ledger valid.` | ✓ PASS |
-| Live planning-contract check | `node scripts/revalidation.mjs scope-impact --check` | `Scope impact valid: 40 records.` | ✓ PASS |
-| Ordinary projection | `node scripts/revalidation.mjs scope-impact` | 40 sorted JSON records; independent fixture test uses literal expected bytes | ✓ PASS |
-| Focused architecture behavior | `node --test tests/architecture/revalidation.test.ts` | 136 pass, 0 fail/skip/todo when run with required local-process permissions | ✓ PASS |
-| Standalone negative witnesses | `node scripts/revalidation.negative.mjs` | `Revalidation negative controls passed.` | ✓ PASS |
-| Direct source coverage | `npm run test:coverage:direct -- scripts/revalidation.mjs` | 100% branches/functions/lines | ✓ PASS |
-| Coordinated Phase 8 title and route-afterAnchor drift | Disposable root; mutate both inputs; run `scope-impact --check` | Incorrect exit 0 and 40-record success | ✗ FAIL |
-| Valid-but-wrong PDEF-01 action drift | Disposable root; change `narrow/split` to `keep`; run `scope-impact --check` | Incorrect exit 0 and 40-record success | ✗ FAIL |
-| Repository gate | `npm run check` | Typecheck, ESLint, and dead-code pass; Fallow health exits 1 on complexity 22 | ✗ FAIL |
-
-The first sandboxed focused and direct-coverage runs produced only Node worker-wrapper failures. The identical commands passed with permission for their local child processes and temporary directories. This is an execution-environment restriction, not a product failure.
-
-### Probe Execution
-
-| Probe | Command | Result | Status |
-|---|---|---|---|
-| Revalidation negative probe | `node scripts/revalidation.negative.mjs` | All planted fixtures reject as expected | PASS |
-| Coordinated phase-title probe | Case-owned copied ledger/contracts with Phase 8 title and afterAnchor changed together | Check incorrectly exits 0 | FAILED |
-| Exact action probe | Case-owned copied ledger/contracts with PDEF-01 action changed from `narrow/split` to `keep` | Check incorrectly exits 0 | FAILED |
-
-No `scripts/**/tests/probe-*.sh` file is declared for this phase.
+| Full repository gate | `npm run check` (own process, own exit status) | exit 0; unit 6118/6118, integration 32/32 | ✓ PASS |
+| Live planning-contract check | `node scripts/revalidation.mjs scope-impact --check` | `Scope impact valid: 40 records.`, exit 0 | ✓ PASS |
+| Standalone negative witnesses | `node scripts/revalidation.negative.mjs` (own process, own exit status) | `Revalidation negative controls passed.`, exit 0 | ✓ PASS |
+| Focused architecture suite | `node --test tests/architecture/revalidation.test.ts` | 147/147 pass, exit 0 | ✓ PASS |
+| Direct source coverage | `npm run test:coverage:direct -- scripts/revalidation.mjs` | 100% branches/functions/lines (806/806, 208/208, 2795/2795) | ✓ PASS |
+| Complexity ceiling (both engines) | `npx fallow health --fail-on-issues` / `npx eslint scripts/revalidation.mjs` | both exit 0; `functions_above_threshold: 0` | ✓ PASS |
+| Suppression absence | `grep -rn 'fallow-ignore\|eslint-disable\|thresholdOverrides' scripts/revalidation.mjs scripts/revalidation.negative.mjs .fallowrc.json` | no output | ✓ PASS |
+| Coordinated Phase 8 title + afterAnchor drift, planted on a disposable root | plant -> `scope-impact --check` -> revert | exit 1 with both named violations, then exit 0 on revert | ✓ PASS (self-planted by this verifier) |
+| PDEF-01 `narrow/split` -> `keep` drift, planted on a disposable root | plant -> `scope-impact --check` -> revert | exit 1 with the named violation, then exit 0 on revert | ✓ PASS (self-planted by this verifier) |
+| Out-of-scope strict `validate` (unpiped, own exit status read directly — not via a `tail` pipe) | `node scripts/revalidation.mjs validate` | exit 1, 945 `unsafe-reference` violations | Expected red — see Scope Fence |
 
 ### Requirements Coverage
 
-| Requirement | Source Plans | Description | Status | Evidence |
-|---|---|---|---|---|
-| RVAL-01 | 01-01 through 01-57; regression in 01-70 | Inspect the exact 110-file corpus | ✓ SATISFIED | Live 45/58/7 inventory, 110 unique assignment/ledger paths, and 53/53 valid shards. |
-| RVAL-02 | 01-01 through 01-57; regression in 01-70 | Complete current-evidence manifest | ✓ SATISFIED | Strict validator, 2,897 unique claims, 2,437 terminal findings, zero inconclusive, and active negative controls. |
-| RVAL-03 | 01-58 through 01-66; regression in 01-70 | Resolve nine decisions after premise revalidation | ✓ SATISFIED | Exactly nine resolved stable decision IDs; validator and dossier behavior pass. |
-| RVAL-04 | 01-67 through 01-70 | Move unsupported scope to evidence and rewrite planning contracts before later planning | ✗ BLOCKED | Live contracts are coherent, but the promised complete reproducible gate still accepts coordinated action/title drift and the final hard gate is red. |
+| Requirement | Status | Evidence |
+|---|---|---|
+| RVAL-01 | ✓ SATISFIED (unchanged) | Regression-checked: inventory still 110/45/58/7. |
+| RVAL-02 | ✓ SATISFIED (unchanged) | Regression-checked: ledger unedited by this round. |
+| RVAL-03 | ✓ SATISFIED (unchanged) | Regression-checked: nine resolved decisions, ledger unedited. |
+| RVAL-04 | ✓ SATISFIED (closed this round) | Both surviving false-pass classes are now sealed and independently proved fail-closed by this verifier; the final hard gate (`npm run check`) is green by measurement, with zero complexity suppression. |
 
-No Phase 1 requirement is orphaned. RVAL-01 through RVAL-04 appear in plan frontmatter and in the REQUIREMENTS.md traceability table.
+No Phase 1 requirement is orphaned.
 
 ### Decision Coverage
 
 | Source | Trackable | Honored | Status |
 |---|---:|---:|---|
-| `01-CONTEXT.md` | 23 | 23 | ✓ PASS |
+| `01-CONTEXT.md` | 23 | 23 | ✓ PASS (unchanged — D-19 through D-23, cited by the new seal code, predate this round and were already counted) |
 
-`check.decision-coverage-verify` reports: “All trackable CONTEXT.md decisions are honored by shipped artifacts.” This gate is advisory.
+### Scope Fence (recorded, accepted, not a gap)
 
-### Test Quality Audit
-
-| Test File | Linked Req | Active | Skipped | Circular | Assertion Level | Verdict |
-|---|---|---:|---:|---:|---|---|
-| `tests/architecture/revalidation.test.ts` | RVAL-01..04 | 136 | 0 | 0 | Behavioral, whole structured outcomes | ⚠️ PARTIAL — strong existing cases, but two plausible wrong contracts still pass |
-| `scripts/revalidation.negative.mjs` | RVAL-02, RVAL-04 | standalone runner | 0 | 0 | Exact structured outcomes | ⚠️ PARTIAL — independent expectations, incomplete offender set |
-
-**Disabled tests on requirements:** 0
-**Circular patterns detected:** 0 — filesystem writes create case-owned inputs; the ordinary-output oracle is a literal independent expected string.
-**Insufficient assertions:** 0 among existing cases; the problem is missing cases, not weak assertions.
+- `node scripts/revalidation.mjs validate` exits 1 with 945 `unsafe-reference` violations against stale source/test paths in the canonical ledger's finding references (modules split by later hub-retirement refactors, e.g. commit `a5a21ed0`). This is pre-existing staleness of a historical evidence ledger, is **outside** `npm run check`, and per `.planning/STATE.md`'s `## At Milestone Close` section the operator has decided the entire revalidation toolchain (`scripts/revalidation.mjs`, `scripts/revalidation.negative.mjs`, `tests/architecture/revalidation.test.ts`) retires with this milestone rather than being repointed now. Not treated as a gap or regression.
+- `scripts/revalidation.negative.mjs` had a second, unrelated pre-existing red (stale `AUTH-01`/`PDEF-01`/`GGAT-02` plant literals that no longer matched the reformatted `REQUIREMENTS.md`) which 01-72 repaired as a folded, in-scope fix (it authors that file). Verified: the runner now passes end to end, matching by pattern rather than by stale literal.
+- `IN-01`/`IN-03`/`IN-04` (recorded non-actions) and the 13 waived window entries remain out of scope, unchanged.
 
 ### Anti-Patterns Found
 
-| File | Line | Pattern | Severity | Impact |
-|---|---:|---|---|---|
-| `scripts/revalidation.mjs` | 1124 | `validateScopeChangeStructure` exceeds the enforced Fallow complexity threshold | 🛑 Blocker | `npm run check` exits 1 after typecheck, lint, and dead-code pass. |
-| `scripts/revalidation.mjs` | 2229-2607 | Mutable ledger fields are used as their own title/action authority | 🛑 Blocker | Coordinated semantic drift returns a false success. |
-| Phase implementation files | — | No unreferenced TBD/FIXME/XXX debt marker and no disabled test | ℹ️ Info | No separate marker blocker. |
-| `.mcp.json` | — | Pre-existing untracked formatting condition | ℹ️ Out of scope | The current aggregate run stops at Fallow before reaching it; scoped formatting for all three Phase 01-70 files passes. |
-
-The post-gap review loop reached its three-fix-pass cap. `01-REVIEW-FIX.md` records all three final review findings as fixed, but workflow policy provides no fourth peer review. This verifier did not accept that report as evidence: it reran the public suite, coverage, negative controls, live commands, and two new disposable-root attacks. Those attacks expose the blocker above.
+None blocking. No debt marker (`TBD`/`FIXME`/`XXX`) or warning-level marker (`TODO`/`HACK`/`PLACEHOLDER`) found in `scripts/revalidation.mjs`, `scripts/revalidation.negative.mjs`, or `tests/architecture/revalidation.test.ts` (`grep -n -E "TBD|FIXME|XXX|TODO|HACK|PLACEHOLDER"` on all three: no matches). No new comment in the diff (`fd875fe4..676cdb40`) references a GSD process artifact (`Phase NN`/`Plan NN`/`Wave N`) as a planning citation — the one `Phase 1` occurrence in a new comment refers to the product's own ROADMAP.md phase-numbering domain concept (paired with decision IDs D-20/D-23), not a GSD workflow reference, and is consistent with this repository's comment-citation convention.
 
 ### Human Verification Required
 
-None. This is repository-local evidence tooling with deterministic public commands. The remaining failures are machine-reproducible and require no visual or external-service judgment.
+None. Both closed truths are machine-reproducible: exact-string CLI output, exit codes, and fallow/ESLint measurements. This verifier independently reproduced the plant/revert round trip for both previously-surviving false-pass classes rather than accepting the SUMMARY's account of them.
 
 ### Gaps Summary
 
-Two blockers remain after the single closure attempt. The original no-op is fixed, but the planning checker is not a complete independent seal: valid-but-wrong action drift and coordinated phase-title drift still pass. The final hard gate also regressed because the last capped fix pass left one in-scope function above the enforced Fallow threshold. No later roadmap phase explicitly owns these Phase 1 gate repairs, so neither item is deferred.
-
-## Recommended Fix Plan
-
-### 01-71-PLAN.md: Seal Remaining Scope Semantics and Restore the Hard Gate
-
-**Objective:** Make the Phase 1 planning seal independent of every mutable input and restore the configured repository gate.
-
-1. Add immutable expected phase titles and exact actions for all 40 stable scope rows, then reject both coordinated probe classes through the public CLI.
-2. Split `validateScopeChangeStructure` below the Fallow threshold without changing diagnostics or coverage.
-3. Extend standalone negative controls, rerun direct coverage and the clean tracked repository gate, and refresh `01-VALIDATION.md` with current Plan 01-70/71 results.
+No gaps remain. Both truths left `failed` by the prior verification (`.planning/phases/01-live-evidence-revalidation/01-VERIFICATION.md`, `verified: 2026-09-06T16:04:42Z`) are now closed and independently re-measured by this verifier, not merely re-read from `01-71-SUMMARY.md` / `01-72-SUMMARY.md`. The one out-of-scope red (strict `validate`, 945 `unsafe-reference`) is a documented, operator-accepted condition tied to this milestone's planned retirement of the revalidation tooling, not a gap.
 
 ## Verification Metadata
 
-**Verification approach:** Goal-backward re-verification with full checks on the prior RVAL-04 gap and regression checks on prior passes
-**Must-haves source:** Previous 01-VERIFICATION.md plus non-reducing ROADMAP criteria and Plan 01-70 contract details
-**Automated checks:** 9 truth-level passes, 2 independent false-pass probes, and 1 configured quality-gate failure
+**Verification approach:** Goal-backward `--gaps-only` re-verification: full 3-level checks plus independent plant/revert probes on the two previously-failed truths; regression sanity checks on the eight previously-passed truths.
+**Must-haves source:** Prior `01-VERIFICATION.md` gaps block, `01-71-PLAN.md`/`01-72-PLAN.md` `must_haves`, and the task's explicit re-measurement instructions.
+**Automated checks:** `npm run check` (full, unpiped), `scope-impact --check`, `revalidation.negative.mjs` (unpiped), `tests/architecture/revalidation.test.ts` (unpiped), `test:coverage:direct`, `fallow health --fail-on-issues`, `eslint`, two independently-planted-and-reverted drift probes on a disposable repository-root copy, suppression-marker greps, `.fallowrc.json` threshold-override check.
 **Human checks required:** 0
-**Review-loop state:** Three fixer passes consumed; no fourth peer review by workflow design
+**Regressions found:** 0
 
 ---
 
-_Verified: 2026-09-06T16:04:42Z_
+_Verified: 2026-09-12T00:00:00Z_
 _Verifier: the agent (gsd-verifier)_

@@ -884,7 +884,7 @@ because a seal may never precede the measurement it asserts.
 
 | Phase                                | Plans Complete | Status      | Completed  |
 | ------------------------------------ | -------------- | ----------- | ---------- |
-| 1. Live Evidence Revalidation        | 70/70          | In Progress |            |
+| 1. Live Evidence Revalidation        | 72/72          | Complete    | 2026-09-12 |
 | 2. Containment and Input Safety      | 3/3            | Complete    | 2026-09-05 |
 | 3. Production Defect Corrections     | 14/14          | Complete    | 2026-09-07 |
 | 4. Hermetic Test Infrastructure      | 7/7            | Complete    | 2026-09-07 |

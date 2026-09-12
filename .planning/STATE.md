@@ -5,17 +5,17 @@ milestone_name: Refine Unit Tests
 current_phase: 09
 current_phase_name: Final Quality and Backlog Closure
 status: phase_complete
-stopped_at: Window ledger disposed (0 open) and IN-02 closed; PR not yet opened
+stopped_at: Phase 01 gaps closed; revalidation tooling retires at milestone close; PR not yet opened
 last_updated: "2026-09-12T17:11:22.957Z"
 last_activity: 2026-09-12
-last_activity_desc: window ledger disposed to 0 open, then IN-02 closed by renaming HooksHydrationReader to HooksHydrationDeps
+last_activity_desc: Phase 01's two verification gaps closed (complexity suppression removed, phase-title and scope-action seals added, three dead negative controls repaired)
 state_head: 63de8980c31cd7b7d230cde1c99b97f081606a3d
 progress:
   total_phases: 9
-  completed_phases: 5
-  total_plans: 211
-  completed_plans: 211
-  percent: 56
+  completed_phases: 9
+  total_plans: 213
+  completed_plans: 213
+  percent: 100
 ---
 
 # Project State
@@ -1236,11 +1236,57 @@ One snag remains in that sequence; the window-gate snag is now cleared:
    silently blocks every quick-batch item from advancing. The section now exists with the
    canonical `with-status` schema (`#`, `Description`, `Date`, `Commit`, `Status`, `Directory`).
 
+## At Milestone Close
+
+**Retire the revalidation tooling with this milestone** (operator decision, 2026-09-12).
+
+The evidence ledger `01-REVALIDATION.json` is a completed intake register, not live
+infrastructure: all 2437 findings are routed (1525 to Phases 2-8, 523 evidence-only closure,
+226 deferred backlog, 163 operator decision -- sums to 2437, nothing awaiting triage), and the
+adversarial review it revalidates is a one-time input. Milestone close archives the phase
+directory, ledger included, exactly as `.planning/milestones/defaults-enabled-phases/` shows.
+
+**Why this is a close-time action, not a now-action:** `scope-impact --check` is part of Phase
+9's requirement seal and is cited as current evidence throughout this file; `01-72` just added
+nine tests to the focused suite. Retiring early would break a seal while the milestone is open.
+
+### Checklist (couplings measured 2026-09-12)
+
+1. Delete `scripts/revalidation.mjs`, `scripts/revalidation.negative.mjs`,
+   `tests/architecture/revalidation.test.ts`. (`revalidation.negative.mjs` is referenced by no
+   npm script, hook, or pair -- free to delete.)
+2. Remove the `specialPairs` entry at `scripts/test-coverage-direct.mjs:20`
+   (`["scripts/revalidation.mjs", "tests/architecture/revalidation.test.ts"]`). It is the ONLY
+   entry, so the Map goes empty -- **check that no branch consulting it becomes uncoverable**,
+   which is the same hazard `WR-03` hit from the other direction.
+3. `productionPaths()` drops **233 -> 232**. `RCOV-01` seals 233 across three carriers, one of
+   which (`revalidation.mjs`) is being deleted, so the seal retires with it -- but re-read
+   `RCOV-01` before assuming that is self-resolving.
+4. `.pre-commit-config.yaml` has two references: the `fix-unicode-dashes` exclude (~line 60,
+   both files named) and the `npm-coverage-direct` `files:` pattern (~line 150, names
+   `scripts/revalidation\.mjs`). Remove both.
+5. `npm run check` must stay green afterwards. Expect the unit count to drop by the focused
+   suite (147 at last measure) and the coverage pair count by one.
+6. Everything under `.planning/phases/01-live-evidence-revalidation/` (ledger, shards, review
+   inputs) archives with the phase -- no action.
+
+### `01-73` was dropped, deliberately
+
+A third gap-closure plan was scoped to remap 945 stale `unsafe-reference` paths and wire
+`validate` into `npm run check`. **Both halves were wrong and it was cancelled before being
+written.** Wiring `validate` into the gate would permanently gate the repo on the internal
+consistency of an archived document describing the tree as of 2026-09-06. And remapping paths
+would have been worse than leaving them: `TXA-F001` asserts `formatRollbackError` "still has no
+production caller", but `install-outcome.ts:985` calls it -- Phase 6's refactor did what the
+finding's own `destination` prescribed. Re-pointing that path would have re-anchored a false
+claim onto a live file, turning a visibly broken reference into an invisibly wrong one. The 945
+are the **expected staleness of a historical record**, not a defect.
+
 ## Deferred Verification
 
 | Phase | State                       | Resume                      |
 | ----- | --------------------------- | --------------------------- |
-| 01    | verification_deferred_gaps  | `$gsd-plan-phase 01 --gaps` |
+| ~~01~~ | **CLOSED 2026-09-12** — `passed` 10/10 | — |
 | 03    | verification_deferred_human | `$gsd-verify-work 03`       |
 | 04    | verification_deferred_human | `$gsd-verify-work 04`       |
 | 05    | verification_deferred_human | `$gsd-verify-work 05`       |
