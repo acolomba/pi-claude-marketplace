@@ -5,11 +5,11 @@ milestone_name: Refine Unit Tests
 current_phase: 09
 current_phase_name: Final Quality and Backlog Closure
 status: phase_complete
-stopped_at: Phase 9 complete and verified; origin/main merged and adapted; PR not yet opened
-last_updated: "2026-09-12T01:30:00.000Z"
+stopped_at: Window ledger fully disposed (0 open); PR not yet opened
+last_updated: "2026-09-12T16:30:00.000Z"
 last_activity: 2026-09-12
-last_activity_desc: origin/main merged into the branch and adapted to this branch's conventions; RCOV-01 re-sealed 230 to 233 pairs
-state_head: 7924eb5d
+last_activity_desc: window ledger disposed to 0 open -- 5 entries fixed by real source edits, 1 was a stale ledger row, 13 waived with measured reasons
+state_head: 408ae717
 progress:
   total_phases: 9
   completed_phases: 5
@@ -1143,10 +1143,19 @@ restructured to satisfy a scanner. Its content is a pre-existing
 `tests/e2e/import-command.test.ts` failure already disclosed when v1.4.1 closed, and
 `tests/e2e/**` is excluded from `npm run check`.
 
+## Quick Tasks Completed
+
+| # | Description | Date | Commit | Status | Directory |
+| --- | --- | --- | --- | --- | --- |
+| 260912-fp0 | Correct the cwd-lifetime comments in extensions/pi-claude-marketplace/edge/register.ts (comments at :18-20 and :104-106 claim the cwd is read once at command registration, but process.cwd() is evaluated inside the getArgumentCompletions arrow at :107-108, so it is read on every completion invocation and nothing is closed over) — fix the comments to match the behavior, do not change the code; closes WINDOWS.md entry 20 | 2026-09-12 | b6f1e037a01875867fa05a1d1f3cca6e9ce2744a | — | .planning/quick/260912-fp0-correct-the-cwd-lifetime-comments-in-ext |
+| 260912-fp1 | Repoint two stale test-path references in extension source comments: the isHooksResolverNote doc comment in extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts cites tests/orchestrators/plugin/cross-surface-reason-parity.test.ts which now lives under tests/architecture/, and the comment justifying the SessionStart gate on ensureSharedDataDir in extensions/pi-claude-marketplace/bridges/hooks/event-router.ts names the deleted tests/edge/index-handler.test.ts as the WR-05 pin whose surviving assertion is in tests/index.test.ts — keep the WR-05 id as a traceability anchor; closes WINDOWS.md entries 23 and 26 | 2026-09-12 | 2673a589 | — | .planning/quick/260912-fp1-repoint-two-stale-test-path-references-i |
+| 260912-fp2 | Correct three stale documentation references: docs/output-catalog.md names the deleted tests/shared/device-flow-prompt.test.ts as the AUTH-03 byte-form lock which now lives in tests/domain/github-auth.test.ts, .planning/codebase/TESTING.md describes tests/helpers/ as live and names four modules by pre-move paths although the directory and both glob alternatives are gone, and .planning/codebase/CONVENTIONS.md around line 151 claims an aggregate bridges/index.ts exists when only the five per-kind barrels do — verify each claim against the live tree first and if a passage already reads correctly report the ledger as stale rather than inventing an edit; closes WINDOWS.md entries 24, 25 and 29 | 2026-09-12 | beacfe7a | — | .planning/quick/260912-fp2-correct-three-stale-documentation-refere |
+| 260912-fp3 | Dispose every remaining open entry in the .planning/WINDOWS.md ledger so no entry reads open: mark ids 20, 23, 24, 25, 26 and 29 fixed once their corrections have landed, and waive ids 1, 2, 3, 7, 8, 9, 10, 13, 14, 15, 16, 17 and 18 with the measured reason recorded for each in the disposition spec — use the gsd-tools windows fixed and windows waive verbs only, never hand-edit the rendered table, and confirm with windows status that zero entries read open | 2026-09-12 | 408ae717 | — | .planning/quick/260912-fp3-dispose-every-remaining-open-entry-in-th |
+
 ## Session Continuity
 
 **Stopped at:** All 9 phases complete and verified; `origin/main` merged and adapted;
-PR not opened by request.
+the window ledger is fully disposed (0 open); PR not opened by request.
 
 Every phase of `refine-unit-tests` is executed and verified. Phase 9 closed with
 `09-VERIFICATION.md` reading `status: passed`, 10/10. The code-review gate ran after the
@@ -1159,27 +1168,62 @@ Measured on the current tree: `npm run check` exit 0 (6109 unit, 32 integration)
 `node scripts/revalidation.mjs scope-impact --check` prints `Scope impact valid: 40 records.`
 The branch is 0 behind `origin/main` and merges clean.
 
-**Resume file:** `.planning/HANDOFF-refine-unit-tests-open-items.md` — READ THIS FIRST. It
-carries the two things left for an operator decision: all 19 open window entries (with a
-suggested three-tier triage) and the unresolved `IN-02` interface-naming question (with the
-five measured constraints any rename must satisfy). It is untracked by design.
+### The window pass (2026-09-12, after the phase verified)
+
+All 19 open ledger entries are disposed: `windows status` reads
+**`open 0 / waived 13 / fixed 18 / total 31`**, so the `/gsd-ship` window gate no longer
+blocks. `npm run check` exit 0 on the resulting tree (6109 unit, 32 integration).
+
+Five entries were closed by real source edits and one was not:
+
+- **20** (`edge/register.ts`, `b6f1e037`) — the comments claimed the cwd was read once at
+  command registration; `process.cwd()` is evaluated inside the `getArgumentCompletions`
+  arrow, so it is read per completion lookup. Comments corrected, behavior untouched
+  (0 changed non-comment lines).
+- **23, 26** (`2673a589`) — both cited test paths were genuinely absent. The `WR-05` anchor
+  was kept and repointed at the surviving assertion in `tests/index.test.ts`.
+- **24** (`c10cf7f3`) — AUTH-03 byte-form lock repointed to `tests/domain/github-auth.test.ts`.
+- **25** (`beacfe7a`) — **wider than the entry recorded.** Two of the four named modules were
+  retired outright rather than moved, and the file's "no mocking library" claim had gone false
+  (`strong-mock@^9.2.2`, 31 suites). Two further claims the plan supplied as established were
+  measured wrong and NOT written: `withHermeticHome` is 13 local definitions rather than a
+  shared helper (the shared module is `tests/platform/hermetic-environment.ts`), and the fakes
+  are no longer unconditionally in-memory (`boundary` is declared in the options bag and
+  enforced by a runtime throw).
+- **29** — **the ledger row was the stale artifact, not the document.**
+  `.planning/codebase/CONVENTIONS.md` was already correct: `a64d00a4` (2026-09-09) replaced the
+  exact wording the entry quotes, six days after it was recorded. Marked `fixed`, no edit made.
+
+The 13 waives (`1, 2, 3, 7, 8, 9, 10, 13, 14, 15, 16, 17, 18`) carry their measured reasons,
+derived mechanically rather than transcribed. Entry **9** remains the operator-accepted
+`reconcile/apply.ts` exposure signed off 2026-09-02 — waived as a durable record of residual
+risk, not as a pending action. Entries **2** and **3** are stubs whose substance belongs to
+unshipped `STOP-07` / `SFAIL-03` feature work.
+
+**Resume file:** `.planning/HANDOFF-refine-unit-tests-open-items.md` — its section 1 (the 19
+open windows) is now HISTORICAL; section 2 (`IN-02`) is still live. `IN-02` is the one
+remaining operator decision: the `HooksHydrationReader` naming question, with the five measured
+constraints any rename must satisfy. The file is untracked by design.
 
 **Read beside it:** `.planning/phases/09-final-quality-and-backlog-closure/09-CLOSURE-LEDGER.md`
 (24 rows, one vocabulary, the milestone's audit trail), `09-REVIEW.md` + `09-REVIEW-FIX.md`,
 `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`.
 
-Last session: 2026-09-12T10:35:00.000Z
+Last session: 2026-09-12 — resumed, then ran the window pass to completion.
 
 **Next:** Open the PR (not done — deliberate), then milestone audit, complete, cleanup.
 
-Two snags waiting in that sequence, both already diagnosed:
+One snag remains in that sequence; the window-gate snag is now cleared:
 
-1. `/gsd-ship` blocks while any window reads `open` — 19 do. `D-09-13` left them deliberately;
-   see the handoff file for which are cheap and which are accepted risk.
+1. ~~`/gsd-ship` blocks while any window reads `open`~~ — **cleared 2026-09-12**, 0 open.
 2. `gsd-tools query phase.complete` refuses here: it sees `.planning/workstreams/` and demands
    `--ws`, but this milestone's ROADMAP/STATE are the ROOT files and no workstream is named
    `refine-unit-tests`. Hand-edit and verify by diff, as this file already prescribes for the
    state verbs.
+3. `quick-batch complete` also refused until a `## Quick Tasks Completed` section was created
+   in this file — it is the sole writer of an item's `complete` status, so the section's absence
+   silently blocks every quick-batch item from advancing. The section now exists with the
+   canonical `with-status` schema (`#`, `Description`, `Date`, `Commit`, `Status`, `Directory`).
 
 ## Deferred Verification
 

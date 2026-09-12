@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "batch_id": "260912-foz",
+  "created_at": "2026-09-12T15:17:58.405Z",
+  "options": {},
+  "base_revision": "6bc71dc44a044c6398bb9f52b12deef7ba903618",
+  "items": [
+    {
+      "quick_id": "260912-fp0",
+      "client_id": null,
+      "description": "Correct the cwd-lifetime comments in extensions/pi-claude-marketplace/edge/register.ts (comments at :18-20 and :104-106 claim the cwd is read once at command registration, but process.cwd() is evaluated inside the getArgumentCompletions arrow at :107-108, so it is read on every completion invocation and nothing is closed over) — fix the comments to match the behavior, do not change the code; closes WINDOWS.md entry 20",
+      "status": "complete",
+      "depends_on": [],
+      "planned_files": ["extensions/pi-claude-marketplace/edge/register.ts"],
+      "directory": null,
+      "worktree": null,
+      "dispatched_worktree": null,
+      "dispatched_branch": null,
+      "dispatched_base": null,
+      "wave": 0,
+      "commit": "b6f1e037a01875867fa05a1d1f3cca6e9ce2744a",
+      "failure_reason": null
+    },
+    {
+      "quick_id": "260912-fp1",
+      "client_id": null,
+      "description": "Repoint two stale test-path references in extension source comments: the isHooksResolverNote doc comment in extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts cites tests/orchestrators/plugin/cross-surface-reason-parity.test.ts which now lives under tests/architecture/, and the comment justifying the SessionStart gate on ensureSharedDataDir in extensions/pi-claude-marketplace/bridges/hooks/event-router.ts names the deleted tests/edge/index-handler.test.ts as the WR-05 pin whose surviving assertion is in tests/index.test.ts — keep the WR-05 id as a traceability anchor; closes WINDOWS.md entries 23 and 26",
+      "status": "complete",
+      "depends_on": [],
+      "planned_files": [
+        "extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts",
+        "extensions/pi-claude-marketplace/bridges/hooks/event-router.ts"
+      ],
+      "directory": null,
+      "worktree": null,
+      "dispatched_worktree": null,
+      "dispatched_branch": null,
+      "dispatched_base": null,
+      "wave": 0,
+      "commit": "2673a589",
+      "failure_reason": null
+    },
+    {
+      "quick_id": "260912-fp2",
+      "client_id": null,
+      "description": "Correct three stale documentation references: docs/output-catalog.md names the deleted tests/shared/device-flow-prompt.test.ts as the AUTH-03 byte-form lock which now lives in tests/domain/github-auth.test.ts, .planning/codebase/TESTING.md describes tests/helpers/ as live and names four modules by pre-move paths although the directory and both glob alternatives are gone, and .planning/codebase/CONVENTIONS.md around line 151 claims an aggregate bridges/index.ts exists when only the five per-kind barrels do — verify each claim against the live tree first and if a passage already reads correctly report the ledger as stale rather than inventing an edit; closes WINDOWS.md entries 24, 25 and 29",
+      "status": "complete",
+      "depends_on": [],
+      "planned_files": ["docs/output-catalog.md", ".planning/codebase/TESTING.md"],
+      "directory": null,
+      "worktree": null,
+      "dispatched_worktree": null,
+      "dispatched_branch": null,
+      "dispatched_base": null,
+      "wave": 0,
+      "commit": "beacfe7a",
+      "failure_reason": null
+    },
+    {
+      "quick_id": "260912-fp3",
+      "client_id": null,
+      "description": "Dispose every remaining open entry in the .planning/WINDOWS.md ledger so no entry reads open: mark ids 20, 23, 24, 25, 26 and 29 fixed once their corrections have landed, and waive ids 1, 2, 3, 7, 8, 9, 10, 13, 14, 15, 16, 17 and 18 with the measured reason recorded for each in the disposition spec — use the gsd-tools windows fixed and windows waive verbs only, never hand-edit the rendered table, and confirm with windows status that zero entries read open",
+      "status": "complete",
+      "depends_on": ["260912-fp0", "260912-fp1", "260912-fp2"],
+      "planned_files": [".planning/WINDOWS.md"],
+      "directory": null,
+      "worktree": null,
+      "dispatched_worktree": null,
+      "dispatched_branch": null,
+      "dispatched_base": null,
+      "wave": 1,
+      "commit": "408ae717",
+      "failure_reason": null
+    }
+  ]
+}
