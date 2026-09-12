@@ -139,6 +139,26 @@ const SEALED_REQUIREMENT_ROUTES = Object.freeze({
 // `requirement-signature` violation. `tests/architecture/revalidation.test.ts`
 // pins the two keysets to each other so the drift is caught before either.
 const SEALED_REQUIREMENT_IDS = new Set(Object.keys(SEALED_REQUIREMENT_ROUTES));
+// The exact Phase 2-9 heading text and canonical route action, held here instead
+// of being taken from either the roadmap or the ledger. Both of those are
+// mutable, so a check that compared them with each other would accept a rename
+// applied to both at once; comparing each with this fixed contract does not
+// (D-20, D-23). Phase 1 is deliberately unsealed because no scope row references
+// it, and every lookup COMPARES rather than reads through, so an absent entry
+// reports nothing and leaves the unsealed-row diagnostics a single line.
+const SEALED_PHASE_CONTRACTS = Object.freeze({
+  "PHASE-02": Object.freeze({ title: "Containment and Input Safety", action: "narrow/split" }),
+  "PHASE-03": Object.freeze({ title: "Production Defect Corrections", action: "narrow/split" }),
+  "PHASE-04": Object.freeze({ title: "Hermetic Test Infrastructure", action: "narrow/split" }),
+  "PHASE-05": Object.freeze({ title: "Injection and Ownership Design", action: "narrow/split" }),
+  "PHASE-06": Object.freeze({ title: "Assertion and Module Refinement", action: "narrow/split" }),
+  "PHASE-07": Object.freeze({ title: "Gate Integrity", action: "narrow/split" }),
+  "PHASE-08": Object.freeze({ title: "Direct Coverage", action: "narrow/split" }),
+  "PHASE-09": Object.freeze({
+    title: "Final Quality and Backlog Closure",
+    action: "narrow/split",
+  }),
+});
 const PUBLISH_JOURNAL_FIELDS = new Set(["status", "records"]);
 const PUBLISH_RECORD_FIELDS = new Set(["destination", "staged", "backup", "hadDestination"]);
 const PUBLISH_STATUSES = new Set(["staged", "published"]);
@@ -2547,9 +2567,26 @@ function validatePhaseRequirements(requirements, phaseId, number, actualRequirem
   }
 }
 
+function validatePhaseTitle(phaseId, phase, violations) {
+  const sealed = SEALED_PHASE_CONTRACTS[phaseId];
+  if (sealed !== undefined && phase.title !== sealed.title) {
+    violations.push(
+      violation(
+        "phase-title-contract",
+        phaseId,
+        "roadmap phase title differs from sealed phase contract",
+      ),
+    );
+  }
+}
+
 function validatePhaseAfterAnchor(phaseId, number, phase, change, locators, violations) {
   const afterParts = change === undefined ? undefined : locators.get(change.id)?.after;
-  if (afterParts !== undefined && afterParts[1] !== `${phaseId} / Phase ${number} ${phase.title}`) {
+  // The anchor is measured against the SEALED title, not against the heading the
+  // anchor is meant to attest, so renaming both at once still disagrees here.
+  // An unsealed phase keeps the parsed heading and stays reported, not thrown.
+  const expected = SEALED_PHASE_CONTRACTS[phaseId]?.title ?? phase.title;
+  if (afterParts !== undefined && afterParts[1] !== `${phaseId} / Phase ${number} ${expected}`) {
     violations.push(
       violation("scope-after-anchor", change.id, "afterAnchor does not resolve to phase"),
     );
@@ -2573,6 +2610,7 @@ function validatePhaseContracts(requirements, phases, rows, locators, violations
 
     const actualRequirements = [...phase.requirements].sort();
     validatePhaseRequirements(requirements, phaseId, number, actualRequirements, violations);
+    validatePhaseTitle(phaseId, phase, violations);
     validatePhaseAfterAnchor(phaseId, number, phase, change, locators, violations);
   }
 }

@@ -1548,7 +1548,107 @@ test("RVAL-04 scope-impact rejects phase title drift", async (t) => {
   assert.deepStrictEqual(execution, {
     status: 1,
     stdout: "",
+    stderr:
+      "phase-title-contract: PHASE-08: roadmap phase title differs from sealed phase contract\n",
+  });
+});
+
+// D-20/D-23: the roadmap heading and the ledger anchor are both mutable, so a
+// check that compared them with each other would report nothing here. The case
+// fails only because a fixed seal outside the ledger is the authority for both.
+test("RVAL-04 scope-impact rejects coordinated phase title and route anchor drift", async (t) => {
+  // arrange
+  const projectRoot = await createScopeImpactFixture(t);
+  const contractPath = path.join(projectRoot, ".planning/ROADMAP.md");
+  const contract = await readFile(contractPath, "utf8");
+  await writeFile(
+    contractPath,
+    contract.replace("### Phase 8: Direct Coverage", "### Phase 8: Coverage Drift"),
+  );
+  const ledgerFile = path.join(projectRoot, ledgerPath);
+  const ledger = JSON.parse(await readFile(ledgerFile, "utf8")) as Ledger;
+  const route = ledger.scopeChanges.find((change) => change.id === "SCOPE-ROUTE-PHASE-08")!;
+  route.beforeAnchor = route.beforeAnchor!.replace(
+    "Phase 8 Direct Coverage",
+    "Phase 8 Coverage Drift",
+  );
+  route.afterAnchor = route.afterAnchor!.replace(
+    "Phase 8 Direct Coverage",
+    "Phase 8 Coverage Drift",
+  );
+  await writeFile(ledgerFile, `${JSON.stringify(ledger, null, 2)}\n`);
+
+  // act
+  const execution = runCli(projectRoot, ["scope-impact", "--check"]);
+
+  // assert
+  assert.deepStrictEqual(execution, {
+    status: 1,
+    stdout: "",
+    stderr:
+      "phase-title-contract: PHASE-08: roadmap phase title differs from sealed phase contract\n" +
+      "scope-after-anchor: SCOPE-ROUTE-PHASE-08: afterAnchor does not resolve to phase\n",
+  });
+});
+
+// The mirror of the coordinated case: only the ledger anchor moves, and the
+// route violation stays distinguishable from the roadmap-title violation.
+test("RVAL-04 scope-impact rejects route anchor drift on its own", async (t) => {
+  // arrange
+  const projectRoot = await createScopeImpactFixture(t);
+  const ledgerFile = path.join(projectRoot, ledgerPath);
+  const ledger = JSON.parse(await readFile(ledgerFile, "utf8")) as Ledger;
+  const route = ledger.scopeChanges.find((change) => change.id === "SCOPE-ROUTE-PHASE-08")!;
+  route.afterAnchor = route.afterAnchor!.replace(
+    "Phase 8 Direct Coverage",
+    "Phase 8 Coverage Drift",
+  );
+  await writeFile(ledgerFile, `${JSON.stringify(ledger, null, 2)}\n`);
+
+  // act
+  const execution = runCli(projectRoot, ["scope-impact", "--check"]);
+
+  // assert
+  assert.deepStrictEqual(execution, {
+    status: 1,
+    stdout: "",
     stderr: "scope-after-anchor: SCOPE-ROUTE-PHASE-08: afterAnchor does not resolve to phase\n",
+  });
+});
+
+test("RVAL-04 seals exactly the eight Phase 2-9 route contracts", async () => {
+  // arrange
+  const source = await readFile(revalidationCli, "utf8");
+
+  // act
+  const phaseIds = sealedTableIds(source, "SEALED_PHASE_CONTRACTS");
+
+  // assert
+  assert.deepStrictEqual(phaseIds, [
+    "PHASE-02",
+    "PHASE-03",
+    "PHASE-04",
+    "PHASE-05",
+    "PHASE-06",
+    "PHASE-07",
+    "PHASE-08",
+    "PHASE-09",
+  ]);
+  assert.strictEqual(phaseIds.length, 8);
+});
+
+test("RVAL-04 scope-impact accepts an unmodified copy of the live contracts", async (t) => {
+  // arrange
+  const projectRoot = await createScopeImpactFixture(t);
+
+  // act
+  const execution = runCli(projectRoot, ["scope-impact", "--check"]);
+
+  // assert
+  assert.deepStrictEqual(execution, {
+    status: 0,
+    stdout: "Scope impact valid: 40 records.\n",
+    stderr: "",
   });
 });
 
