@@ -108,7 +108,7 @@ Both tasks land in one commit: Task 2 is the gate-and-commit step for Task 1's e
 
 | Gate | Reading |
 |---|---|
-| Stale-claim greps (`per-command-registration`, `Captured at registration time`, `closed-over resolver`) | absent; `completion lookup`, `tests/edge/register.test.ts`, `D-04` all present; no planning references | 
+| Stale-claim greps (`per-command-registration`, `Captured at registration time`, `closed-over resolver`) | absent; `completion lookup`, `tests/edge/register.test.ts`, `D-04` all present; no planning references |
 | Changed non-comment lines in the file diff | **0** |
 | `node --test tests/edge/register.test.ts` | exit 0 — 20 pass, 0 fail |
 | `npx prettier --check extensions/pi-claude-marketplace/edge/register.ts` | exit 0 |
