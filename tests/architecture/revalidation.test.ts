@@ -1732,6 +1732,114 @@ test("RVAL-04 scope-impact rejects a contradictory route row identity", async (t
   });
 });
 
+// D-19/D-21/D-23: `keep` and `narrow/split` are both members of the closed
+// action set, so swapping one for the other leaves every structural check
+// satisfied. Only an exact-value seal reports the swap.
+test("RVAL-04 scope-impact rejects a narrow/split row silently changed to keep", async (t) => {
+  // arrange
+  const projectRoot = await createScopeImpactFixture(t);
+  const ledgerFile = path.join(projectRoot, ledgerPath);
+  const ledger = JSON.parse(await readFile(ledgerFile, "utf8")) as Ledger;
+  ledger.scopeChanges.find((change) => change.id === "SCOPE-REQ-PDEF-01")!.action = "keep";
+  await writeFile(ledgerFile, `${JSON.stringify(ledger, null, 2)}\n`);
+
+  // act
+  const execution = runCli(projectRoot, ["scope-impact", "--check"]);
+
+  // assert
+  assert.deepStrictEqual(execution, {
+    status: 1,
+    stdout: "",
+    stderr:
+      "scope-action-contract: SCOPE-REQ-PDEF-01: canonical action differs from sealed scope contract\n",
+  });
+});
+
+// The opposite direction, so the seal cannot be mistaken for a one-way
+// "`keep` is suspicious" heuristic.
+test("RVAL-04 scope-impact rejects a keep row silently changed to narrow/split", async (t) => {
+  // arrange
+  const projectRoot = await createScopeImpactFixture(t);
+  const ledgerFile = path.join(projectRoot, ledgerPath);
+  const ledger = JSON.parse(await readFile(ledgerFile, "utf8")) as Ledger;
+  ledger.scopeChanges.find((change) => change.id === "SCOPE-REQ-RVAL-01")!.action = "narrow/split";
+  await writeFile(ledgerFile, `${JSON.stringify(ledger, null, 2)}\n`);
+
+  // act
+  const execution = runCli(projectRoot, ["scope-impact", "--check"]);
+
+  // assert
+  assert.deepStrictEqual(execution, {
+    status: 1,
+    stdout: "",
+    stderr:
+      "scope-action-contract: SCOPE-REQ-RVAL-01: canonical action differs from sealed scope contract\n",
+  });
+});
+
+// All 40 rows are sealed, not only the 32 requirement rows.
+test("RVAL-04 scope-impact rejects a route row action changed to keep", async (t) => {
+  // arrange
+  const projectRoot = await createScopeImpactFixture(t);
+  const ledgerFile = path.join(projectRoot, ledgerPath);
+  const ledger = JSON.parse(await readFile(ledgerFile, "utf8")) as Ledger;
+  ledger.scopeChanges.find((change) => change.id === "SCOPE-ROUTE-PHASE-08")!.action = "keep";
+  await writeFile(ledgerFile, `${JSON.stringify(ledger, null, 2)}\n`);
+
+  // act
+  const execution = runCli(projectRoot, ["scope-impact", "--check"]);
+
+  // assert
+  assert.deepStrictEqual(execution, {
+    status: 1,
+    stdout: "",
+    stderr:
+      "scope-action-contract: SCOPE-ROUTE-PHASE-08: canonical action differs from sealed scope contract\n",
+  });
+});
+
+// Flipping an evidence-only row to an active action moves its clause, its
+// definition location, and its traceability route all at once. The whole set is
+// asserted so none of those consequences can be lost without the case saying so.
+test("RVAL-04 scope-impact rejects a move-to-evidence row changed to keep", async (t) => {
+  // arrange
+  const projectRoot = await createScopeImpactFixture(t);
+  const ledgerFile = path.join(projectRoot, ledgerPath);
+  const ledger = JSON.parse(await readFile(ledgerFile, "utf8")) as Ledger;
+  ledger.scopeChanges.find((change) => change.id === "SCOPE-REQ-GGAT-02")!.action = "keep";
+  await writeFile(ledgerFile, `${JSON.stringify(ledger, null, 2)}\n`);
+
+  // act
+  const execution = runCli(projectRoot, ["scope-impact", "--check"]);
+
+  // assert
+  assert.deepStrictEqual(execution, {
+    status: 1,
+    stdout: "",
+    stderr:
+      "invalid-requirement-route: GGAT-02: active requirement must use one numbered phase and an active status\n" +
+      "missing-requirement-clause: GGAT-02: requirement clause is blank or absent\n" +
+      "missing-requirement-definition: GGAT-02: active definition is absent\n" +
+      "requirement-disposition: GGAT-02: active requirement cannot be evidence only\n" +
+      "requirement-location: GGAT-02: active requirement cannot have an evidence/history record\n" +
+      "scope-action-contract: SCOPE-REQ-GGAT-02: canonical action differs from sealed scope contract\n" +
+      "scope-after-anchor: SCOPE-REQ-GGAT-02: afterAnchor does not resolve to requirement\n",
+  });
+});
+
+test("RVAL-04 seals the same requirement IDs in the action and route tables", async () => {
+  // arrange
+  const source = await readFile(revalidationCli, "utf8");
+
+  // act
+  const actionIds = sealedTableIds(source, "SEALED_REQUIREMENT_ACTIONS");
+  const routeIds = sealedTableIds(source, "SEALED_REQUIREMENT_ROUTES");
+
+  // assert
+  assert.deepStrictEqual(actionIds, routeIds);
+  assert.strictEqual(actionIds.length, 32);
+});
+
 for (const row of [
   {
     title: "RVAL-04 scope-impact rejects an invalid canonical scope action",

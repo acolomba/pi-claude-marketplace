@@ -159,6 +159,54 @@ const SEALED_PHASE_CONTRACTS = Object.freeze({
     action: "narrow/split",
   }),
 });
+// The exact canonical action for each stable requirement row. `keep` and
+// `narrow/split` are both legal members of `SCOPE_ACTIONS`, so swapping one for
+// the other leaves every structural check satisfied and changes what later
+// phases inherit; only an exact-value contract reports it (D-19, D-21, D-23).
+const SEALED_REQUIREMENT_ACTIONS = Object.freeze({
+  "AUTH-01": "narrow/split",
+  "CLOSE-01": "keep",
+  "CLOSE-02": "narrow/split",
+  "GGAT-01": "narrow/split",
+  "GGAT-02": "move-to-evidence",
+  "GGAT-03": "narrow/split",
+  "GGAT-04": "narrow/split",
+  "PDEF-01": "narrow/split",
+  "PDEF-02": "narrow/split",
+  "PDEF-03": "keep",
+  "PDEF-04": "narrow/split",
+  "PDEF-05": "narrow/split",
+  "PDEF-06": "narrow/split",
+  "PDEF-07": "narrow/split",
+  "PDEF-08": "narrow/split",
+  "RCOV-01": "narrow/split",
+  "RCOV-02": "narrow/split",
+  "RCOV-03": "keep",
+  "RCOV-04": "move-to-evidence",
+  "RVAL-01": "keep",
+  "RVAL-02": "keep",
+  "RVAL-03": "keep",
+  "RVAL-04": "keep",
+  "TREF-01": "narrow/split",
+  "TREF-02": "narrow/split",
+  "TREF-03": "narrow/split",
+  "TREF-04": "narrow/split",
+  "TREF-05": "narrow/split",
+  "TREF-06": "narrow/split",
+  "TREF-07": "narrow/split",
+  "TREF-08": "narrow/split",
+  "TREF-09": "narrow/split",
+});
+// One row-id-keyed lookup over all 40 rows, derived from the two tables above so
+// the checker selects no table at run time and an unsealed row id resolves to
+// `undefined` instead of reaching a second, differently-shaped miss.
+const SEALED_SCOPE_ACTIONS = new Map([
+  ...Object.entries(SEALED_REQUIREMENT_ACTIONS).map(([id, action]) => [`SCOPE-REQ-${id}`, action]),
+  ...Object.entries(SEALED_PHASE_CONTRACTS).map(([id, contract]) => [
+    `SCOPE-ROUTE-${id}`,
+    contract.action,
+  ]),
+]);
 const PUBLISH_JOURNAL_FIELDS = new Set(["status", "records"]);
 const PUBLISH_RECORD_FIELDS = new Set(["destination", "staged", "backup", "hadDestination"]);
 const PUBLISH_STATUSES = new Set(["staged", "published"]);
@@ -2615,6 +2663,25 @@ function validatePhaseContracts(requirements, phases, rows, locators, violations
   }
 }
 
+// Only rows whose action is already a member of the closed set are compared, so
+// a structurally invalid action keeps reporting `invalid-scope-action` alone.
+// An unsealed row id resolves to `undefined` and is left to the row-identity and
+// unexpected-row diagnostics that already name it.
+function validateScopeActionContracts(rows, violations) {
+  for (const [id, change] of rows) {
+    const sealed = SEALED_SCOPE_ACTIONS.get(id);
+    if (sealed !== undefined && SCOPE_ACTIONS.has(change.action) && change.action !== sealed) {
+      violations.push(
+        violation(
+          "scope-action-contract",
+          id,
+          "canonical action differs from sealed scope contract",
+        ),
+      );
+    }
+  }
+}
+
 function validatePlanningContracts(ledger, requirementsMarkdown, roadmapMarkdown) {
   const violations = [];
   const requirements = parseRequirementsContract(visibleMarkdown(requirementsMarkdown), violations);
@@ -2645,6 +2712,7 @@ function validatePlanningContracts(ledger, requirementsMarkdown, roadmapMarkdown
 
   validateRequirementContracts(requirements, rows, validRowIds, locators, violations);
   validatePhaseContracts(requirements, phases, rows, locators, violations);
+  validateScopeActionContracts(rows, violations);
 
   if (ledger.scopeChanges.length !== 40 || rows.size !== 40) {
     violations.push(
