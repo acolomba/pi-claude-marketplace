@@ -1130,16 +1130,7 @@ function validateScopeRowIdentity(change, violations) {
   return valid;
 }
 
-// fallow-ignore-next-line complexity -- temporary; remove after Phase 01-71 refactor
-function validateScopeChangeStructure(change, violations, { requireContractKind = false } = {}) {
-  let valid = true;
-  if (!identityIsSafe(change.id)) {
-    violations.push(
-      violation("invalid-scope-change-id", String(change.id), "scope change id is unsafe"),
-    );
-    valid = false;
-  }
-
+function validateScopeRowMandatoryFields(change, violations) {
   if (
     typeof change.requirementId !== "string" ||
     change.requirementId.trim() === "" ||
@@ -1155,6 +1146,54 @@ function validateScopeChangeStructure(change, violations, { requireContractKind 
         "requirementId, action, and rationale are mandatory",
       ),
     );
+    return false;
+  }
+
+  return true;
+}
+
+// Only the planning-contract caller demands a row kind, so both checks stay behind
+// that caller's gate and neither short-circuits the other.
+function validateScopeContractKind(change, isRequirement, isRoute, violations) {
+  let valid = true;
+  if (!isRequirement && !isRoute) {
+    violations.push(
+      violation(
+        "invalid-scope-kind",
+        String(change.id),
+        "scope contract row must be a requirement or phase route",
+      ),
+    );
+    valid = false;
+  }
+
+  if (
+    isRequirement &&
+    (typeof change.requirementSignature !== "string" || change.requirementSignature.trim() === "")
+  ) {
+    violations.push(
+      violation(
+        "invalid-scope-signature",
+        change.id,
+        "requirement row must include a clause signature",
+      ),
+    );
+    valid = false;
+  }
+
+  return valid;
+}
+
+function validateScopeChangeStructure(change, violations, { requireContractKind = false } = {}) {
+  let valid = true;
+  if (!identityIsSafe(change.id)) {
+    violations.push(
+      violation("invalid-scope-change-id", String(change.id), "scope change id is unsafe"),
+    );
+    valid = false;
+  }
+
+  if (!validateScopeRowMandatoryFields(change, violations)) {
     valid = false;
   }
 
@@ -1170,29 +1209,10 @@ function validateScopeChangeStructure(change, violations, { requireContractKind 
 
   const isRequirement = typeof change.id === "string" && change.id.startsWith("SCOPE-REQ-");
   const isRoute = typeof change.id === "string" && change.id.startsWith("SCOPE-ROUTE-");
-  if (requireContractKind && !isRequirement && !isRoute) {
-    violations.push(
-      violation(
-        "invalid-scope-kind",
-        String(change.id),
-        "scope contract row must be a requirement or phase route",
-      ),
-    );
-    valid = false;
-  }
-
   if (
     requireContractKind &&
-    isRequirement &&
-    (typeof change.requirementSignature !== "string" || change.requirementSignature.trim() === "")
+    !validateScopeContractKind(change, isRequirement, isRoute, violations)
   ) {
-    violations.push(
-      violation(
-        "invalid-scope-signature",
-        change.id,
-        "requirement row must include a clause signature",
-      ),
-    );
     valid = false;
   }
 
