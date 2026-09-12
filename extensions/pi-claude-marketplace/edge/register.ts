@@ -16,8 +16,11 @@
 //       * delegates to registerListMarketplacesTool + registerListPluginsTool.
 //
 // `process.cwd()` is acceptable here at the registration glue layer --
-// this is the one site where it is sanctioned. The cwd captured here is
-// per-command-registration.
+// this is the one site where it is sanctioned. The read happens inside
+// the `getArgumentCompletions` callback, once per completion lookup, so
+// completions resolve against the directory the process is in at the
+// moment the user types, and no directory value is retained between
+// lookups.
 //
 // BLOCK C: this file imports from edge/* (sibling), orchestrators/* (one
 // allowed up-import), shared/* (leaf), and the Pi peer dep. The
@@ -115,8 +118,12 @@ export function registerClaudePluginCommand(
     description: COMMAND_DESCRIPTION,
     handler: (args, ctx) => routeClaudePlugin(args, handlers, ctx),
     // This `process.cwd()` is the single sanctioned site.
-    // Captured at registration time; threads through every keystroke's
-    // completion lookup via the closed-over resolver.
+    // The arrow body runs per completion lookup and reads
+    // `process.cwd()` there, so a fresh `makeLocationsResolver` is
+    // built from the current directory on each lookup -- the read
+    // happens per lookup, not once when the command is registered.
+    // Pinned by `tests/edge/register.test.ts`, test "resolves argument
+    // completions against the working directory the callback runs in".
     getArgumentCompletions: (prefix) =>
       getArgumentCompletions(prefix, makeLocationsResolver(process.cwd()), deps.completionCache),
   });
