@@ -31,6 +31,28 @@ function invokeCli(projectRoot, args) {
   return { status: runtime.exitCode, stdout: stdout.join(""), stderr: stderr.join("") };
 }
 
+/**
+ * The live traceability row for one requirement, matched whatever its column
+ * padding and status spelling currently are.
+ *
+ * A control that plants its violation with a hard-coded row literal stops
+ * planting anything the moment the document is reformatted or a status flips,
+ * and `String.replace` reports that miss by returning the original document.
+ * Matching the row and asserting the match turns the same drift into a failure.
+ */
+function traceabilityRow(markdown, requirementId) {
+  const match = new RegExp(`^\\|[ \\t]*${requirementId}[ \\t]*\\|[^\\n]*\\|$`, "m").exec(markdown);
+  assert.ok(match, `traceability row for ${requirementId} is absent`);
+  return match[0];
+}
+
+/** The live active-definition line for one requirement, either checkbox state. */
+function requirementDefinitionLine(markdown, requirementId) {
+  const match = new RegExp(`^- \\[[ x]\\] \\*\\*${requirementId}\\*\\*`, "m").exec(markdown);
+  assert.ok(match, `active definition for ${requirementId} is absent`);
+  return match[0];
+}
+
 function evidenceLedger(corpusPath) {
   const claimId = `${corpusPath}#CLAIM-1`;
   return {
@@ -254,11 +276,13 @@ try {
     path.join(projectRoot, ledgerPath),
     `${JSON.stringify(renamedLedger, null, 2)}\n`,
   );
+  const authDefinition = requirementDefinitionLine(requirements, "AUTH-01");
+  const authRow = traceabilityRow(requirements, "AUTH-01");
   await writeFile(
     path.join(projectRoot, requirementsPath),
     requirements
-      .replace("- [ ] **AUTH-01**", "- [ ] **EVIL-99**")
-      .replace("| AUTH-01 |", "| EVIL-99 |"),
+      .replace(authDefinition, authDefinition.replace("AUTH-01", "EVIL-99"))
+      .replace(authRow, authRow.replace("AUTH-01", "EVIL-99")),
   );
   await writeFile(
     path.join(projectRoot, roadmapPath),
@@ -279,9 +303,11 @@ try {
   });
 
   await writeFile(path.join(projectRoot, ledgerPath), scopeLedger);
+  const pdefRow = traceabilityRow(requirements, "PDEF-01");
+  assert.ok(pdefRow.includes("Phase 3"), "PDEF-01 is no longer routed to Phase 3");
   await writeFile(
     path.join(projectRoot, requirementsPath),
-    requirements.replace("| PDEF-01 | Phase 3 | Pending |", "| PDEF-01 | Phase 4 | Pending |"),
+    requirements.replace(pdefRow, pdefRow.replace("Phase 3", "Phase 4")),
   );
   await writeFile(
     path.join(projectRoot, roadmapPath),
@@ -305,12 +331,11 @@ try {
   });
 
   await writeFile(path.join(projectRoot, roadmapPath), roadmap);
+  const ggatRow = traceabilityRow(requirements, "GGAT-02");
+  assert.ok(ggatRow.includes("formerly Phase 7"), "GGAT-02 no longer records a former Phase 7");
   await writeFile(
     path.join(projectRoot, requirementsPath),
-    requirements.replace(
-      "| GGAT-02 | Evidence/history (formerly Phase 7) | Evidence only |",
-      "| GGAT-02 | Evidence/history (formerly Phase 8) | Evidence only |",
-    ),
+    requirements.replace(ggatRow, ggatRow.replace("formerly Phase 7", "formerly Phase 8")),
   );
   assert.deepStrictEqual(invokeCli(projectRoot, ["scope-impact", "--check"]), {
     status: 1,
@@ -319,12 +344,12 @@ try {
       "requirement-route-contract: GGAT-02: traceability route/status differs from sealed requirement contract\n",
   });
 
-  const traceabilityRow = "| CLOSE-02 | Phase 9 | Pending |";
+  const hiddenRow = traceabilityRow(requirements, "CLOSE-02");
   await writeFile(
     path.join(projectRoot, requirementsPath),
     requirements.replace(
-      traceabilityRow,
-      ["```md", "hidden contract", "    ```", traceabilityRow, "```"].join("\n"),
+      hiddenRow,
+      ["```md", "hidden contract", "    ```", hiddenRow, "```"].join("\n"),
     ),
   );
   assert.deepStrictEqual(invokeCli(projectRoot, ["scope-impact", "--check"]), {
@@ -348,6 +373,64 @@ try {
     stdout: "",
     stderr:
       "phase-requirements: PHASE-07: roadmap membership differs from sealed requirement routes\n",
+  });
+
+  // A roadmap heading renamed together with the ledger anchor that is supposed
+  // to attest it. The two mutable inputs still agree with each other, so only a
+  // seal held outside both of them reports the rename (D-20, D-23).
+  const titleDrift = JSON.parse(scopeLedger);
+  const driftedRoute = titleDrift.scopeChanges.find(
+    (change) => change.id === "SCOPE-ROUTE-PHASE-08",
+  );
+  assert.ok(driftedRoute);
+  driftedRoute.beforeAnchor = driftedRoute.beforeAnchor.replace(
+    "Phase 8 Direct Coverage",
+    "Phase 8 Coverage Drift",
+  );
+  driftedRoute.afterAnchor = driftedRoute.afterAnchor.replace(
+    "Phase 8 Direct Coverage",
+    "Phase 8 Coverage Drift",
+  );
+  assert.ok(driftedRoute.afterAnchor.includes("Phase 8 Coverage Drift"), "route anchor unchanged");
+  const driftedRoadmap = roadmap.replace(
+    "### Phase 8: Direct Coverage",
+    "### Phase 8: Coverage Drift",
+  );
+  assert.notStrictEqual(driftedRoadmap, roadmap, "roadmap heading unchanged");
+  await writeFile(path.join(projectRoot, ledgerPath), `${JSON.stringify(titleDrift, null, 2)}\n`);
+  await writeFile(path.join(projectRoot, roadmapPath), driftedRoadmap);
+  assert.deepStrictEqual(invokeCli(projectRoot, ["scope-impact", "--check"]), {
+    status: 1,
+    stdout: "",
+    stderr:
+      "phase-title-contract: PHASE-08: roadmap phase title differs from sealed phase contract\n" +
+      "scope-after-anchor: SCOPE-ROUTE-PHASE-08: afterAnchor does not resolve to phase\n",
+  });
+
+  // A canonical action swapped for another legal member of the closed set, with
+  // neither planning document touched (D-19, D-21).
+  await writeFile(path.join(projectRoot, roadmapPath), roadmap);
+  const actionDrift = JSON.parse(scopeLedger);
+  const driftedRow = actionDrift.scopeChanges.find((change) => change.id === "SCOPE-REQ-PDEF-01");
+  assert.ok(driftedRow);
+  assert.strictEqual(driftedRow.action, "narrow/split");
+  driftedRow.action = "keep";
+  await writeFile(path.join(projectRoot, ledgerPath), `${JSON.stringify(actionDrift, null, 2)}\n`);
+  assert.deepStrictEqual(invokeCli(projectRoot, ["scope-impact", "--check"]), {
+    status: 1,
+    stdout: "",
+    stderr:
+      "scope-action-contract: SCOPE-REQ-PDEF-01: canonical action differs from sealed scope contract\n",
+  });
+
+  // The revert half of both plants: restoring the benign bytes returns the exact
+  // success line, so the seals are what rejected the two plants above and not
+  // some unrelated breakage in the copied contracts.
+  await writeFile(path.join(projectRoot, ledgerPath), scopeLedger);
+  assert.deepStrictEqual(invokeCli(projectRoot, ["scope-impact", "--check"]), {
+    status: 0,
+    stdout: "Scope impact valid: 40 records.\n",
+    stderr: "",
   });
 
   process.stdout.write("Revalidation negative controls passed.\n");

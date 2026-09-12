@@ -155,6 +155,53 @@ verification chain were then rerun successfully.
 
 ---
 
+## Current Hard Gate (2026-09-12)
+
+This section supersedes the Plan 01-69 record above for the question "is the
+gate green now". The earlier sections are kept as history and are unchanged.
+
+Run on Node v26.8.2, on branch `features/refine-unit-tests`, in the tracked
+working tree. Every command below was run unpiped and its own exit status was
+read; no command's result was taken from the tail of a pipeline.
+
+| Command | Exit | Result |
+|---------|------|--------|
+| `npm run check` | 0 | typecheck, ESLint, Fallow, Prettier, the corresponding-test gates, unit and integration suites all passed |
+| unit suite inside `npm run check` | 0 | tests 6118 / pass 6118 / fail 0 / skipped 0 / todo 0 in 33.3 seconds |
+| integration suite inside `npm run check` | 0 | tests 32 / pass 32 / fail 0 / skipped 0 / todo 0 in 10.0 seconds |
+| `node scripts/revalidation.mjs scope-impact --check` | 0 | `Scope impact valid: 40 records.` |
+| `node --test tests/architecture/revalidation.test.ts` | 0 | tests 147 / pass 147 / fail 0 |
+| `node scripts/revalidation.negative.mjs` | 0 | `Revalidation negative controls passed.` |
+| `npm run test:coverage:direct -- scripts/revalidation.mjs` | 0 | branches 806/806, functions 208/208, lines 2795/2795 |
+| `grep -rn 'fallow-ignore\|eslint-disable\|thresholdOverrides' scripts/revalidation.mjs scripts/revalidation.negative.mjs .fallowrc.json` | 1 | no complexity suppression anywhere in the gated tree |
+
+### Seal round trips
+
+Both new seals were proved fail-closed by planting on a disposable copy of the
+repository root under the scratch directory. No file under `.planning/` in the
+real tree was mutated at any point.
+
+| Step | Command result |
+|------|----------------|
+| Baseline on the disposable copy | exit 0, `Scope impact valid: 40 records.` |
+| Plant: Phase 8 heading and the `SCOPE-ROUTE-PHASE-08` before/after anchors renamed together | exit 1, `phase-title-contract: PHASE-08: roadmap phase title differs from sealed phase contract` and `scope-after-anchor: SCOPE-ROUTE-PHASE-08: afterAnchor does not resolve to phase` |
+| Revert | exit 0, `Scope impact valid: 40 records.` |
+| Plant: `SCOPE-REQ-PDEF-01` action changed from `narrow/split` to `keep`, both planning documents untouched | exit 1, `scope-action-contract: SCOPE-REQ-PDEF-01: canonical action differs from sealed scope contract` |
+| Revert | exit 0, `Scope impact valid: 40 records.` |
+
+Both plants returned exit 0 with the success line before the seals landed; those
+observations are recorded in `01-72-SUMMARY.md`.
+
+### Known out-of-scope red
+
+`node scripts/revalidation.mjs validate` exits 1 with 945 `unsafe-reference`
+violations. Every one is a stale source or test path in the canonical ledger's
+finding references, left behind by later hub-retirement refactors. `validate` is
+not a member of `npm run check`, and re-pointing those references is a separate
+decision that is not made here.
+
+---
+
 ## Manual-Only Verifications
 
 All phase completion behaviors have automated validation. The operator still makes policy choices for live surviving premises, but the ledger mechanically enforces that their evidence, alternatives, selection, and downstream effects are recorded.
@@ -170,4 +217,6 @@ All phase completion behaviors have automated validation. The operator still mak
 - [x] Feedback latency < 30 seconds for focused checks
 - [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** final hard evidence gate green for Plan 01-69; Phase 2 planning is authorized from the rewritten scope.
+**Approval:** the hard evidence gate is green as recorded in "Current Hard Gate
+(2026-09-12)", which supersedes the earlier Plan 01-69 approval; Phase 2
+planning is authorized from the rewritten scope.
