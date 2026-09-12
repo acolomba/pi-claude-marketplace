@@ -839,11 +839,12 @@ async function registerHooksBridgeWith(
     // actually existing in the rebuilt routing table for this scope: an
     // unsolicited mkdir on a pristine scope would create
     // `<scopeRoot>/pi-claude-marketplace/...` and violate WR-05 (the "no
-    // files on a clean reconcile" invariant pinned by
-    // tests/edge/index-handler.test.ts). When no plugin declares
-    // SessionStart hooks the env-file path will never be set, so the
-    // dir's absence is harmless. Idempotent across `/reload` via mkdir {
-    // recursive }; failures route through hookDebugLog.
+    // files on a clean reconcile" invariant pinned by tests/index.test.ts,
+    // which asserts that a pristine workspace reconcile leaves
+    // both scope roots untouched and emits nothing). When no plugin
+    // declares SessionStart hooks the env-file path will never be set, so
+    // the dir's absence is harmless. Idempotent across `/reload` via mkdir
+    // { recursive }; failures route through hookDebugLog.
     if (routingState.getRoutingBucket("SessionStart").length > 0) {
       await ensureSharedDataDir(loc);
     }

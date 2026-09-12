@@ -475,7 +475,7 @@ function manifestFieldTokenFromNote(note: string): ContentReason | undefined {
  * `unsupported hooks` token for the same on-disk condition (SURF-01). Mirrors
  * the probe-side prefix set verbatim -- if a prefix is added or renamed on one
  * side, the other side MUST follow in lockstep (pinned by
- * tests/orchestrators/plugin/cross-surface-reason-parity.test.ts).
+ * tests/architecture/cross-surface-reason-parity.test.ts).
  */
 function isHooksResolverNote(reason: string): boolean {
   return (
