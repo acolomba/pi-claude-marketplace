@@ -5,11 +5,11 @@ milestone_name: Refine Unit Tests
 current_phase: 09
 current_phase_name: Final Quality and Backlog Closure
 status: phase_complete
-stopped_at: Window ledger fully disposed (0 open); PR not yet opened
-last_updated: "2026-09-12T16:30:00.000Z"
+stopped_at: Window ledger disposed (0 open) and IN-02 closed; PR not yet opened
+last_updated: "2026-09-12T17:11:22.957Z"
 last_activity: 2026-09-12
-last_activity_desc: window ledger disposed to 0 open -- 5 entries fixed by real source edits, 1 was a stale ledger row, 13 waived with measured reasons
-state_head: 408ae717
+last_activity_desc: window ledger disposed to 0 open, then IN-02 closed by renaming HooksHydrationReader to HooksHydrationDeps
+state_head: 63de8980c31cd7b7d230cde1c99b97f081606a3d
 progress:
   total_phases: 9
   completed_phases: 5
@@ -103,10 +103,16 @@ Post-merge measurement: `npm run check` exit 0 (6109 unit, 32 integration);
    and demands `--ws`, but this milestone's ROADMAP/STATE are the ROOT files and no workstream is
    named `refine-unit-tests`. ROADMAP and STATE were hand-edited instead, which is what this
    file already prescribes for the state verbs.
-3. The reviewer's `IN-02` is unactioned by choice: `HooksHydrationReader extends HooksFileReader`
-   asserts an is-a that is only structurally true — it is a two-member dependency bundle, not a
-   kind of file reader. Renaming touches the published bridge surface and ~171 call sites, so it
-   is an operator decision rather than a fix-pass one. It stays recorded in `09-REVIEW.md`.
+3. ~~The reviewer's `IN-02` is unactioned by choice~~ — **closed 2026-09-12** (`63de8980`).
+   `HooksHydrationReader` is now `HooksHydrationDeps`; `HooksFileReader` and the `extends`
+   relation are unchanged. The deferral rested on "~171 call sites across 31 test files," which
+   was a miscount: that figure counts `readHooksJson` MEMBER usages, which a type rename never
+   touches. Measured, the rename was **23 type-level references across 5 files**, and four of
+   the five recorded gate constraints do not fire on an in-place rename at all (the census
+   contains neither name; the construction-string pins are built from member names; the
+   corresponding-tests pairing only fires on a module move). `IN-01`, `IN-03` and `IN-04` remain
+   open by choice — of those, `IN-03` carries real risk, since NFR-10 containment now rests on
+   an injected collaborator honoring a prose-only contract.
 Status: the requirement seal is closed — all eight IDs read `Complete` in the checkbox, the
 traceability row and `SEALED_REQUIREMENT_ROUTES`, and `node scripts/revalidation.mjs scope-impact
 --check` prints `Scope impact valid: 40 records.` `npm run check` was measured on this tree, not
@@ -1151,6 +1157,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 | 260912-fp1 | Repoint two stale test-path references in extension source comments: the isHooksResolverNote doc comment in extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts cites tests/orchestrators/plugin/cross-surface-reason-parity.test.ts which now lives under tests/architecture/, and the comment justifying the SessionStart gate on ensureSharedDataDir in extensions/pi-claude-marketplace/bridges/hooks/event-router.ts names the deleted tests/edge/index-handler.test.ts as the WR-05 pin whose surviving assertion is in tests/index.test.ts — keep the WR-05 id as a traceability anchor; closes WINDOWS.md entries 23 and 26 | 2026-09-12 | 2673a589 | — | .planning/quick/260912-fp1-repoint-two-stale-test-path-references-i |
 | 260912-fp2 | Correct three stale documentation references: docs/output-catalog.md names the deleted tests/shared/device-flow-prompt.test.ts as the AUTH-03 byte-form lock which now lives in tests/domain/github-auth.test.ts, .planning/codebase/TESTING.md describes tests/helpers/ as live and names four modules by pre-move paths although the directory and both glob alternatives are gone, and .planning/codebase/CONVENTIONS.md around line 151 claims an aggregate bridges/index.ts exists when only the five per-kind barrels do — verify each claim against the live tree first and if a passage already reads correctly report the ledger as stale rather than inventing an edit; closes WINDOWS.md entries 24, 25 and 29 | 2026-09-12 | beacfe7a | — | .planning/quick/260912-fp2-correct-three-stale-documentation-refere |
 | 260912-fp3 | Dispose every remaining open entry in the .planning/WINDOWS.md ledger so no entry reads open: mark ids 20, 23, 24, 25, 26 and 29 fixed once their corrections have landed, and waive ids 1, 2, 3, 7, 8, 9, 10, 13, 14, 15, 16, 17 and 18 with the measured reason recorded for each in the disposition spec — use the gsd-tools windows fixed and windows waive verbs only, never hand-edit the rendered table, and confirm with windows status that zero entries read open | 2026-09-12 | 408ae717 | — | .planning/quick/260912-fp3-dispose-every-remaining-open-entry-in-th |
+| 260912-hqq | Rename the published bridge interface HooksHydrationReader to HooksHydrationDeps; closes code-review finding IN-02 | 2026-09-12 | 63de8980 | — | [260912-hqq-rename-the-published-bridge-interface-ho](./quick/260912-hqq-rename-the-published-bridge-interface-ho/) |
 
 ## Session Continuity
 
@@ -1200,10 +1207,14 @@ derived mechanically rather than transcribed. Entry **9** remains the operator-a
 risk, not as a pending action. Entries **2** and **3** are stubs whose substance belongs to
 unshipped `STOP-07` / `SFAIL-03` feature work.
 
-**Resume file:** `.planning/HANDOFF-refine-unit-tests-open-items.md` — its section 1 (the 19
-open windows) is now HISTORICAL; section 2 (`IN-02`) is still live. `IN-02` is the one
-remaining operator decision: the `HooksHydrationReader` naming question, with the five measured
-constraints any rename must satisfy. The file is untracked by design.
+**Resume file:** `.planning/HANDOFF-refine-unit-tests-open-items.md` — **both sections are now
+HISTORICAL.** Section 1 (the 19 open windows) was disposed 2026-09-12; section 2 (`IN-02`) was
+closed the same day by `63de8980`. Keep the file for the reasoning it records, not as a task
+list. The file is untracked by design.
+
+No operator decision is now outstanding. `IN-01`, `IN-03` and `IN-04` stay recorded in
+`09-REVIEW.md` as deliberate non-actions; `IN-03` is the one worth revisiting, because NFR-10
+containment depends on an injected collaborator honoring a contract nothing type-enforces.
 
 **Read beside it:** `.planning/phases/09-final-quality-and-backlog-closure/09-CLOSURE-LEDGER.md`
 (24 rows, one vocabulary, the milestone's audit trail), `09-REVIEW.md` + `09-REVIEW-FIX.md`,
