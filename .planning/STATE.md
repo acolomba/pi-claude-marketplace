@@ -5,15 +5,15 @@ milestone_name: transitive-dependencies
 current_phase: 1
 current_phase_name: Manifest read fidelity
 status: planning
-stopped_at: Phase 1 context gathered
-last_updated: "2026-09-12T13:45:09.298Z"
-last_activity: 2026-09-09
-last_activity_desc: v1.20 roadmap created, 25/25 requirements mapped
-state_head: 068bf5ecf009aa062256e856ea5b2179d7f8f48b
+stopped_at: Phase 1 planned, ready to execute
+last_updated: "2026-09-13T16:06:45.173Z"
+last_activity: 2026-09-13
+last_activity_desc: Phase 1 planned, 4 plans across 2 waves
+state_head: f54c16c4afbfd93e809f71ab3d294944d1777de6
 progress:
   total_phases: 5
   completed_phases: 0
-  total_plans: 0
+  total_plans: 4
   completed_plans: 0
   percent: 0
 ---
@@ -35,10 +35,11 @@ same surfaces. 25 requirements across 5 phases. v1.19 Unit Test Refactor closed
 
 ## Current Position
 
-Phase: 1 of 5 — Manifest read fidelity (not started)
-Plan: —
-Status: Roadmap written; no phase discussed yet
-Last activity: 2026-09-09 — v1.20 roadmap created, 25/25 requirements mapped
+Phase: 1 of 5 (Manifest read fidelity) — READY TO EXECUTE
+Plan: 0 of 4 complete — waves 1 (01-01, 01-02) then 2 (01-03, 01-04)
+Status: Discussed, researched, pattern-mapped and planned. Plan-checker passed;
+requirements coverage 7/7, decision coverage 33/33, gap analysis 40/40.
+Last activity: 2026-09-13 — Phase 1 planned, 4 plans across 2 waves
 
 **Phase numbering restarts at 1 for this milestone** (operator decision,
 2026-09-09). Phases 1-117 belong to archived milestones. A bare phase number in
@@ -493,7 +494,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Phase 1 context gathered
+**Stopped at:** Phase 1 planned, ready to execute
 
 **Resume file:** .planning/phases/01-manifest-read-fidelity/01-CONTEXT.md
 
