@@ -475,6 +475,15 @@ async function preflightInstallResolve(
 }
 
 /**
+ * Default transaction seam for the guard-free ledger body.
+ *
+ * Named at module scope rather than written as an inline parameter default, so
+ * every call that omits `transaction` reads this one frozen object instead of
+ * allocating a fresh literal per invocation (typescript:S7737).
+ */
+const DEFAULT_INSTALL_LEDGER_TRANSACTION: InstallLedgerTransaction = Object.freeze({ runPhases });
+
+/**
  * CR-01: the guard-FREE install ledger body -- the
  * complete PI-15 / PI-3 / PI-2 / PI-4 / PI-6 / PI-7 + 6-phase ledger
  * sequence.
@@ -504,7 +513,7 @@ async function executeInstallLedger(
   locations: ScopedLocations,
   opts: InstallLedgerOptions,
   capture?: InstallFailureCapture,
-  transaction: InstallLedgerTransaction = { runPhases },
+  transaction: InstallLedgerTransaction = DEFAULT_INSTALL_LEDGER_TRANSACTION,
 ): Promise<InstallLedgerContextResult> {
   return runInstallLedgerBody(transaction, state, locations, opts, capture);
 }
