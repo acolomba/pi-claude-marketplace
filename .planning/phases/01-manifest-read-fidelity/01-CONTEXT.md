@@ -162,6 +162,131 @@ DEPS-01/02 name `info` and only `info`.
   parser stays pure and Phase 3 can apply its own resolution semantics to the
   same parsed shape.
 
+### Resolutions to research open questions (added 2026-09-12, after 01-RESEARCH.md)
+
+- **D-01-21 (resolves OQ-1):** The phase ABSORBS a bridge-side fix in
+  `bridges/skills/discover.ts`. The locked resolver normalization (D-01-14 /
+  D-01-15) closes MANF-03 for `ui5` (8 warnings to 0) but NOT for
+  `ui-theme-designer`, which declares `"./skills/<name>"` -- normalizing to
+  `"skills/<name>"`, a legitimately distinct key from the convention path
+  `"skills"`, so the convention probe re-enumerates the same directories. Verified
+  by executing the real modules, not inferred. This is a REGRESSION the phase
+  would otherwise introduce: `ui-theme-designer` emits zero warnings today
+  precisely because its bare manifest is never opened, and MANF-01 is what makes
+  the two warnings appear.
+
+  The fix: a `seenByDir: Map<string, DiscoveredSkill>` in `discoverPluginSkills`,
+  keyed on the RESOLVED skill directory, consulted BEFORE the `seenByGenerated`
+  warning at both emission points. Same resolved directory means one skill
+  reached twice -- skip silently. A different directory that merely elides to the
+  same generated name keeps today's warning, preserving D-141-04 semantics. All
+  four existing collision tests in `tests/bridges/skills/discover.test.ts` use
+  DISTINCT directories, so none of them change.
+
+  REJECTED alternative: suppressing the convention path when a declared path
+  lives under it. The research probe `subdir-plus-sibling` shows it silently
+  DROPS sibling skill directories that were never declared -- a data regression,
+  strictly worse than the output regression it fixes.
+
+  ROADMAP criterion 3 stands as written; both named witnesses must reach zero
+  warnings.
+
+- **D-01-22 (resolves OQ-2):** The new `<name>@<marketplace> (<version>)` byte
+  form GETS an output-catalog state in this phase. D-01-01 already calls the byte
+  form a catalogued output state, and the catalog is the user contract. Both
+  walks are gated in each direction, so the doc block in
+  `docs/output-catalog.md` and the matching `FIXTURES` entry must land in the
+  SAME change. The existing `installed-single-scope-with-dependencies` state
+  stays byte-valid and is not edited.
+
+- **D-01-23 (resolves OQ-3, discretion):** `resolvePluginVersion`'s stat for
+  D-01-11 comes from adding `stat` to the existing `node:fs/promises` import in
+  `orchestrators/plugin/shared.ts`. Do NOT export `defaultStatKind` from
+  `domain/resolver.ts` -- it stays module-private, and `domain/manifest-path.ts`
+  stays a pure constant module per D-01-06.
+
+- **D-01-24 (scope fence, from the OQ-1 symmetry note):** `bridges/commands/discover.ts`
+  has the same overlap shape and would warn identically, but the four
+  bare-manifest plugins declare NO commands, so it is outside MANF-03's letter.
+  Do not widen this phase to the commands bridge. Note for the backlog that the
+  two bridges are an existing fallow-reported mirrored clone pair, so if it is
+  ever fixed, fixing both symmetrically is the lower-duplication move.
+
+### Upstream parity corrections (added 2026-09-13, from the Claude Code 2.1.251 binary)
+
+Verified by reading the compiled schema out of the installed CLI, not from docs.
+These SUPERSEDE the spike's summary where they disagree.
+
+- **D-01-25 (supersedes the control-character question):** `domain/dependencies.ts`
+  applies a POSITIVE ALLOWLIST to a dependency's `name` and `marketplace`:
+  `^[A-Za-z0-9][-A-Za-z0-9._]*$`. This is upstream's own rule, verbatim:
+
+  ```js
+  un = /^[A-Za-z0-9][-A-Za-z0-9._]*(@[A-Za-z0-9][-A-Za-z0-9._]*)?(@\^[^@]*)?$/
+  // object arm: { name: /^[A-Za-z0-9][-A-Za-z0-9._]*$/,
+  //               marketplace: same, optional }
+  ```
+
+  An element failing it is not a usable name and is dropped, folding into D-01-05
+  rather than adding a second rule. Do NOT reach for `assertSafeName` or a
+  control-character denylist here: upstream validates dependency entries MORE
+  strictly than it validates plugin names (its plugin-name check omits general
+  `\p{Cf}`, so a zero-width space passes as a name and fails as a dependency).
+  The output-forgery vector closes as a side effect, since the allowlist admits
+  no control, bidi, ANSI, whitespace, or quote characters at all.
+
+- **D-01-26:** A dependency object may carry `sha` alongside `version`. Upstream
+  declares NEITHER in its object schema -- the schema is `.loose()` with only
+  `{name, marketplace?}`, and a post-parse pass reads `version` and `sha` off the
+  RAW manifest. Our parser returns both as optional typed fields, and `info`
+  renders whichever is present. A sha pin is a declared constraint, so dropping
+  it would reproduce in a new place exactly the defect this phase closes.
+
+- **D-01-27:** The bare-string form may carry a trailing range: `foo@^1.0.0`.
+  Upstream's regex splits it off and its transform DISCARDS it. We split it off
+  and RENDER it as a constraint, so one dependency renders identically whichever
+  shape declared it. This is a deliberate divergence from upstream behavior in
+  the direction of the phase goal -- upstream discards a declared constraint, and
+  this phase exists to stop doing that. Parsing precedence for a bare string is
+  therefore: optional trailing `@^<range>`, then optional `@<marketplace>`, then
+  the name.
+
+- **D-01-28 (corrects the spike):** `.planning/spikes/004-claude-plugin-dependency-spec/README.md`
+  states that a bare string is "the plugin name, unversioned, resolved in the same
+  marketplace as the declaring plugin". The compiled schema says otherwise: the
+  string form accepts `name`, `name@marketplace`, AND a trailing `@^<range>`. This
+  independently CONFIRMS D-01-03 -- a bare string containing `@` is already an
+  address, so appending the declaring marketplace only when no `@` is present
+  matches upstream semantics rather than merely preserving our catalog example.
+  It also confirms D-01-01: upstream's object arm is transformed INTO the string
+  `name@marketplace`, so `@` meaning marketplace is upstream's own canonical
+  identity, not just our token-collision workaround.
+
+- **D-01-29 (scope note, not a task):** Upstream renders NO dependency list
+  anywhere -- no `/plugin` info view lists them; dependency names reach the user
+  only inside error and status text. Our `info` dependency line has no upstream
+  counterpart to match byte-for-byte, so the D-01-22 catalog state is ours to
+  define. Upstream's failure handling is also asymmetric in a way worth knowing
+  but NOT worth copying here: a bad dependency in `plugin.json` throws and kills
+  the whole plugin load, while a bad one in a marketplace entry degrades to a
+  stubbed `source:"unsupported"` entry or is dropped with a warn log. D-01-18
+  keeps `info` entry-sourced, so the degrade path is the one our behavior sits
+  beside.
+
+- **D-01-30 (byte form of the constraint parenthetical):** A version range renders
+  BARE; a sha renders LABELLED and short-formed to 7 characters. When both are
+  present, version first, comma-space separated, in one parenthetical. A range is
+  self-evidently a version, a 40-hex string is not, and the short form matches how
+  resolved shas already render elsewhere in the project.
+
+  ```text
+      dependencies: a@mp (^1.0.0), b@mp (sha abc1234), c@mp (^2.0.0, sha def5678)
+  ```
+
+  A dependency with neither constraint renders as the bare address, unchanged:
+  `a@mp`. This is the byte form D-01-22 catalogues, and the doc block plus its
+  `FIXTURES` entry must land in the same change.
+
 ### Claude's Discretion
 
 - Exact wording and placement of doc comments, and which requirement IDs each
