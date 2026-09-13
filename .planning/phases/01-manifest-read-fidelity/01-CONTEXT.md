@@ -233,8 +233,10 @@ These SUPERSEDE the spike's summary where they disagree.
   control-character denylist here: upstream validates dependency entries MORE
   strictly than it validates plugin names (its plugin-name check omits general
   `\p{Cf}`, so a zero-width space passes as a name and fails as a dependency).
-  The output-forgery vector closes as a side effect, since the allowlist admits
-  no control, bidi, ANSI, whitespace, or quote characters at all.
+  The output-forgery vector closes for THESE TWO FIELDS, since the allowlist
+  admits no control, bidi, ANSI, whitespace, or quote characters at all. It does
+  NOT close for `version` and `sha`, which also render verbatim -- see D-01-33,
+  which corrects this paragraph's original overreach.
 
 - **D-01-26:** A dependency object may carry `sha` alongside `version`. Upstream
   declares NEITHER in its object schema -- the schema is `.loose()` with only
@@ -350,6 +352,41 @@ These SUPERSEDE the spike's summary where they disagree.
   No disagreement warning is emitted when the entry and `plugin.json` differ.
   Upstream logs one; we render the authoritative source and stay silent. Revisit
   only if a real plugin makes the divergence visible.
+
+### Constraint-field validation (added 2026-09-13, ratifying a planner-derived extension)
+
+- **D-01-33 (corrects D-01-25):** The positive allowlist extends to the two
+  CONSTRAINT fields, which D-01-25 left unguarded while claiming the forgery
+  vector was closed. `version` and `sha` render verbatim into a line-oriented
+  notification row exactly as `name` and `marketplace` do, so a newline or ANSI
+  escape in either forges a row.
+
+  D-01-25 bars `assertSafeName` and bars a control-character DENYLIST. It does not
+  bar extending its own chosen mechanism, so the same POSITIVE-allowlist treatment
+  applies:
+
+  ```text
+  version: ^[A-Za-z0-9.\-+*~^<>=| ]+$
+  sha:     ^[0-9a-fA-F]{7,40}$
+  ```
+
+  The `version` charset admits every semver range form upstream accepts --
+  `^1.0.0`, `~1.2`, `>=1.0.0 <2.0.0`, `1.x`, `*`, `1.0.0-beta.1`,
+  `1.0.0 || 2.0.0` -- and admits no control character, newline, escape, quote,
+  bidi mark, or `@`. The space and the pipe are deliberately admitted: dropping
+  them would reject compound ranges upstream genuinely accepts, silently losing a
+  declared constraint, which is the defect this phase exists to close. The `sha`
+  charset is also exactly what D-01-30's short-form-to-7 rendering assumes.
+
+  **One usability rule, covering all four fields.** A field that is ABSENT was not
+  declared and is simply not rendered. A field that is PRESENT but unrenderable --
+  any non-string value, or a string failing its allowlist -- makes the WHOLE
+  element unusable, and the element is dropped silently exactly as D-01-05 drops
+  one with no usable name. Nothing is ever half-rendered with a constraint quietly
+  removed.
+
+  Carried in the plans as threat `T-01-03` (Spoofing / output forgery, severity
+  high, ASVS V5).
 
 ### Claude's Discretion
 
