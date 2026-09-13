@@ -10,7 +10,7 @@
 
 A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artifact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install.
 
-## Current Milestone: refine-unit-tests
+## Previous Milestone: refine-unit-tests -- Refine Unit Tests (branch: features/refine-unit-tests, shipped 2026-09-13, no npm release)
 
 **Goal:** Revalidate the adversarial unit-test review and related backlog against
 the post-refactor codebase, discard stale findings, and fix only issues that
@@ -244,13 +244,27 @@ Four distinct categories of unsupported Claude hook events. All cause plugin `(u
 
 ## Current State
 
-**In progress:** milestone `refine-unit-tests` has completed live-evidence
-revalidation, every confirmed production-defect correction routed to Phases 2
-and 3, and the hermetic test-infrastructure work in Phase 4. Phase 5 now owns
-legitimate injection seams and mutable-state ownership; historical claims still
-authorize no work unless the sealed terminal ledger supports them.
+**In progress:** nothing. No milestone is active -- define the next one with
+`/gsd-new-milestone`.
 
-**Just shipped:** v1.19 Unit Test Refactor (2026-09-04, Phases 108-117, 220 plans, 317 tasks;
+**Just shipped:** refine-unit-tests (2026-09-13, Phases 1-9, 213 plans, 412 tasks;
+archived to `.planning/milestones/refine-unit-tests-*`). v1.19 gave every production
+module an owner test; this milestone asked whether those tests prove anything, and
+started from an evidence gate rather than a fix list. Phase 1 revalidated the whole
+adversarial-review corpus against the post-v1.19 tree and routed all 2437 findings to
+terminal dispositions with none left awaiting triage. Phase 7 predicted gates that
+report success without scanning and then **found six of them live** -- two returning
+early on `assert.ok(true, "... not yet authored")` and two skipping every candidate
+with `if (!exists) continue;`, so a rename of `platform/git-credential.ts` would have
+greened the AUTH-09 gate over zero inspected bytes. Phase 8 replaced
+share-of-aggregate coverage with direct per-pair measurement and cut accepted
+shortfalls from seven to two. Test-only module seams were replaced with injected
+collaborators. The window ledger closed fully disposed (open 0 / waived 13 / fixed 18).
+SonarCloud reached zero open issues on PR #181, down from 38. Audit passed with no
+blockers: requirements 30/30, phases 9/9, integration 6/6; all nine phases read
+`verification_status: passed`.
+
+**Previously shipped:** v1.19 Unit Test Refactor (2026-09-04, Phases 108-117, 220 plans, 317 tasks;
 archived to `.planning/milestones/v1.19-*`). All 204 production modules now have exactly one
 mirrored owner test importing them directly, and the corresponding-test gate reports **zero
 violations across 204 pairs** — the first clean reading of the milestone, from a HEAD baseline of
@@ -274,11 +288,17 @@ been declared in `package.json` and invoked by nothing, now run: the three fast 
 
 **Shipped:** url-source URL Sources (2026-07-13, Phases 76-79). Arbitrary public HTTPS git URLs are first-class sources for both marketplaces and plugins: `marketplace add/update/remove/info` clone `source.url` directly (no github.com reconstruction); the resolver classifies `url` / `git-subdir` / `github`-object plugin sources installable through a source-addressed refcounted clone cache (`plugin-clones/<urlhash12>-<sha12>/`, one external-monorepo clone serving every referencing plugin, warm-cache operations offline); the full plugin lifecycle works for git sources (sha-change atomic swaps, last-reference clone GC on uninstall/update/marketplace-remove, network-free list/info + install-completion parity); and the GitHub-only Device Flow generalized into a `GitAuthProvider` registry (public repos on any host clone unauthenticated, registered hosts run their flow host-keyed via `CredentialOps`, no-provider hosts fail clean, no-credential-leak gate covers every provider file). `npm run check` GREEN (2739 unit + 16 integration).
 
-**Next:** define the next milestone (`/gsd-new-milestone`). Two things carry forward, both
-deliberate: the seven accepted D-116-01a single-branch shortfalls, which close only by a
-production rewrite and keep `npm run test:coverage:direct:all` exiting 1 on a clean tree; and six
-stale documentation references created by this milestone's own relocations, two of which live
-under `extensions/`. Both are in `.planning/WINDOWS.md`. Workstream `milestone` (force-install closeout) remains open.
+**Next:** define the next milestone (`/gsd-new-milestone`). What carries forward, all
+deliberate: **two** accepted direct-coverage shortfalls, down from seven
+(`bridges/commands/discover.ts` and `orchestrators/plugin/install-outcome.ts`, both pinned
+by whole reading string, so they fail on an improvement as loudly as on a regression); three
+Phase 9 code-review findings left open by choice, of which **`IN-03` carries real risk**
+because NFR-10 path containment now rests on an injected collaborator honoring a prose-only
+contract nothing type-enforces; and two newly promoted backlog items, `NEGCTL-01` (the
+direct-coverage negative control cannot observe its own failure signal on Node 26; latent only
+because CI pins Node 24) and `E2EIMP-01`. The stale documentation references are closed. The
+window ledger is fully disposed at `.planning/WINDOWS.md`. PR #181 is open and unmerged by
+operator decision. Workstream `milestone` (force-install closeout) remains open.
 
 ## Requirements
 
@@ -400,12 +420,15 @@ test.ts` (43 V2 tests, +2 G-21-01 inventory-vs-transition regressions)
 
 <!-- Milestone refine-unit-tests (started 2026-09-04). Findings are hypotheses until revalidated against the live post-refactor tree. -->
 
-- [ ] Replace weak or non-hermetic tests with public-contract proofs that fail
-      on the mutations they claim to guard.
-- [ ] Remove or repair inert gates and decide boundary-gate redundancy from a
-      current edge-by-edge comparison.
-- [ ] Make direct coverage enforceable without using coverage exclusions or
-      treating coverage as evidence of assertion strength.
+- [x] Replace weak or non-hermetic tests with public-contract proofs that fail
+      on the mutations they claim to guard -- validated across Phases 4-6
+      (2026-09-07 to 2026-09-10), with surviving-mutation proofs recorded per shard
+- [x] Remove or repair inert gates and decide boundary-gate redundancy from a
+      current edge-by-edge comparison -- validated in Phase 7 (2026-09-10), which
+      found six gates reporting success without scanning anything
+- [x] Make direct coverage enforceable without using coverage exclusions or
+      treating coverage as evidence of assertion strength -- validated in Phase 8
+      (2026-09-11); accepted shortfalls fell from seven to two
 
 <!-- Milestone v1.18 Manifest-Independent Installed Plugin Info (started 2026-08-07, shipped 2026-08-12). -->
 
@@ -706,4 +729,4 @@ _Earlier updates (pre-v1.3-close): see git history. Phase 1 (2026-05-09), Phase 
 
 ---
 
-_Last updated: 2026-09-07 after Phase 4_
+_Last updated: 2026-09-13 after the refine-unit-tests milestone_
