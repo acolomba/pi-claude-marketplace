@@ -13,6 +13,7 @@
 - Notifications now say "1 plugin" or "3 plugins" based on the command you ran, not on how many results came back. A bulk command that matched nothing now reports zero instead of falling silent.
 - A discovery failure in one scope no longer discards work already completed in another. `/reload` recovers through the same callback.
 - Plugin skills now install as `<plugin>:<skill>` (`<plugin>.<skill>` on Windows), matching Claude Code. The old hyphen name broke skill references written as `plugin:skill` in plugin instructions and agent preloads. Thanks to @rakesh-vs (#180).
+- A skill that names a sibling skill as `plugin:skill` now gets the installed name in its staged copy, so the reference works on Windows and when the skill's folder repeats the plugin prefix. Fenced code examples stay verbatim.
 
 ## [0.18.3] - 2026-09-08
 
