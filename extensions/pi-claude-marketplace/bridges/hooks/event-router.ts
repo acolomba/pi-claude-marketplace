@@ -572,18 +572,15 @@ async function hydrateScopeFromState(
       // Zero or one entry today; iterate defensively for forward-compat.
       for (const slug of hookSlugs) {
         const hooksJsonPath = path.join(loc.hooksDir, slug, "hooks.json");
-        await tryHydrateOnePlugin(
-          loc.scope,
-          mpName,
+        await tryHydrateOnePlugin(reader, routingState, generationIsCurrent, {
+          scope: loc.scope,
+          marketplace: mpName,
           pluginId,
-          pluginRecord.resolvedSource,
+          resolvedSource: pluginRecord.resolvedSource,
           hooksJsonPath,
-          loc.hooksDir,
+          hooksDir: loc.hooksDir,
           cwd,
-          reader,
-          routingState,
-          generationIsCurrent,
-        );
+        });
         if (!generationIsCurrent()) {
           return;
         }
@@ -592,18 +589,31 @@ async function hydrateScopeFromState(
   }
 }
 
+/**
+ * One plugin's hydration target.
+ *
+ * `resolvedSource` is deliberately a plain `string`, not `AbsolutePluginRoot`:
+ * state.json round-trips the field through an unconstrained `Type.String()`,
+ * so the brand validation belongs inside this function, at the boundary the
+ * corrupted record actually crosses.
+ */
+interface HydrateOnePluginTarget {
+  readonly scope: Scope;
+  readonly marketplace: string;
+  readonly pluginId: string;
+  readonly resolvedSource: string;
+  readonly hooksJsonPath: string;
+  readonly hooksDir: string;
+  readonly cwd: string;
+}
+
 async function tryHydrateOnePlugin(
-  scope: Scope,
-  marketplace: string,
-  pluginId: string,
-  resolvedSource: string,
-  hooksJsonPath: string,
-  hooksDir: string,
-  cwd: string,
   reader: HooksFileReader,
   routingState: EventRouterRoutingState,
   generationIsCurrent: GenerationGuard,
+  target: HydrateOnePluginTarget,
 ): Promise<void> {
+  const { scope, marketplace, pluginId, resolvedSource, hooksJsonPath, hooksDir, cwd } = target;
   // Defense-in-depth (NFR-10): state.json is normally written only by this
   // extension, but the slug component (`pluginRecord.resources.hooks[i]`) is
   // state-supplied data. A corrupted state record (third-party tampering or
