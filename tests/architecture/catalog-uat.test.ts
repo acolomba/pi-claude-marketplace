@@ -3295,6 +3295,8 @@ const FIXTURES: FixtureMap = {
   //   - Success states:
   //     * installed-single-scope                       (INFO-02 happy path)
   //     * installed-single-scope-with-dependencies     (INFO-02 + dependencies line)
+  //     * installed-single-scope-with-dependency-constraints
+  //                                                    (D-01-30 constraint parenthetical)
   //     * state-only-installed-single-scope            (INFO-09 record-backed row)
   //     * state-only-partially-installed-single-scope  (INFO-10 record-backed partial)
   //     * state-only-installed-with-hooks              (INFO-11 materialized hooks block)
@@ -3363,6 +3365,35 @@ const FIXTURES: FixtureMap = {
             skills: ["commit-summary"],
           },
           dependencies: ["helper@utils-mp"],
+        },
+      } satisfies NotificationMessage,
+    },
+
+    "installed-single-scope-with-dependency-constraints": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "claude-plugins-official",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: true },
+        plugin: {
+          status: "installed",
+          name: "commit-commands",
+          version: "1.2.0",
+          description: "Helpful git commit commands for everyday use.",
+          componentsResolved: true,
+          components: {
+            agents: ["review-bot"],
+            commands: ["c1", "c2"],
+            skills: ["commit-summary"],
+          },
+          // Pre-rendered and pre-sorted on the dependency NAME (D-01-04):
+          // `both`, `helper`, `pinned`. The renderer does not sort.
+          dependencies: [
+            "both@utils-mp (^2.0.0, sha def5678)",
+            "helper@utils-mp (^1.0.0)",
+            "pinned@utils-mp (sha abc1234)",
+          ],
         },
       } satisfies NotificationMessage,
     },
@@ -5229,14 +5260,14 @@ test("catalog UAT: every <!-- catalog-state: --> annotation pairs byte-equal wit
   const catalog = await readFile(CATALOG_PATH, "utf8");
   const examples = loadCatalogExamples(catalog);
 
-  // Exact count, not a floor: 182 is the number of annotated examples in
+  // Exact count, not a floor: 183 is the number of annotated examples in
   // docs/output-catalog.md, and it is what stops a `loadCatalogExamples`
   // refactor from silently parsing a fraction of the corpus. Update it
   // deliberately when catalog examples are added or removed.
   assert.equal(
     examples.length,
-    182,
-    `Expected exactly 182 annotated catalog examples; found ${examples.length}. Check that the discriminator comments in docs/output-catalog.md were not lost, and update this count when examples are added.`,
+    183,
+    `Expected exactly 183 annotated catalog examples; found ${examples.length}. Check that the discriminator comments in docs/output-catalog.md were not lost, and update this count when examples are added.`,
   );
 
   const failures: Failure[] = [];

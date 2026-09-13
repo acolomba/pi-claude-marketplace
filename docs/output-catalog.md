@@ -1765,6 +1765,22 @@ Same as above but with a `dependencies: <plugin>@<marketplace>, ...` line emitte
     dependencies: helper@utils-mp
 ```
 
+### Success -- installed single scope with dependency constraints
+
+Same as above, but each dependency carries the constraint its manifest declared, in one parenthetical after the address (D-01-30). A version range renders bare, because a range is self-evidently a version. A sha renders labelled and short-formed to seven characters, because a 40-hex string is not. When an element declares both, the version comes first and a comma separates them inside the one parenthetical. An element that declares neither renders the bare address, as the state above shows. The line is ordered by dependency name, not by the rendered string (D-01-04). Severity `info`.
+
+<!-- catalog-state: installed-single-scope-with-dependency-constraints -->
+
+```text
+● claude-plugins-official [user] <autoupdate>
+  ● commit-commands v1.2.0 (installed)
+    Helpful git commit commands for everyday use.
+    agents: review-bot
+    commands: c1, c2
+    skills: commit-summary
+    dependencies: both@utils-mp (^2.0.0, sha def5678), helper@utils-mp (^1.0.0), pinned@utils-mp (sha abc1234)
+```
+
 ### Success -- installed from the installation record (INFO-09)
 
 The marketplace manifest loads correctly, but it does not declare the plugin. An enabled installation record for the plugin exists, so the row shows the plugin as installed and states the absence as a reason. The version comes from the installation record, because there is no manifest entry to supply one. No description line and no dependencies line show: the manifest is the only source of both, and this state does not reconstruct them. The component names are the Pi-generated INSTALLED names -- `<plugin>-<skill>` for skills, `<plugin>:<command>` for commands, and `pi-claude-marketplace-<plugin>-<agent>` for agents. These names are different from the source names that the manifest-backed states above show (D-96-01). MCP servers are the one exception: the installation record keeps their raw source keys. This state replaces the `error`-severity `missing-plugin-not-in-manifest` outcome for this input, so the severity for an installed record changes from `error` to `info`. Severity `info`; no reload-hint (read-only surface).
