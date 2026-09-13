@@ -2,20 +2,20 @@
 gsd_state_version: "1.0"
 milestone: refine-unit-tests
 milestone_name: Refine Unit Tests
-current_phase: 09
-current_phase_name: Final Quality and Backlog Closure
-status: phase_complete
+status: Awaiting next milestone
 stopped_at: "PR #181 open and green but HELD by the operator: do not merge"
-last_updated: "2026-09-13T04:20:00.000Z"
+last_updated: "2026-09-13T12:02:02.049Z"
 last_activity: 2026-09-13
-last_activity_desc: "quick task 260912-vyi closed the S107 and S7737 Sonar findings and documented S3863 as inert"
-state_head: 2f2cb7c437d5978a653886727c6850db7ac1867b
+last_activity_desc: Milestone refine-unit-tests completed and archived
+state_head: 3580c7d14af502bb966c30b9420a9c39313798e2
 progress:
   total_phases: 9
-  completed_phases: 9
+  completed_phases: 1
   total_plans: 213
   completed_plans: 213
-  percent: 100
+  percent: 11
+current_phase: 09
+current_phase_name: Final Quality and Backlog Closure
 ---
 
 # Project State
@@ -31,9 +31,10 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: 09 (Final Quality and Backlog Closure) — COMPLETE, verified `passed` 10/10
-Next: Milestone lifecycle — audit, complete, cleanup
-Plan: 6 of 6 complete
+Phase: Milestone refine-unit-tests complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-09-13 — Milestone refine-unit-tests completed and archived
 
 ### What closed after plan 09-06
 
@@ -113,7 +114,7 @@ Post-merge measurement: `npm run check` exit 0 (6109 unit, 32 integration);
    corresponding-tests pairing only fires on a module move). `IN-01`, `IN-03` and `IN-04` remain
    open by choice — of those, `IN-03` carries real risk, since NFR-10 containment now rests on
    an injected collaborator honoring a prose-only contract.
-Status: the requirement seal is closed — all eight IDs read `Complete` in the checkbox, the
+Status: refine-unit-tests milestone complete
 traceability row and `SEALED_REQUIREMENT_ROUTES`, and `node scripts/revalidation.mjs scope-impact
 --check` prints `Scope impact valid: 40 records.` `npm run check` was measured on this tree, not
 inherited: exit 0 in 249s at `da08a749`, unit `pass 6007 / fail 0`, integration `pass 32 / fail 0`.
@@ -132,7 +133,7 @@ item named by hand was rerouted into it. Inline malformed `mcpServers` still rea
 `hooks.json` still reaches `{unsupported hooks}` because no `malformed hooks` member exists. The
 entry carries that grep verbatim and a `NOT closed by the same change:` paragraph.
 Resume file: `.planning/phases/09-final-quality-and-backlog-closure/09-CONTEXT.md`
-Last activity: 2026-09-11 — 09-03 flipped the seal in two commits. `da08a749` moved GGAT-01,
+Last activity: 2026-09-13
 GGAT-03, GGAT-04, RCOV-01, RCOV-02 and RCOV-03; `npm run check` was then measured green on that
 committed tree; `d391d058` moved CLOSE-01 and CLOSE-02. Each commit carried all four carriers,
 including the planted literal in `tests/architecture/revalidation.test.ts` its own flip
@@ -1153,13 +1154,6 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 | # | Description | Date | Commit | Status | Directory |
 | --- | --- | --- | --- | --- | --- |
-| 260912-fp0 | Correct the cwd-lifetime comments in extensions/pi-claude-marketplace/edge/register.ts (comments at :18-20 and :104-106 claim the cwd is read once at command registration, but process.cwd() is evaluated inside the getArgumentCompletions arrow at :107-108, so it is read on every completion invocation and nothing is closed over) — fix the comments to match the behavior, do not change the code; closes WINDOWS.md entry 20 | 2026-09-12 | b6f1e037a01875867fa05a1d1f3cca6e9ce2744a | — | .planning/quick/260912-fp0-correct-the-cwd-lifetime-comments-in-ext |
-| 260912-fp1 | Repoint two stale test-path references in extension source comments: the isHooksResolverNote doc comment in extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts cites tests/orchestrators/plugin/cross-surface-reason-parity.test.ts which now lives under tests/architecture/, and the comment justifying the SessionStart gate on ensureSharedDataDir in extensions/pi-claude-marketplace/bridges/hooks/event-router.ts names the deleted tests/edge/index-handler.test.ts as the WR-05 pin whose surviving assertion is in tests/index.test.ts — keep the WR-05 id as a traceability anchor; closes WINDOWS.md entries 23 and 26 | 2026-09-12 | 2673a589 | — | .planning/quick/260912-fp1-repoint-two-stale-test-path-references-i |
-| 260912-fp2 | Correct three stale documentation references: docs/output-catalog.md names the deleted tests/shared/device-flow-prompt.test.ts as the AUTH-03 byte-form lock which now lives in tests/domain/github-auth.test.ts, .planning/codebase/TESTING.md describes tests/helpers/ as live and names four modules by pre-move paths although the directory and both glob alternatives are gone, and .planning/codebase/CONVENTIONS.md around line 151 claims an aggregate bridges/index.ts exists when only the five per-kind barrels do — verify each claim against the live tree first and if a passage already reads correctly report the ledger as stale rather than inventing an edit; closes WINDOWS.md entries 24, 25 and 29 | 2026-09-12 | beacfe7a | — | .planning/quick/260912-fp2-correct-three-stale-documentation-refere |
-| 260912-fp3 | Dispose every remaining open entry in the .planning/WINDOWS.md ledger so no entry reads open: mark ids 20, 23, 24, 25, 26 and 29 fixed once their corrections have landed, and waive ids 1, 2, 3, 7, 8, 9, 10, 13, 14, 15, 16, 17 and 18 with the measured reason recorded for each in the disposition spec — use the gsd-tools windows fixed and windows waive verbs only, never hand-edit the rendered table, and confirm with windows status that zero entries read open | 2026-09-12 | 408ae717 | — | .planning/quick/260912-fp3-dispose-every-remaining-open-entry-in-th |
-| 260912-hqq | Rename the published bridge interface HooksHydrationReader to HooksHydrationDeps; closes code-review finding IN-02 | 2026-09-12 | 63de8980 | — | [260912-hqq-rename-the-published-bridge-interface-ho](./quick/260912-hqq-rename-the-published-bridge-interface-ho/) |
-| 260912-pdh | Retire the revalidation tooling with the milestone: three files deleted, the sole specialPairs entry and its five guards removed, the unowned-export census entry dropped | 2026-09-12 | 2f2cb7c4 | — | [260912-pdh-retire-the-revalidation-tooling-with-the](./quick/260912-pdh-retire-the-revalidation-tooling-with-the/) |
-| 260912-vyi | Address the SonarCloud findings on PR #181: enable @typescript-eslint/max-params at 7 over the extension tree and cut all three S107 offenders from 10, 8 and 8 parameters to 4, hoist the S7737 object-literal parameter default to a frozen module constant, and record that the committed S3863 exclusion is inert because the scanner drops sonar.issue.ignore.* from the properties file | 2026-09-13 | 76f43311 | complete | [260912-vyi-address-s3863-and-s107](./quick/260912-vyi-address-s3863-and-s107/) |
 
 ## Session Continuity
 
@@ -1472,3 +1466,7 @@ order the dispatch from `depends_on`, not from the roadmap's wave headers. Execu
 to stage explicit paths only and to leave `.claude/settings.json`, `.codex/config.toml`,
 `.claude/CLAUDE.md`, `.mcp.json`, `AGENTS.md`, `.codegraph/` and the untracked `01-REVIEW*`
 drafts alone — those are the operator's and are still modified in the working tree.
+
+## Operator Next Steps
+
+- Start the next milestone with /gsd-new-milestone

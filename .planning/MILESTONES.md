@@ -1,5 +1,84 @@
 # Milestones: pi-claude-marketplace
 
+## refine-unit-tests -- Refine Unit Tests (Shipped: 2026-09-13, no npm release - internal quality milestone)
+
+**Phases completed:** 9 phases (1-9), 213 plans, 412 tasks
+
+**Driver:** v1.19 gave every production module an owner test. This milestone asked
+whether those tests prove anything. It deliberately started from an evidence gate
+rather than a fix list: Phase 1 revalidated the entire adversarial-review corpus
+against the post-v1.19 tree, and later phases were allowed to proceed only on
+premises that still reproduced. Several did not, and were closed as positively
+stale rather than carried as debt.
+
+**Key accomplishments:**
+
+- The adversarial-review corpus was revalidated in full and routed to terminal
+  dispositions: 2437 findings, none left awaiting triage -- 1525 to phases 2-8,
+  523 closed evidence-only, 226 deferred to backlog, 163 to operator decision.
+  The register was retired with the milestone once its seal was released.
+- **Six gates were found reporting success without scanning anything.** Phase 7
+  predicted the class and then found them live, including two cases returning
+  early on `assert.ok(true, "... not yet authored")` and two loops that skipped
+  every candidate with `if (!exists) continue;` -- a rename of
+  `platform/git-credential.ts` would have greened the AUTH-09 gate over zero
+  inspected bytes. This is the milestone's most transferable finding: a gate
+  wants a test that plants the violation, not one that reads the config.
+- Direct per-pair coverage replaced share-of-aggregate measurement, and the
+  accepted shortfall set shrank from seven to two. The pin compares the whole
+  reading string, so it fails on an improvement exactly as on a regression.
+- Production defects the refined tests surfaced were fixed rather than pinned,
+  and test-only module seams were replaced with injected collaborators, making
+  the dependency part of each function's public interface instead of a hole
+  punched through the module from a test.
+- The window ledger was fully disposed -- open 0 / waived 13 / fixed 18 / total
+  31 -- with each waive carrying a measured reason rather than a transcribed one.
+  One entry turned out to be the stale artifact itself: the document it faulted
+  had been corrected six days before the entry was written.
+- SonarCloud reached zero open issues on the pull request, down from 38. Three
+  `S107` functions were cut from 10, 8 and 8 parameters to 4 each,
+  `@typescript-eslint/max-params` was committed at 7 so the rule is now
+  falsifiable locally, and the long-inert `S3863` exclusion was fixed -- its
+  `resourceKey` was resolved relative to `sonar.sources`, so the
+  repo-root-relative pattern had matched nothing.
+
+**Closeout:** `override_closeout`. All nine phases read `verification_status:
+passed` with full scores (10/10, 3/3, 5/5, 4/4, 6/6, 5/5, 7/7, 8/8, 10/10) and the
+milestone audit passed with no blockers -- requirements 30/30, phases 9/9,
+integration 6/6. The override is on two counts. First, `init.manager` reports
+eight of nine phases `stale`, which is a timestamp verdict rather than an outcome
+verdict: their `covered_files` include `REQUIREMENTS.md`, `ROADMAP.md` and
+`STATE.md`, which every later plan rewrites, so re-verifying re-stales them and
+the loop never converges. Second, four open artifacts were acknowledged at close.
+Known verification overrides: 4 newly acknowledged, 17 carried forward from a
+prior close (see STATE.md Deferred Items). Two of the four were stale rather than
+deferred and are recorded as resolved; the other two were promoted to the backlog
+as `NEGCTL-01` and `E2EIMP-01` at the operator's direction.
+
+**Fixed at this close:** v1.19's closeout disclosed that one item "could not be
+suppressed - phase 25's deferred items live in a markdown table the acknowledge
+writer cannot match." That limitation is now closed. The `audit-open` scanner can
+READ a table-shaped deferred item but its `acknowledge` writer matches literal
+bullet text, so such a row reports open forever. Phase 25's row was converted to
+bullets with every cell preserved verbatim, and it acknowledged cleanly.
+
+**Known gaps (accepted):** `IN-01`, `IN-03` and `IN-04` from the Phase 9 code
+review stay open by choice. **`IN-03` carries real risk:** NFR-10 path containment
+now rests on an injected collaborator honoring a prose-only contract that nothing
+type-enforces. `NEGCTL-01` is latent rather than red only because CI pins Node 24.
+Quick-task archival buckets all 43 remaining `.planning/quick/` directories into
+this milestone regardless of which milestone they belonged to -- there is no
+on-disk provenance, and several date to June.
+
+**Shipped unmerged:** the milestone closed with PR #181 open by operator decision.
+All nine checks pass, the SonarCloud quality gate reads `OK`, and the pull request
+carries zero open issues of any rule.
+
+**Archive:** `.planning/milestones/refine-unit-tests-{ROADMAP,REQUIREMENTS,MILESTONE-AUDIT}.md`,
+with phase directories under `refine-unit-tests-phases/` and quick tasks under
+`refine-unit-tests-quick/`.
+---
+
 ## v1.19 Unit Test Refactor (Shipped: 2026-09-04, no npm release - internal quality milestone)
 
 **Phases completed:** 10 phases (108-117), 220 plans, 317 tasks

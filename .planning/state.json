@@ -6,7 +6,7 @@
     {
       "number": "1",
       "name": "Live Evidence Revalidation",
-      "status": "in_progress"
+      "status": "complete"
     },
     {
       "number": "2",
@@ -41,18 +41,18 @@
     {
       "number": "8",
       "name": "Direct Coverage",
-      "status": "in_progress"
+      "status": "complete"
     },
     {
       "number": "9",
       "name": "Final Quality and Backlog Closure",
-      "status": "pending"
+      "status": "complete"
     }
   ],
   "next": {
-    "command": "/gsd:progress --next",
-    "label": "Advance to the next step",
-    "reason": "Phase 09 of 9 · 11% · executing"
+    "command": "/gsd:progress",
+    "label": "Show progress",
+    "reason": "Unsure of state — showing progress"
   },
-  "updated_at": "2026-09-11T20:41:51.154Z"
+  "updated_at": "2026-09-13T12:02:02.148Z"
 }
