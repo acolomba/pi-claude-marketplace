@@ -28,7 +28,7 @@ jobs:
           cache: "npm"
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Run floating-main e2e tests
         run: npm run test:e2e:nightly

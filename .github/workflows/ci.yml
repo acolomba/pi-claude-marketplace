@@ -71,7 +71,7 @@ jobs:
           cache: "npm"
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Run full check pipeline
         # NFR-6: typecheck + ESLint + Prettier + node:test
@@ -92,7 +92,7 @@ jobs:
           cache: "npm"
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Run integration tests
         run: npm run test:integration
@@ -112,7 +112,7 @@ jobs:
           cache: "npm"
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Run pinned e2e tests
         run: npm run test:e2e
@@ -162,7 +162,7 @@ jobs:
           cache: "npm"
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       # Whether actions/checkout at fetch-depth 0 creates
       # refs/remotes/origin/main on a pull_request event cannot be verified
@@ -221,7 +221,7 @@ jobs:
           cache: "npm"
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Validate package manifest
         run: npm pack --dry-run

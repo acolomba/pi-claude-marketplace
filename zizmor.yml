@@ -1,0 +1,20 @@
+# zizmor configuration.
+#
+# The policy block below gates `githubactions:S7637` -- external actions must be
+# pinned to a commit hash. `actions/*` is first-party GitHub and stays on a
+# version ref (`ref-pin`); every other owner must be hash-pinned, which is the
+# exact scope Sonar reports the rule against.
+#
+# The pre-commit hook that runs zizmor carries a `--min-severity high` floor.
+# `unpinned-uses` is the only High-severity audit this repository trips, so the
+# floor leaves the S7637 findings and drops the Low/Medium audits that were
+# reviewed and declined (`artipacked`, `self-repository`, `archived-uses`,
+# `dependabot-cooldown`). A severity floor is used rather than an `ignore:` list
+# of filenames so a newly added workflow file passes cleanly instead of failing
+# until someone remembers to edit this file.
+rules:
+  unpinned-uses:
+    config:
+      policies:
+        "actions/*": ref-pin
+        "*": hash-pin

@@ -35,10 +35,10 @@ jobs:
           cache: "npm"
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Run pre-commit
-        uses: pre-commit/action@v3.0.1
+        uses: pre-commit/action@2c7b3805fd2a0fd8c1884dcaebf91fc102a13ecd # v3.0.1
 
   fallow-audit:
     runs-on: ubuntu-latest
@@ -50,7 +50,7 @@ jobs:
           fetch-depth: 0
 
       - name: Run fallow audit
-        uses: fallow-rs/fallow@v3
+        uses: fallow-rs/fallow@30167b42257ded3bef683f6c91b4aa4017a1ff59 # v3.25.0
         with:
           command: audit
           format: github-annotations
