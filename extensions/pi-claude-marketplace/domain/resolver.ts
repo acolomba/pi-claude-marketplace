@@ -970,6 +970,27 @@ function readPathOrArray(value: unknown): readonly unknown[] {
  * are rejected here (the schema-level guard does not survive the
  * `as unknown` coercion that the resolver uses to read untrusted entry /
  * manifest fields).
+ *
+ * MANF-03 / D-01-14: `relative` is CANONICAL --
+ * `path.relative(pluginRoot, path.resolve(pluginRoot, raw))`. One directory
+ * on disk therefore has exactly one spelling downstream, so `./skills/`,
+ * `skills`, and `a/../skills` are one key rather than three and the
+ * implicit-by-convention probe stops adding a second entry for a directory
+ * a plugin already declared. D-01-15: this value is what `addComponentPath`
+ * both dedups on and stores; the array holds no author spelling.
+ * D-01-16: an element resolving to `pluginRoot` itself stores `"."` rather
+ * than the empty string `path.relative` returns for it, which keeps
+ * `path.join(pluginRoot, element)` yielding `pluginRoot`. D-01-17: the key
+ * stays CASE-SENSITIVE, so `Skills` and `skills` remain distinct.
+ *
+ * Normalization runs strictly AFTER `assertPathInside`, on the very value
+ * that check passed, so the stored path is contained by construction and
+ * cannot begin with `..`. The containment-failure `reason` deliberately
+ * echoes the author's raw spelling instead.
+ *
+ * Both collection paths reach this through `addValidatedComponentPath` and
+ * therefore inherit the canonical form: `collectStrictComponentKind` and its
+ * loose sibling `collectLooseComponentKind`.
  */
 async function validateComponentPath(
   kind: SupportedPathKind,
@@ -1014,7 +1035,10 @@ async function validateComponentPath(
     throw err;
   }
 
-  return { ok: true, relative: raw };
+  // D-01-14 / D-01-16: canonicalize against the candidate the containment
+  // check just accepted; `""` (the plugin root itself) stores as ".".
+  const relative = path.relative(pluginRoot, candidate);
+  return { ok: true, relative: relative === "" ? "." : relative };
 }
 
 function addComponentPath(
