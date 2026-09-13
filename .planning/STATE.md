@@ -5,7 +5,7 @@ milestone_name: Refine Unit Tests
 current_phase: 09
 current_phase_name: Final Quality and Backlog Closure
 status: phase_complete
-stopped_at: PR #181 open and green; four non-blocking Sonar findings handed off
+stopped_at: "PR #181 open and green but HELD by the operator: do not merge"
 last_updated: "2026-09-12T22:50:41.260Z"
 last_activity: 2026-09-12
 last_activity_desc: milestone audit passed (tech_debt, no blockers) and the revalidation tooling retired with its couplings
@@ -1162,8 +1162,9 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** All 9 phases complete and verified; `origin/main` merged and adapted;
-the window ledger is fully disposed (0 open); PR not opened by request.
+**Stopped at:** All 9 phases complete and verified; the milestone audit passed
+(`tech_debt`, no blockers); the revalidation tooling is retired; PR #181 is open and green.
+**The operator has asked that the PR NOT be merged yet.**
 
 Every phase of `refine-unit-tests` is executed and verified. Phase 9 closed with
 `09-VERIFICATION.md` reading `status: passed`, 10/10. The code-review gate ran after the
@@ -1171,10 +1172,12 @@ last plan (0 critical, 3 warning, 4 info) and all three warnings are fixed. `ori
 was then merged in (`059a3199`) and its incoming work adapted to this branch's conventions;
 `RCOV-01` was re-sealed 230 to 233 pairs because the merge added three production modules.
 
-Measured on the current tree: `npm run check` exit 0 (6109 unit, 32 integration),
-`npm run test:coverage:direct:all` exit 0 over 233 pairs,
-`node scripts/revalidation.mjs scope-impact --check` prints `Scope impact valid: 40 records.`
-The branch is 0 behind `origin/main` and merges clean.
+Measured after the `origin/main` merge, before the tooling retirement: `npm run check`
+exit 0 (6109 unit, 32 integration), `npm run test:coverage:direct:all` exit 0 over 233 pairs,
+`node scripts/revalidation.mjs scope-impact --check` printing `Scope impact valid: 40 records.`
+**Those three commands no longer all exist.** `2f2cb7c4` retired the revalidation tooling, so
+`scope-impact --check` is gone and the pair count reads 232; the post-retirement measurement is
+`npm run check` exit 0 at 5971 unit / 32 integration. The branch is 0 behind `origin/main`.
 
 ### The window pass (2026-09-12, after the phase verified)
 
@@ -1229,25 +1232,37 @@ finding's file, line, parameter count and call-site count, plus the reason ESLin
 (24 rows, one vocabulary, the milestone's audit trail), `09-REVIEW.md` + `09-REVIEW-FIX.md`,
 `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`.
 
-Last session: 2026-09-12 — resumed, then ran the window pass to completion.
+Last session: 2026-09-13 — resumed, repaired this section, then addressed the Sonar findings.
 
-**Next:** Open the PR (not done — deliberate), then milestone audit, complete, cleanup.
+**Next:** Milestone complete, then cleanup. **Do NOT merge PR #181** — the operator has held it
+open deliberately. Two docs commits (`e189c011`, `2a458d73`) are local-only; pushing them re-runs CI.
 
-One snag remains in that sequence; the window-gate snag is now cleared:
+### PR #181 — open, green, held
 
-1. ~~`/gsd-ship` blocks while any window reads `open`~~ — **cleared 2026-09-12**, 0 open.
-2. `gsd-tools query phase.complete` refuses here: it sees `.planning/workstreams/` and demands
+`test: refine the unit test suite and fix the defects it surfaced`. `state: OPEN`,
+`mergeable: MERGEABLE`, `mergeStateStatus: CLEAN`, all nine checks `SUCCESS` as of
+2026-09-13T02:50Z against head `eaf3e9b6`. The milestone audit
+(`.planning/refine-unit-tests-MILESTONE-AUDIT.md`) reads `status: tech_debt` with no blockers —
+requirements 30/30, phases 9/9, integration 6/6.
+
+Two snags remain in the close sequence. Both earlier ones are cleared: ~~open the PR~~
+(**done 2026-09-12**, PR #181) and ~~`/gsd-ship` blocks while any window reads `open`~~
+(**cleared 2026-09-12**, 0 open — waived 13 / fixed 18 / total 31). Only item 1 below is still
+live. Item 2 is a correction carried forward, not a snag — and the tooling it points at is now
+retired (`2f2cb7c4`), so it can never be fixed in place. Item 3 is resolved, kept as the record.
+
+1. `gsd-tools query phase.complete` refuses here: it sees `.planning/workstreams/` and demands
    `--ws`, but this milestone's ROADMAP/STATE are the ROOT files and no workstream is named
    `refine-unit-tests`. Hand-edit and verify by diff, as this file already prescribes for the
    state verbs.
-3. **The requirement seal has THREE fail-closed carriers, not four.** Phase 9's narrative and
+2. **The requirement seal has THREE fail-closed carriers, not four.** Phase 9's narrative and
    this file described the seal as four carriers flipping together. The milestone audit proved
    the `- [x]` checkbox is NOT sealed: un-ticking `CLOSE-01` while its traceability row still
    reads `Complete` leaves `scope-impact --check` green at 40 records and the revalidation suite
    at 147/0. The fail-closed three are the traceability row, `SEALED_REQUIREMENT_ROUTES`, and the
    clause signature. Not fixed -- the fix would land in tooling retiring in the next step -- but
    the claim is corrected here so no later milestone inherits it.
-4. `quick-batch complete` also refused until a `## Quick Tasks Completed` section was created
+3. `quick-batch complete` also refused until a `## Quick Tasks Completed` section was created
    in this file — it is the sole writer of an item's `complete` status, so the section's absence
    silently blocks every quick-batch item from advancing. The section now exists with the
    canonical `with-status` schema (`#`, `Description`, `Date`, `Commit`, `Status`, `Directory`).
