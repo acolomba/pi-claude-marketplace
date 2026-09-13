@@ -4,9 +4,9 @@ milestone: refine-unit-tests
 milestone_name: Refine Unit Tests
 status: Awaiting next milestone
 stopped_at: "Milestone closed and archived. PR #181 is open and unmerged by operator decision."
-last_updated: "2026-09-13T12:20:00.000Z"
+last_updated: "2026-09-13T15:30:00.000Z"
 last_activity: 2026-09-13
-last_activity_desc: Milestone refine-unit-tests completed and archived
+last_activity_desc: Quick task 260913-f6a gated the two SonarQube workflow rules
 state_head: 3580c7d14af502bb966c30b9420a9c39313798e2
 progress:
   total_phases: 9
@@ -112,6 +112,7 @@ hit the same wall; convert it rather than re-disclosing it.
 
 | # | Description | Date | Commit | Status | Directory |
 | --- | --- | --- | --- | --- | --- |
+| 260913-f6a | Gate the two SonarQube workflow findings, githubactions:S6505 and githubactions:S7637 | 2026-09-13 | 8a8a0396..69797ebc | Complete | [260913-f6a-gate-sonar-workflow-findings-s6505-and-s](./quick/260913-f6a-gate-sonar-workflow-findings-s6505-and-s/) |
 | 260909-h38 | Make three cross-process concurrency tests deterministic with a FIFO state.json barrier | 2026-09-09 | 147b63f4 | Complete | [260909-h38-make-three-cross-process-concurrency-tes](./quick/260909-h38-make-three-cross-process-concurrency-tes/) |
 
 ## Session Continuity
