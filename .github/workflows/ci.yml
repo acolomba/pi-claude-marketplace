@@ -117,9 +117,97 @@ jobs:
       - name: Run pinned e2e tests
         run: npm run test:e2e
 
+  # RCOV-03 asks for a dedicated authoritative job rather than a step folded
+  # into `check` (D-08-16). The gate spawns one focused test run per changed
+  # pair, so it wants its own timeout and its own legible red signal instead of
+  # sitting behind a typecheck failure in the fifteen-minute composite.
+  #
+  # The job runs one of two scopes, chosen by event, because `origin/main...HEAD`
+  # answers a real question on exactly one of the three events this workflow
+  # fires on:
+  #
+  #   pull_request               -- the PR's commits. Branch-scoped, as designed.
+  #   push: main                 -- EMPTY. origin/main IS HEAD.
+  #   workflow_call (v* tag)     -- EMPTY. The tag sits on main.
+  #
+  # On the two non-PR events a changed-pair run would select nothing, measure
+  # only the pinned pairs and exit 0, having said nothing about the commit that
+  # triggered it -- while `package` depended on it as though it had. Both
+  # in-job base assertions are blind to that: they check which base resolved,
+  # never how large a change set it held. So those two events take the third
+  # scope, the whole tree, which is the honest change set for a commit that is
+  # already on main and the strongest one for a release.
+  direct-coverage:
+    name: direct coverage (Node 24)
+    runs-on: ubuntu-latest
+    # The whole-tree scope is around eight minutes locally over 232 pairs; the
+    # ceiling is sized for a slower runner, not for the measured time.
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          # D-08-15: origin/main must exist as a ref. actions/checkout defaults
+          # to a depth-1 clone in which it does not, so the gate's ordered
+          # candidate chain falls through to HEAD~1 and diffs a single commit
+          # while still reporting a resolved base. Fail-closed base selection
+          # is worth nothing if the base it closes on is the wrong one. The
+          # fallow-audit job in lint.yml sets this for the same reason.
+          fetch-depth: 0
+
+      - name: Setup Node 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Whether actions/checkout at fetch-depth 0 creates
+      # refs/remotes/origin/main on a pull_request event cannot be verified
+      # outside GitHub Actions. This step turns a wrong assumption into a loud
+      # failure rather than a silent HEAD~1 diff (D-08-15). It is scoped to the
+      # event whose change set depends on that ref.
+      - name: Assert the base candidate resolved
+        if: github.event_name == 'pull_request'
+        run: git rev-parse --verify origin/main^{commit}
+
+      - name: Run the branch-scoped direct-coverage gate
+        if: github.event_name == 'pull_request'
+        # `pipefail` is set explicitly: GitHub's default shell is `bash -e`,
+        # which does NOT set it, so without this the pipeline would exit with
+        # tee's status and a red gate would report green.
+        run: |
+          set -o pipefail
+          npm run test:coverage:direct | tee coverage-direct.log
+
+      # The gate writes its selected base before either outcome, so the job can
+      # assert the choice rather than trust the checkout. A regression to
+      # HEAD~1 fails here instead of passing quietly (D-08-15).
+      # A block scalar, because a plain YAML scalar cannot carry `: `.
+      - name: Assert the gate selected origin/main
+        if: github.event_name == 'pull_request'
+        run: |
+          grep -qx 'Changed-pair base: origin/main' coverage-direct.log
+
+      # push: main and the v*-tag workflow_call. There is no change set to
+      # select against origin/main here, so the gate measures the whole tree
+      # and compares every reading against the pin.
+      #
+      # This arm carries no assertion step of its own, and deliberately. The
+      # three steps above exist because a changed-pair run cannot tell whether
+      # the base it resolved was the right question. A whole-tree run has no
+      # base: it enumerates from disk, and `assertReportComplete` already reads
+      # its own retained report back and refuses a run that skipped a row. An
+      # added grep here would restate a check the gate performs.
+      - name: Run the whole-tree direct-coverage gate
+        if: github.event_name != 'pull_request'
+        run: npm run test:coverage:direct:all
+
   package:
     name: package manifest
-    needs: [check, integration-tests, e2e-tests]
+    needs: [check, integration-tests, e2e-tests, direct-coverage]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

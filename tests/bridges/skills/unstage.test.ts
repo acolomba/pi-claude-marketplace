@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import filesystemPromises, {
+import {
   lstat,
   mkdir,
   mkdtemp,
@@ -10,15 +10,18 @@ import filesystemPromises, {
   symlink,
   writeFile,
 } from "node:fs/promises";
-import { syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
 
-import { unstagePluginSkills } from "../../../extensions/pi-claude-marketplace/bridges/skills/unstage.ts";
+import {
+  createUnstagePluginSkills,
+  unstagePluginSkills,
+} from "../../../extensions/pi-claude-marketplace/bridges/skills/unstage.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { SymlinkRefusedError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
 
+import type { SkillsUnstageRemover } from "../../../extensions/pi-claude-marketplace/bridges/skills/unstage.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 
 interface SkillScope {
@@ -194,92 +197,75 @@ test("rejects a symlinked skill target and preserves its destination", async (t)
   assert.strictEqual(await readFile(outsideSkillPath, "utf8"), "outside skill bytes\n");
 });
 
-test("continues after a raced skill directory disappears", async (t) => {
+test("continues after the required remover reports ENOENT after deletion", async (t) => {
   // arrange
-  const { locations } = await createSkillScope(t, "skills-unstage-race-");
+  const { locations } = await createSkillScope(t, "skills-unstage-port-race-");
   const racedSkillDirectory = path.join(locations.skillsTargetDir, "acme-raced");
-  const retainedSkillDirectory = path.join(locations.skillsTargetDir, "acme-after");
+  const laterSkillDirectory = path.join(locations.skillsTargetDir, "acme-later");
   await mkdir(racedSkillDirectory);
-  await mkdir(retainedSkillDirectory);
+  await mkdir(laterSkillDirectory);
   await writeFile(path.join(racedSkillDirectory, "SKILL.md"), "raced bytes\n");
-  await writeFile(path.join(retainedSkillDirectory, "SKILL.md"), "after bytes\n");
-  const originalRm = filesystemPromises.rm.bind(filesystemPromises);
+  await writeFile(path.join(laterSkillDirectory, "SKILL.md"), "later bytes\n");
+  const removalTargets: string[] = [];
   const raceError = Object.assign(new Error("skill disappeared during removal"), {
     code: "ENOENT",
   });
-  const removal = t.mock.method(
-    filesystemPromises,
-    "rm",
-    async (
-      target: Parameters<typeof originalRm>[0],
-      options?: Parameters<typeof originalRm>[1],
-    ) => {
-      await originalRm(target, options);
-      if (String(target) === racedSkillDirectory) {
+  const remover: SkillsUnstageRemover = {
+    async removeTree(target: string): Promise<void> {
+      removalTargets.push(target);
+      await rm(target, { recursive: true, force: true });
+      if (target === racedSkillDirectory) {
         throw raceError;
       }
     },
-  );
-  t.after(() => {
-    removal.mock.restore();
-    syncBuiltinESMExports();
-  });
-  syncBuiltinESMExports();
+  };
+  const unstageSkills = createUnstagePluginSkills(remover);
 
   // act
-  const unstagedSkills = await unstagePluginSkills({
+  const unstagedSkills = await unstageSkills({
     locations,
-    previousSkillNames: ["acme-raced", "acme-after"],
+    previousSkillNames: ["acme-raced", "acme-later"],
   });
 
   // assert
-  assert.deepStrictEqual(unstagedSkills, { removedNames: ["acme-after"], warnings: [] });
+  assert.deepStrictEqual(unstagedSkills, { removedNames: ["acme-later"], warnings: [] });
   assert.deepStrictEqual(await readdir(locations.skillsTargetDir), []);
+  assert.deepStrictEqual(removalTargets, [racedSkillDirectory, laterSkillDirectory]);
 });
 
-test("propagates a removal failure after retaining the partial filesystem state", async (t) => {
+test("propagates the required remover failure after earlier effects", async (t) => {
   // arrange
-  const { locations } = await createSkillScope(t, "skills-unstage-failure-");
+  const { locations } = await createSkillScope(t, "skills-unstage-port-failure-");
   const removedSkillDirectory = path.join(locations.skillsTargetDir, "acme-removed");
   const blockedSkillDirectory = path.join(locations.skillsTargetDir, "acme-blocked");
-  const foreignSkillDirectory = path.join(locations.skillsTargetDir, "other-keep");
+  const laterSkillDirectory = path.join(locations.skillsTargetDir, "acme-later");
   await mkdir(removedSkillDirectory);
   await mkdir(blockedSkillDirectory);
-  await mkdir(foreignSkillDirectory);
-  await writeFile(path.join(removedSkillDirectory, "SKILL.md"), "removed skill bytes\n");
-  await writeFile(path.join(blockedSkillDirectory, "SKILL.md"), "blocked skill bytes\n");
-  await writeFile(path.join(foreignSkillDirectory, "SKILL.md"), "foreign skill bytes\n");
-  const originalRm = filesystemPromises.rm.bind(filesystemPromises);
+  await mkdir(laterSkillDirectory);
+  await writeFile(path.join(removedSkillDirectory, "SKILL.md"), "removed bytes\n");
+  await writeFile(path.join(blockedSkillDirectory, "SKILL.md"), "blocked bytes\n");
+  await writeFile(path.join(laterSkillDirectory, "SKILL.md"), "later bytes\n");
+  const removalTargets: string[] = [];
   const removalError = Object.assign(new Error("skill removal denied"), {
     code: "EACCES",
-    errno: -13,
-    syscall: "rm",
     path: blockedSkillDirectory,
   });
-  const removal = t.mock.method(
-    filesystemPromises,
-    "rm",
-    async (
-      target: Parameters<typeof originalRm>[0],
-      options?: Parameters<typeof originalRm>[1],
-    ) => {
-      if (String(target) === blockedSkillDirectory) {
+  const remover: SkillsUnstageRemover = {
+    async removeTree(target: string): Promise<void> {
+      removalTargets.push(target);
+      if (target === blockedSkillDirectory) {
         throw removalError;
       }
 
-      await originalRm(target, options);
+      await rm(target, { recursive: true, force: true });
     },
-  );
-  t.after(() => {
-    removal.mock.restore();
-    syncBuiltinESMExports();
-  });
-  syncBuiltinESMExports();
+  };
+  const unstageSkills = createUnstagePluginSkills(remover);
 
   // act
-  const unstageError = await unstagePluginSkills({
+  const unstageError = await unstageSkills({
     locations,
-    previousSkillNames: ["acme-removed", "acme-blocked", "acme-never-reached"],
+    previousSkillNames: ["acme-removed", "acme-blocked", "acme-later"],
   }).then(
     () => undefined,
     (reason: unknown) => reason,
@@ -287,13 +273,6 @@ test("propagates a removal failure after retaining the partial filesystem state"
 
   // assert
   assert.strictEqual(unstageError, removalError);
-  assert.deepStrictEqual(await readdir(locations.skillsTargetDir), ["acme-blocked", "other-keep"]);
-  assert.strictEqual(
-    await readFile(path.join(blockedSkillDirectory, "SKILL.md"), "utf8"),
-    "blocked skill bytes\n",
-  );
-  assert.strictEqual(
-    await readFile(path.join(foreignSkillDirectory, "SKILL.md"), "utf8"),
-    "foreign skill bytes\n",
-  );
+  assert.deepStrictEqual(await readdir(locations.skillsTargetDir), ["acme-blocked", "acme-later"]);
+  assert.deepStrictEqual(removalTargets, [removedSkillDirectory, blockedSkillDirectory]);
 });

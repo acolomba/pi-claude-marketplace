@@ -11,14 +11,14 @@
 // The boolean `--map-model` opt-in (AG-7) requires the raw `parseArgs` +
 // manual positional scan pattern from `list.ts`.
 
-import { updatePlugins } from "../../../orchestrators/plugin/update.ts";
-import { notifyUsageError } from "../../../shared/notify.ts";
+import { notifyUsageError } from "../../../shared/notification-dispatch.ts";
 import { passThroughFlagNames } from "../../flag-catalog.ts";
 import { extractLocalFlag } from "../shared.ts";
 
 import { parseMapModelArgs, splitPluginMarketplaceRef } from "./shared.ts";
 
-import type { UpdatePluginsTarget } from "../../../orchestrators/plugin/update.ts";
+import type { UpdatePluginsFn } from "../../../orchestrators/plugin/update-flow.ts";
+import type { UpdatePluginsTarget } from "../../../orchestrators/plugin/update-preflight.ts";
 import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
 
 const USAGE =
@@ -31,6 +31,7 @@ const PASS_THROUGH_FLAGS = passThroughFlagNames("update");
 
 export function makeUpdateHandler(
   pi: ExtensionAPI,
+  updatePlugins: UpdatePluginsFn,
 ): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
   return async (args, ctx): Promise<void> => {
     // Shared scanner; see edge/handlers/shared.ts. The catalog-derived

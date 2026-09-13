@@ -92,6 +92,10 @@ const PI_TO_CLAUDE_TOOL_NAMES = {
   ls: "LS",
 } as const satisfies Record<PiToolName, string>;
 
+const PI_TO_CLAUDE_TOOL_NAME_LOOKUP: ReadonlyMap<string, string> = new Map(
+  Object.entries(PI_TO_CLAUDE_TOOL_NAMES),
+);
+
 /**
  * Inverse of `PI_TO_CLAUDE_TOOL_NAMES`. Keys are the eight Claude-form
  * tool names; values are the corresponding Pi-form literals.
@@ -137,5 +141,5 @@ export const CLAUDE_TO_PI_TOOL_NAMES = {
  * unchanged rather than round-tripping.
  */
 export function mapPiToClaudeToolName(name: string): string {
-  return (PI_TO_CLAUDE_TOOL_NAMES as Record<string, string>)[name] ?? name;
+  return PI_TO_CLAUDE_TOOL_NAME_LOOKUP.get(name) ?? name;
 }

@@ -7,11 +7,14 @@ import {
   appendLeaks,
   assertNever,
   causeChainTrailer,
+  CleanupContextError,
+  cleanupFailuresFromError,
   composeErrorWithCauseChain,
   ConcurrentInstallError,
   ConcurrentUninstallError,
   CrossPluginConflictError,
   errorMessage,
+  errorWithCleanupFailures,
   errorWithManualRecovery,
   findManualRecoveryError,
   InvalidMarketplaceManifestError,
@@ -22,6 +25,7 @@ import {
   MarketplaceNotFoundError,
   MarketplaceUpdateError,
   PluginShapeError,
+  PluginUpdateConcurrencyError,
   PluginUpdatePhase3Error,
   StaleSourceCloneError,
   StateLockHeldError,
@@ -29,6 +33,7 @@ import {
 } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 
 import type {
+  CleanupFailure,
   Phase3Failure,
   PluginShapeErrorKind,
   PluginShapeErrorShape,
@@ -820,6 +825,147 @@ describe("StateLockHeldError", () => {
         cause,
       },
     );
+  });
+});
+
+describe("PluginUpdateConcurrencyError", () => {
+  for (const { error, expectedMessage } of [
+    {
+      error: new PluginUpdateConcurrencyError("marketplace-removed", "acme", "official"),
+      expectedMessage: 'Marketplace "official" disappeared from state during update of "acme".',
+    },
+    {
+      error: new PluginUpdateConcurrencyError("marketplace-removed", "acme", "official", {
+        lifecycle: "finalize",
+      }),
+      expectedMessage: 'Marketplace "official" disappeared from state during finalize of "acme".',
+    },
+    {
+      error: new PluginUpdateConcurrencyError("plugin-uninstalled", "acme", "official"),
+      expectedMessage: 'Plugin "acme" was concurrently uninstalled.',
+    },
+    {
+      error: new PluginUpdateConcurrencyError("plugin-uninstalled", "acme", "official", {
+        lifecycle: "finalize",
+      }),
+      expectedMessage: 'Plugin "acme" was concurrently uninstalled during finalize.',
+    },
+    {
+      error: new PluginUpdateConcurrencyError("plugin-updated", "acme", "official", {
+        expectedVersion: "1.0.0",
+        actualVersion: "1.0.1",
+      }),
+      expectedMessage:
+        'Plugin "acme" was concurrently updated; expected version "1.0.0", found "1.0.1".',
+    },
+    {
+      error: new PluginUpdateConcurrencyError("plugin-updated", "acme", "official"),
+      expectedMessage:
+        'Plugin "acme" was concurrently updated; expected version "unknown", found "unknown".',
+    },
+  ] as const) {
+    test(`exposes stable ${error.kind} facts`, () => {
+      assert.deepStrictEqual(
+        {
+          name: error.name,
+          message: error.message,
+          kind: error.kind,
+          plugin: error.plugin,
+          marketplace: error.marketplace,
+          lifecycle: error.lifecycle,
+        },
+        {
+          name: "PluginUpdateConcurrencyError",
+          message: expectedMessage,
+          kind: error.kind,
+          plugin: "acme",
+          marketplace: "official",
+          lifecycle: error.lifecycle,
+        },
+      );
+    });
+  }
+});
+
+describe("CleanupContextError", () => {
+  test("keeps the primary error as cause and freezes exact cleanup records", () => {
+    const primary = new Error("state save failed");
+    const cleanupCause = new Error("permission denied");
+    const failures = [
+      {
+        phase: "abort",
+        artifact: "commands",
+        path: "/scope/commands-staging/uuid",
+        cause: cleanupCause,
+      },
+    ] satisfies CleanupFailure[];
+
+    const error = new CleanupContextError(primary, failures);
+
+    assert.equal(error.cause, primary);
+    assert.equal(error.primary, primary);
+    assert.deepStrictEqual(error.cleanupFailures, failures);
+    assert.equal(Object.isFrozen(error.cleanupFailures), true);
+    assert.equal(Object.isFrozen(error.cleanupFailures[0]), true);
+    assert.match(causeChainTrailer(error), /abort commands uuid/);
+    assert.ok(!causeChainTrailer(error).includes("/scope/commands-staging"));
+  });
+
+  test("returns the primary error unchanged when cleanup succeeds", () => {
+    const primary = new Error("state save failed");
+
+    assert.equal(errorWithCleanupFailures(primary, []), primary);
+    assert.deepStrictEqual(cleanupFailuresFromError(primary), []);
+  });
+
+  test("merges cleanup records while preserving the original primary cause", () => {
+    const primary = new Error("state save failed");
+    const first = errorWithCleanupFailures(primary, [
+      {
+        phase: "prepare",
+        artifact: "skills",
+        path: "/scope/skills-staging/one",
+        cause: new Error("first cleanup failed"),
+      },
+    ]);
+    const second = errorWithCleanupFailures(first, [
+      {
+        phase: "rollback",
+        artifact: "agents",
+        path: "/scope/agents-staging/two",
+        cause: new Error("second cleanup failed"),
+      },
+    ]);
+
+    assert.ok(second instanceof CleanupContextError);
+    assert.equal(second.primary, primary);
+    assert.equal(second.cause, primary);
+    assert.deepStrictEqual(
+      second.cleanupFailures.map(({ phase, artifact, path }) => ({ phase, artifact, path })),
+      [
+        { phase: "prepare", artifact: "skills", path: "/scope/skills-staging/one" },
+        { phase: "rollback", artifact: "agents", path: "/scope/agents-staging/two" },
+      ],
+    );
+    assert.deepStrictEqual(cleanupFailuresFromError(new Error("outer", { cause: second })), [
+      ...second.cleanupFailures,
+    ]);
+  });
+
+  test("normalizes a non-Error primary without adding successful cleanup diagnostics", () => {
+    const cleanupCause = new Error("cleanup failed");
+    const error = errorWithCleanupFailures("operation failed", [
+      {
+        phase: "commit",
+        artifact: "mcp",
+        path: "/scope/mcp.json",
+        cause: cleanupCause,
+      },
+    ]);
+
+    assert.ok(error instanceof CleanupContextError);
+    assert.equal(error.primary.message, "operation failed");
+    assert.equal(error.cleanupFailures[0]?.cause, cleanupCause);
   });
 });
 

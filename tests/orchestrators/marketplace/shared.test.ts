@@ -27,7 +27,11 @@ import { locationsFor } from "../../../extensions/pi-claude-marketplace/persiste
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import * as defaultGit from "../../../extensions/pi-claude-marketplace/platform/git.ts";
 import { atomicWriteJson } from "../../../extensions/pi-claude-marketplace/shared/atomic-json.ts";
-import { MarketplaceNotFoundError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import {
+  InvalidMarketplaceManifestError,
+  MarketplaceNotFoundError,
+  PluginShapeError,
+} from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 
 import type {
@@ -1331,23 +1335,64 @@ for (const { title, cause, expected } of [
     expected: "source missing",
   },
   {
+    title: "ENOTDIR errno",
+    cause: Object.assign(new Error("opaque"), { code: "ENOTDIR" }),
+    expected: "source missing",
+  },
+  {
     title: "EPERM errno",
     cause: Object.assign(new Error("opaque"), { code: "EPERM" }),
     expected: "permission denied",
   },
   {
-    title: "unknown errno with unreadable text",
-    cause: Object.assign(new Error("manifest unreadable"), { code: "EIO" }),
+    title: "EIO errno with opaque text",
+    cause: Object.assign(new Error("opaque filesystem failure"), { code: "EIO" }),
     expected: "unreadable",
   },
   {
-    title: "unparseable text",
-    cause: new Error("manifest is UNPARSEABLE"),
+    title: "EBADF errno",
+    cause: Object.assign(new Error("opaque filesystem failure"), { code: "EBADF" }),
+    expected: "unreadable",
+  },
+  {
+    title: "EISDIR errno",
+    cause: Object.assign(new Error("opaque filesystem failure"), { code: "EISDIR" }),
+    expected: "unreadable",
+  },
+  {
+    title: "typed invalid manifest with varied text",
+    cause: Object.assign(new InvalidMarketplaceManifestError("schema rejected"), {
+      message: "opaque typed manifest failure",
+    }),
     expected: "unparseable",
   },
   {
-    title: "explicit not-in-manifest text",
-    cause: new Error("plugin not in manifest"),
+    title: "typed plugin absence with varied text",
+    cause: Object.assign(
+      new PluginShapeError({
+        kind: "not-in-manifest",
+        plugin: "hello",
+        marketplace: "official",
+      }),
+      { message: "opaque typed absence" },
+    ),
+    expected: "not in manifest",
+  },
+  {
+    title: "typed marketplace absence with varied text",
+    cause: Object.assign(new MarketplaceNotFoundError("official", ["project"]), {
+      message: "opaque typed absence",
+    }),
+    expected: "not in manifest",
+  },
+  {
+    title: "unknown errno",
+    cause: Object.assign(new Error("opaque filesystem failure"), { code: "ECONNABORTED" }),
+    expected: "not in manifest",
+  },
+  {
+    title: "unknown keyword-bearing error",
+    cause: new Error("unreadable and unparseable but untyped"),
     expected: "not in manifest",
   },
   {

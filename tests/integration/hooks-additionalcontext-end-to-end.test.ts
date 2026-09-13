@@ -27,15 +27,14 @@ import path from "node:path";
 import { test } from "node:test";
 
 import {
-  beforeAgentStartHandlerFor,
-  registerHooksBridge,
-} from "../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
+  createHooksHydration,
+  createHooksRuntime,
+  readHooksJson,
+} from "../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import {
-  pendingSessionStartContextEntries,
-  resetRoutingState,
-} from "../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
-import { currentEpoch } from "../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
-import { saveState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+  loadState,
+  saveState,
+} from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
 import type { ExtensionState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type {
@@ -136,11 +135,9 @@ function makeBeforeAgentStartEvent(systemPrompt: string): BeforeAgentStartEvent 
   } as unknown as BeforeAgentStartEvent;
 }
 
-test("HOOK-E2E-03: SessionStart hook stdout additionalContext reaches before_agent_start.systemPrompt end-to-end", async (t) => {
-  resetRoutingState();
-  t.after(() => {
-    resetRoutingState();
-  });
+test("HOOK-E2E-03: SessionStart hook stdout additionalContext reaches before_agent_start.systemPrompt end-to-end", async () => {
+  const runtime = createHooksRuntime();
+  const hooksHydration = createHooksHydration(runtime, { loadState, readHooksJson });
 
   await withHermeticPiHome(async ({ extensionRoot, sourcesPluginRoot }) => {
     // Lay out the source plugin tree the way the install pipeline would
@@ -201,7 +198,7 @@ JSON
         getSessionFile: () => undefined,
       },
     } as unknown as ExtensionContext;
-    await registerHooksBridge(pi, { ctx: placeholderCtx, cwd: extensionRoot });
+    await hooksHydration.registerHooksBridge(pi, { ctx: placeholderCtx, cwd: extensionRoot });
 
     const sessionStartReg = registrations.find((r) => r.event === "session_start");
     assert.ok(sessionStartReg, "bridge must register session_start handler");
@@ -210,7 +207,7 @@ JSON
 
     // Pre-flight: pending buffer empty after a fresh registerHooksBridge.
     assert.deepEqual(
-      pendingSessionStartContextEntries(),
+      runtime.pendingSessionStartContextEntries(),
       [],
       "registerHooksBridge must clear the pending buffer so /reload cannot leak stale context",
     );
@@ -227,7 +224,7 @@ JSON
     await sessionStartReg.handler(sessionStartEvent, placeholderCtx);
 
     assert.deepEqual(
-      pendingSessionStartContextEntries().map((e) => e.context),
+      runtime.pendingSessionStartContextEntries().map((entry) => entry.context),
       ["LEARN-MODE-MARK"],
       "wire-protocol.ts must parse the additionalContext envelope and adaptObservationResultForEvent must append into the buffer",
     );
@@ -246,7 +243,7 @@ JSON
       "before_agent_start handler must surface the joined systemPrompt to Pi's chain",
     );
     assert.deepEqual(
-      pendingSessionStartContextEntries(),
+      runtime.pendingSessionStartContextEntries(),
       [],
       "drain semantics: pending buffer cleared after the first before_agent_start",
     );
@@ -266,11 +263,9 @@ JSON
   });
 });
 
-test("HOOK-E2E-04: registerHooksBridge clears the pending buffer on /reload (re-entry)", async (t) => {
-  resetRoutingState();
-  t.after(() => {
-    resetRoutingState();
-  });
+test("HOOK-E2E-04: registerHooksBridge clears the pending buffer on /reload (re-entry)", async () => {
+  const runtime = createHooksRuntime();
+  const hooksHydration = createHooksHydration(runtime, { loadState, readHooksJson });
 
   await withHermeticPiHome(async ({ extensionRoot, sourcesPluginRoot }) => {
     const handlersDir = path.join(sourcesPluginRoot, "hooks-handlers");
@@ -322,13 +317,16 @@ JSON
     // drain it. This simulates the pathological case where the user
     // /reload's before submitting a prompt, leaving a stale buffer.
     const firstLoad = makeMockPi();
-    await registerHooksBridge(firstLoad.pi, { ctx: placeholderCtx, cwd: extensionRoot });
+    await hooksHydration.registerHooksBridge(firstLoad.pi, {
+      ctx: placeholderCtx,
+      cwd: extensionRoot,
+    });
     const firstSessionStartReg = firstLoad.registrations.find((r) => r.event === "session_start");
     assert.ok(firstSessionStartReg);
     const firstReloadEvent: SessionStartEvent = { type: "session_start", reason: "startup" };
     await firstSessionStartReg.handler(firstReloadEvent, placeholderCtx);
     assert.deepEqual(
-      pendingSessionStartContextEntries().map((e) => e.context),
+      runtime.pendingSessionStartContextEntries().map((entry) => entry.context),
       ["FIRST-LOAD-MARK"],
     );
 
@@ -337,17 +335,26 @@ JSON
     // registerHooksBridge entry so the prior session's stale entry does
     // not contaminate the new session's drain.
     const secondLoad = makeMockPi();
-    await registerHooksBridge(secondLoad.pi, { ctx: placeholderCtx, cwd: extensionRoot });
+    await hooksHydration.registerHooksBridge(secondLoad.pi, {
+      ctx: placeholderCtx,
+      cwd: extensionRoot,
+    });
     assert.deepEqual(
-      pendingSessionStartContextEntries(),
+      runtime.pendingSessionStartContextEntries(),
       [],
       "registerHooksBridge re-entry must clear the pending buffer (no stale-context leak across /reload)",
     );
 
     // Sanity check: the new session's drain handler returns undefined
     // (empty buffer).
-    const drainHandler = beforeAgentStartHandlerFor(currentEpoch());
-    const result = await drainHandler(makeBeforeAgentStartEvent("BASE"), placeholderCtx);
+    const drainRegistration = secondLoad.registrations.find(
+      (registration) => registration.event === "before_agent_start",
+    );
+    assert.ok(drainRegistration);
+    const result = await drainRegistration.handler(
+      makeBeforeAgentStartEvent("BASE"),
+      placeholderCtx,
+    );
     assert.equal(result, undefined, "empty buffer after /reload must drain to undefined");
   });
 });

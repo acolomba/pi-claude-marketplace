@@ -29,9 +29,7 @@
 
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
-import { syncBuiltinESMExports } from "node:module";
-import { tmpdir } from "node:os";
+import { mkdir, readFile, readdir, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 
@@ -49,8 +47,10 @@ import {
   resolvePluginPin,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts";
 import {
+  createGetPluginInfo,
   getPluginInfo,
   type InfoCloneCacheSeam,
+  type PluginInfoReader,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts";
 import { saveConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -63,48 +63,52 @@ import {
 } from "../../edge/handlers/marketplace-seed.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
+import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
 import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 type FaultableFsPromiseMethod = "readFile" | "readdir";
 
+test("exposes a required plugin info reader factory", async () => {
+  const infoModule: Record<string, unknown> =
+    await import("../../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts");
+
+  assert.equal(Object.keys(infoModule).includes("createGetPluginInfo"), true);
+});
+
 async function withFsPromiseFault<T>(
   method: FaultableFsPromiseMethod,
   targetPath: string,
   error: NodeJS.ErrnoException,
-  action: () => Promise<T>,
+  action: (getPluginInfoWithFault: ReturnType<typeof createGetPluginInfo>) => Promise<T>,
 ): Promise<T> {
-  const descriptor = Object.getOwnPropertyDescriptor(fs.promises, method);
-  assert.ok(descriptor !== undefined, `expected fs.promises.${method} descriptor`);
-  const original = fs.promises[method];
   let faultRaised = false;
-
-  Object.defineProperty(fs.promises, method, {
-    ...descriptor,
-    value: async (...args: unknown[]) => {
-      if (args[0] === targetPath) {
+  const reader: PluginInfoReader = {
+    async readTextFile(filePath) {
+      if (method === "readFile" && filePath === targetPath) {
         faultRaised = true;
         throw error;
       }
 
-      const result: unknown = await Reflect.apply(original, fs.promises, args);
-      return result;
+      return readFile(filePath, "utf8");
     },
-  });
-  syncBuiltinESMExports();
+    async listDirectory(directoryPath) {
+      if (method === "readdir" && directoryPath === targetPath) {
+        faultRaised = true;
+        throw error;
+      }
 
-  try {
-    const result = await action();
-    assert.equal(faultRaised, true, `expected ${method} fault for ${targetPath}`);
-    return result;
-  } finally {
-    Object.defineProperty(fs.promises, method, descriptor);
-    syncBuiltinESMExports();
-  }
+      return readdir(directoryPath, { withFileTypes: true });
+    },
+  };
+
+  const result = await action(createGetPluginInfo(reader));
+  assert.equal(faultRaised, true, `expected ${method} fault for ${targetPath}`);
+  return result;
 }
 
-function makeMockCredentialOps() {
+function createCredentialOps() {
   const credentials = createCredentialOpsFake({ boundary: "memory" });
   return {
     credOps: credentials.credentialOps,
@@ -141,7 +145,7 @@ const ALLOWED_INFO_REMOTES = [
   "https://github.com/owner/gh-mp.git",
 ] as const;
 
-function makeMockGitOps(initial: GitOpsAdapterOptions = {}) {
+function createGitOps(initial: GitOpsAdapterOptions = {}) {
   const normalizedRemoteRefs = Object.fromEntries(
     Object.entries(initial.remoteRefs ?? {}).map(([ref, oid]) => [
       ref.replace(/^refs\/remotes\/[^/]+\//, ""),
@@ -176,18 +180,10 @@ function makeMockGitOps(initial: GitOpsAdapterOptions = {}) {
   const gitOps: GitOps = {
     ...git.gitOps,
     async clone(options) {
-      const { auth, ...authlessOptions } = options;
-      await git.gitOps.clone(authlessOptions);
-      if (auth !== undefined) {
-        Object.assign(git.state.calls.clone.at(-1) ?? {}, { auth });
-      }
+      await git.gitOps.clone(options);
     },
     async fetch(options) {
-      const { auth, ...authlessOptions } = options;
-      await git.gitOps.fetch(authlessOptions);
-      if (auth !== undefined) {
-        Object.assign(git.state.calls.fetch.at(-1) ?? {}, { auth });
-      }
+      await git.gitOps.fetch(options);
     },
     async resolveRef(options) {
       try {
@@ -202,13 +198,7 @@ function makeMockGitOps(initial: GitOpsAdapterOptions = {}) {
       }
     },
     async resolveRemoteRef(options) {
-      const { auth, ...authlessOptions } = options;
-      const oid = await git.gitOps.resolveRemoteRef(authlessOptions);
-      if (auth !== undefined) {
-        Object.assign(git.state.calls.resolveRemoteRef.at(-1) ?? {}, { auth });
-      }
-
-      return oid;
+      return git.gitOps.resolveRemoteRef(options);
     },
   };
 
@@ -265,33 +255,18 @@ function makeCtx(expectedNotifications = 1): {
   return { ctx, pi, notifications };
 }
 
-/**
- * Run a callback with HOME pointing at a tmp dir so user-scope state
- * is hermetic. Restores HOME after.
- */
 async function withHermeticHome<T>(
   fn: (env: { home: string; cwd: string }) => Promise<T>,
 ): Promise<T> {
-  const originalHome = process.env.HOME;
-  const home = await mkdtemp(path.join(tmpdir(), "plug-info-home-"));
-  const cwd = await mkdtemp(path.join(tmpdir(), "plug-info-cwd-"));
-  process.env.HOME = home;
-  try {
-    return await fn({ home, cwd });
-  } finally {
-    for (const verifyInteractions of pendingInteractionVerifications.splice(0)) {
-      verifyInteractions();
+  return withHermeticEnvironment("plug-info-", async ({ cwd, home }) => {
+    try {
+      return await fn({ cwd, home });
+    } finally {
+      for (const verifyInteractions of pendingInteractionVerifications.splice(0)) {
+        verifyInteractions();
+      }
     }
-
-    if (originalHome === undefined) {
-      delete process.env.HOME;
-    } else {
-      process.env.HOME = originalHome;
-    }
-
-    await rm(home, { recursive: true, force: true });
-    await rm(cwd, { recursive: true, force: true });
-  }
+  });
 }
 
 interface SeedPathMarketplaceOpts {
@@ -315,8 +290,8 @@ interface SeedPathMarketplaceOpts {
       /**
        * FSTAT-01 / D-66-01: seed the persisted `compatibility.unsupported`
        * component-kind list. A non-empty value reproduces a recorded-installed
-       * plugin that resolved `unsupported` at install time -- the force-installed
-       * signal the deriver reads (with `installable: false`).
+       * plugin that resolved `partially-available` at install time -- the
+       * partially-installed signal the deriver reads (with `installable: false`).
        */
       unsupported?: readonly string[];
       /** Override the persisted source used by state-only info. */
@@ -1012,6 +987,7 @@ test("GRAM-04: both-scopes missing plugin emits per-scope `error` + summary, NOT
         "  ⊘ ghost (failed) {not in manifest}",
       ].join("\n"),
     );
+    assert.doesNotMatch(notifications[1]!.message, /\n\nPlugin info:/u);
   });
 });
 
@@ -1091,13 +1067,13 @@ test("WR-01: installed plugin with malformed hooks/hooks.json surfaces `{unsuppo
 });
 
 // ---------------------------------------------------------------------------
-// FSTAT-07 / D-66-04: an INSTALLED plugin that re-resolves `unsupported`
-// (manifest declares an unsupported component kind such as `lspServers`)
-// is reported as `(partially-installed)` with the dropped-component detail
-// from `narrowUnsupportedKinds` -- NOT `(installed)`. The `unavailable`
-// arm keeps `(installed)` (D-64-05, covered by WR-01 above) and the
-// `installable` arm keeps `(installed)` (INFO-02 above); info never emits
-// `force-upgradable` (that is a list-inventory-only concept).
+// FSTAT-07 / D-66-04: an INSTALLED plugin that re-resolves
+// `partially-available` (manifest declares an unsupported component kind such
+// as `lspServers`) is reported as `(partially-installed)` with the
+// dropped-component detail from `narrowUnsupportedKinds` -- NOT `(installed)`.
+// The `unavailable` arm keeps `(installed)` (D-64-05, covered by WR-01 above)
+// and the `installable` arm keeps `(installed)` (INFO-02 above); info never
+// emits `partially-upgradable` (that is a list-inventory-only concept).
 // ---------------------------------------------------------------------------
 
 test("FSTAT-07 / D-66-04: installed plugin re-resolving unsupported (lspServers) renders `◉ ... (partially-installed) {lsp}`", async () => {
@@ -1118,7 +1094,7 @@ test("FSTAT-07 / D-66-04: installed plugin re-resolving unsupported (lspServers)
             version: "1.0.0",
             description: "Degraded plugin.",
             // An unsupported component kind flips resolveStrict to the
-            // `unsupported` arm (D-64-06); narrowUnsupportedKinds maps
+            // `partially-available` arm (D-64-06); narrowUnsupportedKinds maps
             // `lspServers` -> the `lsp` manifest-field marker.
             lspServers: { foo: { command: "foo-lsp" } },
           },
@@ -1133,7 +1109,7 @@ test("FSTAT-07 / D-66-04: installed plugin re-resolving unsupported (lspServers)
     await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "degraded", scope: "user", cwd });
     // assert
     assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.severity, undefined, "force-installed is info, not error");
+    assert.equal(notifications[0]!.severity, undefined, "partially-installed is info, not error");
     assert.equal(
       notifications[0]!.message,
       [
@@ -1146,7 +1122,7 @@ test("FSTAT-07 / D-66-04: installed plugin re-resolving unsupported (lspServers)
 });
 
 // ---------------------------------------------------------------------------
-// WR-02 / D-66-01: cross-surface force-installed parity for NON-PATH sources.
+// WR-02 / D-66-01: cross-surface partially-installed parity for NON-PATH sources.
 // INFO-05 defers LIVE component resolution for non-path (npm/github/...)
 // sources to preserve NFR-5, but the install-time `compatibility.unsupported`
 // record is read OFFLINE -- the SAME single deriver `list` reads. A
@@ -1177,7 +1153,7 @@ test("WR-02 / D-66-01: non-path (npm) recorded-installed plugin with persisted u
         ],
       },
       // Recorded-installed AND the install-time resolution dropped `lspServers`
-      // -- the persisted force-installed signal the deriver reads.
+      // -- the persisted partially-installed signal the deriver reads.
       installed: { remote: { version: "1.0.0", unsupported: ["lspServers"] } },
     });
 
@@ -1186,7 +1162,7 @@ test("WR-02 / D-66-01: non-path (npm) recorded-installed plugin with persisted u
     await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "remote", scope: "user", cwd });
     // assert
     assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]!.severity, undefined, "force-installed is info, not error");
+    assert.equal(notifications[0]!.severity, undefined, "partially-installed is info, not error");
     assert.equal(
       notifications[0]!.message,
       [
@@ -1257,6 +1233,62 @@ test("WR-02: not-installed plugin with malformed plugin.json surfaces `{unparsea
       /\(unavailable\) \{unreadable\}/,
       "post-fix: probe-throw must classify SyntaxError as `unparseable`, not the hardcoded `unreadable`",
     );
+  });
+});
+
+test("refuses an outside path source as unavailable without inspecting its plugin tree", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const userRoot = path.join(home, ".pi", "agent");
+    const marketplaceRoot = await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          {
+            name: "escape",
+            source: "../outside-plugin",
+            version: "1.0.0",
+            description: "Outside plugin.",
+          },
+        ],
+      },
+    });
+    const outsideRoot = path.join(path.dirname(marketplaceRoot), "outside-plugin");
+    const outsideManifest = path.join(outsideRoot, ".claude-plugin", "plugin.json");
+    const outsideSkill = path.join(outsideRoot, "skills", "secret", "SKILL.md");
+    await mkdir(path.dirname(outsideManifest), { recursive: true });
+    await mkdir(path.dirname(outsideSkill), { recursive: true });
+    await writeFile(outsideManifest, "{ malformed outside manifest", "utf8");
+    await writeFile(outsideSkill, "outside skill\n", "utf8");
+    const outsideTreeBefore = (await readdir(outsideRoot, { recursive: true })).sort();
+    const outsideManifestBefore = await readFile(outsideManifest);
+    const outsideSkillBefore = await readFile(outsideSkill);
+    const { ctx, pi, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "escape", scope: "user", cwd });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ⊘ escape v1.0.0 (unavailable) {unreadable}",
+          "    Outside plugin.",
+          "    components: not resolved",
+        ].join("\n"),
+      },
+    ]);
+    assert.deepStrictEqual(
+      (await readdir(outsideRoot, { recursive: true })).sort(),
+      outsideTreeBefore,
+    );
+    assert.deepStrictEqual(await readFile(outsideManifest), outsideManifestBefore);
+    assert.deepStrictEqual(await readFile(outsideSkill), outsideSkillBefore);
   });
 });
 
@@ -1422,8 +1454,8 @@ test("readdir EACCES on installed plugin's skills dir surfaces `{permission deni
     const { ctx, pi, notifications } = makeCtx();
 
     // act
-    await withFsPromiseFault("readdir", skillsDir, permissionError, async () => {
-      await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "p", scope: "user", cwd });
+    await withFsPromiseFault("readdir", skillsDir, permissionError, async (getInfo) => {
+      await getInfo({ ctx, pi, marketplace: "mp", plugin: "p", scope: "user", cwd });
     });
 
     // assert
@@ -1462,14 +1494,75 @@ test("readdir EACCES on available plugin's skills dir surfaces `{permission deni
     const { ctx, pi, notifications } = makeCtx();
 
     // act
-    await withFsPromiseFault("readdir", skillsDir, permissionError, async () => {
-      await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "p", scope: "user", cwd });
+    await withFsPromiseFault("readdir", skillsDir, permissionError, async (getInfo) => {
+      await getInfo({ ctx, pi, marketplace: "mp", plugin: "p", scope: "user", cwd });
     });
 
     // assert
     assert.equal(notifications.length, 1);
     const msg = notifications[0]!.message;
     assert.match(msg, /\(available\) \{permission denied\}/);
+  });
+});
+
+test("OPIC-F27: required reader preserves an available-row directory failure and tree", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    const mpRoot = await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [{ name: "p", source: "./p", version: "1.0.0", skills: "skills" }],
+      },
+      installablePluginDirs: ["p"],
+      componentDirs: { p: ["skills/s1"] },
+    });
+    const skillsDir = path.join(mpRoot, "p", "skills");
+    const permissionError = Object.assign(new Error("case-owned reader failure"), {
+      code: "EACCES",
+    });
+    const calls: string[] = [];
+    let raised: unknown;
+    const reader: PluginInfoReader = {
+      readTextFile: (filePath) => readFile(filePath, "utf8"),
+      listDirectory: async (directoryPath) => {
+        calls.push(directoryPath);
+        if (directoryPath === skillsDir) {
+          raised = permissionError;
+          throw permissionError;
+        }
+
+        return readdir(directoryPath, { withFileTypes: true });
+      },
+    };
+    const before = await readdir(mpRoot, { recursive: true });
+    const { ctx, pi, notifications } = makeCtx();
+
+    await createGetPluginInfo(reader)({
+      ctx,
+      pi,
+      marketplace: "mp",
+      plugin: "p",
+      scope: "user",
+      cwd,
+    });
+
+    assert.equal(raised, permissionError);
+    assert.deepEqual(calls, [skillsDir]);
+    assert.deepEqual(await readdir(mpRoot, { recursive: true }), before);
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, undefined);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● mp [user] <no autoupdate>",
+        "  ○ p v1.0.0 (available) {permission denied}",
+        "    components: not resolved",
+      ].join("\n"),
+    );
   });
 });
 
@@ -2492,11 +2585,78 @@ test("plugin info manifest absent: D-96-03: an unreadable materialized hooks con
     const { ctx, pi, notifications } = makeCtx();
 
     // act
-    await withFsPromiseFault("readFile", file, permissionError, async () => {
-      await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+    await withFsPromiseFault("readFile", file, permissionError, async (getInfo) => {
+      await getInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
     });
 
     // assert
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, undefined);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● mp [user] <no autoupdate>",
+        "  ● alpha v1.0.0 (installed) {not in manifest, permission denied}",
+        "    skills: alpha-skill",
+      ].join("\n"),
+    );
+  });
+});
+
+test("OPIC-F27: required reader preserves a state-only file failure and reason order", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    const userRoot = path.join(home, ".pi", "agent");
+    const mpRoot = await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [] },
+      installed: { alpha: { version: "1.0.0", resources: { hooks: ["alpha"] } } },
+    });
+    const file = await seedMaterializedHooks(
+      "user",
+      cwd,
+      "alpha",
+      JSON.stringify({ Stop: [{ hooks: [{ type: "command", command: "echo hi" }] }] }),
+    );
+    const permissionError = Object.assign(new Error("case-owned reader failure"), {
+      code: "EACCES",
+    });
+    const reads: string[] = [];
+    const lists: string[] = [];
+    let raised: unknown;
+    const reader: PluginInfoReader = {
+      readTextFile: async (filePath) => {
+        reads.push(filePath);
+        if (filePath === file) {
+          raised = permissionError;
+          throw permissionError;
+        }
+
+        return readFile(filePath, "utf8");
+      },
+      listDirectory: async (directoryPath) => {
+        lists.push(directoryPath);
+        return readdir(directoryPath, { withFileTypes: true });
+      },
+    };
+    const before = await readdir(mpRoot, { recursive: true });
+    const { ctx, pi, notifications } = makeCtx();
+
+    await createGetPluginInfo(reader)({
+      ctx,
+      pi,
+      marketplace: "mp",
+      plugin: "alpha",
+      scope: "user",
+      cwd,
+    });
+
+    assert.equal(raised, permissionError);
+    assert.deepEqual(reads, [file]);
+    assert.deepEqual(lists, []);
+    assert.deepEqual(await readdir(mpRoot, { recursive: true }), before);
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0]!.severity, undefined);
     assert.equal(
@@ -2894,6 +3054,7 @@ test("plugin info manifest absent: D-96-04 / ENBL-17: `info --fetch` on a disabl
         "  ⊘ alpha v1.0.0 (skipped) {already disabled}",
       ].join("\n"),
     );
+    assert.doesNotMatch(notifications[1]!.message, /\n\nPlugin info:/u);
     // ONE row, not one per cause: a `(skipped)` row for the manifest-absence
     // cause beside the disabled one would be the concatenation regression the
     // single `skipReason` field exists to make unrepresentable.
@@ -3101,8 +3262,8 @@ test("plugin info manifest absent: INFO-12 / NFR-5: `info --fetch` on a manifest
       installed: { alpha: { version: "1.0.0" } },
     });
 
-    const { gitOps, state: gitState } = makeMockGitOps({});
-    const { credOps: credentialOps, state: credState } = makeMockCredentialOps();
+    const { gitOps, state: gitState } = createGitOps({});
+    const { credOps: credentialOps, state: credState } = createCredentialOps();
     const { ctx, pi, notifications } = makeCtx(2);
     // act
     await getPluginInfo({
@@ -3156,8 +3317,8 @@ test("plugin info manifest absent: INFO-12 / NFR-5: bare `info` on a manifest-ab
     });
 
     // The seams are supplied but `fetch` is omitted: nothing may run.
-    const { gitOps, state: gitState } = makeMockGitOps({});
-    const { credOps: credentialOps, state: credState } = makeMockCredentialOps();
+    const { gitOps, state: gitState } = createGitOps({});
+    const { credOps: credentialOps, state: credState } = createCredentialOps();
     const { ctx, pi, notifications } = makeCtx();
     // act
     await getPluginInfo({
@@ -3201,8 +3362,8 @@ test("plugin info manifest absent: INFO-12 / NFR-5: a git-source-shaped manifest
       installed: { alpha: { version: "1.0.0", resolvedSource: "https://example.com/repo" } },
     });
 
-    const { gitOps, state: gitState } = makeMockGitOps({});
-    const { credOps: credentialOps, state: credState } = makeMockCredentialOps();
+    const { gitOps, state: gitState } = createGitOps({});
+    const { credOps: credentialOps, state: credState } = createCredentialOps();
     const { ctx, pi, notifications } = makeCtx(2);
     // act
     await getPluginInfo({
@@ -3267,8 +3428,8 @@ test("plugin info manifest absent: ENBL-17 / NFR-5: a DISABLED manifest-absent r
       },
     });
 
-    const { gitOps, state: gitState } = makeMockGitOps({});
-    const { credOps: credentialOps, state: credState } = makeMockCredentialOps();
+    const { gitOps, state: gitState } = createGitOps({});
+    const { credOps: credentialOps, state: credState } = createCredentialOps();
     const { ctx, pi, notifications } = makeCtx(2);
     // act
     await getPluginInfo({
@@ -3346,8 +3507,8 @@ test("plugin info manifest absent: ENBL-17 / NFR-5: `info --fetch` on a DISABLED
       installed: { alpha: { version: "1.0.0", disabled: true } },
     });
 
-    const { gitOps, state: gitState } = makeMockGitOps({});
-    const { credOps: credentialOps, state: credState } = makeMockCredentialOps();
+    const { gitOps, state: gitState } = createGitOps({});
+    const { credOps: credentialOps, state: credState } = createCredentialOps();
     const { ctx, pi, notifications } = makeCtx(2);
     // act
     await getPluginInfo({
@@ -4381,8 +4542,8 @@ test("INFO-05: composeResolvedComponents throw on the unavailable arm falls back
     const { ctx, pi, notifications } = makeCtx();
 
     // act
-    await withFsPromiseFault("readdir", skillsDir, permissionError, async () => {
-      await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "legacy", scope: "user", cwd });
+    await withFsPromiseFault("readdir", skillsDir, permissionError, async (getInfo) => {
+      await getInfo({ ctx, pi, marketplace: "mp", plugin: "legacy", scope: "user", cwd });
     });
 
     // assert
@@ -4439,8 +4600,8 @@ test("INFO-05: composeResolvedComponents throw on the installed arm falls back t
     const { ctx, pi, notifications } = makeCtx();
 
     // act
-    await withFsPromiseFault("readdir", skillsDir, permissionError, async () => {
-      await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "legacy", scope: "user", cwd });
+    await withFsPromiseFault("readdir", skillsDir, permissionError, async (getInfo) => {
+      await getInfo({ ctx, pi, marketplace: "mp", plugin: "legacy", scope: "user", cwd });
     });
 
     // assert
@@ -4455,11 +4616,12 @@ test("INFO-05: composeResolvedComponents throw on the installed arm falls back t
 // ---------------------------------------------------------------------------
 // INFO-05: lenient hooks reader -- when the resolver bails because the
 // hooks file declares non-bucket-A events, the info surface STILL lists
-// the declared events with a `(unsupported)` suffix on each non-bucket-A
-// one. The strict resolver-side parser (HOOK-01) remains unchanged; the
+// the declared events with a component-level (unsupported) suffix on each
+// non-bucket-A one. The strict resolver-side parser (HOOK-01) remains unchanged; the
 // lenient reader runs ONLY on the path-resolvable
-// `(partially-available) {unsupported hooks}` carrier row (USTAT-01 / D-64-01: the
-// row resolves `unsupported`, so it renders the de-collapsed `⊖` token).
+// `(partially-available) {unsupported hooks}` carrier row (USTAT-01 / D-64-01:
+// the row resolves partially available, so it renders the de-collapsed `⊖`
+// token).
 // ---------------------------------------------------------------------------
 
 test("INFO-05: lenient reader lists `Notification (unsupported)` on a path-resolvable `(partially-available) {unsupported hooks}` row", async () => {
@@ -4480,7 +4642,7 @@ test("INFO-05: lenient reader lists `Notification (unsupported)` on a path-resol
 
     // A single top-level `Notification` event, which is not in
     // BUCKET_A_EVENTS. The partition filters it to the EMPTY subset
-    // (Q2), so the plugin resolves `unsupported` WITHOUT recording
+    // (Q2), so the plugin resolves `partially-available` WITHOUT recording
     // `hooksConfigPath` -- info therefore routes to the lenient reader, which
     // still enumerates `Notification (unsupported)` from the source file.
     const pluginDir = path.join(mpRoot, "ralph");
@@ -4505,7 +4667,7 @@ test("INFO-05: lenient reader lists `Notification (unsupported)` on a path-resol
   });
 });
 
-test("PHOOK-05 / D-71-05: strict reader lists the kept `PostToolUse(Bash)` group plus the dropped `Notification (unsupported)` on a mixed force-degradable row", async () => {
+test("PHOOK-05 / D-71-05: strict reader lists the kept `PostToolUse(Bash)` group plus the dropped `Notification (unsupported)` on a mixed partially-available row", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange
     const userRoot = path.join(home, ".pi", "agent");
@@ -4524,7 +4686,7 @@ test("PHOOK-05 / D-71-05: strict reader lists the kept `PostToolUse(Bash)` group
     // Mixed shape: PostToolUse (bucket-A, with a matcher) + Notification
     // (non-bucket-A). The partition keeps the supportable PostToolUse(Bash)
     // group and drops the Notification event, so the plugin resolves
-    // `unsupported` and records `hooksConfigPath`. Info therefore routes to
+    // `partially-available` and records `hooksConfigPath`. Info therefore routes to
     // the STRICT reader, which extracts the matcher (`PostToolUse(Bash)`) and
     // now also enumerates the dropped Notification event (FSTAT-07
     // dropped-component detail).
@@ -4573,7 +4735,7 @@ test("PHOOK-05 / D-71-05: strict reader enumerates an intra-event dropped matche
     // Intra-event matcher-group partition (D-71-02): PreToolUse declares a
     // supportable `Edit` group and an unsupportable regex `.*` group. The
     // partition keeps the Edit group and drops the regex group, so the plugin
-    // resolves `unsupported` with `hooksConfigPath` recorded. The strict
+    // resolves `partially-available` with `hooksConfigPath` recorded. The strict
     // reader renders the kept group plain and the dropped group at
     // matcher-group granularity with the (unsupported) suffix.
     const pluginDir = path.join(mpRoot, "grouped");
@@ -5084,8 +5246,8 @@ test("FTCH-03: info --fetch on a COLD pinned git plugin materializes the clone t
       },
     });
 
-    const { gitOps, state: gitState } = makeMockGitOps({ fixtureSourceDir: fixtureRepoDir });
-    const { credOps: credentialOps } = makeMockCredentialOps();
+    const { gitOps, state: gitState } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
+    const { credOps: credentialOps } = createCredentialOps();
     const { ctx, pi, notifications } = makeCtx();
     // act
     await getPluginInfo({
@@ -5133,8 +5295,8 @@ test("D-81-04: info --fetch degrades to `components: not resolved` + an existing
     const netErr = Object.assign(new Error("getaddrinfo ENOTFOUND example.com"), {
       code: "ENOTFOUND",
     });
-    const { gitOps } = makeMockGitOps({ cloneThrows: netErr });
-    const { credOps: credentialOps } = makeMockCredentialOps();
+    const { gitOps } = createGitOps({ cloneThrows: netErr });
+    const { credOps: credentialOps } = createCredentialOps();
     const { ctx, pi, notifications } = makeCtx();
 
     // getPluginInfo MUST resolve (not reject) even though the fetch threw.
@@ -5177,8 +5339,8 @@ test("NFR-5: bare info (no --fetch) on a COLD git plugin makes ZERO git-seam cal
     });
 
     // The seam is provided but `fetch` is omitted: the hook must NOT run.
-    const { gitOps, state: gitState } = makeMockGitOps({});
-    const { credOps: credentialOps } = makeMockCredentialOps();
+    const { gitOps, state: gitState } = createGitOps({});
+    const { credOps: credentialOps } = createCredentialOps();
     const { ctx, pi, notifications } = makeCtx();
     // act
     await getPluginInfo({
@@ -5220,8 +5382,8 @@ test("OUT-05 / NFR-5 / OUT-03: a COLD git plugin whose entry declares `defaultEn
     // defect rather than a consented fetch. Counting the calls is what makes
     // this evidence: a source grep says the module holds no git import, while
     // the count says the injected surface was never reached at run time.
-    const { gitOps, state: gitState } = makeMockGitOps({});
-    const { credOps: credentialOps } = makeMockCredentialOps();
+    const { gitOps, state: gitState } = createGitOps({});
+    const { credOps: credentialOps } = createCredentialOps();
     const { ctx, pi, notifications } = makeCtx();
     // act
     await getPluginInfo({
@@ -5286,8 +5448,8 @@ test("D-78-04 / D-81-04: info --fetch on an INSTALLED git plugin with a missing 
     const netErr = Object.assign(new Error("getaddrinfo ENOTFOUND example.com"), {
       code: "ENOTFOUND",
     });
-    const { gitOps } = makeMockGitOps({ cloneThrows: netErr });
-    const { credOps: credentialOps } = makeMockCredentialOps();
+    const { gitOps } = createGitOps({ cloneThrows: netErr });
+    const { credOps: credentialOps } = createCredentialOps();
     const { ctx, pi, notifications } = makeCtx();
     // act
     await getPluginInfo({
@@ -5352,8 +5514,8 @@ test("FTCH-03 / D-78-04: info --fetch on an installed git plugin with a missing 
       installed: { gplug: { version: "1.0.0" } },
     });
 
-    const { gitOps, state: gitState } = makeMockGitOps({ fixtureSourceDir: fixtureRepoDir });
-    const { credOps: credentialOps } = makeMockCredentialOps();
+    const { gitOps, state: gitState } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
+    const { credOps: credentialOps } = createCredentialOps();
     const { ctx, pi, notifications } = makeCtx();
     // act
     await getPluginInfo({
@@ -5412,13 +5574,13 @@ test("FTCH-03 / MIRR-02: info --fetch on an UNPINNED not-installed source materi
       },
     });
 
-    const { gitOps, state: gitState } = makeMockGitOps({
+    const { gitOps, state: gitState } = createGitOps({
       fixtureSourceDir: fixtureRepoDir,
       head: MIRROR_HEAD,
       localRefs: { "refs/heads/main": MIRROR_HEAD },
       remoteRefs: { "refs/remotes/origin/HEAD": MIRROR_HEAD },
     });
-    const { credOps: credentialOps } = makeMockCredentialOps();
+    const { credOps: credentialOps } = createCredentialOps();
     const { ctx, pi, notifications } = makeCtx();
     // act
     await getPluginInfo({
@@ -5468,8 +5630,8 @@ test("FTCH-06: info --fetch folds an HttpError 401 seam throw to `{authenticatio
       code: "HttpError",
       data: { statusCode: 401 },
     });
-    const { gitOps } = makeMockGitOps({ cloneThrows: authErr });
-    const { credOps: credentialOps } = makeMockCredentialOps();
+    const { gitOps } = createGitOps({ cloneThrows: authErr });
+    const { credOps: credentialOps } = createCredentialOps();
     const { ctx, pi, notifications } = makeCtx();
     // act
     await getPluginInfo({
@@ -5512,8 +5674,8 @@ test("FTCH-06: info --fetch folds a UserCanceledError (denied/expired Device Flo
     const canceledErr = Object.assign(new Error("auth canceled"), {
       code: "UserCanceledError",
     });
-    const { gitOps } = makeMockGitOps({ cloneThrows: canceledErr });
-    const { credOps: credentialOps } = makeMockCredentialOps();
+    const { gitOps } = createGitOps({ cloneThrows: canceledErr });
+    const { credOps: credentialOps } = createCredentialOps();
     const { ctx, pi, notifications } = makeCtx();
     // act
     await getPluginInfo({
@@ -5692,7 +5854,7 @@ test("DFEN-04 / DFEN-05: a config `enabled` declaration SUPPRESSES `{installs di
     };
 
     // The row states what an install WOULD do, so it must model the same
-    // precedence `install` applies (install.ts::readDeclaredEnabled), not a
+    // precedence `install` applies (install-declared-enabled.ts), not a
     // shorter one:
     //
     // `yes` -- the config says `enabled: true`. `install` reads that FIRST,
@@ -5797,7 +5959,7 @@ test("OUT-05 / DOC-02: a SILENT entry over a warm clone that declares `defaultEn
     //    lines and everything else staying put.
     //
     // 2. The marketplace entry is the only MANIFEST-side source these surfaces
-    //    read -- `domain/resolver.ts::entryDeclaresInstallDisabled` carries the
+    //    read -- `domain/unsupported-components.ts::entryDeclaresInstallDisabled` carries the
     //    argument for why, and `rowClaimsInstallDisabled` beside it carries the
     //    other half of the rule (the user's config opinion is weighed first).
     //
@@ -5887,8 +6049,8 @@ test("OUT-05 / OUT-03: a degraded `(remote)` row reporting a read failure carrie
     const netErr = Object.assign(new Error("getaddrinfo ENOTFOUND example.com"), {
       code: "ENOTFOUND",
     });
-    const { gitOps } = makeMockGitOps({ cloneThrows: netErr });
-    const { credOps: credentialOps } = makeMockCredentialOps();
+    const { gitOps } = createGitOps({ cloneThrows: netErr });
+    const { credOps: credentialOps } = createCredentialOps();
     const { ctx, pi, notifications } = makeCtx();
     // act
     await getPluginInfo({
@@ -6605,8 +6767,8 @@ test("a generic explicit-fetch failure uses the probe fallback exactly", async (
         ],
       },
     });
-    const { gitOps } = makeMockGitOps({ cloneThrows: new Error("fetch failed") });
-    const { credOps: credentialOps } = makeMockCredentialOps();
+    const { gitOps } = createGitOps({ cloneThrows: new Error("fetch failed") });
+    const { credOps: credentialOps } = createCredentialOps();
     const { ctx, pi, notifications } = makeCtx();
 
     // act
@@ -6722,8 +6884,8 @@ test("a warm partially available git plugin folds a component read failure exact
     const { ctx, pi, notifications } = makeCtx();
 
     // act
-    await withFsPromiseFault("readdir", skillsDir, permissionError, async () => {
-      await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+    await withFsPromiseFault("readdir", skillsDir, permissionError, async (getInfo) => {
+      await getInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
     });
 
     // assert
@@ -6775,8 +6937,8 @@ test("a warm installable git plugin folds a component read failure to remote exa
     const { ctx, pi, notifications } = makeCtx();
 
     // act
-    await withFsPromiseFault("readdir", skillsDir, permissionError, async () => {
-      await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+    await withFsPromiseFault("readdir", skillsDir, permissionError, async (getInfo) => {
+      await getInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
     });
 
     // assert

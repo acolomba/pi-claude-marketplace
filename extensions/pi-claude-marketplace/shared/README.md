@@ -2,9 +2,9 @@
 
 ## Purpose
 
-Pure-leaves. The 5 ES-5 user-contract marker constants (`shared/markers.ts`), severity-named `ctx.ui.notify` wrappers (`shared/notify.ts`), atomic JSON write (`shared/atomic-json.ts`), symlink-refusing path containment (`shared/path-safety.ts`), and Error.cause-chaining helpers (`shared/errors.ts`).
+Pure leaves. The 5 ES-5 user-contract marker constants (`shared/markers.ts`), closed notification types (`shared/notification-types.ts`), deterministic grammar and summary folding (`shared/notification-grammar.ts`, `shared/notification-summary.ts`), the sole Pi notification boundary (`shared/notification-dispatch.ts`), atomic JSON write (`shared/atomic-json.ts`), symlink-refusing path containment (`shared/path-safety.ts`), and Error.cause-chaining helpers (`shared/errors.ts`).
 
-`shared/notify.ts` is the SOLE sanctioned `ctx.ui.notify(` call site -- the per-file ESLint override turns `no-restricted-syntax` off here.
+`shared/notification-dispatch.ts` is the SOLE sanctioned `ctx.ui.notify(` call site -- the per-file ESLint override turns `no-restricted-syntax` off there.
 
 ## Allowed Imports
 
@@ -14,7 +14,7 @@ Pure-leaves. The 5 ES-5 user-contract marker constants (`shared/markers.ts`), se
 
 - [x] `markers.ts` -- PRD §6.12 ES-5 prefix constants (Phase 1)
 - [x] `errors.ts` -- `errorMessage`, `appendLeakToError`, `appendLeaks` (Phase 1; verbatim V1 port)
-- [x] `notify.ts` -- `notifySuccess`, `notifyWarning`, `notifyError` (Phase 1)
+- [x] `notification-dispatch.ts` -- structured, usage, diagnostic, hook, and raw Pi notification dispatch
 - [x] `atomic-json.ts` -- `atomicWriteJson` via `write-file-atomic@^7` (Phase 1)
 - [x] `path-safety.ts` -- `assertPathInside`, `PathContainmentError`, `SymlinkRefusedError` (Phase 1)
 - [ ] `types.ts` -- shared type bundle including `Scope` (Phase 2 -- moves `Scope` from `domain/` to keep `edge/` free of `domain/` imports)

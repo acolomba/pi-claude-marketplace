@@ -1,7 +1,7 @@
 // extensions/pi-claude-marketplace/orchestrators/plugin/plugin-state-classifier.ts
 //
 // D-67-02 / LIST-02: the SINGLE shared per-entry plugin-state classifier. Both
-// the list orchestrator (`installedRowMessage` / `availableRowMessage`) and the
+// the list row owners (`composeInstalledListRow` / `availableRowMessage`) and the
 // completion bucketizer (`orchestrators/edge-deps.ts::loadManifestForMarketplace`)
 // derive their finer plugin state from THESE two functions -- there is no
 // second classifier. A parity drift-guard test (tests/orchestrators/edge-deps.test.ts)
@@ -16,7 +16,7 @@
 
 import { isRecordedButDisabled } from "../../persistence/state-io.ts";
 
-import type { ResolvedPlugin } from "../../domain/resolver.ts";
+import type { ResolvedPlugin } from "../../domain/resolver-types.ts";
 
 /**
  * The finer installed-inventory states the classifier derives from a persisted

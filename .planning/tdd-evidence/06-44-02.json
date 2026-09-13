@@ -1,0 +1,10 @@
+{
+  "taskId": "06-44-02",
+  "command": "node --test --test-isolation=none --test-reporter=tap tests/orchestrators/plugin/reinstall-clone-probe.test.ts",
+  "exitCode": 1,
+  "output": "TAP version 13\n# Subtest: uses the production seam for a warm pinned clone\nnot ok 1 - uses the production seam for a warm pinned clone\n  error: Got unwanted rejection: reinstall-clone-probe.ts must own reinstall clone probing\n  code: ERR_ASSERTION\n  actual: ERR_MODULE_NOT_FOUND\n1..8\n# tests 8\n# pass 0\n# fail 8",
+  "targetTest": "uses the production seam for a warm pinned clone",
+  "targetFile": "tests/orchestrators/plugin/reinstall-clone-probe.test.ts",
+  "expected": "the named reinstall-clone-probe owner exports probeReinstallClone and preserves recorded-sha clone behavior",
+  "actual": "ERR_MODULE_NOT_FOUND for extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-clone-probe.ts"
+}

@@ -221,6 +221,24 @@ test("parseArgs rejects an unrecognised scope value with the invalid-value diagn
   );
 });
 
+test("parseArgs reads the token after the scope flag as its value even when that token is a flag", () => {
+  // arrange
+  const rawArgs = "install --scope --local";
+
+  // act & assert
+  assert.throws(
+    () => parseArgs(rawArgs),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.strictEqual(
+        error.message,
+        'Invalid --scope value: "--local". Must be "user" or "project".',
+      );
+      return true;
+    },
+  );
+});
+
 test("parseArgs keeps the last scope value when the pair is supplied twice", () => {
   // arrange
   const rawArgs = "--scope user install --scope project official";

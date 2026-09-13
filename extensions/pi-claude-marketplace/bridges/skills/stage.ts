@@ -52,6 +52,7 @@ import type {
   StagedSkillRecord,
   StageSkillsInput,
 } from "./types.ts";
+import type { RemovalOps } from "../../shared/fs-utils.ts";
 import type { ClaudePluginVars } from "../../shared/vars.ts";
 
 type SkillsReplacementInternals = Readonly<{
@@ -187,7 +188,10 @@ function augmentSkillDescription(
  * thrown error via `appendLeakToError` so the caller sees both the original
  * cause and a manual-cleanup hint in one notification.
  */
-export async function prepareStageSkills(input: StageSkillsInput): Promise<PreparedSkillsStaging> {
+export async function prepareStageSkills(
+  ops: RemovalOps,
+  input: StageSkillsInput,
+): Promise<PreparedSkillsStaging> {
   const { locations, pluginName, pluginRoot, pluginDataDir, resolved, cwd } = input;
   const previousNames = input.previousSkillNames ?? [];
 
@@ -329,7 +333,10 @@ export async function prepareStageSkills(input: StageSkillsInput): Promise<Prepa
       });
     }
   } catch (err) {
-    throw appendLeakToError(err, await cleanupStaging(stagingRoot, "skills staging directory"));
+    throw appendLeakToError(
+      err,
+      await cleanupStaging(ops, stagingRoot, "skills staging directory"),
+    );
   }
 
   return {
@@ -359,6 +366,7 @@ export async function prepareStageSkills(input: StageSkillsInput): Promise<Prepa
  * For the noop variant: no-op; returns undefined.
  */
 export async function commitPreparedSkills(
+  ops: RemovalOps,
   prepared: PreparedSkillsStaging,
 ): Promise<string | undefined> {
   if (prepared.kind === "noop") {
@@ -409,7 +417,7 @@ export async function commitPreparedSkills(
   }
 
   // Step 4: best-effort cleanup of the staging UUID dir.
-  return cleanupStaging(prepared.stagingRoot, "skills staging directory");
+  return cleanupStaging(ops, prepared.stagingRoot, "skills staging directory");
 }
 
 /**
@@ -419,13 +427,14 @@ export async function commitPreparedSkills(
  * abort is a no-op because the staging dir is already cleaned.
  */
 export async function abortPreparedSkills(
+  ops: RemovalOps,
   prepared: PreparedSkillsStaging,
 ): Promise<string | undefined> {
   if (prepared.kind === "noop") {
     return undefined;
   }
 
-  return cleanupStaging(prepared.stagingRoot, "skills staging directory");
+  return cleanupStaging(ops, prepared.stagingRoot, "skills staging directory");
 }
 
 /**
@@ -434,6 +443,7 @@ export async function abortPreparedSkills(
  * a later orchestrator failure can restore the old install.
  */
 export async function replacePreparedSkills(
+  ops: RemovalOps,
   prepared: PreparedSkillsStaging,
 ): Promise<SkillsReplacement> {
   if (prepared.kind === "noop") {
@@ -483,7 +493,13 @@ export async function replacePreparedSkills(
       renamed.push(pair);
     }
   } catch (err) {
-    const leaks = await rollbackSkillsReplacementInternal(prepared, renamed, backups, backupRoot);
+    const leaks = await rollbackSkillsReplacementInternal(
+      ops,
+      prepared,
+      renamed,
+      backups,
+      backupRoot,
+    );
     if (leaks.length > 0) {
       throw new ManualRecoveryError(errorMessage(err), leaks, { cause: err });
     }
@@ -504,6 +520,7 @@ export async function replacePreparedSkills(
 }
 
 export async function rollbackSkillsReplacement(
+  ops: RemovalOps,
   replacement: SkillsReplacement,
 ): Promise<readonly string[]> {
   if (replacement.kind === "noop") {
@@ -512,6 +529,7 @@ export async function rollbackSkillsReplacement(
 
   const internals = requireSkillsReplacementInternals(replacement);
   return rollbackSkillsReplacementInternal(
+    ops,
     replacement.prepared,
     internals.renamed,
     internals.backups,
@@ -520,6 +538,7 @@ export async function rollbackSkillsReplacement(
 }
 
 export async function finalizeSkillsReplacement(
+  ops: RemovalOps,
   replacement: SkillsReplacement,
 ): Promise<readonly string[]> {
   if (replacement.kind === "noop") {
@@ -528,8 +547,8 @@ export async function finalizeSkillsReplacement(
 
   const internals = requireSkillsReplacementInternals(replacement);
   const leaks = [
-    await cleanupStaging(internals.backupRoot, "skills replacement backup directory"),
-    await cleanupStaging(replacement.prepared.stagingRoot, "skills staging directory"),
+    await cleanupStaging(ops, internals.backupRoot, "skills replacement backup directory"),
+    await cleanupStaging(ops, replacement.prepared.stagingRoot, "skills staging directory"),
   ].filter((leak): leak is string => leak !== undefined);
   return Object.freeze(leaks);
 }
@@ -546,12 +565,14 @@ function requireSkillsReplacementInternals(
 }
 
 async function rollbackSkillsReplacementInternal(
+  ops: RemovalOps,
   prepared: Extract<PreparedSkillsStaging, { kind: "staged" }>,
   renamed: readonly { from: string; to: string }[],
   backups: readonly { name: string; from: string; to: string }[],
   backupRoot: string,
 ): Promise<readonly string[]> {
   return rollbackReplacementCommon({
+    ops,
     renamed,
     backups,
     stagingRoot: prepared.stagingRoot,

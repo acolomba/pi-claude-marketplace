@@ -1,9 +1,9 @@
 import { parsePluginSource, samePlannedSource, sourceLogical } from "../../domain/source.ts";
 import { addMarketplace as defaultAddMarketplace } from "../../orchestrators/marketplace/add.ts";
 import {
-  installPlugin as defaultInstallPlugin,
+  createNodeInstallPlugin,
   type InstallPluginOptions,
-} from "../../orchestrators/plugin/install.ts";
+} from "../../orchestrators/plugin/install-flow.ts";
 import { loadConfig } from "../../persistence/config-io.ts";
 import {
   writeBatchedConfigEntries,
@@ -11,13 +11,21 @@ import {
 } from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState as defaultLoadState, type ExtensionState } from "../../persistence/state-io.ts";
+import { compareByNameThenScope } from "../../shared/compare-name-scope.ts";
 import { ConcurrentInstallError, errorMessage, PluginShapeError } from "../../shared/errors.ts";
+import { type ContentReason } from "../../shared/notification-types.ts";
+import {
+  type MarketplaceStatus,
+  type PluginFailedMessage,
+  type PluginInstalledMessage,
+  type PluginSkippedMessage,
+  type PluginUnavailableMessage,
+} from "../../shared/notification-types.ts";
 import {
   notifyWithContext,
   type MarketplaceRows,
   type Plural,
 } from "../../shared/notify-context.ts";
-import { compareByNameThenScope } from "../../shared/notify.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 
 import { IMPORT_CONTEXT, type ImportMsg } from "./execute.messaging.ts";
@@ -34,17 +42,11 @@ import type {
   AddMarketplaceOptions,
   AddMarketplaceOutcome,
 } from "../../orchestrators/marketplace/add.ts";
+import type { InstallHooksRouting } from "../../orchestrators/plugin/install-disable-cascade.ts";
 import type { InstallPluginOutcome } from "../../orchestrators/types.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
+import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
-import type {
-  ContentReason,
-  MarketplaceStatus,
-  PluginFailedMessage,
-  PluginInstalledMessage,
-  PluginSkippedMessage,
-  PluginUnavailableMessage,
-} from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 
 export interface MarketplaceAddedOutcome {
@@ -172,6 +174,8 @@ export interface ImportClaudeSettingsOptions {
   readonly pi: ExtensionAPI;
   readonly cwd: string;
   readonly selectedScopes: readonly Scope[];
+  readonly hooksRouting: InstallHooksRouting;
+  readonly completionCache: CompletionCache;
   readonly gitOps?: AddMarketplaceOptions["gitOps"];
   readonly deps?: ImportDeps;
 }
@@ -223,8 +227,10 @@ function addMarketplaceFn(
 
 function installPluginFn(
   deps: ImportDeps | undefined,
+  hooksRouting: InstallHooksRouting,
+  completionCache: CompletionCache,
 ): (opts: InstallPluginOptions) => Promise<InstallPluginOutcome> {
-  return deps?.installPlugin ?? (async (opts) => defaultInstallPlugin(opts));
+  return deps?.installPlugin ?? createNodeInstallPlugin(hooksRouting, completionCache);
 }
 
 function pluginsForMarketplace(
@@ -685,7 +691,7 @@ async function installOnePlannedPlugin(
   result: MutableImportResult,
   plugin: PlannedPlugin,
 ): Promise<PlannedPluginBucket> {
-  const installPlugin = installPluginFn(opts.deps);
+  const installPlugin = installPluginFn(opts.deps, opts.hooksRouting, opts.completionCache);
   let outcome: InstallPluginOutcome;
   try {
     outcome = await installPlugin({
@@ -774,6 +780,7 @@ async function addOnePlannedMarketplace(
       scope: marketplace.scope,
       cwd: opts.cwd,
       rawSource: marketplace.source,
+      completionCache: opts.completionCache,
       notifications: { mode: "orchestrated" },
       ...(opts.gitOps !== undefined && { gitOps: opts.gitOps }),
     });
@@ -1186,8 +1193,8 @@ export async function importClaudeSettings(
   }
 
   // D-20-02 / D-19-02: cascade construction
-  // mirrors the reinstall.ts recipe at
-  // orchestrators/plugin/reinstall.ts; execute.ts substitutes the
+  // mirrors the reinstall outcome recipe at
+  // orchestrators/plugin/reinstall-record.ts; execute.ts substitutes the
   // import-cascade variant set (added / updated / failed marketplaces).
   // Truly catastrophic throws bubble to Pi runtime -- better for debugging
   // than a polished error message that masks the bug. The inner

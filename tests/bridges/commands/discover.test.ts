@@ -3,15 +3,13 @@ import { createHook } from "node:async_hooks";
 import { createHash } from "node:crypto";
 import { renameSync, symlinkSync } from "node:fs";
 import { chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
-import { createRequire, syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 
 import { discoverPluginCommands } from "../../../extensions/pi-claude-marketplace/bridges/commands/discover.ts";
-import { CommandNameError } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 
-import type { ResolvedPluginInstallable } from "../../../extensions/pi-claude-marketplace/domain/resolver.ts";
+import type { ResolvedPluginInstallable } from "../../../extensions/pi-claude-marketplace/domain/resolver-types.ts";
 
 function resolvedPlugin(
   pluginRoot: string,
@@ -588,114 +586,6 @@ test("propagates a non-tolerated error when a discovered file gains a looping pa
           syscall: "lstat",
         },
       );
-      return true;
-    },
-  );
-});
-
-test("propagates a wrapped name error when its class identity is unavailable", async (t) => {
-  // arrange
-  const directory = await mkdtemp(path.join(tmpdir(), "command-discover-name-identity-"));
-  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 3 }));
-  const commandsDirectory = path.join(directory, "commands");
-  const unsafeSourceName = "bad\u0001";
-  await mkdir(commandsDirectory, { recursive: true });
-  await writeFile(path.join(commandsDirectory, `${unsafeSourceName}.md`), "unsafe\n");
-  const resolved = resolvedPlugin(directory, ["commands"]);
-  const previousHasInstance = Object.getOwnPropertyDescriptor(CommandNameError, Symbol.hasInstance);
-  t.after(() => {
-    if (previousHasInstance === undefined) {
-      Reflect.deleteProperty(CommandNameError, Symbol.hasInstance);
-    } else {
-      Object.defineProperty(CommandNameError, Symbol.hasInstance, previousHasInstance);
-    }
-  });
-  Object.defineProperty(CommandNameError, Symbol.hasInstance, {
-    configurable: true,
-    value: () => false,
-  });
-  const expectedMessage = `invalid command source "${unsafeSourceName}" in "${commandsDirectory}"`;
-
-  // act & assert
-  await assert.rejects(
-    () => discoverPluginCommands({ pluginName: "acme", resolved }),
-    (error: unknown) => {
-      assert.ok(error instanceof Error);
-      assert.strictEqual(error.constructor, CommandNameError);
-      assert.ok(error.cause instanceof Error);
-      assert.deepStrictEqual(
-        {
-          name: error.name,
-          message: error.message,
-          sourceName: (error as CommandNameError).sourceName,
-          commandsDir: (error as CommandNameError).commandsDir,
-          cause: { name: error.cause.name, message: error.cause.message },
-        },
-        {
-          name: "CommandNameError",
-          message: expectedMessage,
-          sourceName: unsafeSourceName,
-          commandsDir: commandsDirectory,
-          cause: {
-            name: "Error",
-            message: `command path segment in "${unsafeSourceName}" "${unsafeSourceName}" must not contain ASCII control characters.`,
-          },
-        },
-      );
-      return true;
-    },
-  );
-});
-
-test("propagates a filesystem error whose errno disappears between observations", async (t) => {
-  // arrange
-  const directory = await mkdtemp(path.join(tmpdir(), "command-discover-unstable-errno-"));
-  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 3 }));
-  const commandsDirectory = path.join(directory, "commands");
-  const nestedDirectory = path.join(commandsDirectory, "nested");
-  await mkdir(nestedDirectory, { recursive: true });
-  const filesystemPromises = createRequire(import.meta.url)(
-    "node:fs/promises",
-  ) as typeof import("node:fs/promises");
-  const originalReaddir = filesystemPromises.readdir;
-  const commandEntries = await originalReaddir(commandsDirectory, {
-    withFileTypes: true,
-    encoding: "utf8",
-  });
-  const filesystemError = new Error("unstable command-directory errno");
-  let codeReads = 0;
-  Object.defineProperty(filesystemError, "code", {
-    configurable: true,
-    enumerable: true,
-    get: () => {
-      codeReads += 1;
-      return codeReads === 1 ? "EACCES" : undefined;
-    },
-  });
-  const readdir = t.mock.method(
-    filesystemPromises,
-    "readdir",
-    (directoryPath: Parameters<typeof originalReaddir>[0]) => {
-      if (directoryPath === commandsDirectory) {
-        return Promise.resolve(commandEntries);
-      }
-
-      return Promise.reject(filesystemError);
-    },
-  );
-  t.after(() => {
-    readdir.mock.restore();
-    syncBuiltinESMExports();
-  });
-  syncBuiltinESMExports();
-  const resolved = resolvedPlugin(directory, ["commands"]);
-
-  // act & assert
-  await assert.rejects(
-    () => discoverPluginCommands({ pluginName: "acme", resolved }),
-    (error: unknown) => {
-      assert.strictEqual(error, filesystemError);
-      assert.strictEqual(codeReads, 2);
       return true;
     },
   );

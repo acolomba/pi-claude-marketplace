@@ -1,4 +1,5 @@
 // Owner suite for orchestrators/reconcile/apply.ts.
+// behavioral-composition-exception: applyReconcile
 //
 // D-115-03: the load-time cascade's contract is the state it leaves on disk and
 // the single notification it renders, so every case drives the real install,
@@ -48,43 +49,104 @@
 //   plugin-backfilled        a promotion riding the same cascade as an install
 
 import assert from "node:assert/strict";
-import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
-import { createRequire, syncBuiltinESMExports } from "node:module";
+import { chmod, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, test } from "node:test";
+import { fileURLToPath } from "node:url";
 
 import lockfile from "proper-lockfile";
 
+import {
+  createHooksRouting,
+  createHooksRuntime,
+  readHooksJson,
+} from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
+import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
-  applyReconcile,
-  surfacePostCommitWarnings,
+  applyReconcile as applyReconcileWithRouting,
+  createApplyReconcile,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   loadState,
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { EXTENSION_VERSION } from "../../../extensions/pi-claude-marketplace/shared/extension-version.ts";
 import { createNotificationBoundary } from "../../edge/notification-boundary.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { retryTree } from "../plugin/scope-tree-inventory.ts";
 
+import type {
+  HooksRouting,
+  HooksRuntime,
+} from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
-import type { PerEntryOutcome } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts";
+import type { ReconcileStateReader } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
+import type { ApplyReconcileOptions } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import type {
-  ExtensionAPI,
-  ExtensionContext,
-} from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { TestContext } from "node:test";
 
 type MarketplaceRecord = ExtensionState["marketplaces"][string];
 type PluginRecord = MarketplaceRecord["plugins"][string];
 
 const RECORDED_AT = "2026-01-01T00:00:00.000Z";
+const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
+
+interface CompositionExceptionMarker {
+  readonly kind: "production" | "test";
+  readonly path: string;
+  readonly symbol: string;
+}
+
+/** Census the explicitly marked behavioral-composition exceptions. */
+async function compositionExceptionCensus(): Promise<readonly CompositionExceptionMarker[]> {
+  const markers: CompositionExceptionMarker[] = [];
+  const roots = [
+    { kind: "production" as const, path: "extensions/pi-claude-marketplace" },
+    { kind: "test" as const, path: "tests" },
+  ];
+
+  async function visit(kind: CompositionExceptionMarker["kind"], directory: string): Promise<void> {
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      const entryPath = path.join(directory, entry.name);
+      if (entry.isDirectory()) {
+        await visit(kind, entryPath);
+      } else if (entry.isFile() && entry.name.endsWith(".ts")) {
+        const source = await readFile(entryPath, "utf8");
+        for (const match of source.matchAll(
+          /^\/\/ behavioral-composition-exception: ([A-Za-z][A-Za-z0-9]*)$/gmu,
+        )) {
+          markers.push({
+            kind,
+            path: path.relative(REPOSITORY_ROOT, entryPath),
+            symbol: match[1]!,
+          });
+        }
+      }
+    }
+  }
+
+  for (const root of roots) {
+    await visit(root.kind, path.join(REPOSITORY_ROOT, root.path));
+  }
+
+  return markers.sort((left, right) => left.path.localeCompare(right.path));
+}
+
+/** Run one isolated reconcile lifecycle with a fresh production routing owner. */
+function applyReconcile(
+  opts: Omit<ApplyReconcileOptions, "completionCache" | "hooksRouting">,
+): Promise<void> {
+  return applyReconcileWithRouting({
+    ...opts,
+    completionCache: createCompletionCache(),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+  });
+}
 
 /**
  * The single network edge. `allowedRemoteUrls` is empty, so the fake refuses
@@ -369,6 +431,34 @@ function pluginRecord(seed: RecordSeed): PluginRecord {
   };
 }
 
+/** Populate one lifecycle owner with an observable project-scope route. */
+async function populateRuntimeRoute(
+  cwd: string,
+  runtime: HooksRuntime,
+  opts: { readonly command: string; readonly marketplace: string; readonly plugin: string },
+): Promise<HooksRouting> {
+  const pluginRoot = path.join(cwd, "runtime-routes", `${opts.marketplace}-${opts.plugin}`);
+  const hooksJsonPath = path.join(pluginRoot, "hooks.json");
+  await writeUnder(
+    hooksJsonPath,
+    JSON.stringify({
+      PreToolUse: [{ hooks: [{ command: opts.command, type: "command" }], matcher: "" }],
+    }),
+  );
+  const hooksRouting = createHooksRouting(runtime, { readHooksJson });
+  await hooksRouting.readAndCachePluginHooks({
+    cwd,
+    hooksJsonPath,
+    logPrefix: "reconcile-uninstall-owner-test",
+    marketplace: opts.marketplace,
+    plugin: opts.plugin,
+    resolvedSource: asAbsolutePluginRoot(pluginRoot),
+    scope: "project",
+  });
+  hooksRouting.rebuildRoutingTables();
+  return hooksRouting;
+}
+
 function marketplaceRecord(options: {
   readonly cwd: string;
   readonly scope: "project" | "user";
@@ -421,46 +511,42 @@ async function recordFor(
 }
 
 /**
- * Answer `state.json` reads for one scope with `competing` from the
- * `fromRead`-th read onward. That is what another process winning the race
- * between the planner's read and an orchestrator's own locked re-read leaves
- * behind, and it is the only condition the converge and not-added arms
- * document. The double sits at the filesystem boundary the persistence layer
- * reads through; nothing inside the cascade is replaced, and the read count is
- * stated per case so a change in the read order fails the case rather than
- * silently passing it.
+ * Create an apply operation whose required selected-state reader leaves a
+ * competing state on disk after returning the planner's snapshot. The real
+ * child orchestrators then observe that competing state through their normal
+ * locked re-reads, so the behavioral-composition proof remains intact while
+ * the race is owned by the production reader boundary.
  */
-function raceStateFromRead(
-  t: TestContext,
+function applyAfterSelectedStateRace(
   locations: ScopedLocations,
-  fromRead: number,
   competing: ExtensionState | string,
-): void {
-  const fsModule = createRequire(import.meta.url)(
-    "node:fs/promises",
-  ) as typeof import("node:fs/promises");
-  const readOriginal = fsModule.readFile.bind(fsModule);
-  let reads = 0;
-  const mocked = t.mock.method(
-    fsModule,
-    "readFile",
-    async (...args: Parameters<typeof fsModule.readFile>) => {
-      const [target] = args;
-      if (typeof target === "string" && target === locations.stateJsonPath) {
-        reads += 1;
-        if (reads >= fromRead) {
-          return typeof competing === "string" ? competing : JSON.stringify(competing);
+): (
+  opts: Omit<ApplyReconcileOptions, "completionCache" | "hooksRouting"> &
+    Partial<Pick<ApplyReconcileOptions, "completionCache" | "hooksRouting">>,
+) => Promise<void> {
+  let raced = false;
+  const applySelectedReconcile = createApplyReconcile({
+    async loadState(extensionRoot: string): Promise<ExtensionState> {
+      const selected = await loadState(extensionRoot);
+      if (!raced && extensionRoot === locations.extensionRoot) {
+        raced = true;
+        if (typeof competing === "string") {
+          await writeFile(locations.stateJsonPath, competing, "utf8");
+        } else {
+          await saveState(extensionRoot, competing);
         }
       }
 
-      return readOriginal(...args);
+      return selected;
     },
-  );
-  syncBuiltinESMExports();
-  t.after(() => {
-    mocked.mock.restore();
-    syncBuiltinESMExports();
   });
+  return (opts) =>
+    applySelectedReconcile({
+      ...opts,
+      completionCache: opts.completionCache ?? createCompletionCache(),
+      hooksRouting:
+        opts.hooksRouting ?? createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    });
 }
 
 /**
@@ -471,6 +557,31 @@ function raceStateFromRead(
 function withoutTempSuffix(message: string): string {
   return message.replaceAll(/claude-plugins\.json\.\d+/g, "claude-plugins.json.<tmp>");
 }
+
+test("D-05-02: the source and owner-test census contains exactly the two approved behavioral-composition exceptions", async () => {
+  assert.deepStrictEqual(await compositionExceptionCensus(), [
+    {
+      kind: "production",
+      path: "extensions/pi-claude-marketplace/orchestrators/plugin/bootstrap.ts",
+      symbol: "bootstrapClaudePlugin",
+    },
+    {
+      kind: "production",
+      path: "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts",
+      symbol: "applyReconcile",
+    },
+    {
+      kind: "test",
+      path: "tests/orchestrators/plugin/bootstrap.test.ts",
+      symbol: "bootstrapClaudePlugin",
+    },
+    {
+      kind: "test",
+      path: "tests/orchestrators/reconcile/apply.test.ts",
+      symbol: "applyReconcile",
+    },
+  ]);
+});
 
 describe("applyReconcile", () => {
   test("WR-05: leaves a scope with neither a state file nor a configuration file untouched and silent", async (t) => {
@@ -1104,11 +1215,88 @@ describe("applyReconcile", () => {
     );
     const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
     const { gitOps, clonedUrls } = createOfflineGitOps();
+    const ownerRuntime = createHooksRuntime();
+    const peerRuntime = createHooksRuntime();
+    const hooksRouting = await populateRuntimeRoute(cwd, ownerRuntime, {
+      command: "echo reconcile-target",
+      marketplace: "mp",
+      plugin: "hello",
+    });
+    await populateRuntimeRoute(cwd, ownerRuntime, {
+      command: "echo reconcile-unrelated",
+      marketplace: "mp",
+      plugin: "other",
+    });
+    await populateRuntimeRoute(cwd, peerRuntime, {
+      command: "echo reconcile-peer",
+      marketplace: "mp",
+      plugin: "hello",
+    });
+    const completionCache = createCompletionCache();
+    const peerCompletionCache = createCompletionCache();
+    const pluginCachePath = await project.pluginCacheFile("mp");
+    const unrelatedCachePath = await project.pluginCacheFile("unrelated");
+    await completionCache.getPluginIndex(pluginCachePath, "project", "mp", () =>
+      Promise.resolve([{ name: "hello", status: "installed" }]),
+    );
+    await rm(pluginCachePath, { force: true });
+    await peerCompletionCache.getPluginIndex(pluginCachePath, "project", "mp", () =>
+      Promise.resolve([{ name: "peer-hello", status: "installed" }]),
+    );
+    await rm(pluginCachePath, { force: true });
+    await completionCache.getPluginIndex(unrelatedCachePath, "project", "unrelated", () =>
+      Promise.resolve([{ name: "owner-unrelated", status: "available" }]),
+    );
+    await rm(unrelatedCachePath, { force: true });
+    await peerCompletionCache.getPluginIndex(unrelatedCachePath, "project", "unrelated", () =>
+      Promise.resolve([{ name: "peer-unrelated", status: "available" }]),
+    );
+    await rm(path.dirname(path.dirname(unrelatedCachePath)), { force: true, recursive: true });
 
     // act
-    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps });
+    await applyReconcileWithRouting({
+      ctx,
+      pi,
+      cwd,
+      scope: "project",
+      completionCache,
+      gitOps,
+      hooksRouting,
+    });
     const afterFirst = await loadState(project.extensionRoot);
-    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps });
+    await applyReconcileWithRouting({
+      ctx,
+      pi,
+      cwd,
+      scope: "project",
+      completionCache,
+      gitOps,
+      hooksRouting,
+    });
+    const afterSecondTree = await retryTree(project.scopeRoot);
+    let ownerRebuilds = 0;
+    const ownerRows = await completionCache.getPluginIndex(pluginCachePath, "project", "mp", () => {
+      ownerRebuilds += 1;
+      return Promise.resolve([{ name: "hello", status: "available" }]);
+    });
+    const peerRows = await peerCompletionCache.getPluginIndex(
+      pluginCachePath,
+      "project",
+      "mp",
+      () => Promise.reject(new Error("peer cache must stay warm")),
+    );
+    const ownerUnrelatedRows = await completionCache.getPluginIndex(
+      unrelatedCachePath,
+      "project",
+      "unrelated",
+      () => Promise.reject(new Error("owner unrelated cache must stay warm")),
+    );
+    const peerUnrelatedRows = await peerCompletionCache.getPluginIndex(
+      unrelatedCachePath,
+      "project",
+      "unrelated",
+      () => Promise.reject(new Error("peer unrelated cache must stay warm")),
+    );
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -1119,13 +1307,131 @@ describe("applyReconcile", () => {
     assert.deepStrictEqual(Object.keys(afterFirst.marketplaces["mp"]?.plugins ?? {}), []);
     assert.deepStrictEqual(await loadState(project.extensionRoot), afterFirst);
     assert.equal(await readFile(project.configJsonPath, "utf8"), declaration);
-    assert.deepStrictEqual(await retryTree(project.scopeRoot), [
+    assert.deepStrictEqual(afterSecondTree, [
       "claude-plugins.json",
       "pi-claude-marketplace/",
       "pi-claude-marketplace/resources/",
       "pi-claude-marketplace/resources/skills/",
       "pi-claude-marketplace/state.json",
     ]);
+    assert.deepStrictEqual(clonedUrls(), []);
+    assert.deepStrictEqual(
+      ownerRuntime.getRoutingBucket("PreToolUse").map((entry) => entry.pluginId),
+      ["other"],
+    );
+    assert.deepStrictEqual(
+      peerRuntime.getRoutingBucket("PreToolUse").map((entry) => entry.pluginId),
+      ["hello"],
+    );
+    assert.equal(ownerRebuilds, 1);
+    assert.deepStrictEqual(ownerRows, [{ name: "hello", status: "available" }]);
+    assert.deepStrictEqual(peerRows, [{ name: "peer-hello", status: "installed" }]);
+    assert.deepStrictEqual(ownerUnrelatedRows, [{ name: "owner-unrelated", status: "available" }]);
+    assert.deepStrictEqual(peerUnrelatedRows, [{ name: "peer-unrelated", status: "available" }]);
+    verifyBoundary();
+  });
+
+  test("WR-06: a cache-file cleanup failure stays silent while apply removes the target and preserves its sibling", async (t) => {
+    // arrange
+    const { cwd, project } = await createHermeticScopes(t, "uninstall-cache-failure");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      hello: { skill: "clean" },
+      kept: { skill: "clean" },
+    });
+    const declaration = configBytes({
+      marketplaces: { mp: { source: marketplaceRoot } },
+      plugins: { "kept@mp": {} },
+    });
+    await writeUnder(project.configJsonPath, declaration);
+    const kept = pluginRecord({
+      pluginRoot: path.join(marketplaceRoot, "plugins", "kept"),
+      skills: ["kept-tool"],
+    });
+    await seedState(project, {
+      schemaVersion: 2,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+          plugins: {
+            hello: pluginRecord({
+              pluginRoot: path.join(marketplaceRoot, "plugins", "hello"),
+              skills: ["hello-tool"],
+            }),
+            kept,
+          },
+        }),
+      },
+    });
+    await writeUnder(
+      path.join(project.skillsTargetDir, "hello-tool", "SKILL.md"),
+      "---\nname: hello-tool\n---\n\nbody\n",
+    );
+    await writeUnder(
+      path.join(project.skillsTargetDir, "kept-tool", "SKILL.md"),
+      "---\nname: kept-tool\n---\n\nbody\n",
+    );
+    const ownerRuntime = createHooksRuntime();
+    await populateRuntimeRoute(cwd, ownerRuntime, {
+      command: "echo removed",
+      marketplace: "mp",
+      plugin: "hello",
+    });
+    const hooksRouting = await populateRuntimeRoute(cwd, ownerRuntime, {
+      command: "echo kept",
+      marketplace: "mp",
+      plugin: "kept",
+    });
+    const completionCache = createCompletionCache();
+    const pluginCachePath = await project.pluginCacheFile("mp");
+    await mkdir(pluginCachePath, { recursive: true });
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcileWithRouting({
+      ctx,
+      pi,
+      cwd,
+      scope: "project",
+      completionCache,
+      gitOps,
+      hooksRouting,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: "● mp [project]\n  ○ hello v1.0.0 (uninstalled)\n\nReconcile: 1 success",
+      },
+    ]);
+    assert.deepStrictEqual(
+      Object.keys((await loadState(project.extensionRoot)).marketplaces["mp"]?.plugins ?? {}),
+      ["kept"],
+    );
+    assert.equal(await readFile(project.configJsonPath, "utf8"), declaration);
+    assert.deepStrictEqual(await retryTree(project.scopeRoot), [
+      "claude-plugins.json",
+      "pi-claude-marketplace/",
+      "pi-claude-marketplace/cache/",
+      "pi-claude-marketplace/cache/plugins/",
+      "pi-claude-marketplace/cache/plugins/mp.json/",
+      "pi-claude-marketplace/resources/",
+      "pi-claude-marketplace/resources/skills/",
+      "pi-claude-marketplace/resources/skills/kept-tool/",
+      "pi-claude-marketplace/resources/skills/kept-tool/SKILL.md",
+      "pi-claude-marketplace/state.json",
+    ]);
+    assert.equal((await stat(pluginCachePath)).isDirectory(), true);
+    assert.deepStrictEqual(
+      ownerRuntime.getRoutingBucket("PreToolUse").map((entry) => entry.pluginId),
+      ["kept"],
+    );
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
   });
@@ -1285,6 +1591,117 @@ describe("applyReconcile", () => {
     verifyBoundary();
   });
 
+  test("D-27: installs through a declared alias under the canonical recorded name and converges on the second pass", async (t) => {
+    // arrange
+    const { cwd, project } = await createHermeticScopes(t, "canonical-alias");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(
+      cwd,
+      "canonical-src",
+      "canonical-name",
+      { formatter: { skill: "clean" } },
+    );
+    const declaration = configBytes({
+      marketplaces: { "declared-name": { source: marketplaceRoot } },
+      plugins: { "formatter@declared-name": {} },
+    });
+    await writeUnder(project.configJsonPath, declaration);
+    await seedState(project, {
+      schemaVersion: 2,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+      marketplaces: {
+        "canonical-name": marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "canonical-name",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+        }),
+      },
+    });
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps });
+    const afterFirst = await loadState(project.extensionRoot);
+    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● canonical-name [project]\n" +
+          "  ● formatter (installed)\n" +
+          "\n" +
+          "Reconcile: 1 success",
+      },
+    ]);
+    assert.deepStrictEqual(Object.keys(afterFirst.marketplaces), ["canonical-name"]);
+    assert.deepStrictEqual(Object.keys(afterFirst.marketplaces["canonical-name"]!.plugins), [
+      "formatter",
+    ]);
+    assert.deepStrictEqual(await loadState(project.extensionRoot), afterFirst);
+    assert.equal(await readFile(project.configJsonPath, "utf8"), declaration);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("D-27: an ambiguous alias source reports a conflict without changing canonical state", async (t) => {
+    // arrange
+    const { cwd, project } = await createHermeticScopes(t, "ambiguous-alias");
+    const source = await writeMarketplaceSource(cwd, "canonical-src", "canonical-name", {});
+    const declaration = configBytes({
+      marketplaces: { "declared-name": { source: source.marketplaceRoot } },
+    });
+    await writeUnder(project.configJsonPath, declaration);
+    const initialState = {
+      schemaVersion: 2 as const,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+      marketplaces: {
+        zeta: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "zeta",
+          rawSource: source.marketplaceRoot,
+          manifestPath: source.manifestPath,
+          marketplaceRoot: source.marketplaceRoot,
+        }),
+        alpha: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "alpha",
+          rawSource: source.marketplaceRoot,
+          manifestPath: source.manifestPath,
+          marketplaceRoot: source.marketplaceRoot,
+        }),
+      },
+    };
+    await seedState(project, initialState);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A marketplace operation has failed.\n" +
+          "\n" +
+          "⊘ declared-name [project] (failed) {source mismatch}\n" +
+          "\n" +
+          "Reconcile: 1 failure",
+        severity: "error",
+      },
+    ]);
+    assert.deepStrictEqual(await loadState(project.extensionRoot), initialState);
+    assert.equal(await readFile(project.configJsonPath, "utf8"), declaration);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
   test("WARN-01: an install whose skill frontmatter cannot be parsed keeps the installed row, names the degrade, and reports the parse detail on the diagnostic channel", async (t) => {
     // arrange
     const { cwd, project } = await createHermeticScopes(t, "install-degraded");
@@ -1377,9 +1794,20 @@ describe("applyReconcile", () => {
     });
     const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
     const { gitOps, clonedUrls } = createOfflineGitOps();
+    const ownerRuntime = createHooksRuntime();
+    const peerRuntime = createHooksRuntime();
+    const hooksRouting = createHooksRouting(ownerRuntime, { readHooksJson });
 
     // act
-    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps });
+    await applyReconcileWithRouting({
+      ctx,
+      pi,
+      cwd,
+      scope: "project",
+      completionCache: createCompletionCache(),
+      gitOps,
+      hooksRouting,
+    });
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -1388,6 +1816,11 @@ describe("applyReconcile", () => {
       },
     ]);
     assert.deepStrictEqual((await recordFor(project, "mp", "orphan"))?.resources.hooks, ["orphan"]);
+    assert.deepStrictEqual(
+      ownerRuntime.getRoutingBucket("PreToolUse").map((entry) => entry.pluginId),
+      ["orphan"],
+    );
+    assert.deepStrictEqual(peerRuntime.getRoutingBucket("PreToolUse"), []);
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
   });
@@ -2093,29 +2526,33 @@ describe("applyReconcile", () => {
     const { cwd, project, user } = await createHermeticScopes(t, "fan-out");
     const projectSource = await writeMarketplaceSource(cwd, "p-src", "p-mp", {});
     const userSource = await writeMarketplaceSource(cwd, "u-src", "u-mp", {});
-    await writeUnder(
-      project.configJsonPath,
-      configBytes({ marketplaces: { "p-mp": { source: projectSource.marketplaceRoot } } }),
-    );
+    const projectConfig = configBytes({
+      marketplaces: { "p-mp": { source: projectSource.marketplaceRoot } },
+    });
+    const userConfig = configBytes({
+      marketplaces: { "u-mp": { source: userSource.marketplaceRoot } },
+    });
+    await writeUnder(project.configJsonPath, projectConfig);
     await seedState(project, {
       schemaVersion: 2,
       lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {},
     });
-    await writeUnder(
-      user.configJsonPath,
-      configBytes({ marketplaces: { "u-mp": { source: userSource.marketplaceRoot } } }),
-    );
+    await writeUnder(user.configJsonPath, userConfig);
     await seedState(user, {
       schemaVersion: 2,
       lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {},
     });
+    await writeUnder(path.join(project.scopeRoot, "unrelated.txt"), "project bytes\n");
+    await writeUnder(path.join(user.scopeRoot, "unrelated.txt"), "user bytes\n");
     const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
     const { gitOps, clonedUrls } = createOfflineGitOps();
+    const startedAt = Date.now();
 
     // act
     await applyReconcile({ ctx, pi, cwd, gitOps });
+    const completedAt = Date.now();
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -2123,12 +2560,74 @@ describe("applyReconcile", () => {
         message: "● p-mp [project] (added)\n\n● u-mp [user] (added)\n\nReconcile: 2 successes",
       },
     ]);
-    assert.deepStrictEqual(Object.keys((await loadState(project.extensionRoot)).marketplaces), [
-      "p-mp",
+    const projectState = await loadState(project.extensionRoot);
+    const userState = await loadState(user.extensionRoot);
+    const projectRecord = projectState.marketplaces["p-mp"];
+    const userRecord = userState.marketplaces["u-mp"];
+    if (projectRecord === undefined || userRecord === undefined) {
+      assert.fail("Both scope records must be persisted before their full values are compared.");
+    }
+
+    const projectUpdatedAt = Date.parse(projectRecord.lastUpdatedAt ?? "");
+    const userUpdatedAt = Date.parse(userRecord.lastUpdatedAt ?? "");
+    assert.equal(projectUpdatedAt >= startedAt && projectUpdatedAt <= completedAt, true);
+    assert.equal(userUpdatedAt >= startedAt && userUpdatedAt <= completedAt, true);
+    assert.deepStrictEqual(projectState, {
+      schemaVersion: 2,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+      marketplaces: {
+        "p-mp": {
+          ...marketplaceRecord({
+            cwd,
+            scope: "project",
+            marketplace: "p-mp",
+            rawSource: projectSource.marketplaceRoot,
+            manifestPath: projectSource.manifestPath,
+            marketplaceRoot: projectSource.marketplaceRoot,
+          }),
+          lastUpdatedAt: projectRecord.lastUpdatedAt,
+        },
+      },
+    });
+    assert.deepStrictEqual(userState, {
+      schemaVersion: 2,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+      marketplaces: {
+        "u-mp": {
+          ...marketplaceRecord({
+            cwd,
+            scope: "user",
+            marketplace: "u-mp",
+            rawSource: userSource.marketplaceRoot,
+            manifestPath: userSource.manifestPath,
+            marketplaceRoot: userSource.marketplaceRoot,
+          }),
+          lastUpdatedAt: userRecord.lastUpdatedAt,
+        },
+      },
+    });
+    assert.equal(await readFile(project.configJsonPath, "utf8"), projectConfig);
+    assert.equal(await readFile(user.configJsonPath, "utf8"), userConfig);
+    assert.deepStrictEqual(await retryTree(project.scopeRoot), [
+      "claude-plugins.json",
+      "pi-claude-marketplace/",
+      "pi-claude-marketplace/state.json",
+      "unrelated.txt",
     ]);
-    assert.deepStrictEqual(Object.keys((await loadState(user.extensionRoot)).marketplaces), [
-      "u-mp",
+    assert.deepStrictEqual(await retryTree(user.scopeRoot), [
+      "claude-plugins.json",
+      "pi-claude-marketplace/",
+      "pi-claude-marketplace/state.json",
+      "unrelated.txt",
     ]);
+    assert.equal(
+      await readFile(path.join(project.scopeRoot, "unrelated.txt"), "utf8"),
+      "project bytes\n",
+    );
+    assert.equal(
+      await readFile(path.join(user.scopeRoot, "unrelated.txt"), "utf8"),
+      "user bytes\n",
+    );
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
   });
@@ -2487,15 +2986,12 @@ describe("applyReconcile", () => {
         }),
       },
     });
-    // Reads in order: the planner's locked read, then the removal's own scope
-    // resolution, which runs before the removal takes its lock and therefore
-    // outside its own failure handling.
-    raceStateFromRead(t, project, 2, "{ half written");
+    const applyWithRace = applyAfterSelectedStateRace(project, "{ half written");
     const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
-    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps });
+    await applyWithRace({ ctx, pi, cwd, scope: "project", gitOps });
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -2544,15 +3040,33 @@ describe("applyReconcile", () => {
         }),
       },
     });
-    // Reads in order: the planner's locked read, then the uninstall's own
-    // cross-scope target resolution, which runs before the uninstall takes its
-    // lock and therefore outside its own failure handling.
-    raceStateFromRead(t, project, 2, "{ half written");
+    const applyWithRace = applyAfterSelectedStateRace(project, "{ half written");
     const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
     const { gitOps, clonedUrls } = createOfflineGitOps();
+    const completionCache = createCompletionCache();
+    const pluginCachePath = await project.pluginCacheFile("mp");
+    await completionCache.getPluginIndex(pluginCachePath, "project", "mp", () =>
+      Promise.resolve([{ name: "hello", status: "installed" }]),
+    );
+    await rm(path.dirname(path.dirname(pluginCachePath)), { force: true, recursive: true });
+    const beforeTree = await retryTree(project.scopeRoot);
 
     // act
-    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps });
+    await applyWithRace({
+      ctx,
+      pi,
+      cwd,
+      scope: "project",
+      completionCache,
+      gitOps,
+      hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    });
+    const retainedRows = await completionCache.getPluginIndex(
+      pluginCachePath,
+      "project",
+      "mp",
+      () => Promise.reject(new Error("failed uninstall must preserve its completion rows")),
+    );
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -2571,11 +3085,129 @@ describe("applyReconcile", () => {
         severity: "error",
       },
     ]);
+    assert.equal(await readFile(project.stateJsonPath, "utf8"), "{ half written");
+    assert.deepStrictEqual(await retryTree(project.scopeRoot), beforeTree);
+    assert.deepStrictEqual(retainedRows, [{ name: "hello", status: "installed" }]);
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
   });
 
-  test("WR-06: a plugin another process uninstalled first renders no row at all", async (t) => {
+  test("RECON-02: a selected project snapshot races a competing removal while the user scope still completes", async (t) => {
+    // arrange
+    const { cwd, project, user } = await createHermeticScopes(t, "remove-converged");
+    const projectSource = await writeMarketplaceSource(cwd, "project-mp-src", "mp", {});
+    const userSource = await writeMarketplaceSource(cwd, "user-mp-src", "mp", {});
+    await writeUnder(project.configJsonPath, configBytes({ marketplaces: {} }));
+    await writeUnder(user.configJsonPath, configBytes({ marketplaces: {} }));
+    const projectRecorded: ExtensionState = {
+      schemaVersion: 2,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: projectSource.marketplaceRoot,
+          manifestPath: projectSource.manifestPath,
+          marketplaceRoot: projectSource.marketplaceRoot,
+        }),
+      },
+    };
+    const userRecorded: ExtensionState = {
+      schemaVersion: 2,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "user",
+          marketplace: "mp",
+          rawSource: userSource.marketplaceRoot,
+          manifestPath: userSource.manifestPath,
+          marketplaceRoot: userSource.marketplaceRoot,
+        }),
+      },
+    };
+    await seedState(project, projectRecorded);
+    await seedState(user, userRecorded);
+    await writeUnder(path.join(project.scopeRoot, "unrelated.txt"), "project bytes\n");
+    await writeUnder(path.join(user.scopeRoot, "unrelated.txt"), "user bytes\n");
+    const readerRoots: string[] = [];
+    const reader: ReconcileStateReader = {
+      async loadState(extensionRoot) {
+        const selected = await loadState(extensionRoot);
+        readerRoots.push(extensionRoot);
+        if (extensionRoot === project.extensionRoot) {
+          await saveState(extensionRoot, { ...selected, marketplaces: {} });
+        }
+
+        return selected;
+      },
+    };
+    const applyWithReader = createApplyReconcile(reader);
+    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+    const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
+    const completionCache = createCompletionCache();
+
+    // act
+    await applyWithReader({ ctx, pi, cwd, completionCache, gitOps, hooksRouting });
+    await applyWithReader({ ctx, pi, cwd, completionCache, gitOps, hooksRouting });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A marketplace operation has failed.\n" +
+          "\n" +
+          "⊘ mp [project] (failed) {not found}\n" +
+          "\n" +
+          "● mp [user] (removed)\n" +
+          "\n" +
+          "Reconcile: 1 failure, 1 success",
+        severity: "error",
+      },
+    ]);
+    const expectedProjectState: ExtensionState = {
+      ...projectRecorded,
+      marketplaces: {},
+    };
+    const expectedUserState: ExtensionState = {
+      ...userRecorded,
+      marketplaces: {},
+    };
+    assert.deepStrictEqual(await loadState(project.extensionRoot), expectedProjectState);
+    assert.deepStrictEqual(await loadState(user.extensionRoot), expectedUserState);
+    assert.deepStrictEqual(await retryTree(project.scopeRoot), [
+      "claude-plugins.json",
+      "pi-claude-marketplace/",
+      "pi-claude-marketplace/state.json",
+      "unrelated.txt",
+    ]);
+    assert.deepStrictEqual(await retryTree(user.scopeRoot), [
+      "claude-plugins.json",
+      "pi-claude-marketplace/",
+      "pi-claude-marketplace/state.json",
+      "unrelated.txt",
+    ]);
+    assert.equal(
+      await readFile(path.join(project.scopeRoot, "unrelated.txt"), "utf8"),
+      "project bytes\n",
+    );
+    assert.equal(
+      await readFile(path.join(user.scopeRoot, "unrelated.txt"), "utf8"),
+      "user bytes\n",
+    );
+    assert.deepStrictEqual(clonedUrls(), []);
+    assert.deepStrictEqual(readerRoots, [
+      project.extensionRoot,
+      user.extensionRoot,
+      project.extensionRoot,
+      user.extensionRoot,
+    ]);
+    verifyBoundary();
+  });
+
+  test("WR-06: a planned uninstall whose record another process already removed converges without a row", async (t) => {
     // arrange
     const { cwd, project } = await createHermeticScopes(t, "uninstall-converged");
     const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
@@ -2585,9 +3217,22 @@ describe("applyReconcile", () => {
       project.configJsonPath,
       configBytes({ marketplaces: { mp: { source: marketplaceRoot } }, plugins: {} }),
     );
-    const recorded: ExtensionState = {
+    const competingState: ExtensionState = {
       schemaVersion: 2,
       lastReconciledExtensionVersion: EXTENSION_VERSION,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+        }),
+      },
+    };
+    await seedState(project, {
+      ...competingState,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -2601,174 +3246,18 @@ describe("applyReconcile", () => {
           },
         }),
       },
-    };
-    await seedState(project, recorded);
-    const competitorLeft: ExtensionState = {
-      ...recorded,
-      marketplaces: {
-        mp: { ...recorded.marketplaces["mp"]!, plugins: {} },
-      },
-    };
-    // Reads in order: the planner's locked read, the uninstall resolver's
-    // unlocked read, then the uninstall transaction's locked re-read. Only the
-    // third sees the competitor's result.
-    raceStateFromRead(t, project, 3, competitorLeft);
+    });
+    const applyWithRace = applyAfterSelectedStateRace(project, competingState);
     const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
-    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps });
+    await applyWithRace({ ctx, pi, cwd, scope: "project", gitOps });
 
     // assert
     assert.deepStrictEqual(notifications, []);
+    assert.strictEqual(await recordFor(project, "mp", "hello"), undefined);
     assert.deepStrictEqual(clonedUrls(), []);
-    verifyBoundary();
-  });
-
-  test("RECON-02: a marketplace another process removed first renders a not-added failure rather than a removal", async (t) => {
-    // arrange
-    const { cwd, project } = await createHermeticScopes(t, "remove-converged");
-    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {});
-    await writeUnder(project.configJsonPath, configBytes({ marketplaces: {} }));
-    const recorded: ExtensionState = {
-      schemaVersion: 2,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
-      marketplaces: {
-        mp: marketplaceRecord({
-          cwd,
-          scope: "project",
-          marketplace: "mp",
-          rawSource: marketplaceRoot,
-          manifestPath,
-          marketplaceRoot,
-        }),
-      },
-    };
-    await seedState(project, recorded);
-    // Reads in order: the planner's locked read, then the removal's own scope
-    // resolution. Only the second sees the competitor's result.
-    raceStateFromRead(t, project, 2, { ...recorded, marketplaces: {} });
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 2);
-    const { gitOps, clonedUrls } = createOfflineGitOps();
-
-    // act
-    await applyReconcile({ ctx, pi, cwd, scope: "project", gitOps });
-
-    // assert
-    assert.deepStrictEqual(notifications, [
-      {
-        message:
-          "A marketplace operation has failed.\n" +
-          "\n" +
-          "⊘ mp [project] (failed) {not found}\n" +
-          "\n" +
-          "Reconcile: 1 failure",
-        severity: "error",
-      },
-    ]);
-    assert.deepStrictEqual(clonedUrls(), []);
-    verifyBoundary();
-  });
-});
-
-describe("surfacePostCommitWarnings", () => {
-  /** The options bundle the cascade hands the diagnostic channel. */
-  function diagnosticOptions(ctx: ExtensionContext, pi: ExtensionAPI, gitOps: GitOps) {
-    return { ctx, cwd: "/work/project", gitOps, pi, scope: "project" as const };
-  }
-
-  test("IL-2: says nothing when no outcome carries a post-commit warning", () => {
-    // arrange
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
-    const { gitOps } = createOfflineGitOps();
-    const outcomes: readonly PerEntryOutcome[] = [
-      {
-        dependencies: [],
-        kind: "plugin-installed",
-        marketplace: "mp",
-        plugin: "hello",
-        scope: "project",
-      },
-      { kind: "plugin-uninstalled", marketplace: "mp", plugin: "gone", scope: "project" },
-      { kind: "plugin-disabled", marketplace: "mp", plugin: "quiet", scope: "project" },
-    ];
-
-    // act
-    surfacePostCommitWarnings(diagnosticOptions(ctx, pi, gitOps), outcomes);
-
-    // assert
-    assert.deepStrictEqual(notifications, []);
-    verifyBoundary();
-  });
-
-  test("S2: reports a single warning under the singular header", () => {
-    // arrange
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
-    const { gitOps } = createOfflineGitOps();
-    const outcomes: readonly PerEntryOutcome[] = [
-      {
-        dependencies: [],
-        kind: "plugin-installed",
-        marketplace: "mp",
-        plugin: "hello",
-        postCommitWarnings: ["data dir creation deferred"],
-        scope: "project",
-      },
-    ];
-
-    // act
-    surfacePostCommitWarnings(diagnosticOptions(ctx, pi, gitOps), outcomes);
-
-    // assert
-    assert.deepStrictEqual(notifications, [
-      {
-        message:
-          "1 post-install warning surfaced from reconcile installs.\n\ndata dir creation deferred",
-        severity: "warning",
-      },
-    ]);
-    verifyBoundary();
-  });
-
-  test("S2 / NFR-9: collects warnings from an installed row and a disabled row under the plural header and reduces every absolute path to its basename", () => {
-    // arrange
-    const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
-    const { gitOps } = createOfflineGitOps();
-    const outcomes: readonly PerEntryOutcome[] = [
-      {
-        dependencies: [],
-        kind: "plugin-installed",
-        marketplace: "mp",
-        plugin: "hello",
-        postCommitWarnings: [
-          "hello/bad-skill: could not parse frontmatter of /home/user/plugins/hello/skills/bad/SKILL.md",
-        ],
-        scope: "project",
-      },
-      { kind: "mp-added", marketplace: "other", scope: "user" },
-      {
-        kind: "plugin-disabled",
-        marketplace: "mp",
-        plugin: "quiet",
-        postCommitWarnings: ["quiet: preserved foreign agent at /home/user/agents/quiet-bot.md"],
-        scope: "project",
-      },
-    ];
-
-    // act
-    surfacePostCommitWarnings(diagnosticOptions(ctx, pi, gitOps), outcomes);
-
-    // assert
-    assert.deepStrictEqual(notifications, [
-      {
-        message:
-          "2 post-install warnings surfaced from reconcile installs.\n" +
-          "\n" +
-          "hello/bad-skill: could not parse frontmatter of SKILL.md\n" +
-          "quiet: preserved foreign agent at quiet-bot.md",
-        severity: "warning",
-      },
-    ]);
     verifyBoundary();
   });
 });

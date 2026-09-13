@@ -13,14 +13,14 @@
 
 import { PLUGIN_ENTRY_VALIDATOR } from "../../domain/components/plugin.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
-import { resolveStrict } from "../../domain/resolver.ts";
+import { resolveStrict } from "../../domain/plugin-resolver.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { isRecordedButDisabled } from "../../persistence/state-io.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { EXTENSION_VERSION } from "../../shared/extension-version.ts";
-import { redactAbsolutePaths } from "../../shared/notify.ts";
+import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
-import { reinstallPlugin } from "../plugin/reinstall.ts";
+import { createNodeReinstallPlugin } from "../plugin/reinstall-flow.ts";
 
 import {
   classifyOrchestratorThrow,
@@ -32,6 +32,7 @@ import type { PerEntryOutcome } from "./apply-outcomes.ts";
 import type { ApplyReconcileOptions, ScopeReadResult } from "./types.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { Scope } from "../../shared/types.ts";
+import type { ReinstallPluginFn } from "../plugin/reinstall-flow.ts";
 
 /**
  * BFILL-01 / BFILL-02 / D-68-03: the load-time backfill step. Runs as a sibling
@@ -210,6 +211,7 @@ export async function scanForceInstalledBackfills(
   state: ExtensionState,
   outcomes: PerEntryOutcome[],
 ): Promise<boolean> {
+  const reinstallPlugin = createNodeReinstallPlugin(opts.hooksRouting, opts.completionCache);
   const alreadyTouched = new Set<string>();
   for (const o of outcomes) {
     if (o.scope === scope && "plugin" in o) {
@@ -223,6 +225,7 @@ export async function scanForceInstalledBackfills(
       const failed = await backfillOnePluginIsolated(
         opts,
         { scope, marketplace, mp, plugin, record },
+        reinstallPlugin,
         alreadyTouched,
         outcomes,
       );
@@ -252,17 +255,12 @@ export async function scanForceInstalledBackfills(
  */
 async function backfillOnePluginIsolated(
   opts: ApplyReconcileOptions,
-  target: {
-    scope: Scope;
-    marketplace: string;
-    mp: StateMarketplaceRecord;
-    plugin: string;
-    record: StatePluginRecord;
-  },
+  target: BackfillTarget,
+  reinstallPlugin: ReinstallPluginFn,
   alreadyTouched: ReadonlySet<string>,
   outcomes: PerEntryOutcome[],
 ): Promise<boolean> {
-  const { scope, marketplace, mp, plugin, record } = target;
+  const { scope, marketplace, plugin, record } = target;
   // D-68-03: scan ONLY partially-installed plugins.
   if (record.compatibility.installable) {
     return false;
@@ -289,7 +287,7 @@ async function backfillOnePluginIsolated(
   }
 
   try {
-    return await maybeBackfillPlugin(opts, scope, marketplace, mp, plugin, record, outcomes);
+    return await maybeBackfillPlugin(opts, target, reinstallPlugin, outcomes);
   } catch (err) {
     outcomes.push({
       kind: "plugin-install-failed",
@@ -304,6 +302,18 @@ async function backfillOnePluginIsolated(
 
 type StateMarketplaceRecord = ExtensionState["marketplaces"][string];
 type StatePluginRecord = StateMarketplaceRecord["plugins"][string];
+
+/**
+ * One scanned record's identity -- which plugin, in which marketplace, in which
+ * scope, plus the two records the promotion needs.
+ */
+interface BackfillTarget {
+  readonly scope: Scope;
+  readonly marketplace: string;
+  readonly mp: StateMarketplaceRecord;
+  readonly plugin: string;
+  readonly record: StatePluginRecord;
+}
 
 /**
  * BFILL-01: re-resolve one partially-installed plugin offline (NFR-5) and, if its
@@ -321,13 +331,11 @@ type StatePluginRecord = StateMarketplaceRecord["plugins"][string];
  */
 async function maybeBackfillPlugin(
   opts: ApplyReconcileOptions,
-  scope: Scope,
-  marketplace: string,
-  mp: StateMarketplaceRecord,
-  plugin: string,
-  record: StatePluginRecord,
+  target: BackfillTarget,
+  reinstallPlugin: ReinstallPluginFn,
   outcomes: PerEntryOutcome[],
 ): Promise<boolean> {
+  const { scope, marketplace, mp, plugin, record } = target;
   const resolved = await resolveRecordedPluginOffline(mp, plugin);
   if (resolved === undefined || resolved.state === "unavailable") {
     // Unresolvable / structurally broken -- cannot backfill (NFR-5 cache-only;
@@ -434,7 +442,7 @@ async function maybeBackfillPlugin(
 async function resolveRecordedPluginOffline(
   mp: StateMarketplaceRecord,
   plugin: string,
-): Promise<import("../../domain/resolver.ts").ResolvedPlugin | undefined> {
+): Promise<import("../../domain/resolver-types.ts").ResolvedPlugin | undefined> {
   const manifest = await loadMarketplaceManifest(mp.manifestPath);
   const entry = manifest.plugins.find((p) => p.name === plugin);
   if (entry === undefined || !PLUGIN_ENTRY_VALIDATOR.Check(entry)) {

@@ -2,10 +2,11 @@ import assert from "node:assert/strict";
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
 
-const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-const EXTENSION_ROOT = path.join(REPO_ROOT, "extensions/pi-claude-marketplace");
+import { EXTENSION_ROOT_REL, SHELL_OUT_EXEMPT_TARGETS } from "./gate-targets.ts";
+import { REPO_ROOT } from "./source-scan.ts";
+
+const EXTENSION_ROOT = path.join(REPO_ROOT, EXTENSION_ROOT_REL);
 
 /**
  * D-21 supersession defense (W-8). MA-7 (PRD §5.1.1) requires the extension
@@ -66,11 +67,7 @@ const EXTENSION_ROOT = path.join(REPO_ROOT, "extensions/pi-claude-marketplace");
  * "exactly three files" assertion below, so silent widening is caught in CI.
  */
 
-const ALLOWED_CHILD_PROCESS_FILES: ReadonlySet<string> = new Set([
-  "extensions/pi-claude-marketplace/platform/git-credential.ts",
-  "extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts",
-  "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts",
-]);
+const ALLOWED_CHILD_PROCESS_FILES: ReadonlySet<string> = new Set(SHELL_OUT_EXEMPT_TARGETS);
 
 async function* walkTsFiles(dir: string): AsyncGenerator<string> {
   const entries = await readdir(dir, { withFileTypes: true });
@@ -94,8 +91,15 @@ const FORBIDDEN_PATTERNS: ReadonlyArray<RegExp> = [
 ];
 
 test("no child_process imports outside the platform/git-credential whitelist (D-21)", async () => {
+  assert.ok(
+    SHELL_OUT_EXEMPT_TARGETS.length > 0,
+    "D-07-03: an empty SHELL_OUT_EXEMPT_TARGETS empties the whitelist, so this walk would flag the three sanctioned sites and prove nothing about the rest of the tree.",
+  );
+
   const offenders: string[] = [];
+  let walked = 0;
   for await (const file of walkTsFiles(EXTENSION_ROOT)) {
+    walked += 1;
     const rel = path.relative(REPO_ROOT, file);
     if (ALLOWED_CHILD_PROCESS_FILES.has(rel)) {
       continue;
@@ -109,6 +113,10 @@ test("no child_process imports outside the platform/git-credential whitelist (D-
     }
   }
 
+  assert.ok(
+    walked > 0,
+    `D-07-03: walked ${EXTENSION_ROOT_REL} and found no .ts files -- a walk over zero files is a gate reporting success over nothing.`,
+  );
   assert.deepEqual(
     offenders,
     [],
@@ -119,13 +127,18 @@ test("no child_process imports outside the platform/git-credential whitelist (D-
 // AUTH-06/08/09 + EXEC-01..04 + EXEC-05 / HOOK-06 assertion: the whitelist
 // is exactly the three load-bearing sites named below -- nobody silently
 // widened it. If a future change needs another file with node:child_process,
-// it MUST update both ALLOWED_CHILD_PROCESS_FILES above AND this assertion's
-// expected array in the same commit, with a justification recorded in the
-// docstring header.
+// it MUST update both SHELL_OUT_EXEMPT_TARGETS in the registry AND this
+// assertion's expected array in the same commit, with a justification recorded
+// in the docstring header. The expectation is spelled relative to the extension
+// root because the full paths are owned by the registry (D-07-05); comparing
+// the whitelist against the same group it was built from would pin nothing.
 test("whitelist: exactly three files may import node:child_process", () => {
-  assert.deepEqual([...ALLOWED_CHILD_PROCESS_FILES].sort(), [
-    "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts",
-    "extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts",
-    "extensions/pi-claude-marketplace/platform/git-credential.ts",
-  ]);
+  assert.deepEqual(
+    [...ALLOWED_CHILD_PROCESS_FILES].map((rel) => path.relative(EXTENSION_ROOT_REL, rel)).sort(),
+    [
+      "bridges/hooks/async-rewake/registry.ts",
+      "bridges/hooks/dispatch-exec.ts",
+      "platform/git-credential.ts",
+    ],
+  );
 });

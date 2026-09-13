@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
 
-const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+import { PACKAGE_JSON_REL } from "./gate-targets.ts";
+import { REPO_ROOT } from "./source-scan.ts";
 
 /**
  * IL-4: V1 MUST NOT emit telemetry (no metrics, event sink, or analytics
@@ -35,7 +35,7 @@ interface PackageJson {
 }
 
 test("no telemetry / analytics dependencies in package.json (IL-4)", async () => {
-  const raw = await readFile(path.join(REPO_ROOT, "package.json"), "utf8");
+  const raw = await readFile(path.join(REPO_ROOT, PACKAGE_JSON_REL), "utf8");
   const pkg = JSON.parse(raw) as PackageJson;
 
   const allDeps: Record<string, string> = {
@@ -44,6 +44,14 @@ test("no telemetry / analytics dependencies in package.json (IL-4)", async () =>
     ...(pkg.peerDependencies ?? {}),
     ...(pkg.optionalDependencies ?? {}),
   };
+
+  // D-07-03: every dependency section is optional, so a manifest whose sections
+  // moved or were renamed yields an empty map and an empty offender list -- a
+  // ban that passes precisely because it examined no dependency at all.
+  assert.ok(
+    Object.keys(allDeps).length > 0,
+    `D-07-03: ${PACKAGE_JSON_REL} yielded no dependencies, so this ban scanned nothing`,
+  );
 
   const offenders: string[] = [];
   for (const name of Object.keys(allDeps)) {

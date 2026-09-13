@@ -16,9 +16,11 @@ import {
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { AgentOwnershipConflictError } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 import { ManualRecoveryError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import { createRemovalOps } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
+import { createDelegatingRemovalOps } from "../../platform/removal-ops-fake.ts";
 
 import type { AgentsReplacement } from "../../../extensions/pi-claude-marketplace/bridges/agents/types.ts";
-import type { ResolvedPluginInstallable } from "../../../extensions/pi-claude-marketplace/domain/resolver.ts";
+import type { ResolvedPluginInstallable } from "../../../extensions/pi-claude-marketplace/domain/resolver-types.ts";
 import type { AgentsIndex } from "../../../extensions/pi-claude-marketplace/persistence/agents-index-schema.ts";
 
 async function createStageTree(t: TestContext, prefix: string) {
@@ -66,7 +68,7 @@ describe("prepareStagePluginAgents", () => {
     } satisfies ResolvedPluginInstallable;
 
     // act
-    const prepared = await prepareStagePluginAgents({
+    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
       marketplaceName: "catalog",
@@ -74,7 +76,7 @@ describe("prepareStagePluginAgents", () => {
       pluginRoot,
       pluginDataDir,
       resolved,
-      agentsSourceDir: null,
+      agentsDirs: [],
     });
 
     // assert
@@ -109,7 +111,7 @@ describe("prepareStagePluginAgents", () => {
     } satisfies ResolvedPluginInstallable;
 
     // act
-    const prepared = await prepareStagePluginAgents({
+    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
       marketplaceName: "catalog",
@@ -117,10 +119,10 @@ describe("prepareStagePluginAgents", () => {
       pluginRoot,
       pluginDataDir,
       resolved,
-      agentsSourceDir,
+      agentsDirs: [agentsSourceDir],
       knownSkills: [],
     });
-    const cleanupLeak = await commitPreparedAgents(prepared);
+    const cleanupLeak = await commitPreparedAgents(createRemovalOps(), prepared);
 
     // assert
     assert.deepStrictEqual(prepared, {
@@ -130,6 +132,78 @@ describe("prepareStagePluginAgents", () => {
     assert.strictEqual(cleanupLeak, undefined);
     assert.strictEqual(await exists(locations.agentsDir), false);
     assert.strictEqual(await exists(locations.agentsIndexPath), false);
+  });
+
+  test("stages every ordered agent directory and keeps the first cross-directory duplicate", async (t) => {
+    // arrange
+    const { pluginRoot, agentsSourceDir, locations, pluginDataDir } = await createStageTree(
+      t,
+      "agents-stage-multiple-dirs-",
+    );
+    const generatedAgentsDir = path.join(pluginRoot, "generated-agents");
+    await mkdir(generatedAgentsDir, { recursive: true });
+    const firstSharedPath = path.join(agentsSourceDir, "shared.md");
+    const duplicateSharedPath = path.join(generatedAgentsDir, "shared.md");
+    const builderPath = path.join(generatedAgentsDir, "builder.md");
+    await writeFile(
+      firstSharedPath,
+      "---\nname: shared\ndescription: First shared agent\ntools: Read\n---\n\nFirst.\n",
+    );
+    await writeFile(
+      duplicateSharedPath,
+      "---\nname: shared\ndescription: Later shared agent\ntools: Read\n---\n\nLater.\n",
+    );
+    await writeFile(
+      builderPath,
+      "---\nname: builder\ndescription: Builder agent\ntools: Read\n---\n\nBuild.\n",
+    );
+    const resolved = {
+      installable: true,
+      state: "installable",
+      name: "acme",
+      pluginRoot,
+      supported: ["agents"],
+      unsupported: [],
+      notes: [],
+      componentPaths: { skills: [], commands: [], agents: ["agents", "generated-agents"] },
+      mcpServers: {},
+      defaultEnabled: true,
+    } satisfies ResolvedPluginInstallable;
+
+    // act
+    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
+      locations,
+      cwd: locations.scopeRoot,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      resolved,
+      agentsDirs: [agentsSourceDir, generatedAgentsDir],
+    });
+
+    // assert
+    assert.strictEqual(prepared.kind, "staged");
+    assert.deepStrictEqual(prepared.result, {
+      stagedNames: ["pi-claude-marketplace-acme-shared", "pi-claude-marketplace-acme-builder"],
+      recorded: [
+        {
+          generatedName: "pi-claude-marketplace-acme-shared",
+          sourcePath: firstSharedPath,
+          targetPath: path.join(locations.agentsDir, "pi-claude-marketplace-acme-shared.md"),
+        },
+        {
+          generatedName: "pi-claude-marketplace-acme-builder",
+          sourcePath: builderPath,
+          targetPath: path.join(locations.agentsDir, "pi-claude-marketplace-acme-builder.md"),
+        },
+      ],
+      warnings: [
+        `agent source "shared" in "${generatedAgentsDir}" elides to generated name "pi-claude-marketplace-acme-shared" already produced by an earlier componentPaths.agents entry; ignoring duplicate.`,
+      ],
+      failed: [],
+    });
+    assert.strictEqual(await exists(duplicateSharedPath), true);
   });
 
   test("stages the complete agent-family records and generated bytes", async (t) => {
@@ -215,7 +289,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
     } satisfies ResolvedPluginInstallable;
 
     // act
-    const prepared = await prepareStagePluginAgents({
+    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
       marketplaceName: "catalog",
@@ -223,7 +297,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
       pluginRoot,
       pluginDataDir,
       resolved,
-      agentsSourceDir,
+      agentsDirs: [agentsSourceDir],
       knownSkills: ["acme-helper"],
       mapModel: true,
     });
@@ -290,7 +364,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
     } satisfies ResolvedPluginInstallable;
 
     // act
-    const prepared = await prepareStagePluginAgents({
+    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations: userLocations,
       cwd: userLocations.scopeRoot,
       marketplaceName: "catalog",
@@ -298,7 +372,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
       pluginRoot,
       pluginDataDir,
       resolved,
-      agentsSourceDir,
+      agentsDirs: [agentsSourceDir],
     });
 
     // assert
@@ -328,7 +402,7 @@ provenance:
 Read \${CLAUDE_PROJECT_DIR} and ${pluginRoot}.
 `,
     );
-    assert.strictEqual(await abortPreparedAgents(prepared), undefined);
+    assert.strictEqual(await abortPreparedAgents(createRemovalOps(), prepared), undefined);
   });
 
   test("aggregates index, conversion, and discovery warnings in stable order", async (t) => {
@@ -388,7 +462,7 @@ Duplicate body.
     ];
 
     // act
-    const prepared = await prepareStagePluginAgents({
+    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
       marketplaceName: "catalog",
@@ -396,7 +470,7 @@ Duplicate body.
       pluginRoot,
       pluginDataDir,
       resolved,
-      agentsSourceDir,
+      agentsDirs: [agentsSourceDir],
       mapModel: true,
     });
 
@@ -490,7 +564,7 @@ Review files.
     } satisfies ResolvedPluginInstallable;
 
     // act
-    const prepared = await prepareStagePluginAgents({
+    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
       marketplaceName: "catalog",
@@ -498,7 +572,7 @@ Review files.
       pluginRoot,
       pluginDataDir,
       resolved,
-      agentsSourceDir,
+      agentsDirs: [agentsSourceDir],
     });
 
     // assert
@@ -578,7 +652,7 @@ Review files.
     // act & assert
     await assert.rejects(
       () =>
-        prepareStagePluginAgents({
+        prepareStagePluginAgents(createRemovalOps(), {
           locations,
           cwd: locations.scopeRoot,
           marketplaceName: "catalog",
@@ -586,7 +660,7 @@ Review files.
           pluginRoot,
           pluginDataDir,
           resolved,
-          agentsSourceDir,
+          agentsDirs: [agentsSourceDir],
         }),
       (error: unknown) => {
         assert.ok(error instanceof AgentOwnershipConflictError);
@@ -640,7 +714,7 @@ Review files.
     } satisfies ResolvedPluginInstallable;
 
     // act
-    const error = await prepareStagePluginAgents({
+    const error = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
       marketplaceName: "catalog",
@@ -648,7 +722,7 @@ Review files.
       pluginRoot,
       pluginDataDir,
       resolved,
-      agentsSourceDir,
+      agentsDirs: [agentsSourceDir],
     }).then(
       () => undefined,
       (reason: unknown) => reason,
@@ -782,7 +856,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
       ],
     };
     const expectedIndexBytes = `${JSON.stringify(expectedIndex, null, 2)}\n`;
-    const prepared = await prepareStagePluginAgents({
+    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
       marketplaceName: "catalog",
@@ -790,13 +864,13 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
       pluginRoot,
       pluginDataDir,
       resolved,
-      agentsSourceDir,
+      agentsDirs: [agentsSourceDir],
       knownSkills: ["acme-helper"],
       mapModel: true,
     });
 
     // act
-    const cleanupLeak = await commitPreparedAgents(prepared);
+    const cleanupLeak = await commitPreparedAgents(createRemovalOps(), prepared);
 
     // assert
     assert.strictEqual(cleanupLeak, undefined);
@@ -887,7 +961,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
-    const prepared = await prepareStagePluginAgents({
+    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
       marketplaceName: "catalog",
@@ -895,11 +969,11 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
       pluginRoot,
       pluginDataDir,
       resolved,
-      agentsSourceDir,
+      agentsDirs: [agentsSourceDir],
     });
 
     // act
-    const cleanupLeak = await commitPreparedAgents(prepared);
+    const cleanupLeak = await commitPreparedAgents(createRemovalOps(), prepared);
     const storedIndex: unknown = JSON.parse(await readFile(locations.agentsIndexPath, "utf8"));
 
     // assert
@@ -977,7 +1051,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
-    const prepared = await prepareStagePluginAgents({
+    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
       marketplaceName: "catalog",
@@ -985,11 +1059,11 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
       pluginRoot,
       pluginDataDir,
       resolved,
-      agentsSourceDir,
+      agentsDirs: [agentsSourceDir],
     });
 
     // act
-    const cleanupLeak = await commitPreparedAgents(prepared);
+    const cleanupLeak = await commitPreparedAgents(createRemovalOps(), prepared);
     const storedIndex: unknown = JSON.parse(await readFile(locations.agentsIndexPath, "utf8"));
 
     // assert
@@ -1064,7 +1138,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
-    const prepared = await prepareStagePluginAgents({
+    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
       marketplaceName: "catalog",
@@ -1072,7 +1146,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
       pluginRoot,
       pluginDataDir,
       resolved,
-      agentsSourceDir,
+      agentsDirs: [agentsSourceDir],
     });
     assert.strictEqual(prepared.kind, "staged");
     await rm(previousTarget);
@@ -1080,7 +1154,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
     await writeFile(path.join(previousTarget, "blocker.txt"), "keep");
 
     // act
-    const error = await commitPreparedAgents(prepared).then(
+    const error = await commitPreparedAgents(createRemovalOps(), prepared).then(
       () => undefined,
       (reason: unknown) => reason,
     );
@@ -1129,7 +1203,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
-    const prepared = await prepareStagePluginAgents({
+    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
       marketplaceName: "catalog",
@@ -1137,7 +1211,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
       pluginRoot,
       pluginDataDir,
       resolved,
-      agentsSourceDir,
+      agentsDirs: [agentsSourceDir],
     });
     assert.strictEqual(prepared.kind, "staged");
     await mkdir(locations.agentsDir, { recursive: true });
@@ -1146,7 +1220,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
     await writeFile(path.join(blockedTarget, "blocker.txt"), "keep");
 
     // act
-    const error = await commitPreparedAgents(prepared).then(
+    const error = await commitPreparedAgents(createRemovalOps(), prepared).then(
       () => undefined,
       (reason: unknown) => reason,
     );
@@ -1195,7 +1269,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
-    const prepared = await prepareStagePluginAgents({
+    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
       marketplaceName: "catalog",
@@ -1203,7 +1277,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
       pluginRoot,
       pluginDataDir,
       resolved,
-      agentsSourceDir,
+      agentsDirs: [agentsSourceDir],
     });
     assert.strictEqual(prepared.kind, "staged");
     await mkdir(locations.agentsDir, { recursive: true });
@@ -1225,7 +1299,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
     const vanishingPrepared = { ...prepared, _stagedFilePaths: stagedFilePaths };
 
     // act
-    const error = await commitPreparedAgents(vanishingPrepared).then(
+    const error = await commitPreparedAgents(createRemovalOps(), vanishingPrepared).then(
       () => undefined,
       (reason: unknown) => reason,
     );
@@ -1274,7 +1348,7 @@ describe("abortPreparedAgents", () => {
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
-    const prepared = await prepareStagePluginAgents({
+    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
       marketplaceName: "catalog",
@@ -1282,11 +1356,11 @@ describe("abortPreparedAgents", () => {
       pluginRoot,
       pluginDataDir,
       resolved,
-      agentsSourceDir: null,
+      agentsDirs: [],
     });
 
     // act
-    const cleanupLeak = await abortPreparedAgents(prepared);
+    const cleanupLeak = await abortPreparedAgents(createRemovalOps(), prepared);
 
     // assert
     assert.strictEqual(cleanupLeak, undefined);
@@ -1316,7 +1390,7 @@ describe("abortPreparedAgents", () => {
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
-    const prepared = await prepareStagePluginAgents({
+    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
       marketplaceName: "catalog",
@@ -1324,12 +1398,12 @@ describe("abortPreparedAgents", () => {
       pluginRoot,
       pluginDataDir,
       resolved,
-      agentsSourceDir,
+      agentsDirs: [agentsSourceDir],
     });
     assert.strictEqual(prepared.kind, "staged");
 
     // act
-    const cleanupLeak = await abortPreparedAgents(prepared);
+    const cleanupLeak = await abortPreparedAgents(createRemovalOps(), prepared);
 
     // assert
     assert.strictEqual(cleanupLeak, undefined);
@@ -1358,7 +1432,7 @@ describe("replacePreparedAgents", () => {
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
-    const prepared = await prepareStagePluginAgents({
+    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
       marketplaceName: "catalog",
@@ -1366,16 +1440,16 @@ describe("replacePreparedAgents", () => {
       pluginRoot,
       pluginDataDir,
       resolved,
-      agentsSourceDir: null,
+      agentsDirs: [],
     });
 
     // act
-    const replacement = await replacePreparedAgents(prepared);
+    const replacement = await replacePreparedAgents(createRemovalOps(), prepared);
 
     // assert
     assert.deepStrictEqual(replacement, { kind: "noop", prepared });
-    assert.deepStrictEqual(await rollbackAgentsReplacement(replacement), []);
-    assert.deepStrictEqual(await finalizeAgentsReplacement(replacement), []);
+    assert.deepStrictEqual(await rollbackAgentsReplacement(createRemovalOps(), replacement), []);
+    assert.deepStrictEqual(await finalizeAgentsReplacement(createRemovalOps(), replacement), []);
     assert.strictEqual(await exists(locations.agentsDir), false);
     assert.strictEqual(await exists(locations.agentsIndexPath), false);
   });
@@ -1422,7 +1496,7 @@ describe("replacePreparedAgents", () => {
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
-    const prepared = await prepareStagePluginAgents({
+    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
       marketplaceName: "catalog",
@@ -1430,12 +1504,12 @@ describe("replacePreparedAgents", () => {
       pluginRoot,
       pluginDataDir,
       resolved,
-      agentsSourceDir,
+      agentsDirs: [agentsSourceDir],
     });
     assert.strictEqual(prepared.kind, "staged");
 
     // act
-    const error = await replacePreparedAgents(prepared).then(
+    const error = await replacePreparedAgents(createRemovalOps(), prepared).then(
       () => undefined,
       (reason: unknown) => reason,
     );
@@ -1455,7 +1529,7 @@ describe("replacePreparedAgents", () => {
     assert.strictEqual(await readFile(foreignTarget, "utf8"), foreignBytes);
     assert.strictEqual(await readFile(locations.agentsIndexPath, "utf8"), foreignIndexBytes);
     assert.strictEqual(await exists(prepared.stagingDir), true);
-    assert.strictEqual(await abortPreparedAgents(prepared), undefined);
+    assert.strictEqual(await abortPreparedAgents(createRemovalOps(), prepared), undefined);
   });
 
   test("force replaces foreign previous content and rollback restores it exactly", async (t) => {
@@ -1506,7 +1580,7 @@ describe("replacePreparedAgents", () => {
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
-    const prepared = await prepareStagePluginAgents({
+    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
       marketplaceName: "catalog",
@@ -1514,14 +1588,14 @@ describe("replacePreparedAgents", () => {
       pluginRoot,
       pluginDataDir,
       resolved,
-      agentsSourceDir,
+      agentsDirs: [agentsSourceDir],
     });
     assert.strictEqual(prepared.kind, "staged");
 
     // act
-    const replacement = await replacePreparedAgents(prepared, { force: true });
+    const replacement = await replacePreparedAgents(createRemovalOps(), prepared, { force: true });
     const replacedIndex: unknown = JSON.parse(await readFile(locations.agentsIndexPath, "utf8"));
-    const rollbackLeaks = await rollbackAgentsReplacement(replacement);
+    const rollbackLeaks = await rollbackAgentsReplacement(createRemovalOps(), replacement);
 
     // assert
     assert.deepStrictEqual(replacedIndex, {
@@ -1624,7 +1698,7 @@ Current.
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
-    const prepared = await prepareStagePluginAgents({
+    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
       marketplaceName: "catalog",
@@ -1632,14 +1706,14 @@ Current.
       pluginRoot,
       pluginDataDir,
       resolved,
-      agentsSourceDir,
+      agentsDirs: [agentsSourceDir],
     });
     assert.strictEqual(prepared.kind, "staged");
 
     // act
-    const replacement = await replacePreparedAgents(prepared);
+    const replacement = await replacePreparedAgents(createRemovalOps(), prepared);
     const replacedBytes = await readFile(targetPath, "utf8");
-    const rollbackLeaks = await rollbackAgentsReplacement(replacement);
+    const rollbackLeaks = await rollbackAgentsReplacement(createRemovalOps(), replacement);
 
     // assert
     assert.strictEqual(replacedBytes, currentBytes);
@@ -1673,7 +1747,7 @@ Current.
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
-    const prepared = await prepareStagePluginAgents({
+    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
       marketplaceName: "catalog",
@@ -1681,14 +1755,14 @@ Current.
       pluginRoot,
       pluginDataDir,
       resolved,
-      agentsSourceDir,
+      agentsDirs: [agentsSourceDir],
     });
     assert.strictEqual(prepared.kind, "staged");
 
     // act
-    const replacement = await replacePreparedAgents(prepared);
+    const replacement = await replacePreparedAgents(createRemovalOps(), prepared);
     const installedIndex: unknown = JSON.parse(await readFile(locations.agentsIndexPath, "utf8"));
-    const rollbackLeaks = await rollbackAgentsReplacement(replacement);
+    const rollbackLeaks = await rollbackAgentsReplacement(createRemovalOps(), replacement);
 
     // assert
     assert.deepStrictEqual(installedIndex, {
@@ -1763,7 +1837,7 @@ Current.
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
-    const prepared = await prepareStagePluginAgents({
+    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
       marketplaceName: "catalog",
@@ -1771,14 +1845,14 @@ Current.
       pluginRoot,
       pluginDataDir,
       resolved,
-      agentsSourceDir,
+      agentsDirs: [agentsSourceDir],
     });
     assert.strictEqual(prepared.kind, "staged");
     await rm(targetPath);
 
     // act
-    const replacement = await replacePreparedAgents(prepared);
-    const rollbackLeaks = await rollbackAgentsReplacement(replacement);
+    const replacement = await replacePreparedAgents(createRemovalOps(), prepared);
+    const rollbackLeaks = await rollbackAgentsReplacement(createRemovalOps(), replacement);
 
     // assert
     assert.deepStrictEqual(rollbackLeaks, []);
@@ -1812,7 +1886,7 @@ Current.
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
-    const prepared = await prepareStagePluginAgents({
+    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
       marketplaceName: "catalog",
@@ -1820,14 +1894,14 @@ Current.
       pluginRoot,
       pluginDataDir,
       resolved,
-      agentsSourceDir,
+      agentsDirs: [agentsSourceDir],
     });
     assert.strictEqual(prepared.kind, "staged");
     await mkdir(locations.agentsDir, { recursive: true });
     await writeFile(targetPath, intruderBytes);
 
     // act
-    const error = await replacePreparedAgents(prepared).then(
+    const error = await replacePreparedAgents(createRemovalOps(), prepared).then(
       () => undefined,
       (reason: unknown) => reason,
     );
@@ -1892,7 +1966,7 @@ Current.
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
-    const prepared = await prepareStagePluginAgents({
+    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
       marketplaceName: "catalog",
@@ -1900,12 +1974,12 @@ Current.
       pluginRoot,
       pluginDataDir,
       resolved,
-      agentsSourceDir,
+      agentsDirs: [agentsSourceDir],
     });
     assert.strictEqual(prepared.kind, "staged");
 
     // act
-    const error = await replacePreparedAgents(prepared).then(
+    const error = await replacePreparedAgents(createRemovalOps(), prepared).then(
       () => undefined,
       (reason: unknown) => reason,
     );
@@ -1955,7 +2029,7 @@ Current.
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
-    const prepared = await prepareStagePluginAgents({
+    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations: customLocations,
       cwd: customLocations.scopeRoot,
       marketplaceName: "catalog",
@@ -1963,13 +2037,13 @@ Current.
       pluginRoot,
       pluginDataDir,
       resolved,
-      agentsSourceDir,
+      agentsDirs: [agentsSourceDir],
     });
     assert.strictEqual(prepared.kind, "staged");
     await mkdir(locations.agentsDir, { recursive: true });
 
     // act
-    const error = await replacePreparedAgents(prepared).then(
+    const error = await replacePreparedAgents(createRemovalOps(), prepared).then(
       () => undefined,
       (reason: unknown) => reason,
     );
@@ -1986,7 +2060,7 @@ Current.
     );
     assert.strictEqual(await exists(prepared.stagingDir), true);
     assert.deepStrictEqual(await readdir(locations.agentsDir), []);
-    assert.strictEqual(await abortPreparedAgents(prepared), undefined);
+    assert.strictEqual(await abortPreparedAgents(createRemovalOps(), prepared), undefined);
   });
 
   test("reports structured manual recovery when replacement and rollback both fail", async (t) => {
@@ -2018,7 +2092,7 @@ Current.
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
-    const prepared = await prepareStagePluginAgents({
+    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations: hostileLocations,
       cwd: hostileLocations.scopeRoot,
       marketplaceName: "catalog",
@@ -2026,12 +2100,12 @@ Current.
       pluginRoot,
       pluginDataDir,
       resolved,
-      agentsSourceDir,
+      agentsDirs: [agentsSourceDir],
     });
     assert.strictEqual(prepared.kind, "staged");
 
     // act
-    const error = await replacePreparedAgents(prepared).then(
+    const error = await replacePreparedAgents(createRemovalOps(), prepared).then(
       () => undefined,
       (reason: unknown) => reason,
     );
@@ -2090,7 +2164,7 @@ describe("rollbackAgentsReplacement", () => {
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
-    const prepared = await prepareStagePluginAgents({
+    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
       marketplaceName: "catalog",
@@ -2098,15 +2172,15 @@ describe("rollbackAgentsReplacement", () => {
       pluginRoot,
       pluginDataDir,
       resolved,
-      agentsSourceDir,
+      agentsDirs: [agentsSourceDir],
     });
     assert.strictEqual(prepared.kind, "staged");
-    const replacement = await replacePreparedAgents(prepared);
+    const replacement = await replacePreparedAgents(createRemovalOps(), prepared);
     await rm(locations.agentsIndexPath);
     await mkdir(locations.agentsIndexPath);
 
     // act
-    const rollbackLeaks = await rollbackAgentsReplacement(replacement);
+    const rollbackLeaks = await rollbackAgentsReplacement(createRemovalOps(), replacement);
 
     // assert
     assert.deepStrictEqual(rollbackLeaks, [
@@ -2115,6 +2189,119 @@ describe("rollbackAgentsReplacement", () => {
     assert.strictEqual(Object.isFrozen(rollbackLeaks), true);
     assert.strictEqual(await exists(targetPath), false);
     assert.strictEqual(await exists(prepared.stagingDir), false);
+  });
+
+  test("reports one leak per failed stage in stage order and leaves only the blocked roots", async (t) => {
+    // arrange
+    const { pluginRoot, agentsSourceDir, locations, pluginDataDir } = await createStageTree(
+      t,
+      "agents-rollback-stage-leaks-",
+    );
+    const generatedName = "pi-claude-marketplace-acme-current";
+    const sourcePath = path.join(agentsSourceDir, "current.md");
+    const targetPath = path.join(locations.agentsDir, `${generatedName}.md`);
+    await writeFile(
+      sourcePath,
+      "---\nname: current\ndescription: Current agent\ntools: Read\n---\n\nCurrent.\n",
+    );
+    await mkdir(locations.agentsDir, { recursive: true });
+    await writeFile(
+      targetPath,
+      `---\nname: ${generatedName}\nprovenance:\n  generatedBy: pi-claude-marketplace\n---\n\nPrevious.\n`,
+    );
+    const previousIndex: AgentsIndex = {
+      schemaVersion: 1,
+      agents: [
+        {
+          plugin: "acme",
+          marketplace: "catalog",
+          sourceAgent: "current",
+          generatedName,
+          sourcePath: "/previous/current.md",
+          targetPath,
+          sourceHash: "previous-hash",
+          droppedFields: [],
+          droppedTools: [],
+          warnings: [],
+        },
+      ],
+    };
+    const previousIndexBytes = `${JSON.stringify(previousIndex, null, 2)}\n`;
+    await mkdir(locations.extensionRoot, { recursive: true });
+    await writeFile(locations.agentsIndexPath, previousIndexBytes);
+    const resolved = {
+      installable: true,
+      state: "installable",
+      name: "acme",
+      pluginRoot,
+      supported: ["agents"],
+      unsupported: [],
+      notes: [],
+      componentPaths: { skills: [], commands: [], agents: ["agents"] },
+      mcpServers: {},
+      defaultEnabled: true,
+    } satisfies ResolvedPluginInstallable;
+    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
+      locations,
+      cwd: locations.scopeRoot,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      resolved,
+      agentsDirs: [agentsSourceDir],
+    });
+    assert.strictEqual(prepared.kind, "staged");
+    const replacement = await replacePreparedAgents(createRemovalOps(), prepared);
+    assert.strictEqual(replacement.kind, "replaced");
+    const replacedBytes = await readFile(targetPath, "utf8");
+    const backupDirectory = (await readdir(locations.agentsStagingDir)).find((name) =>
+      name.startsWith("backup-"),
+    );
+    assert.notStrictEqual(backupDirectory, undefined);
+    const backupRoot = path.join(locations.agentsStagingDir, backupDirectory ?? "missing");
+    const backupPath = path.join(backupRoot, `${generatedName}.md`);
+    const removalError = Object.assign(new Error("replacement removal denied"), { code: "EACCES" });
+    const restoreError = Object.assign(new Error("previous restoration denied"), {
+      code: "EACCES",
+    });
+    const stagingError = Object.assign(new Error("staging cleanup denied"), { code: "EACCES" });
+    // Three of the rollback's four removals fault and the fourth does not: the
+    // backup root's cleanup runs for real, which is the half of the partition a
+    // collaborator that removes nothing could not state. The index restore sits
+    // between the restore stage and the cleanups and reaches no removal verb
+    // here, so it contributes no leak and the third message is the staging one.
+    const removal = createDelegatingRemovalOps({
+      boundary: "delegate",
+      delegate: createRemovalOps(),
+      rmErrors: [
+        [targetPath, removalError],
+        [prepared.stagingDir, stagingError],
+      ],
+      renameErrors: [[backupPath, restoreError]],
+    });
+    const expectedLeaks = [
+      `failed to remove replacement agent file at ${targetPath}: replacement removal denied`,
+      `failed to restore previous agent file ${generatedName} from ${backupPath} to ${targetPath}: ` +
+        "previous restoration denied",
+      `failed to clean up agents staging directory at ${prepared.stagingDir}: ` +
+        "staging cleanup denied",
+    ];
+
+    // act
+    const leaks = await rollbackAgentsReplacement(removal.removalOps, replacement);
+    const stagingPresent = await exists(prepared.stagingDir);
+    const backupPresent = await exists(backupRoot);
+    const targetBytes = await readFile(targetPath, "utf8");
+    const indexBytes = await readFile(locations.agentsIndexPath, "utf8");
+
+    // assert
+    assert.deepStrictEqual(leaks, expectedLeaks);
+    assert.strictEqual(Object.isFrozen(leaks), true);
+    assert.strictEqual(stagingPresent, true);
+    assert.strictEqual(backupPresent, false);
+    assert.strictEqual(targetBytes, replacedBytes);
+    assert.strictEqual(indexBytes, previousIndexBytes);
   });
 
   test("rejects a replaced-shaped value that was not issued by the lifecycle", async (t) => {
@@ -2139,7 +2326,7 @@ describe("rollbackAgentsReplacement", () => {
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
-    const prepared = await prepareStagePluginAgents({
+    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
       marketplaceName: "catalog",
@@ -2147,13 +2334,13 @@ describe("rollbackAgentsReplacement", () => {
       pluginRoot,
       pluginDataDir,
       resolved,
-      agentsSourceDir,
+      agentsDirs: [agentsSourceDir],
     });
     assert.strictEqual(prepared.kind, "staged");
     const unknownReplacement = { kind: "replaced", prepared } satisfies AgentsReplacement;
 
     // act
-    const error = await rollbackAgentsReplacement(unknownReplacement).then(
+    const error = await rollbackAgentsReplacement(createRemovalOps(), unknownReplacement).then(
       () => undefined,
       (reason: unknown) => reason,
     );
@@ -2165,7 +2352,7 @@ describe("rollbackAgentsReplacement", () => {
       { name: "Error", message: "Unknown agents replacement handle.", cause: undefined },
     );
     assert.strictEqual(await exists(prepared.stagingDir), true);
-    assert.strictEqual(await abortPreparedAgents(prepared), undefined);
+    assert.strictEqual(await abortPreparedAgents(createRemovalOps(), prepared), undefined);
   });
 });
 
@@ -2213,7 +2400,7 @@ Current.
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
-    const prepared = await prepareStagePluginAgents({
+    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
       marketplaceName: "catalog",
@@ -2221,10 +2408,10 @@ Current.
       pluginRoot,
       pluginDataDir,
       resolved,
-      agentsSourceDir,
+      agentsDirs: [agentsSourceDir],
     });
     assert.strictEqual(prepared.kind, "staged");
-    const replacement = await replacePreparedAgents(prepared);
+    const replacement = await replacePreparedAgents(createRemovalOps(), prepared);
     assert.deepStrictEqual(
       (await readdir(locations.agentsStagingDir)).sort(),
       [
@@ -2234,8 +2421,8 @@ Current.
     );
 
     // act
-    const firstLeaks = await finalizeAgentsReplacement(replacement);
-    const secondLeaks = await finalizeAgentsReplacement(replacement);
+    const firstLeaks = await finalizeAgentsReplacement(createRemovalOps(), replacement);
+    const secondLeaks = await finalizeAgentsReplacement(createRemovalOps(), replacement);
 
     // assert
     assert.deepStrictEqual(firstLeaks, []);
@@ -2285,7 +2472,7 @@ Current.
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
-    const prepared = await prepareStagePluginAgents({
+    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
       marketplaceName: "catalog",
@@ -2293,10 +2480,10 @@ Current.
       pluginRoot,
       pluginDataDir,
       resolved,
-      agentsSourceDir,
+      agentsDirs: [agentsSourceDir],
     });
     assert.strictEqual(prepared.kind, "staged");
-    const replacement = await replacePreparedAgents(prepared);
+    const replacement = await replacePreparedAgents(createRemovalOps(), prepared);
     const stagingEntries = await readdir(locations.agentsStagingDir);
     const backupName = stagingEntries.find((name) => name.startsWith("backup-"));
     assert.ok(backupName !== undefined);
@@ -2309,9 +2496,9 @@ Current.
     });
 
     // act
-    const cleanupLeaks = await finalizeAgentsReplacement(replacement);
+    const cleanupLeaks = await finalizeAgentsReplacement(createRemovalOps(), replacement);
     await chmod(locations.agentsStagingDir, 0o700);
-    const retryLeaks = await finalizeAgentsReplacement(replacement);
+    const retryLeaks = await finalizeAgentsReplacement(createRemovalOps(), replacement);
 
     // assert
     assert.deepStrictEqual(cleanupLeaks, [
@@ -2344,7 +2531,7 @@ Current.
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
-    const prepared = await prepareStagePluginAgents({
+    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
       marketplaceName: "catalog",
@@ -2352,13 +2539,13 @@ Current.
       pluginRoot,
       pluginDataDir,
       resolved,
-      agentsSourceDir,
+      agentsDirs: [agentsSourceDir],
     });
     assert.strictEqual(prepared.kind, "staged");
     const unknownReplacement = { kind: "replaced", prepared } satisfies AgentsReplacement;
 
     // act
-    const error = await finalizeAgentsReplacement(unknownReplacement).then(
+    const error = await finalizeAgentsReplacement(createRemovalOps(), unknownReplacement).then(
       () => undefined,
       (reason: unknown) => reason,
     );
@@ -2370,6 +2557,6 @@ Current.
       { name: "Error", message: "Unknown agents replacement handle.", cause: undefined },
     );
     assert.strictEqual(await exists(prepared.stagingDir), true);
-    assert.strictEqual(await abortPreparedAgents(prepared), undefined);
+    assert.strictEqual(await abortPreparedAgents(createRemovalOps(), prepared), undefined);
   });
 });
