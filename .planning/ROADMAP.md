@@ -113,7 +113,12 @@ imports it directly. 204 pairs, corresponding-test gate at zero violations.
 4. A malformed bare `plugin.json` resolves `(unavailable)` carrying the existing `malformed plugin.json:` reason instead of being skipped, and a plugin with no manifest at either location still installs — the absent-manifest miss stays non-fatal. (MANF-04, MANF-05)
 5. `info` on a plugin whose `dependencies` array mixes bare strings with `{name, version, marketplace}` objects lists every element with its version constraint; nothing is dropped. (DEPS-01, DEPS-02)
 
-**Plans**: TBD
+**Plans**: 4 plans
+
+- [ ] `01-01-PLAN.md` — the ordered manifest candidate list, and both hardcoded manifest readers rewired to it (wave 1; MANF-01, MANF-02, MANF-04, MANF-05)
+- [ ] `01-02-PLAN.md` — the dependency element parser, the `info` render with its constraint parenthetical, and the new catalogued byte form (wave 1; DEPS-01, DEPS-02)
+- [ ] `01-03-PLAN.md` — component-path normalization plus the same-resolved-directory skill dedup that keeps MANF-01 from being a net output regression (wave 2, after 01-01; MANF-03)
+- [ ] `01-04-PLAN.md` — `info` sources dependencies from the plugin's own `plugin.json` when readable offline, with the marketplace entry as the fallback (wave 2, after 01-01 and 01-02; DEPS-01, DEPS-02)
 
 **Notes.** This phase closes `PMAN-01` and the display half of `PDEP-01`. PMAN-01 is a parity gap with no in-the-wild victim in the official marketplace today — the convention probe in `collectStrictComponentKind` already yields the same skill set the four bare-manifest plugins declare, their declared versions are unreachable because a resolved sha replaces the whole version ladder for git-subdir sources, and the manifest `description` is consumed nowhere in `extensions/`. That is why it is a safe warm-up rather than a blocker. PDEP-01's separate still-open question — whether the dependency note should also reappear on `install` and `list` — is not in this milestone: DEPS-01 and DEPS-02 both name `info` and only `info`.
 
@@ -223,7 +228,7 @@ plugin names — so plan these phases with the UI gate skipped.
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 1. Manifest read fidelity | v1.20 | 0/— | Not started | — |
+| 1. Manifest read fidelity | v1.20 | 0/4 | Planned | — |
 | 2. Uninstall data disposition and the uninstall option seam | v1.20 | 0/— | Not started | — |
 | 3. Dependency resolution | v1.20 | 0/— | Not started | — |
 | 4. Install provenance | v1.20 | 0/— | Not started | — |
