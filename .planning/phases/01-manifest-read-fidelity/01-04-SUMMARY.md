@@ -19,7 +19,7 @@ affects: [dependency-resolution, install-provenance, prune]
 actuals:
   tokens: 6695
   tasks: 2
-  commits: 3
+  commits: 5
 plan_head_before: 792b3c0dad0bd9fccd9d5b275a1d1f28c0d41e47
 
 # Tech tracking
@@ -203,3 +203,10 @@ See `key-decisions` in the frontmatter. The load-bearing one is `EISDIR`: an err
 ## Next Phase Readiness
 
 Phase 1 is complete — all four plans landed. `info` and Phase 3's resolution now read the same source, so D-01-19's display-vs-resolution split is moot and Phase 3 inherits no constraint from this surface. The parser (`domain/dependencies.ts`) and the ordering constant (`domain/manifest-path.ts`) are both reusable as-is; the note in D-01-31 about last-wins being a within-manifest rule only still needs honoring when Phase 3 intersects ranges across manifests.
+
+## Self-Check: PASSED
+
+- Every file named in `key-files.modified` exists on disk.
+- All four commits resolve: `5b684093`, `419dffeb`, `3c77490c`, `d5203e39`.
+- `npm run check` re-run green end to end; `pre-commit run --all-files` clean with no hook rewrites.
+- `commits: 5` is measured as `git rev-list --count 792b3c0d..HEAD` at rest, which includes this self-check commit.
