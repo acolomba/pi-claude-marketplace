@@ -3,11 +3,11 @@ gsd_state_version: "1.0"
 milestone: refine-unit-tests
 milestone_name: Refine Unit Tests
 status: Awaiting next milestone
-stopped_at: "Milestone closed and archived. PR #181 is open and unmerged by operator decision."
-last_updated: "2026-09-13T12:20:00.000Z"
+stopped_at: "Milestone closed and archived. PR #181 has since merged to main; quick task 260913-csn evaluated contributed PR #180 and repaired the merged suite on branch pr-180."
+last_updated: "2026-09-13T15:26:09.000Z"
 last_activity: 2026-09-13
-last_activity_desc: Milestone refine-unit-tests completed and archived
-state_head: 3580c7d14af502bb966c30b9420a9c39313798e2
+last_activity_desc: Quick task 260913-csn evaluated PR #180 (colon skill namespace), merged origin/main, repaired 144 stale test expectations
+state_head: 57b0163ebc068777a4a23a0ef43e68e69c70c591
 progress:
   total_phases: 9
   completed_phases: 9
