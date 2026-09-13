@@ -1504,13 +1504,17 @@ export interface PluginInfoRowBase {
 /**
  * `componentsResolved: true` arm. The renderer emits per-kind component
  * lists in alphabetical order (`agents`, `commands`, `mcp`, `skills`)
- * followed by an optional `dependencies:` line in
- * `<plugin>@<marketplace>` form.
+ * followed by an optional `dependencies:` line. Each dependency is a
+ * `<plugin>@<marketplace>` address, optionally carrying the constraint
+ * the manifest declared for it in one trailing parenthetical -- a bare
+ * version range, a labelled short sha, or both with the range first
+ * (D-01-30). The strings arrive fully rendered.
  *
  * PRECONDITION: per-kind arrays and the `dependencies` array MUST be
- * pre-sorted alphabetically at construction time. The renderer assumes
- * sorted input and does NOT sort defensively -- defensive sorting
- * would mask caller contract violations.
+ * pre-sorted at construction time -- the per-kind arrays alphabetically,
+ * `dependencies` on the dependency NAME rather than on the rendered
+ * string (D-01-04). The renderer assumes sorted input and does NOT sort
+ * defensively -- defensive sorting would mask caller contract violations.
  */
 export interface PluginInfoComponentsResolved {
   readonly componentsResolved: true;

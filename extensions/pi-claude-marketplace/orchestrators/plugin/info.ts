@@ -36,6 +36,7 @@ import {
   type DroppedHook,
   type HookConfigParseResult,
 } from "../../domain/components/hooks.ts";
+import { parseDeclaredDependencies, type DeclaredDependency } from "../../domain/dependencies.ts";
 import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest, type MarketplaceManifest } from "../../domain/manifest.ts";
 import {
@@ -320,27 +321,97 @@ async function discoverComponentNames(
   return [...names].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
 }
 
+/** D-01-30: a resolved sha renders short-formed to its first seven characters. */
+const SHORT_SHA_LENGTH = 7;
+
+/** A dependency whose marketplace is settled, so it has a renderable address. */
+interface AddressedDependency extends DeclaredDependency {
+  readonly marketplace: string;
+}
+
 /**
- * Resolve a manifest entry's `dependencies` field into a sorted
- * `readonly string[]` for the renderer. The schema keeps this field
- * opaque (`Type.Unknown()`); the renderer surfaces dependencies as
- * `<plugin>@<marketplace>` strings when the manifest provides them in
- * that form. When the field is an array of strings, sort
- * alphabetically (deterministic byte form across manifest authoring
- * orders); any other shape returns `undefined` so the renderer omits
- * the `dependencies:` line.
+ * D-01-02 / D-01-03: an element that declared no marketplace resolves in the
+ * DECLARING plugin's own marketplace, which is the real resolution target.
+ * A bare string that carried an address was already split into a name and a
+ * marketplace by the parser, so it keeps what it declared.
  */
-function normalizeDependencies(raw: unknown): readonly string[] | undefined {
-  if (!Array.isArray(raw)) {
+function withDeclaringMarketplace(
+  dependency: DeclaredDependency,
+  declaringMarketplace: string,
+): AddressedDependency {
+  return { ...dependency, marketplace: dependency.marketplace ?? declaringMarketplace };
+}
+
+/**
+ * D-01-31: elements resolving to the same `<name>@<marketplace>` collapse to
+ * one, the LAST declaration winning, and the discarded one is not surfaced.
+ * The insertion order of the surviving keys is the first declaration's, which
+ * is what keeps the D-01-04 name-tie ordering stable.
+ *
+ * This is the right rule WITHIN one manifest and the wrong one ACROSS
+ * manifests, where ranges accumulate and intersect instead.
+ */
+function collapseByAddress(
+  dependencies: readonly AddressedDependency[],
+): readonly AddressedDependency[] {
+  const byAddress = new Map<string, AddressedDependency>();
+  for (const dependency of dependencies) {
+    byAddress.set(`${dependency.name}@${dependency.marketplace}`, dependency);
+  }
+
+  return [...byAddress.values()];
+}
+
+/**
+ * D-01-30: the address, followed by the constraint parenthetical when the
+ * element declared one. A version range renders BARE (it is self-evidently a
+ * version); a sha renders LABELLED and short-formed. Both present share ONE
+ * parenthetical, version first.
+ */
+function renderDependency(dependency: AddressedDependency): string {
+  const address = `${dependency.name}@${dependency.marketplace}`;
+  const constraints: string[] = [];
+  if (dependency.version !== undefined) {
+    constraints.push(dependency.version);
+  }
+
+  if (dependency.sha !== undefined) {
+    constraints.push(`sha ${dependency.sha.slice(0, SHORT_SHA_LENGTH)}`);
+  }
+
+  return constraints.length === 0 ? address : `${address} (${constraints.join(", ")})`;
+}
+
+/**
+ * Render a manifest entry's `dependencies` field into the pre-sorted
+ * `readonly string[]` the renderer's precondition requires (DEPS-01,
+ * DEPS-02). The schema keeps the field opaque (`Type.Unknown()`), so
+ * `parseDeclaredDependencies` owns every question about which elements are
+ * usable; this adds only the four caller-side rules -- the marketplace
+ * fill-in, the last-wins collapse, the ordering, and the byte form.
+ *
+ * D-01-04: the sort key is the dependency NAME, not the rendered display
+ * string, so identity ordering survives a change to the render form. The sort
+ * is stable, so two entries sharing a name keep their post-collapse
+ * declaration order.
+ *
+ * Returns `undefined` when no element is usable, so the renderer omits the
+ * `dependencies:` line exactly as it does for an empty array.
+ */
+function renderDependencyList(
+  raw: unknown,
+  declaringMarketplace: string,
+): readonly string[] | undefined {
+  const declared = parseDeclaredDependencies(raw).map((dependency) =>
+    withDeclaringMarketplace(dependency, declaringMarketplace),
+  );
+  if (declared.length === 0) {
     return undefined;
   }
 
-  const strings = raw.filter((d): d is string => typeof d === "string");
-  if (strings.length === 0) {
-    return undefined;
-  }
-
-  return [...strings].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+  return [...collapseByAddress(declared)]
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }))
+    .map(renderDependency);
 }
 
 /**
@@ -835,7 +906,10 @@ async function buildBlock(args: {
   const entry = lookup.entry;
   const manifestVersion = entry.version;
   const description = entry.description;
-  const dependencies = normalizeDependencies((entry as Record<string, unknown>).dependencies);
+  const dependencies = renderDependencyList(
+    (entry as Record<string, unknown>).dependencies,
+    marketplace,
+  );
 
   // INFO-05 source-kind gate. `parsedSource` is threaded into both row
   // builders so the not-installable arms can enumerate components from
