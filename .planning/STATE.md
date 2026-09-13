@@ -3,11 +3,11 @@ gsd_state_version: "1.0"
 milestone: refine-unit-tests
 milestone_name: Refine Unit Tests
 status: Awaiting next milestone
-stopped_at: "Milestone closed and archived. PR #181 has since merged to main; quick task 260913-csn evaluated contributed PR #180 and repaired the merged suite on branch pr-180."
-last_updated: "2026-09-13T15:26:09.000Z"
+stopped_at: "Milestone closed and archived. PR #181 has since merged to main; quick tasks 260913-csn (PR #180 evaluation and suite repair, branch pr-180) and 260913-skt (SKTK-01 skill-token rewrite, branch features/skill-token-rewrite) followed."
+last_updated: "2026-09-13T19:22:55.000Z"
 last_activity: 2026-09-13
-last_activity_desc: Quick task 260913-csn evaluated PR #180 (colon skill namespace), merged origin/main, repaired 144 stale test expectations
-state_head: 57b0163ebc068777a4a23a0ef43e68e69c70c591
+last_activity_desc: Quick task 260913-skt shipped SKTK-01 — staged skill content retargets same-plugin skill references onto installed names
+state_head: 6551dfbf387d166f655004ec9e0421686b86cb1d
 progress:
   total_phases: 9
   completed_phases: 9
