@@ -3,14 +3,13 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 /**
- * Gate for `githubactions:S6505` -- package manager scripts must not run during installation.
+ * Fails any workflow that installs npm packages without `--ignore-scripts`. Without the flag,
+ * a dependency's install script runs arbitrary code inside the workflow job, with whatever
+ * permissions and secrets that job holds.
  *
- * SonarCloud reports the rule only where it indexes the workflow files, and it reports nothing
- * about a line this repository has not committed yet. This gate runs on every workflow change so
- * an install call that omits the flag fails before it lands.
- *
- * No off-the-shelf workflow linter carries S6505, which is why this is a local script rather than
- * another hook. Its companion `.negative.mjs` plants a violation and proves the gate flags it.
+ * No off-the-shelf workflow linter carries this check, which is why this is a local script
+ * rather than another hook. Its companion `.negative.mjs` plants a violation and proves the
+ * gate flags it.
  */
 
 const defaultProjectRoot = path.resolve(fileURLToPath(new URL("..", import.meta.url)));

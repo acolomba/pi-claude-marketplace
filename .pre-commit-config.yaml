@@ -30,17 +30,6 @@ repos:
       - id: forbid-submodules
       - id: forbid-new-submodules
 
-  - repo: https://github.com/pre-commit/mirrors-prettier
-    rev: v4.0.0-alpha.8
-    hooks:
-      - id: prettier
-        files: '\.(js|json|ts)$'
-        # Pin prettier to match the npm devDependency (the mirror otherwise
-        # floats and CI resolved a version that reformats TS union types
-        # differently from the local check).
-        additional_dependencies:
-          - prettier@3.9.5
-
   - repo: https://github.com/sirosen/texthooks
     rev: 0.7.1
     hooks:
@@ -98,14 +87,17 @@ repos:
     rev: v1.30.1
     hooks:
       - id: zizmor
-        # githubactions:S7637. The severity floor keeps this on unpinned-uses,
-        # the one High-severity audit this repository trips; see zizmor.yml.
-        # --no-progress is repeated because overriding args replaces the
-        # upstream list rather than extending it.
-        args: ["--no-progress", "--config", "zizmor.yml", "--min-severity", "high"]
+        # --no-progress is repeated here. Setting args replaces the upstream list
+        # instead of adding to it.
+        args: ["--no-progress", "--config", "zizmor.yml"]
 
   - repo: local
     hooks:
+      - id: prettier
+        name: prettier
+        entry: node_modules/.bin/prettier --write
+        language: system
+        files: '\.(js|json|ts)$|^scripts/.*\.mjs$'
       - id: npm-lint
         name: npm lint
         entry: npm run lint
@@ -130,8 +122,8 @@ repos:
         language: system
         pass_filenames: false
         files: '^(\.fallowrc\.json|tsconfig\.json|eslint\.config\.js|(extensions|tests)/.*\.(ts|mjs)|scripts/.*\.mjs|package(-lock)?\.json)$'
-      # githubactions:S6505. SonarCloud only reports the rule on what is already
-      # committed; this runs it on the change itself.
+      # Fails any workflow that installs npm packages without --ignore-scripts.
+      # It runs on the change itself, before the code is committed.
       - id: workflow-install-scripts
         name: npm lint workflows
         entry: npm run lint:workflows

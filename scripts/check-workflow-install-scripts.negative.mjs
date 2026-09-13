@@ -27,7 +27,7 @@ jobs:
 try {
   await mkdir(workflowDirectory, { recursive: true });
 
-  // The plant: an install call with no --ignore-scripts, which is the S6505 violation itself.
+  // The plant: an install call with no --ignore-scripts, which is the violation.
   await writeFile(workflowPath, workflow("npm ci"));
   assert.deepStrictEqual(checkWorkflowInstallScripts(fixtureRoot), [
     { path: ".github/workflows/planted.yml", line: 8, text: "run: npm ci" },
