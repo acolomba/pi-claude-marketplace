@@ -121,6 +121,7 @@ trufflehog worktree failure (SKIP'd, documented); substitute filesystem scan cle
 | 1 | `f973f1e1` | `test: expect colon-namespaced skill names across the suite` |
 | 2 | `57b0163e` | `docs: record the colon skill namespace change` |
 | 3 | (this commit) | `docs(quick): record the PR #180 evaluation and repair` |
+| 4 | (follow-up) | `test(e2e): expect the colon skill name in the import flow` — the pinned e2e suite runs only in CI's e2e job, not in `npm run check`, so its one stale expectation surfaced on the PR after the push |
 
 ## Evaluation verdict
 
