@@ -94,6 +94,16 @@ repos:
       - id: markdownlint-cli2
         exclude: ^(tests/fixtures/|tests/bridges/_fixtures/|\.planning/)
 
+  - repo: https://github.com/zizmorcore/zizmor-pre-commit
+    rev: v1.30.1
+    hooks:
+      - id: zizmor
+        # githubactions:S7637. The severity floor keeps this on unpinned-uses,
+        # the one High-severity audit this repository trips; see zizmor.yml.
+        # --no-progress is repeated because overriding args replaces the
+        # upstream list rather than extending it.
+        args: ["--no-progress", "--config", "zizmor.yml", "--min-severity", "high"]
+
   - repo: local
     hooks:
       - id: npm-lint
