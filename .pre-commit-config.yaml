@@ -120,6 +120,14 @@ repos:
         language: system
         pass_filenames: false
         files: '^(\.fallowrc\.json|tsconfig\.json|eslint\.config\.js|(extensions|tests)/.*\.(ts|mjs)|scripts/.*\.mjs|package(-lock)?\.json)$'
+      # githubactions:S6505. SonarCloud only reports the rule on what is already
+      # committed; this runs it on the change itself.
+      - id: workflow-install-scripts
+        name: npm lint workflows
+        entry: npm run lint:workflows
+        language: system
+        pass_filenames: false
+        files: '^\.github/workflows/.*\.ya?ml$'
       # RCOV-03. The same changed-pair gate the CI `direct-coverage` job runs,
       # at the same strictness, with a commit-scoped base instead of the
       # branch-scoped default (D-08-A07). Cost: one focused test run per pair
