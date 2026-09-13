@@ -33,9 +33,9 @@ Closes the display half of `PDEP-01`. `normalizeDependencies` filters the array
 to `typeof d === "string"`, dropping every object-shaped entry -- the shape
 upstream documents as the primary use case.
 
-- [ ] **DEPS-01**: `info` shows a dependency declared as
+- [x] **DEPS-01**: `info` shows a dependency declared as
   `{name, version, marketplace}`, including its version constraint.
-- [ ] **DEPS-02**: `info` shows every element of a dependency array that mixes
+- [x] **DEPS-02**: `info` shows every element of a dependency array that mixes
   bare strings and objects.
 
 ### Dependency resolution (RESV)
@@ -134,8 +134,8 @@ this milestone.
 | MANF-03 | Phase 1 | Pending |
 | MANF-04 | Phase 1 | Pending |
 | MANF-05 | Phase 1 | Pending |
-| DEPS-01 | Phase 1 | Pending |
-| DEPS-02 | Phase 1 | Pending |
+| DEPS-01 | Phase 1 | Complete |
+| DEPS-02 | Phase 1 | Complete |
 | RESV-01 | Phase 3 | Pending |
 | RESV-02 | Phase 3 | Pending |
 | RESV-03 | Phase 3 | Pending |

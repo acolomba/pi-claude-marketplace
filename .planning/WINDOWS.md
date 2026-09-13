@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 22
+open_count: 23
 waived_count: 0
 fixed_count: 9
-total_count: 31
-last_updated: 2026-09-09T16:14:31.361Z
+total_count: 32
+last_updated: 2026-09-13T19:27:02.848Z
 ---
 
 # Broken Windows Ledger
@@ -46,6 +46,7 @@ last_updated: 2026-09-09T16:14:31.361Z
 | 29 | 117 | deviation | .planning/codebase/CONVENTIONS.md | 151 | CONVENTIONS.md:151 claims barrels exist per bridge kind 'plus the aggregate bridges/index.ts'. Measured in 117-12: extensions/pi-claude-marketplace/bridges/ holds agents/, commands/, hooks/, mcp/, skills/ and README.md — there is no bridges/index.ts. The five per-kind barrels do exist. Documentation drift in a planning document, outside the source tree and outside this phase's scope (D-117-13 opened no production licence and this plan edits no source); recorded, not fixed. | open |  | 2026-09-03T22:29:00.933Z |  |
 | 30 | 117 | unrun-verify | scripts/test-coverage-direct.mjs |  | WR-05 (review iteration 2): the two direct-coverage sweeps have no automated control. Both stop at the first accepted D-116-01a shortfall, so a red run does not distinguish a genuine new gap from a known one, and test:coverage:direct:negative runs in every CI job while the gate it controls runs nowhere. The reviewer's remedy (teach the script an accepted-shortfall list) is barred in terms by D-117-20: 'not by a ledger-keyed verdict (which would be D-116-01a's banned pragma wearing a different hat)'. Built and measured during the fix pass, then reverted unshipped: with the list the changed-pairs sweep runs 204 pairs at exit 0 (197 passed, 7 accepted shortfalls each named with its ledger entry), and both self-expiry refusals work (a listed module that becomes complete, and an entry naming a module no longer in the tree). All seven readings are identical on Node v22.22.2 and v26.8.1. Mitigated in documentation only: CONTRIBUTING.md now names the seven modules and their exact readings, so a contributor can tell an expected stop from a regression without opening a planning artifact. Needs an operator decision to close: either revisit D-117-20 or accept that the gate has no CI control. RESOLVED 2026-09-04 by operator decision: D-117-20 stands (no ledger-keyed gate verdict); SC-4's literal wording accepted as superseded via an overrides entry on 117-VERIFICATION.md. The reproducibility half was fixed outright by npm run test:coverage:direct:report (commit 1495488b), which regenerates all 204 rows from the gate's own enumeration and blocks nothing. | fixed |  | 2026-09-04T01:03:42.619Z | 2026-09-09T16:14:31.361Z |
 | 31 | 106 | deviation | tests/architecture/compat-01-no-expansion.test.ts |  | The workflows reason required the inherited compatibility lock to append the new closed-set member. | fixed |  | 2026-08-29T19:13:44.624Z | 2026-08-29T19:13:48.337Z |
+| 32 | 01 | deviation | extensions/pi-claude-marketplace/orchestrators/plugin/info.ts |  | buildRemoteNotInstalledRow spreads a dependencies field the componentsResolved:false row shape does not carry, so the D-01-32 cold-git fallback renders nothing | open |  | 2026-09-13T19:27:02.848Z |  |
 
 ````json
 [
@@ -420,6 +421,18 @@ last_updated: 2026-09-09T16:14:31.361Z
     "reason": "",
     "recorded_at": "2026-08-29T19:13:44.624Z",
     "resolved_at": "2026-08-29T19:13:48.337Z"
+  },
+  {
+    "id": 32,
+    "kind": "deviation",
+    "phase": "01",
+    "file": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts",
+    "line": null,
+    "description": "buildRemoteNotInstalledRow spreads a dependencies field the componentsResolved:false row shape does not carry, so the D-01-32 cold-git fallback renders nothing",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-09-13T19:27:02.848Z",
+    "resolved_at": null
   }
 ]
 ````
