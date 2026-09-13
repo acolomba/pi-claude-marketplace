@@ -526,12 +526,12 @@ export const MISSING_TARGET_PROBES = [
  * renamed as any module.
  */
 export const EVIDENCE_RECORD_TARGETS = [
-  ".planning/phases/07-gate-integrity/07-FINDING-DISPOSITIONS.md",
+  ".planning/milestones/refine-unit-tests-phases/07-gate-integrity/07-FINDING-DISPOSITIONS.md",
 ] as const;
 
 /** The disposition of every finding routed to the gate-integrity work. */
 export const FINDING_DISPOSITIONS_REL: (typeof EVIDENCE_RECORD_TARGETS)[number] =
-  ".planning/phases/07-gate-integrity/07-FINDING-DISPOSITIONS.md";
+  ".planning/milestones/refine-unit-tests-phases/07-gate-integrity/07-FINDING-DISPOSITIONS.md";
 
 /**
  * D-07-19 / GGAT-04: every export the repository publishes that no production
