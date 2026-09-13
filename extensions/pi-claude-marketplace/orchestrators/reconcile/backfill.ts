@@ -255,18 +255,12 @@ export async function scanForceInstalledBackfills(
  */
 async function backfillOnePluginIsolated(
   opts: ApplyReconcileOptions,
-  target: {
-    scope: Scope;
-    marketplace: string;
-    mp: StateMarketplaceRecord;
-    plugin: string;
-    record: StatePluginRecord;
-  },
+  target: BackfillTarget,
   reinstallPlugin: ReinstallPluginFn,
   alreadyTouched: ReadonlySet<string>,
   outcomes: PerEntryOutcome[],
 ): Promise<boolean> {
-  const { scope, marketplace, mp, plugin, record } = target;
+  const { scope, marketplace, plugin, record } = target;
   // D-68-03: scan ONLY partially-installed plugins.
   if (record.compatibility.installable) {
     return false;
@@ -293,16 +287,7 @@ async function backfillOnePluginIsolated(
   }
 
   try {
-    return await maybeBackfillPlugin(
-      opts,
-      scope,
-      marketplace,
-      mp,
-      plugin,
-      record,
-      reinstallPlugin,
-      outcomes,
-    );
+    return await maybeBackfillPlugin(opts, target, reinstallPlugin, outcomes);
   } catch (err) {
     outcomes.push({
       kind: "plugin-install-failed",
@@ -317,6 +302,18 @@ async function backfillOnePluginIsolated(
 
 type StateMarketplaceRecord = ExtensionState["marketplaces"][string];
 type StatePluginRecord = StateMarketplaceRecord["plugins"][string];
+
+/**
+ * One scanned record's identity -- which plugin, in which marketplace, in which
+ * scope, plus the two records the promotion needs.
+ */
+interface BackfillTarget {
+  readonly scope: Scope;
+  readonly marketplace: string;
+  readonly mp: StateMarketplaceRecord;
+  readonly plugin: string;
+  readonly record: StatePluginRecord;
+}
 
 /**
  * BFILL-01: re-resolve one partially-installed plugin offline (NFR-5) and, if its
@@ -334,14 +331,11 @@ type StatePluginRecord = StateMarketplaceRecord["plugins"][string];
  */
 async function maybeBackfillPlugin(
   opts: ApplyReconcileOptions,
-  scope: Scope,
-  marketplace: string,
-  mp: StateMarketplaceRecord,
-  plugin: string,
-  record: StatePluginRecord,
+  target: BackfillTarget,
   reinstallPlugin: ReinstallPluginFn,
   outcomes: PerEntryOutcome[],
 ): Promise<boolean> {
+  const { scope, marketplace, mp, plugin, record } = target;
   const resolved = await resolveRecordedPluginOffline(mp, plugin);
   if (resolved === undefined || resolved.state === "unavailable") {
     // Unresolvable / structurally broken -- cannot backfill (NFR-5 cache-only;
