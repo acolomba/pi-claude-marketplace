@@ -49,8 +49,7 @@ mismatch and they do not.
  * `accepted-shortfall` is the retained artifact's vocabulary for a refused row, not a claim this
  * report can make on its own: it does not read the broken-windows ledger and so cannot tell an
  * accepted shortfall from a new one. Compare the rows it emits against
- * `scripts/test-coverage-direct.pin.json`, which is the machine-readable record; CONTRIBUTING.md's
- * table is a rendering of it.
+ * `scripts/test-coverage-direct.pin.json`, which is the machine-readable record.
  */
 export function verdictFor(sourcePath, answer) {
   if (typeof answer === "string") {
