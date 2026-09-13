@@ -22,6 +22,7 @@ import { cp, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promis
 import path from "node:path";
 
 import { assertSafeName } from "../../domain/name.ts";
+import { rewriteSkillTokens } from "../../domain/skill-tokens.ts";
 import { parseFrontmatter } from "../../platform/pi-api.ts";
 import { stripBom } from "../../shared/bom.ts";
 import { appendLeakToError, errorMessage, ManualRecoveryError } from "../../shared/errors.ts";
@@ -229,6 +230,8 @@ export async function prepareStageSkills(
   const stagedNames: string[] = [];
   const recorded: StagedSkillRecord[] = [];
   const degraded: SkillDegradeRecord[] = [];
+  // SKTK-01: the same-plugin reference targets this install materializes.
+  const generatedNames = discovered.map((s) => s.generatedName);
 
   try {
     for (const skill of discovered) {
@@ -315,6 +318,10 @@ export async function prepareStageSkills(
         content = augmentSkillDescription(content, parsed.frontmatter, parsed.body, skillVars);
       }
 
+      // SKTK-01: retarget same-plugin `<plugin>:<skill>` references (both
+      // arms -- a degraded skill's body is prose too). Runs before SK-4
+      // substitution so the PARSE-02 backstop validates the final bytes.
+      content = rewriteSkillTokens(content, pluginName, generatedNames);
       content = substituteClaudeVars(content, skillVars);
       await writeFile(skillMdPath, content, "utf8");
 

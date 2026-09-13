@@ -258,6 +258,124 @@ describe("prepareStageSkills", () => {
     );
   });
 
+  test("SKTK-01: rewrites same-plugin references and keeps fenced examples verbatim", async (t) => {
+    // arrange
+    const { locations, pluginDataDir, pluginRoot, scopeRoot } = await allocateCasePaths(
+      t,
+      "skills-stage-tokens-",
+    );
+    const skillsDirectory = path.join(pluginRoot, "skills");
+    const alphaDirectory = path.join(skillsDirectory, "alpha");
+    const toolDirectory = path.join(skillsDirectory, "tool");
+    await mkdir(alphaDirectory, { recursive: true });
+    await mkdir(toolDirectory, { recursive: true });
+    await writeFile(
+      path.join(alphaDirectory, "SKILL.md"),
+      '---\nname: alpha\ndescription: "Wraps acme:acme-tool for cleanup"\n---\n\n' +
+        "Run acme:acme-tool before acme:ghost.\n\n```text\nacme:acme-tool stays verbatim\n```\n",
+    );
+    await writeFile(
+      path.join(toolDirectory, "SKILL.md"),
+      "---\nname: tool\ndescription: Cleanup tool\n---\n\nTool body.\n",
+    );
+    const resolved = {
+      installable: true,
+      state: "installable",
+      name: "acme",
+      pluginRoot,
+      supported: ["skills"],
+      unsupported: [],
+      notes: [],
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      mcpServers: {},
+      defaultEnabled: true,
+    } satisfies ResolvedPluginInstallable;
+
+    // act
+    const prepared = await prepareStageSkills(createRemovalOps(), {
+      locations,
+      cwd: scopeRoot,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      resolved,
+    });
+    assert.strictEqual(prepared.kind, "staged");
+    const alphaBytes = await readFile(path.join(prepared.stagingRoot, "acme:alpha", "SKILL.md"));
+
+    // assert
+    assert.deepStrictEqual(prepared.result.stagedNames, ["acme:alpha", "acme:tool"]);
+    assert.deepStrictEqual(
+      alphaBytes,
+      Buffer.from(
+        '---\nname: acme:alpha\ndescription: "Wraps acme:tool for cleanup"\n---\n\n' +
+          "Run acme:tool before acme:ghost.\n\n```text\nacme:acme-tool stays verbatim\n```\n",
+      ),
+    );
+  });
+
+  test("SKTK-01: rewrites references in a degraded skill's preserved body", async (t) => {
+    // arrange
+    const { locations, pluginDataDir, pluginRoot, scopeRoot } = await allocateCasePaths(
+      t,
+      "skills-stage-tokens-degraded-",
+    );
+    const skillsDirectory = path.join(pluginRoot, "skills");
+    const brokenDirectory = path.join(skillsDirectory, "broken");
+    const toolDirectory = path.join(skillsDirectory, "tool");
+    await mkdir(brokenDirectory, { recursive: true });
+    await mkdir(toolDirectory, { recursive: true });
+    await writeFile(
+      path.join(brokenDirectory, "SKILL.md"),
+      "---\nname: [unterminated\ndescription: discarded\n---\n\nRun acme:acme-tool after the break.\n",
+    );
+    await writeFile(
+      path.join(toolDirectory, "SKILL.md"),
+      "---\nname: tool\ndescription: Cleanup tool\n---\n\nTool body.\n",
+    );
+    const resolved = {
+      installable: true,
+      state: "installable",
+      name: "acme",
+      pluginRoot,
+      supported: ["skills"],
+      unsupported: [],
+      notes: [],
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      mcpServers: {},
+      defaultEnabled: true,
+    } satisfies ResolvedPluginInstallable;
+
+    // act
+    const prepared = await prepareStageSkills(createRemovalOps(), {
+      locations,
+      cwd: scopeRoot,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      resolved,
+    });
+    assert.strictEqual(prepared.kind, "staged");
+    const brokenBytes = await readFile(path.join(prepared.stagingRoot, "acme:broken", "SKILL.md"));
+
+    // assert
+    assert.deepStrictEqual(prepared.result.stagedNames, ["acme:broken", "acme:tool"]);
+    assert.deepStrictEqual(
+      prepared.result.degraded.map((record) => record.generatedName),
+      ["acme:broken"],
+    );
+    assert.deepStrictEqual(
+      brokenBytes,
+      Buffer.from(
+        "---\nname: acme:broken\n" +
+          "description: Source frontmatter could not be parsed.\n" +
+          "disable-model-invocation: true\n---\n\nRun acme:tool after the break.",
+      ),
+    );
+  });
+
   test("degrades malformed frontmatter and preserves the normalized body bytes", async (t) => {
     // arrange
     const { locations, pluginDataDir, pluginRoot, scopeRoot } = await allocateCasePaths(
