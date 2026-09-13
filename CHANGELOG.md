@@ -1,5 +1,18 @@
 # Changelog
 
+## [Unreleased]
+
+- Plugins that keep agents in more than one directory now install every agent. Install, update, and reinstall previously read a single directory, so the rest were silently dropped. When two directories declare the same agent name, the first one wins and the existing collision warning covers the rest.
+- A marketplace alias that resolves ambiguously now fails without writing anything. It used to mutate marketplace and plugin state on the way to the error, which left a half-applied record behind.
+- A path that escapes its allowed root through normalization or a symlink is now rejected before any read or write, not after.
+- A malformed `mcpServers` entry now returns a typed failure instead of throwing, and no longer writes a configuration file on the way out.
+- A hook `if` rule can no longer be matched by an inherited object key such as `__proto__`. Dynamic lookups reject keys the plugin did not declare.
+- `PreCompact` and `PostCompact` now report manual compaction as manual. Threshold and overflow compaction are reported as automatic; both used to collapse into one value.
+- When cleanup fails after a failed update, the original error is what you see. Cleanup context is attached to it instead of replacing it, and no partial artifact is left on disk.
+- Uninstall, update, and marketplace failures are classified by type rather than by matching words in an error message, so a reworded message no longer changes which failure you get told about.
+- Notifications now say "1 plugin" or "3 plugins" based on the command you ran, not on how many results came back. A bulk command that matched nothing now reports zero instead of falling silent.
+- A discovery failure in one scope no longer discards work already completed in another. `/reload` recovers through the same callback.
+
 ## [0.18.3] - 2026-09-08
 
 - Plugin commands now install on Windows, where the generated name joins with `.` instead of `:` (`/code-review.code-review`). Windows forbids `:` in a filename, so any plugin with a `commands/` directory failed. Thanks to @ricardofrantz (#143).
