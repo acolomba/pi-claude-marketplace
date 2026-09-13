@@ -134,8 +134,8 @@ DEPS-01/02 name `info` and only `info`.
 
 ### Dependency source and parsing (DEPS-01, DEPS-02)
 
-- **D-01-18:** `info` continues to read `dependencies` from the MARKETPLACE
-  ENTRY only. It does not read the plugin's own `plugin.json` for this field,
+- **D-01-18 [SUPERSEDED by D-01-32 -- do not implement this]:** `info` continues
+  to read `dependencies` from the MARKETPLACE ENTRY only. It does not read the plugin's own `plugin.json` for this field,
   even though this phase makes a bare manifest readable. This preserves the
   warm/cold render symmetry rule the read surfaces already follow (OUT-05 /
   DOC-02, `domain/resolver.ts:653`): the entry is readable for every plugin
@@ -147,7 +147,8 @@ DEPS-01/02 name `info` and only `info`.
   — **Reversibility:** reversible — the source is one expression at
   `info.ts:838`.
 
-- **D-01-19:** Phase 3 is EXPLICITLY FREE to read dependencies from
+- **D-01-19 [MOOT under D-01-32 -- both now read the same source]:** Phase 3 is
+  EXPLICITLY FREE to read dependencies from
   `plugin.json` for resolution. D-01-18 is a display decision, not a project-wide
   source of truth. Display must render identically warm and cold; resolution
   already requires a materialized clone and can read the manifest freely.
@@ -286,6 +287,69 @@ These SUPERSEDE the spike's summary where they disagree.
   A dependency with neither constraint renders as the bare address, unchanged:
   `a@mp`. This is the byte form D-01-22 catalogues, and the doc block plus its
   `FIXTURES` entry must land in the same change.
+
+### Dependency source reversal and duplicate handling (added 2026-09-13)
+
+- **D-01-31 (duplicates within one manifest):** Same-name dependencies collapse
+  LAST-WINS, keyed on the resolved `name@marketplace`. This matches upstream's
+  `mze` exactly (`r.set(A, {version, sha})` overwrites). A manifest declaring
+  `a@^1` then `a@^2` renders `a@mp (^2.0.0)`; the discarded `^1` is not surfaced.
+
+  Note for Phase 3, which must NOT copy this rule blindly: upstream collapses
+  last-wins only WITHIN one manifest. ACROSS manifests it does the opposite --
+  ranges accumulate into an array and are intersected (`xn.push(Ar.version)`,
+  then `Tct(ps)`), and an unsatisfiable intersection raises `range-conflict`
+  naming every contributing range. Display is within-manifest, so last-wins is
+  the right rule here; resolution is cross-manifest and needs the intersection.
+
+- **D-01-32 (SUPERSEDES D-01-18 and D-01-19):** `info` reads `dependencies` from
+  the plugin's own `plugin.json` when that manifest is readable WITHOUT NETWORK,
+  and falls back to the marketplace entry when it is not. D-01-18's entry-only
+  rule is RETIRED.
+
+  Reason for the reversal: upstream treats `plugin.json` as authoritative and the
+  marketplace entry as a mirror that can go stale, and says so out loud --
+
+  ```js
+  if (!Tn.has(Jm(Qn, e)))
+    n(`Marketplace entry for ${e} lists dependency "${Qn}" not present in ` +
+      `plugin.json -- catalog may be stale`)
+  ```
+
+  Reading the entry alone means reading the source upstream considers the less
+  trustworthy of the two.
+
+  Three consequences the planner MUST carry:
+
+  1. **Warm/cold symmetry is deliberately given up for this field.** A git-source
+     plugin with no clone renders its entry-declared dependencies; the same plugin
+     once cloned renders its `plugin.json`-declared ones, and the two can differ.
+     This is a knowing, scoped exception to the OUT-05 / DOC-02 principle, taken
+     for `dependencies` ONLY. Do not generalize it: `defaultEnabled` and every
+     other manifest-side claim on the read surfaces stay entry-sourced, and
+     `entryDeclaresInstallDisabled`'s one-parameter containment argument
+     (`domain/resolver.ts:653`) is untouched.
+
+  2. **"Readable" never means fetching.** NFR-5 forbids `info` touching the
+     network, and `orchestrators/plugin/info.ts` is one of the files the
+     no-orchestrator-network architecture test pins. Readable means a path source
+     or an already-warm clone. A cold git source falls back to the entry; it does
+     NOT trigger a clone.
+
+  3. **There are now THREE manifest readers, not two.** `info` gains its own read
+     alongside `domain/resolver.ts::readManifest` and
+     `orchestrators/plugin/shared.ts::resolvePluginVersion`. All three consume
+     `MANIFEST_CANDIDATES` (D-01-06) with the same absence-only fall-through
+     (D-01-07), and the D-01-12 behavioral test extends to cover the third. This
+     strengthens rather than weakens the shared-constant decision. The resolver's
+     result is still NOT widened with a `manifest` field -- D-23-02 / NFR-7 stand.
+
+  D-01-19 is now moot: `info` and Phase 3 read the same source, so there is no
+  display-vs-resolution split left to record.
+
+  No disagreement warning is emitted when the entry and `plugin.json` differ.
+  Upstream logs one; we render the authoritative source and stay silent. Revisit
+  only if a real plugin makes the divergence visible.
 
 ### Claude's Discretion
 
