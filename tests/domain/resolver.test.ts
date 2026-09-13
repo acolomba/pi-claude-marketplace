@@ -2610,6 +2610,181 @@ test("COMP-01 entry > manifest declared order; first-wins dedup across both", as
   }
 });
 
+// ──────────────────────────────────────────────────────────────────────────
+// MANF-03 / D-01-14..D-01-17: the stored component path is canonical.
+// ──────────────────────────────────────────────────────────────────────────
+
+test("MANF-03 a declared ./skills/ collapses onto the conventional skills dir", async () => {
+  // arrange
+  const localRoot = pathUnderMarketplace("./local");
+  const context = resolveContext(marketplaceRoot, {
+    [localRoot]: "dir",
+    [path.join(localRoot, "skills")]: "dir",
+  });
+
+  // act
+  const resolvedPlugin = await resolveStrict(
+    pluginEntry({ source: "./local", skills: ["./skills/"] }),
+    context,
+  );
+
+  // assert
+  assert.strictEqual(
+    resolvedPlugin.state,
+    "installable",
+    `notes: ${resolvedPlugin.notes.join(" / ")}`,
+  );
+
+  if (resolvedPlugin.state === "installable") {
+    assert.deepStrictEqual(resolvedPlugin.componentPaths.skills, ["skills"]);
+  }
+});
+
+test("MANF-03 an interior .. segment dedups against the same directory spelled plainly", async () => {
+  // arrange
+  const localRoot = pathUnderMarketplace("./local");
+  const context = resolveContext(marketplaceRoot, { [localRoot]: "dir" });
+
+  // act
+  const resolvedPlugin = await resolveStrict(
+    pluginEntry({ source: "./local", skills: ["a/../skills", "skills"] }),
+    context,
+  );
+
+  // assert
+  assert.strictEqual(
+    resolvedPlugin.state,
+    "installable",
+    `notes: ${resolvedPlugin.notes.join(" / ")}`,
+  );
+
+  if (resolvedPlugin.state === "installable") {
+    assert.deepStrictEqual(resolvedPlugin.componentPaths.skills, ["skills"]);
+  }
+});
+
+test("MANF-03 a declaration of the plugin root itself stores a dot, never an empty string", async () => {
+  // arrange
+  const localRoot = pathUnderMarketplace("./local");
+  const context = resolveContext(marketplaceRoot, { [localRoot]: "dir" });
+
+  // act
+  const resolvedPlugin = await resolveStrict(
+    pluginEntry({ source: "./local", skills: [".", "./"] }),
+    context,
+  );
+
+  // assert
+  assert.strictEqual(
+    resolvedPlugin.state,
+    "installable",
+    `notes: ${resolvedPlugin.notes.join(" / ")}`,
+  );
+
+  if (resolvedPlugin.state === "installable") {
+    assert.deepStrictEqual(resolvedPlugin.componentPaths.skills, ["."]);
+  }
+});
+
+test("MANF-03 keeps Skills and skills as two distinct stored paths", async () => {
+  // arrange
+  const localRoot = pathUnderMarketplace("./local");
+  const context = resolveContext(marketplaceRoot, { [localRoot]: "dir" });
+
+  // act
+  const resolvedPlugin = await resolveStrict(
+    pluginEntry({ source: "./local", skills: ["Skills", "skills"] }),
+    context,
+  );
+
+  // assert
+  assert.strictEqual(
+    resolvedPlugin.state,
+    "installable",
+    `notes: ${resolvedPlugin.notes.join(" / ")}`,
+  );
+
+  if (resolvedPlugin.state === "installable") {
+    assert.deepStrictEqual(resolvedPlugin.componentPaths.skills, ["Skills", "skills"]);
+  }
+});
+
+test("MANF-03 declared skill subdirectories stay distinct from the conventional parent", async () => {
+  // arrange
+  const localRoot = pathUnderMarketplace("./local");
+  const context = resolveContext(marketplaceRoot, {
+    [localRoot]: "dir",
+    [path.join(localRoot, "skills")]: "dir",
+  });
+
+  // act
+  const resolvedPlugin = await resolveStrict(
+    pluginEntry({
+      source: "./local",
+      skills: ["./skills/ui-theme-designer-help", "./skills/ui-theme-designer-design-tokens"],
+    }),
+    context,
+  );
+
+  // assert
+  assert.strictEqual(
+    resolvedPlugin.state,
+    "installable",
+    `notes: ${resolvedPlugin.notes.join(" / ")}`,
+  );
+
+  if (resolvedPlugin.state === "installable") {
+    assert.deepStrictEqual(resolvedPlugin.componentPaths.skills, [
+      path.join("skills", "ui-theme-designer-help"),
+      path.join("skills", "ui-theme-designer-design-tokens"),
+      "skills",
+    ]);
+  }
+});
+
+test("MANF-03 loose mode normalizes entry-declared paths too", async () => {
+  // arrange
+  const localRoot = pathUnderMarketplace("./local");
+  const context = resolveContext(marketplaceRoot, { [localRoot]: "dir" });
+
+  // act
+  const resolvedPlugin = await resolveLoose(
+    pluginEntry({ source: "./local", skills: ["./skills/", "skills"] }),
+    context,
+  );
+
+  // assert
+  assert.strictEqual(
+    resolvedPlugin.state,
+    "installable",
+    `notes: ${resolvedPlugin.notes.join(" / ")}`,
+  );
+
+  if (resolvedPlugin.state === "installable") {
+    assert.deepStrictEqual(resolvedPlugin.componentPaths.skills, ["skills"]);
+  }
+});
+
+test("MANF-03 an escaping component path is refused naming the raw declared spelling", async () => {
+  // arrange
+  const context = resolveContext(marketplaceRoot, { [pathUnderMarketplace("./local")]: "dir" });
+
+  // act
+  const resolvedPlugin = await resolveStrict(
+    pluginEntry({ source: "./local", skills: "./nested/../../outside" }),
+    context,
+  );
+
+  // assert
+  assert.strictEqual(resolvedPlugin.state, "unavailable");
+  assert.ok(
+    resolvedPlugin.notes.includes(
+      'component path for "skills" escapes plugin root: "./nested/../../outside"',
+    ),
+    `notes: ${resolvedPlugin.notes.join(" / ")}`,
+  );
+});
+
 for (const { defaultEnabled, installsDisabled } of [
   { defaultEnabled: false, installsDisabled: true },
   { defaultEnabled: true, installsDisabled: false },
