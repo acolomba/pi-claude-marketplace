@@ -6,9 +6,9 @@ current_phase: 09
 current_phase_name: Final Quality and Backlog Closure
 status: phase_complete
 stopped_at: "PR #181 open and green but HELD by the operator: do not merge"
-last_updated: "2026-09-12T22:50:41.260Z"
-last_activity: 2026-09-12
-last_activity_desc: milestone audit passed (tech_debt, no blockers) and the revalidation tooling retired with its couplings
+last_updated: "2026-09-13T04:20:00.000Z"
+last_activity: 2026-09-13
+last_activity_desc: "quick task 260912-vyi closed the S107 and S7737 Sonar findings and documented S3863 as inert"
 state_head: 2f2cb7c437d5978a653886727c6850db7ac1867b
 progress:
   total_phases: 9
@@ -1159,6 +1159,7 @@ restructured to satisfy a scanner. Its content is a pre-existing
 | 260912-fp3 | Dispose every remaining open entry in the .planning/WINDOWS.md ledger so no entry reads open: mark ids 20, 23, 24, 25, 26 and 29 fixed once their corrections have landed, and waive ids 1, 2, 3, 7, 8, 9, 10, 13, 14, 15, 16, 17 and 18 with the measured reason recorded for each in the disposition spec — use the gsd-tools windows fixed and windows waive verbs only, never hand-edit the rendered table, and confirm with windows status that zero entries read open | 2026-09-12 | 408ae717 | — | .planning/quick/260912-fp3-dispose-every-remaining-open-entry-in-th |
 | 260912-hqq | Rename the published bridge interface HooksHydrationReader to HooksHydrationDeps; closes code-review finding IN-02 | 2026-09-12 | 63de8980 | — | [260912-hqq-rename-the-published-bridge-interface-ho](./quick/260912-hqq-rename-the-published-bridge-interface-ho/) |
 | 260912-pdh | Retire the revalidation tooling with the milestone: three files deleted, the sole specialPairs entry and its five guards removed, the unowned-export census entry dropped | 2026-09-12 | 2f2cb7c4 | — | [260912-pdh-retire-the-revalidation-tooling-with-the](./quick/260912-pdh-retire-the-revalidation-tooling-with-the/) |
+| 260912-vyi | Address the SonarCloud findings on PR #181: enable @typescript-eslint/max-params at 7 over the extension tree and cut all three S107 offenders from 10, 8 and 8 parameters to 4, hoist the S7737 object-literal parameter default to a frozen module constant, and record that the committed S3863 exclusion is inert because the scanner drops sonar.issue.ignore.* from the properties file | 2026-09-13 | 76f43311 | complete | [260912-vyi-address-s3863-and-s107](./quick/260912-vyi-address-s3863-and-s107/) |
 
 ## Session Continuity
 
@@ -1220,13 +1221,41 @@ No operator decision is now outstanding. `IN-01`, `IN-03` and `IN-04` stay recor
 `09-REVIEW.md` as deliberate non-actions; `IN-03` is the one worth revisiting, because NFR-10
 containment depends on an injected collaborator honoring a contract nothing type-enforces.
 
-**Open handoff:** `.planning/HANDOFF-sonar-s107-s7737.md` — the four remaining SonarCloud
-findings on PR #181 (three `S107` too-many-parameters, one `S7737` object-literal default).
-They do NOT block: the gate reads `OK` and all nine checks pass. It also records an OPEN
-item: the `S3863` exclusion committed in `eaf3e9b6` did NOT take effect -- the analysis
-re-ran and the count is unchanged at 34, so the properties-file route needs diagnosis. The handoff carries each
-finding's file, line, parameter count and call-site count, plus the reason ESLint missed them
-(no `max-params` rule is enabled in any form) and the recommendation to close that gap first.
+**Closed handoff:** `.planning/HANDOFF-sonar-s107-s7737.md` — **HISTORICAL as of 2026-09-13.**
+Quick task `260912-vyi` closed all four findings and diagnosed the S3863 item. Keep the file for
+the reasoning it records, not as a task list. Two of its claims were wrong on contact and are
+corrected here so no later reader inherits them.
+
+1. **`S107` and `S7737` are fixed at source.** `classifyDeclaredPlugin` 8 -> 4,
+   `tryHydrateOnePlugin` 10 -> 4, `maybeBackfillPlugin` 8 -> 4, and the `{ runPhases }` default is
+   now the frozen module constant `DEFAULT_INSTALL_LEDGER_TRANSACTION`. The detection gap is
+   closed too: `@typescript-eslint/max-params` is committed at 7 for
+   `extensions/pi-claude-marketplace/**`, so S107 is falsifiable locally instead of only on a PR.
+   The scoping was proved rather than assumed — `eslint --print-config` returns `[2, {"max": 7}]`
+   on an `extensions/` file and nothing on a `tests/` file. A green `npm run lint` alone would
+   not have distinguished a working rule from an inert one, which is the same failure mode S3863
+   turned out to have.
+2. **The handoff's "8 call sites" for `maybeBackfillPlugin` was wrong.** All four functions are
+   module-private with exactly ONE caller each; six of the eight were doc-comment mentions.
+3. **`S3863` cannot be excluded from `sonar-project.properties` at all**, and none of the three
+   hypotheses the handoff listed is the reason. Measured on CI run `34733874521`: the scanner
+   names the properties file as the project root configuration file and echoes `sonar.exclusions`
+   and `sonar.cpd.exclusions` from it back into the log, the analysis ran on `eaf3e9b6` (so the
+   unchanged count is fresh, not a stale snapshot), and yet **no log line mentions the issue
+   exclusion at all** across 7970 lines. Server settings carry no `sonar.issue.ignore.*` value and
+   `sonar.autoscan.enabled` is `false`. The scanner reads the file and drops `sonar.issue.ignore.*`
+   silently. Note the trap: a wrong `resourceKey` would still have produced an
+   "Ignoring issues on multiple criteria"-class line with zero matches, so the handoff's first
+   hypothesis — that the pattern should be `**/*.ts` — is not what the evidence points at, and
+   retrying it is wasted effort.
+
+**One operator action remains, and only the operator can take it.** By decision D1 the exclusion
+block stays committed and the 17 files' imports are untouched — merging each value + `import type`
+pair into one statement with inline `type` specifiers would satisfy S3863 but break the documented
+convention that type-only imports are grouped last. To actually activate the exclusion, set it in
+the SonarCloud UI under **Administration > General Settings > Analysis Scope**. Until then S3863
+reads **34, which is the expected reading, not a regression**. `sonar-project.properties` now says
+all of this in the comment above the block.
 
 **Read beside it:** `.planning/phases/09-final-quality-and-backlog-closure/09-CLOSURE-LEDGER.md`
 (24 rows, one vocabulary, the milestone's audit trail), `09-REVIEW.md` + `09-REVIEW-FIX.md`,
