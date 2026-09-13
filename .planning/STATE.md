@@ -1237,37 +1237,39 @@ corrected here so no later reader inherits them.
    turned out to have.
 2. **The handoff's "8 call sites" for `maybeBackfillPlugin` was wrong.** All four functions are
    module-private with exactly ONE caller each; six of the eight were doc-comment mentions.
-3. **`S3863` did not get excluded, and the first diagnosis of why was wrong.** Measured on CI run
-   `34733874521`: the exclusion was committed in `eaf3e9b6`, the analysis ran on that commit, and
-   the count stayed at 34. The reading recorded at the time — that SonarCloud silently drops
-   `sonar.issue.ignore.*` from the properties file — **does not hold.** That restriction applies to
-   SonarCloud *automatic analysis*, which wants `.sonarcloud.properties` and forbids wildcards;
-   `sonar.autoscan.enabled` is `false` here, so this is CI-based analysis, where
+3. **`S3863` was a wrong `resourceKey` pattern. CONFIRMED FIXED.** The exclusion committed in
+   `eaf3e9b6` did not take effect, and the diagnosis recorded at the time — that SonarCloud
+   silently drops `sonar.issue.ignore.*` from the properties file — **was wrong.** That restriction
+   applies to SonarCloud *automatic analysis*, which wants `.sonarcloud.properties` and forbids
+   wildcards; `sonar.autoscan.enabled` is `false` here, so this is CI-based analysis, where
    `sonar-project.properties` is the supported route and wildcards are allowed. The supporting
-   argument was also unsound: it inferred from the absence of any issue-exclusion log line that the
-   property was dropped, without ever establishing that the scanner logs issue exclusions at all.
+   argument was unsound too: it inferred the property was dropped from the ABSENCE of an
+   issue-exclusion log line, without ever establishing that the scanner logs issue exclusions at
+   all. It then used that inference to dismiss the correct hypothesis.
 
-   The live hypothesis is now the `resourceKey` pattern — the one the handoff named first and the
-   bad diagnosis talked us out of. `sonar.sources` is `extensions/pi-claude-marketplace`, so the
-   matcher may resolve paths relative to the source root, where
-   `extensions/pi-claude-marketplace/**/*.ts` matches nothing. `e945ba66` broadens it to `**/*.ts`,
-   which matches under either reading. **Unproven until CI re-analyses** — this needs a push, and
-   the finding count is the proof.
+   The cause was the pattern. `sonar.sources` is `extensions/pi-claude-marketplace`, and the
+   issue-exclusion matcher resolves `resourceKey` relative to the source root — so
+   `extensions/pi-claude-marketplace/**/*.ts` matched nothing. `e945ba66` broadened it to
+   `**/*.ts`. Measured on the analysis of `015c9f18` (CI run `34755145873`): **S3863 open issues
+   0, down from 34.** The quality gate reads `OK` and the PR carries **zero open issues of any
+   rule**, down from 38.
+
+   Two method notes worth keeping. First, `api/issues/search` returns CLOSED issues unless you
+   pass `resolved=false` — reading `total` without it reports fixed findings as if they were still
+   open, which briefly made the S107 fixes look like they had not worked. Second, the whole
+   detour was caused by writing an unproven inference into a config comment as settled fact; the
+   comment in `sonar-project.properties` is now six lines of *why* only, and status lives here.
 
 By decision D1 the 17 files' imports stay untouched — merging each value + `import type` pair into
 one statement with inline `type` specifiers would satisfy S3863 but break the documented convention
 that type-only imports are grouped last.
 
-**Next check after the next push:** if S3863 still reads 34 with the `**/*.ts` pattern, the pattern
-is not the cause and the remaining route is the SonarCloud UI, under
-**Administration > General Settings > Analysis Scope**. Read it with:
+Nothing is outstanding on the Sonar front. All nine checks pass on `015c9f18`, the quality gate
+reads `OK`, and the PR carries zero open issues. Re-read the counts any time with:
 
 ```
-curl -s "https://sonarcloud.io/api/issues/search?componentKeys=acolomba_pi-claude-marketplace&pullRequest=181&rules=typescript:S3863" | head -c 200
+curl -s "https://sonarcloud.io/api/issues/search?componentKeys=acolomba_pi-claude-marketplace&pullRequest=181&resolved=false&ps=1"
 ```
-
-`sonar-project.properties` deliberately carries only the six-line *why*, not this diagnosis — the
-status belongs here, where it gets revisited, not in a config comment that would go stale in place.
 
 **Read beside it:** `.planning/phases/09-final-quality-and-backlog-closure/09-CLOSURE-LEDGER.md`
 (24 rows, one vocabulary, the milestone's audit trail), `09-REVIEW.md` + `09-REVIEW-FIX.md`,
