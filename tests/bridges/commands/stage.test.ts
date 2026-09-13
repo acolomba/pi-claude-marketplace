@@ -1,5 +1,14 @@
 import assert from "node:assert/strict";
-import { access, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import {
+  access,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test, type TestContext } from "node:test";
@@ -14,8 +23,14 @@ import {
 } from "../../../extensions/pi-claude-marketplace/bridges/commands/stage.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { ManualRecoveryError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import { createRemovalOps } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
+import {
+  PathContainmentError,
+  SymlinkRefusedError,
+} from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
+import { createDelegatingRemovalOps } from "../../platform/removal-ops-fake.ts";
 
-import type { ResolvedPluginInstallable } from "../../../extensions/pi-claude-marketplace/domain/resolver.ts";
+import type { ResolvedPluginInstallable } from "../../../extensions/pi-claude-marketplace/domain/resolver-types.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 
 const MARKETPLACE_NAME = "catalog";
@@ -87,7 +102,7 @@ test("stages recursive commands with exact names, records, substitutions, and pr
   await writeFile(path.join(commandsRoot, "build", "web.md"), nestedSource);
 
   // act
-  const prepared = await prepareStageCommands({
+  const prepared = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
     marketplaceName: MARKETPLACE_NAME,
@@ -96,7 +111,7 @@ test("stages recursive commands with exact names, records, substitutions, and pr
     pluginDataDir,
     resolved: resolvedFor(pluginRoot),
   });
-  const commitLeak = await commitPreparedCommands(prepared);
+  const commitLeak = await commitPreparedCommands(createRemovalOps(), prepared);
   const promptNames = (await readdir(locations.promptsTargetDir)).sort();
   const deployBytes = await readFile(
     path.join(locations.promptsTargetDir, "acme:deploy.md"),
@@ -163,7 +178,7 @@ test("stages a source led by a byte-order mark without the marker or a duplicate
     "---\ndescription: Deploy the service\nmodel: sonnet\n---\nDeploy carefully.\n";
 
   // act
-  const prepared = await prepareStageCommands({
+  const prepared = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
     marketplaceName: MARKETPLACE_NAME,
@@ -172,7 +187,7 @@ test("stages a source led by a byte-order mark without the marker or a duplicate
     pluginDataDir,
     resolved: resolvedFor(pluginRoot),
   });
-  const commitLeak = await commitPreparedCommands(prepared);
+  const commitLeak = await commitPreparedCommands(createRemovalOps(), prepared);
   const deployBytes = await readFile(
     path.join(locations.promptsTargetDir, "acme:deploy.md"),
     "utf8",
@@ -201,7 +216,7 @@ test("returns a complete no-op and materializes no command directories", async (
   const pluginRoot = await createPluginRoot(t, "commands-source-noop-");
 
   // act
-  const prepared = await prepareStageCommands({
+  const prepared = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
     marketplaceName: MARKETPLACE_NAME,
@@ -210,11 +225,11 @@ test("returns a complete no-op and materializes no command directories", async (
     pluginDataDir: path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
     resolved: resolvedFor(pluginRoot, []),
   });
-  const commitLeak = await commitPreparedCommands(prepared);
-  const abortLeak = await abortPreparedCommands(prepared);
-  const replacement = await replacePreparedCommands(prepared);
-  const rollbackLeaks = await rollbackCommandsReplacement(replacement);
-  const finalizeLeaks = await finalizeCommandsReplacement(replacement);
+  const commitLeak = await commitPreparedCommands(createRemovalOps(), prepared);
+  const abortLeak = await abortPreparedCommands(createRemovalOps(), prepared);
+  const replacement = await replacePreparedCommands(createRemovalOps(), prepared);
+  const rollbackLeaks = await rollbackCommandsReplacement(createRemovalOps(), replacement);
+  const finalizeLeaks = await finalizeCommandsReplacement(createRemovalOps(), replacement);
   const stagingExists = await pathIsPresent(locations.commandsStagingDir);
   const promptsExist = await pathIsPresent(locations.promptsTargetDir);
 
@@ -232,6 +247,139 @@ test("returns a complete no-op and materializes no command directories", async (
   assert.strictEqual(promptsExist, false);
 });
 
+test("refuses an outside previous command before changing its complete target tree", async (t) => {
+  // arrange
+  const locations = await createProjectLocations(t, "commands-outside-target-");
+  const resourcesRoot = path.dirname(locations.promptsTargetDir);
+  const outsideFile = path.join(resourcesRoot, "outside", "command.md");
+  await mkdir(path.dirname(outsideFile), { recursive: true });
+  await writeFile(outsideFile, "outside command\n");
+  const targetTreeBefore = (await readdir(resourcesRoot, { recursive: true })).sort();
+  const outsideBytesBefore = await readFile(outsideFile);
+  const expectedError = {
+    name: "PathContainmentError",
+    message: `previous command file escapes ${locations.promptsTargetDir} (resolved: ${outsideFile}).`,
+    parent: locations.promptsTargetDir,
+    child: outsideFile,
+  };
+  const prepared = await prepareStageCommands(createRemovalOps(), {
+    locations,
+    cwd: locations.scopeRoot,
+    marketplaceName: MARKETPLACE_NAME,
+    pluginName: PLUGIN_NAME,
+    pluginRoot: path.join(locations.scopeRoot, "plugin"),
+    pluginDataDir: path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
+    resolved: resolvedFor(path.join(locations.scopeRoot, "plugin"), []),
+    previousCommandNames: ["../outside/command"],
+  });
+  let containmentError: unknown;
+
+  // act
+  try {
+    await commitPreparedCommands(createRemovalOps(), prepared);
+  } catch (error) {
+    containmentError = error;
+  }
+
+  const abortLeak = await abortPreparedCommands(createRemovalOps(), prepared);
+
+  // assert
+  assert.strictEqual(prepared.kind, "staged");
+  assert.deepStrictEqual(prepared.result, {
+    stagedNames: [],
+    recorded: [],
+    warnings: [],
+    degraded: [],
+  });
+  assert.ok(containmentError instanceof PathContainmentError);
+  assert.strictEqual(containmentError instanceof SymlinkRefusedError, false);
+  assert.deepStrictEqual(
+    {
+      name: containmentError.name,
+      message: containmentError.message,
+      parent: containmentError.parent,
+      child: containmentError.child,
+    },
+    expectedError,
+  );
+  assert.strictEqual(abortLeak, undefined);
+  assert.deepStrictEqual(
+    (await readdir(resourcesRoot, { recursive: true })).sort(),
+    targetTreeBefore,
+  );
+  assert.deepStrictEqual(await readFile(outsideFile), outsideBytesBefore);
+});
+
+test("refuses an intermediate symlink before changing its complete target tree", async (t) => {
+  // arrange
+  const locations = await createProjectLocations(t, "commands-symlink-target-");
+  const outsideRoot = path.join(locations.extensionRoot, "outside-prompts");
+  const outsideFile = path.join(outsideRoot, "command.md");
+  const linkPath = path.join(locations.promptsTargetDir, "link");
+  const child = path.join(linkPath, "command.md");
+  await mkdir(locations.promptsTargetDir, { recursive: true });
+  await mkdir(outsideRoot);
+  await writeFile(outsideFile, "outside command\n");
+  await symlink(outsideRoot, linkPath);
+  const targetTreeBefore = await readdir(locations.promptsTargetDir);
+  const outsideTreeBefore = await readdir(outsideRoot);
+  const outsideBytesBefore = await readFile(outsideFile);
+  const expectedError = {
+    name: "SymlinkRefusedError",
+    message: `previous command file contains symlink ${linkPath} -> ${outsideRoot} (parent: ${locations.promptsTargetDir}, target: ${child}).`,
+    parent: locations.promptsTargetDir,
+    child,
+    linkPath,
+    linkTarget: outsideRoot,
+  };
+  const prepared = await prepareStageCommands(createRemovalOps(), {
+    locations,
+    cwd: locations.scopeRoot,
+    marketplaceName: MARKETPLACE_NAME,
+    pluginName: PLUGIN_NAME,
+    pluginRoot: path.join(locations.scopeRoot, "plugin"),
+    pluginDataDir: path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
+    resolved: resolvedFor(path.join(locations.scopeRoot, "plugin"), []),
+    previousCommandNames: ["link/command"],
+  });
+  let symlinkError: unknown;
+
+  // act
+  try {
+    await commitPreparedCommands(createRemovalOps(), prepared);
+  } catch (error) {
+    symlinkError = error;
+  }
+
+  const abortLeak = await abortPreparedCommands(createRemovalOps(), prepared);
+
+  // assert
+  assert.strictEqual(prepared.kind, "staged");
+  assert.deepStrictEqual(prepared.result, {
+    stagedNames: [],
+    recorded: [],
+    warnings: [],
+    degraded: [],
+  });
+  assert.ok(symlinkError instanceof SymlinkRefusedError);
+  assert.ok(symlinkError instanceof PathContainmentError);
+  assert.deepStrictEqual(
+    {
+      name: symlinkError.name,
+      message: symlinkError.message,
+      parent: symlinkError.parent,
+      child: symlinkError.child,
+      linkPath: symlinkError.linkPath,
+      linkTarget: symlinkError.linkTarget,
+    },
+    expectedError,
+  );
+  assert.strictEqual(abortLeak, undefined);
+  assert.deepStrictEqual(await readdir(locations.promptsTargetDir), targetTreeBefore);
+  assert.deepStrictEqual(await readdir(outsideRoot), outsideTreeBefore);
+  assert.deepStrictEqual(await readFile(outsideFile), outsideBytesBefore);
+});
+
 test("aborts staged commands without creating target prompts", async (t) => {
   // arrange
   const locations = await createProjectLocations(t, "commands-stage-abort-");
@@ -242,7 +390,7 @@ test("aborts staged commands without creating target prompts", async (t) => {
   await writeFile(path.join(commandsRoot, "abort.md"), commandSource);
 
   // act
-  const prepared = await prepareStageCommands({
+  const prepared = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
     marketplaceName: MARKETPLACE_NAME,
@@ -253,7 +401,7 @@ test("aborts staged commands without creating target prompts", async (t) => {
   });
   assert.strictEqual(prepared.kind, "staged");
   const stagedBytes = await readFile(path.join(prepared.stagingRoot, "acme:abort.md"), "utf8");
-  const abortLeak = await abortPreparedCommands(prepared);
+  const abortLeak = await abortPreparedCommands(createRemovalOps(), prepared);
   const stagingExists = await pathIsPresent(prepared.stagingRoot);
   const targetExists = await pathIsPresent(path.join(locations.promptsTargetDir, "acme:abort.md"));
 
@@ -277,7 +425,7 @@ test("removes prior owned prompts and tolerates a missing prior prompt during co
   await writeFile(priorTarget, "old prompt bytes\n");
 
   // act
-  const prepared = await prepareStageCommands({
+  const prepared = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
     marketplaceName: MARKETPLACE_NAME,
@@ -287,7 +435,7 @@ test("removes prior owned prompts and tolerates a missing prior prompt during co
     resolved: resolvedFor(pluginRoot),
     previousCommandNames: ["acme:old", "acme:already-missing"],
   });
-  const commitLeak = await commitPreparedCommands(prepared);
+  const commitLeak = await commitPreparedCommands(createRemovalOps(), prepared);
   const priorExists = await pathIsPresent(priorTarget);
   const currentBytes = await readFile(
     path.join(locations.promptsTargetDir, "acme:current.md"),
@@ -316,7 +464,7 @@ test("neutralizes malformed frontmatter and preserves exact substituted body byt
   await writeFile(path.join(commandsRoot, "bad-command.md"), malformedSource);
 
   // act
-  const prepared = await prepareStageCommands({
+  const prepared = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
     marketplaceName: MARKETPLACE_NAME,
@@ -325,7 +473,7 @@ test("neutralizes malformed frontmatter and preserves exact substituted body byt
     pluginDataDir: path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
     resolved: resolvedFor(pluginRoot),
   });
-  const commitLeak = await commitPreparedCommands(prepared);
+  const commitLeak = await commitPreparedCommands(createRemovalOps(), prepared);
   const stagedBytes = await readFile(
     path.join(locations.promptsTargetDir, "acme:bad-command.md"),
     "utf8",
@@ -360,7 +508,7 @@ test("substitutes project variables and retains command-inapplicable skill varia
   await writeFile(path.join(commandsRoot, "vars.md"), commandSource);
 
   // act
-  const prepared = await prepareStageCommands({
+  const prepared = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
     marketplaceName: MARKETPLACE_NAME,
@@ -369,7 +517,7 @@ test("substitutes project variables and retains command-inapplicable skill varia
     pluginDataDir,
     resolved: resolvedFor(pluginRoot),
   });
-  await commitPreparedCommands(prepared);
+  await commitPreparedCommands(createRemovalOps(), prepared);
   const stagedBytes = await readFile(path.join(locations.promptsTargetDir, "acme:vars.md"), "utf8");
 
   // assert
@@ -403,7 +551,7 @@ test("retains the project variable for user scope and restores the user director
   await writeFile(path.join(commandsRoot, "vars.md"), commandSource);
 
   // act
-  const prepared = await prepareStageCommands({
+  const prepared = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: scopeRoot,
     marketplaceName: MARKETPLACE_NAME,
@@ -412,7 +560,7 @@ test("retains the project variable for user scope and restores the user director
     pluginDataDir,
     resolved: resolvedFor(pluginRoot),
   });
-  await commitPreparedCommands(prepared);
+  await commitPreparedCommands(createRemovalOps(), prepared);
   const stagedBytes = await readFile(path.join(locations.promptsTargetDir, "acme:vars.md"), "utf8");
 
   // assert
@@ -430,7 +578,7 @@ test("preserves first-wins discovery warnings on a staged result", async (t) => 
   await writeFile(path.join(commandsRoot, "tools", "lint.md"), "second prompt\n");
 
   // act
-  const prepared = await prepareStageCommands({
+  const prepared = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
     marketplaceName: MARKETPLACE_NAME,
@@ -439,7 +587,7 @@ test("preserves first-wins discovery warnings on a staged result", async (t) => 
     pluginDataDir: path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
     resolved: resolvedFor(pluginRoot),
   });
-  const abortLeak = await abortPreparedCommands(prepared);
+  const abortLeak = await abortPreparedCommands(createRemovalOps(), prepared);
 
   // assert
   assert.strictEqual(prepared.kind, "staged");
@@ -465,7 +613,7 @@ test("rolls a replacement back to exact prior prompt bytes", async (t) => {
   await writeFile(path.join(commandsRoot, "deploy.md"), deploySource);
   await writeFile(path.join(commandsRoot, "status.md"), statusSource);
   await writeFile(deployTarget, priorDeployBytes);
-  const prepared = await prepareStageCommands({
+  const prepared = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
     marketplaceName: MARKETPLACE_NAME,
@@ -477,10 +625,10 @@ test("rolls a replacement back to exact prior prompt bytes", async (t) => {
   });
 
   // act
-  const replacement = await replacePreparedCommands(prepared);
+  const replacement = await replacePreparedCommands(createRemovalOps(), prepared);
   const replacementDeployBytes = await readFile(deployTarget, "utf8");
   const replacementStatusBytes = await readFile(statusTarget, "utf8");
-  const rollbackLeaks = await rollbackCommandsReplacement(replacement);
+  const rollbackLeaks = await rollbackCommandsReplacement(createRemovalOps(), replacement);
   const restoredDeployBytes = await readFile(deployTarget, "utf8");
   const statusExists = await pathIsPresent(statusTarget);
 
@@ -491,6 +639,73 @@ test("rolls a replacement back to exact prior prompt bytes", async (t) => {
   assert.deepStrictEqual(rollbackLeaks, []);
   assert.strictEqual(restoredDeployBytes, priorDeployBytes);
   assert.strictEqual(statusExists, false);
+});
+
+test("reports one leak per failed stage in stage order and leaves only the blocked roots", async (t) => {
+  // arrange
+  const locations = await createProjectLocations(t, "commands-rollback-stage-leaks-");
+  const pluginRoot = await createPluginRoot(t, "commands-stage-leaks-source-");
+  const commandsRoot = path.join(pluginRoot, "commands");
+  const deploySource = "---\ndescription: New deploy\n---\nNew deploy prompt.\n";
+  const deployTarget = path.join(locations.promptsTargetDir, "acme:deploy.md");
+  await mkdir(commandsRoot, { recursive: true });
+  await mkdir(locations.promptsTargetDir, { recursive: true });
+  await writeFile(path.join(commandsRoot, "deploy.md"), deploySource);
+  await writeFile(deployTarget, "prior deploy prompt bytes\n");
+  const prepared = await prepareStageCommands(createRemovalOps(), {
+    locations,
+    cwd: locations.scopeRoot,
+    marketplaceName: MARKETPLACE_NAME,
+    pluginName: PLUGIN_NAME,
+    pluginRoot,
+    pluginDataDir: path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
+    resolved: resolvedFor(pluginRoot),
+    previousCommandNames: ["acme:deploy"],
+  });
+  assert.strictEqual(prepared.kind, "staged");
+  const replacement = await replacePreparedCommands(createRemovalOps(), prepared);
+  assert.strictEqual(replacement.kind, "replaced");
+  const backupDirectory = (await readdir(locations.commandsStagingDir)).find((name) =>
+    name.startsWith("backup-"),
+  );
+  assert.notStrictEqual(backupDirectory, undefined);
+  const backupRoot = path.join(locations.commandsStagingDir, backupDirectory ?? "missing");
+  const backupPath = path.join(backupRoot, "acme:deploy.md");
+  const removalError = Object.assign(new Error("replacement removal denied"), { code: "EACCES" });
+  const restoreError = Object.assign(new Error("previous restoration denied"), { code: "EACCES" });
+  const stagingError = Object.assign(new Error("staging cleanup denied"), { code: "EACCES" });
+  // Three of the rollback's four removals fault and the fourth does not: the
+  // backup root's cleanup runs for real, which is the half of the partition a
+  // collaborator that removes nothing could not state.
+  const removal = createDelegatingRemovalOps({
+    boundary: "delegate",
+    delegate: createRemovalOps(),
+    rmErrors: [
+      [deployTarget, removalError],
+      [prepared.stagingRoot, stagingError],
+    ],
+    renameErrors: [[backupPath, restoreError]],
+  });
+  const expectedLeaks = [
+    `failed to remove replacement command file at ${deployTarget}: replacement removal denied`,
+    `failed to restore previous command file acme:deploy from ${backupPath} to ${deployTarget}: ` +
+      "previous restoration denied",
+    `failed to clean up commands staging directory at ${prepared.stagingRoot}: ` +
+      "staging cleanup denied",
+  ];
+
+  // act
+  const leaks = await rollbackCommandsReplacement(removal.removalOps, replacement);
+  const stagingPresent = await pathIsPresent(prepared.stagingRoot);
+  const backupPresent = await pathIsPresent(backupRoot);
+  const targetBytes = await readFile(deployTarget, "utf8");
+
+  // assert
+  assert.deepStrictEqual(leaks, expectedLeaks);
+  assert.strictEqual(Object.isFrozen(leaks), true);
+  assert.strictEqual(stagingPresent, true);
+  assert.strictEqual(backupPresent, false);
+  assert.strictEqual(targetBytes, deploySource);
 });
 
 test("finalizes a replacement with exact new bytes and no staging trees", async (t) => {
@@ -504,7 +719,7 @@ test("finalizes a replacement with exact new bytes and no staging trees", async 
   await mkdir(locations.promptsTargetDir, { recursive: true });
   await writeFile(path.join(commandsRoot, "current.md"), currentSource);
   await writeFile(currentTarget, "prior prompt bytes\n");
-  const prepared = await prepareStageCommands({
+  const prepared = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
     marketplaceName: MARKETPLACE_NAME,
@@ -517,8 +732,8 @@ test("finalizes a replacement with exact new bytes and no staging trees", async 
   assert.strictEqual(prepared.kind, "staged");
 
   // act
-  const replacement = await replacePreparedCommands(prepared);
-  const finalizeLeaks = await finalizeCommandsReplacement(replacement);
+  const replacement = await replacePreparedCommands(createRemovalOps(), prepared);
+  const finalizeLeaks = await finalizeCommandsReplacement(createRemovalOps(), replacement);
   const currentBytes = await readFile(currentTarget, "utf8");
   const stagingExists = await pathIsPresent(prepared.stagingRoot);
   const stagingChildren = await readdir(locations.commandsStagingDir);
@@ -539,7 +754,7 @@ test("replaces when a declared prior prompt is already missing", async (t) => {
   const currentTarget = path.join(locations.promptsTargetDir, "acme:current.md");
   await mkdir(commandsRoot, { recursive: true });
   await writeFile(path.join(commandsRoot, "current.md"), currentSource);
-  const prepared = await prepareStageCommands({
+  const prepared = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
     marketplaceName: MARKETPLACE_NAME,
@@ -551,9 +766,9 @@ test("replaces when a declared prior prompt is already missing", async (t) => {
   });
 
   // act
-  const replacement = await replacePreparedCommands(prepared);
+  const replacement = await replacePreparedCommands(createRemovalOps(), prepared);
   const currentBytes = await readFile(currentTarget, "utf8");
-  const rollbackLeaks = await rollbackCommandsReplacement(replacement);
+  const rollbackLeaks = await rollbackCommandsReplacement(createRemovalOps(), replacement);
   const currentExists = await pathIsPresent(currentTarget);
 
   // assert
@@ -578,7 +793,7 @@ test("restores owned backups and preserves a foreign prompt when replacement fai
   await writeFile(path.join(commandsRoot, "status.md"), "new status bytes\n");
   await writeFile(deployTarget, priorDeployBytes);
   await writeFile(statusTarget, foreignStatusBytes);
-  const prepared = await prepareStageCommands({
+  const prepared = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
     marketplaceName: MARKETPLACE_NAME,
@@ -590,7 +805,7 @@ test("restores owned backups and preserves a foreign prompt when replacement fai
   });
 
   // act
-  const error = await replacePreparedCommands(prepared).then(
+  const error = await replacePreparedCommands(createRemovalOps(), prepared).then(
     () => undefined,
     (reason: unknown) => reason,
   );
@@ -624,7 +839,7 @@ test("backs up an owned orphan and keeps its replacement after finalization", as
   await mkdir(locations.promptsTargetDir, { recursive: true });
   await writeFile(path.join(commandsRoot, "deploy.md"), deploySource);
   await writeFile(deployTarget, "orphan deploy bytes\n");
-  const prepared = await prepareStageCommands({
+  const prepared = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
     marketplaceName: MARKETPLACE_NAME,
@@ -636,8 +851,8 @@ test("backs up an owned orphan and keeps its replacement after finalization", as
   });
 
   // act
-  const replacement = await replacePreparedCommands(prepared);
-  const finalizeLeaks = await finalizeCommandsReplacement(replacement);
+  const replacement = await replacePreparedCommands(createRemovalOps(), prepared);
+  const finalizeLeaks = await finalizeCommandsReplacement(createRemovalOps(), replacement);
   const deployBytes = await readFile(deployTarget, "utf8");
 
   // assert
@@ -656,7 +871,7 @@ test("rolls back a partial command commit and removes the staging tree", async (
   await mkdir(commandsRoot, { recursive: true });
   await writeFile(path.join(commandsRoot, "alpha.md"), "alpha prompt\n");
   await writeFile(path.join(commandsRoot, "beta.md"), "beta prompt\n");
-  const prepared = await prepareStageCommands({
+  const prepared = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
     marketplaceName: MARKETPLACE_NAME,
@@ -670,7 +885,7 @@ test("rolls back a partial command commit and removes the staging tree", async (
   await writeFile(path.join(betaTarget, "blocker.txt"), "keep blocker\n");
 
   // act
-  const error = await commitPreparedCommands(prepared).then(
+  const error = await commitPreparedCommands(createRemovalOps(), prepared).then(
     () => undefined,
     (reason: unknown) => reason,
   );
@@ -693,7 +908,7 @@ test("reports a commit rollback leak without promoting it to manual recovery", a
   await mkdir(commandsRoot, { recursive: true });
   await writeFile(path.join(commandsRoot, "alpha.md"), "alpha prompt\n");
   await writeFile(path.join(commandsRoot, "beta.md"), "beta prompt\n");
-  const prepared = await prepareStageCommands({
+  const prepared = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
     marketplaceName: MARKETPLACE_NAME,
@@ -725,7 +940,7 @@ test("reports a commit rollback leak without promoting it to manual recovery", a
   });
 
   // act
-  const error = await commitPreparedCommands(prepared).then(
+  const error = await commitPreparedCommands(createRemovalOps(), prepared).then(
     () => undefined,
     (reason: unknown) => reason,
   );
@@ -746,7 +961,7 @@ test("propagates a non-missing previous-prompt removal failure", async (t) => {
   await writeFile(path.join(commandsRoot, "current.md"), "current prompt\n");
   await mkdir(blockedPreviousTarget, { recursive: true });
   await writeFile(path.join(blockedPreviousTarget, "child.txt"), "keep child\n");
-  const prepared = await prepareStageCommands({
+  const prepared = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
     marketplaceName: MARKETPLACE_NAME,
@@ -758,11 +973,11 @@ test("propagates a non-missing previous-prompt removal failure", async (t) => {
   });
 
   // act
-  const error = await commitPreparedCommands(prepared).then(
+  const error = await commitPreparedCommands(createRemovalOps(), prepared).then(
     () => undefined,
     (reason: unknown) => reason,
   );
-  const abortLeak = await abortPreparedCommands(prepared);
+  const abortLeak = await abortPreparedCommands(createRemovalOps(), prepared);
   const childBytes = await readFile(path.join(blockedPreviousTarget, "child.txt"), "utf8");
 
   // assert
@@ -784,7 +999,7 @@ test("names the plugin and generated command when an overlong target cannot be s
   await writeFile(path.join(commandsRoot, outer, `${inner}.md`), "long command prompt\n");
 
   // act
-  const error = await prepareStageCommands({
+  const error = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
     marketplaceName: MARKETPLACE_NAME,
@@ -839,7 +1054,7 @@ test("passes through a non-filesystem staging error and cleans staging", async (
   await writeFile(path.join(commandsRoot, "current.md"), "current prompt\n");
 
   // act
-  const error = await prepareStageCommands({
+  const error = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
     marketplaceName: MARKETPLACE_NAME,
@@ -880,7 +1095,7 @@ test("normalizes lone-CR and repeated malformed blocks to exact body bytes", asy
   await writeFile(path.join(commandsRoot, "frontmatter-only.md"), frontmatterOnlySource);
 
   // act
-  const prepared = await prepareStageCommands({
+  const prepared = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
     marketplaceName: MARKETPLACE_NAME,
@@ -889,7 +1104,7 @@ test("normalizes lone-CR and repeated malformed blocks to exact body bytes", asy
     pluginDataDir: path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
     resolved: resolvedFor(pluginRoot),
   });
-  await commitPreparedCommands(prepared);
+  await commitPreparedCommands(createRemovalOps(), prepared);
   const loneCrBytes = await readFile(
     path.join(locations.promptsTargetDir, "acme:lone-cr.md"),
     "utf8",
@@ -940,7 +1155,7 @@ test("cleans staging when a repeated malformed block reaches the no-opening safe
   await writeFile(path.join(commandsRoot, "repeated.md"), commandSource);
 
   // act
-  const error = await prepareStageCommands({
+  const error = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
     marketplaceName: MARKETPLACE_NAME,
@@ -998,7 +1213,7 @@ test("cleans staging when a repeated malformed block reaches the no-close safegu
   await writeFile(path.join(commandsRoot, "repeated.md"), commandSource);
 
   // act
-  const error = await prepareStageCommands({
+  const error = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
     marketplaceName: MARKETPLACE_NAME,
@@ -1032,7 +1247,7 @@ test("reports manual recovery when a failed replacement cannot remove its new pr
   await writeFile(path.join(commandsRoot, "beta.md"), "new beta prompt\n");
   await writeFile(alphaTarget, "prior alpha prompt\n");
   await writeFile(betaTarget, "foreign beta prompt\n");
-  const prepared = await prepareStageCommands({
+  const prepared = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
     marketplaceName: MARKETPLACE_NAME,
@@ -1072,7 +1287,7 @@ test("reports manual recovery when a failed replacement cannot remove its new pr
   };
 
   // act
-  const error = await replacePreparedCommands(prepared).then(
+  const error = await replacePreparedCommands(createRemovalOps(), prepared).then(
     () => undefined,
     (reason: unknown) => reason,
   );
@@ -1100,7 +1315,7 @@ test("rejects unknown replacement handles through both public cleanup operations
   const commandsRoot = path.join(pluginRoot, "commands");
   await mkdir(commandsRoot, { recursive: true });
   await writeFile(path.join(commandsRoot, "current.md"), "Current prompt.\n");
-  const prepared = await prepareStageCommands({
+  const prepared = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
     marketplaceName: MARKETPLACE_NAME,
@@ -1109,9 +1324,9 @@ test("rejects unknown replacement handles through both public cleanup operations
     pluginDataDir: path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
     resolved: resolvedFor(pluginRoot),
   });
-  const replacement = await replacePreparedCommands(prepared);
+  const replacement = await replacePreparedCommands(createRemovalOps(), prepared);
   assert.strictEqual(replacement.kind, "replaced");
-  t.after(() => finalizeCommandsReplacement(replacement));
+  t.after(() => finalizeCommandsReplacement(createRemovalOps(), replacement));
   const { locations: replacementLocations, ...cloneablePrepared } = replacement.prepared;
   const clonedReplacement = structuredClone({ ...replacement, prepared: cloneablePrepared });
   const unknownReplacement = {
@@ -1120,11 +1335,17 @@ test("rejects unknown replacement handles through both public cleanup operations
   } satisfies typeof replacement;
 
   // act
-  const rollbackError = await rollbackCommandsReplacement(unknownReplacement).then(
+  const rollbackError = await rollbackCommandsReplacement(
+    createRemovalOps(),
+    unknownReplacement,
+  ).then(
     () => undefined,
     (reason: unknown) => reason,
   );
-  const finalizeError = await finalizeCommandsReplacement(unknownReplacement).then(
+  const finalizeError = await finalizeCommandsReplacement(
+    createRemovalOps(),
+    unknownReplacement,
+  ).then(
     () => undefined,
     (reason: unknown) => reason,
   );

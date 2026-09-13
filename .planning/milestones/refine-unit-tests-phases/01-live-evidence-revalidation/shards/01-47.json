@@ -1,0 +1,1308 @@
+{
+  "version": 1,
+  "plan": "01-47",
+  "files": [
+    {
+      "path": ".planning/reviews/unit-test-adversarial/edge-handlers-root.md",
+      "category": "first-pass",
+      "assignedPlan": "01-47",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/edge-handlers-root.md#CLAIM-001",
+        ".planning/reviews/unit-test-adversarial/edge-handlers-root.md#CLAIM-002",
+        ".planning/reviews/unit-test-adversarial/edge-handlers-root.md#CLAIM-003",
+        ".planning/reviews/unit-test-adversarial/edge-handlers-root.md#CLAIM-004",
+        ".planning/reviews/unit-test-adversarial/edge-handlers-root.md#CLAIM-005",
+        ".planning/reviews/unit-test-adversarial/edge-handlers-root.md#CLAIM-006",
+        ".planning/reviews/unit-test-adversarial/edge-handlers-root.md#CLAIM-007",
+        ".planning/reviews/unit-test-adversarial/edge-handlers-root.md#CLAIM-008",
+        ".planning/reviews/unit-test-adversarial/edge-handlers-root.md#CLAIM-009",
+        ".planning/reviews/unit-test-adversarial/edge-handlers-root.md#CLAIM-010",
+        ".planning/reviews/unit-test-adversarial/edge-handlers-root.md#CLAIM-011",
+        ".planning/reviews/unit-test-adversarial/edge-handlers-root.md#CLAIM-012",
+        ".planning/reviews/unit-test-adversarial/edge-handlers-root.md#CLAIM-013",
+        ".planning/reviews/unit-test-adversarial/edge-handlers-root.md#CLAIM-014",
+        ".planning/reviews/unit-test-adversarial/edge-handlers-root.md#CLAIM-015"
+      ],
+      "reviewStatus": "complete",
+      "outcome": "live findings"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/edge-root.md",
+      "category": "first-pass",
+      "assignedPlan": "01-47",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/edge-root.md#CLAIM-001",
+        ".planning/reviews/unit-test-adversarial/edge-root.md#CLAIM-002",
+        ".planning/reviews/unit-test-adversarial/edge-root.md#CLAIM-003",
+        ".planning/reviews/unit-test-adversarial/edge-root.md#CLAIM-004",
+        ".planning/reviews/unit-test-adversarial/edge-root.md#CLAIM-005",
+        ".planning/reviews/unit-test-adversarial/edge-root.md#CLAIM-006",
+        ".planning/reviews/unit-test-adversarial/edge-root.md#CLAIM-007",
+        ".planning/reviews/unit-test-adversarial/edge-root.md#CLAIM-008",
+        ".planning/reviews/unit-test-adversarial/edge-root.md#CLAIM-009",
+        ".planning/reviews/unit-test-adversarial/edge-root.md#CLAIM-010",
+        ".planning/reviews/unit-test-adversarial/edge-root.md#CLAIM-011",
+        ".planning/reviews/unit-test-adversarial/edge-root.md#CLAIM-012"
+      ],
+      "reviewStatus": "complete",
+      "outcome": "live findings"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/orchestrators-import.md",
+      "category": "first-pass",
+      "assignedPlan": "01-47",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-import.md#CLAIM-001",
+        ".planning/reviews/unit-test-adversarial/orchestrators-import.md#CLAIM-002",
+        ".planning/reviews/unit-test-adversarial/orchestrators-import.md#CLAIM-003",
+        ".planning/reviews/unit-test-adversarial/orchestrators-import.md#CLAIM-004",
+        ".planning/reviews/unit-test-adversarial/orchestrators-import.md#CLAIM-005",
+        ".planning/reviews/unit-test-adversarial/orchestrators-import.md#CLAIM-006",
+        ".planning/reviews/unit-test-adversarial/orchestrators-import.md#CLAIM-007",
+        ".planning/reviews/unit-test-adversarial/orchestrators-import.md#CLAIM-008",
+        ".planning/reviews/unit-test-adversarial/orchestrators-import.md#CLAIM-009",
+        ".planning/reviews/unit-test-adversarial/orchestrators-import.md#CLAIM-010",
+        ".planning/reviews/unit-test-adversarial/orchestrators-import.md#CLAIM-011",
+        ".planning/reviews/unit-test-adversarial/orchestrators-import.md#CLAIM-012",
+        ".planning/reviews/unit-test-adversarial/orchestrators-import.md#CLAIM-013",
+        ".planning/reviews/unit-test-adversarial/orchestrators-import.md#CLAIM-014",
+        ".planning/reviews/unit-test-adversarial/orchestrators-import.md#CLAIM-015",
+        ".planning/reviews/unit-test-adversarial/orchestrators-import.md#CLAIM-016",
+        ".planning/reviews/unit-test-adversarial/orchestrators-import.md#CLAIM-017",
+        ".planning/reviews/unit-test-adversarial/orchestrators-import.md#CLAIM-018",
+        ".planning/reviews/unit-test-adversarial/orchestrators-import.md#CLAIM-019",
+        ".planning/reviews/unit-test-adversarial/orchestrators-import.md#CLAIM-020",
+        ".planning/reviews/unit-test-adversarial/orchestrators-import.md#CLAIM-021",
+        ".planning/reviews/unit-test-adversarial/orchestrators-import.md#CLAIM-022"
+      ],
+      "reviewStatus": "complete",
+      "outcome": "live findings"
+    }
+  ],
+  "sourceClaims": [
+    {
+      "id": ".planning/reviews/unit-test-adversarial/edge-handlers-root.md#CLAIM-001",
+      "filePath": ".planning/reviews/unit-test-adversarial/edge-handlers-root.md",
+      "label": "CLAIM-001",
+      "findingId": "EHRR-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/edge-handlers-root.md#CLAIM-002",
+      "filePath": ".planning/reviews/unit-test-adversarial/edge-handlers-root.md",
+      "label": "CLAIM-002",
+      "findingId": "EHRR-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/edge-handlers-root.md#CLAIM-003",
+      "filePath": ".planning/reviews/unit-test-adversarial/edge-handlers-root.md",
+      "label": "CLAIM-003",
+      "findingId": "EHRR-F003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/edge-handlers-root.md#CLAIM-004",
+      "filePath": ".planning/reviews/unit-test-adversarial/edge-handlers-root.md",
+      "label": "CLAIM-004",
+      "findingId": "EHRR-F004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/edge-handlers-root.md#CLAIM-005",
+      "filePath": ".planning/reviews/unit-test-adversarial/edge-handlers-root.md",
+      "label": "CLAIM-005",
+      "findingId": "EHRR-F005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/edge-handlers-root.md#CLAIM-006",
+      "filePath": ".planning/reviews/unit-test-adversarial/edge-handlers-root.md",
+      "label": "CLAIM-006",
+      "findingId": "EHRR-F006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/edge-handlers-root.md#CLAIM-007",
+      "filePath": ".planning/reviews/unit-test-adversarial/edge-handlers-root.md",
+      "label": "CLAIM-007",
+      "findingId": "EHRR-F007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/edge-handlers-root.md#CLAIM-008",
+      "filePath": ".planning/reviews/unit-test-adversarial/edge-handlers-root.md",
+      "label": "CLAIM-008",
+      "findingId": "EHRR-F008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/edge-handlers-root.md#CLAIM-009",
+      "filePath": ".planning/reviews/unit-test-adversarial/edge-handlers-root.md",
+      "label": "CLAIM-009",
+      "findingId": "EHRR-F009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/edge-handlers-root.md#CLAIM-010",
+      "filePath": ".planning/reviews/unit-test-adversarial/edge-handlers-root.md",
+      "label": "CLAIM-010",
+      "findingId": "EHRR-F010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/edge-handlers-root.md#CLAIM-011",
+      "filePath": ".planning/reviews/unit-test-adversarial/edge-handlers-root.md",
+      "label": "CLAIM-011",
+      "findingId": "EHRR-F011"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/edge-handlers-root.md#CLAIM-012",
+      "filePath": ".planning/reviews/unit-test-adversarial/edge-handlers-root.md",
+      "label": "CLAIM-012",
+      "findingId": "EHRR-F012"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/edge-handlers-root.md#CLAIM-013",
+      "filePath": ".planning/reviews/unit-test-adversarial/edge-handlers-root.md",
+      "label": "CLAIM-013",
+      "findingId": "EHRR-F013"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/edge-handlers-root.md#CLAIM-014",
+      "filePath": ".planning/reviews/unit-test-adversarial/edge-handlers-root.md",
+      "label": "CLAIM-014",
+      "findingId": "EHRR-F014"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/edge-handlers-root.md#CLAIM-015",
+      "filePath": ".planning/reviews/unit-test-adversarial/edge-handlers-root.md",
+      "label": "CLAIM-015",
+      "findingId": "EHRR-F015"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/edge-root.md#CLAIM-001",
+      "filePath": ".planning/reviews/unit-test-adversarial/edge-root.md",
+      "label": "CLAIM-001",
+      "findingId": "ERR-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/edge-root.md#CLAIM-002",
+      "filePath": ".planning/reviews/unit-test-adversarial/edge-root.md",
+      "label": "CLAIM-002",
+      "findingId": "ERR-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/edge-root.md#CLAIM-003",
+      "filePath": ".planning/reviews/unit-test-adversarial/edge-root.md",
+      "label": "CLAIM-003",
+      "findingId": "ERR-F003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/edge-root.md#CLAIM-004",
+      "filePath": ".planning/reviews/unit-test-adversarial/edge-root.md",
+      "label": "CLAIM-004",
+      "findingId": "ERR-F004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/edge-root.md#CLAIM-005",
+      "filePath": ".planning/reviews/unit-test-adversarial/edge-root.md",
+      "label": "CLAIM-005",
+      "findingId": "ERR-F005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/edge-root.md#CLAIM-006",
+      "filePath": ".planning/reviews/unit-test-adversarial/edge-root.md",
+      "label": "CLAIM-006",
+      "findingId": "ERR-F006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/edge-root.md#CLAIM-007",
+      "filePath": ".planning/reviews/unit-test-adversarial/edge-root.md",
+      "label": "CLAIM-007",
+      "findingId": "ERR-F007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/edge-root.md#CLAIM-008",
+      "filePath": ".planning/reviews/unit-test-adversarial/edge-root.md",
+      "label": "CLAIM-008",
+      "findingId": "ERR-F008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/edge-root.md#CLAIM-009",
+      "filePath": ".planning/reviews/unit-test-adversarial/edge-root.md",
+      "label": "CLAIM-009",
+      "findingId": "ERR-F009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/edge-root.md#CLAIM-010",
+      "filePath": ".planning/reviews/unit-test-adversarial/edge-root.md",
+      "label": "CLAIM-010",
+      "findingId": "ERR-F010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/edge-root.md#CLAIM-011",
+      "filePath": ".planning/reviews/unit-test-adversarial/edge-root.md",
+      "label": "CLAIM-011",
+      "findingId": "ERR-F011"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/edge-root.md#CLAIM-012",
+      "filePath": ".planning/reviews/unit-test-adversarial/edge-root.md",
+      "label": "CLAIM-012",
+      "findingId": "ERR-F012"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-import.md#CLAIM-001",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-import.md",
+      "label": "CLAIM-001",
+      "findingId": "OIR-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-import.md#CLAIM-002",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-import.md",
+      "label": "CLAIM-002",
+      "findingId": "OIR-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-import.md#CLAIM-003",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-import.md",
+      "label": "CLAIM-003",
+      "findingId": "OIR-F003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-import.md#CLAIM-004",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-import.md",
+      "label": "CLAIM-004",
+      "findingId": "OIR-F004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-import.md#CLAIM-005",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-import.md",
+      "label": "CLAIM-005",
+      "findingId": "OIR-F005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-import.md#CLAIM-006",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-import.md",
+      "label": "CLAIM-006",
+      "findingId": "OIR-F006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-import.md#CLAIM-007",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-import.md",
+      "label": "CLAIM-007",
+      "findingId": "OIR-F007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-import.md#CLAIM-008",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-import.md",
+      "label": "CLAIM-008",
+      "findingId": "OIR-F008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-import.md#CLAIM-009",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-import.md",
+      "label": "CLAIM-009",
+      "findingId": "OIR-F009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-import.md#CLAIM-010",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-import.md",
+      "label": "CLAIM-010",
+      "findingId": "OIR-F010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-import.md#CLAIM-011",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-import.md",
+      "label": "CLAIM-011",
+      "findingId": "OIR-F011"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-import.md#CLAIM-012",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-import.md",
+      "label": "CLAIM-012",
+      "findingId": "OIR-F012"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-import.md#CLAIM-013",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-import.md",
+      "label": "CLAIM-013",
+      "findingId": "OIR-F013"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-import.md#CLAIM-014",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-import.md",
+      "label": "CLAIM-014",
+      "findingId": "OIR-F014"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-import.md#CLAIM-015",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-import.md",
+      "label": "CLAIM-015",
+      "findingId": "OIR-F015"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-import.md#CLAIM-016",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-import.md",
+      "label": "CLAIM-016",
+      "findingId": "OIR-F016"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-import.md#CLAIM-017",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-import.md",
+      "label": "CLAIM-017",
+      "findingId": "OIR-F017"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-import.md#CLAIM-018",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-import.md",
+      "label": "CLAIM-018",
+      "findingId": "OIR-F018"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-import.md#CLAIM-019",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-import.md",
+      "label": "CLAIM-019",
+      "findingId": "OIR-F019"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-import.md#CLAIM-020",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-import.md",
+      "label": "CLAIM-020",
+      "findingId": "OIR-F020"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-import.md#CLAIM-021",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-import.md",
+      "label": "CLAIM-021",
+      "findingId": "OIR-F021"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-import.md#CLAIM-022",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-import.md",
+      "label": "CLAIM-022",
+      "findingId": "OIR-F022"
+    }
+  ],
+  "findings": [
+    {
+      "id": "EHRR-F001",
+      "claimIds": [".planning/reviews/unit-test-adversarial/edge-handlers-root.md#CLAIM-001"],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "EHR-F18",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/edge/handlers/shared.ts" }],
+      "testRefs": [{ "path": "tests/edge/handlers/shared.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph, current suite inspection, and focused node:test rerun",
+        "observed": "The scanner suite still uses whole deepStrictEqual values, the exact verified notification boundary, sibling test rows, and no skip/todo; it passed in the 15-module focused run."
+      },
+      "rationale": "The report's clean-suite baseline is the same retained positive pattern already canonicalized by EHR-F18.",
+      "destination": "Retain as a Phase 2 reference pattern."
+    },
+    {
+      "id": "EHRR-F002",
+      "claimIds": [".planning/reviews/unit-test-adversarial/edge-handlers-root.md#CLAIM-002"],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "EHR-F18",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/edge/handlers/tools.ts" }],
+      "testRefs": [{ "path": "tests/edge/handlers/tools.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph, current suite inspection, and focused node:test rerun",
+        "observed": "The tools suite retains exact strong-mock boundaries, case-owned temporary scopes, the offline transport guard, and compile-time status coverage; its module rerun passed."
+      },
+      "rationale": "The broad positive statement remains true while narrower gaps stay independently routed.",
+      "destination": "Retain the suite's existing patterns as Phase 2 exemplars."
+    },
+    {
+      "id": "EHRR-F003",
+      "claimIds": [".planning/reviews/unit-test-adversarial/edge-handlers-root.md#CLAIM-003"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "EHR-F12",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/edge/handlers/tools.ts" }],
+      "testRefs": [{ "path": "tests/edge/handlers/tools.test.ts" }],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --experimental-strip-types probe.ts (inside a repository-local copied extension tree)",
+        "exitCode": 0,
+        "observed": "The isolated probe observed both list-marketplaces and marketplace-filtered list-plugins rejecting on schemaVersion 3; the existing unfiltered plugin case alone returns the graceful isError shape."
+      },
+      "rationale": "Both missing cases and both unguarded production paths are the same live defect already canonicalized as EHR-F12.",
+      "destination": "Unify the state-read error contract and add both exact cases in Phase 2."
+    },
+    {
+      "id": "EHRR-F004",
+      "claimIds": [".planning/reviews/unit-test-adversarial/edge-handlers-root.md#CLAIM-004"],
+      "evidenceStatus": "duplicate",
+      "route": "deferred backlog",
+      "duplicateOf": "EHR-F13",
+      "sourceRefs": [{ "path": "N/A", "reason": "The claim concerns test seed construction." }],
+      "testRefs": [
+        { "path": "tests/edge/handlers/marketplace-seed.ts" },
+        { "path": "tests/edge/handlers/tools.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current type and consumer inspection",
+        "observed": "buildInstalledPluginRecord still returns Record<string, unknown>, and mergeMarketplaceIntoState still double-casts the assembled state through unknown before saveState."
+      },
+      "rationale": "The structural type erasure and prescribed real PluginRecord typing are already represented by EHR-F13.",
+      "destination": "Repair the seed typing in Phase 2 without preserving the double assertion."
+    },
+    {
+      "id": "EHRR-F005",
+      "claimIds": [".planning/reviews/unit-test-adversarial/edge-handlers-root.md#CLAIM-005"],
+      "evidenceStatus": "duplicate",
+      "route": "deferred backlog",
+      "duplicateOf": "EHR-F13",
+      "sourceRefs": [{ "path": "N/A", "reason": "The claim concerns test-support ownership." }],
+      "testRefs": [{ "path": "tests/edge/handlers/marketplace-seed.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph and current import census",
+        "observed": "The seed still serves edge plugin, edge marketplace, and orchestrator plugin suites from an edge-handler path; the exact consumer set has evolved, so final placement remains an owning-concern decision."
+      },
+      "rationale": "The cross-layer placement concern is retained by EHR-F13, while its historical consumer counts are not treated as immutable facts.",
+      "destination": "Keep the placement decision deferred until concern ownership is resolved."
+    },
+    {
+      "id": "EHRR-F006",
+      "claimIds": [".planning/reviews/unit-test-adversarial/edge-handlers-root.md#CLAIM-006"],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "EHR-F14",
+      "sourceRefs": [
+        { "path": "N/A", "reason": "The claim concerns a test boundary's interaction policy." }
+      ],
+      "testRefs": [{ "path": "tests/edge/handlers/tools.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current boundary call-site inspection",
+        "observed": "createToolBoundary still assigns exact cwd read counts, but every affected case also owns a whole public result; the useful no-read/sequence contracts supersede a blanket removal."
+      },
+      "rationale": "The additive-brittleness warning and its targeted-assertion remedy are already narrowed by EHR-F14.",
+      "destination": "Avoid uniform incidental read counts; retain only named absence or sequence contracts."
+    },
+    {
+      "id": "EHRR-F007",
+      "claimIds": [".planning/reviews/unit-test-adversarial/edge-handlers-root.md#CLAIM-007"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "N/A", "reason": "The claim concerns an exported test seed interface." }
+      ],
+      "testRefs": [{ "path": "tests/edge/handlers/marketplace-seed.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current interface and adjacent export inspection",
+        "observed": "SeededRecordInput still lacks a top-level summary although its fields and neighboring exports are documented."
+      },
+      "rationale": "The documentation gap remains mechanical and independently actionable.",
+      "destination": "Add a concise input-role summary when the seed is repaired in Phase 2."
+    },
+    {
+      "id": "EHRR-F008",
+      "claimIds": [".planning/reviews/unit-test-adversarial/edge-handlers-root.md#CLAIM-008"],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "EHR-F18",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/edge/handlers/shared.ts" }],
+      "testRefs": [{ "path": "tests/edge/handlers/shared.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current paired-suite inspection and focused node:test rerun",
+        "observed": "The file remains a clean paired owner and passed without skipped or todo cases."
+      },
+      "rationale": "The explicit clean-file claim is already covered by the canonical positive-pattern finding.",
+      "destination": "No implementation route beyond preserving the pattern."
+    },
+    {
+      "id": "EHRR-F009",
+      "claimIds": [".planning/reviews/unit-test-adversarial/edge-handlers-root.md#CLAIM-009"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "EHR-F15",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/edge/handlers/tools.ts" }],
+      "testRefs": [
+        { "path": "N/A", "reason": "The claim is mechanical production naming and documentation." }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source inspection",
+        "observed": "ToolFilterBuckets still exposes i/a/u fields, and projectRowStatus, pluginScopeOrFallback, pluginReasons, and pluginVersion retain imperative JSDoc openings."
+      },
+      "rationale": "The naming and comment defects are the same mechanical cleanup grouped by EHR-F15.",
+      "destination": "Rename the buckets and repair the comments in the owning Phase 2 edit."
+    },
+    {
+      "id": "EHRR-F010",
+      "claimIds": [".planning/reviews/unit-test-adversarial/edge-handlers-root.md#CLAIM-010"],
+      "evidenceStatus": "duplicate",
+      "route": "deferred backlog",
+      "duplicateOf": "EHR-F20",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/edge/handlers/tools.ts" }],
+      "testRefs": [
+        { "path": "N/A", "reason": "The claim concerns a cross-cutting production source cast." }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph and current cast census",
+        "observed": "record.source remains unknown at persistence output and is still asserted to ParsedSource without a local guard; sibling orchestrators retain the same convention."
+      },
+      "rationale": "The cross-cutting loader/cast correction is already preserved by EHR-F20.",
+      "destination": "Resolve the invariant once at the loader boundary or document every sanctioned cast."
+    },
+    {
+      "id": "EHRR-F011",
+      "claimIds": [".planning/reviews/unit-test-adversarial/edge-handlers-root.md#CLAIM-011"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/edge/handlers/shared.ts" }],
+      "testRefs": [{ "path": "N/A", "reason": "The claim is a production JSDoc style issue." }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source inspection",
+        "observed": "scanLocalFlag still opens with the noun phrase 'Position-independent --local flag scanner' rather than a third-person verb."
+      },
+      "rationale": "The localized documentation defect remains current.",
+      "destination": "Reword the summary mechanically in Phase 2."
+    },
+    {
+      "id": "EHRR-F012",
+      "claimIds": [".planning/reviews/unit-test-adversarial/edge-handlers-root.md#CLAIM-012"],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "EHR-F18",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/edge/handlers/shared.ts" },
+        { "path": "extensions/pi-claude-marketplace/edge/handlers/tools.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/edge/handlers/shared.test.ts" },
+        { "path": "tests/edge/handlers/tools.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph source scan and focused paired-suite rerun",
+        "observed": "Both modules retain explicit returns, no module-mutable state or hidden time/random/environment reads, and catch values are formatted through errorMessage; narrower defects are separately routed."
+      },
+      "rationale": "The report's otherwise-sound production baseline is the retained positive evidence in EHR-F18.",
+      "destination": "Keep as a reference baseline without masking routed defects."
+    },
+    {
+      "id": "EHRR-F013",
+      "claimIds": [".planning/reviews/unit-test-adversarial/edge-handlers-root.md#CLAIM-013"],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/edge/handlers/shared.ts" },
+        { "path": "extensions/pi-claude-marketplace/edge/handlers/tools.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/edge/handlers/shared.test.ts" },
+        { "path": "tests/edge/handlers/tools.test.ts" }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test tests/edge/handlers/shared.test.ts tests/edge/handlers/tools.test.ts",
+        "exitCode": 0,
+        "observed": "The two current suites passed as part of the focused 15-module run; this positively replaces the report's historical not-run limitation without weakening the corrupt-state finding."
+      },
+      "rationale": "The diagnostic review's command limitation is historical, not a current evidence gap.",
+      "destination": "Evidence-only closure."
+    },
+    {
+      "id": "EHRR-F014",
+      "claimIds": [".planning/reviews/unit-test-adversarial/edge-handlers-root.md#CLAIM-014"],
+      "evidenceStatus": "duplicate",
+      "route": "deferred backlog",
+      "duplicateOf": "EHR-F17",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/edge/handlers/tools.ts" }],
+      "testRefs": [{ "path": "tests/edge/handlers/tools.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current tool boundary inspection",
+        "observed": "No host-level generic rejection adapter is established in this assignment; regardless of host behavior, the two local tool paths differ and remain unowned by focused cases."
+      },
+      "rationale": "The host-catch caveat changes severity wording, not the live inconsistency; EHR-F17 already preserves that terminal question.",
+      "destination": "Confirm host ownership before choosing the Phase 2 error-surface implementation."
+    },
+    {
+      "id": "EHRR-F015",
+      "claimIds": [".planning/reviews/unit-test-adversarial/edge-handlers-root.md#CLAIM-015"],
+      "evidenceStatus": "duplicate",
+      "route": "deferred backlog",
+      "duplicateOf": "EHR-F20",
+      "sourceRefs": [
+        { "path": "N/A", "reason": "The claim concerns cross-cutting test boundary scope." }
+      ],
+      "testRefs": [
+        { "path": "tests/edge/notification-boundary.ts" },
+        { "path": "tests/edge/handlers/shared.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph and current boundary-consumer inspection",
+        "observed": "The first pass did not own the boundary file, but shared.test still consumes its exactParams, explicit verify, and unstated-zero convention correctly."
+      },
+      "rationale": "The scope caveat and reusable boundary evidence are already preserved by EHR-F20.",
+      "destination": "Carry the boundary evidence into later consolidation without expanding this shard's scope."
+    },
+    {
+      "id": "ERR-F001",
+      "claimIds": [".planning/reviews/unit-test-adversarial/edge-root.md#CLAIM-001"],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "ER-F17",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/edge/router.ts" },
+        { "path": "extensions/pi-claude-marketplace/edge/types.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/edge/args.test.ts" },
+        { "path": "tests/edge/args-schema.test.ts" },
+        { "path": "tests/edge/flag-catalog.test.ts" },
+        { "path": "tests/edge/router.test.ts" },
+        { "path": "tests/edge/types.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph, current owner-suite inspection, and focused node:test rerun",
+        "observed": "Every direct edge module retains a paired suite; the cited tests retain whole strict values, row-owned tests, strong-mock router dispatch, and type-only ownership, and all six edge owner modules passed."
+      },
+      "rationale": "The broad healthy-area statement remains current reference evidence already captured by ER-F17.",
+      "destination": "Retain as Phase 2 reference patterns while addressing narrower gaps."
+    },
+    {
+      "id": "ERR-F002",
+      "claimIds": [".planning/reviews/unit-test-adversarial/edge-root.md#CLAIM-002"],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/edge/args.ts" },
+        { "path": "extensions/pi-claude-marketplace/edge/register.ts" },
+        { "path": "extensions/pi-claude-marketplace/edge/router.ts" }
+      ],
+      "testRefs": [{ "path": "tests/edge/register.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph hidden-dependency scan",
+        "observed": "The direct edge modules remain free of hidden time, UUID, and environment reads; register's process.cwd call remains the known completion-adapter boundary, although its timing comments are separately incorrect."
+      },
+      "rationale": "The purity observation is valid once separated from the stale claim that register.ts has no finding.",
+      "destination": "Preserve the dependency boundary and repair its timing documentation under ER-F02."
+    },
+    {
+      "id": "ERR-F003",
+      "claimIds": [".planning/reviews/unit-test-adversarial/edge-root.md#CLAIM-003"],
+      "evidenceStatus": "duplicate",
+      "route": "operator decision",
+      "duplicateOf": "ER-F08",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/edge/register.ts" }],
+      "testRefs": [{ "path": "tests/edge/register.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph and current recorder census",
+        "observed": "The three prescribed AutocompleteProvider interactions still use requests, applications, and triggerTests arrays; the neighboring non-interaction literals remain legitimate stubs."
+      },
+      "rationale": "The recorder diagnosis, strong-mock prescription, and explicit exception for pure stubs are the same policy question canonicalized by ER-F08.",
+      "destination": "Resolve the recorder policy once and preserve whole emitted-message assertions."
+    },
+    {
+      "id": "ERR-F004",
+      "claimIds": [".planning/reviews/unit-test-adversarial/edge-root.md#CLAIM-004"],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "ER-F17",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/edge/register.ts" }],
+      "testRefs": [{ "path": "tests/edge/register.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current case-role inspection",
+        "observed": "The three other current-provider literals only return canned values and assert public wrapper results, so they remain stubs rather than prescribed-call mocks."
+      },
+      "rationale": "This exception is useful positive evidence, not a second defect.",
+      "destination": "Retain the stubs as written."
+    },
+    {
+      "id": "ERR-F005",
+      "claimIds": [".planning/reviews/unit-test-adversarial/edge-root.md#CLAIM-005"],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "ER-F11",
+      "sourceRefs": [
+        { "path": "N/A", "reason": "The claim concerns historical test-support placement." }
+      ],
+      "testRefs": [{ "path": "tests/edge/notification-boundary.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current placement, import census, and retained project decision",
+        "observed": "The boundary has 27 current consumers across edge, orchestrator, and root suites, but project history deliberately retains concern-local edge placement rather than a generic shared helper directory."
+      },
+      "rationale": "The factual blast radius remains, but the prescribed move is superseded by ER-F11's explicit ownership decision.",
+      "destination": "No implementation route; preserve the current placement."
+    },
+    {
+      "id": "ERR-F006",
+      "claimIds": [".planning/reviews/unit-test-adversarial/edge-root.md#CLAIM-006"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "ER-F12",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/edge/args.ts" }],
+      "testRefs": [
+        { "path": "N/A", "reason": "The claim is a production type-consistency issue." }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current interface inspection",
+        "observed": "ParsedArgs positional and scope remain mutable declarations while sibling edge data interfaces are readonly."
+      },
+      "rationale": "The type-consistency warning is already canonicalized by ER-F12.",
+      "destination": "Make both fields readonly in Phase 2."
+    },
+    {
+      "id": "ERR-F007",
+      "claimIds": [".planning/reviews/unit-test-adversarial/edge-root.md#CLAIM-007"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "ER-F13",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/edge/args.ts" }],
+      "testRefs": [{ "path": "tests/edge/args.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current export inspection",
+        "observed": "ParsedArgs and parseArgs still have no declaration-attached JSDoc."
+      },
+      "rationale": "The localized documentation gap is ER-F13.",
+      "destination": "Document both retained exports in Phase 2."
+    },
+    {
+      "id": "ERR-F008",
+      "claimIds": [".planning/reviews/unit-test-adversarial/edge-root.md#CLAIM-008"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "ER-F14",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/edge/args-schema.ts" }],
+      "testRefs": [
+        { "path": "N/A", "reason": "The claim is a production documentation attachment issue." }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current declaration inspection",
+        "observed": "The parse-and-validate JSDoc remains attached to PositionalSpec, leaving both data contracts and parseCommandArgs without correctly placed summaries."
+      },
+      "rationale": "The documentation anchoring defect is already canonicalized by ER-F14.",
+      "destination": "Move and split the comments in Phase 2."
+    },
+    {
+      "id": "ERR-F009",
+      "claimIds": [".planning/reviews/unit-test-adversarial/edge-root.md#CLAIM-009"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "ER-F15",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/edge/args-schema.ts" }],
+      "testRefs": [
+        { "path": "N/A", "reason": "The claim is a production generic-type invariant." }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current return-path inspection",
+        "observed": "parseCommandArgs still asserts its dynamically assembled object to ParsedCommandArgs<Spec> without stating the key-by-key invariant."
+      },
+      "rationale": "The unspoken accumulator invariant is ER-F15.",
+      "destination": "Add the concise invariant comment in Phase 2."
+    },
+    {
+      "id": "ERR-F010",
+      "claimIds": [".planning/reviews/unit-test-adversarial/edge-root.md#CLAIM-010"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "ER-F16",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/edge/flag-catalog.ts" }],
+      "testRefs": [{ "path": "tests/edge/flag-catalog.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current signature and catalog inspection",
+        "observed": "completionFlagEntries still returns an anonymous mutable array shape with optional description even though every realizable completion has a description."
+      },
+      "rationale": "The named readonly return-contract correction is ER-F16.",
+      "destination": "Introduce the accurate named return type in Phase 2."
+    },
+    {
+      "id": "ERR-F011",
+      "claimIds": [".planning/reviews/unit-test-adversarial/edge-root.md#CLAIM-011"],
+      "evidenceStatus": "superseded",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/edge/register.ts" },
+        { "path": "extensions/pi-claude-marketplace/edge/router.ts" },
+        { "path": "extensions/pi-claude-marketplace/edge/types.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/edge/register.test.ts" },
+        { "path": "tests/edge/router.test.ts" },
+        { "path": "tests/edge/types.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source and paired-test inspection",
+        "observed": "router.ts and types.ts retain the reported clean baseline, but register.ts has two comments that claim registration-time cwd capture while the callback and its test prove invocation-time capture (ER-F02)."
+      },
+      "rationale": "The blanket clean-file claim is positively replaced by narrower current evidence and ER-F02; the valid router/type portions remain reference evidence.",
+      "destination": "Close the blanket claim and route the register documentation correction through ER-F02."
+    },
+    {
+      "id": "ERR-F012",
+      "claimIds": [".planning/reviews/unit-test-adversarial/edge-root.md#CLAIM-012"],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/edge/args.ts" },
+        { "path": "extensions/pi-claude-marketplace/edge/router.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/edge/args.test.ts" },
+        { "path": "tests/edge/args-schema.test.ts" },
+        { "path": "tests/edge/flag-catalog.test.ts" },
+        { "path": "tests/edge/register.test.ts" },
+        { "path": "tests/edge/router.test.ts" },
+        { "path": "tests/edge/types.test.ts" }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test tests/edge/args.test.ts tests/edge/args-schema.test.ts tests/edge/flag-catalog.test.ts tests/edge/register.test.ts tests/edge/router.test.ts tests/edge/types.test.ts",
+        "exitCode": 0,
+        "observed": "All six assigned edge owner modules passed in the focused run, positively replacing the historical not-run limitation; completions and handlers remained outside this corpus file's scope."
+      },
+      "rationale": "The execution limitation is stale while the original scope boundary remains valid.",
+      "destination": "Evidence-only closure."
+    },
+    {
+      "id": "OIR-F001",
+      "claimIds": [".planning/reviews/unit-test-adversarial/orchestrators-import.md#CLAIM-001"],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/import/index.ts" },
+        { "path": "extensions/pi-claude-marketplace/orchestrators/import/execute.ts" },
+        { "path": "extensions/pi-claude-marketplace/orchestrators/import/settings.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/orchestrators/import/index.test.ts" },
+        { "path": "tests/orchestrators/import/execute.test.ts" },
+        { "path": "tests/orchestrators/import/settings.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current tree census and focused node:test rerun",
+        "observed": "All seven production modules retain direct paired test modules, and all seven assigned import test modules passed."
+      },
+      "rationale": "The 1:1 ownership claim remains useful baseline evidence independent of individual coverage gaps.",
+      "destination": "Retain the pairing structure."
+    },
+    {
+      "id": "OIR-F002",
+      "claimIds": [".planning/reviews/unit-test-adversarial/orchestrators-import.md#CLAIM-002"],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/import/execute.messaging.ts" }
+      ],
+      "testRefs": [{ "path": "tests/orchestrators/import/execute.messaging.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph and current whole-literal/omission assertion inspection",
+        "observed": "The messaging suite still uses independent literal rendered strings and explicit optional-field omission checks, and it passed the focused run."
+      },
+      "rationale": "The positive assertion-independence pattern remains current despite separately routed messaging gaps from later review.",
+      "destination": "Retain as a Phase 2 reference pattern."
+    },
+    {
+      "id": "OIR-F003",
+      "claimIds": [".planning/reviews/unit-test-adversarial/orchestrators-import.md#CLAIM-003"],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/orchestrators/import/types.ts" }],
+      "testRefs": [{ "path": "tests/orchestrators/import/types.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current type-only suite inspection and focused node:test rerun",
+        "observed": "types.test remains compile-time-only with satisfies positives, ts-expect-error negatives, and readonly-array checks; it passed under the current test runner."
+      },
+      "rationale": "Correct type-only ownership remains true even though later review identified additional missing type cases.",
+      "destination": "Preserve the pairing style and add routed negatives through OI-F06/OI-F07."
+    },
+    {
+      "id": "OIR-F004",
+      "claimIds": [".planning/reviews/unit-test-adversarial/orchestrators-import.md#CLAIM-004"],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/orchestrators/import/index.ts" }],
+      "testRefs": [{ "path": "tests/orchestrators/import/index.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph and current barrel-contract inspection",
+        "observed": "The barrel suite still pins the single runtime binding, same-binding identity, selected type exports, and absent internal exports with consumed negatives."
+      },
+      "rationale": "The closed-surface contract remains valid independently of the unnecessary runtime describe wrapper.",
+      "destination": "Retain the contract while flattening its sole runtime case under OI-F23."
+    },
+    {
+      "id": "OIR-F005",
+      "claimIds": [".planning/reviews/unit-test-adversarial/orchestrators-import.md#CLAIM-005"],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/import/execute.ts" }
+      ],
+      "testRefs": [{ "path": "tests/orchestrators/import/execute.test.ts" }],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "node --test tests/orchestrators/import/execute.test.ts after adding applyDefaultEnabled: true in a repository-local copied source tree",
+        "exitCode": 1,
+        "observed": "The focused owner suite failed under the isolated mutation, proving the exact install-options case kills a regression that opts import into default-enabled policy."
+      },
+      "rationale": "D-102-03 remains behaviorally owned; its hand-rolled recorder is separately routed as a test-double policy issue.",
+      "destination": "Preserve the behavioral discriminator and add source traceability under OI-F25."
+    },
+    {
+      "id": "OIR-F006",
+      "claimIds": [".planning/reviews/unit-test-adversarial/orchestrators-import.md#CLAIM-006"],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/import/execute.ts" },
+        { "path": "extensions/pi-claude-marketplace/orchestrators/import/settings.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/orchestrators/import/execute.test.ts" },
+        { "path": "tests/orchestrators/import/settings.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current fixture, assertion, cleanup, and focused-run inspection",
+        "observed": "Import tests retain whole-value assertions, case-owned temporary roots, registered cleanup, and HOME/PI_CODING_AGENT_DIR restoration; all seven modules passed with no skips or todos."
+      },
+      "rationale": "The broad no-blocker and hermeticity baseline remains valid while narrower findings stay independent.",
+      "destination": "Retain as baseline evidence, not as closure of narrower gaps."
+    },
+    {
+      "id": "OIR-F007",
+      "claimIds": [".planning/reviews/unit-test-adversarial/orchestrators-import.md#CLAIM-007"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "OI-F17",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/import/execute.ts" }
+      ],
+      "testRefs": [{ "path": "tests/orchestrators/import/execute.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current recorder-array census",
+        "observed": "The options, cross-collaborator order, continuation order, scope-order, and D-102-03 cases still use requested, calls, or attempted arrays around plain collaborator functions; canned-response-only collaborators remain legitimate stubs."
+      },
+      "rationale": "The interaction-policy finding, its shared-log exception, and its stub boundary are already canonicalized by OI-F17.",
+      "destination": "Convert prescribed calls to verified exact mocks in Phase 2 without deleting public result assertions."
+    },
+    {
+      "id": "OIR-F008",
+      "claimIds": [".planning/reviews/unit-test-adversarial/orchestrators-import.md#CLAIM-008"],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/import/execute.ts" }
+      ],
+      "testRefs": [{ "path": "tests/orchestrators/import/execute.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current collaborator-role inspection",
+        "observed": "Outside prescribed-call and order cases, injected import collaborators drive canned responses while whole ClaudeImportExecutionResult and notification values own public behavior."
+      },
+      "rationale": "The report's explicit exclusion prevents a style finding from becoming a blanket mock rewrite.",
+      "destination": "Retain response-driving stubs."
+    },
+    {
+      "id": "OIR-F009",
+      "claimIds": [".planning/reviews/unit-test-adversarial/orchestrators-import.md#CLAIM-009"],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "OI-F18",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/orchestrators/import/refs.ts" }],
+      "testRefs": [{ "path": "tests/orchestrators/import/refs.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current assertion-value inspection and focused rerun",
+        "observed": "All 12 assertions still spell deepEqual, but their compared outputs are object/array structures with strict primitive expectations; the cited coercion defect has no current discriminator and the suite passed."
+      },
+      "rationale": "OI-F18 positively narrows the semantic claim to a convention-only wording issue, so the historical remedy is not scheduled as a test-strength defect.",
+      "destination": "Evidence-only closure; a mechanical rename may be batched only if the project chooses the convention."
+    },
+    {
+      "id": "OIR-F010",
+      "claimIds": [".planning/reviews/unit-test-adversarial/orchestrators-import.md#CLAIM-010"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "OI-F19",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/orchestrators/import/refs.ts" }],
+      "testRefs": [{ "path": "tests/orchestrators/import/refs.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current binding-name census",
+        "observed": "All 12 refs cases still bind their returned value as result instead of parsed or extracted."
+      },
+      "rationale": "The placeholder-name cleanup is OI-F19.",
+      "destination": "Rename by role during the Phase 2 owner edit."
+    },
+    {
+      "id": "OIR-F011",
+      "claimIds": [".planning/reviews/unit-test-adversarial/orchestrators-import.md#CLAIM-011"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "OI-F20",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/import/marketplaces.ts" }
+      ],
+      "testRefs": [{ "path": "tests/orchestrators/import/marketplaces.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current binding-name census",
+        "observed": "All nine marketplace-plan cases still bind the returned value as result."
+      },
+      "rationale": "The role-name cleanup is OI-F20.",
+      "destination": "Rename to plan, sourcePlan, or planned in Phase 2."
+    },
+    {
+      "id": "OIR-F012",
+      "claimIds": [".planning/reviews/unit-test-adversarial/orchestrators-import.md#CLAIM-012"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "OI-F21",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/import/settings.ts" }
+      ],
+      "testRefs": [{ "path": "tests/orchestrators/import/settings.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current binding-name census",
+        "observed": "Six settings cases still bind const result and three still predeclare let result around environment restoration."
+      },
+      "rationale": "The placeholder-name cleanup is OI-F21.",
+      "destination": "Rename the loaded settings values by role in Phase 2."
+    },
+    {
+      "id": "OIR-F013",
+      "claimIds": [".planning/reviews/unit-test-adversarial/orchestrators-import.md#CLAIM-013"],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "OI-F22",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/import/settings.ts" }
+      ],
+      "testRefs": [{ "path": "tests/orchestrators/import/settings.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current fixture setup and focused rerun",
+        "observed": "The EISDIR assertion remains before the act marker, but its adjacent comments explicitly identify it as a fixture-identity guard and the case's public diagnostic assertion remains separate."
+      },
+      "rationale": "OI-F22 supersedes the phase-marker criticism: the assertion is not misplaced behavioral ownership.",
+      "destination": "Evidence-only closure; retain or extract the fixture guard for readability only."
+    },
+    {
+      "id": "OIR-F014",
+      "claimIds": [".planning/reviews/unit-test-adversarial/orchestrators-import.md#CLAIM-014"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "OI-F23",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/orchestrators/import/index.ts" }],
+      "testRefs": [{ "path": "tests/orchestrators/import/index.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current barrel suite inspection",
+        "observed": "A describe block still wraps the only runtime importClaudeSettings re-export case."
+      },
+      "rationale": "The unnecessary grouping is OI-F23.",
+      "destination": "Flatten the single runtime case in Phase 2."
+    },
+    {
+      "id": "OIR-F015",
+      "claimIds": [".planning/reviews/unit-test-adversarial/orchestrators-import.md#CLAIM-015"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "OI-F24",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/import/execute.ts" }
+      ],
+      "testRefs": [{ "path": "N/A", "reason": "The claim is production import-path readability." }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current import inspection",
+        "observed": "Four execute.ts imports still climb through ../../orchestrators rather than using sibling-relative ../ paths."
+      },
+      "rationale": "The path cleanup is OI-F24.",
+      "destination": "Shorten the specifiers in Phase 2."
+    },
+    {
+      "id": "OIR-F016",
+      "claimIds": [".planning/reviews/unit-test-adversarial/orchestrators-import.md#CLAIM-016"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "OI-F25",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/import/execute.ts" }
+      ],
+      "testRefs": [{ "path": "tests/orchestrators/import/execute.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current call-site and decision-test inspection",
+        "observed": "installOnePlannedPlugin still deliberately omits applyDefaultEnabled without a D-102-03 call-site comment; the isolated mutation confirms the test owns the omission."
+      },
+      "rationale": "The missing traceability is OI-F25.",
+      "destination": "Add the concise decision comment in Phase 2."
+    },
+    {
+      "id": "OIR-F017",
+      "claimIds": [".planning/reviews/unit-test-adversarial/orchestrators-import.md#CLAIM-017"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/import/execute.ts" }
+      ],
+      "testRefs": [
+        { "path": "N/A", "reason": "The claim is missing production API documentation." }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current interface inspection",
+        "observed": "MarketplaceAddedOutcome, MarketplaceSkipOutcome, PluginSkipOutcome, MarketplaceFailureOutcome, SourceMismatchOutcome, and UnexpectedPluginFailureOutcome still lack top-level summaries."
+      },
+      "rationale": "The six interface documentation gaps remain distinct from later findings about export necessity.",
+      "destination": "Document retained interfaces or remove test-only/dead exports in the Phase 2 owner edit."
+    },
+    {
+      "id": "OIR-F018",
+      "claimIds": [".planning/reviews/unit-test-adversarial/orchestrators-import.md#CLAIM-018"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "OI-F27",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/import/settings.ts" }
+      ],
+      "testRefs": [{ "path": "tests/orchestrators/import/settings.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph dependency and current test inspection",
+        "observed": "resolveClaudeSettingsPaths still reads process.env.CLAUDE_CONFIG_DIR and os.homedir directly, and default-branch tests still mutate and restore real environment values."
+      },
+      "rationale": "The hidden environment/home collaborators are OI-F27.",
+      "destination": "Inject narrow defaulted lookup ports in Phase 2."
+    },
+    {
+      "id": "OIR-F019",
+      "claimIds": [".planning/reviews/unit-test-adversarial/orchestrators-import.md#CLAIM-019"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "OI-F28",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/import/settings.ts" }
+      ],
+      "testRefs": [{ "path": "tests/orchestrators/import/settings.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current catch-path inspection",
+        "observed": "readClaudeSettingsFile still asserts caught unknown directly to NodeJS.ErrnoException before reading code."
+      },
+      "rationale": "The unchecked catch assertion is OI-F28.",
+      "destination": "Narrow structurally or document the fs rejection invariant in Phase 2."
+    },
+    {
+      "id": "OIR-F020",
+      "claimIds": [".planning/reviews/unit-test-adversarial/orchestrators-import.md#CLAIM-020"],
+      "evidenceStatus": "superseded",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/import/types.ts" },
+        { "path": "extensions/pi-claude-marketplace/orchestrators/import/index.ts" },
+        { "path": "extensions/pi-claude-marketplace/orchestrators/import/refs.ts" },
+        { "path": "extensions/pi-claude-marketplace/orchestrators/import/marketplaces.ts" },
+        { "path": "extensions/pi-claude-marketplace/orchestrators/import/execute.messaging.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/orchestrators/import/types.test.ts" },
+        { "path": "tests/orchestrators/import/index.test.ts" },
+        { "path": "tests/orchestrators/import/refs.test.ts" },
+        { "path": "tests/orchestrators/import/marketplaces.test.ts" },
+        { "path": "tests/orchestrators/import/execute.messaging.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source/test inspection plus later canonical shards",
+        "observed": "The modules remain structurally sound, but the blanket clean claim is positively replaced by current routed gaps OI-F06 through OI-F12 and OI-F23; all paired suites still pass."
+      },
+      "rationale": "Later evidence supersedes 'clean' without discarding the valid baseline patterns.",
+      "destination": "Close the blanket claim and use the narrower canonical findings."
+    },
+    {
+      "id": "OIR-F021",
+      "claimIds": [".planning/reviews/unit-test-adversarial/orchestrators-import.md#CLAIM-021"],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/import/execute.ts" },
+        { "path": "extensions/pi-claude-marketplace/orchestrators/import/settings.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/orchestrators/import/execute.test.ts" },
+        { "path": "tests/orchestrators/import/execute.messaging.test.ts" },
+        { "path": "tests/orchestrators/import/index.test.ts" },
+        { "path": "tests/orchestrators/import/marketplaces.test.ts" },
+        { "path": "tests/orchestrators/import/refs.test.ts" },
+        { "path": "tests/orchestrators/import/settings.test.ts" },
+        { "path": "tests/orchestrators/import/types.test.ts" }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test tests/orchestrators/import/execute.test.ts tests/orchestrators/import/execute.messaging.test.ts tests/orchestrators/import/index.test.ts tests/orchestrators/import/marketplaces.test.ts tests/orchestrators/import/refs.test.ts tests/orchestrators/import/settings.test.ts tests/orchestrators/import/types.test.ts",
+        "exitCode": 0,
+        "observed": "All seven current import suites passed with no failures, skips, or todos, positively replacing the diagnostic report's historical not-run limitation."
+      },
+      "rationale": "The old execution limitation no longer constrains the evidence record.",
+      "destination": "Evidence-only closure."
+    },
+    {
+      "id": "OIR-F022",
+      "claimIds": [".planning/reviews/unit-test-adversarial/orchestrators-import.md#CLAIM-022"],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/plugin/install.ts" }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "The plugin install suite was explicitly outside this corpus assignment."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Assignment boundary plus targeted CodeGraph source path",
+        "observed": "The report used install.ts only to establish the applyDefaultEnabled mechanism; this revalidation independently proved the import-side omission and did not claim ownership of the install suite."
+      },
+      "rationale": "The scope boundary is valid and prevents duplicate ownership while preserving the mechanism trace.",
+      "destination": "No implementation route from this scope note."
+    }
+  ],
+  "decisions": [],
+  "scopeChanges": []
+}

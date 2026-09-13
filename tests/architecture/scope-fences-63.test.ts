@@ -2,15 +2,19 @@ import assert from "node:assert/strict";
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
 
-const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+import {
+  EXTENSION_ROOT_REL,
+  PLUGIN_EDGE_HANDLERS_REL,
+  SCOPE_FENCE_TARGETS,
+} from "./gate-targets.ts";
+import { REPO_ROOT } from "./source-scan.ts";
 
 /**
  * Scope-fence architecture lints pinning three invariants:
  *
  * SURF-03 (deferred): no synthesis-caveat warning surface ships yet.
- * `shared/notify.ts` must NOT introduce a lossy-synthesis token in
+ * `shared/notification-types.ts` must NOT introduce a lossy-synthesis token in
  * `REASONS`; no `<lossy synthesis>` marker family may appear in any source
  * file; no install-arm warning emission outside the orphan-rewake row.
  *
@@ -20,9 +24,9 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..
  * this test pins the source-level non-additions that would produce such a
  * column.
  *
- * HOOK-04 (prior completion per D-58-01): `shared/notify.ts::REASONS` already
+ * HOOK-04 (prior completion per D-58-01): `shared/notification-types.ts::REASONS` already
  * contains `"unsupported hooks"`, and `MANIFEST_FIELD_REASONS` in
- * `orchestrators/plugin/install.ts` excludes `"hooks"`. This test pins that
+ * `orchestrators/plugin/install.messaging.ts` excludes `"hooks"`. This test pins that
  * prior state so a future regression cannot silently re-add `"hooks"` to the
  * structural-degradation set, which would re-open the supersession.
  *
@@ -34,15 +38,32 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..
  * path. A non-existent directory makes its assertion trivially satisfied.
  */
 
-const NOTIFY_REL = "extensions/pi-claude-marketplace/shared/notify.ts";
-// The gate follows the MANIFEST_FIELD_REASONS declaration itself -- currently
-// in install.messaging.ts, alongside the rest of install's
-// error-classification family -- rather than pinning a fixed folder.
-const INSTALL_REL = "extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts";
-const LIST_ORCH_REL = "extensions/pi-claude-marketplace/orchestrators/plugin/list.ts";
-const LIST_EDGE_REL = "extensions/pi-claude-marketplace/edge/handlers/plugin/list.ts";
-const PLUGIN_EDGE_DIR_REL = "extensions/pi-claude-marketplace/edge/handlers/plugin";
-const PLUGIN_COMMANDS_DIR_REL = "extensions/pi-claude-marketplace/commands/plugin";
+/**
+ * The scope-fence group in its declared order: the vocabulary owner first, then
+ * the three surfaces that must render scope through it. The gate follows the
+ * MANIFEST_FIELD_REASONS declaration itself -- currently in
+ * install.messaging.ts, alongside the rest of install's error-classification
+ * family -- rather than pinning a fixed folder. Position is what aims each
+ * clause, so the module basenames are pinned in the first case (D-07-03).
+ */
+const [NOTIFICATION_TYPES_REL, INSTALL_REL, LIST_ORCH_REL, LIST_EDGE_REL] = SCOPE_FENCE_TARGETS;
+
+/** The module basenames the destructuring above binds, in registry order. */
+const DECLARED_MODULE_ORDER: ReadonlyArray<string> = [
+  "notification-types.ts",
+  "install.messaging.ts",
+  "list-flow.ts",
+  "list.ts",
+];
+
+/**
+ * The historical command-surface directory, composed from the registry's
+ * extension root because its contract is that it does NOT resolve --
+ * `SCOPE_FENCE_TARGETS` requires every member to exist, so this path cannot be
+ * a member of it. It is the one repository-relative path this gate still
+ * assembles locally.
+ */
+const PLUGIN_COMMANDS_DIR_REL = `${EXTENSION_ROOT_REL}/commands/plugin`;
 
 const HOOKS_EDGE_FILE_REGEX = /^hooks\.(ts|js|cjs|mjs)$/;
 
@@ -96,8 +117,18 @@ async function dirEntries(relPath: string): Promise<readonly string[] | null> {
   }
 }
 
-test("SURF-03: no lossy-synthesis tokens in shared/notify.ts (synthesis-caveat warning surface deferred)", async () => {
-  const source = await readFile(path.join(REPO_ROOT, NOTIFY_REL), "utf8");
+test("SURF-03: no lossy-synthesis tokens in shared/notification-types.ts (synthesis-caveat warning surface deferred)", async () => {
+  assert.ok(
+    SCOPE_FENCE_TARGETS.length > 0,
+    "D-07-03: an empty SCOPE_FENCE_TARGETS leaves every clause in this gate reporting success over zero declared files.",
+  );
+  assert.deepEqual(
+    SCOPE_FENCE_TARGETS.map((rel) => path.basename(rel)),
+    DECLARED_MODULE_ORDER,
+    "D-07-03: every clause in this gate is aimed by POSITION in SCOPE_FENCE_TARGETS. A member reordered, added, or dropped in the registry re-aims a token scan at a file it was never written for, and the clause would still report success.",
+  );
+
+  const source = await readFile(path.join(REPO_ROOT, NOTIFICATION_TYPES_REL), "utf8");
   const hits: string[] = [];
   for (const token of LOSSY_SYNTHESIS_TOKENS) {
     if (source.includes(token)) {
@@ -108,7 +139,7 @@ test("SURF-03: no lossy-synthesis tokens in shared/notify.ts (synthesis-caveat w
   assert.deepEqual(
     hits,
     [],
-    `SURF-03 violation: synthesis-caveat token(s) ${hits.join(", ")} appeared in ${NOTIFY_REL}. ` +
+    `SURF-03 violation: synthesis-caveat token(s) ${hits.join(", ")} appeared in ${NOTIFICATION_TYPES_REL}. ` +
       `SURF-03 is deferred; ZERO lossy-synthesis surface ships. ` +
       `If you genuinely intend to ship a synthesis warning, do it as a deliberate change with REASONS catalog + byte-UAT in lockstep.`,
   );
@@ -117,7 +148,17 @@ test("SURF-03: no lossy-synthesis tokens in shared/notify.ts (synthesis-caveat w
 test("SURF-04: no /claude:plugin hooks edge handler (perma-forbidden)", async () => {
   const offenders: string[] = [];
 
-  for (const dirRel of [PLUGIN_EDGE_DIR_REL, PLUGIN_COMMANDS_DIR_REL]) {
+  // The live edge-handler directory MUST enumerate: a directory that stopped
+  // resolving would make the scan below report success over zero entries
+  // (D-07-03). The historical `commands/plugin` directory is expected to be
+  // absent, and its absence is what satisfies its half of the assertion.
+  const edgeNames = await dirEntries(PLUGIN_EDGE_HANDLERS_REL);
+  assert.ok(
+    edgeNames !== null && edgeNames.length > 0,
+    `D-07-03: enumerated ${PLUGIN_EDGE_HANDLERS_REL} and found no files -- the perma-forbidden hooks handler cannot be ruled out of a directory this scan never read.`,
+  );
+
+  for (const dirRel of [PLUGIN_EDGE_HANDLERS_REL, PLUGIN_COMMANDS_DIR_REL]) {
     const names = await dirEntries(dirRel);
     if (names === null) {
       continue;
@@ -140,13 +181,16 @@ test("SURF-04: no /claude:plugin hooks edge handler (perma-forbidden)", async ()
 });
 
 test("SURF-04: no hook-count column on list (perma-forbidden)", async () => {
+  const listSurfaces: ReadonlyArray<string> = [LIST_ORCH_REL, LIST_EDGE_REL];
   const offenders: string[] = [];
-  for (const rel of [LIST_ORCH_REL, LIST_EDGE_REL]) {
+  const visited: string[] = [];
+  for (const rel of listSurfaces) {
     const source = await readIfExists(rel);
     if (source === null) {
       continue;
     }
 
+    visited.push(rel);
     for (const token of HOOK_COUNT_COLUMN_TOKENS) {
       if (source.includes(token)) {
         offenders.push(`${rel}: ${token}`);
@@ -160,13 +204,19 @@ test("SURF-04: no hook-count column on list (perma-forbidden)", async () => {
     `SURF-04 violation: hook-count column token(s) ${offenders.join("; ")} appeared. ` +
       `The existing list-row byte-form is locked by catalog-uat; do not grow a hook-count column.`,
   );
+
+  assert.deepEqual(
+    visited,
+    [...listSurfaces],
+    "D-07-03: the scan must have opened both declared list surfaces. One that stopped resolving is skipped by readIfExists and drops out of this list, which is what turns an uninspected target into a failure instead of a pass.",
+  );
 });
 
-test('HOOK-04: REASONS contains "unsupported hooks" in shared/notify.ts (D-58-01 prior completion)', async () => {
-  const source = await readFile(path.join(REPO_ROOT, NOTIFY_REL), "utf8");
+test('HOOK-04: REASONS contains "unsupported hooks" in shared/notification-types.ts (D-58-01 prior completion)', async () => {
+  const source = await readFile(path.join(REPO_ROOT, NOTIFICATION_TYPES_REL), "utf8");
   assert.ok(
     source.includes('"unsupported hooks"'),
-    `HOOK-04 regression: token "unsupported hooks" missing from ${NOTIFY_REL}. ` +
+    `HOOK-04 regression: token "unsupported hooks" missing from ${NOTIFICATION_TYPES_REL}. ` +
       `D-58-01 renamed the hooks-degradation REASONS member to "unsupported hooks"; ` +
       `do not revert.`,
   );

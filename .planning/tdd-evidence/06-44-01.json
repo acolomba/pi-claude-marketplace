@@ -1,0 +1,10 @@
+{
+  "taskId": "06-44-01",
+  "command": "node --test --test-isolation=none --test-reporter=tap tests/orchestrators/plugin/reinstall-targets.test.ts",
+  "exitCode": 1,
+  "output": "TAP version 13\n# Subtest: returns a frozen plural selection for an empty bare request\nnot ok 1 - returns a frozen plural selection for an empty bare request\n  error: Got unwanted rejection: reinstall-targets.ts must own reinstall target selection\n  code: ERR_ASSERTION\n  actual: ERR_MODULE_NOT_FOUND\n1..10\n# tests 10\n# pass 0\n# fail 10",
+  "targetTest": "returns a frozen plural selection for an empty bare request",
+  "targetFile": "tests/orchestrators/plugin/reinstall-targets.test.ts",
+  "expected": "the named reinstall-targets owner exports selectReinstallTargets and preserves structural cardinality",
+  "actual": "ERR_MODULE_NOT_FOUND for extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-targets.ts"
+}

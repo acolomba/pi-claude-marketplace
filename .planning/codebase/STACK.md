@@ -26,11 +26,11 @@
 **Core:**
 - No web/app framework -- this is a Pi extension (library-style), not a server or SPA
 - `@earendil-works/pi-coding-agent` (peer dep `>=0.80.5`, dev dep `^0.84.2`) - the Pi extension host API (`ctx.ui.notify`, `resources_discover`, `session_start`, tool registration)
-- `@earendil-works/pi-tui` (peer dep `*`, dev dep `^0.84.1`) - Pi terminal UI primitives
+- `@earendil-works/pi-tui` (peer dep `*`, dev dep `^0.84.2`) - Pi terminal UI primitives
 - `pi-subagents` (optional peer dep `>=0.35.0`) - soft-dependency companion extension for agent artifact rendering; degrades gracefully when absent
 
 **Testing:**
-- `node:test` (Node's built-in test runner) - suites under `tests/{architecture,bridges,domain,edge,helpers,orchestrators,persistence,platform,shared,transaction}/**/*.test.ts` (`npm test`), plus a separate `tests/integration/**/*.test.ts` suite (`npm run test:integration`) and `tests/e2e/**/*.test.ts` (`npm run test:e2e`, pinned ref; `npm run test:e2e:nightly` runs against floating `main`)
+- `node:test` (Node's built-in test runner) - suites under `tests/{architecture,bridges,domain,edge,orchestrators,persistence,platform,scripts,shared,transaction}/**/*.test.ts` plus `tests/index.test.ts` (`npm test`), plus a separate `tests/integration/**/*.test.ts` suite (`npm run test:integration`) and `tests/e2e/**/*.test.ts` (`npm run test:e2e`, pinned ref; `npm run test:e2e:nightly` runs against floating `main`)
 - Real temporary directories (`mkdtemp`, plus a `withHermeticHome` helper) for filesystem isolation -- no in-memory filesystem layer is used
 - Coverage via `node --test --experimental-test-coverage` with `lcov` reporters, split into `unit`/`integration`/`e2e` reports (`npm run test:coverage`) feeding SonarCloud (`sonar.javascript.lcov.reportPaths=coverage/unit.lcov,coverage/integration.lcov,coverage/e2e.lcov` in `sonar-project.properties`)
 
@@ -38,18 +38,18 @@
 - No bundler/build step -- TypeScript is type-checked only (`tsc --noEmit`); Node runs `.ts` sources natively
 - `eslint` `^10.4.0` with flat config (`eslint.config.js`, ~400 lines), including custom architecture-boundary and output-discipline rules (`no-restricted-syntax` forbids `process.stdout.write`/`process.stderr.write` in `extensions/pi-claude-marketplace/**`)
 - `prettier` `^3.8.3` for formatting (`npm run format` / `format:check`)
-- `fallow` `^3.16.0` - whole-graph static analysis (`.fallowrc.json`). `npm run fallow` chains three subcommands, each `--fail-on-issues --format human`, run whole-repo:
+- `fallow` `^3.17.0` - whole-graph static analysis (`.fallowrc.json`). `npm run fallow` chains three subcommands, each `--fail-on-issues --format human`, run whole-repo:
   - `fallow dead-code` (entry point `extensions/pi-claude-marketplace/index.ts`)
   - `fallow health` (`maxCyclomatic: 20`, `maxCognitive: 15`, `maxUnitSize: 60`, `maxCrap: 0`)
   - `fallow dupes` (`threshold: 3`, with two ignored-clone IDs pre-approved in `duplicates.ignoredClones`)
-  - `.fallowrc.json`'s `boundaries` block defines 12 architecture zones (`entry`, `edge`, `orchestrators`, `bridges-agents`, `bridges-commands`, `bridges-mcp`, `bridges-skills`, `bridges-hooks`, `domain`, `transaction`, `persistence`, `platform`, `shared`) with an explicit allow-list of legal import edges between zones, plus a `calls.forbidden` block barring `process.stdout.*`/`process.stderr.*` from every zone -- finer-grained than the ESLint `no-restricted-paths` gate and the only mechanism enforcing that cross-bridge imports (e.g. `bridges-agents` -> `bridges-commands`) are forbidden
+  - `.fallowrc.json`'s `boundaries` block defines 13 architecture zones (`entry`, `edge`, `orchestrators`, `bridges-agents`, `bridges-commands`, `bridges-mcp`, `bridges-skills`, `bridges-hooks`, `domain`, `transaction`, `persistence`, `platform`, `shared`) with an explicit allow-list of legal import edges between zones, plus a `calls.forbidden` block barring `process.stdout.*`/`process.stderr.*` from every zone -- finer-grained than the ESLint `no-restricted-paths` gate and the only mechanism enforcing that cross-bridge imports (e.g. `bridges-agents` -> `bridges-commands`) are forbidden
   - CI runs a separate `fallow-audit` job (`.github/workflows/lint.yml`) using the vendor action `fallow-rs/fallow@v3` with `command: audit`, `format: github-annotations` -- this gates PRs on newly-introduced findings only, distinct from the full `npm run fallow` gate that `npm run check` runs
-- `pre-commit` framework (`.pre-commit-config.yaml`) runs trufflehog, gitlint, yamllint, yamlfmt, mdformat, markdownlint-cli2, texthooks (smartquotes/dashes/ligatures/bidi-control fixers), plus local hooks `npm-lint`, `npm-format-check`, `npm-typecheck`, and `npm-fallow` (this last one `always_run: true`, i.e. it runs on every commit regardless of which files changed)
+- `pre-commit` framework (`.pre-commit-config.yaml`) runs trufflehog, gitlint, yamllint, yamlfmt, mdformat, markdownlint-cli2, texthooks (smartquotes/dashes/ligatures/bidi-control fixers), plus local hooks `npm-lint`, `npm-format-check`, `npm-typecheck`, and `npm-fallow` (each `pass_filenames: false` and gated by its own `files:` pattern over `extensions/`, `tests/`, `scripts/`, and the config/lockfile set, so a docs-only commit skips all four)
 
 ## Key Dependencies
 
 **Critical:**
-- `isomorphic-git` `^1.38.1` - pure-JS git implementation used for marketplace clone/fetch/pull (no dependency on a `git` binary on PATH); wrapped in `extensions/pi-claude-marketplace/platform/git.ts`, paired with `isomorphic-git/http/node` as its HTTP transport (`platform/git.ts:4`)
+- `isomorphic-git` `^1.41.8` - pure-JS git implementation used for marketplace clone/fetch/pull (no dependency on a `git` binary on PATH); wrapped in `extensions/pi-claude-marketplace/platform/git.ts`, paired with `isomorphic-git/http/node` as its HTTP transport (`platform/git.ts:4`)
 - `typebox` `^1.1.38` (also a peer dep `*`) - runtime schema validation and discriminated-union modeling (e.g. `installable: true | false`)
 - `write-file-atomic` `^8.0.0` - atomic JSON writes for `state.json`, `mcp.json`, `agents-index.json`
 - `proper-lockfile` `^4.1.2` - cross-process file locking for `withStateGuard` concurrent-write detection
@@ -81,13 +81,13 @@
 - `pre-commit` (Python-based framework, Python 3.12 in CI) for the git hook pipeline
 
 **Production:**
-- Distributed as an npm package (`pi-claude-marketplace`, currently `0.16.0`) consumed as a Pi extension via `pi.extensions` in `package.json`, pointing at `./extensions/pi-claude-marketplace/index.ts`
+- Distributed as an npm package (`pi-claude-marketplace`, currently `0.18.1`) consumed as a Pi extension via `pi.extensions` in `package.json`, pointing at `./extensions/pi-claude-marketplace/index.ts`
 - Runs inside a host Pi agent process (`@earendil-works/pi-coding-agent`) -- no standalone server or deployment target of its own
 - Published to npm via GitHub Actions on `v*` tags (`.github/workflows/publish.yml`, which calls `ci.yml` as a reusable workflow via `workflow_call` before publishing, `id-token: write` for npm provenance)
 
 ## CI Workflows
 
-Four workflow files in `.github/workflows/`:
+Five workflow files in `.github/workflows/`:
 - `ci.yml` - `workflow_call` (invoked by `publish.yml`), plus `push`/`pull_request` on `main` (paths-ignore for docs/planning), plus `workflow_dispatch`. Jobs: `check` (`npm run check`), `integration-tests`, `e2e-tests` (pinned ref), `package` (`npm pack --dry-run`, depends on the other three). All run on Node 24. There is deliberately no `push` trigger on `features/**` branches
 - `lint.yml` - `pull_request` on `main` + `workflow_dispatch`. Two jobs: `pre-commit` (runs the full `.pre-commit-config.yaml` pipeline via `pre-commit/action@v3.0.1`) and `fallow-audit` (the vendor `fallow-rs/fallow@v3` action, `command: audit`, `format: github-annotations`, `fetch-depth: 0`) -- separate from and additional to the `npm run fallow` gate embedded in `npm run check`
 - `sonarcloud.yml` - `push`/`pull_request` on `main`, skipped for Dependabot and fork PRs (no secrets access); runs `npm run test:coverage` then `SonarSource/sonarqube-scan-action@v8`

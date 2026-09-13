@@ -1,0 +1,2042 @@
+{
+  "plan": "01-34",
+  "files": [
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/persistence.md",
+      "category": "adversarial",
+      "assignedPlan": "01-34",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-001",
+        ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-002",
+        ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-003",
+        ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-004",
+        ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-005",
+        ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-006",
+        ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-007",
+        ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-008",
+        ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-009",
+        ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-010",
+        ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-011",
+        ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-012",
+        ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-013",
+        ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-014",
+        ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-015",
+        ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-016",
+        ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-017",
+        ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-018",
+        ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-019",
+        ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-020",
+        ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-021",
+        ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-022",
+        ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-023",
+        ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-024",
+        ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-025",
+        ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-026",
+        ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-027",
+        ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-028",
+        ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-029",
+        ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-030",
+        ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-031"
+      ],
+      "reviewStatus": "complete",
+      "outcome": "live findings"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/platform.md",
+      "category": "adversarial",
+      "assignedPlan": "01-34",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-001",
+        ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-002",
+        ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-003",
+        ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-004",
+        ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-005",
+        ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-006",
+        ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-007",
+        ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-008",
+        ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-009",
+        ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-010",
+        ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-011",
+        ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-012",
+        ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-013",
+        ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-014",
+        ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-015",
+        ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-016",
+        ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-017",
+        ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-018",
+        ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-019",
+        ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-020",
+        ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-021",
+        ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-022",
+        ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-023",
+        ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-024",
+        ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-025",
+        ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-026",
+        ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-027",
+        ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-028",
+        ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-029",
+        ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-030",
+        ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-031",
+        ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-032",
+        ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-033",
+        ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-034"
+      ],
+      "reviewStatus": "complete",
+      "outcome": "live findings"
+    }
+  ],
+  "sourceClaims": [
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-001",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/persistence.md",
+      "label": "CLAIM-001",
+      "findingId": "PER-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-002",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/persistence.md",
+      "label": "CLAIM-002",
+      "findingId": "PER-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-003",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/persistence.md",
+      "label": "CLAIM-003",
+      "findingId": "PER-F003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-004",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/persistence.md",
+      "label": "CLAIM-004",
+      "findingId": "PER-F004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-005",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/persistence.md",
+      "label": "CLAIM-005",
+      "findingId": "PER-F005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-006",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/persistence.md",
+      "label": "CLAIM-006",
+      "findingId": "PER-F006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-007",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/persistence.md",
+      "label": "CLAIM-007",
+      "findingId": "PER-F007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-008",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/persistence.md",
+      "label": "CLAIM-008",
+      "findingId": "PER-F008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-009",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/persistence.md",
+      "label": "CLAIM-009",
+      "findingId": "PER-F009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-010",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/persistence.md",
+      "label": "CLAIM-010",
+      "findingId": "PER-F010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-011",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/persistence.md",
+      "label": "CLAIM-011",
+      "findingId": "PER-F011"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-012",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/persistence.md",
+      "label": "CLAIM-012",
+      "findingId": "PER-F012"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-013",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/persistence.md",
+      "label": "CLAIM-013",
+      "findingId": "PER-F013"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-014",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/persistence.md",
+      "label": "CLAIM-014",
+      "findingId": "PER-F014"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-015",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/persistence.md",
+      "label": "CLAIM-015",
+      "findingId": "PER-F015"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-016",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/persistence.md",
+      "label": "CLAIM-016",
+      "findingId": "PER-F016"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-017",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/persistence.md",
+      "label": "CLAIM-017",
+      "findingId": "PER-F017"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-018",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/persistence.md",
+      "label": "CLAIM-018",
+      "findingId": "PER-F018"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-019",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/persistence.md",
+      "label": "CLAIM-019",
+      "findingId": "PER-F019"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-020",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/persistence.md",
+      "label": "CLAIM-020",
+      "findingId": "PER-F020"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-021",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/persistence.md",
+      "label": "CLAIM-021",
+      "findingId": "PER-F021"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-022",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/persistence.md",
+      "label": "CLAIM-022",
+      "findingId": "PER-F022"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-023",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/persistence.md",
+      "label": "CLAIM-023",
+      "findingId": "PER-F023"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-024",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/persistence.md",
+      "label": "CLAIM-024",
+      "findingId": "PER-F024"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-025",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/persistence.md",
+      "label": "CLAIM-025",
+      "findingId": "PER-F025"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-026",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/persistence.md",
+      "label": "CLAIM-026",
+      "findingId": "PER-F026"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-027",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/persistence.md",
+      "label": "CLAIM-027",
+      "findingId": "PER-F027"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-028",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/persistence.md",
+      "label": "CLAIM-028",
+      "findingId": "PER-F028"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-029",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/persistence.md",
+      "label": "CLAIM-029",
+      "findingId": "PER-F029"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-030",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/persistence.md",
+      "label": "CLAIM-030",
+      "findingId": "PER-F030"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-031",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/persistence.md",
+      "label": "CLAIM-031",
+      "findingId": "PER-F031"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-001",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/platform.md",
+      "label": "CLAIM-001",
+      "findingId": "PLT-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-002",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/platform.md",
+      "label": "CLAIM-002",
+      "findingId": "PLT-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-003",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/platform.md",
+      "label": "CLAIM-003",
+      "findingId": "PLT-F003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-004",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/platform.md",
+      "label": "CLAIM-004",
+      "findingId": "PLT-F004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-005",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/platform.md",
+      "label": "CLAIM-005",
+      "findingId": "PLT-F005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-006",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/platform.md",
+      "label": "CLAIM-006",
+      "findingId": "PLT-F006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-007",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/platform.md",
+      "label": "CLAIM-007",
+      "findingId": "PLT-F007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-008",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/platform.md",
+      "label": "CLAIM-008",
+      "findingId": "PLT-F008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-009",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/platform.md",
+      "label": "CLAIM-009",
+      "findingId": "PLT-F009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-010",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/platform.md",
+      "label": "CLAIM-010",
+      "findingId": "PLT-F010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-011",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/platform.md",
+      "label": "CLAIM-011",
+      "findingId": "PLT-F011"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-012",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/platform.md",
+      "label": "CLAIM-012",
+      "findingId": "PLT-F012"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-013",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/platform.md",
+      "label": "CLAIM-013",
+      "findingId": "PLT-F013"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-014",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/platform.md",
+      "label": "CLAIM-014",
+      "findingId": "PLT-F014"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-015",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/platform.md",
+      "label": "CLAIM-015",
+      "findingId": "PLT-F015"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-016",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/platform.md",
+      "label": "CLAIM-016",
+      "findingId": "PLT-F016"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-017",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/platform.md",
+      "label": "CLAIM-017",
+      "findingId": "PLT-F017"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-018",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/platform.md",
+      "label": "CLAIM-018",
+      "findingId": "PLT-F018"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-019",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/platform.md",
+      "label": "CLAIM-019",
+      "findingId": "PLT-F019"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-020",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/platform.md",
+      "label": "CLAIM-020",
+      "findingId": "PLT-F020"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-021",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/platform.md",
+      "label": "CLAIM-021",
+      "findingId": "PLT-F021"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-022",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/platform.md",
+      "label": "CLAIM-022",
+      "findingId": "PLT-F022"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-023",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/platform.md",
+      "label": "CLAIM-023",
+      "findingId": "PLT-F023"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-024",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/platform.md",
+      "label": "CLAIM-024",
+      "findingId": "PLT-F024"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-025",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/platform.md",
+      "label": "CLAIM-025",
+      "findingId": "PLT-F025"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-026",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/platform.md",
+      "label": "CLAIM-026",
+      "findingId": "PLT-F026"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-027",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/platform.md",
+      "label": "CLAIM-027",
+      "findingId": "PLT-F027"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-028",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/platform.md",
+      "label": "CLAIM-028",
+      "findingId": "PLT-F028"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-029",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/platform.md",
+      "label": "CLAIM-029",
+      "findingId": "PLT-F029"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-030",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/platform.md",
+      "label": "CLAIM-030",
+      "findingId": "PLT-F030"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-031",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/platform.md",
+      "label": "CLAIM-031",
+      "findingId": "PLT-F031"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-032",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/platform.md",
+      "label": "CLAIM-032",
+      "findingId": "PLT-F032"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-033",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/platform.md",
+      "label": "CLAIM-033",
+      "findingId": "PLT-F033"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-034",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/platform.md",
+      "label": "CLAIM-034",
+      "findingId": "PLT-F034"
+    }
+  ],
+  "findings": [
+    {
+      "id": "PER-F001",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-001"],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/persistence/state-io.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/persistence/state-io.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
+        "observed": "All five config write-back helpers lack a discriminating schemaVersion pin case"
+      },
+      "rationale": "All five config write-back helpers lack a discriminating schemaVersion pin case; no repository-local isolated surviving mutation was run, so D-11 prevents a terminal test-strength verdict.",
+      "destination": "Carry the focused remediation into Phase 2."
+    },
+    {
+      "id": "PER-F002",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-002"],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/persistence/state-io.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/persistence/state-io.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
+        "observed": "Config write-back tests do not assert caller input remains unmodified"
+      },
+      "rationale": "Config write-back tests do not assert caller input remains unmodified; no repository-local isolated surviving mutation was run, so D-11 prevents a terminal test-strength verdict.",
+      "destination": "Carry the focused remediation into Phase 2."
+    },
+    {
+      "id": "PER-F003",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-003"],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/persistence/state-io.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/persistence/state-io.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
+        "observed": "deletePluginConfigEntry lacks the absent plugins-map case"
+      },
+      "rationale": "deletePluginConfigEntry lacks the absent plugins-map case; no repository-local isolated surviving mutation was run, so D-11 prevents a terminal test-strength verdict.",
+      "destination": "Carry the focused remediation into Phase 2."
+    },
+    {
+      "id": "PER-F004",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-004"],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/persistence/state-io.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/persistence/state-io.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
+        "observed": "migrateFirstRunConfig entryCount does not discriminate the plugin-count term"
+      },
+      "rationale": "migrateFirstRunConfig entryCount does not discriminate the plugin-count term; no repository-local isolated surviving mutation was run, so D-11 prevents a terminal test-strength verdict.",
+      "destination": "Carry the focused remediation into Phase 2."
+    },
+    {
+      "id": "PER-F005",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-005"],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/persistence/state-io.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/persistence/state-io.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
+        "observed": "ScopedLocations branding blocks fresh literals but survives spread-and-override"
+      },
+      "rationale": "Current source, test, configuration, and call-graph evidence supports the preserved historical claim.",
+      "destination": "Resolve the named design or policy choice before implementation."
+    },
+    {
+      "id": "PER-F006",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-006"],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/persistence/state-io.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/persistence/state-io.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
+        "observed": "Migration tests do not discriminate independent manifestPath and marketplaceRoot fills"
+      },
+      "rationale": "Migration tests do not discriminate independent manifestPath and marketplaceRoot fills; no repository-local isolated surviving mutation was run, so D-11 prevents a terminal test-strength verdict.",
+      "destination": "Carry the focused remediation into Phase 2."
+    },
+    {
+      "id": "PER-F007",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-007"],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/persistence/state-io.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/persistence/state-io.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
+        "observed": "Migration tests do not discriminate cross-marketplace mutated accumulation"
+      },
+      "rationale": "Migration tests do not discriminate cross-marketplace mutated accumulation; no repository-local isolated surviving mutation was run, so D-11 prevents a terminal test-strength verdict.",
+      "destination": "Carry the focused remediation into Phase 2."
+    },
+    {
+      "id": "PER-F008",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-008"],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/persistence/state-io.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/persistence/state-io.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
+        "observed": "Migration object-guard null and array arms lack discriminating cases"
+      },
+      "rationale": "Migration object-guard null and array arms lack discriminating cases; no repository-local isolated surviving mutation was run, so D-11 prevents a terminal test-strength verdict.",
+      "destination": "Carry the focused remediation into Phase 2."
+    },
+    {
+      "id": "PER-F009",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-009"],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/persistence/state-io.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/persistence/state-io.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
+        "observed": "Agents-index entry required fields and string-array element types are incompletely pinned"
+      },
+      "rationale": "Agents-index entry required fields and string-array element types are incompletely pinned; no repository-local isolated surviving mutation was run, so D-11 prevents a terminal test-strength verdict.",
+      "destination": "Carry the focused remediation into Phase 2."
+    },
+    {
+      "id": "PER-F010",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-010"],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/persistence/state-io.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/persistence/state-io.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
+        "observed": "Agents-index envelope required fields are not independently pinned"
+      },
+      "rationale": "Agents-index envelope required fields are not independently pinned; no repository-local isolated surviving mutation was run, so D-11 prevents a terminal test-strength verdict.",
+      "destination": "Carry the focused remediation into Phase 2."
+    },
+    {
+      "id": "PER-F011",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-011"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/persistence/state-io.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/persistence/state-io.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
+        "observed": "Persistence tests retain production-role-free rename aliases"
+      },
+      "rationale": "Current source, test, configuration, and call-graph evidence supports the preserved historical claim.",
+      "destination": "Carry the focused remediation into Phase 2."
+    },
+    {
+      "id": "PER-F012",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-012"],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/persistence/state-io.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/persistence/state-io.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
+        "observed": "clonePluginRecord non-aliasing is not discriminated for every nested array"
+      },
+      "rationale": "clonePluginRecord non-aliasing is not discriminated for every nested array; no repository-local isolated surviving mutation was run, so D-11 prevents a terminal test-strength verdict.",
+      "destination": "Carry the focused remediation into Phase 2."
+    },
+    {
+      "id": "PER-F013",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-013"],
+      "evidenceStatus": "inconclusive",
+      "route": "operator decision",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/persistence/state-io.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/persistence/state-io.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
+        "observed": "loadState fixed-point no-write behavior has no deterministic injected seam"
+      },
+      "rationale": "loadState fixed-point no-write behavior has no deterministic injected seam; no repository-local isolated surviving mutation was run, so D-11 prevents a terminal test-strength verdict.",
+      "destination": "Resolve the named design or policy choice before implementation."
+    },
+    {
+      "id": "PER-F014",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-014"],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/persistence/state-io.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/persistence/state-io.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
+        "observed": "pluginDataDir marketplace-name validation lacks a discriminating unsafe marketplace case"
+      },
+      "rationale": "pluginDataDir marketplace-name validation lacks a discriminating unsafe marketplace case; no repository-local isolated surviving mutation was run, so D-11 prevents a terminal test-strength verdict.",
+      "destination": "Carry the focused remediation into Phase 2."
+    },
+    {
+      "id": "PER-F015",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-015"],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/persistence/state-io.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/persistence/state-io.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
+        "observed": "locationsFor hides the getAgentDir process-environment dependency"
+      },
+      "rationale": "Current source, test, configuration, and call-graph evidence supports the preserved historical claim.",
+      "destination": "Resolve the named design or policy choice before implementation."
+    },
+    {
+      "id": "PER-F016",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-016"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/persistence/state-io.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/persistence/state-io.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
+        "observed": "ScopedLocations brand documentation overstates the spread-and-override guarantee"
+      },
+      "rationale": "Current source, test, configuration, and call-graph evidence supports the preserved historical claim.",
+      "destination": "Carry the focused remediation into Phase 2."
+    },
+    {
+      "id": "PER-F017",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-017"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/persistence/state-io.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/persistence/state-io.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
+        "observed": "ensureOneRecordResources still treats arrays as records"
+      },
+      "rationale": "Current source, test, configuration, and call-graph evidence supports the preserved historical claim.",
+      "destination": "Carry the focused remediation into Phase 2."
+    },
+    {
+      "id": "PER-F018",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-018"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 8",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/persistence/state-io.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/persistence/state-io.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
+        "observed": "Validator error-detail logic remains triplicated across persistence modules"
+      },
+      "rationale": "Current source, test, configuration, and call-graph evidence supports the preserved historical claim.",
+      "destination": "Carry the focused remediation into Phase 8."
+    },
+    {
+      "id": "PER-F019",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-019"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 8",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/persistence/state-io.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/persistence/state-io.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
+        "observed": "Three persistence suites still duplicate arrangement builders instead of concern seeds"
+      },
+      "rationale": "Current source, test, configuration, and call-graph evidence supports the preserved historical claim.",
+      "destination": "Carry the focused remediation into Phase 8."
+    },
+    {
+      "id": "PER-F020",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-020"],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/persistence/state-io.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/persistence/state-io.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
+        "observed": "Validator empty-error fallbacks remain unreachable and are covered by singleton surgery"
+      },
+      "rationale": "Current source, test, configuration, and call-graph evidence supports the preserved historical claim.",
+      "destination": "Resolve the named design or policy choice before implementation."
+    },
+    {
+      "id": "PER-F021",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-021"],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/persistence/state-io.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/persistence/state-io.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
+        "observed": "config-io containment error identity remains weaker than a class-and-fields assertion"
+      },
+      "rationale": "config-io containment error identity remains weaker than a class-and-fields assertion; no repository-local isolated surviving mutation was run, so D-11 prevents a terminal test-strength verdict.",
+      "destination": "Carry the focused remediation into Phase 2."
+    },
+    {
+      "id": "PER-F022",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-022"],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/persistence/state-io.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/persistence/state-io.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
+        "observed": "locations containment rows do not fully assert error class and structured fields"
+      },
+      "rationale": "locations containment rows do not fully assert error class and structured fields; no repository-local isolated surviving mutation was run, so D-11 prevents a terminal test-strength verdict.",
+      "destination": "Carry the focused remediation into Phase 2."
+    },
+    {
+      "id": "PER-F023",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-023"],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/persistence/state-io.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/persistence/state-io.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
+        "observed": "ScopedLocations compile-time negative guarantee is not pinned by the owner test"
+      },
+      "rationale": "ScopedLocations compile-time negative guarantee is not pinned by the owner test; no repository-local isolated surviving mutation was run, so D-11 prevents a terminal test-strength verdict.",
+      "destination": "Carry the focused remediation into Phase 2."
+    },
+    {
+      "id": "PER-F024",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-024"],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/persistence/state-io.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/persistence/state-io.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
+        "observed": "Two state-io expected byte values are derived with the production serializer formula"
+      },
+      "rationale": "Two state-io expected byte values are derived with the production serializer formula; no repository-local isolated surviving mutation was run, so D-11 prevents a terminal test-strength verdict.",
+      "destination": "Carry the focused remediation into Phase 2."
+    },
+    {
+      "id": "PER-F025",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-025"],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/persistence/state-io.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/persistence/state-io.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
+        "observed": "Agents-index I/O tests hand-derive the index path instead of asserting the location bundle path"
+      },
+      "rationale": "Agents-index I/O tests hand-derive the index path instead of asserting the location bundle path; no repository-local isolated surviving mutation was run, so D-11 prevents a terminal test-strength verdict.",
+      "destination": "Carry the focused remediation into Phase 2."
+    },
+    {
+      "id": "PER-F026",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-026"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 8",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/persistence/state-io.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/persistence/state-io.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
+        "observed": "The config-write-back AST architecture gate remains in the owner-pair test"
+      },
+      "rationale": "Current source, test, configuration, and call-graph evidence supports the preserved historical claim.",
+      "destination": "Carry the focused remediation into Phase 8."
+    },
+    {
+      "id": "PER-F027",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-027"],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/persistence/state-io.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/persistence/state-io.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
+        "observed": "Nine persistence JSON fixtures remain unreferenced"
+      },
+      "rationale": "Current source, test, configuration, and call-graph evidence supports the preserved historical claim.",
+      "destination": "Retain as cross-cutting backlog evidence outside the focused remediation phases."
+    },
+    {
+      "id": "PER-F028",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-028"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 8",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/persistence/state-io.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/persistence/state-io.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
+        "observed": "agentsIndexPathFor still duplicates ScopedLocations.agentsIndexPath"
+      },
+      "rationale": "Current source, test, configuration, and call-graph evidence supports the preserved historical claim.",
+      "destination": "Carry the focused remediation into Phase 8."
+    },
+    {
+      "id": "PER-F029",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-029"],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/persistence/state-io.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/persistence/state-io.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
+        "observed": "Config merge behavior remains strongly asserted by whole values and ordering checks"
+      },
+      "rationale": "Current source, test, configuration, and call-graph evidence supports the preserved historical claim.",
+      "destination": "Retain as positive current evidence without implementation work."
+    },
+    {
+      "id": "PER-F030",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-030"],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/persistence/state-io.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/persistence/state-io.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
+        "observed": "Migration mutation-in-place and fixed-point contracts remain strongly asserted"
+      },
+      "rationale": "Current source, test, configuration, and call-graph evidence supports the preserved historical claim.",
+      "destination": "Retain as positive current evidence without implementation work."
+    },
+    {
+      "id": "PER-F031",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/persistence.md#CLAIM-031"],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/persistence/state-io.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/persistence/state-io.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
+        "observed": "Hermetic-home helpers, dead fixtures, and identifier-sensitive duplicate helpers remain cross-cutting gate blind spots"
+      },
+      "rationale": "Current source, test, configuration, and call-graph evidence supports the preserved historical claim.",
+      "destination": "Retain as cross-cutting backlog evidence outside the focused remediation phases."
+    },
+    {
+      "id": "PLT-F001",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-001"],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/platform/git.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/platform/git.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
+        "observed": "credentialFill exit-code and null-code normalization cases remain over-determined by empty stdout"
+      },
+      "rationale": "credentialFill exit-code and null-code normalization cases remain over-determined by empty stdout; no repository-local isolated surviving mutation was run, so D-11 prevents a terminal test-strength verdict.",
+      "destination": "Carry the focused remediation into Phase 2."
+    },
+    {
+      "id": "PLT-F002",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-002"],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/platform/git.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/platform/git.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
+        "observed": "Credential process fake failInput still no-ops when no stdin error listener exists"
+      },
+      "rationale": "Credential process fake failInput still no-ops when no stdin error listener exists; no repository-local isolated surviving mutation was run, so D-11 prevents a terminal test-strength verdict.",
+      "destination": "Carry the focused remediation into Phase 2."
+    },
+    {
+      "id": "PLT-F003",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-003"],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/platform/git.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/platform/git.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
+        "observed": "The default credential timeout has no discriminating owner case"
+      },
+      "rationale": "The default credential timeout has no discriminating owner case; no repository-local isolated surviving mutation was run, so D-11 prevents a terminal test-strength verdict.",
+      "destination": "Carry the focused remediation into Phase 2."
+    },
+    {
+      "id": "PLT-F004",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-004"],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/platform/git.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/platform/git.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
+        "observed": "Partial credential attribute emission lacks independent username-only and password-only cases"
+      },
+      "rationale": "Partial credential attribute emission lacks independent username-only and password-only cases; no repository-local isolated surviving mutation was run, so D-11 prevents a terminal test-strength verdict.",
+      "destination": "Carry the focused remediation into Phase 2."
+    },
+    {
+      "id": "PLT-F005",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-005"],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/platform/git.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/platform/git.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
+        "observed": "DEFAULT_CREDENTIAL_OPS has no explicit owner case"
+      },
+      "rationale": "DEFAULT_CREDENTIAL_OPS has no explicit owner case; no repository-local isolated surviving mutation was run, so D-11 prevents a terminal test-strength verdict.",
+      "destination": "Carry the focused remediation into Phase 2."
+    },
+    {
+      "id": "PLT-F006",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-006"],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/platform/git.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/platform/git.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
+        "observed": "Clone ref and singleBranch forwarding remain unproven by the discovery-failure fixture"
+      },
+      "rationale": "Clone ref and singleBranch forwarding remain unproven by the discovery-failure fixture; no repository-local isolated surviving mutation was run, so D-11 prevents a terminal test-strength verdict.",
+      "destination": "Carry the focused remediation into Phase 2."
+    },
+    {
+      "id": "PLT-F007",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-007"],
+      "evidenceStatus": "inconclusive",
+      "route": "operator decision",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/platform/git.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/platform/git.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
+        "observed": "Checkout noCheckout behavior remains unobservable and has no production caller"
+      },
+      "rationale": "Checkout noCheckout behavior remains unobservable and has no production caller; no repository-local isolated surviving mutation was run, so D-11 prevents a terminal test-strength verdict.",
+      "destination": "Resolve the named design or policy choice before implementation."
+    },
+    {
+      "id": "PLT-F008",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-008"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/platform/git.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/platform/git.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
+        "observed": "Expected git protocol bytes hardcode the isomorphic-git version"
+      },
+      "rationale": "Current source, test, configuration, and call-graph evidence supports the preserved historical claim.",
+      "destination": "Carry the focused remediation into Phase 2."
+    },
+    {
+      "id": "PLT-F009",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-009"],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/platform/git.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/platform/git.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
+        "observed": "Git and credential exported option types remain incompletely pinned"
+      },
+      "rationale": "Git and credential exported option types remain incompletely pinned; no repository-local isolated surviving mutation was run, so D-11 prevents a terminal test-strength verdict.",
+      "destination": "Carry the focused remediation into Phase 2."
+    },
+    {
+      "id": "PLT-F010",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-010"],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/platform/git.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/platform/git.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
+        "observed": "Git fake boundary guards lack owner cases and one negative control remains outside describe"
+      },
+      "rationale": "Git fake boundary guards lack owner cases and one negative control remains outside describe; no repository-local isolated surviving mutation was run, so D-11 prevents a terminal test-strength verdict.",
+      "destination": "Carry the focused remediation into Phase 2."
+    },
+    {
+      "id": "PLT-F011",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-011"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 8",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/platform/git.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/platform/git.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
+        "observed": "observeVoid remains duplicated across sibling adapter contracts"
+      },
+      "rationale": "Current source, test, configuration, and call-graph evidence supports the preserved historical claim.",
+      "destination": "Carry the focused remediation into Phase 8."
+    },
+    {
+      "id": "PLT-F012",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-012"],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 4",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/platform/git.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/platform/git.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
+        "observed": "No executable gate proves each real adapter remains registered with its shared contract"
+      },
+      "rationale": "No executable gate proves each real adapter remains registered with its shared contract; no repository-local isolated surviving mutation was run, so D-11 prevents a terminal test-strength verdict.",
+      "destination": "Carry the focused remediation into Phase 4."
+    },
+    {
+      "id": "PLT-F013",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-013"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 8",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/platform/git.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/platform/git.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
+        "observed": "Credential equality remains duplicated between the fake and owner test"
+      },
+      "rationale": "Current source, test, configuration, and call-graph evidence supports the preserved historical claim.",
+      "destination": "Carry the focused remediation into Phase 8."
+    },
+    {
+      "id": "PLT-F014",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-014"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 8",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/platform/git.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/platform/git.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
+        "observed": "Pi peer-contract test titles still read as module implementation claims"
+      },
+      "rationale": "Current source, test, configuration, and call-graph evidence supports the preserved historical claim.",
+      "destination": "Carry the focused remediation into Phase 8."
+    },
+    {
+      "id": "PLT-F015",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-015"],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/platform/git.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/platform/git.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
+        "observed": "listBranches, listRemotes, and noCheckout remain dead production surface"
+      },
+      "rationale": "Current source, test, configuration, and call-graph evidence supports the preserved historical claim.",
+      "destination": "Resolve the named design or policy choice before implementation."
+    },
+    {
+      "id": "PLT-F016",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-016"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/platform/git.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/platform/git.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
+        "observed": "Git auth callback documentation still describes a nonexistent deviceFlowAttempted flag"
+      },
+      "rationale": "Current source, test, configuration, and call-graph evidence supports the preserved historical claim.",
+      "destination": "Carry the focused remediation into Phase 2."
+    },
+    {
+      "id": "PLT-F017",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-017"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/platform/git.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/platform/git.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
+        "observed": "createGitOpsFake still structured-clones function-bearing auth bundles"
+      },
+      "rationale": "Current source, test, configuration, and call-graph evidence supports the preserved historical claim.",
+      "destination": "Carry the focused remediation into Phase 2."
+    },
+    {
+      "id": "PLT-F018",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-018"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 8",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/platform/git.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/platform/git.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
+        "observed": "Git fake non-clonable-field workaround patterns remain duplicated downstream"
+      },
+      "rationale": "Current source, test, configuration, and call-graph evidence supports the preserved historical claim.",
+      "destination": "Carry the focused remediation into Phase 8."
+    },
+    {
+      "id": "PLT-F019",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-019"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/platform/git.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/platform/git.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
+        "observed": "CredentialSpawn permits readonly args while the production process API requires mutable args"
+      },
+      "rationale": "Current source, test, configuration, and call-graph evidence supports the preserved historical claim.",
+      "destination": "Carry the focused remediation into Phase 2."
+    },
+    {
+      "id": "PLT-F020",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-020"],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/platform/git.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/platform/git.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
+        "observed": "Git fake clone fetch and resolveRemoteRef still crash on auth bundles"
+      },
+      "rationale": "Git fake clone fetch and resolveRemoteRef still crash on auth bundles; no repository-local isolated surviving mutation was run, so D-11 prevents a terminal test-strength verdict.",
+      "destination": "Carry the focused remediation into Phase 2."
+    },
+    {
+      "id": "PLT-F021",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-021"],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/platform/git.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/platform/git.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
+        "observed": "Git contract validation category remains neither covered nor explicitly recorded"
+      },
+      "rationale": "Git contract validation category remains neither covered nor explicitly recorded; no repository-local isolated surviving mutation was run, so D-11 prevents a terminal test-strength verdict.",
+      "destination": "Carry the focused remediation into Phase 2."
+    },
+    {
+      "id": "PLT-F022",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-022"],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 4",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/platform/git.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/platform/git.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
+        "observed": "Git fake negative control and inventory derive expectations from one source"
+      },
+      "rationale": "Git fake negative control and inventory derive expectations from one source; no repository-local isolated surviving mutation was run, so D-11 prevents a terminal test-strength verdict.",
+      "destination": "Carry the focused remediation into Phase 4."
+    },
+    {
+      "id": "PLT-F023",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-023"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 8",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/platform/git.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/platform/git.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
+        "observed": "The local Git operations describe still groups several exported entrypoints"
+      },
+      "rationale": "Current source, test, configuration, and call-graph evidence supports the preserved historical claim.",
+      "destination": "Carry the focused remediation into Phase 8."
+    },
+    {
+      "id": "PLT-F024",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-024"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/platform/git.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/platform/git.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
+        "observed": "Pi API owner tests still use double assertions for an over-wide ExtensionAPI"
+      },
+      "rationale": "Current source, test, configuration, and call-graph evidence supports the preserved historical claim.",
+      "destination": "Carry the focused remediation into Phase 2."
+    },
+    {
+      "id": "PLT-F025",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-025"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 8",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/platform/git.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/platform/git.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
+        "observed": "Git auth option bundle remains repeated rather than reusing BuildAuthCallbacksOpts"
+      },
+      "rationale": "Current source, test, configuration, and call-graph evidence supports the preserved historical claim.",
+      "destination": "Carry the focused remediation into Phase 8."
+    },
+    {
+      "id": "PLT-F026",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-026"],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/platform/git.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/platform/git.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
+        "observed": "Catch binding criticism is a repo-wide style choice rather than a local type defect"
+      },
+      "rationale": "Current source, test, configuration, and call-graph evidence supports the preserved historical claim.",
+      "destination": "Resolve the named design or policy choice before implementation."
+    },
+    {
+      "id": "PLT-F027",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-027"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 8",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/platform/git.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/platform/git.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
+        "observed": "Three live Git option interfaces remain undocumented"
+      },
+      "rationale": "Current source, test, configuration, and call-graph evidence supports the preserved historical claim.",
+      "destination": "Carry the focused remediation into Phase 8."
+    },
+    {
+      "id": "PLT-F028",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-028"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/platform/git.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/platform/git.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
+        "observed": "CredentialProcess on erases the event-to-listener type pairing"
+      },
+      "rationale": "Current source, test, configuration, and call-graph evidence supports the preserved historical claim.",
+      "destination": "Carry the focused remediation into Phase 2."
+    },
+    {
+      "id": "PLT-F029",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-029"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/platform/git.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/platform/git.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
+        "observed": "Pi soft-dependency probes still accept the full ExtensionAPI instead of a narrow ToolProbe"
+      },
+      "rationale": "Current source, test, configuration, and call-graph evidence supports the preserved historical claim.",
+      "destination": "Carry the focused remediation into Phase 2."
+    },
+    {
+      "id": "PLT-F030",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-030"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/platform/git.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/platform/git.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
+        "observed": "hasLoadedPiMcpAdapter retains an uncommented structural cast"
+      },
+      "rationale": "Current source, test, configuration, and call-graph evidence supports the preserved historical claim.",
+      "destination": "Carry the focused remediation into Phase 2."
+    },
+    {
+      "id": "PLT-F031",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-031"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 4",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/platform/git.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/platform/git.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
+        "observed": "Shared contracts still lack a typed or executable participant inventory"
+      },
+      "rationale": "Current source, test, configuration, and call-graph evidence supports the preserved historical claim.",
+      "destination": "Carry the focused remediation into Phase 4."
+    },
+    {
+      "id": "PLT-F032",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-032"],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/platform/git.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/platform/git.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
+        "observed": "Credential fake contracts and negative controls remain strong on cloning validation and exact failure identity"
+      },
+      "rationale": "Current source, test, configuration, and call-graph evidence supports the preserved historical claim.",
+      "destination": "Retain as positive current evidence without implementation work."
+    },
+    {
+      "id": "PLT-F033",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-033"],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/platform/git.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/platform/git.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
+        "observed": "Git resolveRemoteRef forceUpdateRef auth callbacks and credential wire-format cases remain discriminating"
+      },
+      "rationale": "Current source, test, configuration, and call-graph evidence supports the preserved historical claim.",
+      "destination": "Retain as positive current evidence without implementation work."
+    },
+    {
+      "id": "PLT-F034",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/platform.md#CLAIM-034"],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/platform/git.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/platform/git.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection and focused owner-suite rerun",
+        "observed": "Shared-fake structuredClone dead-export and contract-delegation blind spots remain cross-cutting meta-findings"
+      },
+      "rationale": "Current source, test, configuration, and call-graph evidence supports the preserved historical claim.",
+      "destination": "Retain as cross-cutting backlog evidence outside the focused remediation phases."
+    }
+  ]
+}

@@ -6,7 +6,7 @@ import test from "node:test";
 
 import { discoverGeneratedNames } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/discover-names.ts";
 
-import type { MaterializablePlugin } from "../../../extensions/pi-claude-marketplace/domain/resolver.ts";
+import type { MaterializablePlugin } from "../../../extensions/pi-claude-marketplace/domain/resolver-types.ts";
 import type { TestContext } from "node:test";
 
 async function createPluginRoot(t: TestContext, prefix: string): Promise<string> {
@@ -83,7 +83,7 @@ test("composes generated names from every bridge in each bridge's declared order
   // assert
   assert.deepStrictEqual(discovered, {
     agents: ["pi-claude-marketplace-acme-alpha", "pi-claude-marketplace-acme-zeta"],
-    agentsSourceDir: agentsDirectory,
+    agentsDirs: [agentsDirectory],
     commands: ["acme:alpha", "acme:zeta"],
     skills: ["acme-alpha", "acme-zeta"],
   });
@@ -104,7 +104,7 @@ test("returns empty names and a null source when no components are declared", as
   // assert
   assert.deepStrictEqual(discovered, {
     agents: [],
-    agentsSourceDir: null,
+    agentsDirs: [],
     commands: [],
     skills: [],
   });
@@ -127,7 +127,7 @@ test("returns an empty agent list with the selected relative source directory", 
   // assert
   assert.deepStrictEqual(discovered, {
     agents: [],
-    agentsSourceDir: agentsDirectory,
+    agentsDirs: [agentsDirectory],
     commands: [],
     skills: [],
   });
@@ -157,9 +157,35 @@ test("keeps first-wins names while deliberately dropping all bridge warnings", a
   // assert
   assert.deepStrictEqual(discovered, {
     agents: ["pi-claude-marketplace-acme-review"],
-    agentsSourceDir: agentsDirectory,
+    agentsDirs: [agentsDirectory],
     commands: ["acme:run"],
     skills: ["acme-helper"],
+  });
+});
+
+test("discovers agents from every resolved directory in resolver order", async (t) => {
+  // arrange
+  const pluginRoot = await createPluginRoot(t, "plugin-discover-names-agent-dirs-");
+  const declaredDirectory = path.join(pluginRoot, "declared-agents");
+  const conventionalDirectory = path.join(pluginRoot, "agents");
+  await writeAgent(declaredDirectory, "shared.md", "shared");
+  await writeAgent(conventionalDirectory, "later.md", "later");
+  await writeAgent(conventionalDirectory, "shared.md", "shared");
+  const resolved = resolvedPlugin(pluginRoot, {
+    agents: ["declared-agents", "agents"],
+    commands: [],
+    skills: [],
+  });
+
+  // act
+  const discovered = await discoverGeneratedNames("acme", resolved);
+
+  // assert
+  assert.deepStrictEqual(discovered, {
+    agents: ["pi-claude-marketplace-acme-shared", "pi-claude-marketplace-acme-later"],
+    agentsDirs: [declaredDirectory, conventionalDirectory],
+    commands: [],
+    skills: [],
   });
 });
 

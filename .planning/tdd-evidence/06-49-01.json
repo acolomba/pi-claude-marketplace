@@ -1,0 +1,10 @@
+{
+  "taskId": "06-49-01",
+  "command": "node --test --test-isolation=none --test-reporter=tap tests/orchestrators/plugin/list-installed-row.test.ts",
+  "exitCode": 1,
+  "output": "TAP version 13\n# Subtest: composes a same-scope installed row with exact dependencies and description\nnot ok 1 - composes a same-scope installed row with exact dependencies and description\n  error: Got unwanted rejection: list-installed-row.ts must own installed inventory row composition\n  code: ERR_ASSERTION\n  actual: ERR_MODULE_NOT_FOUND\n1..10\n# tests 10\n# pass 0\n# fail 10",
+  "targetTest": "composes a same-scope installed row with exact dependencies and description",
+  "targetFile": "tests/orchestrators/plugin/list-installed-row.test.ts",
+  "expected": "the named list-installed-row owner exports composeInstalledListRow and preserves exact installed inventory projection",
+  "actual": "ERR_MODULE_NOT_FOUND for extensions/pi-claude-marketplace/orchestrators/plugin/list-installed-row.ts"
+}

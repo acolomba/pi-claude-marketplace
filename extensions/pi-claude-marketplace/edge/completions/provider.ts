@@ -1,6 +1,6 @@
 // edge/completions/provider.ts
 //
-// `getArgumentCompletions(prefix, resolver)` dispatcher -- the single entry
+// `getArgumentCompletions(prefix, resolver, completionCache)` dispatcher -- the single entry
 // point Pi calls per keystroke. Five branches implement PRD §6.7 TC-1..TC-6
 // with status-aware refinements per D-03 corollary.
 //
@@ -49,6 +49,7 @@ import {
 
 import type { CatalogVerb } from "../flag-catalog.ts";
 import type { LocationsResolver } from "./data.ts";
+import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AutocompleteItem } from "@earendil-works/pi-tui";
 
@@ -103,13 +104,13 @@ function flagCompletions(
   // `--scope` is the global base flag offered for EVERY head; the catalog governs
   // only the per-verb extra flags spread after it. RINST-01 / D-67-03: reinstall
   // contributes no extra completion flags -- overwrite is unconditional.
-  const flags: { name: string; description?: string }[] = [
+  const flags: { name: string; description: string }[] = [
     { name: "--scope", description: "Scope: user or project" },
   ];
 
   const verb = catalogVerbForHead(positionalHead);
   if (verb !== null) {
-    flags.push(...completionFlagEntries(verb));
+    flags.push(...(completionFlagEntries(verb) as { name: string; description: string }[]));
   }
 
   return flags
@@ -117,12 +118,8 @@ function flagCompletions(
     .map((f) => ({
       label: f.name,
       value: `${headPrefix}${f.name} `,
-      ...optionalDescription(f.description),
+      description: f.description,
     }));
-}
-
-function optionalDescription(description: string | undefined): { description?: string } {
-  return description === undefined ? {} : { description };
 }
 
 function marketplaceSubcommandCompletions(current: string, headPrefix: string): AutocompleteItem[] {
@@ -260,6 +257,7 @@ function pluginRefBranchConfig(
 export async function getArgumentCompletions(
   prefix: string,
   resolver: LocationsResolver,
+  completionCache: CompletionCache,
 ): Promise<AutocompleteItem[] | null> {
   const { tokens, current } = promoteExactSubcommandToken(splitCompletionInput(prefix));
   const argumentTextPrefix = tokens.join(" ");
@@ -313,7 +311,14 @@ export async function getArgumentCompletions(
   const pluginRefConfig = pluginRefBranchConfig(positionalHead, explicitScope, partial);
   if (pluginRefConfig !== null && positionals.length === 1) {
     const { mode, ...options } = pluginRefConfig;
-    return getPluginRefCompletions(mode, current, argumentTextPrefix, resolver, options);
+    return getPluginRefCompletions(
+      mode,
+      current,
+      argumentTextPrefix,
+      resolver,
+      completionCache,
+      options,
+    );
   }
 
   // Branch 5 (TC-5): marketplace-name positional for `list <here>` / `ls <here>` and

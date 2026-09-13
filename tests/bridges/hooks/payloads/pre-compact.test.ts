@@ -8,9 +8,8 @@ import { translate } from "../../../../extensions/pi-claude-marketplace/bridges/
 import type { TranslationContext } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/translation-context.ts";
 import type { SessionBeforeCompactEvent } from "../../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
-test("emits the complete PreCompact envelope with an automatic trigger", () => {
-  // arrange
-  const event = {
+function preCompactEvent(reason: SessionBeforeCompactEvent["reason"]): SessionBeforeCompactEvent {
+  return {
     type: "session_before_compact",
     preparation: {
       firstKeptEntryId: "message-2",
@@ -40,34 +39,52 @@ test("emits the complete PreCompact envelope with an automatic trigger", () => {
       },
     ],
     customInstructions: "Preserve decisions.",
-    reason: "threshold",
+    reason,
     willRetry: false,
     signal: new AbortController().signal,
-  } satisfies SessionBeforeCompactEvent;
-  const context = {
-    sessionId: "session-1",
-    transcriptPath: "/sessions/session-1.jsonl",
-    cwd: "/workspace/project",
-  } satisfies TranslationContext;
-  const expectedPayload = {
-    session_id: "session-1",
-    transcript_path: "/sessions/session-1.jsonl",
-    cwd: "/workspace/project",
-    hook_event_name: "PreCompact",
-    trigger: "auto",
   };
+}
 
-  // act
-  const payload = translate(event, context);
+const compactTriggerCases = [
+  { reason: "manual", trigger: "manual" },
+  { reason: "threshold", trigger: "auto" },
+  { reason: "overflow", trigger: "auto" },
+] as const satisfies readonly {
+  reason: SessionBeforeCompactEvent["reason"];
+  trigger: "manual" | "auto";
+}[];
 
-  // assert
-  assert.deepStrictEqual(payload, expectedPayload);
-});
+for (const { reason, trigger } of compactTriggerCases) {
+  test(`maps the ${reason} reason to the ${trigger} PreCompact trigger`, () => {
+    // arrange
+    const event = preCompactEvent(reason);
+    const context = {
+      sessionId: "session-1",
+      transcriptPath: "/sessions/session-1.jsonl",
+      cwd: "/workspace/project",
+    } satisfies TranslationContext;
+    const expectedPayload = {
+      session_id: "session-1",
+      transcript_path: "/sessions/session-1.jsonl",
+      cwd: "/workspace/project",
+      hook_event_name: "PreCompact",
+      trigger,
+    };
+
+    // act
+    const firstPayload = translate(event, context);
+    const repeatedPayload = translate(event, context);
+
+    // assert
+    assert.deepStrictEqual(firstPayload, expectedPayload);
+    assert.deepStrictEqual(repeatedPayload, expectedPayload);
+  });
+}
 
 test("preserves empty context strings in the complete PreCompact envelope", () => {
   // arrange
   const event = {
-    type: "session_before_compact",
+    ...preCompactEvent("manual"),
     preparation: {
       firstKeptEntryId: "message-empty-context",
       messagesToSummarize: [],
@@ -86,9 +103,7 @@ test("preserves empty context strings in the complete PreCompact envelope", () =
       },
     },
     branchEntries: [],
-    reason: "manual",
     willRetry: true,
-    signal: new AbortController().signal,
   } satisfies SessionBeforeCompactEvent;
   const context = {
     sessionId: "",
@@ -100,7 +115,7 @@ test("preserves empty context strings in the complete PreCompact envelope", () =
     transcript_path: "",
     cwd: "",
     hook_event_name: "PreCompact",
-    trigger: "auto",
+    trigger: "manual",
   };
 
   // act

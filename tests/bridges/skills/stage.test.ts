@@ -15,10 +15,28 @@ import {
 } from "../../../extensions/pi-claude-marketplace/bridges/skills/stage.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { ManualRecoveryError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import { createRemovalOps } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { SymlinkRefusedError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
+import {
+  createDelegatingRemovalOps,
+  createRemovalOpsFake,
+} from "../../platform/removal-ops-fake.ts";
 
-import type { ResolvedPluginInstallable } from "../../../extensions/pi-claude-marketplace/domain/resolver.ts";
+import type { ResolvedPluginInstallable } from "../../../extensions/pi-claude-marketplace/domain/resolver-types.ts";
 
+// Builtin-module patching that remains in this file, and why. The removal port
+// carries `rm` and `rename` for cleanupStaging and rollbackReplacementCommon
+// only. Every fault that reaches either of those two helpers is injected
+// through the collaborator; five faults land on calls the port does not carry:
+//
+//   - `cp` in prepareStageSkills' per-skill copy, and `stat` in
+//     commitPreparedSkills' target inspection: both verbs are outside the
+//     port's membership (D-08-13), so neither has an injected seam.
+//   - the `rm` of a previous-named target dir and the staged `rename`, both
+//     inside commitPreparedSkills, and the orphan-clearing `rename` inside
+//     replacePreparedSkills: direct calls the port deliberately does not
+//     carry, so faulting them still needs the builtin.
+//
 const filesystemPromises = createRequire(import.meta.url)(
   "node:fs/promises",
 ) as typeof import("node:fs/promises");
@@ -66,7 +84,7 @@ describe("prepareStageSkills", () => {
     } satisfies ResolvedPluginInstallable;
 
     // act
-    const prepared = await prepareStageSkills({
+    const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
       marketplaceName: "catalog",
@@ -135,7 +153,7 @@ describe("prepareStageSkills", () => {
       "\n";
 
     // act
-    const prepared = await prepareStageSkills({
+    const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
       marketplaceName: "catalog",
@@ -210,7 +228,7 @@ describe("prepareStageSkills", () => {
       '"acme-tool"; ignoring duplicate.';
 
     // act
-    const prepared = await prepareStageSkills({
+    const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
       marketplaceName: "catalog",
@@ -291,7 +309,7 @@ describe("prepareStageSkills", () => {
     };
 
     // act
-    const prepared = await prepareStageSkills({
+    const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
       marketplaceName: "catalog",
@@ -354,7 +372,7 @@ describe("prepareStageSkills", () => {
     };
 
     // act
-    const prepared = await prepareStageSkills({
+    const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
       marketplaceName: "catalog",
@@ -425,7 +443,7 @@ describe("prepareStageSkills", () => {
     };
 
     // act
-    const prepared = await prepareStageSkills({
+    const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
       marketplaceName: "catalog",
@@ -477,7 +495,7 @@ describe("prepareStageSkills", () => {
       "when_to_use: For pull requests\n---\n\nBody.\n";
 
     // act
-    const prepared = await prepareStageSkills({
+    const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
       marketplaceName: "catalog",
@@ -553,7 +571,7 @@ describe("prepareStageSkills", () => {
       "\n---\n\nBody.\n";
 
     // act
-    const prepared = await prepareStageSkills({
+    const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
       marketplaceName: "catalog",
@@ -614,7 +632,7 @@ describe("prepareStageSkills", () => {
       "---\nUses C:\\Users\\case\\plugin.\n";
 
     // act
-    const prepared = await prepareStageSkills({
+    const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
       marketplaceName: "catalog",
@@ -682,7 +700,7 @@ describe("prepareStageSkills", () => {
       "\nProject: ${CLAUDE_PROJECT_DIR}\n";
 
     // act
-    const prepared = await prepareStageSkills({
+    const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: path.join(scopeRoot, "ignored-project"),
       marketplaceName: "catalog",
@@ -737,7 +755,7 @@ describe("prepareStageSkills", () => {
     // act
     let prepareError: unknown;
     try {
-      await prepareStageSkills({
+      await prepareStageSkills(createRemovalOps(), {
         locations,
         cwd: scopeRoot,
         marketplaceName: "catalog",
@@ -801,7 +819,7 @@ describe("prepareStageSkills", () => {
     // act
     let prepareError: unknown;
     try {
-      await prepareStageSkills({
+      await prepareStageSkills(createRemovalOps(), {
         locations,
         cwd: scopeRoot,
         marketplaceName: "catalog",
@@ -857,7 +875,7 @@ describe("prepareStageSkills", () => {
     // act
     let prepareError: unknown;
     try {
-      await prepareStageSkills({
+      await prepareStageSkills(createRemovalOps(), {
         locations,
         cwd: scopeRoot,
         marketplaceName: "catalog",
@@ -899,7 +917,7 @@ describe("commitPreparedSkills", () => {
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
-    const prepared = await prepareStageSkills({
+    const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
       marketplaceName: "catalog",
@@ -910,7 +928,7 @@ describe("commitPreparedSkills", () => {
     });
 
     // act
-    const leak = await commitPreparedSkills(prepared);
+    const leak = await commitPreparedSkills(createRemovalOps(), prepared);
     const targetDirectory = await stat(locations.skillsTargetDir).catch(() => undefined);
 
     // assert
@@ -954,7 +972,7 @@ describe("commitPreparedSkills", () => {
     );
 
     // act
-    const prepared = await prepareStageSkills({
+    const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
       marketplaceName: "catalog",
@@ -963,7 +981,7 @@ describe("commitPreparedSkills", () => {
       pluginDataDir,
       resolved,
     });
-    const leak = await commitPreparedSkills(prepared);
+    const leak = await commitPreparedSkills(createRemovalOps(), prepared);
     const committedBytes = await readFile(targetFile);
 
     // assert
@@ -1003,7 +1021,7 @@ describe("commitPreparedSkills", () => {
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
-    const prepared = await prepareStageSkills({
+    const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
       marketplaceName: "catalog",
@@ -1016,7 +1034,7 @@ describe("commitPreparedSkills", () => {
     assert.strictEqual(prepared.kind, "staged");
 
     // act
-    const leak = await commitPreparedSkills(prepared);
+    const leak = await commitPreparedSkills(createRemovalOps(), prepared);
     const targetBytes = await readFile(
       path.join(locations.skillsTargetDir, "acme-alpha", "SKILL.md"),
       "utf8",
@@ -1068,7 +1086,7 @@ describe("commitPreparedSkills", () => {
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
-    const prepared = await prepareStageSkills({
+    const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
       marketplaceName: "catalog",
@@ -1104,7 +1122,7 @@ describe("commitPreparedSkills", () => {
     // act
     let commitError: unknown;
     try {
-      await commitPreparedSkills(prepared);
+      await commitPreparedSkills(createRemovalOps(), prepared);
     } catch (error) {
       commitError = error;
     }
@@ -1143,7 +1161,7 @@ describe("commitPreparedSkills", () => {
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
-    const prepared = await prepareStageSkills({
+    const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
       marketplaceName: "catalog",
@@ -1181,7 +1199,7 @@ describe("commitPreparedSkills", () => {
     // act
     let commitError: unknown;
     try {
-      await commitPreparedSkills(prepared);
+      await commitPreparedSkills(createRemovalOps(), prepared);
     } catch (error) {
       commitError = error;
     }
@@ -1217,7 +1235,7 @@ describe("commitPreparedSkills", () => {
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
-    const prepared = await prepareStageSkills({
+    const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
       marketplaceName: "catalog",
@@ -1240,7 +1258,7 @@ describe("commitPreparedSkills", () => {
     // act
     let commitError: unknown;
     try {
-      await commitPreparedSkills(prepared);
+      await commitPreparedSkills(createRemovalOps(), prepared);
     } catch (error) {
       commitError = error;
     }
@@ -1278,7 +1296,7 @@ describe("commitPreparedSkills", () => {
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
-    const prepared = await prepareStageSkills({
+    const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
       marketplaceName: "catalog",
@@ -1288,34 +1306,21 @@ describe("commitPreparedSkills", () => {
       resolved,
     });
     assert.strictEqual(prepared.kind, "staged");
-    const originalRm = filesystemPromises.rm.bind(filesystemPromises);
     const cleanupError = Object.assign(new Error("staging cleanup denied"), { code: "EACCES" });
-    const removal = t.mock.method(
-      filesystemPromises,
-      "rm",
-      async (
-        target: Parameters<typeof originalRm>[0],
-        options?: Parameters<typeof originalRm>[1],
-      ) => {
-        if (String(target) === prepared.stagingRoot) {
-          throw cleanupError;
-        }
-
-        await originalRm(target, options);
-      },
-    );
-    t.after(() => {
-      removal.mock.restore();
-      syncBuiltinESMExports();
+    // The fault is keyed on this one staging root, so a sibling cleanup in the
+    // same commit would still succeed. The staged rename below is NOT a port
+    // call, so it still moves real bytes and the target read still holds.
+    const removal = createRemovalOpsFake({
+      boundary: "memory",
+      rmErrors: [[prepared.stagingRoot, cleanupError]],
     });
-    syncBuiltinESMExports();
     const expectedLeak =
       "failed to clean up skills staging directory at " +
       prepared.stagingRoot +
       ": staging cleanup denied";
 
     // act
-    const leak = await commitPreparedSkills(prepared);
+    const leak = await commitPreparedSkills(removal.removalOps, prepared);
     const targetBytes = await readFile(
       path.join(locations.skillsTargetDir, "acme-alpha", "SKILL.md"),
       "utf8",
@@ -1348,7 +1353,7 @@ describe("abortPreparedSkills", () => {
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
-    const prepared = await prepareStageSkills({
+    const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
       marketplaceName: "catalog",
@@ -1359,7 +1364,7 @@ describe("abortPreparedSkills", () => {
     });
 
     // act
-    const leak = await abortPreparedSkills(prepared);
+    const leak = await abortPreparedSkills(createRemovalOps(), prepared);
 
     // assert
     assert.strictEqual(leak, undefined);
@@ -1391,7 +1396,7 @@ describe("abortPreparedSkills", () => {
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
-    const prepared = await prepareStageSkills({
+    const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
       marketplaceName: "catalog",
@@ -1403,8 +1408,8 @@ describe("abortPreparedSkills", () => {
     assert.strictEqual(prepared.kind, "staged");
 
     // act
-    const firstLeak = await abortPreparedSkills(prepared);
-    const secondLeak = await abortPreparedSkills(prepared);
+    const firstLeak = await abortPreparedSkills(createRemovalOps(), prepared);
+    const secondLeak = await abortPreparedSkills(createRemovalOps(), prepared);
     const stagingState = await stat(prepared.stagingRoot).catch(() => undefined);
     const targetState = await stat(locations.skillsTargetDir).catch(() => undefined);
 
@@ -1436,7 +1441,7 @@ describe("replacePreparedSkills", () => {
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
-    const prepared = await prepareStageSkills({
+    const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
       marketplaceName: "catalog",
@@ -1447,7 +1452,7 @@ describe("replacePreparedSkills", () => {
     });
 
     // act
-    const replacement = await replacePreparedSkills(prepared);
+    const replacement = await replacePreparedSkills(createRemovalOps(), prepared);
 
     // assert
     assert.deepStrictEqual(replacement, { kind: "noop", prepared });
@@ -1485,7 +1490,7 @@ describe("replacePreparedSkills", () => {
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
-    const prepared = await prepareStageSkills({
+    const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
       marketplaceName: "catalog",
@@ -1498,9 +1503,9 @@ describe("replacePreparedSkills", () => {
     assert.strictEqual(prepared.kind, "staged");
 
     // act
-    const replacement = await replacePreparedSkills(prepared);
+    const replacement = await replacePreparedSkills(createRemovalOps(), prepared);
     assert.strictEqual(replacement.kind, "replaced");
-    t.after(() => finalizeSkillsReplacement(replacement));
+    t.after(() => finalizeSkillsReplacement(createRemovalOps(), replacement));
     const targetBytes = await readFile(path.join(targetDirectory, "SKILL.md"), "utf8");
     const resourceBytes = await readFile(
       path.join(targetDirectory, "resources", "new.txt"),
@@ -1553,7 +1558,7 @@ describe("replacePreparedSkills", () => {
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
-    const prepared = await prepareStageSkills({
+    const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
       marketplaceName: "catalog",
@@ -1586,12 +1591,12 @@ describe("replacePreparedSkills", () => {
     syncBuiltinESMExports();
 
     // act
-    const replacement = await replacePreparedSkills(prepared);
+    const replacement = await replacePreparedSkills(createRemovalOps(), prepared);
     const targetBytes = await readFile(path.join(targetDirectory, "SKILL.md"), "utf8");
     const orphanState = await stat(path.join(targetDirectory, "leftover.txt")).catch(
       () => undefined,
     );
-    const leaks = await finalizeSkillsReplacement(replacement);
+    const leaks = await finalizeSkillsReplacement(createRemovalOps(), replacement);
 
     // assert
     assert.strictEqual(
@@ -1639,7 +1644,7 @@ describe("replacePreparedSkills", () => {
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
-    const prepared = await prepareStageSkills({
+    const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
       marketplaceName: "catalog",
@@ -1656,7 +1661,7 @@ describe("replacePreparedSkills", () => {
     // act
     let replacementError: unknown;
     try {
-      await replacePreparedSkills(prepared);
+      await replacePreparedSkills(createRemovalOps(), prepared);
     } catch (error) {
       replacementError = error;
     }
@@ -1713,7 +1718,7 @@ describe("replacePreparedSkills", () => {
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
-    const prepared = await prepareStageSkills({
+    const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
       marketplaceName: "catalog",
@@ -1724,67 +1729,42 @@ describe("replacePreparedSkills", () => {
       previousSkillNames: ["acme-alpha"],
     });
     assert.strictEqual(prepared.kind, "staged");
-    const originalRm = filesystemPromises.rm.bind(filesystemPromises);
-    const originalRename = filesystemPromises.rename.bind(filesystemPromises);
     const removalError = Object.assign(new Error("replacement removal denied"), { code: "EACCES" });
     const restoreError = Object.assign(new Error("previous restoration denied"), {
       code: "EACCES",
     });
-    let backupPath = "";
-    const removal = t.mock.method(
-      filesystemPromises,
-      "rm",
-      async (
-        target: Parameters<typeof originalRm>[0],
-        options?: Parameters<typeof originalRm>[1],
-      ) => {
-        if (String(target) === alphaTarget) {
-          throw removalError;
-        }
-
-        await originalRm(target, options);
-      },
-    );
-    const rename = t.mock.method(
-      filesystemPromises,
-      "rename",
-      async (
-        from: Parameters<typeof originalRename>[0],
-        to: Parameters<typeof originalRename>[1],
-      ) => {
-        if (String(from) === alphaTarget) {
-          backupPath = String(to);
-          await originalRename(from, to);
-          return;
-        }
-
-        if (String(from) === backupPath && String(to) === alphaTarget) {
-          throw restoreError;
-        }
-
-        await originalRename(from, to);
-      },
-    );
-    t.after(() => {
-      removal.mock.restore();
-      rename.mock.restore();
-      syncBuiltinESMExports();
+    // The restore fault is keyed on its destination. Its source is the backup
+    // path `replacePreparedSkills` mints inside its own unported forward
+    // rename, so the case cannot name it before the call; the target the
+    // backup is restored TO is known from the fixture.
+    const removal = createDelegatingRemovalOps({
+      boundary: "delegate",
+      delegate: createRemovalOps(),
+      rmErrors: [[alphaTarget, removalError]],
+      renameDestinationErrors: [[alphaTarget, restoreError]],
     });
-    syncBuiltinESMExports();
 
     // act
     let replacementError: unknown;
     try {
-      await replacePreparedSkills(prepared);
+      await replacePreparedSkills(removal.removalOps, prepared);
     } catch (error) {
       replacementError = error;
     }
+
+    const restore = removal.operations.find((operation) => operation.verb === "rename");
+    const backupPath = restore?.verb === "rename" ? restore.from : "unrecorded";
 
     // assert
     assert.ok(replacementError instanceof ManualRecoveryError);
     assert.strictEqual(
       replacementError.message,
       "Cannot replace skill target with non-previous content at " + betaTarget,
+    );
+    assert.strictEqual(path.basename(backupPath), "acme-alpha");
+    assert.strictEqual(
+      path.dirname(backupPath).startsWith(path.join(locations.skillsStagingDir, "backup-")),
+      true,
     );
     assert.deepStrictEqual(replacementError.leaks, [
       "failed to remove replacement skill dir at " + alphaTarget + ": replacement removal denied",
@@ -1817,7 +1797,7 @@ describe("rollbackSkillsReplacement", () => {
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
-    const prepared = await prepareStageSkills({
+    const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
       marketplaceName: "catalog",
@@ -1826,10 +1806,10 @@ describe("rollbackSkillsReplacement", () => {
       pluginDataDir,
       resolved,
     });
-    const replacement = await replacePreparedSkills(prepared);
+    const replacement = await replacePreparedSkills(createRemovalOps(), prepared);
 
     // act
-    const leaks = await rollbackSkillsReplacement(replacement);
+    const leaks = await rollbackSkillsReplacement(createRemovalOps(), replacement);
 
     // assert
     assert.deepStrictEqual(leaks, []);
@@ -1872,7 +1852,7 @@ describe("rollbackSkillsReplacement", () => {
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
-    const prepared = await prepareStageSkills({
+    const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
       marketplaceName: "catalog",
@@ -1883,11 +1863,11 @@ describe("rollbackSkillsReplacement", () => {
       previousSkillNames: ["acme-alpha"],
     });
     assert.strictEqual(prepared.kind, "staged");
-    const replacement = await replacePreparedSkills(prepared);
+    const replacement = await replacePreparedSkills(createRemovalOps(), prepared);
     assert.strictEqual(replacement.kind, "replaced");
 
     // act
-    const leaks = await rollbackSkillsReplacement(replacement);
+    const leaks = await rollbackSkillsReplacement(createRemovalOps(), replacement);
     const alphaBytes = await readFile(path.join(alphaTarget, "SKILL.md"), "utf8");
     const nestedBytes = await readFile(path.join(alphaTarget, "nested", "old.txt"), "utf8");
     const betaState = await stat(betaTarget).catch(() => undefined);
@@ -1899,6 +1879,100 @@ describe("rollbackSkillsReplacement", () => {
     assert.strictEqual(nestedBytes, "old nested bytes\n");
     assert.strictEqual(betaState, undefined);
     assert.deepStrictEqual(stagingEntries, []);
+  });
+
+  test("reports one leak per failed stage in stage order and leaves only the blocked roots", async (t) => {
+    // arrange
+    const { locations, pluginDataDir, pluginRoot, scopeRoot } = await allocateCasePaths(
+      t,
+      "skills-rollback-stage-leaks-",
+    );
+    const skillsDirectory = path.join(pluginRoot, "skills");
+    const alphaDirectory = path.join(skillsDirectory, "alpha");
+    const alphaTarget = path.join(locations.skillsTargetDir, "acme-alpha");
+    await mkdir(alphaDirectory, { recursive: true });
+    await mkdir(alphaTarget, { recursive: true });
+    await writeFile(
+      path.join(alphaDirectory, "SKILL.md"),
+      "---\nname: alpha\ndescription: New alpha\n---\n",
+    );
+    await writeFile(path.join(alphaTarget, "SKILL.md"), "old alpha bytes\n");
+    const resolved = {
+      installable: true,
+      state: "installable",
+      name: "acme",
+      pluginRoot,
+      supported: ["skills"],
+      unsupported: [],
+      notes: [],
+      componentPaths: { skills: [skillsDirectory], commands: [], agents: [] },
+      mcpServers: {},
+      defaultEnabled: true,
+    } satisfies ResolvedPluginInstallable;
+    const prepared = await prepareStageSkills(createRemovalOps(), {
+      locations,
+      cwd: scopeRoot,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      resolved,
+      previousSkillNames: ["acme-alpha"],
+    });
+    assert.strictEqual(prepared.kind, "staged");
+    const replacement = await replacePreparedSkills(createRemovalOps(), prepared);
+    assert.strictEqual(replacement.kind, "replaced");
+    const [backupDirectory = ""] = (await readdir(locations.skillsStagingDir)).filter((name) =>
+      name.startsWith("backup-"),
+    );
+    // What the name IS, not merely that it is not undefined: `backup-${randomUUID()}`. The
+    // standalone `assert.notStrictEqual(backupDirectory, undefined)` this replaces passed for every
+    // value the `find` could answer except one, and left a `?? "missing"` fallback below it that
+    // nothing could reach.
+    assert.match(backupDirectory, /^backup-[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/);
+    const backupRoot = path.join(locations.skillsStagingDir, backupDirectory);
+    const backupPath = path.join(backupRoot, "acme-alpha");
+    const removalError = Object.assign(new Error("replacement removal denied"), { code: "EACCES" });
+    const restoreError = Object.assign(new Error("previous restoration denied"), {
+      code: "EACCES",
+    });
+    const stagingError = Object.assign(new Error("staging cleanup denied"), { code: "EACCES" });
+    // Three of the rollback's four removals fault and the fourth does not: the
+    // backup root's cleanup runs for real, which is the half of the partition a
+    // collaborator that removes nothing could not state.
+    const removal = createDelegatingRemovalOps({
+      boundary: "delegate",
+      delegate: createRemovalOps(),
+      rmErrors: [
+        [alphaTarget, removalError],
+        [prepared.stagingRoot, stagingError],
+      ],
+      renameErrors: [[backupPath, restoreError]],
+    });
+    const expectedLeaks = [
+      "failed to remove replacement skill dir at " + alphaTarget + ": replacement removal denied",
+      "failed to restore previous skill dir acme-alpha from " +
+        backupPath +
+        " to " +
+        alphaTarget +
+        ": previous restoration denied",
+      "failed to clean up skills staging directory at " +
+        prepared.stagingRoot +
+        ": staging cleanup denied",
+    ];
+
+    // act
+    const leaks = await rollbackSkillsReplacement(removal.removalOps, replacement);
+    const stagingState = await stat(prepared.stagingRoot).catch(() => undefined);
+    const backupState = await stat(backupRoot).catch(() => undefined);
+    const targetBytes = await readFile(path.join(alphaTarget, "SKILL.md"), "utf8");
+
+    // assert
+    assert.deepStrictEqual(leaks, expectedLeaks);
+    assert.strictEqual(Object.isFrozen(leaks), true);
+    assert.strictEqual(stagingState?.isDirectory(), true);
+    assert.strictEqual(backupState, undefined);
+    assert.strictEqual(targetBytes, "---\nname: acme-alpha\ndescription: New alpha\n---\n");
   });
 
   test("rejects a cloned replacement handle without internal identity", async (t) => {
@@ -1926,7 +2000,7 @@ describe("rollbackSkillsReplacement", () => {
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
-    const prepared = await prepareStageSkills({
+    const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
       marketplaceName: "catalog",
@@ -1935,14 +2009,14 @@ describe("rollbackSkillsReplacement", () => {
       pluginDataDir,
       resolved,
     });
-    const replacement = await replacePreparedSkills(prepared);
+    const replacement = await replacePreparedSkills(createRemovalOps(), prepared);
     assert.strictEqual(replacement.kind, "replaced");
-    t.after(() => finalizeSkillsReplacement(replacement));
+    t.after(() => finalizeSkillsReplacement(createRemovalOps(), replacement));
     const clonedReplacement = { ...replacement };
 
     // act & assert
     await assert.rejects(
-      () => rollbackSkillsReplacement(clonedReplacement),
+      () => rollbackSkillsReplacement(createRemovalOps(), clonedReplacement),
       (error: unknown) => {
         assert.ok(error instanceof Error);
         assert.deepStrictEqual(
@@ -1975,7 +2049,7 @@ describe("finalizeSkillsReplacement", () => {
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
-    const prepared = await prepareStageSkills({
+    const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
       marketplaceName: "catalog",
@@ -1984,10 +2058,10 @@ describe("finalizeSkillsReplacement", () => {
       pluginDataDir,
       resolved,
     });
-    const replacement = await replacePreparedSkills(prepared);
+    const replacement = await replacePreparedSkills(createRemovalOps(), prepared);
 
     // act
-    const leaks = await finalizeSkillsReplacement(replacement);
+    const leaks = await finalizeSkillsReplacement(createRemovalOps(), replacement);
 
     // assert
     assert.deepStrictEqual(leaks, []);
@@ -2022,7 +2096,7 @@ describe("finalizeSkillsReplacement", () => {
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
-    const prepared = await prepareStageSkills({
+    const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
       marketplaceName: "catalog",
@@ -2033,12 +2107,12 @@ describe("finalizeSkillsReplacement", () => {
       previousSkillNames: ["acme-alpha"],
     });
     assert.strictEqual(prepared.kind, "staged");
-    const replacement = await replacePreparedSkills(prepared);
+    const replacement = await replacePreparedSkills(createRemovalOps(), prepared);
     assert.strictEqual(replacement.kind, "replaced");
 
     // act
-    const firstLeaks = await finalizeSkillsReplacement(replacement);
-    const secondLeaks = await finalizeSkillsReplacement(replacement);
+    const firstLeaks = await finalizeSkillsReplacement(createRemovalOps(), replacement);
+    const secondLeaks = await finalizeSkillsReplacement(createRemovalOps(), replacement);
     const targetBytes = await readFile(path.join(targetDirectory, "SKILL.md"), "utf8");
     const stagingEntries = await readdir(locations.skillsStagingDir);
 
@@ -2077,7 +2151,7 @@ describe("finalizeSkillsReplacement", () => {
       mcpServers: {},
       defaultEnabled: true,
     } satisfies ResolvedPluginInstallable;
-    const prepared = await prepareStageSkills({
+    const prepared = await prepareStageSkills(createRemovalOps(), {
       locations,
       cwd: scopeRoot,
       marketplaceName: "catalog",
@@ -2088,39 +2162,28 @@ describe("finalizeSkillsReplacement", () => {
       previousSkillNames: ["acme-alpha"],
     });
     assert.strictEqual(prepared.kind, "staged");
-    const replacement = await replacePreparedSkills(prepared);
+    const replacement = await replacePreparedSkills(createRemovalOps(), prepared);
     assert.strictEqual(replacement.kind, "replaced");
-    const backupDirectory = (await readdir(locations.skillsStagingDir)).find((name) =>
+    const [backupDirectory = ""] = (await readdir(locations.skillsStagingDir)).filter((name) =>
       name.startsWith("backup-"),
     );
-    assert.notStrictEqual(backupDirectory, undefined);
-    const backupRoot = path.join(locations.skillsStagingDir, backupDirectory ?? "missing");
-    const originalRm = filesystemPromises.rm.bind(filesystemPromises);
+    // What the name IS, not merely that it is not undefined: `backup-${randomUUID()}`. The
+    // standalone `assert.notStrictEqual(backupDirectory, undefined)` this replaces passed for every
+    // value the `find` could answer except one, and left a `?? "missing"` fallback below it that
+    // nothing could reach.
+    assert.match(backupDirectory, /^backup-[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/);
+    const backupRoot = path.join(locations.skillsStagingDir, backupDirectory);
     const backupError = Object.assign(new Error("backup cleanup denied"), { code: "EACCES" });
     const stagingError = Object.assign(new Error("staging cleanup denied"), { code: "EACCES" });
-    const removal = t.mock.method(
-      filesystemPromises,
-      "rm",
-      async (
-        target: Parameters<typeof originalRm>[0],
-        options?: Parameters<typeof originalRm>[1],
-      ) => {
-        if (String(target) === backupRoot) {
-          throw backupError;
-        }
-
-        if (String(target) === prepared.stagingRoot) {
-          throw stagingError;
-        }
-
-        await originalRm(target, options);
-      },
-    );
-    t.after(() => {
-      removal.mock.restore();
-      syncBuiltinESMExports();
+    // Finalization's only removals are these two cleanups, and both fault, so
+    // an in-memory collaborator reaches the whole surface the case drives.
+    const removal = createRemovalOpsFake({
+      boundary: "memory",
+      rmErrors: [
+        [backupRoot, backupError],
+        [prepared.stagingRoot, stagingError],
+      ],
     });
-    syncBuiltinESMExports();
     const expectedLeaks = [
       "failed to clean up skills replacement backup directory at " +
         backupRoot +
@@ -2131,7 +2194,7 @@ describe("finalizeSkillsReplacement", () => {
     ];
 
     // act
-    const leaks = await finalizeSkillsReplacement(replacement);
+    const leaks = await finalizeSkillsReplacement(removal.removalOps, replacement);
     const targetBytes = await readFile(path.join(targetDirectory, "SKILL.md"), "utf8");
 
     // assert

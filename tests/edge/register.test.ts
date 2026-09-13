@@ -36,7 +36,7 @@
 // cases fails where it happens. See `installNetworkTrap`.
 
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import https from "node:https";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -45,13 +45,27 @@ import { describe, test, type TestContext } from "node:test";
 import { It, mock, verify, when } from "strong-mock";
 
 import {
+  createHooksRouting,
+  createHooksRuntime,
+  readHooksJson,
+} from "../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
+import {
   registerClaudeMarketplaceTools,
   registerClaudePluginCommand,
 } from "../../extensions/pi-claude-marketplace/edge/register.ts";
 import { TOP_LEVEL_USAGE } from "../../extensions/pi-claude-marketplace/edge/router.ts";
-import { saveState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { makeLocationsResolver } from "../../extensions/pi-claude-marketplace/orchestrators/edge-deps.ts";
+import { createPluginUpdateOperations } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts";
+import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import {
+  loadState,
+  saveState,
+} from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import { retryTree } from "../orchestrators/plugin/scope-tree-inventory.ts";
 import { createGitOpsFake } from "../platform/git-ops-fake.ts";
 
+import { buildInstalledPluginRecord } from "./handlers/marketplace-seed.ts";
 import { createNotificationBoundary } from "./notification-boundary.ts";
 
 import type { Notification } from "./notification-boundary.ts";
@@ -61,9 +75,11 @@ import type { PluginUpdateOutcome } from "../../extensions/pi-claude-marketplace
 import type { ExtensionState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type {
   ExtensionAPI,
+  ExtensionCommandContext,
   ExtensionContext,
   SessionStartEvent,
 } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { CompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import type {
   AutocompleteItem,
   AutocompleteProvider,
@@ -71,12 +87,18 @@ import type {
 } from "@earendil-works/pi-tui";
 
 type MarketplaceRecord = ExtensionState["marketplaces"][string];
+type ImportDelegate = NonNullable<EdgeDeps["importClaudeSettings"]>;
 
 /** The options bag `registerCommand` receives, derived from the Pi surface. */
 type CommandRegistration = Parameters<ExtensionAPI["registerCommand"]>[1];
 
 /** The factory `addAutocompleteProvider` receives, derived from the Pi surface. */
 type AutocompleteProviderFactory = Parameters<ExtensionContext["ui"]["addAutocompleteProvider"]>[0];
+
+type NotificationSeverity = Parameters<ExtensionContext["ui"]["notify"]>[1];
+type NotificationUi = Omit<ExtensionContext["ui"], "notify"> & {
+  readonly notify: (message: string, severity?: NotificationSeverity) => void;
+};
 
 /** The listener shape the `session_start` overload accepts. */
 type SessionStartListener = (event: SessionStartEvent, ctx: ExtensionContext) => void;
@@ -200,14 +222,24 @@ function marketplaceRecordIn(root: string, marketplaceName: string): Marketplace
   };
 }
 
-/** Record one project-scope marketplace under `root`, the completion read path. */
-async function seedProjectMarketplace(root: string, marketplaceName: string): Promise<void> {
+/** Record project-scope marketplaces under `root`, the completion read path. */
+async function seedProjectMarketplaces(
+  root: string,
+  marketplaceNames: readonly string[],
+): Promise<void> {
   const extensionRoot = path.join(root, ".pi", "pi-claude-marketplace");
   await mkdir(extensionRoot, { recursive: true });
   await saveState(extensionRoot, {
     schemaVersion: 2,
-    marketplaces: { [marketplaceName]: marketplaceRecordIn(root, marketplaceName) },
+    marketplaces: Object.fromEntries(
+      marketplaceNames.map((name) => [name, marketplaceRecordIn(root, name)]),
+    ),
   });
+}
+
+/** Record one project-scope marketplace under `root`. */
+async function seedProjectMarketplace(root: string, marketplaceName: string): Promise<void> {
+  await seedProjectMarketplaces(root, [marketplaceName]);
 }
 
 /**
@@ -215,16 +247,23 @@ async function seedProjectMarketplace(root: string, marketplaceName: string): Pr
  * the two orchestrator entrypoints refuse to run: no case here dispatches a
  * subcommand that reaches them, so a call is a defect rather than a fixture gap.
  */
-function createEdgeDeps(): EdgeDeps {
-  const { gitOps } = createGitOpsFake({ boundary: "memory" });
+function createEdgeDeps(
+  completionCache: CompletionCache,
+  importClaudeSettings?: ImportDelegate,
+  gitOps?: EdgeDeps["gitOps"],
+): EdgeDeps {
+  const selectedGitOps = gitOps ?? createGitOpsFake({ boundary: "memory" }).gitOps;
   return {
-    gitOps,
+    completionCache,
+    gitOps: selectedGitOps,
     pluginUpdate: (): Promise<PluginUpdateOutcome> => {
       throw new Error("the registration glue must not run a plugin update");
     },
-    importClaudeSettings: (): Promise<ClaudeImportExecutionResult> => {
-      throw new Error("the registration glue must not run a settings import");
-    },
+    importClaudeSettings:
+      importClaudeSettings ??
+      ((): Promise<ClaudeImportExecutionResult> => {
+        throw new Error("the registration glue must not run a settings import");
+      }),
   } satisfies EdgeDeps;
 }
 
@@ -233,7 +272,13 @@ function createEdgeDeps(): EdgeDeps {
  * callbacks. The command name and the event name are stated by hand; only the
  * two callbacks are captured, because a function has no structural comparison.
  */
-function registerCommandUnderTest(): CommandUnderTest {
+function registerCommandWithCache(
+  completionCache: CompletionCache,
+  hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson }),
+  importClaudeSettings?: ImportDelegate,
+  expectedNotifications = 0,
+  gitOps?: EdgeDeps["gitOps"],
+): CommandUnderTest {
   const pi = mock<PiRegistrar>({ exactParams: true, name: "extension API" });
   const commandOptions = It.willCapture<CommandRegistration>("claude:plugin registration");
   const sessionStartListener = It.willCapture<SessionStartListener>("session start listener");
@@ -247,8 +292,18 @@ function registerCommandUnderTest(): CommandUnderTest {
   })
     .thenReturn()
     .times(1);
+  if (expectedNotifications > 0) {
+    when(() => pi.getAllTools())
+      .thenReturn([])
+      .times(expectedNotifications * 2);
+  }
 
-  registerClaudePluginCommand(pi, createEdgeDeps());
+  registerClaudePluginCommand(
+    pi,
+    createEdgeDeps(completionCache, importClaudeSettings, gitOps),
+    hooksRouting,
+    createPluginUpdateOperations(hooksRouting, completionCache).updatePlugins,
+  );
 
   const registration = commandOptions.value;
   const sessionStart = sessionStartListener.value;
@@ -261,6 +316,25 @@ function registerCommandUnderTest(): CommandUnderTest {
     sessionStart,
     verifyRegistrar: (): void => {
       verify(pi);
+    },
+  };
+}
+
+function registerCommandUnderTest(): CommandUnderTest {
+  return registerCommandWithCache(createCompletionCache());
+}
+
+function createBootstrapGitOps(sourceTree: string): EdgeDeps["gitOps"] {
+  const git = createGitOpsFake({
+    boundary: "memory",
+    allowedRemoteUrls: ["https://github.com/anthropics/claude-plugins-official.git"],
+    cloneFixture: { boundary: "local", sourceDir: sourceTree },
+  });
+  return {
+    ...git.gitOps,
+    async clone(cloneOptions) {
+      const { auth: _auth, ...transportOptions } = cloneOptions;
+      await git.gitOps.clone(transportOptions);
     },
   };
 }
@@ -332,6 +406,47 @@ describe("registerClaudePluginCommand", () => {
     verifyRegistrar();
   });
 
+  test("shares the supplied lifecycle routing owner with registered import execution", async (t) => {
+    // arrange
+    const { cwd } = await createHermeticScope(t, "import-routing-owner");
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0, {
+      value: cwd,
+      reads: 1,
+    });
+    const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
+    let forwardedHooksRouting: unknown;
+    const importClaudeSettings: ImportDelegate = (options) => {
+      forwardedHooksRouting = Reflect.get(options, "hooksRouting");
+      return Promise.resolve({
+        addedMarketplaces: [],
+        changedResources: false,
+        diagnostics: [],
+        installedPlugins: [],
+        marketplaceFailures: [],
+        skippedExistingMarketplaces: [],
+        skippedExistingPlugins: [],
+        sourceMismatches: [],
+        unexpectedPluginFailures: [],
+        warnings: [],
+      });
+    };
+
+    const { registration, verifyRegistrar } = registerCommandWithCache(
+      createCompletionCache(),
+      hooksRouting,
+      importClaudeSettings,
+    );
+
+    // act
+    await registration.handler("import --scope project", ctx);
+
+    // assert
+    assert.strictEqual(forwardedHooksRouting, hooksRouting);
+    assert.deepStrictEqual(notifications, []);
+    verifyBoundary();
+    verifyRegistrar();
+  });
+
   test("resolves argument completions against the working directory the callback runs in (D-04)", async (t) => {
     // arrange
     const scope = await createHermeticScope(t, "completion-cwd");
@@ -353,6 +468,800 @@ describe("registerClaudePluginCommand", () => {
     verifyRegistrar();
   });
 
+  test("keeps supplied lifecycle completion-cache hits isolated between registrations", async (t) => {
+    // arrange
+    const scope = await createHermeticScope(t, "completion-cache");
+    const marketplace = "cache-mp";
+    await seedProjectMarketplace(scope.cwd, marketplace);
+    const resolver = makeLocationsResolver(scope.cwd);
+    const cachePath = await resolver.pluginCachePath("project", marketplace);
+    const ownerCache = createCompletionCache();
+    const peerCache = createCompletionCache();
+    await ownerCache.getPluginIndex(cachePath, "project", marketplace, () =>
+      Promise.resolve([{ name: "owner-row", status: "installed" }]),
+    );
+    await rm(cachePath);
+    await peerCache.getPluginIndex(cachePath, "project", marketplace, () =>
+      Promise.resolve([{ name: "peer-row", status: "installed" }]),
+    );
+    await rm(cachePath);
+    const owner = registerCommandWithCache(ownerCache);
+    const peer = registerCommandWithCache(peerCache);
+    const expectedOwnerCandidates = [
+      {
+        label: "owner-row@cache-mp",
+        value: "uninstall --scope project owner-row@cache-mp ",
+      },
+    ];
+    const expectedPeerCandidates = [
+      {
+        label: "peer-row@cache-mp",
+        value: "uninstall --scope project peer-row@cache-mp ",
+      },
+    ];
+
+    // act
+    const ownerCandidates = await owner.registration.getArgumentCompletions?.(
+      "uninstall --scope project ",
+    );
+    const peerCandidates = await peer.registration.getArgumentCompletions?.(
+      "uninstall --scope project ",
+    );
+
+    // assert
+    assert.deepStrictEqual(ownerCandidates, expectedOwnerCandidates);
+    assert.deepStrictEqual(peerCandidates, expectedPeerCandidates);
+    owner.verifyRegistrar();
+    peer.verifyRegistrar();
+  });
+
+  test("runs registered bootstrap through the supplied lifecycle cache and both real children", async (t) => {
+    // arrange
+    const { cwd } = await createHermeticScope(t, "bootstrap-owner");
+    t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-02-03T04:05:06.000Z") });
+    const sourceTree = await mkdtemp(path.join(tmpdir(), "register-bootstrap-source-"));
+    t.after(async () => {
+      await rm(sourceTree, { force: true, recursive: true });
+    });
+    await mkdir(path.join(sourceTree, ".claude-plugin"), { recursive: true });
+    await writeFile(
+      path.join(sourceTree, ".claude-plugin", "marketplace.json"),
+      JSON.stringify({
+        name: "claude-plugins-official",
+        owner: { name: "registration owner" },
+        plugins: [],
+      }),
+      "utf8",
+    );
+    const userLocations = locationsFor("user", cwd);
+    const projectLocations = locationsFor("project", cwd);
+    const marketplaceRoot = await userLocations.sourceCloneDir("claude-plugins-official");
+    const pluginCachePath = await userLocations.pluginCacheFile("claude-plugins-official");
+    const completionCache = createCompletionCache();
+    const peerCompletionCache = createCompletionCache();
+    await completionCache.getPluginIndex(pluginCachePath, "user", "claude-plugins-official", () =>
+      Promise.resolve([{ name: "owner-stale", status: "available" }]),
+    );
+    await rm(pluginCachePath, { force: true });
+    await peerCompletionCache.getPluginIndex(
+      pluginCachePath,
+      "user",
+      "claude-plugins-official",
+      () => Promise.resolve([{ name: "peer-stale", status: "available" }]),
+    );
+    await rm(path.dirname(path.dirname(pluginCachePath)), { force: true, recursive: true });
+    const owner = registerCommandWithCache(
+      completionCache,
+      createHooksRouting(createHooksRuntime(), { readHooksJson }),
+      undefined,
+      2,
+      createBootstrapGitOps(sourceTree),
+    );
+    const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
+    const ui = mock<NotificationUi>({ exactParams: true, name: "command UI" });
+    const notifications: Notification[] = [];
+    when(() => ctx.cwd)
+      .thenReturn(cwd)
+      .times(1);
+    when(() => ctx.ui)
+      .thenReturn(ui)
+      .times(2);
+    when(() => ui.notify)
+      .thenReturn((message, severity) => {
+        notifications.push(severity === undefined ? { message } : { message, severity });
+      })
+      .times(2);
+
+    // act
+    await owner.registration.handler("bootstrap", ctx);
+    const userTree = await retryTree(userLocations.scopeRoot);
+    const projectTree = await retryTree(projectLocations.scopeRoot);
+    const ownerRows = await completionCache.getPluginIndex(
+      pluginCachePath,
+      "user",
+      "claude-plugins-official",
+      () => Promise.resolve([{ name: "owner-fresh", status: "available" }]),
+    );
+    const peerRows = await peerCompletionCache.getPluginIndex(
+      pluginCachePath,
+      "user",
+      "claude-plugins-official",
+      () => Promise.reject(new Error("the peer cache must retain its warmed row")),
+    );
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      { message: "● claude-plugins-official [user] (added)" },
+      { message: "● claude-plugins-official [user] <autoupdate>" },
+    ]);
+    assert.deepStrictEqual(await loadState(userLocations.extensionRoot), {
+      schemaVersion: 2,
+      marketplaces: {
+        "claude-plugins-official": {
+          addedFromCwd: cwd,
+          lastUpdatedAt: "2026-02-03T04:05:06.000Z",
+          manifestPath: path.join(marketplaceRoot, ".claude-plugin", "marketplace.json"),
+          marketplaceRoot,
+          name: "claude-plugins-official",
+          plugins: {},
+          scope: "user",
+          source: {
+            kind: "github",
+            owner: "anthropics",
+            raw: "anthropics/claude-plugins-official",
+            repo: "claude-plugins-official",
+          },
+        },
+      },
+    });
+    assert.deepStrictEqual(JSON.parse(await readFile(userLocations.configJsonPath, "utf8")), {
+      schemaVersion: 1,
+      marketplaces: {
+        "claude-plugins-official": {
+          autoupdate: true,
+          source: "anthropics/claude-plugins-official",
+        },
+      },
+      plugins: {},
+    });
+    assert.deepStrictEqual(userTree, [
+      "claude-plugins.json",
+      "pi-claude-marketplace/",
+      "pi-claude-marketplace/sources/",
+      "pi-claude-marketplace/sources/claude-plugins-official/",
+      "pi-claude-marketplace/sources/claude-plugins-official/.claude-plugin/",
+      "pi-claude-marketplace/sources/claude-plugins-official/.claude-plugin/marketplace.json",
+      "pi-claude-marketplace/sources-staging/",
+      "pi-claude-marketplace/state.json",
+    ]);
+    assert.deepStrictEqual(projectTree, []);
+    assert.deepStrictEqual(await loadState(projectLocations.extensionRoot), {
+      schemaVersion: 2,
+      marketplaces: {},
+    });
+    assert.deepStrictEqual(ownerRows, [{ name: "owner-fresh", status: "available" }]);
+    assert.deepStrictEqual(peerRows, [{ name: "peer-stale", status: "available" }]);
+    verify(ctx);
+    verify(ui);
+    owner.verifyRegistrar();
+  });
+});
+
+test("rebuilds completion rows through the cache that owns a successful registered add", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticScope(t, "add-completion-owner");
+  const marketplace = "registered-add";
+  const sourceRoot = path.join(cwd, "marketplace-source");
+  await mkdir(path.join(sourceRoot, ".claude-plugin"), { recursive: true });
+  await mkdir(path.join(sourceRoot, "plugins", "hello"), { recursive: true });
+  await writeFile(
+    path.join(sourceRoot, ".claude-plugin", "marketplace.json"),
+    JSON.stringify({
+      name: marketplace,
+      owner: { name: "registration owner" },
+      plugins: [{ name: "hello", source: "./plugins/hello", version: "1.0.0" }],
+    }),
+    "utf8",
+  );
+  const resolver = makeLocationsResolver(cwd);
+  const cachePath = await resolver.pluginCachePath("project", marketplace);
+  const ownerCache = createCompletionCache();
+  const peerCache = createCompletionCache();
+  await ownerCache.getPluginIndex(cachePath, "project", marketplace, () =>
+    Promise.resolve([{ name: "owner-stale", status: "available" }]),
+  );
+  await rm(cachePath, { force: true });
+  await peerCache.getPluginIndex(cachePath, "project", marketplace, () =>
+    Promise.resolve([{ name: "peer-stale", status: "available" }]),
+  );
+  await rm(cachePath, { force: true });
+  const owner = registerCommandWithCache(
+    ownerCache,
+    createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    undefined,
+    1,
+  );
+  const peer = registerCommandWithCache(peerCache);
+  const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
+  const ui = mock<NotificationUi>({ exactParams: true, name: "command UI" });
+  const notifications: Notification[] = [];
+  when(() => ctx.cwd)
+    .thenReturn(cwd)
+    .times(1);
+  when(() => ctx.ui)
+    .thenReturn(ui)
+    .times(1);
+  when(() => ui.notify)
+    .thenReturn((message, severity) => {
+      notifications.push(severity === undefined ? { message } : { message, severity });
+    })
+    .times(1);
+
+  // act
+  await owner.registration.handler(`marketplace add ${sourceRoot} --scope project`, ctx);
+  const ownerCandidates = await owner.registration.getArgumentCompletions?.(
+    "install --scope project ",
+  );
+  const peerCandidates = await peer.registration.getArgumentCompletions?.(
+    "install --scope project ",
+  );
+
+  // assert
+  assert.deepStrictEqual(notifications, [{ message: "● registered-add [project] (added)" }]);
+  assert.deepStrictEqual(ownerCandidates, [
+    {
+      label: "hello@registered-add",
+      value: "install --scope project hello@registered-add ",
+    },
+  ]);
+  assert.deepStrictEqual(peerCandidates, [
+    {
+      label: "peer-stale@registered-add",
+      value: "install --scope project peer-stale@registered-add ",
+    },
+  ]);
+  verify(ctx);
+  verify(ui);
+  owner.verifyRegistrar();
+  peer.verifyRegistrar();
+});
+
+test("rebuilds completion rows through the cache that owns a successful registered remove", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticScope(t, "remove-completion-owner");
+  const marketplace = "registered-remove";
+  const unrelated = "unrelated-marketplace";
+  const sourceRoot = path.join(cwd, "marketplaces", marketplace);
+  await mkdir(path.join(sourceRoot, ".claude-plugin"), { recursive: true });
+  await mkdir(path.join(sourceRoot, "plugins", "fresh"), { recursive: true });
+  await writeFile(
+    path.join(sourceRoot, ".claude-plugin", "marketplace.json"),
+    JSON.stringify({
+      name: marketplace,
+      owner: { name: "registration owner" },
+      plugins: [{ name: "fresh", source: "./plugins/fresh", version: "2.0.0" }],
+    }),
+    "utf8",
+  );
+  await seedProjectMarketplaces(cwd, [marketplace, unrelated]);
+  const resolver = makeLocationsResolver(cwd);
+  const cachePath = await resolver.pluginCachePath("project", marketplace);
+  const unrelatedCachePath = await resolver.pluginCachePath("project", unrelated);
+  const ownerCache = createCompletionCache();
+  const peerCache = createCompletionCache();
+  await ownerCache.getPluginIndex(cachePath, "project", marketplace, () =>
+    Promise.resolve([{ name: "owner-stale", status: "available" }]),
+  );
+  await rm(cachePath, { force: true });
+  await peerCache.getPluginIndex(cachePath, "project", marketplace, () =>
+    Promise.resolve([{ name: "peer-stale", status: "available" }]),
+  );
+  await rm(cachePath, { force: true });
+  await ownerCache.getPluginIndex(unrelatedCachePath, "project", unrelated, () =>
+    Promise.resolve([{ name: "owner-unrelated", status: "available" }]),
+  );
+  await rm(unrelatedCachePath, { force: true });
+  await peerCache.getPluginIndex(unrelatedCachePath, "project", unrelated, () =>
+    Promise.resolve([{ name: "peer-unrelated", status: "available" }]),
+  );
+  await rm(unrelatedCachePath, { force: true });
+  const owner = registerCommandWithCache(
+    ownerCache,
+    createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    undefined,
+    1,
+  );
+  const peer = registerCommandWithCache(peerCache);
+  const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
+  const ui = mock<NotificationUi>({ exactParams: true, name: "command UI" });
+  const notifications: Notification[] = [];
+  when(() => ctx.cwd)
+    .thenReturn(cwd)
+    .times(1);
+  when(() => ctx.ui)
+    .thenReturn(ui)
+    .times(1);
+  when(() => ui.notify)
+    .thenReturn((message, severity) => {
+      notifications.push(severity === undefined ? { message } : { message, severity });
+    })
+    .times(1);
+
+  // act
+  await owner.registration.handler(`marketplace remove ${marketplace} --scope project`, ctx);
+  await seedProjectMarketplaces(cwd, [marketplace, unrelated]);
+  const ownerCandidates = await owner.registration.getArgumentCompletions?.(
+    "install --scope project ",
+  );
+  const peerCandidates = await peer.registration.getArgumentCompletions?.(
+    "install --scope project ",
+  );
+
+  // assert
+  assert.deepStrictEqual(notifications, [{ message: "● registered-remove [project] (removed)" }]);
+  assert.deepStrictEqual(ownerCandidates, [
+    {
+      label: "fresh@registered-remove",
+      value: "install --scope project fresh@registered-remove ",
+    },
+    {
+      label: "owner-unrelated@unrelated-marketplace",
+      value: "install --scope project owner-unrelated@unrelated-marketplace ",
+    },
+  ]);
+  assert.deepStrictEqual(peerCandidates, [
+    {
+      label: "peer-stale@registered-remove",
+      value: "install --scope project peer-stale@registered-remove ",
+    },
+    {
+      label: "peer-unrelated@unrelated-marketplace",
+      value: "install --scope project peer-unrelated@unrelated-marketplace ",
+    },
+  ]);
+  verify(ctx);
+  verify(ui);
+  owner.verifyRegistrar();
+  peer.verifyRegistrar();
+});
+
+test("rebuilds completion rows through the cache that owns a successful registered update", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticScope(t, "update-completion-owner");
+  const marketplace = "registered-update";
+  const unrelated = "unrelated-marketplace";
+  const sourceRoot = path.join(cwd, "marketplaces", marketplace);
+  await mkdir(path.join(sourceRoot, ".claude-plugin"), { recursive: true });
+  await mkdir(path.join(sourceRoot, "plugins", "fresh"), { recursive: true });
+  await writeFile(
+    path.join(sourceRoot, ".claude-plugin", "marketplace.json"),
+    JSON.stringify({
+      name: marketplace,
+      owner: { name: "registration owner" },
+      plugins: [{ name: "fresh", source: "./plugins/fresh", version: "2.0.0" }],
+    }),
+    "utf8",
+  );
+  await seedProjectMarketplaces(cwd, [marketplace, unrelated]);
+  const extensionRoot = path.join(cwd, ".pi", "pi-claude-marketplace");
+  const state = await loadState(extensionRoot);
+  const record = state.marketplaces[marketplace];
+  if (record === undefined) {
+    throw new Error("the registered update fixture has no target marketplace");
+  }
+
+  record.manifestPath = path.join(sourceRoot, ".claude-plugin", "before-update.json");
+  await saveState(extensionRoot, state);
+  const resolver = makeLocationsResolver(cwd);
+  const cachePath = await resolver.pluginCachePath("project", marketplace);
+  const unrelatedCachePath = await resolver.pluginCachePath("project", unrelated);
+  const ownerCache = createCompletionCache();
+  const peerCache = createCompletionCache();
+  await ownerCache.getPluginIndex(cachePath, "project", marketplace, () =>
+    Promise.resolve([{ name: "owner-stale", status: "available" }]),
+  );
+  await rm(cachePath, { force: true });
+  await peerCache.getPluginIndex(cachePath, "project", marketplace, () =>
+    Promise.resolve([{ name: "peer-stale", status: "available" }]),
+  );
+  await rm(cachePath, { force: true });
+  await ownerCache.getPluginIndex(unrelatedCachePath, "project", unrelated, () =>
+    Promise.resolve([{ name: "owner-unrelated", status: "available" }]),
+  );
+  await rm(unrelatedCachePath, { force: true });
+  await peerCache.getPluginIndex(unrelatedCachePath, "project", unrelated, () =>
+    Promise.resolve([{ name: "peer-unrelated", status: "available" }]),
+  );
+  await rm(unrelatedCachePath, { force: true });
+  const owner = registerCommandWithCache(
+    ownerCache,
+    createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    undefined,
+    1,
+  );
+  const peer = registerCommandWithCache(peerCache);
+  const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
+  const ui = mock<NotificationUi>({ exactParams: true, name: "command UI" });
+  const notifications: Notification[] = [];
+  when(() => ctx.cwd)
+    .thenReturn(cwd)
+    .times(1);
+  when(() => ctx.ui)
+    .thenReturn(ui)
+    .times(1);
+  when(() => ui.notify)
+    .thenReturn((message, severity) => {
+      notifications.push(severity === undefined ? { message } : { message, severity });
+    })
+    .times(1);
+
+  // act
+  await owner.registration.handler(`marketplace update ${marketplace} --scope project`, ctx);
+  const ownerCandidates = await owner.registration.getArgumentCompletions?.(
+    "install --scope project ",
+  );
+  const peerCandidates = await peer.registration.getArgumentCompletions?.(
+    "install --scope project ",
+  );
+
+  // assert
+  assert.deepStrictEqual(notifications, [{ message: "● registered-update [project] (updated)" }]);
+  assert.deepStrictEqual(ownerCandidates, [
+    {
+      label: "fresh@registered-update",
+      value: "install --scope project fresh@registered-update ",
+    },
+    {
+      label: "owner-unrelated@unrelated-marketplace",
+      value: "install --scope project owner-unrelated@unrelated-marketplace ",
+    },
+  ]);
+  assert.deepStrictEqual(peerCandidates, [
+    {
+      label: "peer-stale@registered-update",
+      value: "install --scope project peer-stale@registered-update ",
+    },
+    {
+      label: "peer-unrelated@unrelated-marketplace",
+      value: "install --scope project peer-unrelated@unrelated-marketplace ",
+    },
+  ]);
+  verify(ctx);
+  verify(ui);
+  owner.verifyRegistrar();
+  peer.verifyRegistrar();
+});
+
+test("rebuilds completion rows through the cache that owns a successful registered install", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticScope(t, "install-completion-owner");
+  const marketplace = "registered-install";
+  const unrelated = "unrelated-marketplace";
+  const sourceRoot = path.join(cwd, "marketplaces", marketplace);
+  const pluginRoot = path.join(sourceRoot, "plugins", "hello");
+  await mkdir(path.join(sourceRoot, ".claude-plugin"), { recursive: true });
+  await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
+  await writeFile(
+    path.join(sourceRoot, ".claude-plugin", "marketplace.json"),
+    JSON.stringify({
+      name: marketplace,
+      owner: { name: "registration owner" },
+      plugins: [{ name: "hello", source: "./plugins/hello", version: "1.0.0" }],
+    }),
+    "utf8",
+  );
+  await writeFile(
+    path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "hello", version: "1.0.0" }),
+    "utf8",
+  );
+  await seedProjectMarketplaces(cwd, [marketplace, unrelated]);
+  const resolver = makeLocationsResolver(cwd);
+  const cachePath = await resolver.pluginCachePath("project", marketplace);
+  const unrelatedCachePath = await resolver.pluginCachePath("project", unrelated);
+  const ownerCache = createCompletionCache();
+  const peerCache = createCompletionCache();
+  await ownerCache.getPluginIndex(cachePath, "project", marketplace, () =>
+    Promise.resolve([{ name: "hello", status: "available" }]),
+  );
+  await rm(cachePath, { force: true });
+  await peerCache.getPluginIndex(cachePath, "project", marketplace, () =>
+    Promise.resolve([{ name: "hello", status: "available" }]),
+  );
+  await rm(cachePath, { force: true });
+  await ownerCache.getPluginIndex(unrelatedCachePath, "project", unrelated, () =>
+    Promise.resolve([{ name: "owner-unrelated", status: "available" }]),
+  );
+  await rm(unrelatedCachePath, { force: true });
+  await peerCache.getPluginIndex(unrelatedCachePath, "project", unrelated, () =>
+    Promise.resolve([{ name: "peer-unrelated", status: "available" }]),
+  );
+  await rm(unrelatedCachePath, { force: true });
+  const owner = registerCommandWithCache(
+    ownerCache,
+    createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    undefined,
+    2,
+  );
+  const peer = registerCommandWithCache(peerCache);
+  const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
+  const ui = mock<NotificationUi>({ exactParams: true, name: "command UI" });
+  const notifications: Notification[] = [];
+  when(() => ctx.cwd)
+    .thenReturn(cwd)
+    .times(1);
+  when(() => ctx.ui)
+    .thenReturn(ui)
+    .times(1);
+  when(() => ui.notify)
+    .thenReturn((message, severity) => {
+      notifications.push(severity === undefined ? { message } : { message, severity });
+    })
+    .times(1);
+
+  // act
+  await owner.registration.handler(`install hello@${marketplace} --scope project`, ctx);
+  const ownerInstallCandidates = await owner.registration.getArgumentCompletions?.(
+    "install --scope project ",
+  );
+  const ownerUninstallCandidates = await owner.registration.getArgumentCompletions?.(
+    "uninstall --scope project ",
+  );
+  const peerInstallCandidates = await peer.registration.getArgumentCompletions?.(
+    "install --scope project ",
+  );
+  const peerRows = await peerCache.getPluginIndex(cachePath, "project", marketplace, () =>
+    Promise.reject(new Error("the peer cache must retain its warmed target row")),
+  );
+
+  // assert
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "● registered-install [project]\n  ● hello v1.0.0 (installed)\n\n/reload to pick up changes",
+    },
+  ]);
+  assert.deepStrictEqual(ownerInstallCandidates, [
+    {
+      label: "owner-unrelated@unrelated-marketplace",
+      value: "install --scope project owner-unrelated@unrelated-marketplace ",
+    },
+  ]);
+  assert.deepStrictEqual(ownerUninstallCandidates, [
+    {
+      label: "hello@registered-install",
+      value: "uninstall --scope project hello@registered-install ",
+    },
+  ]);
+  assert.deepStrictEqual(peerInstallCandidates, [
+    {
+      label: "peer-unrelated@unrelated-marketplace",
+      value: "install --scope project peer-unrelated@unrelated-marketplace ",
+    },
+  ]);
+  assert.deepStrictEqual(peerRows, [{ name: "hello", status: "available" }]);
+  verify(ctx);
+  verify(ui);
+  owner.verifyRegistrar();
+  peer.verifyRegistrar();
+});
+
+test("rebuilds completion rows through the cache that owns a successful registered reinstall", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticScope(t, "reinstall-completion-owner");
+  const marketplace = "registered-reinstall";
+  const sourceRoot = path.join(cwd, "marketplaces", marketplace);
+  const pluginRoot = path.join(sourceRoot, "plugins", "hello");
+  await mkdir(path.join(sourceRoot, ".claude-plugin"), { recursive: true });
+  await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
+  await writeFile(
+    path.join(sourceRoot, ".claude-plugin", "marketplace.json"),
+    JSON.stringify({
+      name: marketplace,
+      owner: { name: "registration owner" },
+      plugins: [{ name: "hello", source: "./plugins/hello", version: "1.0.0" }],
+    }),
+    "utf8",
+  );
+  await writeFile(
+    path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "hello", version: "1.0.0" }),
+    "utf8",
+  );
+  await seedProjectMarketplace(cwd, marketplace);
+  const extensionRoot = path.join(cwd, ".pi", "pi-claude-marketplace");
+  const state = await loadState(extensionRoot);
+  const record = state.marketplaces[marketplace];
+  if (record === undefined) {
+    throw new Error("the registered reinstall fixture has no target marketplace");
+  }
+
+  record.plugins["hello"] = buildInstalledPluginRecord(
+    { version: "1.0.0", resolvedSource: pluginRoot },
+    { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+  ) as ExtensionState["marketplaces"][string]["plugins"][string];
+  await saveState(extensionRoot, state);
+  const resolver = makeLocationsResolver(cwd);
+  const cachePath = await resolver.pluginCachePath("project", marketplace);
+  const ownerCache = createCompletionCache();
+  const peerCache = createCompletionCache();
+  await ownerCache.getPluginIndex(cachePath, "project", marketplace, () =>
+    Promise.resolve([{ name: "owner-stale", status: "available" }]),
+  );
+  await rm(cachePath, { force: true });
+  await peerCache.getPluginIndex(cachePath, "project", marketplace, () =>
+    Promise.resolve([{ name: "peer-stale", status: "available" }]),
+  );
+  await rm(cachePath, { force: true });
+  const owner = registerCommandWithCache(
+    ownerCache,
+    createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    undefined,
+    1,
+  );
+  const peer = registerCommandWithCache(peerCache);
+  const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
+  const ui = mock<NotificationUi>({ exactParams: true, name: "command UI" });
+  const notifications: Notification[] = [];
+  when(() => ctx.cwd)
+    .thenReturn(cwd)
+    .times(1);
+  when(() => ctx.ui)
+    .thenReturn(ui)
+    .times(1);
+  when(() => ui.notify)
+    .thenReturn((message, severity) => {
+      notifications.push(severity === undefined ? { message } : { message, severity });
+    })
+    .times(1);
+
+  // act
+  await owner.registration.handler(`reinstall hello@${marketplace} --scope project`, ctx);
+  const ownerCandidates = await owner.registration.getArgumentCompletions?.(
+    "install --scope project ",
+  );
+  const peerCandidates = await peer.registration.getArgumentCompletions?.(
+    "install --scope project ",
+  );
+
+  // assert
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "● registered-reinstall [project]\n  ● hello v1.0.0 (reinstalled)\n\n/reload to pick up changes",
+    },
+  ]);
+  assert.deepStrictEqual(ownerCandidates, []);
+  assert.deepStrictEqual(peerCandidates, [
+    {
+      label: "peer-stale@registered-reinstall",
+      value: "install --scope project peer-stale@registered-reinstall ",
+    },
+  ]);
+  verify(ctx);
+  verify(ui);
+  owner.verifyRegistrar();
+  peer.verifyRegistrar();
+});
+
+test("rebuilds completion rows through the cache that owns a successful registered uninstall", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticScope(t, "uninstall-completion-owner");
+  const marketplace = "registered-uninstall";
+  const unrelated = "unrelated-marketplace";
+  const sourceRoot = path.join(cwd, "marketplaces", marketplace);
+  const pluginRoot = path.join(sourceRoot, "plugins", "hello");
+  await mkdir(path.join(sourceRoot, ".claude-plugin"), { recursive: true });
+  await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
+  await writeFile(
+    path.join(sourceRoot, ".claude-plugin", "marketplace.json"),
+    JSON.stringify({
+      name: marketplace,
+      owner: { name: "registration owner" },
+      plugins: [{ name: "hello", source: "./plugins/hello", version: "1.0.0" }],
+    }),
+    "utf8",
+  );
+  await writeFile(
+    path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "hello", version: "1.0.0" }),
+    "utf8",
+  );
+  await seedProjectMarketplaces(cwd, [marketplace, unrelated]);
+  const extensionRoot = path.join(cwd, ".pi", "pi-claude-marketplace");
+  const state = await loadState(extensionRoot);
+  const record = state.marketplaces[marketplace];
+  if (record === undefined) {
+    throw new Error("the registered uninstall fixture has no target marketplace");
+  }
+
+  record.plugins["hello"] = buildInstalledPluginRecord(
+    { version: "1.0.0", resolvedSource: pluginRoot },
+    { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+  ) as ExtensionState["marketplaces"][string]["plugins"][string];
+  await saveState(extensionRoot, state);
+  const resolver = makeLocationsResolver(cwd);
+  const cachePath = await resolver.pluginCachePath("project", marketplace);
+  const unrelatedCachePath = await resolver.pluginCachePath("project", unrelated);
+  const ownerCache = createCompletionCache();
+  const peerCache = createCompletionCache();
+  await ownerCache.getPluginIndex(cachePath, "project", marketplace, () =>
+    Promise.resolve([{ name: "hello", status: "installed" }]),
+  );
+  await rm(cachePath, { force: true });
+  await peerCache.getPluginIndex(cachePath, "project", marketplace, () =>
+    Promise.resolve([{ name: "hello", status: "installed" }]),
+  );
+  await rm(cachePath, { force: true });
+  await ownerCache.getPluginIndex(unrelatedCachePath, "project", unrelated, () =>
+    Promise.resolve([{ name: "owner-unrelated", status: "available" }]),
+  );
+  await rm(unrelatedCachePath, { force: true });
+  const owner = registerCommandWithCache(
+    ownerCache,
+    createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    undefined,
+    1,
+  );
+  const peer = registerCommandWithCache(peerCache);
+  const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
+  const ui = mock<NotificationUi>({ exactParams: true, name: "command UI" });
+  const notifications: Notification[] = [];
+  when(() => ctx.cwd)
+    .thenReturn(cwd)
+    .times(1);
+  when(() => ctx.ui)
+    .thenReturn(ui)
+    .times(1);
+  when(() => ui.notify)
+    .thenReturn((message, severity) => {
+      notifications.push(severity === undefined ? { message } : { message, severity });
+    })
+    .times(1);
+
+  // act
+  await owner.registration.handler(`uninstall hello@${marketplace} --scope project`, ctx);
+  const ownerInstallCandidates = await owner.registration.getArgumentCompletions?.(
+    "install --scope project ",
+  );
+  const ownerUninstallCandidates = await owner.registration.getArgumentCompletions?.(
+    "uninstall --scope project ",
+  );
+  const peerUninstallCandidates = await peer.registration.getArgumentCompletions?.(
+    "uninstall --scope project ",
+  );
+
+  // assert
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "● registered-uninstall [project]\n  ○ hello v1.0.0 (uninstalled)\n\n/reload to pick up changes",
+    },
+  ]);
+  assert.deepStrictEqual(ownerInstallCandidates, [
+    {
+      label: "hello@registered-uninstall",
+      value: "install --scope project hello@registered-uninstall ",
+    },
+    {
+      label: "owner-unrelated@unrelated-marketplace",
+      value: "install --scope project owner-unrelated@unrelated-marketplace ",
+    },
+  ]);
+  assert.deepStrictEqual(ownerUninstallCandidates, []);
+  assert.deepStrictEqual(peerUninstallCandidates, [
+    {
+      label: "hello@registered-uninstall",
+      value: "uninstall --scope project hello@registered-uninstall ",
+    },
+  ]);
+  verify(ctx);
+  verify(ui);
+  owner.verifyRegistrar();
+  peer.verifyRegistrar();
+});
+
+describe("registerClaudePluginCommand autocomplete wrapper", () => {
   test("installs exactly one autocomplete provider when the session starts (TC-7)", async (t) => {
     // arrange
     await createHermeticScope(t, "provider-install");

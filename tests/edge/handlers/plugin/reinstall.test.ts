@@ -90,7 +90,7 @@
 // diagnostics owned by tests/edge/args.test.ts, none restates the retired
 // vocabulary guard owned by tests/architecture/partial-vocabulary-guard.test.ts,
 // and none re-derives the reinstall workflow's own row grammar, which
-// tests/orchestrators/plugin/reinstall.test.ts owns.
+// tests/orchestrators/plugin/reinstall-flow.test.ts owns.
 
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
@@ -99,7 +99,14 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { test, type TestContext } from "node:test";
 
-import { makeReinstallHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/reinstall.ts";
+import {
+  createHooksRouting,
+  createHooksRuntime,
+  readHooksJson,
+} from "../../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
+import { makeReinstallHandler as makeReinstallHandlerWithOperation } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/reinstall.ts";
+import { createNodeReinstallPlugins } from "../../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts";
+import { createCompletionCache } from "../../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
 import {
   buildInstalledPluginRecord,
@@ -107,7 +114,24 @@ import {
   mergeMarketplaceIntoState,
 } from "../marketplace-seed.ts";
 
+import type {
+  ReinstallPluginsFn,
+  ReinstallPluginsOptions,
+} from "../../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts";
+import type { ExtensionAPI } from "../../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { Scope } from "../../../../extensions/pi-claude-marketplace/shared/types.ts";
+
+function makeReinstallHandler(
+  pi: ExtensionAPI,
+): ReturnType<typeof makeReinstallHandlerWithOperation> {
+  return makeReinstallHandlerWithOperation(
+    pi,
+    createNodeReinstallPlugins(
+      createHooksRouting(createHooksRuntime(), { readHooksJson }),
+      createCompletionCache(),
+    ),
+  );
+}
 
 /** The usage block this shim appends after a blank line to every rejection. */
 const REINSTALL_USAGE =
@@ -420,7 +444,17 @@ test("re-materialises only the named plugin when a plugin reference is supplied 
     value: workspace.cwd,
     reads: 1,
   });
-  const reinstallHandler = makeReinstallHandler(pi);
+  const calls: ReinstallPluginsOptions[] = [];
+  const reinstallPlugins = createNodeReinstallPlugins(
+    createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    createCompletionCache(),
+  );
+  const reinstallPluginsSpy: ReinstallPluginsFn = async (opts) => {
+    calls.push(opts);
+    return reinstallPlugins(opts);
+  };
+
+  const reinstallHandler = makeReinstallHandlerWithOperation(pi, reinstallPluginsSpy);
 
   // act
   await reinstallHandler("alpha@mp", ctx);
@@ -435,6 +469,15 @@ test("re-materialises only the named plugin when a plugin reference is supplied 
     userBase: undefined,
     userLocal: undefined,
   });
+
+  assert.deepStrictEqual(calls, [
+    {
+      ctx,
+      pi,
+      cwd: workspace.cwd,
+      target: { kind: "plugin", plugin: "alpha", marketplace: "mp" },
+    },
+  ]);
   assert.strictEqual(workspace.transportCalls(), 0);
   verifyBoundary();
 });

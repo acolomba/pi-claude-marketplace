@@ -6,11 +6,11 @@ import {
   NON_TOOL_EVENT_CLOSED_SETS,
   NON_TOOL_EVENT_FIELDS,
   TOOL_EVENTS,
-  isDispatchableEvent,
   type BucketAEvent,
   type DispatchableEvent,
   type StopFailureErrorType,
   type ToolEvent,
+  type _BucketAEventsCoverageProof,
 } from "../../../extensions/pi-claude-marketplace/domain/components/hook-events.ts";
 
 void ("SessionStart" satisfies BucketAEvent);
@@ -25,6 +25,16 @@ void ("Notification" satisfies DispatchableEvent);
 void ("rate_limit" satisfies StopFailureErrorType);
 // @ts-expect-error Error types use the closed vocabulary.
 void ("timeout" satisfies StopFailureErrorType);
+
+// The proof resolves to `never` exactly when `BUCKET_A_EVENTS` registers every
+// `ClaudeHookEvent`. The tuple wrappers stop the naked-`never` conditional from
+// distributing, so both directions are compared as written.
+type BucketAEventsCoverageProofIsExact = [_BucketAEventsCoverageProof] extends [never]
+  ? [never] extends [_BucketAEventsCoverageProof]
+    ? true
+    : false
+  : false;
+void (true satisfies BucketAEventsCoverageProofIsExact);
 
 describe("BUCKET_A_EVENTS", () => {
   test("publishes every admitted event in registration order", () => {
@@ -75,47 +85,17 @@ describe("TOOL_EVENTS", () => {
   });
 });
 
-describe("isDispatchableEvent", () => {
-  for (const eventName of [
-    "SessionStart",
-    "UserPromptSubmit",
-    "PreToolUse",
-    "PostToolUse",
-    "PostToolUseFailure",
-    "PreCompact",
-    "PostCompact",
-    "SessionEnd",
-    "Stop",
-    "StopFailure",
-  ] as const) {
-    test(`accepts ${eventName}`, () => {
-      // arrange
-      const event: BucketAEvent = eventName;
+describe("DispatchableEvent", () => {
+  test("matches the admitted event set exactly", () => {
+    // arrange
+    const dispatchableEvents: readonly DispatchableEvent[] = BUCKET_A_EVENTS;
 
-      // act
-      const isDispatchable = isDispatchableEvent(event);
+    // act
+    const events = dispatchableEvents;
 
-      // assert
-      assert.strictEqual(isDispatchable, true);
-    });
-  }
-
-  for (const { description, eventName } of [
-    { description: "an empty event name", eventName: "" },
-    { description: "a case-changed event name", eventName: "sessionstart" },
-    { description: "a one-character event lookalike", eventName: "SessionStarts" },
-  ] as const) {
-    test(`rejects ${description}`, () => {
-      // arrange
-      const event = eventName as BucketAEvent;
-
-      // act
-      const isDispatchable = isDispatchableEvent(event);
-
-      // assert
-      assert.strictEqual(isDispatchable, false);
-    });
-  }
+    // assert
+    assert.deepStrictEqual(events, BUCKET_A_EVENTS);
+  });
 });
 
 describe("NON_TOOL_EVENT_FIELDS", () => {
@@ -145,8 +125,8 @@ describe("NON_TOOL_EVENT_CLOSED_SETS", () => {
     const expectedClosedSets = {
       SessionStart: new Set(["startup", "resume"]),
       SessionEnd: new Set(),
-      PreCompact: new Set(),
-      PostCompact: new Set(),
+      PreCompact: new Set(["manual", "auto"]),
+      PostCompact: new Set(["manual", "auto"]),
       StopFailure: new Set([
         "rate_limit",
         "overloaded",

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test, type TestContext } from "node:test";
 
+import { createCredentialOpsFake } from "./credential-ops-fake.ts";
 import {
   GIT_OPS_CASE_NAMES,
   gitOpsContractCases,
@@ -9,6 +10,8 @@ import {
   type GitOpsFactory,
 } from "./git-ops-contract.ts";
 import { createGitOpsFake } from "./git-ops-fake.ts";
+
+import type { GitAuthBundle } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 
 const REMOTE_URL = "https://git.example.invalid/owner/repo.git";
 const INITIAL_OID = "1111111111111111111111111111111111111111";
@@ -91,6 +94,46 @@ describe("createGitOpsFake", () => {
       resolveRef: [],
       currentBranch: [],
       resolveRemoteRef: [{ url: REMOTE_URL, ref: "main" }],
+    });
+  });
+
+  test("records callable authentication on every remote operation", async () => {
+    // arrange
+    const authenticationError = new Error("credential provider unavailable");
+    const credentials = createCredentialOpsFake({ boundary: "memory" });
+    const onAuthRequired = (): Promise<never> => Promise.reject(authenticationError);
+    const auth = {
+      credentialOps: credentials.credentialOps,
+      host: "git.example.invalid",
+      onAuthRequired,
+    } satisfies GitAuthBundle;
+    const git = createGitOpsFake({
+      boundary: "memory",
+      allowedRemoteUrls: [REMOTE_URL],
+    });
+
+    // act
+    await git.gitOps.clone({ dir: "/memory/clone", url: REMOTE_URL, ref: "main", auth });
+    await git.gitOps.fetch({ dir: "/memory/clone", remote: "origin", ref: "main", auth });
+    const remoteOid = await git.gitOps.resolveRemoteRef({ url: REMOTE_URL, ref: "main", auth });
+
+    // assert
+    assert.strictEqual(remoteOid, "0000000000000000000000000000000000000002");
+    assert.deepStrictEqual(git.state.calls, {
+      clone: [{ dir: "/memory/clone", url: REMOTE_URL, ref: "main", auth }],
+      fetch: [{ dir: "/memory/clone", remote: "origin", ref: "main", auth }],
+      forceUpdateRef: [],
+      checkout: [],
+      resolveRef: [],
+      currentBranch: [],
+      resolveRemoteRef: [{ url: REMOTE_URL, ref: "main", auth }],
+    });
+    assert.strictEqual(git.state.calls.clone[0]?.auth, auth);
+    assert.strictEqual(git.state.calls.fetch[0]?.auth, auth);
+    assert.strictEqual(git.state.calls.resolveRemoteRef[0]?.auth, auth);
+    await assert.rejects(git.state.calls.clone[0]?.auth?.onAuthRequired(), (error: unknown) => {
+      assert.strictEqual(error, authenticationError);
+      return true;
     });
   });
 });

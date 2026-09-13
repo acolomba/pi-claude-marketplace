@@ -11,7 +11,7 @@
 // `makeAutoupdateHandler(false)`.
 
 import { setMarketplaceAutoupdate } from "../../../orchestrators/marketplace/autoupdate.ts";
-import { notifyUsageError } from "../../../shared/notify.ts";
+import { notifyUsageError } from "../../../shared/notification-dispatch.ts";
 import { parseCommandArgs } from "../../args-schema.ts";
 import { extractLocalFlag } from "../shared.ts";
 

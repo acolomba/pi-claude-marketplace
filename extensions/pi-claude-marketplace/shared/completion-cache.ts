@@ -12,13 +12,6 @@
 // loadMarketplaceManifest) from its caller.
 //
 // Read API
-//   getMarketplaceNames(path, scope, rebuild)
-//     - memory hit -> return cached
-//     - memory miss + file hit (schema-OK) -> hydrate memory + return
-//     - memory miss + (ENOENT | corrupt | schema mismatch) -> rebuild ->
-//       atomicWriteJson -> hydrate memory + return
-//     - rebuild throw -> propagate (TC-9: state.json errors surface)
-//
 //   getPluginIndex(path, scope, marketplace, rebuild, { now? })
 //     - memory hit AND now() - loadedAt <= 10 minutes -> return cached
 //     - memory miss OR TTL expiry -> drop memory + read file
@@ -32,12 +25,12 @@
 //         - any other throw -> propagate (TC-9)
 //
 // Invalidation API
-//   invalidateMarketplaceNames(path, scope) -- memory drop + unlink (ENOENT silent)
+//   invalidateMarketplaceNames(path, scope) -- unlink (ENOENT silent)
 //   invalidateMarketplaceCache(scope, mp) -- memory-only drop
 //   dropMarketplaceCache(path, scope, mp) -- memory drop + unlink (ENOENT silent)
 //
-// Test seam
-//   resetCompletionCache() -- clear both in-memory maps between cases.
+// Ownership
+//   createCompletionCache() -- owns one private plugin-index memory map.
 //
 // TC-8 discriminator: callers wrap manifest-load failures in
 // ManifestSoftFailError; everything else propagates. The cache module cannot
@@ -66,7 +59,6 @@ export const MARKETPLACE_NAMES_CACHE_SCHEMA = Type.Object({
   schemaVersion: Type.Literal(2),
   names: Type.Array(Type.String()),
 });
-const MARKETPLACE_NAMES_VALIDATOR = Compile(MARKETPLACE_NAMES_CACHE_SCHEMA);
 
 // LIST-02 / D-67-02: the plugin-index cache carries the FINER derived status
 // set so the completion bucketizer can offer the `--partial`-gated candidate sets
@@ -130,16 +122,13 @@ export interface PluginIndexRow {
 }
 
 // ---------------------------------------------------------------------------
-// In-memory maps. Single-threaded JS event loop = no locking. Keyed by
-// `${scope}` for marketplace names, `${scope}::${marketplace}` for plugin
-// index (string keys preferred over struct keys for hash simplicity).
+// Plugin-index ownership is created per CompletionCache instance below.
 // ---------------------------------------------------------------------------
 
-const memMarketplaceNames = new Map<string /* scope */, readonly string[]>();
-const memPluginIndex = new Map<
-  string /* `${scope}::${marketplace}` */,
-  { rows: readonly PluginIndexRow[]; loadedAt: number }
->();
+interface PluginIndexMemoryEntry {
+  readonly rows: readonly PluginIndexRow[];
+  readonly loadedAt: number;
+}
 
 /** 10-minute TTL safety net for the plugin index (D-03 -- catches concurrent-process changes). */
 const PLUGIN_INDEX_TTL_MS = 10 * 60 * 1000;
@@ -166,30 +155,6 @@ export class ManifestSoftFailError extends Error {
 
 function pluginIndexKey(scope: Scope, marketplace: string): string {
   return `${scope}::${marketplace}`;
-}
-
-/** Read + parse + validate a cache file; return undefined on any failure (caller falls back to rebuild). */
-async function readMarketplaceNamesFile(filePath: string): Promise<readonly string[] | undefined> {
-  let raw: string;
-  try {
-    raw = await readFile(filePath, "utf8");
-  } catch {
-    return undefined;
-  }
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return undefined;
-  }
-
-  if (!MARKETPLACE_NAMES_VALIDATOR.Check(parsed)) {
-    return undefined;
-  }
-
-  // Narrowed by validator; `names` is string[].
-  return parsed.names;
 }
 
 interface PluginIndexFileResult {
@@ -236,43 +201,6 @@ function pluginIndexFileIsFresh(result: PluginIndexFileResult, now: () => number
 // Read API.
 // ---------------------------------------------------------------------------
 
-/**
- * Resolve the union of marketplace names for `scope`.
- *
- * In-memory hit serves immediately. On memory miss, attempts a file read;
- * a validated file content hydrates the memory map and returns. On any file
- * problem (ENOENT, corrupt JSON, schema mismatch), invokes `rebuild`,
- * atomically writes the result, hydrates memory, and returns.
- *
- * State.json errors from `rebuild` propagate (TC-9). Names cache has NO
- * TTL: changes flow through orchestrator-side invalidation.
- */
-export async function getMarketplaceNames(
-  marketplaceNamesCachePath: string,
-  scope: Scope,
-  rebuild: () => Promise<readonly string[]>,
-): Promise<readonly string[]> {
-  const memHit = memMarketplaceNames.get(scope);
-  if (memHit !== undefined) {
-    return memHit;
-  }
-
-  const fromFile = await readMarketplaceNamesFile(marketplaceNamesCachePath);
-  if (fromFile !== undefined) {
-    memMarketplaceNames.set(scope, fromFile);
-    return fromFile;
-  }
-
-  // Rebuild from authoritative source; state.json errors surface (TC-9).
-  const names = await rebuild();
-  await atomicWriteJson(marketplaceNamesCachePath, {
-    schemaVersion: 2 as const,
-    names: [...names],
-  });
-  memMarketplaceNames.set(scope, names);
-  return names;
-}
-
 export interface GetPluginIndexOptions {
   /**
    * Clock injection seam for the 10-min TTL (default: Date.now). Keeps the
@@ -293,7 +221,8 @@ export interface GetPluginIndexOptions {
  *
  * TC-9: any other rebuild throw propagates verbatim (e.g. state.json error).
  */
-export async function getPluginIndex(
+async function getPluginIndexWithMemory(
+  memPluginIndex: Map<string, PluginIndexMemoryEntry>,
   pluginCachePath: string,
   scope: Scope,
   marketplace: string,
@@ -375,16 +304,11 @@ export async function getPluginIndex(
 // ---------------------------------------------------------------------------
 
 /**
- * Drop the marketplace-names memory entry AND unlink the cache file. Names
- * change whenever marketplaces are added or removed; leaving the file intact
- * would let the next completion process rehydrate stale names from disk.
- * ENOENT on the file is silent (already absent is OK).
+ * Unlink the marketplace-names cache file. Names change whenever marketplaces
+ * are added or removed; leaving the file intact would retain stale data for
+ * older or concurrent completion processes. ENOENT is silent.
  */
-export async function invalidateMarketplaceNames(
-  marketplaceNamesCachePath: string,
-  scope: Scope,
-): Promise<void> {
-  memMarketplaceNames.delete(scope);
+async function invalidateMarketplaceNamesFile(marketplaceNamesCachePath: string): Promise<void> {
   try {
     await unlink(marketplaceNamesCachePath);
   } catch (err) {
@@ -397,7 +321,11 @@ export async function invalidateMarketplaceNames(
 }
 
 /** Drop the in-memory plugin-index entry for (`scope`, `marketplace`). File on disk is left intact. */
-export function invalidateMarketplaceCache(scope: Scope, marketplace: string): void {
+function invalidateMarketplaceCacheWithMemory(
+  memPluginIndex: Map<string, PluginIndexMemoryEntry>,
+  scope: Scope,
+  marketplace: string,
+): void {
   memPluginIndex.delete(pluginIndexKey(scope, marketplace));
 }
 
@@ -406,7 +334,8 @@ export function invalidateMarketplaceCache(scope: Scope, marketplace: string): v
  * the underlying marketplace is removed (no recovery path -- cache file must
  * not linger). ENOENT on the file is silent (already absent is OK).
  */
-export async function dropMarketplaceCache(
+async function dropMarketplaceCacheWithMemory(
+  memPluginIndex: Map<string, PluginIndexMemoryEntry>,
   pluginCachePath: string,
   scope: Scope,
   marketplace: string,
@@ -423,17 +352,43 @@ export async function dropMarketplaceCache(
   }
 }
 
-/**
- * Drop both in-memory maps.
- *
- * The narrower `invalidateMarketplaceCache` / `dropMarketplaceCache` entries
- * above evict ONE marketplace, which is what the mutating orchestrators want.
- * This clears the lot, for a caller that needs the whole process-global cache
- * back to its cold state. Its only caller today is test setup isolating cases
- * from each other, which is exactly that need; keeping it beside the two
- * narrower evictions is what stops a third map being added and missed here.
- */
-export function resetCompletionCache(): void {
-  memMarketplaceNames.clear();
-  memPluginIndex.clear();
+/** Plugin-index cache operations shared by readers and targeted invalidators. */
+export interface CompletionCache {
+  /** Resolves one scoped marketplace's plugin-index rows. */
+  getPluginIndex(
+    pluginCachePath: string,
+    scope: Scope,
+    marketplace: string,
+    rebuild: () => Promise<readonly PluginIndexRow[]>,
+    options?: GetPluginIndexOptions,
+  ): Promise<readonly PluginIndexRow[]>;
+  /** Removes one scoped marketplace from memory while retaining its disk cache. */
+  invalidateMarketplaceCache(scope: Scope, marketplace: string): void;
+  /** Removes one scoped marketplace from memory and disk. */
+  dropMarketplaceCache(pluginCachePath: string, scope: Scope, marketplace: string): Promise<void>;
+  /** Removes one scope's marketplace-names cache file. */
+  invalidateMarketplaceNames(marketplaceNamesCachePath: string, scope: Scope): Promise<void>;
+}
+
+/** Creates one CompletionCache with private plugin-index memory. */
+export function createCompletionCache(): CompletionCache {
+  const memPluginIndex = new Map<string, PluginIndexMemoryEntry>();
+  return {
+    getPluginIndex: (pluginCachePath, scope, marketplace, rebuild, options) =>
+      getPluginIndexWithMemory(
+        memPluginIndex,
+        pluginCachePath,
+        scope,
+        marketplace,
+        rebuild,
+        options,
+      ),
+    invalidateMarketplaceCache: (scope, marketplace) => {
+      invalidateMarketplaceCacheWithMemory(memPluginIndex, scope, marketplace);
+    },
+    dropMarketplaceCache: (pluginCachePath, scope, marketplace) =>
+      dropMarketplaceCacheWithMemory(memPluginIndex, pluginCachePath, scope, marketplace),
+    invalidateMarketplaceNames: (marketplaceNamesCachePath) =>
+      invalidateMarketplaceNamesFile(marketplaceNamesCachePath),
+  };
 }

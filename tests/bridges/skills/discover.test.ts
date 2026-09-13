@@ -6,7 +6,7 @@ import test, { type TestContext } from "node:test";
 
 import { discoverPluginSkills } from "../../../extensions/pi-claude-marketplace/bridges/skills/discover.ts";
 
-import type { ResolvedPluginInstallable } from "../../../extensions/pi-claude-marketplace/domain/resolver.ts";
+import type { ResolvedPluginInstallable } from "../../../extensions/pi-claude-marketplace/domain/resolver-types.ts";
 
 async function createPluginRoot(t: TestContext, prefix: string): Promise<string> {
   const pluginRoot = await mkdtemp(path.join(tmpdir(), prefix));

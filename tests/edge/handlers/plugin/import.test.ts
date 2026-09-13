@@ -41,17 +41,14 @@
 // before the scope value is ever consulted. The case states that measured
 // outcome rather than a rejection the module does not perform.
 //
-// D-116-01a: this pair lands one branch short of complete, with lines and
-// functions both complete. The `String(err)` arm of `err instanceof Error ?
-// err.message : String(err)` at import.ts:31 cannot be entered at runtime. The
-// only throw that reaches that catch comes from `parseArgs`, which throws
-// `new Error(...)` at both of its throw sites, so no input can deliver a
-// non-error value there. The arm exists only because a `catch (err)` binding is
-// typed `unknown` under `useUnknownInCatchVariables`; narrowing it needs a type
-// assertion, which is barred throughout this tree. The claim is measured, not
-// inspected: a brute force over the reachable argument space produced an `Error`
-// at every throw, and a plant that replaced the arm's expression left the whole
-// suite green. No coverage exception is added and no production file is changed.
+// This pair reads COMPLETE: `branches 11/11, functions 2/2, lines 75/75`. It
+// used to carry one uncovered branch, the `String(err)` arm of an inline
+// `err instanceof Error ? err.message : String(err)`. That expression is gone
+// from `import.ts`; the catch now calls the shared `errorMessage(err)`, so the
+// `unknown`-narrowing arm belongs to that helper's own pair and not to this one.
+//
+// Which pairs fall short is recorded in one place, `scripts/test-coverage-direct.pin.json`,
+// and a pair absent from it reads complete. This one is absent from it.
 //
 // No exhaustiveness claim: the module holds no switch and no closed-union
 // dispatch, so a missing-arm plant has no target here. No case asserts the
@@ -69,9 +66,15 @@ import { test, type TestContext } from "node:test";
 import { mock, verify, when } from "strong-mock";
 
 import {
+  createHooksRouting,
+  createHooksRuntime,
+  readHooksJson,
+} from "../../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
+import {
   makeImportHandler,
   type ImportHandlerDeps,
 } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/import.ts";
+import { createCompletionCache } from "../../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { createGitOpsFake } from "../../../platform/git-ops-fake.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
 
@@ -91,7 +94,7 @@ const INVALID_SCOPE_MESSAGE =
   'Invalid --scope value: "bad". Must be "user" or "project".\n\nUsage: /claude:plugin import [--scope user|project]';
 
 /** The whole cascade an import over a tree with no Claude settings renders. */
-const EMPTY_CASCADE_MESSAGE = "(no marketplaces)";
+const EMPTY_CASCADE_MESSAGE = "(no marketplaces)\n\nImport: 0 successes";
 
 interface HermeticScope {
   readonly cwd: string;
@@ -180,6 +183,8 @@ test("imports the project scope before the user scope when no scope flag narrows
     reads: 1,
   });
   const git = createGitOpsFake({ boundary: "memory" });
+  const completionCache = createCompletionCache();
+  const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
   const importClaudeSettings = mock<ImportDelegate>({
     exactParams: true,
     name: "import claude settings",
@@ -191,9 +196,15 @@ test("imports the project scope before the user scope when no scope flag narrows
       cwd,
       selectedScopes: ["project", "user"],
       gitOps: git.gitOps,
+      hooksRouting,
+      completionCache,
     }),
   ).thenResolve(nothingImported());
-  const importHandler = makeImportHandler(pi, { gitOps: git.gitOps, importClaudeSettings });
+  const importHandler = makeImportHandler(
+    pi,
+    { completionCache, gitOps: git.gitOps, importClaudeSettings },
+    hooksRouting,
+  );
 
   // act
   await importHandler("", ctx);
@@ -205,6 +216,39 @@ test("imports the project scope before the user scope when no scope flag narrows
   verify(importClaudeSettings);
 });
 
+test("forwards the supplied lifecycle routing owner into import execution", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticScope(t, "routing-owner");
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(0, 0, {
+    value: cwd,
+    reads: 1,
+  });
+  const git = createGitOpsFake({ boundary: "memory" });
+  const completionCache = createCompletionCache();
+  const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
+  let forwardedHooksRouting: unknown;
+  const importClaudeSettings: ImportDelegate = (options) => {
+    forwardedHooksRouting = Reflect.get(options, "hooksRouting");
+
+    return Promise.resolve(nothingImported());
+  };
+
+  const importHandler = makeImportHandler(
+    pi,
+    { completionCache, gitOps: git.gitOps, importClaudeSettings },
+    hooksRouting,
+  );
+
+  // act
+  await importHandler("--scope project", ctx);
+
+  // assert
+  assert.strictEqual(forwardedHooksRouting, hooksRouting);
+  assert.deepStrictEqual(notifications, []);
+  assert.deepStrictEqual(git.state.calls.clone, []);
+  verifyBoundary();
+});
+
 for (const scope of ["project", "user"] satisfies readonly Scope[]) {
   test(`imports the ${scope} scope alone when --scope ${scope} narrows the command`, async (t) => {
     // arrange
@@ -214,6 +258,8 @@ for (const scope of ["project", "user"] satisfies readonly Scope[]) {
       reads: 1,
     });
     const git = createGitOpsFake({ boundary: "memory" });
+    const completionCache = createCompletionCache();
+    const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
     const importClaudeSettings = mock<ImportDelegate>({
       exactParams: true,
       name: "import claude settings",
@@ -225,9 +271,15 @@ for (const scope of ["project", "user"] satisfies readonly Scope[]) {
         cwd,
         selectedScopes: [scope],
         gitOps: git.gitOps,
+        hooksRouting,
+        completionCache,
       }),
     ).thenResolve(nothingImported());
-    const importHandler = makeImportHandler(pi, { gitOps: git.gitOps, importClaudeSettings });
+    const importHandler = makeImportHandler(
+      pi,
+      { completionCache, gitOps: git.gitOps, importClaudeSettings },
+      hooksRouting,
+    );
 
     // act
     await importHandler(`--scope ${scope}`, ctx);
@@ -248,7 +300,12 @@ test("runs the real import workflow when the dependency object declares no deleg
     reads: 1,
   });
   const git = createGitOpsFake({ boundary: "memory" });
-  const importHandler = makeImportHandler(pi, { gitOps: git.gitOps });
+  const completionCache = createCompletionCache();
+  const importHandler = makeImportHandler(
+    pi,
+    { completionCache, gitOps: git.gitOps },
+    createHooksRouting(createHooksRuntime(), { readHooksJson }),
+  );
 
   // act
   await importHandler("", ctx);
@@ -268,11 +325,16 @@ for (const { args, label, tokens } of [
     await createHermeticScope(t, `positional-${label}`);
     const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
     const git = createGitOpsFake({ boundary: "memory" });
+    const completionCache = createCompletionCache();
     const importClaudeSettings = mock<ImportDelegate>({
       exactParams: true,
       name: "import claude settings",
     });
-    const importHandler = makeImportHandler(pi, { gitOps: git.gitOps, importClaudeSettings });
+    const importHandler = makeImportHandler(
+      pi,
+      { completionCache, gitOps: git.gitOps, importClaudeSettings },
+      createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    );
 
     // act
     await importHandler(args, ctx);
@@ -290,11 +352,16 @@ test("reports an unrecognised scope value with the import usage block and never 
   await createHermeticScope(t, "invalid-scope");
   const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
   const git = createGitOpsFake({ boundary: "memory" });
+  const completionCache = createCompletionCache();
   const importClaudeSettings = mock<ImportDelegate>({
     exactParams: true,
     name: "import claude settings",
   });
-  const importHandler = makeImportHandler(pi, { gitOps: git.gitOps, importClaudeSettings });
+  const importHandler = makeImportHandler(
+    pi,
+    { completionCache, gitOps: git.gitOps, importClaudeSettings },
+    createHooksRouting(createHooksRuntime(), { readHooksJson }),
+  );
 
   // act
   await importHandler("--scope bad", ctx);
@@ -311,11 +378,16 @@ test("takes the scope-target flag as a positional and rejects it alongside a sco
   await createHermeticScope(t, "scope-target");
   const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
   const git = createGitOpsFake({ boundary: "memory" });
+  const completionCache = createCompletionCache();
   const importClaudeSettings = mock<ImportDelegate>({
     exactParams: true,
     name: "import claude settings",
   });
-  const importHandler = makeImportHandler(pi, { gitOps: git.gitOps, importClaudeSettings });
+  const importHandler = makeImportHandler(
+    pi,
+    { completionCache, gitOps: git.gitOps, importClaudeSettings },
+    createHooksRouting(createHooksRuntime(), { readHooksJson }),
+  );
 
   // act
   await importHandler("--scope user --local", ctx);

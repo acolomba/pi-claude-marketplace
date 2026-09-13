@@ -1,0 +1,10 @@
+{
+  "taskId": "06-45-01",
+  "command": "node --test --test-isolation=none --test-reporter=tap tests/orchestrators/plugin/reinstall-replace.test.ts",
+  "exitCode": 1,
+  "output": "TAP version 13\n# Subtest: exports the atomic reinstall replacement owner\nnot ok 1 - exports the atomic reinstall replacement owner\n  error: Got unwanted rejection: reinstall-replace.ts must own atomic reinstall replacement\n  code: ERR_ASSERTION\n1..1\n# tests 1\n# pass 0\n# fail 1",
+  "targetTest": "exports the atomic reinstall replacement owner",
+  "targetFile": "tests/orchestrators/plugin/reinstall-replace.test.ts",
+  "expected": "the named reinstall-replace owner exports replaceReinstalledPlugin",
+  "actual": "the target assertion rejects because reinstall-replace.ts does not exist"
+}

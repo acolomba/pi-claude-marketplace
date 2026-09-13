@@ -2,7 +2,7 @@
 //
 // PURL-08 / D-78-03 / D-78-04 / NFR-5: the SHARED git-source probe module,
 // colocated with `plugin-state-classifier.ts`. Both the `list` orchestrator
-// (`availableRowMessage` / `installedRowMessage`) and the completion bucketizer
+// (`availableRowMessage` / `composeInstalledListRow`) and the completion bucketizer
 // (`orchestrators/edge-deps.ts::loadManifestForMarketplace`) consume THESE
 // helpers so their status buckets never diverge on the same manifest (the
 // divergence class where install completion classifies a git-source entry
@@ -18,12 +18,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 
 import { canonicalCloneUrl, pluginCloneKey, pluginMirrorKey } from "../../domain/clone-key.ts";
-import {
-  resolveStrict,
-  type GitPluginRootResult,
-  type ResolveContext,
-  type ResolvedPlugin,
-} from "../../domain/resolver.ts";
+import { resolveStrict } from "../../domain/plugin-resolver.ts";
 import {
   parsePluginSource,
   type GitHubSource,
@@ -39,6 +34,11 @@ import {
 } from "./plugin-state-classifier.ts";
 
 import type { MarketplaceManifest } from "../../domain/manifest.ts";
+import type {
+  GitPluginRootResult,
+  ResolveContext,
+  ResolvedPlugin,
+} from "../../domain/resolver-types.ts";
 
 export type ManifestEntry = MarketplaceManifest["plugins"][number];
 

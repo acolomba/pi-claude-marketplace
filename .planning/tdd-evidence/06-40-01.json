@@ -1,0 +1,10 @@
+{
+  "taskId": "06-40-01",
+  "command": "node --test --test-isolation=none --test-reporter=tap tests/orchestrators/plugin/update-cascade.test.ts",
+  "exitCode": 1,
+  "output": "TAP version 13\n# Subtest: owns plugin update cascade composition\nnot ok 1 - owns plugin update cascade composition\n  error: Got unwanted rejection: update-cascade.ts must own plugin update result composition\n  code: ERR_ASSERTION\n  actual: ERR_MODULE_NOT_FOUND\n1..1\n# tests 1\n# pass 0\n# fail 1",
+  "targetTest": "owns plugin update cascade composition",
+  "targetFile": "tests/orchestrators/plugin/update-cascade.test.ts",
+  "expected": "the named update-cascade owner exports composeUpdateCascade",
+  "actual": "ERR_MODULE_NOT_FOUND for extensions/pi-claude-marketplace/orchestrators/plugin/update-cascade.ts"
+}

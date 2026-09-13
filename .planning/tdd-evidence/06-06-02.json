@@ -1,0 +1,9 @@
+{
+  "command": "node --test-reporter tap tests/domain/mcp-resolution.test.ts",
+  "exitCode": 1,
+  "output": "TAP version 13\n# Subtest: resolves a strict string reference at inline parity\nnot ok 1 - resolves a strict string reference at inline parity\n  ---\n  error: Got unwanted rejection: mcp-resolution.ts is absent\n  code: ERR_ASSERTION\n  ...\n1..17\n# tests 17\n# suites 0\n# pass 0\n# fail 17\n# cancelled 0\n# skipped 0\n# todo 0\n",
+  "targetTest": "resolves a strict string reference at inline parity",
+  "targetFile": "tests/domain/mcp-resolution.test.ts",
+  "expected": "The mcp-resolution owner resolves wrapped references to the same map as inline MCP declarations.",
+  "actual": "The dynamic import rejected because mcp-resolution.ts does not exist before extraction."
+}

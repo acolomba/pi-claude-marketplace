@@ -11,7 +11,8 @@
  * user grepping debug output finds the failure filed under the right
  * subsystem. The console.error call is the SOLE sanctioned IL-2 / IL-3
  * deviation at this seam, authorized by the per-file ESLint override block in
- * eslint.config.js that mirrors BLOCK B's authorization for shared/notify.ts.
+ * eslint.config.js that mirrors BLOCK B's authorization for
+ * shared/notification-dispatch.ts.
  * No inline `eslint-disable-next-line` directives live in this file: any
  * drift of the per-file override block surfaces as a red lint at this call
  * site rather than a silently-absorbed inline disable.

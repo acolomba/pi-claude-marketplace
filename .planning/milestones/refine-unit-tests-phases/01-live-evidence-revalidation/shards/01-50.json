@@ -1,0 +1,1510 @@
+{
+  "plan": "01-50",
+  "files": [
+    {
+      "path": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md",
+      "category": "first-pass",
+      "assignedPlan": "01-50",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md#OPMFP-C001",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md#OPMFP-C002",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md#OPMFP-C003",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md#OPMFP-C004",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md#OPMFP-C005",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md#OPMFP-C006",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md#OPMFP-C007",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md#OPMFP-C008",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md#OPMFP-C009",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md#OPMFP-C010",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md#OPMFP-C011",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md#OPMFP-C012",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md#OPMFP-C013",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md#OPMFP-C014",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md#OPMFP-C015",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md#OPMFP-C016",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md#OPMFP-C017"
+      ],
+      "reviewStatus": "complete",
+      "outcome": "live findings"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md",
+      "category": "first-pass",
+      "assignedPlan": "01-50",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C001",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C002",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C003",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C004",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C005",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C006",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C007",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C008",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C009",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C010",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C011",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C012",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C013",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C014",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C015",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C016",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C017",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C018",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C019",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C020",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C021",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C022",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C023",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C024",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C025",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C026",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C027",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C028",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C029",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C030",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C031"
+      ],
+      "reviewStatus": "complete",
+      "outcome": "live findings"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md",
+      "category": "first-pass",
+      "assignedPlan": "01-50",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md#OPSFP-C001",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md#OPSFP-C002",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md#OPSFP-C003",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md#OPSFP-C004",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md#OPSFP-C005",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md#OPSFP-C006",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md#OPSFP-C007",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md#OPSFP-C008",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md#OPSFP-C009",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md#OPSFP-C010",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md#OPSFP-C011",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md#OPSFP-C012",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md#OPSFP-C013",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md#OPSFP-C014",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md#OPSFP-C015",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md#OPSFP-C016",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md#OPSFP-C017",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md#OPSFP-C018",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md#OPSFP-C019",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md#OPSFP-C020",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md#OPSFP-C021"
+      ],
+      "reviewStatus": "complete",
+      "outcome": "live findings"
+    }
+  ],
+  "sourceClaims": [
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md#OPMFP-C001",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md",
+      "label": "OPMFP-C001",
+      "findingId": "OPMFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md#OPMFP-C002",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md",
+      "label": "OPMFP-C002",
+      "findingId": "OPMFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md#OPMFP-C003",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md",
+      "label": "OPMFP-C003",
+      "findingId": "OPMFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md#OPMFP-C004",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md",
+      "label": "OPMFP-C004",
+      "findingId": "OPMFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md#OPMFP-C005",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md",
+      "label": "OPMFP-C005",
+      "findingId": "OPMFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md#OPMFP-C006",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md",
+      "label": "OPMFP-C006",
+      "findingId": "OPMFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md#OPMFP-C007",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md",
+      "label": "OPMFP-C007",
+      "findingId": "OPMFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md#OPMFP-C008",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md",
+      "label": "OPMFP-C008",
+      "findingId": "OPMFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md#OPMFP-C009",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md",
+      "label": "OPMFP-C009",
+      "findingId": "OPMFP-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md#OPMFP-C010",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md",
+      "label": "OPMFP-C010",
+      "findingId": "OPMFP-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md#OPMFP-C011",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md",
+      "label": "OPMFP-C011",
+      "findingId": "OPMFP-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md#OPMFP-C012",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md",
+      "label": "OPMFP-C012",
+      "findingId": "OPMFP-F003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md#OPMFP-C013",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md",
+      "label": "OPMFP-C013",
+      "findingId": "OPMFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md#OPMFP-C014",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md",
+      "label": "OPMFP-C014",
+      "findingId": "OPMFP-F004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md#OPMFP-C015",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md",
+      "label": "OPMFP-C015",
+      "findingId": "OPMFP-F004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md#OPMFP-C016",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md",
+      "label": "OPMFP-C016",
+      "findingId": "OPMFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md#OPMFP-C017",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md",
+      "label": "OPMFP-C017",
+      "findingId": "OPMFP-F005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C001",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md",
+      "label": "OPRFP-C001",
+      "findingId": "OPRFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C002",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md",
+      "label": "OPRFP-C002",
+      "findingId": "OPRFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C003",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md",
+      "label": "OPRFP-C003",
+      "findingId": "OPRFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C004",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md",
+      "label": "OPRFP-C004",
+      "findingId": "OPRFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C005",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md",
+      "label": "OPRFP-C005",
+      "findingId": "OPRFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C006",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md",
+      "label": "OPRFP-C006",
+      "findingId": "OPRFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C007",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md",
+      "label": "OPRFP-C007",
+      "findingId": "OPRFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C008",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md",
+      "label": "OPRFP-C008",
+      "findingId": "OPRFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C009",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md",
+      "label": "OPRFP-C009",
+      "findingId": "OPRFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C010",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md",
+      "label": "OPRFP-C010",
+      "findingId": "OPRFP-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C011",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md",
+      "label": "OPRFP-C011",
+      "findingId": "OPRFP-F003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C012",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md",
+      "label": "OPRFP-C012",
+      "findingId": "OPRFP-F003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C013",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md",
+      "label": "OPRFP-C013",
+      "findingId": "OPRFP-F004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C014",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md",
+      "label": "OPRFP-C014",
+      "findingId": "OPRFP-F004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C015",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md",
+      "label": "OPRFP-C015",
+      "findingId": "OPRFP-F004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C016",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md",
+      "label": "OPRFP-C016",
+      "findingId": "OPRFP-F005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C017",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md",
+      "label": "OPRFP-C017",
+      "findingId": "OPRFP-F006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C018",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md",
+      "label": "OPRFP-C018",
+      "findingId": "OPRFP-F007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C019",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md",
+      "label": "OPRFP-C019",
+      "findingId": "OPRFP-F008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C020",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md",
+      "label": "OPRFP-C020",
+      "findingId": "OPRFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C021",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md",
+      "label": "OPRFP-C021",
+      "findingId": "OPRFP-F009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C022",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md",
+      "label": "OPRFP-C022",
+      "findingId": "OPRFP-F010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C023",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md",
+      "label": "OPRFP-C023",
+      "findingId": "OPRFP-F011"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C024",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md",
+      "label": "OPRFP-C024",
+      "findingId": "OPRFP-F012"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C025",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md",
+      "label": "OPRFP-C025",
+      "findingId": "OPRFP-F013"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C026",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md",
+      "label": "OPRFP-C026",
+      "findingId": "OPRFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C027",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md",
+      "label": "OPRFP-C027",
+      "findingId": "OPRFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C028",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md",
+      "label": "OPRFP-C028",
+      "findingId": "OPRFP-F014"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C029",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md",
+      "label": "OPRFP-C029",
+      "findingId": "OPRFP-F007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C030",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md",
+      "label": "OPRFP-C030",
+      "findingId": "OPRFP-F015"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C031",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md",
+      "label": "OPRFP-C031",
+      "findingId": "OPRFP-F015"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md#OPSFP-C001",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md",
+      "label": "OPSFP-C001",
+      "findingId": "OPSFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md#OPSFP-C002",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md",
+      "label": "OPSFP-C002",
+      "findingId": "OPSFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md#OPSFP-C003",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md",
+      "label": "OPSFP-C003",
+      "findingId": "OPSFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md#OPSFP-C004",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md",
+      "label": "OPSFP-C004",
+      "findingId": "OPSFP-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md#OPSFP-C005",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md",
+      "label": "OPSFP-C005",
+      "findingId": "OPSFP-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md#OPSFP-C006",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md",
+      "label": "OPSFP-C006",
+      "findingId": "OPSFP-F003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md#OPSFP-C007",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md",
+      "label": "OPSFP-C007",
+      "findingId": "OPSFP-F003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md#OPSFP-C008",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md",
+      "label": "OPSFP-C008",
+      "findingId": "OPSFP-F004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md#OPSFP-C009",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md",
+      "label": "OPSFP-C009",
+      "findingId": "OPSFP-F005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md#OPSFP-C010",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md",
+      "label": "OPSFP-C010",
+      "findingId": "OPSFP-F006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md#OPSFP-C011",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md",
+      "label": "OPSFP-C011",
+      "findingId": "OPSFP-F007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md#OPSFP-C012",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md",
+      "label": "OPSFP-C012",
+      "findingId": "OPSFP-F008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md#OPSFP-C013",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md",
+      "label": "OPSFP-C013",
+      "findingId": "OPSFP-F009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md#OPSFP-C014",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md",
+      "label": "OPSFP-C014",
+      "findingId": "OPSFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md#OPSFP-C015",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md",
+      "label": "OPSFP-C015",
+      "findingId": "OPSFP-F010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md#OPSFP-C016",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md",
+      "label": "OPSFP-C016",
+      "findingId": "OPSFP-F011"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md#OPSFP-C017",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md",
+      "label": "OPSFP-C017",
+      "findingId": "OPSFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md#OPSFP-C018",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md",
+      "label": "OPSFP-C018",
+      "findingId": "OPSFP-F012"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md#OPSFP-C019",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md",
+      "label": "OPSFP-C019",
+      "findingId": "OPSFP-F013"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md#OPSFP-C020",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md",
+      "label": "OPSFP-C020",
+      "findingId": "OPSFP-F013"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md#OPSFP-C021",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md",
+      "label": "OPSFP-C021",
+      "findingId": "OPSFP-F014"
+    }
+  ],
+  "findings": [
+    {
+      "id": "OPMFP-F001",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md#OPMFP-C001",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md#OPMFP-C002",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md#OPMFP-C003",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md#OPMFP-C004",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md#OPMFP-C005",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md#OPMFP-C006",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md#OPMFP-C007",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md#OPMFP-C008",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md#OPMFP-C013",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md#OPMFP-C016"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.messaging.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/fetch.messaging.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.messaging.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/enable-disable.messaging.test.ts"
+        },
+        {
+          "path": "tests/orchestrators/plugin/fetch.messaging.test.ts"
+        },
+        {
+          "path": "tests/orchestrators/plugin/install.messaging.test.ts"
+        },
+        {
+          "path": "tests/orchestrators/plugin/reinstall.messaging.test.ts"
+        },
+        {
+          "path": "tests/orchestrators/plugin/uninstall.messaging.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test extensions/test/messaging/plugin_enable.messaging.test.ts extensions/test/messaging/plugin_fetch.messaging.test.ts extensions/test/messaging/plugin_install.messaging.test.ts extensions/test/messaging/plugin_reinstall.messaging.test.ts extensions/test/messaging/plugin_uninstall.messaging.test.ts extensions/test/messaging/plugin_search.messaging.test.ts extensions/test/messaging/plugin_update.messaging.test.ts extensions/test/messaging/plugin_validate.messaging.test.ts",
+        "exitCode": 0,
+        "observed": "All eight focused messaging test files passed; current tests enumerate renderer outcomes with literal whole-value assertions."
+      },
+      "rationale": "Current source-to-test pairing and the focused rerun support the report's positive coverage claims.",
+      "destination": "No implementation change; retain as validated evidence."
+    },
+    {
+      "id": "OPMFP-F002",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md#OPMFP-C009",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md#OPMFP-C010",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md#OPMFP-C011"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "OPM-F13",
+      "sourceRefs": [
+        {
+          "path": "tests/orchestrators/plugin/enable-disable.messaging.test.ts"
+        },
+        {
+          "path": "tests/orchestrators/plugin/fetch.messaging.test.ts"
+        },
+        {
+          "path": "tests/orchestrators/plugin/uninstall.messaging.test.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "The finding concerns test naming rather than runtime behavior."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph and rg",
+        "observed": "Current files retain naming forms identified by the canonical adversarial review."
+      },
+      "rationale": "These are the same naming-consistency observations already owned by OPM-F13.",
+      "destination": "Use OPM-F13 for any Phase 2 readability cleanup."
+    },
+    {
+      "id": "OPMFP-F003",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md#OPMFP-C012"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "OPM-F14",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/reinstall.messaging.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "TypeScript control-flow inspection",
+        "observed": "The mapped reinstall outcome type fixes the context for each renderer branch, and exact transitive render assertions already fail if the context is wrong."
+      },
+      "rationale": "The positive symbol is REINSTALL_CONTEXT, but a direct assertion adds no independent discrimination beyond the typed mapping and exact output cases; the original premise is stale and OPM-F14 records that adjudication.",
+      "destination": "No new test; canonical evidence remains OPM-F14."
+    },
+    {
+      "id": "OPMFP-F004",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md#OPMFP-C014",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md#OPMFP-C015"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "deferred backlog",
+      "duplicateOf": "OPM-F15",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "This is a production exhaustiveness-style observation."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph and TypeScript configuration inspection",
+        "observed": "Both current switches omit explicit default branches, while compiler exhaustiveness through mapped discriminated types and noImplicitReturns guards the supported cases."
+      },
+      "rationale": "The omission is real but is not a demonstrated runtime correctness defect; OPM-F15 already owns the optional exhaustiveness-style follow-up.",
+      "destination": "Defer under OPM-F15."
+    },
+    {
+      "id": "OPMFP-F005",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md#OPMFP-C017"
+      ],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-messaging.md"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/reinstall.messaging.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test extensions/test/messaging/plugin_enable.messaging.test.ts extensions/test/messaging/plugin_fetch.messaging.test.ts extensions/test/messaging/plugin_install.messaging.test.ts extensions/test/messaging/plugin_reinstall.messaging.test.ts extensions/test/messaging/plugin_uninstall.messaging.test.ts extensions/test/messaging/plugin_search.messaging.test.ts extensions/test/messaging/plugin_update.messaging.test.ts extensions/test/messaging/plugin_validate.messaging.test.ts",
+        "exitCode": 0,
+        "observed": "The revalidation reran the focused messaging suite successfully, replacing the report's static-only limitation."
+      },
+      "rationale": "The statement accurately described the historical review but is no longer true of the revalidated evidence.",
+      "destination": "Close with the recorded current behavioral probe."
+    },
+    {
+      "id": "OPRFP-F001",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C001",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C002",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C003",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C004",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C005",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C006",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C007",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C008",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C009",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C020",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C026",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C027"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/reinstall.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test extensions/test/orchestrators/plugin_reinstall.test.ts",
+        "exitCode": 0,
+        "observed": "The focused reinstall suite passed, including retry, structural NFR-5, force-mode, dependency-boundary, and bridge scenarios."
+      },
+      "rationale": "The current focused suite substantiates the report's positive reinstall behavior and hermeticity claims.",
+      "destination": "No implementation change; retain as validated evidence."
+    },
+    {
+      "id": "OPRFP-F002",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C010"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "OPR-B-F17",
+      "sourceRefs": [
+        {
+          "path": "tests/orchestrators/plugin/reinstall.test.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/reinstall.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph and adversarial report comparison",
+        "observed": "The current GAP-15 case retains the same dishonest setup-to-assertion relationship recorded by OPR-B-F17."
+      },
+      "rationale": "Canonical finding OPR-B-F17 already owns this safety-sensitive test defect.",
+      "destination": "Repair through OPR-B-F17 in Phase 2."
+    },
+    {
+      "id": "OPRFP-F003",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C011",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C012"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "OPR-B-F02",
+      "sourceRefs": [
+        {
+          "path": "tests/orchestrators/plugin/reinstall.test.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/reinstall.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "isolated-copy mutation: hard-code the plural/cardinality path, then run the focused reinstall suite",
+        "exitCode": 0,
+        "observed": "The focused suite survived the cardinality mutation, confirming that the current GAP-12 and GAP-14 assertions do not discriminate the plural count."
+      },
+      "rationale": "This is the same assertion-strength defect already owned by OPR-B-F02.",
+      "destination": "Strengthen cardinality assertions through OPR-B-F02 in Phase 2."
+    },
+    {
+      "id": "OPRFP-F004",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C013",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C014",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C015"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "deferred backlog",
+      "duplicateOf": "OPR-B-F20",
+      "sourceRefs": [
+        {
+          "path": "tests/orchestrators/plugin/reinstall.test.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/reinstall.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph and duplicate-case comparison",
+        "observed": "The three reported case pairs remain structurally duplicated in the current test file."
+      },
+      "rationale": "Canonical OPR-B-F20 already owns these duplicate-test observations.",
+      "destination": "Consolidate only if the OPR-B-F20 backlog item is selected."
+    },
+    {
+      "id": "OPRFP-F005",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C016"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "deferred backlog",
+      "duplicateOf": "OPR-B-F24",
+      "sourceRefs": [
+        {
+          "path": "tests/orchestrators/plugin/reinstall.test.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/reinstall.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph",
+        "observed": "GAP-04 and GAP-17 still exercise overlapping behavior with different setup detail."
+      },
+      "rationale": "OPR-B-F24 owns this near-duplicate judgment.",
+      "destination": "Retain under OPR-B-F24 as deferred cleanup."
+    },
+    {
+      "id": "OPRFP-F006",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C017"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "deferred backlog",
+      "duplicateOf": "OPR-B-F21",
+      "sourceRefs": [
+        {
+          "path": "tests/orchestrators/plugin/reinstall.test.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/reinstall.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph",
+        "observed": "The filesystem-watch case still depends on an event timing window; the project decision explicitly retains this TOCTOU risk for later determinism work."
+      },
+      "rationale": "The race is current and already owned by OPR-B-F21, but is not evidence that the production behavior is wrong.",
+      "destination": "Retain the existing test and defer deterministic synchronization under OPR-B-F21."
+    },
+    {
+      "id": "OPRFP-F007",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C018",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C029"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "operator decision",
+      "duplicateOf": "OPR-B-F22",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts"
+        },
+        {
+          "path": "tests/orchestrators/plugin/reinstall.test.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "The claim requests a structural split rather than proving behavior."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph symbol and file-boundary inspection",
+        "observed": "The production and test modules remain large, but splitting them would be an architectural organization choice with broad ownership effects."
+      },
+      "rationale": "OPR-B-F22 owns the module-split decision; evidence revalidation cannot authorize it.",
+      "destination": "Request operator decision only if a later implementation plan proposes the split."
+    },
+    {
+      "id": "OPRFP-F008",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C019"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "deferred backlog",
+      "duplicateOf": "OPR-B-F23",
+      "sourceRefs": [
+        {
+          "path": "tests/orchestrators/plugin/reinstall.test.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "GAP labels are test organization metadata."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "rg",
+        "observed": "Current GAP labels remain non-sequential and difficult to scan."
+      },
+      "rationale": "This readability issue is already recorded as OPR-B-F23.",
+      "destination": "Defer any renumbering under OPR-B-F23."
+    },
+    {
+      "id": "OPRFP-F009",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C021"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "deferred backlog",
+      "duplicateOf": "OPR-B-F25",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "This is a production exhaustiveness-style observation."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph and TypeScript configuration inspection",
+        "observed": "Two current switches omit explicit default branches while typed inputs and noImplicitReturns constrain supported cases."
+      },
+      "rationale": "The stylistic exhaustiveness opportunity is already owned by OPR-B-F25 and is not a demonstrated runtime failure.",
+      "destination": "Defer under OPR-B-F25."
+    },
+    {
+      "id": "OPRFP-F010",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C022"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "deferred backlog",
+      "duplicateOf": "OPR-B-F26",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "The claim concerns a production type assertion."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph",
+        "observed": "The partial-object cast remains in current production source."
+      },
+      "rationale": "OPR-B-F26 already owns this type-safety cleanup.",
+      "destination": "Resolve only through the canonical backlog finding."
+    },
+    {
+      "id": "OPRFP-F011",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C023"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "OPR-B-F27",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/reinstall.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph",
+        "observed": "Current commit-hook handling directly calls homedir rather than using the injected environment boundary."
+      },
+      "rationale": "The boundary leak remains current and is already owned by OPR-B-F27.",
+      "destination": "Route environment injection remediation through OPR-B-F27 in Phase 2."
+    },
+    {
+      "id": "OPRFP-F012",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C024"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "OPR-B-F28",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/reinstall.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "isolated-copy mutation: preserve the previous updatedAt value instead of constructing the current timestamp, then run the focused reinstall suite",
+        "exitCode": 0,
+        "observed": "The focused suite survived the timestamp mutation, confirming that updatedAt refresh behavior lacks a discriminating assertion."
+      },
+      "rationale": "This current time-boundary test gap is already owned by OPR-B-F28.",
+      "destination": "Inject or assert time deterministically through OPR-B-F28 in Phase 2."
+    },
+    {
+      "id": "OPRFP-F013",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C025"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "deferred backlog",
+      "duplicateOf": "OPR-B-F29",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "Documentation presence is a source-maintainability concern."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph",
+        "observed": "The identified exported helpers remain without public API documentation."
+      },
+      "rationale": "OPR-B-F29 already owns this documentation cleanup.",
+      "destination": "Defer under OPR-B-F29."
+    },
+    {
+      "id": "OPRFP-F014",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C028"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "operator decision",
+      "duplicateOf": "OPR-B-F33",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/reinstall.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph",
+        "observed": "Current production source exposes an explicitly documented @internal __deps boundary for tests, so the report's absolute no-test-only-surface claim is not accurate."
+      },
+      "rationale": "OPR-B-F33 owns whether to retain or replace this intentional test boundary; removing it requires an operator-approved design choice.",
+      "destination": "Preserve traceability and defer the interface decision to OPR-B-F33."
+    },
+    {
+      "id": "OPRFP-F015",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C030",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md#OPRFP-C031"
+      ],
+      "evidenceStatus": "superseded",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/reinstall.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test extensions/test/orchestrators/plugin_reinstall.test.ts",
+        "exitCode": 0,
+        "observed": "Current revalidation incorporated canonical cross-file adversarial findings and reran the focused suite; formatting and full-repository gates remain outside this evidence-only assignment."
+      },
+      "rationale": "The historical limitations are superseded for focused behavior and cross-review reconciliation, while unrelated full-gate work is intentionally out of scope.",
+      "destination": "Close the historical caveats with current scoped evidence."
+    },
+    {
+      "id": "OPSFP-F001",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md#OPSFP-C001",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md#OPSFP-C002",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md#OPSFP-C003",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md#OPSFP-C014",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md#OPSFP-C017"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/git-source-probe.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/clone-gc.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/clone-cache.test.ts"
+        },
+        {
+          "path": "tests/orchestrators/plugin/git-source-probe.test.ts"
+        },
+        {
+          "path": "tests/orchestrators/plugin/clone-gc.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test extensions/test/orchestrators/plugin_clone_gc.test.ts extensions/test/orchestrators/plugin_git_source.test.ts extensions/test/orchestrators/plugin_lock.test.ts extensions/test/orchestrators/plugin_manifest.test.ts extensions/test/orchestrators/plugin_registry.test.ts extensions/test/orchestrators/plugin_shared.test.ts extensions/test/orchestrators/plugin_support.test.ts && node --test --test-name-pattern='^(?!.*uses default git operations)' extensions/test/orchestrators/plugin_clone_cache.test.ts",
+        "exitCode": 0,
+        "observed": "All focused support suites passed; the unsafe default-Git case was intentionally excluded pending hermetic remediation."
+      },
+      "rationale": "Current tests support the broad positive pairing and fake-boundary claims, except for the separately routed default-Git surface.",
+      "destination": "Retain as current evidence; use OPSFP-F007 for the isolated hermeticity risk."
+    },
+    {
+      "id": "OPSFP-F002",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md#OPSFP-C004",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md#OPSFP-C005"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "OPS-F22",
+      "sourceRefs": [
+        {
+          "path": "tests/orchestrators/plugin/clone-cache.test.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/clone-cache.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph and rg call-site count",
+        "observed": "Six mkdtemp call sites create 53 temporary directories across 55 clone-cache cases without matching cleanup hooks."
+      },
+      "rationale": "The leak remains current and the canonical safety finding OPS-F22 already owns it.",
+      "destination": "Add deterministic cleanup through OPS-F22 in Phase 2."
+    },
+    {
+      "id": "OPSFP-F003",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md#OPSFP-C006",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md#OPSFP-C007"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "deferred backlog",
+      "duplicateOf": "OPS-F23",
+      "sourceRefs": [
+        {
+          "path": "tests/orchestrators/plugin/clone-cache.test.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "These claims concern test declaration and assertion spelling."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "rg and Node assert API probe",
+        "observed": "The file retains 55 void test declarations and uses equal/deepEqual spellings; node:assert/strict aliases them to strictEqual/deepStrictEqual, so this is readability rather than correctness."
+      },
+      "rationale": "OPS-F23 already owns the accurate style-only subset of the report's claims.",
+      "destination": "Defer optional readability cleanup under OPS-F23."
+    },
+    {
+      "id": "OPSFP-F004",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md#OPSFP-C008"
+      ],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "tests/orchestrators/plugin/clone-cache.test.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/clone-cache.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node -e 'const assert=require(\"node:assert/strict\"); if(assert.equal!==assert.strictEqual||assert.deepEqual!==assert.deepStrictEqual)process.exit(1); try{assert.equal(null,undefined);process.exit(2)}catch{}'",
+        "exitCode": 0,
+        "observed": "Under node:assert/strict, equal and deepEqual are strict aliases and null does not equal undefined."
+      },
+      "rationale": "The report's loose-equality correctness premise is invalid in the imported strict assertion namespace.",
+      "destination": "Close the correctness claim; retain only the spelling consistency item in OPS-F23."
+    },
+    {
+      "id": "OPSFP-F005",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md#OPSFP-C009"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "tests/orchestrators/plugin/clone-cache.test.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "Describe grouping is test organization rather than executable behavior."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "rg",
+        "observed": "The current clone-cache test file has no describe grouping."
+      },
+      "rationale": "The observation is current but does not affect behavior or safety.",
+      "destination": "Defer as optional test organization cleanup."
+    },
+    {
+      "id": "OPSFP-F006",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md#OPSFP-C010"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/git-source-probe.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/clone-cache.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph call-path inspection",
+        "observed": "The named test does not inject the Git fake and reaches DEFAULT_GIT_OPS.fetch; its present failure may occur before socket access but that is not a stable hermetic boundary."
+      },
+      "rationale": "A test that can reach real default Git behavior violates the phase's no-network and hermeticity requirements even when it currently fails locally first.",
+      "destination": "Inject an explicit failing Git fake in Phase 2 before rerunning this case."
+    },
+    {
+      "id": "OPSFP-F007",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md#OPSFP-C011"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "OPS-F24",
+      "sourceRefs": [
+        {
+          "path": "tests/orchestrators/plugin/git-source-probe.test.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "The finding concerns local variable naming."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "rg",
+        "observed": "The current Git-source test file retains 27 generic result variable declarations."
+      },
+      "rationale": "This naming issue is already owned by OPS-F24.",
+      "destination": "Apply any approved naming cleanup through OPS-F24."
+    },
+    {
+      "id": "OPSFP-F008",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md#OPSFP-C012"
+      ],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/clone-gc.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/clone-gc.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph call-path inspection",
+        "observed": "The cloneKeys setup proves that the live omega key never reaches the deletion chokepoint; removing it would eliminate the case's live-key discrimination."
+      },
+      "rationale": "The positive symbol is cloneKeys, and current call flow shows it is necessary input rather than an inert stub; the original premise is invalid.",
+      "destination": "Keep the setup and close the claim without implementation work."
+    },
+    {
+      "id": "OPSFP-F009",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md#OPSFP-C013"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "OPS-F25",
+      "sourceRefs": [
+        {
+          "path": "tests/orchestrators/plugin/clone-gc.test.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/clone-gc.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph",
+        "observed": "The current clone-GC case still asserts the generic Error name in addition to the discriminating message."
+      },
+      "rationale": "OPS-F25 already owns this assertion-specificity cleanup.",
+      "destination": "Address through OPS-F25 in Phase 2."
+    },
+    {
+      "id": "OPSFP-F010",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md#OPSFP-C015"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "OPS-F05",
+      "sourceRefs": [
+        {
+          "path": "tests/orchestrators/plugin/shared.test.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/shared.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph",
+        "observed": "makeRecordingBoundary still uses double type assertions to construct the recording test boundary."
+      },
+      "rationale": "Canonical OPS-F05 already owns this test-double type-safety issue.",
+      "destination": "Repair through OPS-F05 in Phase 2."
+    },
+    {
+      "id": "OPSFP-F011",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md#OPSFP-C016"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "deferred backlog",
+      "duplicateOf": "OPS-F26",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "The claim concerns a production type assertion."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph",
+        "observed": "The current shared helper retains the undocumented cast identified by the canonical review."
+      },
+      "rationale": "OPS-F26 already owns this maintainability item.",
+      "destination": "Defer under OPS-F26."
+    },
+    {
+      "id": "OPSFP-F012",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md#OPSFP-C018"
+      ],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/shared.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test extensions/test/orchestrators/plugin_clone_gc.test.ts extensions/test/orchestrators/plugin_git_source.test.ts extensions/test/orchestrators/plugin_lock.test.ts extensions/test/orchestrators/plugin_manifest.test.ts extensions/test/orchestrators/plugin_registry.test.ts extensions/test/orchestrators/plugin_shared.test.ts extensions/test/orchestrators/plugin_support.test.ts",
+        "exitCode": 0,
+        "observed": "The current revalidation ran and passed the focused hermetic support suites."
+      },
+      "rationale": "The claim is historical and no longer describes the revalidated evidence.",
+      "destination": "Close with the recorded behavioral probe."
+    },
+    {
+      "id": "OPSFP-F013",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md#OPSFP-C019",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md#OPSFP-C020"
+      ],
+      "evidenceStatus": "superseded",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/clone-cache.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph call-path inspection",
+        "observed": "Current revalidation followed the Git boundary and fake paths needed for the assigned support claims; higher-level verbs remain outside this corpus assignment."
+      },
+      "rationale": "The Git-fake inspection limitation is superseded, while expanding into excluded verbs would violate the assignment boundary.",
+      "destination": "Close the inspected boundary and leave unrelated verbs to their assigned corpus plans."
+    },
+    {
+      "id": "OPSFP-F014",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md#OPSFP-C021"
+      ],
+      "evidenceStatus": "superseded",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-support.md"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "A historical priority recommendation is not executable evidence."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current adjudication comparison",
+        "observed": "Current severity and routes are assigned per surviving evidence: safety and hermeticity first, canonical assertion defects next, and style-only items deferred."
+      },
+      "rationale": "The report's historical priority list is replaced by the schema-governed current routes without discarding any underlying claim.",
+      "destination": "Use the finding-level routes in this shard."
+    }
+  ]
+}

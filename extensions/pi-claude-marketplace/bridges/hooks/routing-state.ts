@@ -1,9 +1,7 @@
 // bridges/hooks/routing-state.ts
 //
-// Leaf-ward home for the hooks bridge's shared module state: the per-event
-// routing table, the parsed-config cache, the live epoch cell, and the
-// SessionStart additionalContext buffer (D-59-02 / D-59-03), plus the record
-// shapes those cells are keyed on.
+// Leaf-ward home for the hooks bridge's routing operations and the record
+// shapes those operations use (D-59-02 / D-59-03).
 //
 // The state lives here rather than in `event-router.ts` so the dispatch
 // chain can read it without importing the hub back. `dispatch.ts`,
@@ -14,17 +12,14 @@
 // remaining edge one-directional, and a one-directional edge cannot cycle.
 //
 // INVARIANT that keeps it that way: this module imports only `domain/`,
-// `shared/`, and the same-zone `if-field/` (itself leaf-ward relative to
-// dispatch). It must never import `event-router.ts`, `dispatch.ts`,
+// `shared/`, `runtime.ts`, and the same-zone `if-field/` (itself leaf-ward
+// relative to dispatch). It must never import `event-router.ts`, `dispatch.ts`,
 // `dispatch-exec.ts`, `event-adapters.ts`, `settle.ts`, or
 // `async-rewake/registry.ts` -- any one of those import edges restores the
 // cycle knot this module exists to remove. `npm run fallow` gates it.
 //
-// ESM imported bindings are read-only, so a reassigned cell can only live
-// here if its writes live here too. The two Maps are `const` and mutated in
-// place, so they are exported directly; `liveEpoch` and
-// `pendingSessionStartContext` are reassigned and stay module-private behind
-// named mutators.
+// Every caller binds these operations to an explicit HooksRuntime. No module-
+// owned routing lifetime exists here.
 
 import { type BucketAEvent } from "../../domain/components/hook-events.ts";
 import {
@@ -36,6 +31,7 @@ import { type AbsolutePluginRoot } from "../../domain/plugin-root.ts";
 import { type Scope } from "../../shared/types.ts";
 
 import { type IfPredicate } from "./if-field/index.ts";
+import { type HooksRuntime } from "./runtime.ts";
 
 /**
  * Flattened (event, group, handler) routing slot. The dispatch core walks
@@ -145,181 +141,37 @@ export interface PendingSessionStartContext {
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-// Module-state cells (D-59-02 / D-59-03)
-//
-// Every cell here is module-private and reached through the named accessors
-// below. `const` Maps have interior mutability, so exporting one would let
-// any importer write it without the declaring module having a say -- which
-// is how the read path for `routingTable` came to run through an accessor
-// in some call sites and the raw Map in others.
+// Runtime-bound operations
 // ──────────────────────────────────────────────────────────────────────────
 
-const parsedConfigCache = new Map<string, CacheEntry>();
-
-const routingTable = new Map<BucketAEvent, ReadonlyArray<RoutingEntry>>();
-
-let liveEpoch = 0;
-
-let pendingSessionStartContext: PendingSessionStartContext[] = [];
-
-/**
- * D-59-03: read-only accessor for the live epoch cell. Used by the
- * dispatch.ts composite handlers (which capture the value at
- * registerHooksBridge time and compare against `currentEpoch()` on every
- * event) and by tests that pin the no-op-on-mismatch contract.
- */
-export function currentEpoch(): number {
-  return liveEpoch;
+/** Routing behavior bound to one required hooks runtime. */
+export interface RoutingStateOperations {
+  readonly currentEpoch: () => number;
+  readonly bumpEpoch: () => number;
+  readonly appendPendingSessionStartContext: (entry: PendingSessionStartContext) => void;
+  readonly pendingSessionStartContextEntries: () => readonly PendingSessionStartContext[];
+  readonly clearPendingSessionStartContext: () => void;
+  readonly setParsedConfig: (key: string, entry: CacheEntry) => void;
+  readonly deleteParsedConfig: (key: string) => void;
+  readonly parsedConfigEntries: () => ReadonlyMap<string, CacheEntry>;
+  readonly getRoutingBucket: (event: BucketAEvent) => readonly RoutingEntry[];
+  readonly setRoutingBucket: (event: BucketAEvent, entries: readonly RoutingEntry[]) => void;
+  readonly routingTableEntries: () => ReadonlyMap<BucketAEvent, readonly RoutingEntry[]>;
 }
 
-/**
- * Increment the epoch and return the new value. A mutator rather than an
- * exported `let`: ESM imported bindings are read-only, so the cell can only
- * live in this leaf if its writes live here too. Called on every
- * `registerHooksBridge` entry, which captures the returned value as the
- * epoch its handler closures compare against.
- */
-export function bumpEpoch(): number {
-  liveEpoch += 1;
-  return liveEpoch;
-}
-
-/**
- * Return the epoch to its initial value. Exists for the same read-only
- * imported-binding reason as `bumpEpoch`; the test reset seam is its only
- * caller.
- */
-export function resetEpoch(): void {
-  liveEpoch = 0;
-}
-
-/**
- * Append a SessionStart hook's `additionalContext` payload to the pending
- * buffer. Called by `event-adapters.ts::adaptObservationResultForEvent`
- * when a SessionStart hook returns
- * `{hookSpecificOutput: {additionalContext: "..."}}`. The
- * `beforeAgentStartHandlerFor` closure drains the buffer on the next
- * `before_agent_start` event.
- *
- * Idempotent for noop append (empty string): empty strings are silently
- * skipped so a buggy hook returning `additionalContext: ""` does not
- * pollute the join output with a leading blank line. Provenance is still
- * required on the argument shape so the call site always carries
- * attribution -- the skipped-empty arm just discards both.
- */
-export function appendPendingSessionStartContext(entry: PendingSessionStartContext): void {
-  if (entry.context.length === 0) {
-    return;
-  }
-
-  pendingSessionStartContext.push(entry);
-}
-
-/**
- * Read-only view of the pending buffer. The buffer cell is reassigned on
- * clear, so importers cannot bind it directly and read it through this
- * accessor instead.
- */
-export function pendingSessionStartContextEntries(): ReadonlyArray<PendingSessionStartContext> {
-  return pendingSessionStartContext;
-}
-
-/**
- * Empty the pending buffer. Reassignment rather than in-place truncation is
- * why this is a named mutator: an importing module cannot write an imported
- * binding, so the drain path and the `/reload` hygiene path both call here.
- */
-export function clearPendingSessionStartContext(): void {
-  pendingSessionStartContext = [];
-}
-
-/**
- * D-59-02: upsert one plugin's parsed hooks config. Idempotent -- a replay
- * overwrites the existing entry rather than duplicating it.
- */
-export function setParsedConfig(key: string, entry: CacheEntry): void {
-  parsedConfigCache.set(key, entry);
-}
-
-/**
- * D-59-02: drop one plugin's parsed hooks config. Removing a missing key is
- * a no-op, which is what makes the uninstall and re-hydrate paths safe to
- * retry.
- */
-export function deleteParsedConfig(key: string): void {
-  parsedConfigCache.delete(key);
-}
-
-/**
- * Drop every parsed config. Paired with the two mutators above so the cache
- * has one write surface.
- */
-function clearParsedConfigCache(): void {
-  parsedConfigCache.clear();
-}
-
-/**
- * Read-only view of the parsed-config cache, for the rebuild walk (which
- * needs every value) and the phantom-entry sweep (which needs every key).
- */
-export function parsedConfigEntries(): ReadonlyMap<string, CacheEntry> {
-  return parsedConfigCache;
-}
-
-/**
- * Read one per-event routing bucket. Returns the bucket or an empty array;
- * never undefined. The `routingTable` cell is module-private, so every
- * consumer reaches a bucket through here.
- */
-export function getRoutingBucket(claudeEvent: BucketAEvent): ReadonlyArray<RoutingEntry> {
-  return routingTable.get(claudeEvent) ?? [];
-}
-
-/**
- * Replace one per-event routing bucket. Named mutator rather than a raw
- * exported Map: interior mutability would otherwise let any importer write
- * the cell, which is how the read side drifted onto two different paths
- * (accessor here, `routingTable.get` at the call site) before the cell was
- * made private.
- */
-export function setRoutingBucket(
-  claudeEvent: BucketAEvent,
-  entries: ReadonlyArray<RoutingEntry>,
-): void {
-  routingTable.set(claudeEvent, entries);
-}
-
-/**
- * Drop every bucket. Paired with `setRoutingBucket` so the rebuild path and
- * the test-reset path share one write surface.
- */
-function clearRoutingTable(): void {
-  routingTable.clear();
-}
-
-/**
- * Read-only view of the whole table, for callers that need the keyset rather
- * than one bucket. Mirrors `pendingSessionStartContextEntries` for the other
- * collection cell in this module.
- */
-export function routingTableEntries(): ReadonlyMap<BucketAEvent, ReadonlyArray<RoutingEntry>> {
-  return routingTable;
-}
-
-/**
- * Clear every cell this module owns: the epoch, the parsed-config cache, the
- * routing table and the pending SessionStart buffer.
- *
- * A public lifecycle operation rather than a test hole. This module is the one
- * place that knows the full cell inventory, so a caller that wants a clean
- * baseline should say so once here instead of composing four clears and
- * silently missing the fifth when one is added. Its only caller today is test
- * setup, which is what a reset is for; the four clears it composes are each
- * already public.
- */
-export function resetRoutingState(): void {
-  resetEpoch();
-  clearParsedConfigCache();
-  clearRoutingTable();
-  clearPendingSessionStartContext();
+/** Binds routing behavior to an explicitly supplied runtime lifetime. */
+export function createRoutingStateOperations(runtime: HooksRuntime): RoutingStateOperations {
+  return {
+    currentEpoch: runtime.currentGeneration,
+    bumpEpoch: runtime.advanceGeneration,
+    appendPendingSessionStartContext: runtime.appendPendingSessionStartContext,
+    pendingSessionStartContextEntries: runtime.pendingSessionStartContextEntries,
+    clearPendingSessionStartContext: runtime.preparePendingContextForRegistration,
+    setParsedConfig: runtime.setParsedConfig,
+    deleteParsedConfig: runtime.deleteParsedConfig,
+    parsedConfigEntries: runtime.parsedConfigEntries,
+    getRoutingBucket: runtime.getRoutingBucket,
+    setRoutingBucket: runtime.setRoutingBucket,
+    routingTableEntries: runtime.routingTableEntries,
+  };
 }

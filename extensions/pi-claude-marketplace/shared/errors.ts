@@ -63,6 +63,67 @@ function* causeChain(err: unknown): Generator {
   }
 }
 
+export type CleanupLifecycle = "prepare" | "abort" | "commit" | "rollback";
+export type CleanupArtifact = "skills" | "commands" | "agents" | "mcp";
+
+/** Immutable diagnostic for one terminal artifact-cleanup failure. */
+export interface CleanupFailure {
+  readonly phase: CleanupLifecycle;
+  readonly artifact: CleanupArtifact;
+  readonly path: string;
+  readonly cause: Error;
+}
+
+/**
+ * Secondary cleanup context wrapped around an unchanged operational failure.
+ * `cause` and `primary` both retain the original Error instance; cleanup facts
+ * stay structured until the cause-chain renderer formats them for display.
+ */
+export class CleanupContextError extends Error {
+  readonly primary: Error;
+  readonly cleanupFailures: readonly CleanupFailure[];
+
+  constructor(primary: Error, cleanupFailures: readonly CleanupFailure[]) {
+    super(primary.message, { cause: primary });
+    this.name = "CleanupContextError";
+    this.primary = primary;
+    this.cleanupFailures = Object.freeze(
+      cleanupFailures.map((failure) => Object.freeze({ ...failure })),
+    );
+  }
+}
+
+/** Preserve the primary error and append immutable cleanup facts when present. */
+export function errorWithCleanupFailures(
+  err: unknown,
+  cleanupFailures: readonly CleanupFailure[],
+): Error {
+  const normalized = err instanceof Error ? err : new Error(errorMessage(err));
+  if (cleanupFailures.length === 0) {
+    return normalized;
+  }
+
+  if (normalized instanceof CleanupContextError) {
+    return new CleanupContextError(normalized.primary, [
+      ...normalized.cleanupFailures,
+      ...cleanupFailures,
+    ]);
+  }
+
+  return new CleanupContextError(normalized, cleanupFailures);
+}
+
+/** Return the first structured cleanup collection in a bounded cause chain. */
+export function cleanupFailuresFromError(err: unknown): readonly CleanupFailure[] {
+  for (const link of causeChain(err)) {
+    if (link instanceof CleanupContextError) {
+      return link.cleanupFailures;
+    }
+  }
+
+  return Object.freeze([]);
+}
+
 /**
  * MSG-CC-1 (CMC-18): depth-5 Error.cause walker rendered as
  * `cause: <l1> -> <l2> -> ... [(truncated)]`. Returns `""` when `err` is
@@ -84,7 +145,7 @@ function* causeChain(err: unknown): Generator {
  *
  * NFR-9: surfaces only `Error.message` (or `String`/
  * `Object.prototype.toString` fallback for non-Error). No `.stack`, no
- * absolute paths. `shared/notify.ts` consumes this walker via
+ * absolute paths. `shared/notification-grammar.ts` consumes this walker via
  * `renderIndentedCauseChain` so the trailer lands automatically below every
  * failed / manual-recovery plugin row.
  *
@@ -111,6 +172,11 @@ export function causeChainTrailer(err: unknown): string {
 }
 
 function linkMessage(c: unknown): string {
+  if (c instanceof CleanupContextError) {
+    const details = c.cleanupFailures.map(renderCleanupFailure).join("; ");
+    return `${c.message} (cleanup: ${details})`;
+  }
+
   if (c instanceof Error) {
     return c.message;
   }
@@ -122,12 +188,18 @@ function linkMessage(c: unknown): string {
   return Object.prototype.toString.call(c);
 }
 
+function renderCleanupFailure(failure: CleanupFailure): string {
+  const basename = failure.path.replace(/^.*[\\/]/u, "");
+  const diagnostic = failure.cause.message.split(failure.path).join(basename);
+  return `${failure.phase} ${failure.artifact} ${basename}: ${diagnostic}`;
+}
+
 /**
  * Compose `errorMessage(err) [\n\n${causeChainTrailer(err)}]` for outcome
  * `notes` aggregated outside the notify path. The `notify` renderer trails
  * the cause chain automatically below the plugin row; this helper exists for
  * outcome-aggregation callsites (orchestrators/marketplace/update.ts,
- * orchestrators/plugin/reinstall.ts, orchestrators/plugin/update.ts) that
+ * orchestrators/plugin/reinstall-flow.ts, orchestrators/plugin/update-flow.ts) that
  * need the same text without going through the notify channel.
  *
  * Single canonical implementation here is the source of truth -- if the
@@ -288,13 +360,15 @@ export class CrossPluginConflictError extends Error {
 /**
  * PI-15 concurrent install detected at the state-guard save boundary.
  *
- * Thrown inside the `withStateGuard` closure of
- * orchestrators/plugin/install.ts when a re-read of state shows the plugin
- * record already exists (another process beat us to the commit). The outer
+ * Thrown by the guard-free ledger in `orchestrators/plugin/install-outcome.ts` when a
+ * re-read of state shows the plugin record already exists (another process
+ * beat us to the commit). The install-flow transaction owner supplies the
+ * state guard. The outer
  * `runPhases` result unwinds the staged resources via the ledger's
  * `undo` chain; `formatRollbackError` returns the structured rollback
  * result and the orchestrator composes the final user message via the
- * `notify(ctx, NotificationMessage)` path (`shared/notify.ts`).
+ * `notifyWithContext` path (`shared/notify-context.ts`), whose dispatch tail is
+ * `shared/notification-dispatch.ts`.
  */
 export class ConcurrentInstallError extends Error {
   readonly plugin: string;
@@ -326,6 +400,84 @@ export class ConcurrentUninstallError extends Error {
 }
 
 /**
+ * Stable producer fact for state that changes between update preflight and
+ * its guarded intent/finalize writes. Consumers narrow on `kind`; the message
+ * remains diagnostic text only.
+ */
+export type PluginUpdateConcurrencyKind =
+  "marketplace-removed" | "plugin-uninstalled" | "plugin-updated";
+
+export class PluginUpdateConcurrencyError extends Error {
+  readonly kind: PluginUpdateConcurrencyKind;
+  readonly plugin: string;
+  readonly marketplace: string;
+  readonly lifecycle: "intent" | "finalize";
+  readonly expectedVersion?: string;
+  readonly actualVersion?: string;
+
+  constructor(
+    kind: PluginUpdateConcurrencyKind,
+    plugin: string,
+    marketplace: string,
+    options: {
+      readonly lifecycle?: "intent" | "finalize";
+      readonly expectedVersion?: string;
+      readonly actualVersion?: string;
+    } = {},
+  ) {
+    const lifecycle = options.lifecycle ?? "intent";
+    super(
+      pluginUpdateConcurrencyMessage({
+        kind,
+        plugin,
+        marketplace,
+        lifecycle,
+        ...(options.expectedVersion !== undefined && {
+          expectedVersion: options.expectedVersion,
+        }),
+        ...(options.actualVersion !== undefined && { actualVersion: options.actualVersion }),
+      }),
+    );
+    this.name = "PluginUpdateConcurrencyError";
+    this.kind = kind;
+    this.plugin = plugin;
+    this.marketplace = marketplace;
+    this.lifecycle = lifecycle;
+    if (options.expectedVersion !== undefined) {
+      this.expectedVersion = options.expectedVersion;
+    }
+
+    if (options.actualVersion !== undefined) {
+      this.actualVersion = options.actualVersion;
+    }
+  }
+}
+
+function pluginUpdateConcurrencyMessage(args: {
+  readonly kind: PluginUpdateConcurrencyKind;
+  readonly plugin: string;
+  readonly marketplace: string;
+  readonly lifecycle: "intent" | "finalize";
+  readonly expectedVersion?: string;
+  readonly actualVersion?: string;
+}): string {
+  switch (args.kind) {
+    case "marketplace-removed":
+      return `Marketplace "${args.marketplace}" disappeared from state during ${
+        args.lifecycle === "finalize" ? "finalize" : "update"
+      } of "${args.plugin}".`;
+    case "plugin-uninstalled":
+      return `Plugin "${args.plugin}" was concurrently uninstalled${
+        args.lifecycle === "finalize" ? " during finalize" : ""
+      }.`;
+    case "plugin-updated":
+      return `Plugin "${args.plugin}" was concurrently updated; expected version "${
+        args.expectedVersion ?? "unknown"
+      }", found "${args.actualVersion ?? "unknown"}".`;
+  }
+}
+
+/**
  * D-08 fail-fast cross-process state lock contention.
  *
  * Thrown by `transaction/with-state-guard.ts` before loading state when
@@ -348,7 +500,7 @@ export class StateLockHeldError extends Error {
 /**
  * PUP-6 aggregate phase-3 failure for plugin update.
  *
- * Wraps the heterogeneous-undo phase-3a failures from update.ts's
+ * Wraps the heterogeneous-undo phase-3a failures from update-swap.ts's
  * hand-rolled 3-phase sequence. `failures` carries one entry per bridge
  * (`skills` | `commands` | `agents` | `mcp`) whose `commit*` threw. The
  * constructor's `message` argument typically embeds the
@@ -360,6 +512,7 @@ export interface Phase3Failure {
   readonly phase: "skills" | "commands" | "agents" | "hooks" | "mcp";
   readonly msg: string;
   readonly cause: unknown;
+  readonly cleanupFailures?: readonly CleanupFailure[];
 }
 
 export class PluginUpdatePhase3Error extends Error {
@@ -379,11 +532,11 @@ export class PluginUpdatePhase3Error extends Error {
  * when a rollback of a partially-completed `replace*Internal` swap
  * leaks files / directories the caller must clean up by hand. The
  * manual-recovery anchor is NOT embedded in `.message` -- per
- * MSG-MR-1 / MSG-MR-2 the manual-recovery row is composed at the notify
- * boundary in `shared/notify.ts`. Bridges produce STRUCTURED data
- * (`.leaks`); the orchestrator (`orchestrators/plugin/reinstall.ts` reason
+ * MSG-MR-1 / MSG-MR-2 the manual-recovery row is composed by
+ * `shared/notification-grammar.ts` before dispatch. Bridges produce STRUCTURED data
+ * (`.leaks`); the orchestrator (`orchestrators/plugin/reinstall-flow.ts` reason
  * narrowing and the cascade-row mapper) type-checks the Error instead of
- * substring-matching the message text. `shared/notify.ts` reads `.leaks`
+ * substring-matching the message text. `shared/notification-grammar.ts` reads `.leaks`
  * directly to name the leaked paths on the rendered row (AS-7).
  *
  * `Error.cause` is set via the standard `ErrorOptions` bag (mirrors the
@@ -482,7 +635,7 @@ export function manualRecoveryLeaks(err: unknown): readonly string[] {
  *                                with `op = "install"`
  *   - `"no-longer-installable"` -- PR-6, thrown from `requireInstallable`
  *                                with `op = "update"`
- * The downstream consumer is `classifyEntityShapeError` (install.ts).
+ * The downstream consumer is `classifyEntityShapeError` (install-flow.ts).
  *
  * The constructor is the SINGLE SOURCE OF TRUTH for the `.message` text. The
  * exact byte-equal forms (preserved so existing
@@ -498,7 +651,7 @@ export function manualRecoveryLeaks(err: unknown): readonly string[] {
  * strings (`"contains hooks"`, `"source dir does not exist"`,
  * `"declares dependencies that must be installed manually"`, etc.) -- the
  * closed `Reason` set lives one layer up at the renderer boundary. The
- * `classifyEntityShapeError` consumer in `orchestrators/plugin/install.ts`
+ * `classifyEntityShapeError` consumer in `orchestrators/plugin/install-flow.ts`
  * narrows these strings to closed-set `Reason` members. Carrying the raw
  * strings here preserves byte-equal `.message` text (the resolver's notes
  * are joined verbatim) and removes the regex re-parse path entirely.
