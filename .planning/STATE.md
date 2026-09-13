@@ -1237,25 +1237,37 @@ corrected here so no later reader inherits them.
    turned out to have.
 2. **The handoff's "8 call sites" for `maybeBackfillPlugin` was wrong.** All four functions are
    module-private with exactly ONE caller each; six of the eight were doc-comment mentions.
-3. **`S3863` cannot be excluded from `sonar-project.properties` at all**, and none of the three
-   hypotheses the handoff listed is the reason. Measured on CI run `34733874521`: the scanner
-   names the properties file as the project root configuration file and echoes `sonar.exclusions`
-   and `sonar.cpd.exclusions` from it back into the log, the analysis ran on `eaf3e9b6` (so the
-   unchanged count is fresh, not a stale snapshot), and yet **no log line mentions the issue
-   exclusion at all** across 7970 lines. Server settings carry no `sonar.issue.ignore.*` value and
-   `sonar.autoscan.enabled` is `false`. The scanner reads the file and drops `sonar.issue.ignore.*`
-   silently. Note the trap: a wrong `resourceKey` would still have produced an
-   "Ignoring issues on multiple criteria"-class line with zero matches, so the handoff's first
-   hypothesis — that the pattern should be `**/*.ts` — is not what the evidence points at, and
-   retrying it is wasted effort.
+3. **`S3863` did not get excluded, and the first diagnosis of why was wrong.** Measured on CI run
+   `34733874521`: the exclusion was committed in `eaf3e9b6`, the analysis ran on that commit, and
+   the count stayed at 34. The reading recorded at the time — that SonarCloud silently drops
+   `sonar.issue.ignore.*` from the properties file — **does not hold.** That restriction applies to
+   SonarCloud *automatic analysis*, which wants `.sonarcloud.properties` and forbids wildcards;
+   `sonar.autoscan.enabled` is `false` here, so this is CI-based analysis, where
+   `sonar-project.properties` is the supported route and wildcards are allowed. The supporting
+   argument was also unsound: it inferred from the absence of any issue-exclusion log line that the
+   property was dropped, without ever establishing that the scanner logs issue exclusions at all.
 
-**One operator action remains, and only the operator can take it.** By decision D1 the exclusion
-block stays committed and the 17 files' imports are untouched — merging each value + `import type`
-pair into one statement with inline `type` specifiers would satisfy S3863 but break the documented
-convention that type-only imports are grouped last. To actually activate the exclusion, set it in
-the SonarCloud UI under **Administration > General Settings > Analysis Scope**. Until then S3863
-reads **34, which is the expected reading, not a regression**. `sonar-project.properties` now says
-all of this in the comment above the block.
+   The live hypothesis is now the `resourceKey` pattern — the one the handoff named first and the
+   bad diagnosis talked us out of. `sonar.sources` is `extensions/pi-claude-marketplace`, so the
+   matcher may resolve paths relative to the source root, where
+   `extensions/pi-claude-marketplace/**/*.ts` matches nothing. `e945ba66` broadens it to `**/*.ts`,
+   which matches under either reading. **Unproven until CI re-analyses** — this needs a push, and
+   the finding count is the proof.
+
+By decision D1 the 17 files' imports stay untouched — merging each value + `import type` pair into
+one statement with inline `type` specifiers would satisfy S3863 but break the documented convention
+that type-only imports are grouped last.
+
+**Next check after the next push:** if S3863 still reads 34 with the `**/*.ts` pattern, the pattern
+is not the cause and the remaining route is the SonarCloud UI, under
+**Administration > General Settings > Analysis Scope**. Read it with:
+
+```
+curl -s "https://sonarcloud.io/api/issues/search?componentKeys=acolomba_pi-claude-marketplace&pullRequest=181&rules=typescript:S3863" | head -c 200
+```
+
+`sonar-project.properties` deliberately carries only the six-line *why*, not this diagnosis — the
+status belongs here, where it gets revisited, not in a config comment that would go stale in place.
 
 **Read beside it:** `.planning/phases/09-final-quality-and-backlog-closure/09-CLOSURE-LEDGER.md`
 (24 rows, one vocabulary, the milestone's audit trail), `09-REVIEW.md` + `09-REVIEW-FIX.md`,
