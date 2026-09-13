@@ -3762,9 +3762,9 @@ test("standalone enable exposes ordered rollback partials and retries without du
       hooks: ["foo"],
       mcpServers: ["server"],
       prompts: [],
-      skills: ["foo-s1"],
+      skills: ["foo:s1"],
     });
-    assert.deepStrictEqual(await readdir(locations.skillsTargetDir), ["foo-s1"]);
+    assert.deepStrictEqual(await readdir(locations.skillsTargetDir), ["foo:s1"]);
     assert.deepStrictEqual(
       runtime.getRoutingBucket("PreToolUse").map((entry) => entry.handlerDecl.command),
       ["echo hook"],
@@ -3884,7 +3884,7 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable of a BASE-declared plugi
     assert.deepStrictEqual(afterEnable, {
       enabled: true,
       merged: { declaredEnabled: true, source: "base" },
-      skills: ["foo-s1"],
+      skills: ["foo:s1"],
       version: "1.0.0",
     });
     assert.deepStrictEqual(declaringConfig, {
@@ -3897,7 +3897,7 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable of a BASE-declared plugi
     assert.deepStrictEqual(afterUpdate, {
       enabled: true,
       merged: { declaredEnabled: true, source: "base" },
-      skills: ["foo-s1"],
+      skills: ["foo:s1"],
       version: "2.0.0",
     });
     assert.deepStrictEqual(afterReinstall, afterUpdate);
@@ -4023,7 +4023,7 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable of a LOCALLY-declared pl
     assert.deepStrictEqual(afterEnable, {
       enabled: true,
       merged: { declaredEnabled: true, source: "local" },
-      skills: ["foo-s1"],
+      skills: ["foo:s1"],
       version: "1.0.0",
     });
     assert.deepStrictEqual(declaringConfig, {
@@ -4041,7 +4041,7 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable of a LOCALLY-declared pl
     assert.deepStrictEqual(afterUpdate, {
       enabled: true,
       merged: { declaredEnabled: true, source: "local" },
-      skills: ["foo-s1"],
+      skills: ["foo:s1"],
       version: "2.0.0",
     });
     assert.deepStrictEqual(

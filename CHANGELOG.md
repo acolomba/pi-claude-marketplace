@@ -12,6 +12,7 @@
 - Uninstall, update, and marketplace failures are classified by type rather than by matching words in an error message, so a reworded message no longer changes which failure you get told about.
 - Notifications now say "1 plugin" or "3 plugins" based on the command you ran, not on how many results came back. A bulk command that matched nothing now reports zero instead of falling silent.
 - A discovery failure in one scope no longer discards work already completed in another. `/reload` recovers through the same callback.
+- Plugin skills now install as `<plugin>:<skill>` (`<plugin>.<skill>` on Windows), matching Claude Code. The old hyphen name broke skill references written as `plugin:skill` in plugin instructions and agent preloads. Thanks to @rakesh-vs (#180).
 
 ## [0.18.3] - 2026-09-08
 

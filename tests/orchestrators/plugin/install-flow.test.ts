@@ -945,9 +945,9 @@ test("PI-6: generated skill name collides with another plugin's existing skill -
     const cwd = await mkdtemp(path.join(tmpdir(), "install-pi6-"));
     try {
       // The plugin we're installing is "hello"; its skill is "shared-tool"
-      // which the generator maps to "hello-shared-tool".
+      // which the generator maps to "hello:shared-tool".
       // We seed a prior plugin "world" that already owns the same name
-      // "hello-shared-tool" -> conflict.
+      // "hello:shared-tool" -> conflict.
       await seedPathMarketplaceWithPlugin({
         cwd,
         marketplaceRoot: path.join(cwd, "mp-src"),
@@ -957,7 +957,7 @@ test("PI-6: generated skill name collides with another plugin's existing skill -
         conflictingPriorPlugin: {
           marketplace: "other-mp",
           plugin: "world",
-          skillName: "hello-shared-tool",
+          skillName: "hello:shared-tool",
         },
       });
 
@@ -976,7 +976,7 @@ test("PI-6: generated skill name collides with another plugin's existing skill -
       assert.match(notifications[0]?.message ?? "", /Cross-plugin name conflict/);
       assert.match(
         notifications[0]?.message ?? "",
-        /hello-shared-tool/,
+        /hello:shared-tool/,
         "must name the colliding skill",
       );
     } finally {
@@ -1312,14 +1312,14 @@ for (const site of DFEN_DECLARATION_SITES) {
         // ENBL-18: the record keeps its inventory. It describes WHAT the plugin
         // contains, which stays true while the plugin is disabled; emptiness is
         // never the disabled marker.
-        assert.deepEqual([...record.resources.skills], ["hello-tool"]);
+        assert.deepEqual([...record.resources.skills], ["hello:tool"]);
         assert.deepEqual([...record.resources.prompts], ["hello:deploy"]);
 
         // ...and nothing the record names is on disk. Asserting the inventory
         // without this would pass on a state-phase-only implementation that
         // never materialized, which is a different (and rejected) outcome.
         await assert.rejects(
-          stat(path.join(locations.skillsTargetDir, "hello-tool")),
+          stat(path.join(locations.skillsTargetDir, "hello:tool")),
           "the staged skill directory must be gone",
         );
         await assert.rejects(
@@ -1838,7 +1838,7 @@ for (const precedence of DFEN_PRECEDENCE_CASES) {
         assert.ok(record !== undefined);
         assert.equal(record.enabled, precedence.expectRecordEnabled);
 
-        const skillDir = path.join(locations.skillsTargetDir, "hello-tool");
+        const skillDir = path.join(locations.skillsTargetDir, "hello:tool");
         if (precedence.expectArtifacts) {
           assert.ok((await stat(skillDir)).isDirectory(), "the staged skill must be on disk");
         } else {
@@ -2315,7 +2315,7 @@ test("D-102-03: an install that does not opt in ignores defaultEnabled and lands
 
       // The artifacts survive: nothing disabled them on the way out.
       assert.ok(
-        (await stat(path.join(locations.skillsTargetDir, "hello-tool"))).isDirectory(),
+        (await stat(path.join(locations.skillsTargetDir, "hello:tool"))).isDirectory(),
         "the staged skill must be on disk",
       );
       assert.ok(
@@ -2561,7 +2561,7 @@ test("D-102-02 / NFR-3: a disable cascade that throws reports failure and leaves
       assert.deepEqual([...record.resources.prompts], []);
       assert.deepEqual([...record.resources.mcpServers], ["server1"]);
       await assert.rejects(
-        stat(path.join(locations.skillsTargetDir, "hello-tool")),
+        stat(path.join(locations.skillsTargetDir, "hello:tool")),
         "the skills bridge ran, so its artifact must be gone",
       );
       await assert.rejects(
@@ -2640,7 +2640,7 @@ test("PI-9: happy-path install lands skills + commands + agents + mcp + state in
       });
 
       // End-state: every bridge's target file exists.
-      const skillTarget = path.join(locations.skillsTargetDir, "hello-tool", "SKILL.md");
+      const skillTarget = path.join(locations.skillsTargetDir, "hello:tool", "SKILL.md");
       assert.ok((await readFile(skillTarget, "utf8")).length > 0, "skill SKILL.md must exist");
 
       const commandTarget = path.join(locations.promptsTargetDir, "hello:deploy.md");
@@ -2659,7 +2659,7 @@ test("PI-9: happy-path install lands skills + commands + agents + mcp + state in
       const after = await loadState(locations.extensionRoot);
       const record = after.marketplaces["mp"]?.plugins["hello"];
       assert.ok(record !== undefined);
-      assert.deepEqual([...record.resources.skills], ["hello-tool"]);
+      assert.deepEqual([...record.resources.skills], ["hello:tool"]);
       assert.deepEqual([...record.resources.prompts], ["hello:deploy"]);
       assert.deepEqual([...record.resources.agents], [`${GENERATED_AGENT_PREFIX}hello-bot`]);
       assert.deepEqual([...record.resources.mcpServers], ["server1"]);
@@ -2725,7 +2725,7 @@ test("PI-10: staged skill body has ${CLAUDE_PLUGIN_ROOT} replaced with absolute 
       assert.equal(errs.length, 0, `unexpected errors: ${JSON.stringify(errs)}`);
 
       const skillBody = await readFile(
-        path.join(locations.skillsTargetDir, "hello-tool", "SKILL.md"),
+        path.join(locations.skillsTargetDir, "hello:tool", "SKILL.md"),
         "utf8",
       );
 
@@ -3017,7 +3017,7 @@ test("PI-14: PathContainmentError from a bridge prepare propagates verbatim with
       // refused via SymlinkRefusedError (subclass of PathContainmentError).
       await mkdir(locations.skillsTargetDir, { recursive: true });
       // Target of the symlink doesn't have to exist; readlink will report it.
-      await symlink("/tmp/decoy", path.join(locations.skillsTargetDir, "hello-tool"));
+      await symlink("/tmp/decoy", path.join(locations.skillsTargetDir, "hello:tool"));
 
       const { ctx, pi, notifications } = makeCtx();
       await installPlugin({
@@ -3544,7 +3544,7 @@ test("Rollback-skills-undo: skills committed then commands phase fails -> skill 
       assert.equal(notifications[0]?.severity, "error");
 
       // Skills undo: the committed skill dir must have been removed.
-      const skillTarget = path.join(locations.skillsTargetDir, "hello-tool");
+      const skillTarget = path.join(locations.skillsTargetDir, "hello:tool");
       const { stat } = await import("node:fs/promises");
       let exists = true;
       try {
@@ -3910,8 +3910,8 @@ test("retry proof: install: completion-cache maintenance failure stays installed
         "pi-claude-marketplace/data/mp/hello/",
         "pi-claude-marketplace/resources/",
         "pi-claude-marketplace/resources/skills/",
-        "pi-claude-marketplace/resources/skills/hello-tool/",
-        "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+        "pi-claude-marketplace/resources/skills/hello:tool/",
+        "pi-claude-marketplace/resources/skills/hello:tool/SKILL.md",
         "pi-claude-marketplace/skills-staging/",
         "pi-claude-marketplace/state.json",
       ]);
@@ -3919,7 +3919,7 @@ test("retry proof: install: completion-cache maintenance failure stays installed
       assert.strictEqual(firstStateBytes, await readFile(locations.stateJsonPath, "utf8"));
       assert.deepStrictEqual(
         (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.hello?.resources,
-        { agents: [], hooks: [], mcpServers: [], prompts: [], skills: ["hello-tool"] },
+        { agents: [], hooks: [], mcpServers: [], prompts: [], skills: ["hello:tool"] },
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -3978,7 +3978,7 @@ test("install keeps a completion-cache maintenance failure silent in standalone 
       ]);
       assert.deepStrictEqual(
         (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.hello?.resources,
-        { agents: [], hooks: [], mcpServers: [], prompts: [], skills: ["hello-tool"] },
+        { agents: [], hooks: [], mcpServers: [], prompts: [], skills: ["hello:tool"] },
       );
       assert.deepStrictEqual(hooksRuntime.getRoutingBucket("PreToolUse"), []);
       assert.deepStrictEqual(await retryTree(locations.scopeRoot), [
@@ -3989,8 +3989,8 @@ test("install keeps a completion-cache maintenance failure silent in standalone 
         "pi-claude-marketplace/data/mp/hello/",
         "pi-claude-marketplace/resources/",
         "pi-claude-marketplace/resources/skills/",
-        "pi-claude-marketplace/resources/skills/hello-tool/",
-        "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+        "pi-claude-marketplace/resources/skills/hello:tool/",
+        "pi-claude-marketplace/resources/skills/hello:tool/SKILL.md",
         "pi-claude-marketplace/skills-staging/",
         "pi-claude-marketplace/state.json",
       ]);
@@ -4072,8 +4072,8 @@ test("retry proof: install: plugin-data-dir maintenance failure stays installed 
         "pi-claude-marketplace/data/mp/",
         "pi-claude-marketplace/resources/",
         "pi-claude-marketplace/resources/skills/",
-        "pi-claude-marketplace/resources/skills/hello-tool/",
-        "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+        "pi-claude-marketplace/resources/skills/hello:tool/",
+        "pi-claude-marketplace/resources/skills/hello:tool/SKILL.md",
         "pi-claude-marketplace/skills-staging/",
         "pi-claude-marketplace/state.json",
       ]);
@@ -5464,7 +5464,7 @@ test("FORCE-01: force on an unsupported plugin installs the supported components
       assert.equal(errs.length, 0, `unexpected errors: ${JSON.stringify(errs)}`);
 
       // The supported skill materialized on disk.
-      const skillTarget = path.join(locations.skillsTargetDir, "p1-tool", "SKILL.md");
+      const skillTarget = path.join(locations.skillsTargetDir, "p1:tool", "SKILL.md");
       assert.ok(
         (await readFile(skillTarget, "utf8")).length > 0,
         "supported skill must materialize",
@@ -5475,7 +5475,7 @@ test("FORCE-01: force on an unsupported plugin installs the supported components
       const after = await loadState(locations.extensionRoot);
       const record = after.marketplaces["mp"]?.plugins["p1"];
       assert.ok(record !== undefined, "state record must be written on partial degrade");
-      assert.deepEqual([...record.resources.skills], ["p1-tool"]);
+      assert.deepEqual([...record.resources.skills], ["p1:tool"]);
       assert.ok(
         record.compatibility.unsupported.includes("themes"),
         `unsupported should include themes: ${record.compatibility.unsupported.join(" / ")}`,
@@ -5520,7 +5520,7 @@ test("FORCE-01: force on a fully-supported plugin is inert and installs as (inst
       const after = await loadState(locations.extensionRoot);
       const record = after.marketplaces["mp"]?.plugins["p1"];
       assert.ok(record !== undefined, "fully-supported plugin installs under force");
-      assert.deepEqual([...record.resources.skills], ["p1-tool"]);
+      assert.deepEqual([...record.resources.skills], ["p1:tool"]);
       // Inert: no unsupported kinds, identical to a plain install.
       assert.deepEqual([...record.compatibility.unsupported], []);
 
@@ -6715,7 +6715,7 @@ test("SUB-02: project-scope install substitutes ${CLAUDE_PROJECT_DIR} to the ins
       assert.equal(errs.length, 0, `unexpected errors: ${JSON.stringify(errs)}`);
 
       const skillBody = await readFile(
-        path.join(locations.skillsTargetDir, "hello-tool", "SKILL.md"),
+        path.join(locations.skillsTargetDir, "hello:tool", "SKILL.md"),
         "utf8",
       );
       assert.ok(
@@ -6794,7 +6794,7 @@ test("SUB-02: user-scope install keeps ${CLAUDE_PROJECT_DIR} literal in skill, c
       assert.equal(errs.length, 0, `unexpected errors: ${JSON.stringify(errs)}`);
 
       const skillBody = await readFile(
-        path.join(locations.skillsTargetDir, "hello-tool", "SKILL.md"),
+        path.join(locations.skillsTargetDir, "hello:tool", "SKILL.md"),
         "utf8",
       );
       assert.ok(
@@ -6871,7 +6871,7 @@ test("PI-15: an mcp phase that cannot run unwinds the hooks bridge and leaves no
         "the hooks config the hooks phase wrote must be removed by its undo",
       );
       assert.equal(
-        await survives(path.join(locations.skillsTargetDir, "hello-tool")),
+        await survives(path.join(locations.skillsTargetDir, "hello:tool")),
         false,
         "the skills the first phase staged must not survive the failure",
       );
@@ -7645,8 +7645,8 @@ test("install cleans up each bridge staging root inside its own phase and a repe
         "pi-claude-marketplace/resources/prompts/",
         "pi-claude-marketplace/resources/prompts/complete:deploy.md",
         "pi-claude-marketplace/resources/skills/",
-        "pi-claude-marketplace/resources/skills/complete-audit/",
-        "pi-claude-marketplace/resources/skills/complete-audit/SKILL.md",
+        "pi-claude-marketplace/resources/skills/complete:audit/",
+        "pi-claude-marketplace/resources/skills/complete:audit/SKILL.md",
         "pi-claude-marketplace/skills-staging/",
         "pi-claude-marketplace/state.json",
       ]);
@@ -7657,7 +7657,7 @@ test("install cleans up each bridge staging root inside its own phase and a repe
           hooks: [],
           mcpServers: [],
           prompts: ["complete:deploy"],
-          skills: ["complete-audit"],
+          skills: ["complete:audit"],
         },
       );
     } finally {
@@ -8284,7 +8284,7 @@ test("retry proof: install: commands prepare failure after a committed skill con
           commandTarget: path.join(locations.promptsTargetDir, "retryable:deploy.md"),
           agentsStagingDir: locations.agentsStagingDir,
           skillsStagingDir: locations.skillsStagingDir,
-          skillTarget: path.join(locations.skillsTargetDir, "retryable-audit"),
+          skillTarget: path.join(locations.skillsTargetDir, "retryable:audit"),
         },
         activeSchedule,
       );
@@ -8351,7 +8351,7 @@ test("retry proof: install: commands prepare failure after a committed skill con
           hooks: [],
           mcpServers: [],
           prompts: ["retryable:deploy"],
-          skills: ["retryable-audit"],
+          skills: ["retryable:audit"],
         },
       );
       assert.deepStrictEqual(firstTree, [
@@ -8377,8 +8377,8 @@ test("retry proof: install: commands prepare failure after a committed skill con
         "pi-claude-marketplace/resources/prompts/",
         "pi-claude-marketplace/resources/prompts/retryable:deploy.md",
         "pi-claude-marketplace/resources/skills/",
-        "pi-claude-marketplace/resources/skills/retryable-audit/",
-        "pi-claude-marketplace/resources/skills/retryable-audit/SKILL.md",
+        "pi-claude-marketplace/resources/skills/retryable:audit/",
+        "pi-claude-marketplace/resources/skills/retryable:audit/SKILL.md",
         "pi-claude-marketplace/skills-staging/",
         "pi-claude-marketplace/state.json",
       ]);
@@ -8416,7 +8416,7 @@ test("retry proof: install: skills prepare failure with no committed phases conv
           agentsStagingDir: locations.agentsStagingDir,
           commandsStagingDir: locations.commandsStagingDir,
           skillsStagingDir: locations.skillsStagingDir,
-          skillTarget: path.join(locations.skillsTargetDir, "retryable-audit"),
+          skillTarget: path.join(locations.skillsTargetDir, "retryable:audit"),
         },
         activeSchedule,
       );
@@ -8476,14 +8476,14 @@ test("retry proof: install: skills prepare failure with no committed phases conv
         "pi-claude-marketplace/data/mp/retryable/",
         "pi-claude-marketplace/resources/",
         "pi-claude-marketplace/resources/skills/",
-        "pi-claude-marketplace/resources/skills/retryable-audit/",
-        "pi-claude-marketplace/resources/skills/retryable-audit/SKILL.md",
+        "pi-claude-marketplace/resources/skills/retryable:audit/",
+        "pi-claude-marketplace/resources/skills/retryable:audit/SKILL.md",
         "pi-claude-marketplace/skills-staging/",
         "pi-claude-marketplace/state.json",
       ]);
       assert.deepStrictEqual(
         (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.retryable?.resources,
-        { agents: [], hooks: [], mcpServers: [], prompts: [], skills: ["retryable-audit"] },
+        { agents: [], hooks: [], mcpServers: [], prompts: [], skills: ["retryable:audit"] },
       );
     } finally {
       restoreSchedule?.();
@@ -8530,7 +8530,7 @@ test("retry proof: install: agents prepare failure after committed commands unwi
           commandsStagingDir: locations.commandsStagingDir,
           commandTarget: path.join(locations.promptsTargetDir, "retryable:deploy.md"),
           skillsStagingDir: locations.skillsStagingDir,
-          skillTarget: path.join(locations.skillsTargetDir, "retryable-audit"),
+          skillTarget: path.join(locations.skillsTargetDir, "retryable:audit"),
         },
         activeSchedule,
       );
@@ -8610,11 +8610,11 @@ test("retry proof: install: agents prepare failure after committed commands unwi
           hooks: [],
           mcpServers: [],
           prompts: ["retryable:deploy"],
-          skills: ["retryable-audit"],
+          skills: ["retryable:audit"],
         },
       );
       const finalTree = await retryTree(locations.scopeRoot);
-      assert.strictEqual(finalTree.filter((entry) => entry.includes("retryable-audit")).length, 2);
+      assert.strictEqual(finalTree.filter((entry) => entry.includes("retryable:audit")).length, 2);
       assert.strictEqual(finalTree.filter((entry) => entry.includes("retryable:deploy")).length, 1);
       assert.strictEqual(
         finalTree.filter((entry) => entry.includes("retryable-reviewer")).length,
@@ -8673,7 +8673,7 @@ test("retry proof: install: hooks reparse failure after three bridges retries wi
           commandsStagingDir: locations.commandsStagingDir,
           commandTarget: path.join(locations.promptsTargetDir, "retryable:deploy.md"),
           skillsStagingDir: locations.skillsStagingDir,
-          skillTarget: path.join(locations.skillsTargetDir, "retryable-audit"),
+          skillTarget: path.join(locations.skillsTargetDir, "retryable:audit"),
           beforePhase: async (phase) => {
             if (phase === "hooks") {
               activeSchedule.current.push("prepare:hooks");
@@ -8767,7 +8767,7 @@ test("retry proof: install: hooks reparse failure after three bridges retries wi
         hooks: ["retryable"],
         mcpServers: [],
         prompts: ["retryable:deploy"],
-        skills: ["retryable-audit"],
+        skills: ["retryable:audit"],
       });
       assert.deepStrictEqual(record?.hookEntries, [{ event: "PreToolUse", matcher: "" }]);
       const finalTree = await retryTree(locations.scopeRoot);
@@ -8837,7 +8837,7 @@ test("retry proof: install: MCP prepare failure after hooks compensates every co
           commandsStagingDir: locations.commandsStagingDir,
           commandTarget: path.join(locations.promptsTargetDir, "retryable:deploy.md"),
           skillsStagingDir: locations.skillsStagingDir,
-          skillTarget: path.join(locations.skillsTargetDir, "retryable-audit"),
+          skillTarget: path.join(locations.skillsTargetDir, "retryable:audit"),
         },
         activeSchedule,
       );
@@ -8904,7 +8904,7 @@ test("retry proof: install: MCP prepare failure after hooks compensates every co
         false,
       );
       assert.strictEqual(
-        firstTree.some((entry) => entry.includes("retryable-audit/SKILL.md")),
+        firstTree.some((entry) => entry.includes("retryable:audit/SKILL.md")),
         false,
       );
       assert.deepStrictEqual(
@@ -8914,7 +8914,7 @@ test("retry proof: install: MCP prepare failure after hooks compensates every co
           hooks: ["retryable"],
           mcpServers: ["server"],
           prompts: ["retryable:deploy"],
-          skills: ["retryable-audit"],
+          skills: ["retryable:audit"],
         },
       );
       const finalTree = await retryTree(locations.scopeRoot);
@@ -8949,7 +8949,7 @@ test("retry proof: install: non-containment undo failure reports ordered rollbac
       const manifestBytes = await readFile(manifestPath, "utf8");
       await mkdir(path.dirname(locations.commandsStagingDir), { recursive: true });
       await writeFile(locations.commandsStagingDir, "fault: commands staging is not a directory");
-      const skillTarget = path.join(locations.skillsTargetDir, "retryable-audit");
+      const skillTarget = path.join(locations.skillsTargetDir, "retryable:audit");
       const undoFault = { enabled: true, message: "skill undo denied", target: skillTarget };
       const firstSchedule: string[] = [];
       const secondSchedule: string[] = [];
@@ -9038,7 +9038,7 @@ test("retry proof: install: non-containment undo failure reports ordered rollbac
         "commit:commands",
       ]);
       assert.strictEqual(
-        firstTree.includes("pi-claude-marketplace/resources/skills/retryable-audit/SKILL.md"),
+        firstTree.includes("pi-claude-marketplace/resources/skills/retryable:audit/SKILL.md"),
         true,
       );
       assert.deepStrictEqual(
@@ -9048,12 +9048,12 @@ test("retry proof: install: non-containment undo failure reports ordered rollbac
           hooks: [],
           mcpServers: [],
           prompts: ["retryable:deploy"],
-          skills: ["retryable-audit"],
+          skills: ["retryable:audit"],
         },
       );
       const finalTree = await retryTree(locations.scopeRoot);
       assert.strictEqual(
-        finalTree.filter((entry) => entry.endsWith("retryable-audit/SKILL.md")).length,
+        finalTree.filter((entry) => entry.endsWith("retryable:audit/SKILL.md")).length,
         1,
       );
       assert.strictEqual(
@@ -9083,7 +9083,7 @@ test("retry proof: install: containment failure preserves the refused residue an
       });
       const stateBytes = await readFile(locations.stateJsonPath, "utf8");
       const manifestBytes = await readFile(manifestPath, "utf8");
-      const skillTarget = path.join(locations.skillsTargetDir, "retryable-audit");
+      const skillTarget = path.join(locations.skillsTargetDir, "retryable:audit");
       await mkdir(locations.skillsTargetDir, { recursive: true });
       await symlink("/tmp/retry-proof-decoy", skillTarget);
       const expectedRefusal =
@@ -9163,13 +9163,13 @@ test("retry proof: install: containment failure preserves the refused residue an
       assert.deepStrictEqual(firstSchedule, ["prepare:skills"]);
       assert.deepStrictEqual(secondSchedule, ["prepare:skills", "commit:skills"]);
       assert.strictEqual(
-        firstTree.includes("pi-claude-marketplace/resources/skills/retryable-audit"),
+        firstTree.includes("pi-claude-marketplace/resources/skills/retryable:audit"),
         true,
       );
       assert.strictEqual(firstTree.includes("pi-claude-marketplace/skills-staging/"), true);
       assert.deepStrictEqual(
         (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.retryable?.resources,
-        { agents: [], hooks: [], mcpServers: [], prompts: [], skills: ["retryable-audit"] },
+        { agents: [], hooks: [], mcpServers: [], prompts: [], skills: ["retryable:audit"] },
       );
       assert.strictEqual((await stat(skillTarget)).isDirectory(), true);
     } finally {
@@ -9227,7 +9227,7 @@ test("retry proof: install: state commit race after staged work retries from unc
           commandsStagingDir: locations.commandsStagingDir,
           commandTarget: path.join(locations.promptsTargetDir, "retryable:deploy.md"),
           skillsStagingDir: locations.skillsStagingDir,
-          skillTarget: path.join(locations.skillsTargetDir, "retryable-audit"),
+          skillTarget: path.join(locations.skillsTargetDir, "retryable:audit"),
         },
         activeSchedule,
       );
@@ -9303,7 +9303,7 @@ test("retry proof: install: state commit race after staged work retries from unc
         "commit:commands",
       ]);
       assert.strictEqual(
-        firstTree.includes("pi-claude-marketplace/resources/skills/retryable-audit/SKILL.md"),
+        firstTree.includes("pi-claude-marketplace/resources/skills/retryable:audit/SKILL.md"),
         true,
       );
       assert.strictEqual(
@@ -9316,12 +9316,12 @@ test("retry proof: install: state commit race after staged work retries from unc
         hooks: [],
         mcpServers: [],
         prompts: ["retryable:deploy"],
-        skills: ["retryable-audit"],
+        skills: ["retryable:audit"],
       });
       assert.strictEqual(record?.enabled, true);
       const finalTree = await retryTree(locations.scopeRoot);
       assert.strictEqual(
-        finalTree.filter((entry) => entry.endsWith("retryable-audit/SKILL.md")).length,
+        finalTree.filter((entry) => entry.endsWith("retryable:audit/SKILL.md")).length,
         1,
       );
       assert.strictEqual(

@@ -172,23 +172,43 @@ describe("assertSafeName", () => {
 
 describe("generatedSkillName", () => {
   for (const { plugin, source, expectedSkillName } of [
-    { plugin: "acme", source: "foo", expectedSkillName: "acme-foo" },
-    { plugin: "acme", source: "acme-foo", expectedSkillName: "acme-foo" },
-    { plugin: "ab", source: "abc", expectedSkillName: "ab-abc" },
+    { plugin: "acme", source: "foo", expectedSkillName: "acme:foo" },
+    { plugin: "acme", source: "acme-foo", expectedSkillName: "acme:foo" },
+    { plugin: "acme", source: "acme:foo", expectedSkillName: "acme:foo" },
+    { plugin: "ab", source: "abc", expectedSkillName: "ab:abc" },
     {
       plugin: "acme",
       source: "acme-acme-foo",
-      expectedSkillName: "acme-acme-foo",
+      expectedSkillName: "acme:acme-foo",
     },
     {
       plugin: "Ac.Me",
       source: "Ac.Me-Task_Name",
-      expectedSkillName: "Ac.Me-Task_Name",
+      expectedSkillName: "Ac.Me:Task_Name",
     },
     { plugin: "foo", source: "foo", expectedSkillName: "foo" },
   ]) {
     test(`generates ${JSON.stringify(expectedSkillName)} from ${JSON.stringify(source)}`, () => {
       // arrange
+      const pluginName = plugin;
+      const sourceName = source;
+
+      // act
+      const skillName = generatedSkillName(pluginName, sourceName);
+
+      // assert
+      assert.strictEqual(skillName, expectedSkillName);
+    });
+  }
+
+  for (const { plugin, source, expectedSkillName } of [
+    { plugin: "acme", source: "foo", expectedSkillName: "acme.foo" },
+    { plugin: "acme", source: "acme-foo", expectedSkillName: "acme.foo" },
+    { plugin: "acme", source: "acme.foo", expectedSkillName: "acme.foo" },
+  ]) {
+    test(`generates ${JSON.stringify(expectedSkillName)} from ${JSON.stringify(source)} on win32`, (t) => {
+      // arrange
+      setCasePlatform(t, "win32");
       const pluginName = plugin;
       const sourceName = source;
 
