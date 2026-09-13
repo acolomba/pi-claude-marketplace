@@ -7140,3 +7140,252 @@ test("D-01-05: an array whose every element is unusable omits the line", async (
   // assert
   assert.equal(message, DEPENDENCY_BLOCK_HEAD.trimEnd());
 });
+
+// ---------------------------------------------------------------------------
+// D-01-32: `info` sources `dependencies` from the plugin's OWN `plugin.json`
+// whenever that manifest is readable WITHOUT a network call, and from the
+// marketplace entry when it is not. The entry is a mirror that can go stale;
+// the manifest is what the plugin actually declares.
+// ---------------------------------------------------------------------------
+
+/**
+ * Plant the plugin's own manifest under a path-source plugin root. A location
+ * left unnamed is absent from disk, which is the only condition a reader may
+ * fall through on (D-01-07).
+ */
+async function plantOwnManifest(
+  pluginRoot: string,
+  manifests: { readonly wrapped?: string; readonly bare?: string },
+): Promise<void> {
+  if (manifests.wrapped !== undefined) {
+    await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
+    await writeFile(
+      path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+      manifests.wrapped,
+      "utf8",
+    );
+  }
+
+  if (manifests.bare !== undefined) {
+    await writeFile(path.join(pluginRoot, "plugin.json"), manifests.bare, "utf8");
+  }
+}
+
+/**
+ * Seed one path-source plugin whose marketplace ENTRY declares
+ * `entryDependencies`, plant whichever own-manifest locations the case names,
+ * and return the single rendered notification message.
+ */
+async function renderOwnManifestCase(opts: {
+  readonly entryDependencies?: unknown;
+  readonly wrapped?: string;
+  readonly bare?: string;
+}): Promise<string> {
+  return withHermeticHome(async ({ home, cwd }) => {
+    const mpRoot = await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          {
+            name: "host",
+            source: "./host",
+            version: "1.0.0",
+            ...(opts.entryDependencies !== undefined && { dependencies: opts.entryDependencies }),
+          },
+        ],
+      },
+      installablePluginDirs: ["host"],
+    });
+    await plantOwnManifest(path.join(mpRoot, "host"), opts);
+    const { ctx, pi, notifications } = makeCtx();
+
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "host", scope: "user", cwd });
+
+    assert.equal(notifications.length, 1);
+    return notifications[0]!.message;
+  });
+}
+
+test("D-01-32: a bare plugin.json outranks the marketplace entry's dependency list", async () => {
+  // arrange / act
+  const message = await renderOwnManifestCase({
+    entryDependencies: ["stale@mp"],
+    bare: JSON.stringify({ name: "host", dependencies: ["fresh@mp"] }),
+  });
+
+  // assert
+  assert.equal(message, `${DEPENDENCY_BLOCK_HEAD}    dependencies: fresh@mp`);
+});
+
+test("D-01-32: the wrapped manifest outranks a bare sibling, matching the shared ordering", async () => {
+  // arrange / act
+  const message = await renderOwnManifestCase({
+    entryDependencies: ["stale@mp"],
+    wrapped: JSON.stringify({ name: "host", dependencies: ["wrapped-dep@mp"] }),
+    bare: JSON.stringify({ name: "host", dependencies: ["bare-dep@mp"] }),
+  });
+
+  // assert
+  assert.equal(message, `${DEPENDENCY_BLOCK_HEAD}    dependencies: wrapped-dep@mp`);
+});
+
+test("D-01-32: a readable manifest declaring nothing omits the line; the entry does not reappear", async () => {
+  // arrange / act
+  const message = await renderOwnManifestCase({
+    entryDependencies: ["stale@mp"],
+    bare: JSON.stringify({ name: "host" }),
+  });
+
+  // assert
+  assert.equal(message, DEPENDENCY_BLOCK_HEAD.trimEnd());
+});
+
+test("D-01-32: a plugin with no manifest at either candidate falls back to the entry", async () => {
+  // arrange / act
+  const message = await renderOwnManifestCase({ entryDependencies: ["from-entry@mp"] });
+
+  // assert
+  assert.equal(message, `${DEPENDENCY_BLOCK_HEAD}    dependencies: from-entry@mp`);
+});
+
+test("D-01-07: an unparseable first candidate ends the walk; the bare sibling never rescues it", async () => {
+  // arrange / act
+  const message = await renderOwnManifestCase({
+    entryDependencies: ["from-entry@mp"],
+    wrapped: "{ not json",
+    bare: JSON.stringify({ name: "host", dependencies: ["bare-dep@mp"] }),
+  });
+
+  // assert -- the present-but-unusable wrapped file decides the outcome for
+  // EVERY reader, so the row is `(unavailable)` and carries no dependency line
+  // at all. What this pins is that the bare sibling contributed nothing: had
+  // any reader fallen through to it, its list would be on the row.
+  assert.match(message, /\(unavailable\)/, message);
+  assert.doesNotMatch(message, /bare-dep@mp/, message);
+});
+
+test("D-01-32: a path source whose root fails containment falls back to the entry without throwing", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange -- `../escape` resolves outside the marketplace root, so
+    // `derivePluginRootForInfo`'s `assertPathInside` refuses it at block level.
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          {
+            name: "host",
+            source: "../escape",
+            version: "1.0.0",
+            dependencies: ["from-entry@mp"],
+          },
+        ],
+      },
+    });
+    const { ctx, pi, notifications } = makeCtx();
+
+    // act -- a propagating PathContainmentError would fail this call outright.
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "host", scope: "user", cwd });
+
+    // assert -- the row is byte-unchanged: the ROW builder's own containment
+    // throw still lands on the pre-existing `{unreadable}` arm. What is new is
+    // that the BLOCK-level read refused the same path quietly instead of
+    // throwing past every catch in the file.
+    assert.deepEqual(notifications, [
+      {
+        message:
+          "\u25cf mp [user] <no autoupdate>\n" +
+          "  \u2298 host v1.0.0 (unavailable) {unreadable}\n" +
+          "    components: not resolved",
+      },
+    ]);
+  });
+});
+
+test("D-01-32: a WARM git clone's plugin.json supplies the dependency list, not the entry", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const cloneUrl = "https://example.com/repo";
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          { name: "gplug", source: cloneUrl, version: "1.0.0", dependencies: ["stale@mp"] },
+        ],
+      },
+    });
+    await seedWarmMirror({
+      scope: "user",
+      cwd,
+      cloneUrl,
+      pluginJson: { name: "gplug", dependencies: ["fresh@mp"] },
+      componentDirs: ["skills/warm-skill"],
+    });
+    const { ctx, pi, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "gplug", scope: "user", cwd });
+
+    // assert
+    const msg = notifications[0]!.message;
+    assert.match(msg, /dependencies: fresh@mp/, msg);
+    assert.doesNotMatch(msg, /stale@mp/, msg);
+  });
+});
+
+test("D-01-32 / NFR-5: a COLD git source renders the entry's list and creates no clone directory", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          {
+            name: "gplug",
+            source: "https://example.com/repo",
+            version: "1.0.0",
+            dependencies: ["from-entry@mp"],
+          },
+        ],
+      },
+    });
+    const clonesDir = path.join(userRoot, "pi-claude-marketplace", "plugin-clones");
+    assert.equal(fs.existsSync(clonesDir), false, "precondition: cold cache");
+    const { ctx, pi, notifications } = makeCtx();
+
+    // act -- `--fetch` is deliberately NOT passed: "readable" never means
+    // fetching, so this is the arm that must NOT read a manifest at all.
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "gplug", scope: "user", cwd });
+
+    // assert -- the `(remote)` row is byte-unchanged. It carries no dependency
+    // line by its own contract (a row with no materialized tree renders no
+    // component block), so what the entry declared cannot be read off it; the
+    // load-bearing half is that nothing was cloned to make the manifest
+    // readable.
+    assert.deepEqual(notifications, [
+      {
+        message:
+          "● mp [user] <no autoupdate>\n" +
+          "  ◌ gplug v1.0.0 (remote)\n" +
+          "    components: not resolved",
+      },
+    ]);
+    assert.equal(fs.existsSync(clonesDir), false, "info must not create plugin-clones/ (NFR-5)");
+  });
+});
