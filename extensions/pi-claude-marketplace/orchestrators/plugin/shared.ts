@@ -13,9 +13,10 @@
 // and may import from `domain/`, `shared/`, and `persistence/` (type-only).
 // No imports from `bridges/` or `orchestrators/marketplace/*`.
 
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 
+import { MANIFEST_CANDIDATES } from "../../domain/manifest-path.ts";
 import { computeHashVersion } from "../../domain/version.ts";
 import { loadConfig } from "../../persistence/config-io.ts";
 import {
@@ -897,9 +898,60 @@ export async function resolveInstalledMarketplaceTarget(opts: {
 }
 
 /**
+ * D-01-07 / D-01-11: is this manifest candidate THERE? Only a path that is not
+ * there may advance the walk to the next candidate, so a stat this process was
+ * not allowed to make (EACCES and friends) counts as present -- it is not
+ * evidence of absence. Mirrors the stat gate in
+ * `domain/resolver.ts::readManifest`, which is what lets the two readers agree
+ * on which file describes a plugin. Never throws.
+ */
+async function manifestCandidateExists(manifestPath: string): Promise<boolean> {
+  try {
+    return (await stat(manifestPath)).isFile();
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    return code !== "ENOENT" && code !== "ENOTDIR";
+  }
+}
+
+/**
+ * Tier 1 of {@link resolvePluginVersion}: the `version` the plugin's own
+ * manifest declares, or `undefined` when it declares none usable.
+ *
+ * MANF-01: the walk is the shared `MANIFEST_CANDIDATES` ordering, so this
+ * reader and the resolver read the same file. D-01-07: a candidate that
+ * EXISTS ends the walk -- if it cannot be read, cannot be parsed, or carries
+ * no usable `version`, the answer falls to tier 2, never to a sibling
+ * candidate. Never throws (D-23-02 / D-23-03).
+ */
+async function readDeclaredPluginVersion(pluginRoot: string): Promise<string | undefined> {
+  for (const candidate of MANIFEST_CANDIDATES) {
+    const manifestPath = path.join(pluginRoot, candidate);
+
+    if (!(await manifestCandidateExists(manifestPath))) {
+      continue;
+    }
+
+    try {
+      const parsed: unknown = JSON.parse(await readFile(manifestPath, "utf8"));
+      const pluginJsonVersion = (parsed as { version?: unknown }).version;
+      return typeof pluginJsonVersion === "string" && pluginJsonVersion.length > 0
+        ? pluginJsonVersion
+        : undefined;
+    } catch {
+      // Present and unusable: tier 2 / tier 3 cover it.
+      return undefined;
+    }
+  }
+
+  return undefined;
+}
+
+/**
  * PI-7 / PUP-3 / SNM-34 version precedence (3 tiers, highest first):
- *   1. The plugin's own `<pluginRoot>/.claude-plugin/plugin.json` `version`
- *      (D-23-01: "If also set in the marketplace entry, `plugin.json` wins.").
+ *   1. The plugin's own manifest `version`, read at the first
+ *      `MANIFEST_CANDIDATES` location present under `pluginRoot` (MANF-01;
+ *      D-23-01: "If also set in the marketplace entry, `plugin.json` wins.").
  *   2. The marketplace `entry.version`.
  *   3. The PI-7 `computeHashVersion` content hash, as a last resort.
  *
@@ -907,7 +959,7 @@ export async function resolveInstalledMarketplaceTarget(opts: {
  * gate used for `entry.version`; D-23-03 -- no SemVer enforcement). The
  * plugin.json read is re-done here independently (D-23-02): the NFR-7
  * discriminated `ResolvedPluginInstallable` union is NOT widened with a
- * `manifest` field. Any read/parse failure (ENOENT, malformed JSON, missing
+ * `manifest` field. Any read/parse failure (absence, malformed JSON, missing
  * or non-string `.version`) silently falls through to the next tier and never
  * throws.
  */
@@ -915,19 +967,10 @@ export async function resolvePluginVersion(
   entry: PluginEntry,
   installable: MaterializablePlugin,
 ): Promise<string> {
-  // Tier 1: the plugin's own plugin.json `version`. Re-read in place; any
-  // failure falls through to the next tier (D-23-02 / D-23-03).
-  try {
-    const manifestPath = path.join(installable.pluginRoot, ".claude-plugin", "plugin.json");
-    const raw = await readFile(manifestPath, "utf8");
-    const parsed: unknown = JSON.parse(raw);
-    const pluginJsonVersion = (parsed as { version?: unknown }).version;
-    if (typeof pluginJsonVersion === "string" && pluginJsonVersion.length > 0) {
-      return pluginJsonVersion;
-    }
-  } catch {
-    // Fall through -- plugin.json is absent, unparseable, or carries no usable
-    // version; tier 2 / tier 3 cover it.
+  // Tier 1: the plugin's own manifest `version`.
+  const declaredVersion = await readDeclaredPluginVersion(installable.pluginRoot);
+  if (declaredVersion !== undefined) {
+    return declaredVersion;
   }
 
   // Tier 2: the marketplace entry version.

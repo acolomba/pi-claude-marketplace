@@ -45,6 +45,7 @@ import { PathContainmentError, assertPathInside } from "../shared/path-safety.ts
 import { parseHooksConfig, type DroppedHook, type HooksConfig } from "./components/hooks.ts";
 import { MCP_SERVERS_VALIDATOR } from "./components/mcp.ts";
 import { PLUGIN_MANIFEST_VALIDATOR, type PluginEntry } from "./components/plugin.ts";
+import { MANIFEST_CANDIDATES } from "./manifest-path.ts";
 import { assertSafeName } from "./name.ts";
 import {
   parsePluginSource,
@@ -621,34 +622,51 @@ async function sourceEscapeReason(
   }
 }
 
+/**
+ * MANF-01 / MANF-02: read the plugin's own manifest, walking the shared
+ * `MANIFEST_CANDIDATES` ordering rather than a path of this reader's own.
+ * MANF-05: no manifest at any candidate is a normal outcome, not a failure.
+ */
 async function readManifest(
   ctx: ResolveContext,
   pluginRoot: string,
 ): Promise<{ ok: true; manifest: Record<string, unknown> | null } | { ok: false; reason: string }> {
-  const manifestPath = path.join(pluginRoot, ".claude-plugin", "plugin.json");
-  if ((await statKindOf(ctx)(manifestPath)) !== "file") {
-    return { ok: true, manifest: null };
-  }
+  for (const candidate of MANIFEST_CANDIDATES) {
+    const manifestPath = path.join(pluginRoot, candidate);
 
-  try {
-    const raw = await readFileTextOf(ctx)(manifestPath);
-    const parsed: unknown = JSON.parse(raw);
-
-    if (!PLUGIN_MANIFEST_VALIDATOR.Check(parsed)) {
-      const detail = PLUGIN_MANIFEST_VALIDATOR.Errors(parsed)
-        .slice(0, 1)
-        .map((error) => `${error.instancePath || "(root)"}: ${error.message}`)
-        .join("");
-      return { ok: false, reason: `malformed plugin.json: ${detail}` };
+    // D-01-07: ABSENCE is the only fall-through. The first candidate that
+    // exists is this plugin's manifest and its read decides the outcome; a
+    // present-but-unusable file never hands off to the next candidate.
+    if ((await statKindOf(ctx)(manifestPath)) !== "file") {
+      continue;
     }
 
-    return { ok: true, manifest: parsed };
-  } catch (err) {
-    return {
-      ok: false,
-      reason: `malformed plugin.json: ${err instanceof Error ? err.message : String(err)}`,
-    };
+    try {
+      const raw = await readFileTextOf(ctx)(manifestPath);
+      const parsed: unknown = JSON.parse(raw);
+
+      if (!PLUGIN_MANIFEST_VALIDATOR.Check(parsed)) {
+        const detail = PLUGIN_MANIFEST_VALIDATOR.Errors(parsed)
+          .slice(0, 1)
+          .map((error) => `${error.instancePath || "(root)"}: ${error.message}`)
+          .join("");
+        return { ok: false, reason: `malformed plugin.json: ${detail}` };
+      }
+
+      return { ok: true, manifest: parsed };
+    } catch (err) {
+      // D-01-08 / D-01-09: an unreadable file, a parse throw and a schema
+      // rejection are one rule -- the manifest is present and unusable.
+      return {
+        ok: false,
+        reason: `malformed plugin.json: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
   }
+
+  // D-01-13 / MANF-05: absent at every candidate. A plugin declaring no
+  // manifest at all still resolves, and still installs.
+  return { ok: true, manifest: null };
 }
 
 /**
