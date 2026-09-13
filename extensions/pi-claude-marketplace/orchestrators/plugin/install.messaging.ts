@@ -1,7 +1,6 @@
 import { causeChainTrailer, errorMessage, PluginShapeError } from "../../shared/errors.ts";
 import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
 import {
-  ICON_DISABLED,
   ICON_INSTALLED,
   ICON_UNINSTALLABLE,
   installedLikeRow,
@@ -10,6 +9,9 @@ import {
   renderPartiallyAvailableRow,
   renderUnavailableRow,
   renderVersion,
+  ICON_DISABLED,
+} from "../../shared/notification-grammar.ts";
+import {
   type ContentReason,
   type PluginDisabledMessage,
   type PluginFailedMessage,
@@ -18,7 +20,7 @@ import {
   type PluginPartiallyInstalledMessage,
   type PluginUnavailableMessage,
   type StatusToken,
-} from "../../shared/notify.ts";
+} from "../../shared/notification-types.ts";
 import { PathContainmentError } from "../../shared/path-safety.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 
@@ -37,8 +39,8 @@ import type { InstallPluginOutcome } from "../types.ts";
  *
  * The shared presentation vocabulary (`ICON_*`, `joinTokens`,
  * `renderScopeBracket`, `renderVersion`, `composeReasons`, `pluginRow`) stays
- * central in `shared/notify.ts` (D-11); this module CALLS it, never duplicates
- * it.
+ * central in `shared/notification-grammar.ts` (D-11); this module CALLS it,
+ * never duplicates it.
  */
 
 /**
@@ -64,7 +66,7 @@ type InstallStatus =
 /**
  * Entity-shaped non-cascade error line (MSG-NC-1 / CMC-34) -- internal
  * classified-error return shape for `classifyEntityShapeError` and the
- * install.ts error-routing path. It lives here beside `InstallMsg` because
+ * install-flow.ts error-routing path. It lives here beside `InstallMsg` because
  * it is a message-row shape: `composeInstallFailureMessage` consumes it and
  * returns `InstallMsg`.
  *
@@ -188,7 +190,7 @@ function composeNotInstallableMessage(
 // ───────────────────────────────────────────────────────────────────────────
 // Error classification and failure-row composition.
 //
-// This family lived in install.ts and was reached through four `__test_*`
+// This family lived in the legacy install hub and was reached through four `__test_*`
 // re-exports. `EntityErrorRow` above already moved here on the grounds that it
 // is a message-row shape; the functions that produce and consume it belong on
 // the same side of that line. The orchestrator now calls them across a public
@@ -427,7 +429,7 @@ export function classifyEntityShapeError(
 // emitted here.
 // New detection tokens added here MUST also have an entry in
 // `MANIFEST_FIELD_TO_REASON` below mapping them to a member of the closed
-// `Reason` set in `shared/notify.ts::REASONS` so the renderer accepts them.
+// `Reason` set in `shared/notification-types.ts::REASONS` so the renderer accepts them.
 const MANIFEST_FIELD_REASONS: ReadonlySet<string> = new Set(["lspServers"]);
 const MANIFEST_FIELD_NOTE_PREFIX = "contains ";
 
@@ -473,7 +475,7 @@ function manifestFieldTokenFromNote(note: string): ContentReason | undefined {
  * `unsupported hooks` token for the same on-disk condition (SURF-01). Mirrors
  * the probe-side prefix set verbatim -- if a prefix is added or renamed on one
  * side, the other side MUST follow in lockstep (pinned by
- * tests/orchestrators/plugin/cross-surface-reason-parity.test.ts).
+ * tests/architecture/cross-surface-reason-parity.test.ts).
  */
 function isHooksResolverNote(reason: string): boolean {
   return (

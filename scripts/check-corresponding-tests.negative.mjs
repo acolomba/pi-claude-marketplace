@@ -8,6 +8,7 @@ import { checkCorrespondingTests } from "./check-corresponding-tests.mjs";
 const fixtureRoot = await mkdtemp(path.join(tmpdir(), "corresponding-tests-gate-"));
 const sourceDirectory = path.join(fixtureRoot, "extensions/pi-claude-marketplace/domain");
 const testDirectory = path.join(fixtureRoot, "tests/domain");
+const scriptTestDirectory = path.join(fixtureRoot, "tests/scripts");
 const sourcePath = path.join(sourceDirectory, "answer.ts");
 const testPath = path.join(testDirectory, "answer.test.ts");
 const fakePath = path.join(testDirectory, "answer-fake.ts");
@@ -55,6 +56,7 @@ test("looks like supplemental evidence without a contract import", () => {
 try {
   await mkdir(sourceDirectory, { recursive: true });
   await mkdir(testDirectory, { recursive: true });
+  await mkdir(scriptTestDirectory, { recursive: true });
   await writeFile(sourcePath, "export const answer = 42;\n");
   await writeFile(
     testPath,
@@ -63,6 +65,7 @@ try {
   await writeFile(fakePath, "export const createAnswerFake = () => 42;\n");
   await writeFile(contractPath, "export const registerAnswerContract = (answer) => answer;\n");
   await writeFile(fakeTestPath, supplementalTest);
+  await writeFile(path.join(scriptTestDirectory, "checker.test.ts"), "export {};\n");
 
   assert.deepStrictEqual(checkCorrespondingTests(fixtureRoot), []);
 

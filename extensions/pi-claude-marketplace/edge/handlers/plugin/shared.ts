@@ -7,7 +7,7 @@
 // lines per CMC-34 / MSG-NC-1.
 
 import { errorMessage } from "../../../shared/errors.ts";
-import { notifyUsageError } from "../../../shared/notify.ts";
+import { notifyUsageError } from "../../../shared/notification-dispatch.ts";
 import { parseCommandArgs } from "../../args-schema.ts";
 import { parseArgs } from "../../args.ts";
 import { passThroughFlagNames } from "../../flag-catalog.ts";

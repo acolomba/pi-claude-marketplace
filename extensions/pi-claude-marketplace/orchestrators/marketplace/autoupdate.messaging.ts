@@ -15,10 +15,10 @@
 // flip cause, which dispatches through the command render map below (lifted
 // verbatim from the central `renderPluginRow` `failed` arm).
 
-import { ICON_UNINSTALLABLE, pluginRow } from "../../shared/notify.ts";
+import { pluginRow, ICON_UNINSTALLABLE } from "../../shared/notification-grammar.ts";
+import { type PluginFailedMessage } from "../../shared/notification-types.ts";
 
 import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
-import type { PluginFailedMessage } from "../../shared/notify.ts";
 
 /**
  * The single plugin-child-row status either flip command emits: a synthetic

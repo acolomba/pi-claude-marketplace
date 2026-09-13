@@ -98,6 +98,11 @@ test("MCP-only staging materializes no agent, command, or skill target", async (
   });
   const commit = await commitPreparedMcp(prepared);
   const storedBytes = await readFile(locations.mcpJsonPath, "utf8");
+  const dormantSources = {
+    agent: await pathExists(path.join(pluginRoot, "agents", "dormant.md")),
+    command: await pathExists(path.join(pluginRoot, "commands", "dormant.md")),
+    skill: await pathExists(path.join(pluginRoot, "skills", "dormant", "SKILL.md")),
+  };
   const siblingTargets = {
     agentsIndex: await pathExists(locations.agentsIndexPath),
     agents: await pathExists(locations.agentsDir),
@@ -120,6 +125,15 @@ test("MCP-only staging materializes no agent, command, or skill target", async (
     warnings: [],
   });
   assert.strictEqual(storedBytes, expectedBytes);
+  // D-07-03: the sibling-absence claim below is vacuous unless the source tree
+  // really offered an agent, a command, and a skill for staging to skip. A
+  // fixture that silently failed to write them would green this gate over
+  // nothing.
+  assert.deepStrictEqual(
+    dormantSources,
+    { agent: true, command: true, skill: true },
+    "D-07-03: the plugin source is missing a dormant artifact, so the sibling-absence assertion inspects nothing",
+  );
   assert.deepStrictEqual(siblingTargets, {
     agentsIndex: false,
     agents: false,

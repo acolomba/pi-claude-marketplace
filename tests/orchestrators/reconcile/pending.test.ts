@@ -191,7 +191,9 @@ test("MSG-GR-3: an omitted scope walks both scopes and orders a shared marketpla
   assert.deepStrictEqual(notifications, [
     {
       message:
-        "● mp [project]\n  ● p-proj (will install)\n\n● mp [user]\n  ● p-user (will install)",
+        "● mp [project]\n  ● p-proj (will install)\n\n" +
+        "● mp [user]\n  ● p-user (will install)\n\n" +
+        "Reconcile pending: 2 successes",
     },
   ]);
   verifyBoundary();
@@ -214,7 +216,9 @@ test("an explicit user scope reports the user scope's pending work and never rea
   await pendingReconcile({ ctx, pi, cwd, scope: "user" });
 
   // assert
-  assert.deepStrictEqual(notifications, [{ message: "● mp [user]\n  ● p-user (will install)" }]);
+  assert.deepStrictEqual(notifications, [
+    { message: "● mp [user]\n  ● p-user (will install)\n\nReconcile pending: 1 success" },
+  ]);
   verifyBoundary();
 });
 
@@ -235,7 +239,9 @@ test("an explicit project scope reports the project scope's pending work and nev
   await pendingReconcile({ ctx, pi, cwd, scope: "project" });
 
   // assert
-  assert.deepStrictEqual(notifications, [{ message: "● mp [project]\n  ● p-proj (will install)" }]);
+  assert.deepStrictEqual(notifications, [
+    { message: "● mp [project]\n  ● p-proj (will install)\n\nReconcile pending: 1 success" },
+  ]);
   verifyBoundary();
 });
 
@@ -248,7 +254,9 @@ test("DIFF-01 / NFR-5: a repeated invocation emits the same notification and lea
   ]);
   await writeUnder(project.configJsonPath, declaredConfig);
   await writeUnder(project.stateJsonPath, recordedState);
-  const expectedNotification = { message: "● mp [project]\n  ○ p1 (will uninstall)" };
+  const expectedNotification = {
+    message: "● mp [project]\n  ○ p1 (will uninstall)\n\nReconcile pending: 1 success",
+  };
   const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(2, 4);
 
   // act
@@ -313,7 +321,10 @@ for (const { reported, files } of invalidConfigRows) {
     // assert
     assert.deepStrictEqual(notifications, [
       {
-        message: `A marketplace operation has failed.\n\n⊘ ${reported} [project] (failed) {invalid manifest}`,
+        message:
+          `A marketplace operation has failed.\n\n` +
+          `⊘ ${reported} [project] (failed) {invalid manifest}\n\n` +
+          "Reconcile pending: 1 failure",
         severity: "error",
       },
     ]);
@@ -353,7 +364,10 @@ for (const { condition, bytes, reason } of stateLoadFailureRows) {
     // assert
     assert.deepStrictEqual(notifications, [
       {
-        message: `A marketplace operation has failed.\n\n⊘ state.json [project] (failed) {${reason}}`,
+        message:
+          `A marketplace operation has failed.\n\n` +
+          `⊘ state.json [project] (failed) {${reason}}\n\n` +
+          "Reconcile pending: 1 failure",
         severity: "error",
       },
     ]);
@@ -380,7 +394,8 @@ test("MSG-GR-3: a failed configuration block sorts among the plan blocks by name
       message:
         "A marketplace operation has failed.\n\n" +
         "⊘ claude-plugins.json [project] (failed) {invalid manifest}\n\n" +
-        "● zzz-mp [user]\n  ● pp (will install)",
+        "● zzz-mp [user]\n  ● pp (will install)\n\n" +
+        "Reconcile pending: 1 failure, 1 success",
       severity: "error",
     },
   ]);
@@ -516,7 +531,8 @@ const plannedInstallRows = [
       await stagePlannedInstall(cwd, locations, { degrade: true });
     },
     rendered: "● cr (will partially install)",
-    expectedMessage: "● mp-github [project]\n  ● cr (will partially install)",
+    expectedMessage:
+      "● mp-github [project]\n  ● cr (will partially install)\n\n" + "Reconcile pending: 1 success",
   },
   {
     condition: "a candidate that resolves cleanly",
@@ -524,7 +540,7 @@ const plannedInstallRows = [
       await stagePlannedInstall(cwd, locations, { degrade: false });
     },
     rendered: "● cr (will install)",
-    expectedMessage: "● mp-github [project]\n  ● cr (will install)",
+    expectedMessage: "● mp-github [project]\n  ● cr (will install)\n\nReconcile pending: 1 success",
   },
   {
     condition: "a marketplace that is declared but not recorded",
@@ -535,7 +551,7 @@ const plannedInstallRows = [
       );
     },
     rendered: "● pp (will install)",
-    expectedMessage: "● newmp [project]\n  ● pp (will install)",
+    expectedMessage: "● newmp [project]\n  ● pp (will install)\n\nReconcile pending: 1 success",
   },
   {
     condition: "a recorded manifest that does not parse",
@@ -544,7 +560,7 @@ const plannedInstallRows = [
       await writeFile(manifestPath, "{ not valid json at all", "utf8");
     },
     rendered: "● cr (will install)",
-    expectedMessage: "● mp-github [project]\n  ● cr (will install)",
+    expectedMessage: "● mp-github [project]\n  ● cr (will install)\n\nReconcile pending: 1 success",
   },
   {
     condition: "a recorded manifest that omits the planned plugin",
@@ -560,7 +576,7 @@ const plannedInstallRows = [
       );
     },
     rendered: "● cr (will install)",
-    expectedMessage: "● mp-github [project]\n  ● cr (will install)",
+    expectedMessage: "● mp-github [project]\n  ● cr (will install)\n\nReconcile pending: 1 success",
   },
 ] satisfies readonly {
   readonly condition: string;

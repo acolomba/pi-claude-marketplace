@@ -19,7 +19,7 @@
  * Gate discipline: this module lives in the orchestrator tier but MUST NOT
  * name `gitOps` / `DEFAULT_GIT_OPS` or import `platform/git.ts` as a VALUE --
  * only `import type` from platform/git.ts is permitted -- so consumers
- * (install.ts) that import it stay clean under the no-orchestrator-network
+ * (install-outcome.ts) that import it stay clean under the no-orchestrator-network
  * gate. It imports the provider registry (domain), the Device Flow engine
  * (domain), the raw notify seam (shared), and credential/auth types, and
  * re-exports the `DEFAULT_CREDENTIAL_OPS` value (platform/git-credential.ts).
@@ -30,16 +30,16 @@
 
 import { findProviderForHost } from "../domain/auth-registry.ts";
 import { initiateDeviceFlow } from "../domain/github-auth.ts";
-import { makeRawNotifyFn } from "../shared/notify.ts";
+import { makeRawNotifyFn } from "../shared/notification-dispatch.ts";
 
 import type { DeviceFlowHttp } from "../domain/github-auth.ts";
 import type { CredentialOps } from "../platform/git-credential.ts";
 import type { AuthAttemptResult, OnAuthRequiredFn } from "../platform/git.ts";
-import type { ExtensionContext } from "../platform/pi-api.ts";
+import type { NotificationContext } from "../platform/pi-api.ts";
 import type { GitAuthBundle } from "./marketplace/shared.ts";
 
 // Re-export the credential/auth surface the network-gated plugin orchestrators
-// (install.ts / reinstall.ts) need. Those files MUST NOT import from
+// (install-outcome.ts / reinstall.ts) need. Those files MUST NOT import from
 // `platform/git.ts` or `platform/git-credential.ts` directly -- the
 // no-orchestrator-network gate greps for any `platform/git` import, even
 // type-only -- so this gate-clean module is their single sanctioned re-export
@@ -78,7 +78,7 @@ export const NO_PROVIDER_CAUSE = (host: string): string =>
 export function buildAuthForHost(args: {
   host: string;
   credentialOps: CredentialOps;
-  ctx: ExtensionContext;
+  ctx: NotificationContext;
   deviceFlowHttp?: DeviceFlowHttp;
   authMemo?: Map<string, AuthAttemptResult>;
 }): GitAuthBundle | undefined {
@@ -134,7 +134,7 @@ export function buildCloneAuth(
   cloneUrl: string,
   kind: "url" | "git-subdir" | "github",
   auth: {
-    readonly ctx: ExtensionContext;
+    readonly ctx: NotificationContext;
     readonly credentialOps: CredentialOps;
     readonly deviceFlowHttp?: DeviceFlowHttp;
     readonly authMemo?: Map<string, AuthAttemptResult>;

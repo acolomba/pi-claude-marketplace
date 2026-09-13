@@ -21,9 +21,15 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 
-import { registerHooksBridge } from "../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
-import { resetRoutingState } from "../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
-import { saveState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import {
+  createHooksHydration,
+  createHooksRuntime,
+  readHooksJson,
+} from "../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
+import {
+  loadState,
+  saveState,
+} from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
 import type { ExtensionState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type {
@@ -120,11 +126,9 @@ function buildStateWithHooksPlugin(sourcesPluginRoot: string): ExtensionState {
   };
 }
 
-test("HOOK-E2E-02: a real SessionStart hook fires through bash and the handler writes its sentinel file", async (t) => {
-  resetRoutingState();
-  t.after(() => {
-    resetRoutingState();
-  });
+test("HOOK-E2E-02: a real SessionStart hook fires through bash and the handler writes its sentinel file", async () => {
+  const runtime = createHooksRuntime();
+  const hooksHydration = createHooksHydration(runtime, { loadState, readHooksJson });
 
   await withHermeticPiHome(async ({ extensionRoot, sourcesPluginRoot, sentinelPath }) => {
     // Lay out the source plugin tree the way the install pipeline would
@@ -195,7 +199,7 @@ echo '{}'
         getSessionFile: () => undefined,
       },
     } as unknown as ExtensionContext;
-    await registerHooksBridge(pi, { ctx: placeholderCtx, cwd: extensionRoot });
+    await hooksHydration.registerHooksBridge(pi, { ctx: placeholderCtx, cwd: extensionRoot });
 
     const sessionStartReg = registrations.find((r) => r.event === "session_start");
     assert.ok(sessionStartReg, "bridge must register session_start handler");
@@ -237,11 +241,9 @@ echo '{}'
 // and `${CLAUDE_PLUGIN_ROOT}` resolves to the external path.
 // ──────────────────────────────────────────────────────────────────────────
 
-test("HOOK-E2E-05: path-source plugin whose resolvedSource is OUTSIDE extensionRoot still spawns the handler", async (t) => {
-  resetRoutingState();
-  t.after(() => {
-    resetRoutingState();
-  });
+test("HOOK-E2E-05: path-source plugin whose resolvedSource is OUTSIDE extensionRoot still spawns the handler", async () => {
+  const runtime = createHooksRuntime();
+  const hooksHydration = createHooksHydration(runtime, { loadState, readHooksJson });
 
   const originalAgentDir = process.env.PI_CODING_AGENT_DIR;
   const tmpRoot = await mkdtemp(path.join(tmpdir(), "hooks-spawn-pathsrc-"));
@@ -340,7 +342,7 @@ echo '{}'
         getSessionFile: () => undefined,
       },
     } as unknown as ExtensionContext;
-    await registerHooksBridge(pi, { ctx: placeholderCtx, cwd: extensionRoot });
+    await hooksHydration.registerHooksBridge(pi, { ctx: placeholderCtx, cwd: extensionRoot });
 
     const sessionStartReg = registrations.find((r) => r.event === "session_start");
     assert.ok(sessionStartReg);

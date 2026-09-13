@@ -1,0 +1,1536 @@
+{
+  "version": 1,
+  "inventoryMode": "shard",
+  "plan": "01-02",
+  "files": [
+    {
+      "path": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "category": "control",
+      "assignedPlan": "01-02",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#PROVENANCE",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#CHANGED-SINCE-FIRST-PASS",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#MASTER-TALLY",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#PRODUCTION-BUG-01",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#PRODUCTION-BUG-02",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#PRODUCTION-BUG-03",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#PRODUCTION-BUG-04",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#PRODUCTION-BUG-05",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#PRODUCTION-BUG-06",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#PRODUCTION-BUG-07",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#PRODUCTION-BUG-08",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#PRODUCTION-BUG-09",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#PRODUCTION-BUG-10",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#PRODUCTION-BUG-11",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#PRODUCTION-BUG-12",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#PRODUCTION-BUG-13",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#PRODUCTION-BUG-14",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#PRODUCTION-LOWER-SEVERITY-DEFECTS",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#NFR10-ASSERT-PATH-INSIDE",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#NFR10-INFO-READ-ESCAPE",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#NFR10-COMMANDS-GUARDS",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#NFR10-SKILLS-SYMLINK",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#NFR10-HOOK-ENV",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#NFR10-PLUGIN-DATA-DIR",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#NFR10-SCOPED-LOCATIONS-BRAND",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#NFR10-TYPE-TEST-NEVER",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#LEVERAGE-01",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#LEVERAGE-02",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#LEVERAGE-03",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#LEVERAGE-04",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#LEVERAGE-05",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#LEVERAGE-06",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#LEVERAGE-07",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#LEVERAGE-08",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#LEVERAGE-09",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#LEVERAGE-10",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#LEVERAGE-11",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#LEVERAGE-12",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#LEVERAGE-13",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATES-ROOT-CAUSE",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-01",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-02",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-03",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-04",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-05",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-06",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-07",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-08",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-09",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-10",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-11",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-12",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-13",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-14",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-15",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-16",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-17",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-18",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-19",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-20",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-21",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-22",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-23",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-24",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-25",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-26",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-27",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-28",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-29",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-30",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-31",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-32",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-33",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-34",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-35",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-36",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#PATTERN-CORRECTIONS",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#PATTERNS-CONFIRMED-STRONG",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#SIBLING-DRIFT",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#SIBLING-DRIFT-INTRA-FILE",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#STRUCK-01",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#STRUCK-02",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#STRUCK-03",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#STRUCK-04",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#STRUCK-05",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#STRUCK-06",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#STRUCK-07",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#STRUCK-08",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#STRUCK-09",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#STRUCK-10",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#STRUCK-11",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#STRUCK-12",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#STRUCK-13",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#STRUCK-14",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#STRUCK-15",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#STRUCK-16",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#STRUCK-17",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#STRUCK-18",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#STRUCK-19",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#CALIBRATION-INJECTION",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#CALIBRATION-MARKETPLACE-SEED",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#CALIBRATION-NOTIFY-WIDE",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#CALIBRATION-HOOKS-SCHEMA",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#CALIBRATION-AREA-SEVERITY",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#OPERATOR-DECISION-01",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#OPERATOR-DECISION-02",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#OPERATOR-DECISION-03",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#OPERATOR-DECISION-04",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#OPERATOR-DECISION-05",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#OPERATOR-DECISION-06",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#OPERATOR-DECISION-07",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#OPERATOR-DECISION-08",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#OPERATOR-DECISION-09",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#SUGGESTED-SEQUENCING-01-11",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#KNOWN-GAP-COVERAGE-REPORT",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#KNOWN-GAP-COVERAGE-NOT-MUTATION",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#KNOWN-GAP-UNREVIEWED-SUITES",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#KNOWN-GAP-ADVERSARIAL-NEGATIVES",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#KNOWN-GAP-PARTITION-BOUNDARIES",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#KNOWN-GAP-STALE-CONTROLS",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#METHOD-PRODUCTION-PLUS-TESTS",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#METHOD-MUTATION",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#METHOD-THROWAWAY-PROBES",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#METHOD-COMMENTS-AS-LEADS",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#METHOD-FALSIFIED-HYPOTHESES",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#METHOD-NAMED-SUSPICIONS"
+      ],
+      "reviewStatus": "complete",
+      "outcome": "live findings"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/README.md",
+      "category": "control",
+      "assignedPlan": "01-02",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/README.md#BACKLOG-TRACKING",
+        ".planning/reviews/unit-test-adversarial/README.md#REVIEWED-TREE-PROVENANCE",
+        ".planning/reviews/unit-test-adversarial/README.md#CORPUS-CONTENTS",
+        ".planning/reviews/unit-test-adversarial/README.md#REPORT-PATH-MAPPING",
+        ".planning/reviews/unit-test-adversarial/README.md#FIXING-PASS-READING-ORDER"
+      ],
+      "reviewStatus": "complete",
+      "outcome": "live findings"
+    }
+  ],
+  "sourceClaims": [
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#PROVENANCE",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "PROVENANCE",
+      "findingId": "MF-001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#CHANGED-SINCE-FIRST-PASS",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "CHANGED-SINCE-FIRST-PASS",
+      "findingId": "MF-001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#MASTER-TALLY",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "MASTER-TALLY",
+      "findingId": "MF-001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#PRODUCTION-BUG-01",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "PRODUCTION-BUG-01",
+      "findingId": "MF-002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#PRODUCTION-BUG-02",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "PRODUCTION-BUG-02",
+      "findingId": "MF-002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#PRODUCTION-BUG-03",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "PRODUCTION-BUG-03",
+      "findingId": "MF-002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#PRODUCTION-BUG-04",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "PRODUCTION-BUG-04",
+      "findingId": "MF-002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#PRODUCTION-BUG-05",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "PRODUCTION-BUG-05",
+      "findingId": "MF-002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#PRODUCTION-BUG-06",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "PRODUCTION-BUG-06",
+      "findingId": "MF-002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#PRODUCTION-BUG-07",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "PRODUCTION-BUG-07",
+      "findingId": "MF-002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#PRODUCTION-BUG-08",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "PRODUCTION-BUG-08",
+      "findingId": "MF-002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#PRODUCTION-BUG-09",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "PRODUCTION-BUG-09",
+      "findingId": "MF-002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#PRODUCTION-BUG-10",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "PRODUCTION-BUG-10",
+      "findingId": "MF-002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#PRODUCTION-BUG-11",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "PRODUCTION-BUG-11",
+      "findingId": "MF-002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#PRODUCTION-BUG-12",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "PRODUCTION-BUG-12",
+      "findingId": "MF-002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#PRODUCTION-BUG-13",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "PRODUCTION-BUG-13",
+      "findingId": "MF-002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#PRODUCTION-BUG-14",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "PRODUCTION-BUG-14",
+      "findingId": "MF-002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#PRODUCTION-LOWER-SEVERITY-DEFECTS",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "PRODUCTION-LOWER-SEVERITY-DEFECTS",
+      "findingId": "MF-002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#NFR10-ASSERT-PATH-INSIDE",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "NFR10-ASSERT-PATH-INSIDE",
+      "findingId": "MF-003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#NFR10-INFO-READ-ESCAPE",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "NFR10-INFO-READ-ESCAPE",
+      "findingId": "MF-003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#NFR10-COMMANDS-GUARDS",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "NFR10-COMMANDS-GUARDS",
+      "findingId": "MF-003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#NFR10-SKILLS-SYMLINK",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "NFR10-SKILLS-SYMLINK",
+      "findingId": "MF-003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#NFR10-HOOK-ENV",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "NFR10-HOOK-ENV",
+      "findingId": "MF-003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#NFR10-PLUGIN-DATA-DIR",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "NFR10-PLUGIN-DATA-DIR",
+      "findingId": "MF-003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#NFR10-SCOPED-LOCATIONS-BRAND",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "NFR10-SCOPED-LOCATIONS-BRAND",
+      "findingId": "MF-003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#NFR10-TYPE-TEST-NEVER",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "NFR10-TYPE-TEST-NEVER",
+      "findingId": "MF-003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#LEVERAGE-01",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "LEVERAGE-01",
+      "findingId": "MF-004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#LEVERAGE-02",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "LEVERAGE-02",
+      "findingId": "MF-004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#LEVERAGE-03",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "LEVERAGE-03",
+      "findingId": "MF-004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#LEVERAGE-04",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "LEVERAGE-04",
+      "findingId": "MF-004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#LEVERAGE-05",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "LEVERAGE-05",
+      "findingId": "MF-004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#LEVERAGE-06",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "LEVERAGE-06",
+      "findingId": "MF-004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#LEVERAGE-07",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "LEVERAGE-07",
+      "findingId": "MF-004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#LEVERAGE-08",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "LEVERAGE-08",
+      "findingId": "MF-004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#LEVERAGE-09",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "LEVERAGE-09",
+      "findingId": "MF-004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#LEVERAGE-10",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "LEVERAGE-10",
+      "findingId": "MF-004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#LEVERAGE-11",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "LEVERAGE-11",
+      "findingId": "MF-004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#LEVERAGE-12",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "LEVERAGE-12",
+      "findingId": "MF-004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#LEVERAGE-13",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "LEVERAGE-13",
+      "findingId": "MF-004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATES-ROOT-CAUSE",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "GATES-ROOT-CAUSE",
+      "findingId": "MF-005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-01",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "GATE-01",
+      "findingId": "MF-005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-02",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "GATE-02",
+      "findingId": "MF-005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-03",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "GATE-03",
+      "findingId": "MF-005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-04",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "GATE-04",
+      "findingId": "MF-005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-05",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "GATE-05",
+      "findingId": "MF-005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-06",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "GATE-06",
+      "findingId": "MF-005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-07",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "GATE-07",
+      "findingId": "MF-005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-08",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "GATE-08",
+      "findingId": "MF-005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-09",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "GATE-09",
+      "findingId": "MF-005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-10",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "GATE-10",
+      "findingId": "MF-005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-11",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "GATE-11",
+      "findingId": "MF-005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-12",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "GATE-12",
+      "findingId": "MF-005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-13",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "GATE-13",
+      "findingId": "MF-005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-14",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "GATE-14",
+      "findingId": "MF-005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-15",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "GATE-15",
+      "findingId": "MF-005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-16",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "GATE-16",
+      "findingId": "MF-005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-17",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "GATE-17",
+      "findingId": "MF-005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-18",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "GATE-18",
+      "findingId": "MF-005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-19",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "GATE-19",
+      "findingId": "MF-005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-20",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "GATE-20",
+      "findingId": "MF-005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-21",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "GATE-21",
+      "findingId": "MF-005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-22",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "GATE-22",
+      "findingId": "MF-005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-23",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "GATE-23",
+      "findingId": "MF-005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-24",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "GATE-24",
+      "findingId": "MF-005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-25",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "GATE-25",
+      "findingId": "MF-005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-26",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "GATE-26",
+      "findingId": "MF-005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-27",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "GATE-27",
+      "findingId": "MF-005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-28",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "GATE-28",
+      "findingId": "MF-005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-29",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "GATE-29",
+      "findingId": "MF-005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-30",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "GATE-30",
+      "findingId": "MF-005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-31",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "GATE-31",
+      "findingId": "MF-005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-32",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "GATE-32",
+      "findingId": "MF-005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-33",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "GATE-33",
+      "findingId": "MF-005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-34",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "GATE-34",
+      "findingId": "MF-005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-35",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "GATE-35",
+      "findingId": "MF-005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-36",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "GATE-36",
+      "findingId": "MF-005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#PATTERN-CORRECTIONS",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "PATTERN-CORRECTIONS",
+      "findingId": "MF-006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#PATTERNS-CONFIRMED-STRONG",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "PATTERNS-CONFIRMED-STRONG",
+      "findingId": "MF-006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#SIBLING-DRIFT",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "SIBLING-DRIFT",
+      "findingId": "MF-006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#SIBLING-DRIFT-INTRA-FILE",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "SIBLING-DRIFT-INTRA-FILE",
+      "findingId": "MF-006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#STRUCK-01",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "STRUCK-01",
+      "findingId": "MF-007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#STRUCK-02",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "STRUCK-02",
+      "findingId": "MF-007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#STRUCK-03",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "STRUCK-03",
+      "findingId": "MF-007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#STRUCK-04",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "STRUCK-04",
+      "findingId": "MF-007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#STRUCK-05",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "STRUCK-05",
+      "findingId": "MF-007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#STRUCK-06",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "STRUCK-06",
+      "findingId": "MF-007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#STRUCK-07",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "STRUCK-07",
+      "findingId": "MF-007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#STRUCK-08",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "STRUCK-08",
+      "findingId": "MF-007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#STRUCK-09",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "STRUCK-09",
+      "findingId": "MF-007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#STRUCK-10",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "STRUCK-10",
+      "findingId": "MF-007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#STRUCK-11",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "STRUCK-11",
+      "findingId": "MF-007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#STRUCK-12",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "STRUCK-12",
+      "findingId": "MF-007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#STRUCK-13",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "STRUCK-13",
+      "findingId": "MF-007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#STRUCK-14",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "STRUCK-14",
+      "findingId": "MF-007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#STRUCK-15",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "STRUCK-15",
+      "findingId": "MF-007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#STRUCK-16",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "STRUCK-16",
+      "findingId": "MF-007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#STRUCK-17",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "STRUCK-17",
+      "findingId": "MF-007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#STRUCK-18",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "STRUCK-18",
+      "findingId": "MF-007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#STRUCK-19",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "STRUCK-19",
+      "findingId": "MF-007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#CALIBRATION-INJECTION",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "CALIBRATION-INJECTION",
+      "findingId": "MF-008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#CALIBRATION-MARKETPLACE-SEED",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "CALIBRATION-MARKETPLACE-SEED",
+      "findingId": "MF-008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#CALIBRATION-NOTIFY-WIDE",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "CALIBRATION-NOTIFY-WIDE",
+      "findingId": "MF-008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#CALIBRATION-HOOKS-SCHEMA",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "CALIBRATION-HOOKS-SCHEMA",
+      "findingId": "MF-008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#CALIBRATION-AREA-SEVERITY",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "CALIBRATION-AREA-SEVERITY",
+      "findingId": "MF-008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#OPERATOR-DECISION-01",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "OPERATOR-DECISION-01",
+      "findingId": "MF-009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#OPERATOR-DECISION-02",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "OPERATOR-DECISION-02",
+      "findingId": "MF-009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#OPERATOR-DECISION-03",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "OPERATOR-DECISION-03",
+      "findingId": "MF-009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#OPERATOR-DECISION-04",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "OPERATOR-DECISION-04",
+      "findingId": "MF-009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#OPERATOR-DECISION-05",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "OPERATOR-DECISION-05",
+      "findingId": "MF-009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#OPERATOR-DECISION-06",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "OPERATOR-DECISION-06",
+      "findingId": "MF-009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#OPERATOR-DECISION-07",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "OPERATOR-DECISION-07",
+      "findingId": "MF-009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#OPERATOR-DECISION-08",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "OPERATOR-DECISION-08",
+      "findingId": "MF-009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#OPERATOR-DECISION-09",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "OPERATOR-DECISION-09",
+      "findingId": "MF-009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#SUGGESTED-SEQUENCING-01-11",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "SUGGESTED-SEQUENCING-01-11",
+      "findingId": "MF-010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#KNOWN-GAP-COVERAGE-REPORT",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "KNOWN-GAP-COVERAGE-REPORT",
+      "findingId": "MF-011"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#KNOWN-GAP-COVERAGE-NOT-MUTATION",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "KNOWN-GAP-COVERAGE-NOT-MUTATION",
+      "findingId": "MF-011"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#KNOWN-GAP-UNREVIEWED-SUITES",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "KNOWN-GAP-UNREVIEWED-SUITES",
+      "findingId": "MF-011"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#KNOWN-GAP-ADVERSARIAL-NEGATIVES",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "KNOWN-GAP-ADVERSARIAL-NEGATIVES",
+      "findingId": "MF-011"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#KNOWN-GAP-PARTITION-BOUNDARIES",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "KNOWN-GAP-PARTITION-BOUNDARIES",
+      "findingId": "MF-011"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#KNOWN-GAP-STALE-CONTROLS",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "KNOWN-GAP-STALE-CONTROLS",
+      "findingId": "MF-011"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#METHOD-PRODUCTION-PLUS-TESTS",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "METHOD-PRODUCTION-PLUS-TESTS",
+      "findingId": "MF-012"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#METHOD-MUTATION",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "METHOD-MUTATION",
+      "findingId": "MF-012"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#METHOD-THROWAWAY-PROBES",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "METHOD-THROWAWAY-PROBES",
+      "findingId": "MF-012"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#METHOD-COMMENTS-AS-LEADS",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "METHOD-COMMENTS-AS-LEADS",
+      "findingId": "MF-012"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#METHOD-FALSIFIED-HYPOTHESES",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "METHOD-FALSIFIED-HYPOTHESES",
+      "findingId": "MF-012"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#METHOD-NAMED-SUSPICIONS",
+      "filePath": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md",
+      "label": "METHOD-NAMED-SUSPICIONS",
+      "findingId": "MF-012"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/README.md#BACKLOG-TRACKING",
+      "filePath": ".planning/reviews/unit-test-adversarial/README.md",
+      "label": "BACKLOG-TRACKING",
+      "findingId": "README-001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/README.md#REVIEWED-TREE-PROVENANCE",
+      "filePath": ".planning/reviews/unit-test-adversarial/README.md",
+      "label": "REVIEWED-TREE-PROVENANCE",
+      "findingId": "README-001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/README.md#CORPUS-CONTENTS",
+      "filePath": ".planning/reviews/unit-test-adversarial/README.md",
+      "label": "CORPUS-CONTENTS",
+      "findingId": "README-002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/README.md#REPORT-PATH-MAPPING",
+      "filePath": ".planning/reviews/unit-test-adversarial/README.md",
+      "label": "REPORT-PATH-MAPPING",
+      "findingId": "README-002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/README.md#FIXING-PASS-READING-ORDER",
+      "filePath": ".planning/reviews/unit-test-adversarial/README.md",
+      "label": "FIXING-PASS-READING-ORDER",
+      "findingId": "README-003"
+    }
+  ],
+  "findings": [
+    {
+      "id": "MF-001",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#PROVENANCE",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#CHANGED-SINCE-FIRST-PASS",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#MASTER-TALLY"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "Cross-cutting source evidence is distributed across the corpus and named exemplars."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "Cross-cutting test evidence is distributed across the corpus and named exemplars."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current git/source census",
+        "observed": "Current corpus and git history retain the two-pass provenance; the reported aggregate counts are explicitly historical and stale for planning."
+      },
+      "rationale": "The report correctly distinguishes historical methodology from live dispositions and warns against count-based planning.",
+      "destination": "Evidence-only provenance retained.",
+      "duplicateOf": null
+    },
+    {
+      "id": "MF-002",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#PRODUCTION-BUG-01",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#PRODUCTION-BUG-02",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#PRODUCTION-BUG-03",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#PRODUCTION-BUG-04",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#PRODUCTION-BUG-05",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#PRODUCTION-BUG-06",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#PRODUCTION-BUG-07",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#PRODUCTION-BUG-08",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#PRODUCTION-BUG-09",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#PRODUCTION-BUG-10",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#PRODUCTION-BUG-11",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#PRODUCTION-BUG-12",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#PRODUCTION-BUG-13",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#PRODUCTION-BUG-14",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#PRODUCTION-LOWER-SEVERITY-DEFECTS"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/mcp/stage.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/index.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/update.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/shared/path-safety.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/transaction/rollback.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/bridges/mcp/stage.test.ts"
+        },
+        {
+          "path": "tests/index.test.ts"
+        },
+        {
+          "path": "tests/orchestrators/plugin/update.test.ts"
+        },
+        {
+          "path": "tests/shared/path-safety.test.ts"
+        },
+        {
+          "path": "tests/transaction/rollback.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "git diff --quiet c8417fbc..HEAD -- extensions/pi-claude-marketplace tests",
+        "exitCode": 1,
+        "observed": "The scoped tree differs only in domain/name.ts, orchestrators/plugin/info.ts, and tests/platform/git.test.ts; inspection shows those edits do not repair the listed production defects, so the probed defect sites remain current."
+      },
+      "rationale": "The consolidated defect table remains actionable; each named defect must retain its own downstream implementation ticket and focused regression probe.",
+      "destination": "Phase 2 production-defect workstream.",
+      "duplicateOf": null
+    },
+    {
+      "id": "MF-003",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#NFR10-ASSERT-PATH-INSIDE",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#NFR10-INFO-READ-ESCAPE",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#NFR10-COMMANDS-GUARDS",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#NFR10-SKILLS-SYMLINK",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#NFR10-HOOK-ENV",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#NFR10-PLUGIN-DATA-DIR",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#NFR10-SCOPED-LOCATIONS-BRAND",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#NFR10-TYPE-TEST-NEVER"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/path-safety.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/commands/stage.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/persistence/locations.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/path-safety.test.ts"
+        },
+        {
+          "path": "tests/orchestrators/plugin/info.test.ts"
+        },
+        {
+          "path": "tests/bridges/commands/stage.test.ts"
+        },
+        {
+          "path": "tests/persistence/locations.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current git/source census",
+        "observed": "CodeGraph and current sources retain lexical path checks, lenient info path derivation, and the named unexercised guards; no intervening scoped change closes the cluster."
+      },
+      "rationale": "The containment cluster remains a security-relevant live workstream; fix the chokepoint before callers and add real-filesystem probes.",
+      "destination": "Phase 2 NFR-10 containment workstream.",
+      "duplicateOf": null
+    },
+    {
+      "id": "MF-004",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#LEVERAGE-01",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#LEVERAGE-02",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#LEVERAGE-03",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#LEVERAGE-04",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#LEVERAGE-05",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#LEVERAGE-06",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#LEVERAGE-07",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#LEVERAGE-08",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#LEVERAGE-09",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#LEVERAGE-10",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#LEVERAGE-11",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#LEVERAGE-12",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#LEVERAGE-13"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/platform/pi-api.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/shared/notify.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/settle.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/platform/git-ops-fake.ts"
+        },
+        {
+          "path": "tests/shared/notify.test.ts"
+        },
+        {
+          "path": "tests/architecture/catalog-uat.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current git/source census",
+        "observed": "Current CodeGraph/source census retains the fake cloning, hidden environment/time dependencies, wide host types, test-only exports, duplicated helpers, fragment assertions, and module-size seams summarized by leverage items 1-13."
+      },
+      "rationale": "These are canonical cross-cutting workstreams, not per-occurrence tickets; downstream plans must preserve the report's sequencing constraints.",
+      "destination": "Phase 3 cross-cutting test-design remediation.",
+      "duplicateOf": null
+    },
+    {
+      "id": "MF-005",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATES-ROOT-CAUSE",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-01",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-02",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-03",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-04",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-05",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-06",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-07",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-08",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-09",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-10",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-11",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-12",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-13",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-14",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-15",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-16",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-17",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-18",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-19",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-20",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-21",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-22",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-23",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-24",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-25",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-26",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-27",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-28",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-29",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-30",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-31",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-32",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-33",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-34",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-35",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#GATE-36"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 4",
+      "sourceRefs": [
+        {
+          "path": "scripts/test-coverage-direct.mjs"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/source-scan.ts"
+        },
+        {
+          "path": "tests/architecture/catalog-uat.test.ts"
+        },
+        {
+          "path": "tests/architecture/no-credential-leak.test.ts"
+        },
+        {
+          "path": "tests/architecture/import-boundaries.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current git/source census",
+        "observed": "Current static inspection retains the listed target omissions, regex spelling gaps, vacuous/zero-visit paths, duplicated gates, dead-fixture blind spots, and absent direct-coverage invocation in the check chain."
+      },
+      "rationale": "The gate audit acceptance criterion remains live: prove visited real targets and plant offender plus benign controls against the exact production spelling.",
+      "destination": "Phase 4 architecture-gate audit.",
+      "duplicateOf": null
+    },
+    {
+      "id": "MF-006",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#PATTERN-CORRECTIONS",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#PATTERNS-CONFIRMED-STRONG",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#SIBLING-DRIFT",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#SIBLING-DRIFT-INTRA-FILE"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "Cross-cutting source evidence is distributed across the corpus and named exemplars."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/edge/notification-boundary.ts"
+        },
+        {
+          "path": "tests/domain/name.test.ts"
+        },
+        {
+          "path": "tests/transaction/phase-ledger.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current git/source census",
+        "observed": "Current referenced exemplar modules exist and retain the described strong forms; the corrections prevent propagation of refuted or incomplete exemplars."
+      },
+      "rationale": "Preserve these as implementation constraints and exemplars, not independent defects.",
+      "destination": "Evidence guidance for Phases 2-4.",
+      "duplicateOf": null
+    },
+    {
+      "id": "MF-007",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#STRUCK-01",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#STRUCK-02",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#STRUCK-03",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#STRUCK-04",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#STRUCK-05",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#STRUCK-06",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#STRUCK-07",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#STRUCK-08",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#STRUCK-09",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#STRUCK-10",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#STRUCK-11",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#STRUCK-12",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#STRUCK-13",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#STRUCK-14",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#STRUCK-15",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#STRUCK-16",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#STRUCK-17",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#STRUCK-18",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#STRUCK-19"
+      ],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "Cross-cutting source evidence is distributed across the corpus and named exemplars."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/compat-01-no-expansion.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current git/source census",
+        "observed": "The meta report supplies positive replacements or refutations for all 19 struck classes; current tree and strict-assert imports preserve those replacement premises."
+      },
+      "rationale": "These historical claims must remain traceable but must not produce implementation work in their refuted or superseded form.",
+      "destination": "Evidence-only closure; retain replacement wording from META-FINDINGS.",
+      "duplicateOf": null
+    },
+    {
+      "id": "MF-008",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#CALIBRATION-INJECTION",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#CALIBRATION-MARKETPLACE-SEED",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#CALIBRATION-NOTIFY-WIDE",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#CALIBRATION-HOOKS-SCHEMA",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#CALIBRATION-AREA-SEVERITY"
+      ],
+      "evidenceStatus": "superseded",
+      "route": "evidence-only closure",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "Cross-cutting source evidence is distributed across the corpus and named exemplars."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/edge/types.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current git/source census",
+        "observed": "The consolidation explicitly replaces inconsistent per-area severities with settled cross-area rulings; current sources do not invalidate those rulings."
+      },
+      "rationale": "Earlier severity labels are superseded while the underlying live issues remain linked through their canonical workstreams.",
+      "destination": "Evidence-only severity reconciliation.",
+      "duplicateOf": null
+    },
+    {
+      "id": "MF-009",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#OPERATOR-DECISION-01",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#OPERATOR-DECISION-02",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#OPERATOR-DECISION-03",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#OPERATOR-DECISION-04",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#OPERATOR-DECISION-05",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#OPERATOR-DECISION-06",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#OPERATOR-DECISION-07",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#OPERATOR-DECISION-08",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#OPERATOR-DECISION-09"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/notify.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/notify.test.ts"
+        },
+        {
+          "path": "tests/architecture/catalog-uat.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current git/source census",
+        "observed": "Current source retains the mutually exclusive design alternatives for defensive branches, module splits, notify rendering, reconcile aliases, cardinality, namespace patching, naming, and coverage-gate placement."
+      },
+      "rationale": "These claims describe genuine design choices with user-visible or broad test-suite consequences and cannot be auto-selected during evidence revalidation.",
+      "destination": "Phase 1 operator decision dossiers MF-DEC-01 through MF-DEC-09.",
+      "duplicateOf": null
+    },
+    {
+      "id": "MF-010",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#SUGGESTED-SEQUENCING-01-11"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "Cross-cutting source evidence is distributed across the corpus and named exemplars."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "Cross-cutting test evidence is distributed across the corpus and named exemplars."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current git/source census",
+        "observed": "Dependency inspection supports production/security fixes and operator decisions preceding broad test rewrites; the sequence remains applicable to the current tree."
+      },
+      "rationale": "Retain sequencing as a planning constraint rather than a separate implementation defect.",
+      "destination": "Roadmap sequencing input.",
+      "duplicateOf": null
+    },
+    {
+      "id": "MF-011",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#KNOWN-GAP-COVERAGE-REPORT",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#KNOWN-GAP-COVERAGE-NOT-MUTATION",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#KNOWN-GAP-UNREVIEWED-SUITES",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#KNOWN-GAP-ADVERSARIAL-NEGATIVES",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#KNOWN-GAP-PARTITION-BOUNDARIES",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#KNOWN-GAP-STALE-CONTROLS"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The historical coverage report is not present in the current checkout; the claim is retained as a known evidence gap, not treated as current coverage proof."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/integration"
+        },
+        {
+          "path": "tests/e2e"
+        },
+        {
+          "path": "tests/live-uat"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current git/source census",
+        "observed": "The excluded suite directories remain present, while the historical coverage artifact is absent; the corpus itself marks these areas outside the completed sweep and names stale control documents."
+      },
+      "rationale": "These limitations survive as explicit deferred audit scope and prevent interpreting this corpus as repository-wide proof.",
+      "destination": "Deferred follow-up sweep and control-document regeneration.",
+      "duplicateOf": null
+    },
+    {
+      "id": "MF-012",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#METHOD-PRODUCTION-PLUS-TESTS",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#METHOD-MUTATION",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#METHOD-THROWAWAY-PROBES",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#METHOD-COMMENTS-AS-LEADS",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#METHOD-FALSIFIED-HYPOTHESES",
+        ".planning/reviews/unit-test-adversarial/META-FINDINGS.md#METHOD-NAMED-SUSPICIONS"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "Cross-cutting source evidence is distributed across the corpus and named exemplars."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "Cross-cutting test evidence is distributed across the corpus and named exemplars."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current git/source census",
+        "observed": "The method claims are supported by the report's linked examples and remain process guidance rather than product behavior."
+      },
+      "rationale": "Retain as evidence-quality guidance for later shards and implementation verification.",
+      "destination": "Evidence-review protocol guidance.",
+      "duplicateOf": null
+    },
+    {
+      "id": "README-001",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/README.md#BACKLOG-TRACKING",
+        ".planning/reviews/unit-test-adversarial/README.md#REVIEWED-TREE-PROVENANCE"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "sourceRefs": [{ "path": ".planning/BACKLOG.md" }],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "Repository provenance and tracking claims do not describe executable test behavior."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "git cat-file plus current planning-state inspection",
+        "observed": "Commit c8417fbc exists locally and TESTQ-01 remains the single historical corpus tracking identity."
+      },
+      "rationale": "The README correctly records the reviewed revision and single-item backlog provenance; those facts are historical locators, not live dispositions.",
+      "destination": "Evidence-only provenance retained.",
+      "duplicateOf": null
+    },
+    {
+      "id": "README-002",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/README.md#CORPUS-CONTENTS",
+        ".planning/reviews/unit-test-adversarial/README.md#REPORT-PATH-MAPPING"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "sourceRefs": [{ "path": ".planning/reviews/unit-test-adversarial/README.md" }],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "Corpus inventory and legacy path mapping are documentary structure claims."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "revalidation inventory and filesystem census",
+        "observed": "The live corpus contains the assigned first-pass, adversarial, and control documents, and internal unit-test-findings paths map to this archived directory."
+      },
+      "rationale": "The contents and path-alias statements remain accurate discovery metadata.",
+      "destination": "Evidence-only corpus navigation.",
+      "duplicateOf": null
+    },
+    {
+      "id": "README-003",
+      "claimIds": [".planning/reviews/unit-test-adversarial/README.md#FIXING-PASS-READING-ORDER"],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "sourceRefs": [
+        { "path": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md" },
+        { "path": ".planning/reviews/unit-test-adversarial/_AUDIT.md" }
+      ],
+      "testRefs": [{ "path": "N/A", "reason": "Reading order is a review-process prescription." }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current corpus cross-reference inspection",
+        "observed": "META-FINDINGS remains the consolidation document and explicitly directs readers to _AUDIT.md and area files for detail."
+      },
+      "rationale": "The prescribed reading order remains useful, while current evidence must still independently revalidate every inherited claim.",
+      "destination": "Evidence-review protocol guidance.",
+      "duplicateOf": null
+    }
+  ],
+  "decisions": [],
+  "scopeChanges": []
+}

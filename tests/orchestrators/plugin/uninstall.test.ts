@@ -10,13 +10,21 @@ import {
   GENERATED_AGENT_MARKER,
   GENERATED_AGENT_PREFIX,
 } from "../../../extensions/pi-claude-marketplace/bridges/agents/marker.ts";
+import {
+  createHooksRouting,
+  createHooksRuntime,
+  readHooksJson,
+} from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
   AgentsUnstageFailureError,
   cascadeUnstagePlugin,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
-import { uninstallPlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
+import {
+  createNodeUninstallPlugin,
+  createUninstallPlugin,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
 import { loadAgentsIndex } from "../../../extensions/pi-claude-marketplace/persistence/agents-index-io.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
@@ -24,17 +32,26 @@ import {
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { atomicWriteJson } from "../../../extensions/pi-claude-marketplace/shared/atomic-json.ts";
+import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import {
-  resetCompletionCache,
-  getPluginIndex,
-} from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
-import { MarketplaceNotFoundError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+  MarketplaceNotFoundError,
+  StateLockHeldError,
+} from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { SymlinkRefusedError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
+import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
 import { retryTree } from "./scope-tree-inventory.ts";
 
-import type { UninstallPluginOutcome } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
+import type {
+  HooksRouting,
+  HooksRuntime,
+} from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
+import type {
+  UninstallPluginOperation,
+  UninstallPluginOptions,
+  UninstallPluginOutcome,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
 import type { AgentsIndex } from "../../../extensions/pi-claude-marketplace/persistence/agents-index-schema.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
@@ -72,6 +89,60 @@ import type { TestContext } from "node:test";
 interface NotifyRecord {
   message: string;
   severity?: string;
+}
+
+/** Populate one lifecycle runtime with a distinct hook route. */
+async function populateRuntimeRoute(
+  cwd: string,
+  runtime: HooksRuntime,
+  opts: { readonly command: string; readonly marketplace: string; readonly plugin: string },
+): Promise<HooksRouting> {
+  const pluginRoot = path.join(cwd, "runtime-routes", `${opts.marketplace}-${opts.plugin}`);
+  const hooksJsonPath = path.join(pluginRoot, "hooks.json");
+  await mkdir(pluginRoot, { recursive: true });
+  await writeFile(
+    hooksJsonPath,
+    JSON.stringify({
+      PreToolUse: [{ hooks: [{ command: opts.command, type: "command" }], matcher: "" }],
+    }),
+    "utf8",
+  );
+  const hooksRouting = createHooksRouting(runtime, { readHooksJson });
+  await hooksRouting.readAndCachePluginHooks({
+    cwd,
+    hooksJsonPath,
+    logPrefix: "uninstall-owner-test",
+    marketplace: opts.marketplace,
+    plugin: opts.plugin,
+    resolvedSource: asAbsolutePluginRoot(pluginRoot),
+    scope: "project",
+  });
+  hooksRouting.rebuildRoutingTables();
+  return hooksRouting;
+}
+
+test("uninstall exposes its required transaction factory", () => {
+  assert.strictEqual(typeof createUninstallPlugin, "function");
+});
+
+/** Construct one production uninstall operation with fresh lifecycle owners. */
+function createUninstallOwner(): UninstallPluginOperation {
+  return createNodeUninstallPlugin(
+    createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    createCompletionCache(),
+  );
+}
+
+function uninstallWithFreshOwner(
+  opts: UninstallPluginOptions & { notifications: { mode: "orchestrated" } },
+): Promise<UninstallPluginOutcome>;
+function uninstallWithFreshOwner(
+  opts: UninstallPluginOptions,
+): Promise<UninstallPluginOutcome | undefined>;
+function uninstallWithFreshOwner(
+  opts: UninstallPluginOptions,
+): Promise<UninstallPluginOutcome | undefined> {
+  return createUninstallOwner()(opts);
 }
 
 function makeCtx(piOverrides?: { getAllTools?: () => unknown[] }): {
@@ -127,26 +198,8 @@ async function seedState(extensionRoot: string, state: ExtensionState): Promise<
   await saveState(extensionRoot, state);
 }
 
-/**
- * Hermetic home: override process.env.HOME for the duration of `fn`, then
- * restore. Lets us isolate user-scope state.json under a tmp root so the
- * test never reads or writes the developer's real ~/.pi/.
- */
 async function withHermeticHome<T>(fn: () => Promise<T>): Promise<T> {
-  const hermeticHome = await mkdtemp(path.join(tmpdir(), "uninstall-home-"));
-  const prevHome = process.env.HOME;
-  process.env.HOME = hermeticHome;
-  try {
-    return await fn();
-  } finally {
-    if (prevHome === undefined) {
-      delete process.env.HOME;
-    } else {
-      process.env.HOME = prevHome;
-    }
-
-    await rm(hermeticHome, { recursive: true, force: true });
-  }
+  return withHermeticEnvironment("uninstall-", fn);
 }
 
 /** Build a minimum-viable owned agent file (basename prefix + body marker). */
@@ -267,7 +320,7 @@ test("PU-1: cascade order observable end-state -- all four bridges' resources re
       const seeded = await seedFullPlugin(locations, "mp", "hello", cwd);
       const { ctx, pi, notifications } = makeCtx();
 
-      await uninstallPlugin({
+      await uninstallWithFreshOwner({
         ctx,
         pi,
         scope: "project",
@@ -297,6 +350,7 @@ test("PU-1: cascade order observable end-state -- all four bridges' resources re
         notifications[0]?.message,
         "● mp [project]\n  ○ hello v0.0.1 (uninstalled)\n\n/reload to pick up changes",
       );
+      assert.doesNotMatch(notifications[0]?.message ?? "", /Plugin uninstall:/);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -337,7 +391,7 @@ test("PU-2: pluginDataDir rm failure leaves state record removed; cleanup leak S
 
       const { ctx, pi, notifications } = makeCtx();
       try {
-        await uninstallPlugin({
+        await uninstallWithFreshOwner({
           ctx,
           pi,
           scope: "project",
@@ -411,7 +465,7 @@ test("NFR-10: pluginDataDir containment failure PROPAGATES; it is not swallowed 
       // survived. D-19-01 sanctions swallowing the cleanup, not the
       // assertion guarding it.
       await assert.rejects(
-        uninstallPlugin({
+        uninstallWithFreshOwner({
           ctx,
           pi,
           scope: "project",
@@ -485,7 +539,7 @@ test("PU-3 + PU-7: foreign agent content -> V2 PluginFailedMessage + state recor
       });
 
       const { ctx, pi, notifications } = makeCtx();
-      await uninstallPlugin({
+      await uninstallWithFreshOwner({
         ctx,
         pi,
         scope: "project",
@@ -564,7 +618,7 @@ test("PU-5 / D-01: standalone uninstall of an already-gone plugin -> error row (
       });
 
       const { ctx, pi, notifications } = makeCtx();
-      await uninstallPlugin({
+      await uninstallWithFreshOwner({
         ctx,
         pi,
         scope: "project",
@@ -599,7 +653,7 @@ test("ATTR-04 / M4: marketplace record itself absent -> LOUD {marketplace not ad
       // the silent already-gone-plugin converge above). The standalone
       // `marketplace-not-added` variant carries the requested-scope bracket.
       const { ctx, pi, notifications } = makeCtx();
-      await uninstallPlugin({
+      await uninstallWithFreshOwner({
         ctx,
         pi,
         scope: "project",
@@ -644,7 +698,7 @@ test("SCOPE-01: explicit-scope uninstall of an other-scope-only target names the
       });
 
       const { ctx, pi, notifications } = makeCtx();
-      await uninstallPlugin({
+      await uninstallWithFreshOwner({
         ctx,
         pi,
         scope: "project",
@@ -716,7 +770,7 @@ test("PU-6: legacy state record missing resources.agents/mcpServers loads + unin
       await writeFile(locations.stateJsonPath, JSON.stringify(legacyState));
 
       const { ctx, pi, notifications } = makeCtx();
-      await uninstallPlugin({
+      await uninstallWithFreshOwner({
         ctx,
         pi,
         scope: "project",
@@ -769,7 +823,7 @@ test("PU-8 (a): uninstalled variant -> reload-hint always emitted by notify() pe
       });
 
       const { ctx, pi, notifications } = makeCtx();
-      await uninstallPlugin({
+      await uninstallWithFreshOwner({
         ctx,
         pi,
         scope: "project",
@@ -819,7 +873,7 @@ test("PU-8 (b): V2 per-variant reload-hint -- emitted on uninstalled even with z
         });
 
       const { ctx, pi, notifications } = makeCtx();
-      await uninstallPlugin({
+      await uninstallWithFreshOwner({
         ctx,
         pi,
         scope: "project",
@@ -865,7 +919,7 @@ test("MSG-SD-3: uninstall NEVER emits soft-dep markers (structural via V2 Plugin
       // field (D-15-02 / MSG-SD-3) so renderPluginRow's
       // composeReasons call passes (false, false) for both declares-flags.
       const { ctx, pi, notifications } = makeCtx({ getAllTools: () => [] });
-      await uninstallPlugin({
+      await uninstallWithFreshOwner({
         ctx,
         pi,
         scope: "project",
@@ -904,14 +958,18 @@ test("D-03-INV :: uninstall invalidates plugin cache for the target marketplace"
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-d03inv-"));
     try {
-      resetCompletionCache();
       const locations = locationsFor("project", cwd);
       await seedFullPlugin(locations, "mp", "hello", cwd);
+      const completionCache = createCompletionCache();
+      const uninstallPlugin = createNodeUninstallPlugin(
+        createHooksRouting(createHooksRuntime(), { readHooksJson }),
+        completionCache,
+      );
 
       // Pre-warm the plugin index memory entry.
       const pluginCachePath = await locations.pluginCacheFile("mp");
       let rebuildCount = 0;
-      await getPluginIndex(pluginCachePath, "project", "mp", () => {
+      await completionCache.getPluginIndex(pluginCachePath, "project", "mp", () => {
         rebuildCount += 1;
         return Promise.resolve([{ name: "hello", status: "installed" }]);
       });
@@ -931,7 +989,7 @@ test("D-03-INV :: uninstall invalidates plugin cache for the target marketplace"
       });
 
       // Memory must be cleared; with file absent, next read invokes rebuild.
-      await getPluginIndex(pluginCachePath, "project", "mp", () => {
+      await completionCache.getPluginIndex(pluginCachePath, "project", "mp", () => {
         rebuildCount += 1;
         return Promise.resolve([{ name: "hello", status: "available" }]);
       });
@@ -952,7 +1010,6 @@ test("cache-drop EISDIR swallowed: success notification still emitted, plugin re
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-cache-eisdir-"));
     try {
-      resetCompletionCache();
       const locations = locationsFor("project", cwd);
       await seedState(locations.extensionRoot, {
         schemaVersion: 1,
@@ -982,7 +1039,7 @@ test("cache-drop EISDIR swallowed: success notification still emitted, plugin re
         });
 
       const { ctx, pi, notifications } = makeCtx();
-      await uninstallPlugin({
+      await uninstallWithFreshOwner({
         ctx,
         pi,
         scope: "project",
@@ -1057,6 +1114,7 @@ test("TR-03 (non-AG-5 partial): resources.* filtered by outcome.dropped.*; sReco
                 skills: ["skill1", "skill2"],
                 prompts: ["cmd1", "cmd2"],
                 agents: ["agent1", "agent2"],
+                hooks: ["hello"],
                 mcpServers: ["mcp1", "mcp2"],
               }),
             },
@@ -1078,7 +1136,7 @@ test("TR-03 (non-AG-5 partial): resources.* filtered by outcome.dropped.*; sReco
             skills: ["skill1"],
             commands: ["cmd1"],
             agents: [],
-            hooks: [],
+            hooks: ["hello"],
             mcpServers: [],
           },
           cause: err,
@@ -1086,7 +1144,22 @@ test("TR-03 (non-AG-5 partial): resources.* filtered by outcome.dropped.*; sReco
       };
 
       const { ctx, pi, notifications } = makeCtx();
-      await uninstallPlugin({
+      const ownerRuntime = createHooksRuntime();
+      const peerRuntime = createHooksRuntime();
+      const hooksRouting = await populateRuntimeRoute(cwd, ownerRuntime, {
+        command: "echo partial-owner",
+        marketplace: "mp",
+        plugin: "hello",
+      });
+      await populateRuntimeRoute(cwd, peerRuntime, {
+        command: "echo partial-peer",
+        marketplace: "mp",
+        plugin: "hello",
+      });
+      await createNodeUninstallPlugin(
+        hooksRouting,
+        createCompletionCache(),
+      )({
         ctx,
         pi,
         scope: "project",
@@ -1140,6 +1213,11 @@ test("TR-03 (non-AG-5 partial): resources.* filtered by outcome.dropped.*; sReco
         (notifications[0]?.message ?? "").includes("/reload to pick up changes"),
         false,
         "TR-03 partial: failed uninstall must not emit reload-hint trailer",
+      );
+      assert.deepEqual(ownerRuntime.getRoutingBucket("PreToolUse"), []);
+      assert.deepEqual(
+        peerRuntime.getRoutingBucket("PreToolUse").map((entry) => entry.pluginId),
+        ["hello"],
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -1199,7 +1277,16 @@ test("TR-03 (AG-5 cause): full row preserved intact when cause instanceof Agents
       };
 
       const { ctx, pi, notifications } = makeCtx();
-      await uninstallPlugin({
+      const ownerRuntime = createHooksRuntime();
+      const hooksRouting = await populateRuntimeRoute(cwd, ownerRuntime, {
+        command: "echo ag5-owner",
+        marketplace: "mp",
+        plugin: "hello",
+      });
+      await createNodeUninstallPlugin(
+        hooksRouting,
+        createCompletionCache(),
+      )({
         ctx,
         pi,
         scope: "project",
@@ -1249,6 +1336,10 @@ test("TR-03 (AG-5 cause): full row preserved intact when cause instanceof Agents
         ),
         `TR-03 AG-5: expected failure row; got "${notifications[0]?.message ?? ""}"`,
       );
+      assert.deepEqual(
+        ownerRuntime.getRoutingBucket("PreToolUse").map((entry) => entry.pluginId),
+        ["hello"],
+      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -1270,7 +1361,7 @@ for (const { code, reason } of [
         const { ctx, pi, notifications } = makeCtx();
 
         // act
-        const outcome = await uninstallPlugin({
+        const outcome = await uninstallWithFreshOwner({
           ctx,
           pi,
           scope: "project",
@@ -1300,6 +1391,47 @@ for (const { code, reason } of [
   });
 }
 
+test("cascade failure maps StateLockHeldError to lock held independently of its message", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-cascade-lock-held-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedFullPlugin(locations, "mp", "hello", cwd);
+      const cause = new StateLockHeldError("project", locations.stateLockFile);
+      cause.message = "wording deliberately unrelated to contention";
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      const outcome = await uninstallWithFreshOwner({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        cascade: cascadeFailure(cause),
+      });
+
+      // assert
+      assert.equal(outcome, undefined);
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n● mp [project]\n" +
+            "  ⊘ hello v0.0.1 (failed) {lock held}\n" +
+            "    cause: wording deliberately unrelated to contention",
+          severity: "error",
+        },
+      ]);
+      const state = await loadState(locations.extensionRoot);
+      assert.ok(state.marketplaces["mp"]?.plugins["hello"] !== undefined);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("cascade failure maps an unclassified error to unreadable", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-cascade-unclassified-"));
@@ -1311,7 +1443,7 @@ test("cascade failure maps an unclassified error to unreadable", async () => {
       const { ctx, pi, notifications } = makeCtx();
 
       // act
-      const outcome = await uninstallPlugin({
+      const outcome = await uninstallWithFreshOwner({
         ctx,
         pi,
         scope: "project",
@@ -1355,7 +1487,7 @@ test("cascade failure without a cause uses the exported fallback error", async (
       const { ctx, pi, notifications } = makeCtx();
 
       // act
-      const outcome = await uninstallPlugin({
+      const outcome = await uninstallWithFreshOwner({
         ctx,
         pi,
         scope: "project",
@@ -1397,7 +1529,7 @@ test("cascade string rejection is normalized before rendering", async () => {
       const { ctx, pi, notifications } = makeCtx();
 
       // act
-      const outcome = await uninstallPlugin({
+      const outcome = await uninstallWithFreshOwner({
         ctx,
         pi,
         scope: "project",
@@ -1441,7 +1573,7 @@ test("RECON-03 uninstall orchestrated mode -- cascade failure returns a typed re
       const { ctx, pi, notifications } = makeCtx();
 
       // act
-      const outcome = await uninstallPlugin({
+      const outcome = await uninstallWithFreshOwner({
         ctx,
         pi,
         scope: "project",
@@ -1476,7 +1608,7 @@ test("RECON-03 uninstall orchestrated mode -- success returns { status: 'uninsta
       await seedFullPlugin(locations, "mp", "hello", cwd);
       const { ctx, pi, notifications } = makeCtx();
 
-      const outcome = await uninstallPlugin({
+      const outcome = await uninstallWithFreshOwner({
         ctx,
         pi,
         scope: "project",
@@ -1529,7 +1661,7 @@ test("WR-06 uninstall orchestrated mode -- PU-5 silent converge (record already 
       });
 
       const { ctx, pi, notifications } = makeCtx();
-      const outcome = await uninstallPlugin({
+      const outcome = await uninstallWithFreshOwner({
         ctx,
         pi,
         scope: "project",
@@ -1701,7 +1833,7 @@ test("WR-06 uninstall orchestrated mode -- marketplace removed after resolution 
       let cascadeCalls = 0;
 
       // act
-      const outcome = await uninstallPlugin({
+      const outcome = await uninstallWithFreshOwner({
         ctx,
         pi,
         cwd,
@@ -1738,7 +1870,7 @@ test("RECON-03 uninstall orchestrated mode -- missing marketplace returns { stat
     const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-orch-na-"));
     try {
       const { ctx, pi, notifications } = makeCtx();
-      const outcome = await uninstallPlugin({
+      const outcome = await uninstallWithFreshOwner({
         ctx,
         pi,
         scope: "project",
@@ -1769,7 +1901,7 @@ test("RECON-03 uninstall standalone-default mode -- omitted notifications option
       await seedFullPlugin(locations, "mp", "byte-hello", cwd);
       const { ctx, pi, notifications } = makeCtx();
 
-      const outcome = await uninstallPlugin({
+      const outcome = await uninstallWithFreshOwner({
         ctx,
         pi,
         scope: "project",
@@ -1814,7 +1946,7 @@ test("WB-01: standalone uninstall deletes the plugin entry from claude-plugins.j
       );
 
       const { ctx, pi } = makeCtx();
-      await uninstallPlugin({
+      await uninstallWithFreshOwner({
         ctx,
         pi,
         scope: "project",
@@ -1861,7 +1993,7 @@ test("cross-layer: standalone uninstall deletes the plugin key from BOTH the bas
       );
 
       const { ctx, pi } = makeCtx();
-      await uninstallPlugin({
+      await uninstallWithFreshOwner({
         ctx,
         pi,
         scope: "project",
@@ -1908,7 +2040,7 @@ test("WR-09 / T-56-03-01: orchestrated-mode uninstall SKIPS write-back; config u
       const bytesBefore = await readFile(locations.configJsonPath);
 
       const { ctx, pi } = makeCtx();
-      await uninstallPlugin({
+      await uninstallWithFreshOwner({
         ctx,
         pi,
         scope: "project",
@@ -1961,7 +2093,7 @@ test("WB-01: ALREADY-GONE uninstall leaves config byte-unchanged", async () => {
       const bytesBefore = await readFile(locations.configJsonPath);
 
       const { ctx, pi } = makeCtx();
-      await uninstallPlugin({
+      await uninstallWithFreshOwner({
         ctx,
         pi,
         scope: "project",
@@ -1997,7 +2129,7 @@ test("CFG-03 / T-56-03-04: invalid config aborts uninstall; basename-only cause;
       const stateMtimePre = (await stat(statePath)).mtimeMs;
 
       const { ctx, pi, notifications } = makeCtx();
-      await uninstallPlugin({
+      await uninstallWithFreshOwner({
         ctx,
         pi,
         scope: "project",
@@ -2041,7 +2173,7 @@ test("CFG-03 orchestrated invalid config returns a typed result without notifica
       const { ctx, pi, notifications } = makeCtx();
 
       // act
-      const outcome = await uninstallPlugin({
+      const outcome = await uninstallWithFreshOwner({
         ctx,
         pi,
         scope: "project",
@@ -2076,21 +2208,9 @@ test("CFG-03 orchestrated invalid config returns a typed result without notifica
 // ─────────────────────────────────────────────────────────────────────────────
 
 test("WR-03: uninstallPlugin clears the plugin's routing-table entries without /reload", async () => {
-  const { addPluginConfigToCache } =
-    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts");
-  const { resetRoutingState, setRoutingBucket } =
-    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
-  const { getRoutingBucket } =
-    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts");
-  const { compileIfPredicate, MATCH_ALL_IF } =
-    await import("../../../extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts");
-  const { parseHooksConfig, parseMatcher } =
-    await import("../../../extensions/pi-claude-marketplace/domain/components/hooks.ts");
-
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-wr03-"));
     try {
-      resetRoutingState();
       const locations = locationsFor("project", cwd);
 
       // Pre-seed state with a hooks-bearing plugin so the rebuild walk sees
@@ -2113,47 +2233,39 @@ test("WR-03: uninstallPlugin clears the plugin's routing-table entries without /
         },
       });
 
-      // Pre-seed the parsed-config cache + routing table for the plugin so
-      // the uninstall has something visible to remove. Two parallel seeds:
-      // (a) cache so rebuild walks pick it up, (b) explicit routing-table
-      // injection so the test's pre-condition assertion is unambiguous.
-      const TEST_IF_CTX = { homedir: "/home/u", cwd, projectRoot: cwd } as const;
-      const parsed = parseHooksConfig(
-        JSON.stringify({
-          PreToolUse: [{ matcher: "", hooks: [{ type: "command", command: "echo hi" }] }],
-        }),
-        TEST_IF_CTX,
-        compileIfPredicate,
-      );
-      assert.ok(parsed.ok);
-      addPluginConfigToCache(
-        "project",
-        "mp",
-        "p1",
-        asAbsolutePluginRoot("/test/project/mp/p1"),
-        parsed.value,
-        parsed.ifPredicates,
-      );
-      setRoutingBucket("PreToolUse", [
-        {
-          scope: "project",
-          marketplace: "mp",
-          pluginId: "p1",
-          resolvedSource: asAbsolutePluginRoot("/test/plugin-root"),
-          claudeEvent: "PreToolUse",
-          matcher: parseMatcher(""),
-          rawMatcher: "",
-          handlerDecl: { type: "command", command: "echo hi" },
-          declarationIndex: 0,
-          ifPredicate: MATCH_ALL_IF,
-        },
-      ]);
+      const ownerRuntime = createHooksRuntime();
+      const peerRuntime = createHooksRuntime();
+      const hooksRouting = await populateRuntimeRoute(cwd, ownerRuntime, {
+        command: "echo target",
+        marketplace: "mp",
+        plugin: "p1",
+      });
+      await populateRuntimeRoute(cwd, ownerRuntime, {
+        command: "echo unrelated",
+        marketplace: "mp",
+        plugin: "p2",
+      });
+      await populateRuntimeRoute(cwd, peerRuntime, {
+        command: "echo peer",
+        marketplace: "mp",
+        plugin: "p1",
+      });
 
       // Pre-condition: routing table holds the entry.
-      assert.equal(getRoutingBucket("PreToolUse").length, 1);
+      assert.deepEqual(
+        ownerRuntime.getRoutingBucket("PreToolUse").map((entry) => entry.pluginId),
+        ["p1", "p2"],
+      );
+      assert.deepEqual(
+        peerRuntime.getRoutingBucket("PreToolUse").map((entry) => entry.pluginId),
+        ["p1"],
+      );
 
       const { ctx, pi, notifications } = makeCtx();
-      await uninstallPlugin({
+      await createNodeUninstallPlugin(
+        hooksRouting,
+        createCompletionCache(),
+      )({
         ctx,
         pi,
         scope: "project",
@@ -2178,7 +2290,60 @@ test("WR-03: uninstallPlugin clears the plugin's routing-table entries without /
       // is gone. This proves WR-03's `rebuildRoutingTables(state, locations)`
       // ran inside `withLockedStateTransaction` right after
       // `removePluginConfigFromCache`.
-      assert.equal(getRoutingBucket("PreToolUse").length, 0);
+      assert.deepEqual(
+        ownerRuntime.getRoutingBucket("PreToolUse").map((entry) => entry.pluginId),
+        ["p2"],
+      );
+      assert.deepEqual(
+        peerRuntime.getRoutingBucket("PreToolUse").map((entry) => entry.pluginId),
+        ["p1"],
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("WR-03: a post-save routing failure cannot roll back committed uninstall", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-routing-failure-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedState(locations.extensionRoot, {
+        schemaVersion: 1,
+        marketplaces: {
+          mp: {
+            name: "mp",
+            scope: "project",
+            source: pathSource("./src"),
+            addedFromCwd: cwd,
+            manifestPath: path.join(cwd, "marketplace.json"),
+            marketplaceRoot: cwd,
+            plugins: { hello: makePluginRecord() },
+          },
+        },
+      });
+      const routingError = new Error("forced post-save routing failure");
+      const { ctx, pi, notifications } = makeCtx();
+
+      await createNodeUninstallPlugin(
+        {
+          rebuildRoutingTables(): void {
+            throw new Error("rebuild must not run after cache removal throws");
+          },
+          removePluginConfigFromCache(): void {
+            throw routingError;
+          },
+        },
+        createCompletionCache(),
+      )({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+
+      assert.deepEqual(
+        Object.keys((await loadState(locations.extensionRoot)).marketplaces.mp?.plugins ?? {}),
+        [],
+      );
+      assert.equal(notifications.length, 1);
+      assert.match(notifications[0]?.message ?? "", /hello v0\.0\.1 \(uninstalled\)/);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -2247,7 +2412,7 @@ test("uninstalling the last referencer of a git clone deletes its plugin-clones 
       assert.equal(await pathExists(cloneDir), true, "clone dir present before uninstall");
 
       const { ctx, pi, notifications } = makeCtx();
-      await uninstallPlugin({
+      await uninstallWithFreshOwner({
         ctx,
         pi,
         scope: "project",
@@ -2283,7 +2448,7 @@ test("uninstalling one of two plugins sharing a git clone leaves the clone until
 
       // Uninstall the FIRST sharer -> the clone survives (beta still references it).
       const first = makeCtx();
-      await uninstallPlugin({
+      await uninstallWithFreshOwner({
         ctx: first.ctx,
         pi: first.pi,
         scope: "project",
@@ -2299,7 +2464,7 @@ test("uninstalling one of two plugins sharing a git clone leaves the clone until
 
       // Uninstall the SECOND sharer -> now the last referencer is gone, GC sweeps it.
       const second = makeCtx();
-      await uninstallPlugin({
+      await uninstallWithFreshOwner({
         ctx: second.ctx,
         pi: second.pi,
         scope: "project",
@@ -2334,7 +2499,7 @@ test("a GC rm leak does not fail the uninstall (leak swallowed per D-19-01)", as
 
       const { ctx, pi, notifications } = makeCtx();
       try {
-        await uninstallPlugin({
+        await uninstallWithFreshOwner({
           ctx,
           pi,
           scope: "project",
@@ -2371,7 +2536,7 @@ test("GC never rolls back the committed uninstall: the state record is deleted e
 
       const { ctx, pi } = makeCtx();
       try {
-        await uninstallPlugin({
+        await uninstallWithFreshOwner({
           ctx,
           pi,
           scope: "project",
@@ -2434,7 +2599,14 @@ test("cross-layer cascade: uninstall sweeps the plugin key from the sibling laye
 
       const { ctx, pi } = makeCtx();
       // STANDALONE mode (notifications omitted), targeting BASE.
-      await uninstallPlugin({ ctx, pi, scope: "project", cwd, marketplace: "m", plugin: "p" });
+      await uninstallWithFreshOwner({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "m",
+        plugin: "p",
+      });
 
       const { loadConfig } =
         await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
@@ -2484,7 +2656,7 @@ test("D-19-01: a clone-GC throw (plugin-clones path is a FILE) is swallowed -- t
       await writeFile(locations.pluginClonesDir, "not a directory");
       const { ctx, pi, notifications } = makeCtx();
 
-      await uninstallPlugin({
+      await uninstallWithFreshOwner({
         ctx,
         pi,
         scope: "project",
@@ -2539,7 +2711,14 @@ test("LIFE-04: manifest-absent uninstall removes the skill directory", async () 
       assert.equal(await pathExists(manifestPathFor(cwd)), false, "manifest absent before call");
 
       const { ctx, pi, notifications } = makeCtx();
-      await uninstallPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+      await uninstallWithFreshOwner({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
 
       assert.equal(await pathExists(seeded.skillDir), false, "skill dir removed");
       const after = await loadState(locations.extensionRoot);
@@ -2561,7 +2740,14 @@ test("LIFE-04: manifest-absent uninstall removes the command file", async () => 
       assert.equal(await pathExists(manifestPathFor(cwd)), false, "manifest absent before call");
 
       const { ctx, pi, notifications } = makeCtx();
-      await uninstallPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+      await uninstallWithFreshOwner({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
 
       assert.equal(await pathExists(seeded.commandFile), false, "command file removed");
       const after = await loadState(locations.extensionRoot);
@@ -2583,7 +2769,14 @@ test("LIFE-04: manifest-absent uninstall removes the agent file and its index ro
       assert.equal(await pathExists(manifestPathFor(cwd)), false, "manifest absent before call");
 
       const { ctx, pi, notifications } = makeCtx();
-      await uninstallPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+      await uninstallWithFreshOwner({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
 
       // The agents bridge owns two artifacts per agent -- the file and the
       // index row -- so this case asserts both halves of its cleanup.
@@ -2610,7 +2803,14 @@ test("LIFE-04: manifest-absent uninstall removes the staged hooks config", async
       assert.equal(await pathExists(manifestPathFor(cwd)), false, "manifest absent before call");
 
       const { ctx, pi, notifications } = makeCtx();
-      await uninstallPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+      await uninstallWithFreshOwner({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
 
       assert.equal(await pathExists(seeded.hooksFile), false, "staged hooks config removed");
       // Removal is confined to the plugin's own hooks directory; the sibling
@@ -2649,7 +2849,14 @@ test("LIFE-04: manifest-absent uninstall removes only the owned mcp.json server"
       await writeFile(seeded.mcpJson, JSON.stringify(seededDoc));
 
       const { ctx, pi, notifications } = makeCtx();
-      await uninstallPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+      await uninstallWithFreshOwner({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
 
       const afterDoc = JSON.parse(await readFile(seeded.mcpJson, "utf8")) as {
         mcpServers: Record<string, unknown>;
@@ -2694,7 +2901,14 @@ test("LIFE-04: manifest-absent uninstall of a record with no resources still con
 
       const { ctx, pi, notifications } = makeCtx();
       await assert.doesNotReject(
-        uninstallPlugin({ ctx, pi, scope: "project", cwd, marketplace: "mp", plugin: "hello" }),
+        uninstallWithFreshOwner({
+          ctx,
+          pi,
+          scope: "project",
+          cwd,
+          marketplace: "mp",
+          plugin: "hello",
+        }),
       );
 
       const after = await loadState(locations.extensionRoot);
@@ -2939,6 +3153,7 @@ async function captureRejection(pending: Promise<unknown>): Promise<unknown> {
 
 test("retry proof: uninstall: a hooks cascade refusal persists the shrunken record and the retry converges", async (t) => {
   await withHermeticHome(async () => {
+    const uninstallWithFreshOwner = createUninstallOwner();
     const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-retry-hooks-"));
     let restoreSchedule: (() => void) | undefined;
     try {
@@ -2961,7 +3176,7 @@ test("retry proof: uninstall: a hooks cascade refusal persists the shrunken reco
       const { ctx, notifications, pi } = makeCtx();
 
       // act
-      const first = await uninstallPlugin({
+      const first = await uninstallWithFreshOwner({
         ctx,
         cwd,
         marketplace: "mp",
@@ -2976,7 +3191,7 @@ test("retry proof: uninstall: a hooks cascade refusal persists the shrunken reco
       ];
       fault.enabled = false;
       activeSchedule.current = secondSchedule;
-      const second = await uninstallPlugin({
+      const second = await uninstallWithFreshOwner({
         ctx,
         cwd,
         marketplace: "mp",
@@ -3062,6 +3277,7 @@ test("retry proof: uninstall: a hooks cascade refusal persists the shrunken reco
 
 test("retry proof: uninstall: foreign agent content preserves the whole record and the retry converges", async (t) => {
   await withHermeticHome(async () => {
+    const uninstallWithFreshOwner = createUninstallOwner();
     const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-retry-agent-foreign-"));
     let restoreSchedule: (() => void) | undefined;
     try {
@@ -3089,7 +3305,7 @@ test("retry proof: uninstall: foreign agent content preserves the whole record a
       const { ctx, notifications, pi } = makeCtx();
 
       // act
-      const first = await uninstallPlugin({
+      const first = await uninstallWithFreshOwner({
         ctx,
         cwd,
         marketplace: "mp",
@@ -3105,7 +3321,7 @@ test("retry proof: uninstall: foreign agent content preserves the whole record a
       const firstForeignBytes = await readFile(seeded.agentFile, "utf8");
       await unlink(seeded.agentFile);
       activeSchedule.current = secondSchedule;
-      const second = await uninstallPlugin({
+      const second = await uninstallWithFreshOwner({
         ctx,
         cwd,
         marketplace: "mp",
@@ -3196,6 +3412,7 @@ test("retry proof: uninstall: foreign agent content preserves the whole record a
 
 test("retry proof: uninstall: a normalized cascade rejection mutates nothing and the retry uninstalls once", async (t) => {
   await withHermeticHome(async () => {
+    const uninstallWithFreshOwner = createUninstallOwner();
     const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-retry-cascade-reject-"));
     let restoreSchedule: (() => void) | undefined;
     try {
@@ -3226,7 +3443,7 @@ test("retry proof: uninstall: a normalized cascade rejection mutates nothing and
       const { ctx, notifications, pi } = makeCtx();
 
       // act
-      const first = await uninstallPlugin({
+      const first = await uninstallWithFreshOwner({
         cascade,
         ctx,
         cwd,
@@ -3241,7 +3458,7 @@ test("retry proof: uninstall: a normalized cascade rejection mutates nothing and
       const firstMcpBytes = await readFile(locations.mcpJsonPath, "utf8");
       cascadeReject.enabled = false;
       activeSchedule.current = secondSchedule;
-      const second = await uninstallPlugin({
+      const second = await uninstallWithFreshOwner({
         cascade,
         ctx,
         cwd,
@@ -3316,6 +3533,7 @@ test("retry proof: uninstall: a normalized cascade rejection mutates nothing and
 
 test("retry proof: uninstall: an invalid config aborts before any mutation and the retry uninstalls", async (t) => {
   await withHermeticHome(async () => {
+    const uninstallWithFreshOwner = createUninstallOwner();
     const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-retry-config-invalid-"));
     let restoreSchedule: (() => void) | undefined;
     try {
@@ -3336,7 +3554,7 @@ test("retry proof: uninstall: an invalid config aborts before any mutation and t
       const { ctx, notifications, pi } = makeCtx();
 
       // act
-      const first = await uninstallPlugin({
+      const first = await uninstallWithFreshOwner({
         ctx,
         cwd,
         marketplace: "mp",
@@ -3350,7 +3568,7 @@ test("retry proof: uninstall: an invalid config aborts before any mutation and t
       const firstStateMtime = (await stat(locations.stateJsonPath)).mtimeMs;
       await unlink(locations.configJsonPath);
       activeSchedule.current = secondSchedule;
-      const second = await uninstallPlugin({
+      const second = await uninstallWithFreshOwner({
         ctx,
         cwd,
         marketplace: "mp",
@@ -3426,6 +3644,7 @@ test("retry proof: uninstall: an invalid config aborts before any mutation and t
 
 test("retry proof: uninstall: a refused config write-back keeps the record and the retry deletes the entry", async (t) => {
   await withHermeticHome(async () => {
+    const uninstallWithFreshOwner = createUninstallOwner();
     const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-retry-config-writeback-"));
     let restoreSchedule: (() => void) | undefined;
     try {
@@ -3483,7 +3702,7 @@ test("retry proof: uninstall: a refused config write-back keeps the record and t
       const { ctx, notifications, pi } = makeCtx();
 
       // act
-      const first = await uninstallPlugin({
+      const first = await uninstallWithFreshOwner({
         ctx,
         cwd,
         marketplace: "mp",
@@ -3497,7 +3716,7 @@ test("retry proof: uninstall: a refused config write-back keeps the record and t
       const firstConfigBytes = await readFile(locations.configJsonPath, "utf8");
       fault.enabled = false;
       activeSchedule.current = secondSchedule;
-      const second = await uninstallPlugin({
+      const second = await uninstallWithFreshOwner({
         ctx,
         cwd,
         marketplace: "mp",
@@ -3573,6 +3792,7 @@ test("retry proof: uninstall: a refused config write-back keeps the record and t
 
 test("retry proof: uninstall: a refused state save leaves the swept config diverged and the retry converges it", async (t) => {
   await withHermeticHome(async () => {
+    const uninstallWithFreshOwner = createUninstallOwner();
     const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-retry-state-save-"));
     let restoreSchedule: (() => void) | undefined;
     try {
@@ -3629,7 +3849,7 @@ test("retry proof: uninstall: a refused state save leaves the swept config diver
       const { ctx, notifications, pi } = makeCtx();
 
       // act
-      const first = await uninstallPlugin({
+      const first = await uninstallWithFreshOwner({
         ctx,
         cwd,
         marketplace: "mp",
@@ -3644,7 +3864,7 @@ test("retry proof: uninstall: a refused state save leaves the swept config diver
       const firstConfigMtime = (await stat(locations.configJsonPath)).mtimeMs;
       fault.enabled = false;
       activeSchedule.current = secondSchedule;
-      const second = await uninstallPlugin({
+      const second = await uninstallWithFreshOwner({
         ctx,
         cwd,
         marketplace: "mp",
@@ -3721,18 +3941,19 @@ test("retry proof: uninstall: a refused state save leaves the swept config diver
 
 test("retry proof: uninstall: a refused cache drop leaves the cache file and the retry reports not installed", async (t) => {
   await withHermeticHome(async () => {
+    const completionCache = createCompletionCache();
+    const uninstallWithFreshOwner = createNodeUninstallPlugin(
+      createHooksRouting(createHooksRuntime(), { readHooksJson }),
+      completionCache,
+    );
     const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-retry-cache-drop-"));
     let restoreSchedule: (() => void) | undefined;
     try {
       // arrange
-      resetCompletionCache();
-      t.after(() => {
-        resetCompletionCache();
-      });
       const locations = locationsFor("project", cwd);
       await seedFullPlugin(locations, "mp", "hello", cwd);
       const targets = await retryTargets(cwd, "mp", "hello");
-      await getPluginIndex(targets.cacheFile, "project", "mp", () =>
+      await completionCache.getPluginIndex(targets.cacheFile, "project", "mp", () =>
         Promise.resolve([{ name: "hello", status: "installed" }]),
       );
       const cacheBytes = await readFile(targets.cacheFile, "utf8");
@@ -3744,7 +3965,7 @@ test("retry proof: uninstall: a refused cache drop leaves the cache file and the
       const { ctx, notifications, pi } = makeCtx();
 
       // act
-      const first = await uninstallPlugin({
+      const first = await uninstallWithFreshOwner({
         ctx,
         cwd,
         marketplace: "mp",
@@ -3757,7 +3978,7 @@ test("retry proof: uninstall: a refused cache drop leaves the cache file and the
       const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
       fault.enabled = false;
       activeSchedule.current = secondSchedule;
-      const second = await uninstallPlugin({
+      const second = await uninstallWithFreshOwner({
         ctx,
         cwd,
         marketplace: "mp",
@@ -3819,6 +4040,7 @@ test("retry proof: uninstall: a refused cache drop leaves the cache file and the
 
 test("retry proof: uninstall: a refused data-dir removal keeps the directory and the retry converges", async (t) => {
   await withHermeticHome(async () => {
+    const uninstallWithFreshOwner = createUninstallOwner();
     const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-retry-data-dir-"));
     let restoreSchedule: (() => void) | undefined;
     try {
@@ -3836,7 +4058,7 @@ test("retry proof: uninstall: a refused data-dir removal keeps the directory and
       const { ctx, notifications, pi } = makeCtx();
 
       // act
-      const first = await uninstallPlugin({
+      const first = await uninstallWithFreshOwner({
         ctx,
         cwd,
         marketplace: "mp",
@@ -3849,7 +4071,7 @@ test("retry proof: uninstall: a refused data-dir removal keeps the directory and
       const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
       fault.enabled = false;
       activeSchedule.current = secondSchedule;
-      const second = await uninstallPlugin({
+      const second = await uninstallWithFreshOwner({
         ctx,
         cwd,
         marketplace: "mp",
@@ -3901,6 +4123,7 @@ test("retry proof: uninstall: a refused data-dir removal keeps the directory and
 
 test("retry proof: uninstall: a refused clone reclaim orphans the last-referenced clone across the retry", async (t) => {
   await withHermeticHome(async () => {
+    const uninstallWithFreshOwner = createUninstallOwner();
     const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-retry-clone-rm-"));
     let restoreSchedule: (() => void) | undefined;
     try {
@@ -3921,7 +4144,7 @@ test("retry proof: uninstall: a refused clone reclaim orphans the last-reference
       const { ctx, notifications, pi } = makeCtx();
 
       // act
-      const first = await uninstallPlugin({
+      const first = await uninstallWithFreshOwner({
         ctx,
         cwd,
         marketplace: "mp",
@@ -3934,7 +4157,7 @@ test("retry proof: uninstall: a refused clone reclaim orphans the last-reference
       const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
       fault.enabled = false;
       activeSchedule.current = secondSchedule;
-      const second = await uninstallPlugin({
+      const second = await uninstallWithFreshOwner({
         ctx,
         cwd,
         marketplace: "mp",
@@ -3990,6 +4213,7 @@ test("retry proof: uninstall: a refused clone reclaim orphans the last-reference
 
 test("retry proof: uninstall: a hooks refusal on a shared clone retries without reclaiming the surviving clone", async (t) => {
   await withHermeticHome(async () => {
+    const uninstallWithFreshOwner = createUninstallOwner();
     const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-retry-clone-shared-"));
     let restoreSchedule: (() => void) | undefined;
     try {
@@ -4037,7 +4261,7 @@ test("retry proof: uninstall: a hooks refusal on a shared clone retries without 
       const { ctx, notifications, pi } = makeCtx();
 
       // act
-      const first = await uninstallPlugin({
+      const first = await uninstallWithFreshOwner({
         ctx,
         cwd,
         marketplace: "mp",
@@ -4050,7 +4274,7 @@ test("retry proof: uninstall: a hooks refusal on a shared clone retries without 
       const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
       fault.enabled = false;
       activeSchedule.current = secondSchedule;
-      const second = await uninstallPlugin({
+      const second = await uninstallWithFreshOwner({
         ctx,
         cwd,
         marketplace: "mp",
@@ -4117,6 +4341,7 @@ test("retry proof: uninstall: a hooks refusal on a shared clone retries without 
 
 test("retry proof: uninstall: a clone-scan failure is swallowed and the retry converges without a scan", async (t) => {
   await withHermeticHome(async () => {
+    const uninstallWithFreshOwner = createUninstallOwner();
     const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-retry-clone-scan-"));
     let restoreSchedule: (() => void) | undefined;
     try {
@@ -4136,7 +4361,7 @@ test("retry proof: uninstall: a clone-scan failure is swallowed and the retry co
       const { ctx, notifications, pi } = makeCtx();
 
       // act
-      const first = await uninstallPlugin({
+      const first = await uninstallWithFreshOwner({
         ctx,
         cwd,
         marketplace: "mp",
@@ -4149,7 +4374,7 @@ test("retry proof: uninstall: a clone-scan failure is swallowed and the retry co
       const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
       await unlink(locations.pluginClonesDir);
       activeSchedule.current = secondSchedule;
-      const second = await uninstallPlugin({
+      const second = await uninstallWithFreshOwner({
         ctx,
         cwd,
         marketplace: "mp",
@@ -4190,6 +4415,7 @@ test("retry proof: uninstall: a clone-scan failure is swallowed and the retry co
 
 test("retry proof: uninstall: a refused data-dir path escape propagates after the commit and the retry reports not installed", async (t) => {
   await withHermeticHome(async () => {
+    const uninstallWithFreshOwner = createUninstallOwner();
     const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-retry-data-escape-"));
     const escape = await mkdtemp(path.join(tmpdir(), "uninstall-retry-data-escape-target-"));
     let restoreSchedule: (() => void) | undefined;
@@ -4212,7 +4438,7 @@ test("retry proof: uninstall: a refused data-dir path escape propagates after th
 
       // act
       const firstError = await captureRejection(
-        uninstallPlugin({
+        uninstallWithFreshOwner({
           ctx,
           cwd,
           marketplace: "mp",
@@ -4226,7 +4452,7 @@ test("retry proof: uninstall: a refused data-dir path escape propagates after th
       const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
       await unlink(targets.dataDir);
       activeSchedule.current = secondSchedule;
-      const second = await uninstallPlugin({
+      const second = await uninstallWithFreshOwner({
         ctx,
         cwd,
         marketplace: "mp",
@@ -4304,6 +4530,7 @@ test("retry proof: uninstall: a refused data-dir path escape propagates after th
 
 test("retry proof: uninstall: a refused cache path escape is swallowed and later cleanup still runs", async (t) => {
   await withHermeticHome(async () => {
+    const uninstallWithFreshOwner = createUninstallOwner();
     const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-retry-cache-escape-"));
     const escape = await mkdtemp(path.join(tmpdir(), "uninstall-retry-cache-escape-target-"));
     let restoreSchedule: (() => void) | undefined;
@@ -4324,7 +4551,7 @@ test("retry proof: uninstall: a refused cache path escape is swallowed and later
       const { ctx, notifications, pi } = makeCtx();
 
       // act
-      const first = await uninstallPlugin({
+      const first = await uninstallWithFreshOwner({
         ctx,
         cwd,
         marketplace: "mp",
@@ -4337,7 +4564,7 @@ test("retry proof: uninstall: a refused cache path escape is swallowed and later
       const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
       await unlink(path.join(locations.cacheDir, "plugins"));
       activeSchedule.current = secondSchedule;
-      const second = await uninstallPlugin({
+      const second = await uninstallWithFreshOwner({
         ctx,
         cwd,
         marketplace: "mp",

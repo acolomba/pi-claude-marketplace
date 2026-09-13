@@ -1,0 +1,10 @@
+{
+  "taskId": "06-49-02",
+  "command": "node --test --test-isolation=none --test-reporter=tap tests/orchestrators/plugin/list-candidate-row.test.ts",
+  "exitCode": 1,
+  "output": "TAP version 13\n# Subtest: composes the complete available candidate projection\nnot ok 1 - composes the complete available candidate projection\n  error: Got unwanted rejection: list-candidate-row.ts must own candidate row composition\n  code: ERR_ASSERTION\n  actual: ERR_MODULE_NOT_FOUND\n1..8\n# tests 8\n# pass 0\n# fail 8",
+  "targetTest": "composes the complete available candidate projection",
+  "targetFile": "tests/orchestrators/plugin/list-candidate-row.test.ts",
+  "expected": "the named list-candidate-row owner exports composeCandidateListRow and preserves exact candidate projection",
+  "actual": "ERR_MODULE_NOT_FOUND for extensions/pi-claude-marketplace/orchestrators/plugin/list-candidate-row.ts"
+}

@@ -22,7 +22,8 @@
 // empty `ScopeConfig` so a sensible merged view is still produced (D-18
 // enables the fallback policy downstream); the caller inspects `base.status`
 // / `local.status` to decide what to do. This module itself does NOT inject
-// `notify` calls (D-19 routes through `shared/notify.ts` in downstream layers).
+// notification calls (D-19 routes through `shared/notification-dispatch.ts` in
+// downstream layers).
 //
 // D-16: a dangling plugin reference (a plugin entry whose marketplace name
 // does NOT appear in either marketplaces map) is a VALID merged result. The
@@ -126,9 +127,9 @@ export function mergeScopeConfigs(base: ScopeConfig, local: ScopeConfig): Merged
  * view never silently swallows the invalid signal: the caller inspects
  * `base.status` and `local.status` to decide what to do.
  *
- * This module does NOT inject `notify` calls or any user-visible messaging
- * (D-19 routes through `shared/notify.ts` in downstream layers). This
- * function is a pure data seam.
+ * This module does NOT inject notification calls or any user-visible messaging
+ * (D-19 routes through `shared/notification-dispatch.ts` in downstream layers).
+ * This function is a pure data seam.
  */
 export async function loadMergedScopeConfig(loc: ScopedLocations): Promise<ScopeLoadOutcome> {
   const base = await loadConfig(loc.configJsonPath);

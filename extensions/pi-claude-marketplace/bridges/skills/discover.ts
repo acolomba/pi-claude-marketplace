@@ -30,7 +30,7 @@ import { assertSafeName, generatedSkillName } from "../../domain/name.ts";
 import { readDirEntriesTolerant } from "../../shared/fs-utils.ts";
 
 import type { DiscoveredSkill } from "./types.ts";
-import type { MaterializablePlugin } from "../../domain/resolver.ts";
+import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
 import type { Dirent } from "node:fs";
 
 /**

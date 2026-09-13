@@ -52,7 +52,6 @@
 import { spawn } from "node:child_process";
 import { StringDecoder } from "node:string_decoder";
 
-import { isDispatchableEvent } from "../../domain/components/hook-events.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
@@ -78,6 +77,7 @@ import { parseHookStdout } from "./wire-protocol.ts";
 import type { SpawnDeps } from "./async-rewake/registry.ts";
 import type { HookExecResult } from "./exec-result.ts";
 import type { RoutingEntry } from "./routing-state.ts";
+import type { HooksRuntime } from "./runtime.ts";
 import type { DispatchableEvent } from "../../domain/components/hook-events.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 
@@ -147,7 +147,8 @@ export async function dispatchHookExec(
   entry: RoutingEntry,
   event: unknown,
   ctx: ExtensionContext,
-  pi?: ExtensionAPI,
+  pi: ExtensionAPI | undefined,
+  runtime: HooksRuntime,
   deps: SpawnDeps = {},
 ): Promise<HookExecResult> {
   const spawnImpl = deps.spawnImpl ?? spawn;
@@ -176,25 +177,13 @@ export async function dispatchHookExec(
 
     try {
       const loc = locationsFor(entry.scope, ctx.cwd);
-      await spawnAndRegister(entry, event, ctx, pi, loc, deps);
+      await spawnAndRegister(runtime, entry, event, ctx, pi, loc, deps);
     } catch (err) {
       hookDebugLog(
         `async-rewake: spawnAndRegister threw (${entry.pluginId}/${entry.claudeEvent}): ${errorMessage(err)}`,
       );
     }
 
-    return { kind: "noop" };
-  }
-
-  // D-87-04: narrow the admitted `BucketAEvent` to the dispatchable subset
-  // before indexing the translator tables. Every admitted event now has a
-  // translator (`Stop` / `StopFailure` are dispatched here by the settle
-  // handler), so this arm is a defensive belt against a future admission that
-  // outruns its translator -- log + noop rather than a type error.
-  if (!isDispatchableEvent(entry.claudeEvent)) {
-    hookDebugLog(
-      `exec: ${entry.claudeEvent} is admitted but not dispatchable (${entry.pluginId}); noop`,
-    );
     return { kind: "noop" };
   }
 

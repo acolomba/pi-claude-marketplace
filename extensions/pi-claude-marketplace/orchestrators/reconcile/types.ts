@@ -42,9 +42,11 @@
 
 import type { PerEntryOutcome } from "./apply-outcomes.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
-import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
+import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
+import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { GitOps } from "../marketplace/shared.ts";
+import type { InstallHooksRouting } from "../plugin/install-disable-cascade.ts";
 
 /** Planned addition of a marketplace declared in config but not recorded. */
 export interface PlannedMarketplaceAdd {
@@ -248,10 +250,14 @@ export function emptyReconcilePlan(scope: Scope): ReconcilePlan {
  * `pending.ts::pendingReconcile`'s scope fan-out).
  */
 export interface ApplyReconcileOptions {
-  readonly ctx: ExtensionContext;
-  readonly pi: ExtensionAPI;
+  readonly ctx: NotificationContext;
+  readonly pi: ToolInventory;
   /** Project-scope cwd (ignored for the user scope). */
   readonly cwd: string;
+  /** Lifecycle-owned route effects shared with registered hook callbacks. */
+  readonly hooksRouting: InstallHooksRouting;
+  /** Lifecycle-owned completion cache shared with command completion reads. */
+  readonly completionCache: CompletionCache;
   readonly scope?: Scope;
   /**
    * D-12 injection seam threaded into `addMarketplace` for RECON-03 network

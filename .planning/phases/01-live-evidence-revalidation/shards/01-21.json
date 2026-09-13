@@ -1,0 +1,1852 @@
+{
+  "version": 1,
+  "inventoryMode": "locked-corpus",
+  "plan": "01-21",
+  "files": [
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md",
+      "category": "adversarial",
+      "assignedPlan": "01-21",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-001",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-002",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-003",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-004",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-005",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-006",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-007",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-008",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-009",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-010",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-011",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-012",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-013",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-014",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-015",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-016",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-017",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-018",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-019",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-020",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-021",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-022",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-023",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-024",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-025",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-026",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-027",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-028"
+      ],
+      "reviewStatus": "complete",
+      "outcome": "live findings"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md",
+      "category": "adversarial",
+      "assignedPlan": "01-21",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-001",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-002",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-003",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-004",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-005",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-006",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-007",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-008",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-009",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-010",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-011",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-012",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-013",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-014",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-015",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-016",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-017",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-018",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-019",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-020",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-021",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-022",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-023",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-024",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-025",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-026",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-027"
+      ],
+      "reviewStatus": "complete",
+      "outcome": "live findings"
+    }
+  ],
+  "sourceClaims": [
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-001",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md",
+      "label": "OI-001",
+      "findingId": "OI-F01"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-002",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md",
+      "label": "OI-002",
+      "findingId": "OI-F02"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-003",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md",
+      "label": "OI-003",
+      "findingId": "OI-F03"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-004",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md",
+      "label": "OI-004",
+      "findingId": "OI-F04"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-005",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md",
+      "label": "OI-005",
+      "findingId": "OI-F05"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-006",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md",
+      "label": "OI-006",
+      "findingId": "OI-F06"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-007",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md",
+      "label": "OI-007",
+      "findingId": "OI-F07"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-008",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md",
+      "label": "OI-008",
+      "findingId": "OI-F08"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-009",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md",
+      "label": "OI-009",
+      "findingId": "OI-F09"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-010",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md",
+      "label": "OI-010",
+      "findingId": "OI-F10"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-011",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md",
+      "label": "OI-011",
+      "findingId": "OI-F11"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-012",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md",
+      "label": "OI-012",
+      "findingId": "OI-F12"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-013",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md",
+      "label": "OI-013",
+      "findingId": "OI-F13"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-014",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md",
+      "label": "OI-014",
+      "findingId": "OI-F14"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-015",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md",
+      "label": "OI-015",
+      "findingId": "OI-F15"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-016",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md",
+      "label": "OI-016",
+      "findingId": "OI-F16"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-017",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md",
+      "label": "OI-017",
+      "findingId": "OI-F17"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-018",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md",
+      "label": "OI-018",
+      "findingId": "OI-F18"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-019",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md",
+      "label": "OI-019",
+      "findingId": "OI-F19"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-020",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md",
+      "label": "OI-020",
+      "findingId": "OI-F20"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-021",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md",
+      "label": "OI-021",
+      "findingId": "OI-F21"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-022",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md",
+      "label": "OI-022",
+      "findingId": "OI-F22"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-023",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md",
+      "label": "OI-023",
+      "findingId": "OI-F23"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-024",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md",
+      "label": "OI-024",
+      "findingId": "OI-F24"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-025",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md",
+      "label": "OI-025",
+      "findingId": "OI-F25"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-026",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md",
+      "label": "OI-026",
+      "findingId": "OI-F26"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-027",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md",
+      "label": "OI-027",
+      "findingId": "OI-F27"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-028",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md",
+      "label": "OI-028",
+      "findingId": "OI-F28"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-001",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md",
+      "label": "OMAA-001",
+      "findingId": "OMAA-F01"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-002",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md",
+      "label": "OMAA-002",
+      "findingId": "OMAA-F02"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-003",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md",
+      "label": "OMAA-003",
+      "findingId": "OMAA-F03"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-004",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md",
+      "label": "OMAA-004",
+      "findingId": "OMAA-F04"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-005",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md",
+      "label": "OMAA-005",
+      "findingId": "OMAA-F05"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-006",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md",
+      "label": "OMAA-006",
+      "findingId": "OMAA-F06"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-007",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md",
+      "label": "OMAA-007",
+      "findingId": "OMAA-F07"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-008",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md",
+      "label": "OMAA-008",
+      "findingId": "OMAA-F08"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-009",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md",
+      "label": "OMAA-009",
+      "findingId": "OMAA-F09"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-010",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md",
+      "label": "OMAA-010",
+      "findingId": "OMAA-F10"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-011",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md",
+      "label": "OMAA-011",
+      "findingId": "OMAA-F11"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-012",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md",
+      "label": "OMAA-012",
+      "findingId": "OMAA-F12"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-013",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md",
+      "label": "OMAA-013",
+      "findingId": "OMAA-F13"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-014",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md",
+      "label": "OMAA-014",
+      "findingId": "OMAA-F14"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-015",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md",
+      "label": "OMAA-015",
+      "findingId": "OMAA-F15"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-016",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md",
+      "label": "OMAA-016",
+      "findingId": "OMAA-F16"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-017",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md",
+      "label": "OMAA-017",
+      "findingId": "OMAA-F17"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-018",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md",
+      "label": "OMAA-018",
+      "findingId": "OMAA-F18"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-019",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md",
+      "label": "OMAA-019",
+      "findingId": "OMAA-F19"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-020",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md",
+      "label": "OMAA-020",
+      "findingId": "OMAA-F20"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-021",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md",
+      "label": "OMAA-021",
+      "findingId": "OMAA-F21"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-022",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md",
+      "label": "OMAA-022",
+      "findingId": "OMAA-F22"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-023",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md",
+      "label": "OMAA-023",
+      "findingId": "OMAA-F23"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-024",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md",
+      "label": "OMAA-024",
+      "findingId": "OMAA-F24"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-025",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md",
+      "label": "OMAA-025",
+      "findingId": "OMAA-F25"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-026",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md",
+      "label": "OMAA-026",
+      "findingId": "OMAA-F26"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-027",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md",
+      "label": "OMAA-027",
+      "findingId": "OMAA-F27"
+    }
+  ],
+  "findings": [
+    {
+      "id": "OI-F01",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-001"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/import/execute.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/import/execute.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection",
+        "observed": "Current code and tests establish that non-exhaustive marketplace reconciliation switch."
+      },
+      "rationale": "The historical claim remains actionable against the post-refactor tree: non-exhaustive marketplace reconciliation switch.",
+      "destination": "Reconcile this item in Phase 2 with its related source-test pair."
+    },
+    {
+      "id": "OI-F02",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-002"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/import/execute.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/import/execute.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "node --test .tmp-revalidation-01-21/tests/orchestrators/import/refs.test.ts .tmp-revalidation-01-21/tests/orchestrators/import/marketplaces.test.ts .tmp-revalidation-01-21/tests/orchestrators/import/execute.test.ts after applying the report mutations in a repository-local isolated copy",
+        "exitCode": 0,
+        "observed": "Focused current tests passed with the grouped isolated mutations; changedResources has no reader and mixed accumulation is unproved."
+      },
+      "rationale": "The historical claim remains actionable against the post-refactor tree: changedResources has no reader and mixed accumulation is unproved.",
+      "destination": "Reconcile this item in Phase 2 with its related source-test pair."
+    },
+    {
+      "id": "OI-F03",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-003"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/import/execute.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/import/execute.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "node --test .tmp-revalidation-01-21/tests/orchestrators/import/refs.test.ts .tmp-revalidation-01-21/tests/orchestrators/import/marketplaces.test.ts .tmp-revalidation-01-21/tests/orchestrators/import/execute.test.ts after applying the report mutations in a repository-local isolated copy",
+        "exitCode": 0,
+        "observed": "Focused current tests passed with the grouped isolated mutations; raw ref spelling is unproved end to end."
+      },
+      "rationale": "The historical claim remains actionable against the post-refactor tree: raw ref spelling is unproved end to end.",
+      "destination": "Reconcile this item in Phase 2 with its related source-test pair."
+    },
+    {
+      "id": "OI-F04",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-004"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/import/execute.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/import/execute.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "node --test .tmp-revalidation-01-21/tests/orchestrators/import/refs.test.ts .tmp-revalidation-01-21/tests/orchestrators/import/marketplaces.test.ts .tmp-revalidation-01-21/tests/orchestrators/import/execute.test.ts after applying the report mutations in a repository-local isolated copy",
+        "exitCode": 0,
+        "observed": "Focused current tests passed with the grouped isolated mutations; settings-before-plan diagnostic ordering is unproved."
+      },
+      "rationale": "The historical claim remains actionable against the post-refactor tree: settings-before-plan diagnostic ordering is unproved.",
+      "destination": "Reconcile this item in Phase 2 with its related source-test pair."
+    },
+    {
+      "id": "OI-F05",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-005"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/import/execute.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/import/execute.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection",
+        "observed": "Current code and tests establish that plugin warning cause is unreachable-optional."
+      },
+      "rationale": "The historical claim remains actionable against the post-refactor tree: plugin warning cause is unreachable-optional.",
+      "destination": "Reconcile this item in Phase 2 with its related source-test pair."
+    },
+    {
+      "id": "OI-F06",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-006"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/import/types.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/import/types.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection",
+        "observed": "Current code and tests establish that malformed-enabled-plugin-ref is dead vocabulary."
+      },
+      "rationale": "The historical claim remains actionable against the post-refactor tree: malformed-enabled-plugin-ref is dead vocabulary.",
+      "destination": "Reconcile this item in Phase 2 with its related source-test pair."
+    },
+    {
+      "id": "OI-F07",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-007"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/import/types.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/import/types.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection",
+        "observed": "Current code and tests establish that marketplace plan diagnostics readonly negative is absent."
+      },
+      "rationale": "The historical claim remains actionable against the post-refactor tree: marketplace plan diagnostics readonly negative is absent.",
+      "destination": "Reconcile this item in Phase 2 with its related source-test pair."
+    },
+    {
+      "id": "OI-F08",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-008"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/import/refs.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/import/refs.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "node --test .tmp-revalidation-01-21/tests/orchestrators/import/refs.test.ts .tmp-revalidation-01-21/tests/orchestrators/import/marketplaces.test.ts .tmp-revalidation-01-21/tests/orchestrators/import/execute.test.ts after applying the report mutations in a repository-local isolated copy",
+        "exitCode": 0,
+        "observed": "Focused current tests passed with the grouped isolated mutations; malformed ref project scope is unproved."
+      },
+      "rationale": "The historical claim remains actionable against the post-refactor tree: malformed ref project scope is unproved.",
+      "destination": "Reconcile this item in Phase 2 with its related source-test pair."
+    },
+    {
+      "id": "OI-F09",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-009"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/import/marketplaces.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/import/marketplaces.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "node --test .tmp-revalidation-01-21/tests/orchestrators/import/refs.test.ts .tmp-revalidation-01-21/tests/orchestrators/import/marketplaces.test.ts .tmp-revalidation-01-21/tests/orchestrators/import/execute.test.ts after applying the report mutations in a repository-local isolated copy",
+        "exitCode": 0,
+        "observed": "Focused current tests passed with the grouped isolated mutations; official marketplace source precedence is unproved."
+      },
+      "rationale": "The historical claim remains actionable against the post-refactor tree: official marketplace source precedence is unproved.",
+      "destination": "Reconcile this item in Phase 2 with its related source-test pair."
+    },
+    {
+      "id": "OI-F10",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-010"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/import/marketplaces.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/import/marketplaces.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "node --test .tmp-revalidation-01-21/tests/orchestrators/import/refs.test.ts .tmp-revalidation-01-21/tests/orchestrators/import/marketplaces.test.ts .tmp-revalidation-01-21/tests/orchestrators/import/execute.test.ts after applying the report mutations in a repository-local isolated copy",
+        "exitCode": 0,
+        "observed": "Focused current tests passed with the grouped isolated mutations; cross-scope diagnostic aggregation is unproved."
+      },
+      "rationale": "The historical claim remains actionable against the post-refactor tree: cross-scope diagnostic aggregation is unproved.",
+      "destination": "Reconcile this item in Phase 2 with its related source-test pair."
+    },
+    {
+      "id": "OI-F11",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-011"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/import/execute.messaging.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/import/execute.messaging.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection",
+        "observed": "Current code and tests establish that execute messaging fileoverview follows imports."
+      },
+      "rationale": "The historical claim remains actionable against the post-refactor tree: execute messaging fileoverview follows imports.",
+      "destination": "Reconcile this item in Phase 2 with its related source-test pair."
+    },
+    {
+      "id": "OI-F12",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-012"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/import/execute.messaging.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/import/execute.messaging.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection",
+        "observed": "Current code and tests establish that skipped renderer scope propagation is unproved."
+      },
+      "rationale": "The historical claim remains actionable against the post-refactor tree: skipped renderer scope propagation is unproved.",
+      "destination": "Reconcile this item in Phase 2 with its related source-test pair."
+    },
+    {
+      "id": "OI-F13",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-013"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/import/settings.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/import/settings.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection",
+        "observed": "Current code and tests establish that relative config test depends on real homedir and production computation."
+      },
+      "rationale": "The historical claim remains actionable against the post-refactor tree: relative config test depends on real homedir and production computation.",
+      "destination": "Reconcile this item in Phase 2 with its related source-test pair."
+    },
+    {
+      "id": "OI-F14",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-014"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/import/settings.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/import/settings.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection",
+        "observed": "Current code and tests establish that environment restoration uses try-finally instead of pre-registered cleanup."
+      },
+      "rationale": "The historical claim remains actionable against the post-refactor tree: environment restoration uses try-finally instead of pre-registered cleanup.",
+      "destination": "Reconcile this item in Phase 2 with its related source-test pair."
+    },
+    {
+      "id": "OI-F15",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-015"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/import/settings.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/import/settings.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection",
+        "observed": "Current code and tests establish that unset CLAUDE_CONFIG_DIR negative is unproved."
+      },
+      "rationale": "The historical claim remains actionable against the post-refactor tree: unset CLAUDE_CONFIG_DIR negative is unproved.",
+      "destination": "Reconcile this item in Phase 2 with its related source-test pair."
+    },
+    {
+      "id": "OI-F16",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-016"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/import/execute.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/import/execute.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection",
+        "observed": "Current code and tests establish that exported import functions lack API documentation."
+      },
+      "rationale": "The historical claim remains actionable against the post-refactor tree: exported import functions lack API documentation.",
+      "destination": "Reconcile this item in Phase 2 with its related source-test pair."
+    },
+    {
+      "id": "OI-F17",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-017"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/import/execute.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/import/execute.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection",
+        "observed": "Current code and tests establish that execute tests use hand-rolled collaborator recorders."
+      },
+      "rationale": "The historical claim remains actionable against the post-refactor tree: execute tests use hand-rolled collaborator recorders.",
+      "destination": "Reconcile this item in Phase 2 with its related source-test pair."
+    },
+    {
+      "id": "OI-F18",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-018"
+      ],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/import/refs.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/import/refs.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection",
+        "observed": "Current code and tests establish that deepEqual claim was semantically overstated."
+      },
+      "rationale": "Current evidence positively narrows the historical wording: the cited construct remains, but the claimed defect does not.",
+      "destination": "Preserve as evidence-only closure; do not schedule the historical remedy."
+    },
+    {
+      "id": "OI-F19",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-019"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/import/refs.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/import/refs.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection",
+        "observed": "Current code and tests establish that refs tests use placeholder result names."
+      },
+      "rationale": "The historical claim remains actionable against the post-refactor tree: refs tests use placeholder result names.",
+      "destination": "Reconcile this item in Phase 2 with its related source-test pair."
+    },
+    {
+      "id": "OI-F20",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-020"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/import/marketplaces.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/import/marketplaces.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection",
+        "observed": "Current code and tests establish that marketplaces tests use placeholder result names."
+      },
+      "rationale": "The historical claim remains actionable against the post-refactor tree: marketplaces tests use placeholder result names.",
+      "destination": "Reconcile this item in Phase 2 with its related source-test pair."
+    },
+    {
+      "id": "OI-F21",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-021"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/import/settings.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/import/settings.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection",
+        "observed": "Current code and tests establish that settings tests use placeholder result names."
+      },
+      "rationale": "The historical claim remains actionable against the post-refactor tree: settings tests use placeholder result names.",
+      "destination": "Reconcile this item in Phase 2 with its related source-test pair."
+    },
+    {
+      "id": "OI-F22",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-022"
+      ],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/import/settings.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/import/settings.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection",
+        "observed": "Current code and tests establish that arrange assertion claim is only a fixture guard."
+      },
+      "rationale": "Current evidence positively narrows the historical wording: the cited construct remains, but the claimed defect does not.",
+      "destination": "Preserve as evidence-only closure; do not schedule the historical remedy."
+    },
+    {
+      "id": "OI-F23",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-023"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/import/index.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/import/index.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection",
+        "observed": "Current code and tests establish that barrel test has unnecessary describe nesting."
+      },
+      "rationale": "The historical claim remains actionable against the post-refactor tree: barrel test has unnecessary describe nesting.",
+      "destination": "Reconcile this item in Phase 2 with its related source-test pair."
+    },
+    {
+      "id": "OI-F24",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-024"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/import/execute.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/import/execute.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection",
+        "observed": "Current code and tests establish that execute imports take needlessly long sibling paths."
+      },
+      "rationale": "The historical claim remains actionable against the post-refactor tree: execute imports take needlessly long sibling paths.",
+      "destination": "Reconcile this item in Phase 2 with its related source-test pair."
+    },
+    {
+      "id": "OI-F25",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-025"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/import/execute.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/import/execute.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection",
+        "observed": "Current code and tests establish that applyDefaultEnabled omission lacks traceability."
+      },
+      "rationale": "The historical claim remains actionable against the post-refactor tree: applyDefaultEnabled omission lacks traceability.",
+      "destination": "Reconcile this item in Phase 2 with its related source-test pair."
+    },
+    {
+      "id": "OI-F26",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-026"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/import/execute.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/import/execute.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection",
+        "observed": "Current code and tests establish that eight outcome interfaces are unused exports."
+      },
+      "rationale": "The historical claim remains actionable against the post-refactor tree: eight outcome interfaces are unused exports.",
+      "destination": "Reconcile this item in Phase 2 with its related source-test pair."
+    },
+    {
+      "id": "OI-F27",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-027"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/import/settings.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/import/settings.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection",
+        "observed": "Current code and tests establish that settings path resolution hides environment and homedir dependencies."
+      },
+      "rationale": "The historical claim remains actionable against the post-refactor tree: settings path resolution hides environment and homedir dependencies.",
+      "destination": "Reconcile this item in Phase 2 with its related source-test pair."
+    },
+    {
+      "id": "OI-F28",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-import.md#OI-028"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/import/settings.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/import/settings.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection",
+        "observed": "Current code and tests establish that settings errno catch uses an unchecked assertion."
+      },
+      "rationale": "The historical claim remains actionable against the post-refactor tree: settings errno catch uses an unchecked assertion.",
+      "destination": "Reconcile this item in Phase 2 with its related source-test pair."
+    },
+    {
+      "id": "OMAA-F01",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-001"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/add.messaging.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/marketplace/add.messaging.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection",
+        "observed": "Current code and tests establish that messaging test uses bare actual, deepEqual, and verbose satisfies form."
+      },
+      "rationale": "The historical claim remains actionable against the post-refactor tree: messaging test uses bare actual, deepEqual, and verbose satisfies form.",
+      "destination": "Reconcile this item in Phase 2 with its related source-test pair."
+    },
+    {
+      "id": "OMAA-F02",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-002"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/add.messaging.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/marketplace/add.messaging.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection",
+        "observed": "Current code and tests establish that AddPrivateReason widening is unproved."
+      },
+      "rationale": "The historical claim remains actionable against the post-refactor tree: AddPrivateReason widening is unproved.",
+      "destination": "Reconcile this item in Phase 2 with its related source-test pair."
+    },
+    {
+      "id": "OMAA-F03",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-003"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/add.messaging.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/marketplace/add.messaging.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection",
+        "observed": "Current code and tests establish that messaging comments narrate legacy byte identity."
+      },
+      "rationale": "The historical claim remains actionable against the post-refactor tree: messaging comments narrate legacy byte identity.",
+      "destination": "Reconcile this item in Phase 2 with its related source-test pair."
+    },
+    {
+      "id": "OMAA-F04",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-004"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/marketplace/add.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection",
+        "observed": "Current code and tests establish that persisted marketplace record is not asserted whole."
+      },
+      "rationale": "The historical claim remains actionable against the post-refactor tree: persisted marketplace record is not asserted whole.",
+      "destination": "Reconcile this item in Phase 2 with its related source-test pair."
+    },
+    {
+      "id": "OMAA-F05",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-005"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/marketplace/add.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection",
+        "observed": "Current code and tests establish that write-back against pre-existing config is unproved."
+      },
+      "rationale": "The historical claim remains actionable against the post-refactor tree: write-back against pre-existing config is unproved.",
+      "destination": "Reconcile this item in Phase 2 with its related source-test pair."
+    },
+    {
+      "id": "OMAA-F06",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-006"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/marketplace/add.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection",
+        "observed": "Current code and tests establish that strong-mock verification is hidden in notification callback."
+      },
+      "rationale": "The historical claim remains actionable against the post-refactor tree: strong-mock verification is hidden in notification callback.",
+      "destination": "Reconcile this item in Phase 2 with its related source-test pair."
+    },
+    {
+      "id": "OMAA-F07",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-007"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/marketplace/add.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection",
+        "observed": "Current code and tests establish that WR-07 disjunctive assertion accepts incompatible outcomes."
+      },
+      "rationale": "The historical claim remains actionable against the post-refactor tree: WR-07 disjunctive assertion accepts incompatible outcomes.",
+      "destination": "Reconcile this item in Phase 2 with its related source-test pair."
+    },
+    {
+      "id": "OMAA-F08",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-008"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/marketplace/add.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection",
+        "observed": "Current code and tests establish that six notification checks use message fragments."
+      },
+      "rationale": "The historical claim remains actionable against the post-refactor tree: six notification checks use message fragments.",
+      "destination": "Reconcile this item in Phase 2 with its related source-test pair."
+    },
+    {
+      "id": "OMAA-F09",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-009"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/marketplace/add.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection",
+        "observed": "Current code and tests establish that cache invalidation and manifest seeding lack positive assertions."
+      },
+      "rationale": "The historical claim remains actionable against the post-refactor tree: cache invalidation and manifest seeding lack positive assertions.",
+      "destination": "Reconcile this item in Phase 2 with its related source-test pair."
+    },
+    {
+      "id": "OMAA-F10",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-010"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/marketplace/add.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection",
+        "observed": "Current code and tests establish that basename-only config error mitigation is not asserted."
+      },
+      "rationale": "The historical claim remains actionable against the post-refactor tree: basename-only config error mitigation is not asserted.",
+      "destination": "Reconcile this item in Phase 2 with its related source-test pair."
+    },
+    {
+      "id": "OMAA-F11",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-011"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/marketplace/add.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection",
+        "observed": "Current code and tests establish that one add case owns source parsing rather than add behavior."
+      },
+      "rationale": "The historical claim remains actionable against the post-refactor tree: one add case owns source parsing rather than add behavior.",
+      "destination": "Reconcile this item in Phase 2 with its related source-test pair."
+    },
+    {
+      "id": "OMAA-F12",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-012"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/marketplace/add.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection",
+        "observed": "Current code and tests establish that four redundant dynamic imports remain."
+      },
+      "rationale": "The historical claim remains actionable against the post-refactor tree: four redundant dynamic imports remain.",
+      "destination": "Reconcile this item in Phase 2 with its related source-test pair."
+    },
+    {
+      "id": "OMAA-F13",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-013"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/marketplace/add.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection",
+        "observed": "Current code and tests establish that negative and single-field assertions under-specify values."
+      },
+      "rationale": "The historical claim remains actionable against the post-refactor tree: negative and single-field assertions under-specify values.",
+      "destination": "Reconcile this item in Phase 2 with its related source-test pair."
+    },
+    {
+      "id": "OMAA-F14",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-014"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/marketplace/add.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection",
+        "observed": "Current code and tests establish that prototypeReads assertions couple to implementation checks."
+      },
+      "rationale": "The historical claim remains actionable against the post-refactor tree: prototypeReads assertions couple to implementation checks.",
+      "destination": "Reconcile this item in Phase 2 with its related source-test pair."
+    },
+    {
+      "id": "OMAA-F15",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-015"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/marketplace/add.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection",
+        "observed": "Current code and tests establish that cloneThrows fake throws only after copying fixture."
+      },
+      "rationale": "The historical claim remains actionable against the post-refactor tree: cloneThrows fake throws only after copying fixture.",
+      "destination": "Reconcile this item in Phase 2 with its related source-test pair."
+    },
+    {
+      "id": "OMAA-F16",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-016"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/marketplace/add.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection",
+        "observed": "Current code and tests establish that stale cross-reference and byte-identical narration remain in tests."
+      },
+      "rationale": "The historical claim remains actionable against the post-refactor tree: stale cross-reference and byte-identical narration remain in tests.",
+      "destination": "Reconcile this item in Phase 2 with its related source-test pair."
+    },
+    {
+      "id": "OMAA-F17",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-017"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/marketplace/add.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection",
+        "observed": "Current code and tests establish that add/update test support is duplicated."
+      },
+      "rationale": "The historical claim remains actionable against the post-refactor tree: add/update test support is duplicated.",
+      "destination": "Reconcile this item in Phase 2 with its related source-test pair."
+    },
+    {
+      "id": "OMAA-F18",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-018"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/marketplace/add.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection",
+        "observed": "Current code and tests establish that AddMarketplaceNotifications is an unused export."
+      },
+      "rationale": "The historical claim remains actionable against the post-refactor tree: AddMarketplaceNotifications is an unused export.",
+      "destination": "Reconcile this item in Phase 2 with its related source-test pair."
+    },
+    {
+      "id": "OMAA-F19",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-019"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/marketplace/add.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection",
+        "observed": "Current code and tests establish that source-kind dispatch has no closed-union exhaustiveness enforcement."
+      },
+      "rationale": "The historical claim remains actionable against the post-refactor tree: source-kind dispatch has no closed-union exhaustiveness enforcement.",
+      "destination": "Reconcile this item in Phase 2 with its related source-test pair."
+    },
+    {
+      "id": "OMAA-F20",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-020"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/marketplace/add.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection",
+        "observed": "Current code and tests establish that ConfigInvalidError exposes basename only through message."
+      },
+      "rationale": "The historical claim remains actionable against the post-refactor tree: ConfigInvalidError exposes basename only through message.",
+      "destination": "Reconcile this item in Phase 2 with its related source-test pair."
+    },
+    {
+      "id": "OMAA-F21",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-021"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/marketplace/add.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection",
+        "observed": "Current code and tests establish that production comments narrate byte identity."
+      },
+      "rationale": "The historical claim remains actionable against the post-refactor tree: production comments narrate byte identity.",
+      "destination": "Reconcile this item in Phase 2 with its related source-test pair."
+    },
+    {
+      "id": "OMAA-F22",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-022"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/marketplace/add.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection",
+        "observed": "Current code and tests establish that git and credential dependencies default to live boundaries."
+      },
+      "rationale": "The historical claim remains actionable against the post-refactor tree: git and credential dependencies default to live boundaries.",
+      "destination": "Reconcile this item in Phase 2 with its related source-test pair."
+    },
+    {
+      "id": "OMAA-F23",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-023"
+      ],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/marketplace/add.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection",
+        "observed": "Current code and tests establish that default GitOps test-side warning was overstated."
+      },
+      "rationale": "Current evidence positively narrows the historical wording: the cited construct remains, but the claimed defect does not.",
+      "destination": "Preserve as evidence-only closure; do not schedule the historical remedy."
+    },
+    {
+      "id": "OMAA-F24",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-024"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/marketplace/add.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection",
+        "observed": "Current code and tests establish that unsupported-source case has weak error identity assertion."
+      },
+      "rationale": "The historical claim remains actionable against the post-refactor tree: unsupported-source case has weak error identity assertion.",
+      "destination": "Reconcile this item in Phase 2 with its related source-test pair."
+    },
+    {
+      "id": "OMAA-F25",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-025"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/marketplace/add.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection",
+        "observed": "Current code and tests establish that assert phases contain narration comments."
+      },
+      "rationale": "The historical claim remains actionable against the post-refactor tree: assert phases contain narration comments.",
+      "destination": "Reconcile this item in Phase 2 with its related source-test pair."
+    },
+    {
+      "id": "OMAA-F26",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-026"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/marketplace/add.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection",
+        "observed": "Current code and tests establish that random UUID and two clocks are hidden dependencies."
+      },
+      "rationale": "The historical claim remains actionable against the post-refactor tree: random UUID and two clocks are hidden dependencies.",
+      "destination": "Reconcile this item in Phase 2 with its related source-test pair."
+    },
+    {
+      "id": "OMAA-F27",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-marketplace-add-update-a.md#OMAA-027"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/marketplace/add.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore plus current source/test inspection",
+        "observed": "Current code and tests establish that two manifest-name assertions remain unnecessary."
+      },
+      "rationale": "The historical claim remains actionable against the post-refactor tree: two manifest-name assertions remain unnecessary.",
+      "destination": "Reconcile this item in Phase 2 with its related source-test pair."
+    }
+  ],
+  "decisions": [],
+  "scopeChanges": []
+}

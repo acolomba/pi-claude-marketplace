@@ -9,21 +9,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import {
-  appendPendingSessionStartContext,
-  bumpEpoch,
-  clearPendingSessionStartContext,
-  currentEpoch,
-  deleteParsedConfig,
-  getRoutingBucket,
-  parsedConfigEntries,
-  pendingSessionStartContextEntries,
-  resetEpoch,
-  resetRoutingState,
-  routingTableEntries,
-  setParsedConfig,
-  setRoutingBucket,
-} from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
+import { createRoutingStateOperations } from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
+import { createHooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 
 import type {
@@ -32,49 +19,51 @@ import type {
   RoutingEntry,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
 
-test("reports zero and exact successive epoch values", (t) => {
+test("reports zero and exact successive epoch values", () => {
   // arrange
-  resetEpoch();
-  t.after(() => {
-    resetEpoch();
-  });
+  const routingState = createRoutingStateOperations(createHooksRuntime());
 
   // act
-  const epochs = [currentEpoch(), bumpEpoch(), currentEpoch(), bumpEpoch(), currentEpoch()];
+  const epochs = [
+    routingState.currentEpoch(),
+    routingState.bumpEpoch(),
+    routingState.currentEpoch(),
+    routingState.bumpEpoch(),
+    routingState.currentEpoch(),
+  ];
 
   // assert
   assert.deepStrictEqual(epochs, [0, 1, 1, 2, 2]);
 });
 
-test("resets an advanced epoch to zero", (t) => {
+test("a fresh runtime begins at zero without changing an advanced peer", () => {
   // arrange
-  resetEpoch();
-  t.after(() => {
-    resetEpoch();
-  });
-  const firstEpoch = bumpEpoch();
-  const secondEpoch = bumpEpoch();
+  const routingState = createRoutingStateOperations(createHooksRuntime());
+  const firstEpoch = routingState.bumpEpoch();
+  const secondEpoch = routingState.bumpEpoch();
 
   // act
-  resetEpoch();
-  const resetValue = currentEpoch();
+  const freshState = createRoutingStateOperations(createHooksRuntime());
+  const freshValue = freshState.currentEpoch();
+  const retainedValue = routingState.currentEpoch();
 
   // assert
   assert.deepStrictEqual(
-    { firstEpoch, secondEpoch, resetValue },
-    { firstEpoch: 1, secondEpoch: 2, resetValue: 0 },
+    { firstEpoch, secondEpoch, freshValue, retainedValue },
+    { firstEpoch: 1, secondEpoch: 2, freshValue: 0, retainedValue: 2 },
   );
 });
 
 test("reads an empty pending SessionStart context", (t) => {
   // arrange
-  clearPendingSessionStartContext();
+  const routingState = createRoutingStateOperations(createHooksRuntime());
+  routingState.clearPendingSessionStartContext();
   t.after(() => {
-    clearPendingSessionStartContext();
+    routingState.clearPendingSessionStartContext();
   });
 
   // act
-  const entries = pendingSessionStartContextEntries();
+  const entries = routingState.pendingSessionStartContextEntries();
 
   // assert
   assert.deepStrictEqual(entries, []);
@@ -82,9 +71,10 @@ test("reads an empty pending SessionStart context", (t) => {
 
 test("skips an empty pending SessionStart context", (t) => {
   // arrange
-  clearPendingSessionStartContext();
+  const routingState = createRoutingStateOperations(createHooksRuntime());
+  routingState.clearPendingSessionStartContext();
   t.after(() => {
-    clearPendingSessionStartContext();
+    routingState.clearPendingSessionStartContext();
   });
   const emptyEntry = {
     context: "",
@@ -94,8 +84,8 @@ test("skips an empty pending SessionStart context", (t) => {
   } satisfies PendingSessionStartContext;
 
   // act
-  appendPendingSessionStartContext(emptyEntry);
-  const entries = pendingSessionStartContextEntries();
+  routingState.appendPendingSessionStartContext(emptyEntry);
+  const entries = routingState.pendingSessionStartContextEntries();
 
   // assert
   assert.deepStrictEqual(entries, []);
@@ -103,9 +93,10 @@ test("skips an empty pending SessionStart context", (t) => {
 
 test("preserves pending SessionStart context order across reads", (t) => {
   // arrange
-  clearPendingSessionStartContext();
+  const routingState = createRoutingStateOperations(createHooksRuntime());
+  routingState.clearPendingSessionStartContext();
   t.after(() => {
-    clearPendingSessionStartContext();
+    routingState.clearPendingSessionStartContext();
   });
   const firstEntry = {
     context: "first context",
@@ -135,10 +126,10 @@ test("preserves pending SessionStart context order across reads", (t) => {
   ] satisfies ReadonlyArray<PendingSessionStartContext>;
 
   // act
-  appendPendingSessionStartContext(firstEntry);
-  appendPendingSessionStartContext(secondEntry);
-  const firstRead = pendingSessionStartContextEntries();
-  const secondRead = pendingSessionStartContextEntries();
+  routingState.appendPendingSessionStartContext(firstEntry);
+  routingState.appendPendingSessionStartContext(secondEntry);
+  const firstRead = routingState.pendingSessionStartContextEntries();
+  const secondRead = routingState.pendingSessionStartContextEntries();
 
   // assert
   assert.deepStrictEqual(firstRead, expectedEntries);
@@ -147,11 +138,12 @@ test("preserves pending SessionStart context order across reads", (t) => {
 
 test("clears pending SessionStart context for later reads", (t) => {
   // arrange
-  clearPendingSessionStartContext();
+  const routingState = createRoutingStateOperations(createHooksRuntime());
+  routingState.clearPendingSessionStartContext();
   t.after(() => {
-    clearPendingSessionStartContext();
+    routingState.clearPendingSessionStartContext();
   });
-  appendPendingSessionStartContext({
+  routingState.appendPendingSessionStartContext({
     context: "context to clear",
     pluginId: "clear-plugin",
     marketplace: "clear-marketplace",
@@ -159,26 +151,23 @@ test("clears pending SessionStart context for later reads", (t) => {
   });
 
   // act
-  clearPendingSessionStartContext();
-  const firstReadAfterClear = pendingSessionStartContextEntries();
-  const secondReadAfterClear = pendingSessionStartContextEntries();
+  routingState.clearPendingSessionStartContext();
+  const firstReadAfterClear = routingState.pendingSessionStartContextEntries();
+  const secondReadAfterClear = routingState.pendingSessionStartContextEntries();
 
   // assert
   assert.deepStrictEqual(firstReadAfterClear, []);
   assert.deepStrictEqual(secondReadAfterClear, []);
 });
 
-test("reads a missing parsed config without creating a cache entry", (t) => {
+test("reads a missing parsed config without creating a cache entry", () => {
   // arrange
-  resetRoutingState();
-  t.after(() => {
-    resetRoutingState();
-  });
+  const routingState = createRoutingStateOperations(createHooksRuntime());
   const missingKey = "project\u0000catalog\u0000missing-plugin";
 
   // act
-  const missingEntry = parsedConfigEntries().get(missingKey);
-  const cacheEntries = Array.from(parsedConfigEntries());
+  const missingEntry = routingState.parsedConfigEntries().get(missingKey);
+  const cacheEntries = Array.from(routingState.parsedConfigEntries());
 
   // assert
   assert.deepStrictEqual(
@@ -187,12 +176,9 @@ test("reads a missing parsed config without creating a cache entry", (t) => {
   );
 });
 
-test("sets and stably reads a complete parsed config", (t) => {
+test("sets and stably reads a complete parsed config", () => {
   // arrange
-  resetRoutingState();
-  t.after(() => {
-    resetRoutingState();
-  });
+  const routingState = createRoutingStateOperations(createHooksRuntime());
   const cacheKey = "user\u0000catalog-alpha\u0000plugin-alpha";
   const cacheEntry = {
     scope: "user",
@@ -226,10 +212,10 @@ test("sets and stably reads a complete parsed config", (t) => {
   } satisfies CacheEntry;
 
   // act
-  setParsedConfig(cacheKey, cacheEntry);
-  const firstRead = parsedConfigEntries().get(cacheKey);
-  const secondRead = parsedConfigEntries().get(cacheKey);
-  const cacheEntries = Array.from(parsedConfigEntries());
+  routingState.setParsedConfig(cacheKey, cacheEntry);
+  const firstRead = routingState.parsedConfigEntries().get(cacheKey);
+  const secondRead = routingState.parsedConfigEntries().get(cacheKey);
+  const cacheEntries = Array.from(routingState.parsedConfigEntries());
 
   // assert
   assert.deepStrictEqual(firstRead, expectedEntry);
@@ -237,12 +223,9 @@ test("sets and stably reads a complete parsed config", (t) => {
   assert.deepStrictEqual(cacheEntries, [[cacheKey, expectedEntry]]);
 });
 
-test("overwrites a parsed config under the same cache key", (t) => {
+test("overwrites a parsed config under the same cache key", () => {
   // arrange
-  resetRoutingState();
-  t.after(() => {
-    resetRoutingState();
-  });
+  const routingState = createRoutingStateOperations(createHooksRuntime());
   const cacheKey = "project\u0000catalog-beta\u0000plugin-beta";
   const initialEntry = {
     scope: "project",
@@ -289,20 +272,17 @@ test("overwrites a parsed config under the same cache key", (t) => {
   } satisfies CacheEntry;
 
   // act
-  setParsedConfig(cacheKey, initialEntry);
-  setParsedConfig(cacheKey, replacementEntry);
-  const cacheEntries = Array.from(parsedConfigEntries());
+  routingState.setParsedConfig(cacheKey, initialEntry);
+  routingState.setParsedConfig(cacheKey, replacementEntry);
+  const cacheEntries = Array.from(routingState.parsedConfigEntries());
 
   // assert
   assert.deepStrictEqual(cacheEntries, [[cacheKey, expectedEntry]]);
 });
 
-test("deletes a parsed config and keeps it absent after a repeated delete", (t) => {
+test("deletes a parsed config and keeps it absent after a repeated delete", () => {
   // arrange
-  resetRoutingState();
-  t.after(() => {
-    resetRoutingState();
-  });
+  const routingState = createRoutingStateOperations(createHooksRuntime());
   const cacheKey = "user\u0000catalog-gamma\u0000plugin-gamma";
   const cacheEntry = {
     scope: "user",
@@ -319,14 +299,14 @@ test("deletes a parsed config and keeps it absent after a repeated delete", (t) 
     ifPredicates: new Map([["PostCompact|0|0", { kind: "match-all" }]]),
   } satisfies CacheEntry;
 
-  setParsedConfig(cacheKey, cacheEntry);
+  routingState.setParsedConfig(cacheKey, cacheEntry);
 
   // act
-  deleteParsedConfig(cacheKey);
-  const firstReadAfterDelete = parsedConfigEntries().get(cacheKey);
-  deleteParsedConfig(cacheKey);
-  const secondReadAfterDelete = parsedConfigEntries().get(cacheKey);
-  const cacheEntries = Array.from(parsedConfigEntries());
+  routingState.deleteParsedConfig(cacheKey);
+  const firstReadAfterDelete = routingState.parsedConfigEntries().get(cacheKey);
+  routingState.deleteParsedConfig(cacheKey);
+  const secondReadAfterDelete = routingState.parsedConfigEntries().get(cacheKey);
+  const cacheEntries = Array.from(routingState.parsedConfigEntries());
 
   // assert
   assert.deepStrictEqual(
@@ -335,16 +315,13 @@ test("deletes a parsed config and keeps it absent after a repeated delete", (t) 
   );
 });
 
-test("returns an empty bucket and an empty routing table by default", (t) => {
+test("returns an empty bucket and an empty routing table by default", () => {
   // arrange
-  resetRoutingState();
-  t.after(() => {
-    resetRoutingState();
-  });
+  const routingState = createRoutingStateOperations(createHooksRuntime());
 
   // act
-  const preToolUseBucket = getRoutingBucket("PreToolUse");
-  const routingEntries = Array.from(routingTableEntries());
+  const preToolUseBucket = routingState.getRoutingBucket("PreToolUse");
+  const routingEntries = Array.from(routingState.routingTableEntries());
 
   // assert
   assert.deepStrictEqual(
@@ -353,12 +330,9 @@ test("returns an empty bucket and an empty routing table by default", (t) => {
   );
 });
 
-test("sets and stably reads routing entries in per-bucket order", (t) => {
+test("sets and stably reads routing entries in per-bucket order", () => {
   // arrange
-  resetRoutingState();
-  t.after(() => {
-    resetRoutingState();
-  });
+  const routingState = createRoutingStateOperations(createHooksRuntime());
   const firstEntry = {
     scope: "user",
     marketplace: "catalog-alpha",
@@ -411,21 +385,18 @@ test("sets and stably reads routing entries in per-bucket order", (t) => {
   ] satisfies ReadonlyArray<RoutingEntry>;
 
   // act
-  setRoutingBucket("PreToolUse", [firstEntry, secondEntry]);
-  const firstRead = getRoutingBucket("PreToolUse");
-  const secondRead = getRoutingBucket("PreToolUse");
+  routingState.setRoutingBucket("PreToolUse", [firstEntry, secondEntry]);
+  const firstRead = routingState.getRoutingBucket("PreToolUse");
+  const secondRead = routingState.getRoutingBucket("PreToolUse");
 
   // assert
   assert.deepStrictEqual(firstRead, expectedEntries);
   assert.deepStrictEqual(secondRead, expectedEntries);
 });
 
-test("replaces a routing bucket without retaining earlier entries", (t) => {
+test("replaces a routing bucket without retaining earlier entries", () => {
   // arrange
-  resetRoutingState();
-  t.after(() => {
-    resetRoutingState();
-  });
+  const routingState = createRoutingStateOperations(createHooksRuntime());
   const initialEntry = {
     scope: "user",
     marketplace: "catalog-initial",
@@ -466,22 +437,19 @@ test("replaces a routing bucket without retaining earlier entries", (t) => {
   ] satisfies ReadonlyArray<RoutingEntry>;
 
   // act
-  setRoutingBucket("SessionEnd", [initialEntry]);
-  setRoutingBucket("SessionEnd", [replacementEntry]);
-  const sessionEndBucket = getRoutingBucket("SessionEnd");
-  const routingEntries = Array.from(routingTableEntries());
+  routingState.setRoutingBucket("SessionEnd", [initialEntry]);
+  routingState.setRoutingBucket("SessionEnd", [replacementEntry]);
+  const sessionEndBucket = routingState.getRoutingBucket("SessionEnd");
+  const routingEntries = Array.from(routingState.routingTableEntries());
 
   // assert
   assert.deepStrictEqual(sessionEndBucket, expectedEntries);
   assert.deepStrictEqual(routingEntries, [["SessionEnd", expectedEntries]]);
 });
 
-test("reads all routing buckets while preserving each bucket's order", (t) => {
+test("reads all routing buckets while preserving each bucket's order", () => {
   // arrange
-  resetRoutingState();
-  t.after(() => {
-    resetRoutingState();
-  });
+  const routingState = createRoutingStateOperations(createHooksRuntime());
   const sessionEndEntry = {
     scope: "project",
     marketplace: "catalog-session",
@@ -568,22 +536,19 @@ test("reads all routing buckets while preserving each bucket's order", (t) => {
   ]);
 
   // act
-  setRoutingBucket("SessionEnd", [sessionEndEntry]);
-  setRoutingBucket("PreToolUse", [firstPreToolEntry, secondPreToolEntry]);
-  const firstRead = routingTableEntries();
-  const secondRead = routingTableEntries();
+  routingState.setRoutingBucket("SessionEnd", [sessionEndEntry]);
+  routingState.setRoutingBucket("PreToolUse", [firstPreToolEntry, secondPreToolEntry]);
+  const firstRead = routingState.routingTableEntries();
+  const secondRead = routingState.routingTableEntries();
 
   // assert
   assert.deepStrictEqual(firstRead, expectedRoutingEntries);
   assert.deepStrictEqual(secondRead, expectedRoutingEntries);
 });
 
-test("resets every routing state cell through the composite lifecycle", (t) => {
+test("a fresh runtime starts empty without clearing a populated peer", () => {
   // arrange
-  resetRoutingState();
-  t.after(() => {
-    resetRoutingState();
-  });
+  const routingState = createRoutingStateOperations(createHooksRuntime());
   const cacheKey = "project\u0000catalog-reset\u0000plugin-reset";
   const cacheEntry = {
     scope: "project",
@@ -618,26 +583,26 @@ test("resets every routing state cell through the composite lifecycle", (t) => {
     scope: "project",
   } satisfies PendingSessionStartContext;
 
-  setParsedConfig(cacheKey, cacheEntry);
-  setRoutingBucket("PreToolUse", [routingEntry]);
-  bumpEpoch();
-  appendPendingSessionStartContext(pendingEntry);
+  routingState.setParsedConfig(cacheKey, cacheEntry);
+  routingState.setRoutingBucket("PreToolUse", [routingEntry]);
+  routingState.bumpEpoch();
+  routingState.appendPendingSessionStartContext(pendingEntry);
 
   // act
   const stateBeforeReset = {
-    epoch: currentEpoch(),
-    parsedKeys: Array.from(parsedConfigEntries().keys()),
-    routingEvents: Array.from(routingTableEntries().keys()),
-    routedPluginIds: getRoutingBucket("PreToolUse").map((entry) => entry.pluginId),
-    pendingContexts: pendingSessionStartContextEntries().map((entry) => entry.context),
+    epoch: routingState.currentEpoch(),
+    parsedKeys: Array.from(routingState.parsedConfigEntries().keys()),
+    routingEvents: Array.from(routingState.routingTableEntries().keys()),
+    routedPluginIds: routingState.getRoutingBucket("PreToolUse").map((entry) => entry.pluginId),
+    pendingContexts: routingState.pendingSessionStartContextEntries().map((entry) => entry.context),
   };
-  resetRoutingState();
-  const stateAfterReset = {
-    epoch: currentEpoch(),
-    parsedKeys: Array.from(parsedConfigEntries().keys()),
-    routingEvents: Array.from(routingTableEntries().keys()),
-    routedPluginIds: getRoutingBucket("PreToolUse").map((entry) => entry.pluginId),
-    pendingContexts: pendingSessionStartContextEntries().map((entry) => entry.context),
+  const freshState = createRoutingStateOperations(createHooksRuntime());
+  const stateFromFreshRuntime = {
+    epoch: freshState.currentEpoch(),
+    parsedKeys: Array.from(freshState.parsedConfigEntries().keys()),
+    routingEvents: Array.from(freshState.routingTableEntries().keys()),
+    routedPluginIds: freshState.getRoutingBucket("PreToolUse").map((entry) => entry.pluginId),
+    pendingContexts: freshState.pendingSessionStartContextEntries().map((entry) => entry.context),
   };
 
   // assert
@@ -648,11 +613,125 @@ test("resets every routing state cell through the composite lifecycle", (t) => {
     routedPluginIds: ["plugin-reset"],
     pendingContexts: ["reset context"],
   });
-  assert.deepStrictEqual(stateAfterReset, {
+  assert.deepStrictEqual(stateFromFreshRuntime, {
     epoch: 0,
     parsedKeys: [],
     routingEvents: [],
     routedPluginIds: [],
     pendingContexts: [],
   });
+});
+
+test("binds routing operations to one required runtime instance", () => {
+  // arrange
+  const routingState = createRoutingStateOperations(createHooksRuntime());
+  const runtime = createHooksRuntime();
+  const operations = createRoutingStateOperations(runtime);
+  const cacheKey = "project\u0000catalog-bound\u0000plugin-bound";
+  const cacheEntry = {
+    scope: "project",
+    marketplace: "catalog-bound",
+    pluginId: "plugin-bound",
+    resolvedSource: asAbsolutePluginRoot("/plugins/catalog-bound/plugin-bound"),
+    config: {
+      PreToolUse: [
+        {
+          hooks: [{ type: "command", command: "echo bound" }],
+        },
+      ],
+    },
+    ifPredicates: new Map([["PreToolUse|0|0", { kind: "match-all" }]]),
+  } satisfies CacheEntry;
+  const route = {
+    scope: "project",
+    marketplace: "catalog-bound",
+    pluginId: "plugin-bound",
+    resolvedSource: asAbsolutePluginRoot("/plugins/catalog-bound/plugin-bound"),
+    claudeEvent: "PreToolUse",
+    matcher: { kind: "match-all" },
+    rawMatcher: "",
+    handlerDecl: { type: "command", command: "echo bound" },
+    declarationIndex: 0,
+    ifPredicate: { kind: "match-all" },
+  } satisfies RoutingEntry;
+  const pendingEntry = {
+    context: "bound context",
+    pluginId: "plugin-bound",
+    marketplace: "catalog-bound",
+    scope: "project",
+  } satisfies PendingSessionStartContext;
+
+  // act
+  operations.setParsedConfig(cacheKey, cacheEntry);
+  operations.setRoutingBucket("PreToolUse", [route]);
+  operations.appendPendingSessionStartContext(pendingEntry);
+  const explicitEpoch = operations.bumpEpoch();
+  routingState.setParsedConfig(cacheKey, cacheEntry);
+  routingState.setRoutingBucket("PreToolUse", [route]);
+  routingState.appendPendingSessionStartContext(pendingEntry);
+  const transitionEpoch = routingState.bumpEpoch();
+  const explicitState = {
+    epoch: operations.currentEpoch(),
+    parsed: Array.from(operations.parsedConfigEntries()),
+    routes: Array.from(operations.routingTableEntries()),
+    pending: operations.pendingSessionStartContextEntries(),
+  };
+  const transitionState = {
+    epoch: routingState.currentEpoch(),
+    parsed: Array.from(routingState.parsedConfigEntries()),
+    routes: Array.from(routingState.routingTableEntries()),
+    pending: routingState.pendingSessionStartContextEntries(),
+  };
+  operations.deleteParsedConfig(cacheKey);
+  operations.setRoutingBucket("PreToolUse", []);
+  operations.clearPendingSessionStartContext();
+  operations.bumpEpoch();
+
+  // assert
+  assert.strictEqual(explicitEpoch, 1);
+  assert.strictEqual(transitionEpoch, 1);
+  assert.deepStrictEqual(explicitState, transitionState);
+  assert.deepStrictEqual(
+    {
+      epoch: routingState.currentEpoch(),
+      parsed: Array.from(routingState.parsedConfigEntries()),
+      routes: Array.from(routingState.routingTableEntries()),
+      pending: routingState.pendingSessionStartContextEntries(),
+    },
+    transitionState,
+  );
+});
+
+test("advancing generation preserves the runtime's other routing state", () => {
+  // arrange
+  const routingState = createRoutingStateOperations(createHooksRuntime());
+  const cacheKey = "user\u0000catalog-preserved\u0000plugin-preserved";
+  const cacheEntry = {
+    scope: "user",
+    marketplace: "catalog-preserved",
+    pluginId: "plugin-preserved",
+    resolvedSource: asAbsolutePluginRoot("/plugins/catalog-preserved/plugin-preserved"),
+    config: {},
+    ifPredicates: new Map(),
+  } satisfies CacheEntry;
+  const pendingEntry = {
+    context: "preserved context",
+    pluginId: "plugin-preserved",
+    marketplace: "catalog-preserved",
+    scope: "user",
+  } satisfies PendingSessionStartContext;
+  routingState.setParsedConfig(cacheKey, cacheEntry);
+  routingState.setRoutingBucket("SessionEnd", []);
+  routingState.appendPendingSessionStartContext(pendingEntry);
+  routingState.bumpEpoch();
+
+  // act
+  const advancedEpoch = routingState.bumpEpoch();
+
+  // assert
+  assert.strictEqual(advancedEpoch, 2);
+  assert.strictEqual(routingState.currentEpoch(), 2);
+  assert.deepStrictEqual(Array.from(routingState.parsedConfigEntries()), [[cacheKey, cacheEntry]]);
+  assert.deepStrictEqual(Array.from(routingState.routingTableEntries()), [["SessionEnd", []]]);
+  assert.deepStrictEqual(routingState.pendingSessionStartContextEntries(), [pendingEntry]);
 });

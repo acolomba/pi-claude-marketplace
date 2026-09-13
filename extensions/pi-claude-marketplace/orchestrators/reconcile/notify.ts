@@ -8,8 +8,9 @@
 // secondary project-before-user per MSG-GR-3), and constructs the concrete
 // per-status `MarketplaceNotificationMessage` arm for each block.
 //
-// Pure: no I/O. The function NEVER calls `ctx.ui.notify` or any seam in
-// `shared/notify.ts` beyond importing the types and the comparator.
+// Pure: no I/O. The function NEVER calls the `notification-dispatch.ts`
+// owner; it imports only notification types and the stable name/scope
+// comparator from their named shared owners.
 //
 // Token mapping (pending-tense set):
 //
@@ -39,9 +40,19 @@
 // orchestrator detects emptiness BEFORE calling this projection so the
 // advisory takes precedence.
 
-import { resolveStrict } from "../../domain/resolver.ts";
+import { resolveStrict } from "../../domain/plugin-resolver.ts";
+import { compareByNameThenScope } from "../../shared/compare-name-scope.ts";
+import { type ContentReason } from "../../shared/notification-types.ts";
+import {
+  type MarketplaceNotificationMessage,
+  type MarketplaceStatus,
+  type PluginInstalledMessage,
+  type PluginNotificationMessage,
+  type PluginPartiallyInstalledMessage,
+  type Reason,
+  type ReconcileAppliedCascadeMessage,
+} from "../../shared/notification-types.ts";
 import { malformedReasonsForKinds } from "../../shared/notify-reasons.ts";
-import { compareByNameThenScope } from "../../shared/notify.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 import { enableRowDependencies } from "../plugin/shared.ts";
 
@@ -58,16 +69,6 @@ import type { PendingMsg, ReconcileAppliedMsg } from "./reconcile.messaging.ts";
 import type { PlannedPluginInstall, ReconcilePlan } from "./types.ts";
 import type { MarketplaceManifest } from "../../domain/manifest.ts";
 import type { MarketplaceRows, WithPlugins } from "../../shared/notify-context.ts";
-import type {
-  ContentReason,
-  MarketplaceNotificationMessage,
-  MarketplaceStatus,
-  PluginInstalledMessage,
-  PluginNotificationMessage,
-  PluginPartiallyInstalledMessage,
-  Reason,
-  ReconcileAppliedCascadeMessage,
-} from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 
 /**
@@ -502,7 +503,7 @@ export function isReconcilePlanListEmpty(plans: readonly ReconcilePlan[]): boole
  * never surfaces a hint.
  *
  * SURF-05 / D-63-08 / IN-07: the row also carries the ledger's orphan-rewake
- * signal, in the emit order `install.ts` and the sibling enable projection both
+ * signal, in the emit order `install-flow.ts` and the sibling enable projection both
  * use -- `{orphan rewake}` first, then the per-kind malformed tokens. The
  * orphan token moves no severity channel: the malformed rule alone decides
  * `warning` versus `info`.
@@ -543,7 +544,7 @@ function installedRowFromOutcome(outcome: PluginInstalledOutcome): PluginInstall
  * byte-identically to before (NREG-01).
  *
  * SURF-05 / WARN-01: the row also carries the ledger's other two degradation
- * signals in `install.ts`'s emit order -- `{orphan rewake}`, then the per-kind
+ * signals in `install-flow.ts`'s emit order -- `{orphan rewake}`, then the per-kind
  * `{malformed skill}` / `{malformed command}` tokens, then the dropped kinds --
  * so the standalone verb and this projection render one brace, not two.
  *
@@ -593,7 +594,7 @@ function enabledRowFromOutcome(
  * Build the row for a load-time backfill.
  *
  * WR-04: the backfill runs the same class of ledger as the install and enable
- * arms, so it names the same two degradation signals in `install.ts`'s emit
+ * arms, so it names the same two degradation signals in `install-flow.ts`'s emit
  * order -- `{orphan rewake}`, then the per-kind `{malformed skill}` /
  * `{malformed command}` tokens, then (on the degraded arm) the dropped kinds.
  * A backfill that reports neither renders byte-identically to before (NREG-01).

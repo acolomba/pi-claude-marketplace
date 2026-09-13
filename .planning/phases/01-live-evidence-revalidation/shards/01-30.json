@@ -1,0 +1,2040 @@
+{
+  "plan": "01-30",
+  "files": [
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md",
+      "category": "adversarial",
+      "assignedPlan": "01-30",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-001",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-002",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-003",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-004",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-005",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-006",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-007",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-008",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-009",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-010",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-011",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-012",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-013",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-014",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-015",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-016",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-017",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-018",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-019",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-020",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-021",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-022",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-023",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-024",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-025",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-026",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-027",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-028",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-029"
+      ],
+      "reviewStatus": "complete",
+      "outcome": "live findings"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md",
+      "category": "adversarial",
+      "assignedPlan": "01-30",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-001",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-002",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-003",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-004",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-005",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-006",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-007",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-008",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-009",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-010",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-011",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-012",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-013",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-014",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-015",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-016",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-017",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-018",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-019",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-020",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-021",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-022",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-023",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-024",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-025",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-026",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-027",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-028",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-029",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-030",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-031",
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-032"
+      ],
+      "reviewStatus": "complete",
+      "outcome": "live findings"
+    }
+  ],
+  "sourceClaims": [
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-001",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md",
+      "label": "CLAIM-001",
+      "findingId": "OPS-F01"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-002",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md",
+      "label": "CLAIM-002",
+      "findingId": "OPS-F02"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-003",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md",
+      "label": "CLAIM-003",
+      "findingId": "OPS-F03"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-004",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md",
+      "label": "CLAIM-004",
+      "findingId": "OPS-F04"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-005",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md",
+      "label": "CLAIM-005",
+      "findingId": "OPS-F05"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-006",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md",
+      "label": "CLAIM-006",
+      "findingId": "OPS-F06"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-007",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md",
+      "label": "CLAIM-007",
+      "findingId": "OPS-F07"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-008",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md",
+      "label": "CLAIM-008",
+      "findingId": "OPS-F08"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-009",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md",
+      "label": "CLAIM-009",
+      "findingId": "OPS-F09"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-010",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md",
+      "label": "CLAIM-010",
+      "findingId": "OPS-F10"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-011",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md",
+      "label": "CLAIM-011",
+      "findingId": "OPS-F11"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-012",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md",
+      "label": "CLAIM-012",
+      "findingId": "OPS-F12"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-013",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md",
+      "label": "CLAIM-013",
+      "findingId": "OPS-F13"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-014",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md",
+      "label": "CLAIM-014",
+      "findingId": "OPS-F14"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-015",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md",
+      "label": "CLAIM-015",
+      "findingId": "OPS-F15"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-016",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md",
+      "label": "CLAIM-016",
+      "findingId": "OPS-F16"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-017",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md",
+      "label": "CLAIM-017",
+      "findingId": "OPS-F17"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-018",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md",
+      "label": "CLAIM-018",
+      "findingId": "OPS-F18"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-019",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md",
+      "label": "CLAIM-019",
+      "findingId": "OPS-F19"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-020",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md",
+      "label": "CLAIM-020",
+      "findingId": "OPS-F20"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-021",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md",
+      "label": "CLAIM-021",
+      "findingId": "OPS-F21"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-022",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md",
+      "label": "CLAIM-022",
+      "findingId": "OPS-F22"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-023",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md",
+      "label": "CLAIM-023",
+      "findingId": "OPS-F23"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-024",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md",
+      "label": "CLAIM-024",
+      "findingId": "OPS-F24"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-025",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md",
+      "label": "CLAIM-025",
+      "findingId": "OPS-F25"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-026",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md",
+      "label": "CLAIM-026",
+      "findingId": "OPS-F26"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-027",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md",
+      "label": "CLAIM-027",
+      "findingId": "OPS-F27"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-028",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md",
+      "label": "CLAIM-028",
+      "findingId": "OPS-F28"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-029",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md",
+      "label": "CLAIM-029",
+      "findingId": "OPS-F29"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-001",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md",
+      "label": "CLAIM-001",
+      "findingId": "OPU-F01"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-002",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md",
+      "label": "CLAIM-002",
+      "findingId": "OPU-F02"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-003",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md",
+      "label": "CLAIM-003",
+      "findingId": "OPU-F03"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-004",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md",
+      "label": "CLAIM-004",
+      "findingId": "OPU-F04"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-005",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md",
+      "label": "CLAIM-005",
+      "findingId": "OPU-F05"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-006",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md",
+      "label": "CLAIM-006",
+      "findingId": "OPU-F06"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-007",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md",
+      "label": "CLAIM-007",
+      "findingId": "OPU-F07"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-008",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md",
+      "label": "CLAIM-008",
+      "findingId": "OPU-F08"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-009",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md",
+      "label": "CLAIM-009",
+      "findingId": "OPU-F09"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-010",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md",
+      "label": "CLAIM-010",
+      "findingId": "OPU-F10"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-011",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md",
+      "label": "CLAIM-011",
+      "findingId": "OPU-F11"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-012",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md",
+      "label": "CLAIM-012",
+      "findingId": "OPU-F12"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-013",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md",
+      "label": "CLAIM-013",
+      "findingId": "OPU-F13"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-014",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md",
+      "label": "CLAIM-014",
+      "findingId": "OPU-F14"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-015",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md",
+      "label": "CLAIM-015",
+      "findingId": "OPU-F15"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-016",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md",
+      "label": "CLAIM-016",
+      "findingId": "OPU-F16"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-017",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md",
+      "label": "CLAIM-017",
+      "findingId": "OPU-F17"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-018",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md",
+      "label": "CLAIM-018",
+      "findingId": "OPU-F18"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-019",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md",
+      "label": "CLAIM-019",
+      "findingId": "OPU-F19"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-020",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md",
+      "label": "CLAIM-020",
+      "findingId": "OPU-F20"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-021",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md",
+      "label": "CLAIM-021",
+      "findingId": "OPU-F21"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-022",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md",
+      "label": "CLAIM-022",
+      "findingId": "OPU-F22"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-023",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md",
+      "label": "CLAIM-023",
+      "findingId": "OPU-F23"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-024",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md",
+      "label": "CLAIM-024",
+      "findingId": "OPU-F24"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-025",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md",
+      "label": "CLAIM-025",
+      "findingId": "OPU-F25"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-026",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md",
+      "label": "CLAIM-026",
+      "findingId": "OPU-F26"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-027",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md",
+      "label": "CLAIM-027",
+      "findingId": "OPU-F27"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-028",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md",
+      "label": "CLAIM-028",
+      "findingId": "OPU-F28"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-029",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md",
+      "label": "CLAIM-029",
+      "findingId": "OPU-F29"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-030",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md",
+      "label": "CLAIM-030",
+      "findingId": "OPU-F30"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-031",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md",
+      "label": "CLAIM-031",
+      "findingId": "OPU-F31"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-032",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md",
+      "label": "CLAIM-032",
+      "findingId": "OPU-F32"
+    }
+  ],
+  "findings": [
+    {
+      "id": "OPS-F01",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-001"
+      ],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/shared.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Current inspection retains the cited assertion arrangement for: enableRowDependencies lacks single-flag cases, so swapped or dropped guards may survive. D-11 requires an isolated surviving mutation to confirm test weakness; no mutation was run, so the claim remains explicitly inconclusive."
+      },
+      "rationale": "The historical test-strength claim remains plausible, but static inspection alone cannot satisfy the D-11 mutation requirement.",
+      "destination": "Phase 2 should run the report's proposed isolated mutation before accepting or rejecting the test-strength change."
+    },
+    {
+      "id": "OPS-F02",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-002"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/shared.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Current CodeGraph and direct inspection retain the cited implementation, ownership, documentation, or assertion shape: enableRowDependencies partition refusal lacks a compile-time negative."
+      },
+      "rationale": "The historical claim remains actionable in the current tree: enableRowDependencies partition refusal lacks a compile-time negative.",
+      "destination": "Phase 2 should apply the review's stated correction and run the direct source-test coverage gate."
+    },
+    {
+      "id": "OPS-F03",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-003"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/shared.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Current CodeGraph and direct inspection retain the cited implementation, ownership, documentation, or assertion shape: surfaceDiscoveryWarnings lacks a reinstalled-verb case."
+      },
+      "rationale": "The historical claim remains actionable in the current tree: surfaceDiscoveryWarnings lacks a reinstalled-verb case.",
+      "destination": "Phase 2 should apply the review's stated correction and run the direct source-test coverage gate."
+    },
+    {
+      "id": "OPS-F04",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-004"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/shared.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Current CodeGraph and direct inspection retain the cited implementation, ownership, documentation, or assertion shape: emitMarketplaceNotAddedSignal lacks a cross-scope-flag case."
+      },
+      "rationale": "The historical claim remains actionable in the current tree: emitMarketplaceNotAddedSignal lacks a cross-scope-flag case.",
+      "destination": "Phase 2 should apply the review's stated correction and run the direct source-test coverage gate."
+    },
+    {
+      "id": "OPS-F05",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-005"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/notify.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/shared.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Current CodeGraph and direct inspection retain the cited implementation, ownership, documentation, or assertion shape: makeRecordingBoundary hides an incomplete SDK boundary behind double assertions."
+      },
+      "rationale": "The historical claim remains actionable in the current tree: makeRecordingBoundary hides an incomplete SDK boundary behind double assertions.",
+      "destination": "Phase 2 should apply the review's stated correction and run the direct source-test coverage gate."
+    },
+    {
+      "id": "OPS-F06",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-006"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/update-row.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/update-row.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Current CodeGraph and direct inspection retain the cited implementation, ownership, documentation, or assertion shape: update-row cases use the placeholder name result."
+      },
+      "rationale": "The historical claim remains actionable in the current tree: update-row cases use the placeholder name result.",
+      "destination": "Phase 2 should apply the review's stated correction and run the direct source-test coverage gate."
+    },
+    {
+      "id": "OPS-F07",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-007"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/update-row.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/update-row.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Current CodeGraph and direct inspection retain the cited implementation, ownership, documentation, or assertion shape: update-row outcome literals are not satisfies-checked."
+      },
+      "rationale": "The historical claim remains actionable in the current tree: update-row outcome literals are not satisfies-checked.",
+      "destination": "Phase 2 should apply the review's stated correction and run the direct source-test coverage gate."
+    },
+    {
+      "id": "OPS-F08",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-008"
+      ],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/clone-cache.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Current inspection retains the cited assertion arrangement for: clone-cache re-export test checks a function name instead of binding identity. D-11 requires an isolated surviving mutation to confirm test weakness; no mutation was run, so the claim remains explicitly inconclusive."
+      },
+      "rationale": "The historical test-strength claim remains plausible, but static inspection alone cannot satisfy the D-11 mutation requirement.",
+      "destination": "Phase 2 should run the report's proposed isolated mutation before accepting or rejecting the test-strength change."
+    },
+    {
+      "id": "OPS-F09",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-009"
+      ],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/clone-cache.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Current inspection retains the cited assertion arrangement for: clone-cache uses fragment assertions where exact clone paths are computable. D-11 requires an isolated surviving mutation to confirm test weakness; no mutation was run, so the claim remains explicitly inconclusive."
+      },
+      "rationale": "The historical test-strength claim remains plausible, but static inspection alone cannot satisfy the D-11 mutation requirement.",
+      "destination": "Phase 2 should run the report's proposed isolated mutation before accepting or rejecting the test-strength change."
+    },
+    {
+      "id": "OPS-F10",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-010"
+      ],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/clone-cache.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Current inspection retains the cited assertion arrangement for: clone-cache warm-mirror cases use loose positive and negative call assertions. D-11 requires an isolated surviving mutation to confirm test weakness; no mutation was run, so the claim remains explicitly inconclusive."
+      },
+      "rationale": "The historical test-strength claim remains plausible, but static inspection alone cannot satisfy the D-11 mutation requirement.",
+      "destination": "Phase 2 should run the report's proposed isolated mutation before accepting or rejecting the test-strength change."
+    },
+    {
+      "id": "OPS-F11",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-011"
+      ],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/clone-cache.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Current inspection retains the cited assertion arrangement for: same-repository seed case does not prove once-only behavior or manifest order. D-11 requires an isolated surviving mutation to confirm test weakness; no mutation was run, so the claim remains explicitly inconclusive."
+      },
+      "rationale": "The historical test-strength claim remains plausible, but static inspection alone cannot satisfy the D-11 mutation requirement.",
+      "destination": "Phase 2 should run the report's proposed isolated mutation before accepting or rejecting the test-strength change."
+    },
+    {
+      "id": "OPS-F12",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-012"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/clone-cache.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Current CodeGraph and direct inspection retain the cited implementation, ownership, documentation, or assertion shape: clone-cache has many cases without required AAA phase comments."
+      },
+      "rationale": "The historical claim remains actionable in the current tree: clone-cache has many cases without required AAA phase comments.",
+      "destination": "Phase 2 should apply the review's stated correction and run the direct source-test coverage gate."
+    },
+    {
+      "id": "OPS-F13",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-013"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/clone-cache.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Current CodeGraph and direct inspection retain the cited implementation, ownership, documentation, or assertion shape: clone-cache retains planning-vocabulary Pitfall prefixes in test titles."
+      },
+      "rationale": "The historical claim remains actionable in the current tree: clone-cache retains planning-vocabulary Pitfall prefixes in test titles.",
+      "destination": "Phase 2 should apply the review's stated correction and run the direct source-test coverage gate."
+    },
+    {
+      "id": "OPS-F14",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-014"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/clone-cache.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Current CodeGraph and direct inspection retain the cited implementation, ownership, documentation, or assertion shape: clone-cache performs redundant dynamic imports for an already static binding."
+      },
+      "rationale": "The historical claim remains actionable in the current tree: clone-cache performs redundant dynamic imports for an already static binding.",
+      "destination": "Phase 2 should apply the review's stated correction and run the direct source-test coverage gate."
+    },
+    {
+      "id": "OPS-F15",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-015"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/clone-cache.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Current CodeGraph and direct inspection retain the cited implementation, ownership, documentation, or assertion shape: clone-cache asserts errors by message substring instead of identity or structured fields."
+      },
+      "rationale": "The historical claim remains actionable in the current tree: clone-cache asserts errors by message substring instead of identity or structured fields.",
+      "destination": "Phase 2 should apply the review's stated correction and run the direct source-test coverage gate."
+    },
+    {
+      "id": "OPS-F16",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-016"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/clone-cache.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Current CodeGraph and direct inspection retain the cited implementation, ownership, documentation, or assertion shape: clone failure case title promises a leak suffix the arrangement cannot produce."
+      },
+      "rationale": "The historical claim remains actionable in the current tree: clone failure case title promises a leak suffix the arrangement cannot produce.",
+      "destination": "Phase 2 should apply the review's stated correction and run the direct source-test coverage gate."
+    },
+    {
+      "id": "OPS-F17",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-017"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/bootstrap.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/bootstrap.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Current CodeGraph and direct inspection retain the cited implementation, ownership, documentation, or assertion shape: bootstrap test derives its directory from URL.pathname rather than fileURLToPath."
+      },
+      "rationale": "The historical claim remains actionable in the current tree: bootstrap test derives its directory from URL.pathname rather than fileURLToPath.",
+      "destination": "Phase 2 should apply the review's stated correction and run the direct source-test coverage gate."
+    },
+    {
+      "id": "OPS-F18",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-018"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/shared.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Current CodeGraph and direct inspection retain the cited implementation, ownership, documentation, or assertion shape: assertNoCrossPluginConflicts retains an unused scope parameter."
+      },
+      "rationale": "The historical claim remains actionable in the current tree: assertNoCrossPluginConflicts retains an unused scope parameter.",
+      "destination": "Phase 2 should apply the review's stated correction and run the direct source-test coverage gate."
+    },
+    {
+      "id": "OPS-F19",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-019"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/git-source-probe.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/git-source-probe.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Current CodeGraph and direct inspection retain the cited implementation, ownership, documentation, or assertion shape: git-source-probe and clone-cache duplicate subdirectory anchoring logic."
+      },
+      "rationale": "The historical claim remains actionable in the current tree: git-source-probe and clone-cache duplicate subdirectory anchoring logic.",
+      "destination": "Phase 2 should apply the review's stated correction and run the direct source-test coverage gate."
+    },
+    {
+      "id": "OPS-F20",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-020"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/bootstrap.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/bootstrap.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Current CodeGraph and direct inspection retain the cited implementation, ownership, documentation, or assertion shape: bootstrap statically composes marketplace orchestrators and is not an injection-seam reference implementation."
+      },
+      "rationale": "The historical claim remains actionable in the current tree: bootstrap statically composes marketplace orchestrators and is not an injection-seam reference implementation.",
+      "destination": "Phase 2 should apply the review's stated correction and run the direct source-test coverage gate."
+    },
+    {
+      "id": "OPS-F21",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-021"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/bootstrap.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/bootstrap.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Current CodeGraph and direct inspection retain the cited implementation, ownership, documentation, or assertion shape: BOOTSTRAP_MARKETPLACE_NAME is only incidentally covered rather than imported as an owned export."
+      },
+      "rationale": "The historical claim remains actionable in the current tree: BOOTSTRAP_MARKETPLACE_NAME is only incidentally covered rather than imported as an owned export.",
+      "destination": "Phase 2 should apply the review's stated correction and run the direct source-test coverage gate."
+    },
+    {
+      "id": "OPS-F22",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-022"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/clone-cache.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Current CodeGraph and direct inspection retain the cited implementation, ownership, documentation, or assertion shape: clone-cache temporary directories lack per-case cleanup."
+      },
+      "rationale": "The historical claim remains actionable in the current tree: clone-cache temporary directories lack per-case cleanup.",
+      "destination": "Phase 2 should apply the review's stated correction and run the direct source-test coverage gate."
+    },
+    {
+      "id": "OPS-F23",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-023"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/clone-cache.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Current CodeGraph and direct inspection retain the cited implementation, ownership, documentation, or assertion shape: clone-cache uses void test broadly and loose assert.equal spelling."
+      },
+      "rationale": "The historical claim remains actionable in the current tree: clone-cache uses void test broadly and loose assert.equal spelling.",
+      "destination": "Phase 2 should apply the review's stated correction and run the direct source-test coverage gate."
+    },
+    {
+      "id": "OPS-F24",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-024"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/git-source-probe.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/git-source-probe.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Current CodeGraph and direct inspection retain the cited implementation, ownership, documentation, or assertion shape: git-source-probe cases use the placeholder name result."
+      },
+      "rationale": "The historical claim remains actionable in the current tree: git-source-probe cases use the placeholder name result.",
+      "destination": "Phase 2 should apply the review's stated correction and run the direct source-test coverage gate."
+    },
+    {
+      "id": "OPS-F25",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-025"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/git-source-probe.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/git-source-probe.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Current CodeGraph and direct inspection retain the cited implementation, ownership, documentation, or assertion shape: git-source-probe error checks compare error.name strings instead of classes or structured fields."
+      },
+      "rationale": "The historical claim remains actionable in the current tree: git-source-probe error checks compare error.name strings instead of classes or structured fields.",
+      "destination": "Phase 2 should apply the review's stated correction and run the direct source-test coverage gate."
+    },
+    {
+      "id": "OPS-F26",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-026"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/shared.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Current CodeGraph and direct inspection retain the cited implementation, ownership, documentation, or assertion shape: shared.ts has an undocumented assertion over a schema-typed unknown field."
+      },
+      "rationale": "The historical claim remains actionable in the current tree: shared.ts has an undocumented assertion over a schema-typed unknown field.",
+      "destination": "Phase 2 should apply the review's stated correction and run the direct source-test coverage gate."
+    },
+    {
+      "id": "OPS-F27",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-027"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "tests/platform/git-ops-fake.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/platform/git-ops-fake.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Current CodeGraph and direct inspection retain the cited implementation, ownership, documentation, or assertion shape: git-ops fake structured cloning forces repeated auth strip-and-reattach workarounds."
+      },
+      "rationale": "The historical claim remains actionable in the current tree: git-ops fake structured cloning forces repeated auth strip-and-reattach workarounds.",
+      "destination": "Phase 2 should apply the review's stated correction and run the direct source-test coverage gate."
+    },
+    {
+      "id": "OPS-F28",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-028"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/persistence/locations.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/clone-gc.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Current CodeGraph and direct inspection retain the cited implementation, ownership, documentation, or assertion shape: ScopedLocations branding can be copied by object spread and its negative must use a bare literal."
+      },
+      "rationale": "The historical claim remains actionable in the current tree: ScopedLocations branding can be copied by object spread and its negative must use a bare literal.",
+      "destination": "Phase 2 should apply the review's stated correction and run the direct source-test coverage gate."
+    },
+    {
+      "id": "OPS-F29",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-support.md#CLAIM-029"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "tests/architecture/partial-vocabulary-guard.test.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/architecture/partial-vocabulary-guard.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Current CodeGraph and direct inspection retain the cited implementation, ownership, documentation, or assertion shape: repository comment-vocabulary enforcement should include the surviving planning terms."
+      },
+      "rationale": "The historical claim remains actionable in the current tree: repository comment-vocabulary enforcement should include the surviving planning terms.",
+      "destination": "Phase 2 should apply the review's stated correction and run the direct source-test coverage gate."
+    },
+    {
+      "id": "OPU-F01",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-001"
+      ],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/update.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/update.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Current inspection retains the cited assertion arrangement for: swapState-version-advanced fixture cannot reach an update and its assertions do not discriminate the named behavior. D-11 requires an isolated surviving mutation to confirm test weakness; no mutation was run, so the claim remains explicitly inconclusive."
+      },
+      "rationale": "The historical test-strength claim remains plausible, but static inspection alone cannot satisfy the D-11 mutation requirement.",
+      "destination": "Phase 2 should run the report's proposed isolated mutation before accepting or rejecting the test-strength change."
+    },
+    {
+      "id": "OPU-F02",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-002"
+      ],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/update.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/update.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Current inspection retains the cited assertion arrangement for: swapState-mp-gone does not distinguish marketplace removal from the fixture baseline skip. D-11 requires an isolated surviving mutation to confirm test weakness; no mutation was run, so the claim remains explicitly inconclusive."
+      },
+      "rationale": "The historical test-strength claim remains plausible, but static inspection alone cannot satisfy the D-11 mutation requirement.",
+      "destination": "Phase 2 should run the report's proposed isolated mutation before accepting or rejecting the test-strength change."
+    },
+    {
+      "id": "OPU-F03",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-003"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/update.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/update.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Current CodeGraph and direct inspection retain the cited implementation, ownership, documentation, or assertion shape: prepare-handles-fail obtains rollback classification from rollback-server user text."
+      },
+      "rationale": "The historical claim remains actionable in the current tree: prepare-handles-fail obtains rollback classification from rollback-server user text.",
+      "destination": "Phase 2 should apply the review's stated correction and run the direct source-test coverage gate."
+    },
+    {
+      "id": "OPU-F04",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-004"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/update.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/update.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Current CodeGraph and direct inspection retain the cited implementation, ownership, documentation, or assertion shape: UpdatePluginsOptions.mapModel has no owning case in update.test.ts."
+      },
+      "rationale": "The historical claim remains actionable in the current tree: UpdatePluginsOptions.mapModel has no owning case in update.test.ts.",
+      "destination": "Phase 2 should apply the review's stated correction and run the direct source-test coverage gate."
+    },
+    {
+      "id": "OPU-F05",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-005"
+      ],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/update.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/update.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Current inspection retains the cited assertion arrangement for: notifyDirectFailure subject names are not pinned for sync-clone and phase-2 arms. D-11 requires an isolated surviving mutation to confirm test weakness; no mutation was run, so the claim remains explicitly inconclusive."
+      },
+      "rationale": "The historical test-strength claim remains plausible, but static inspection alone cannot satisfy the D-11 mutation requirement.",
+      "destination": "Phase 2 should run the report's proposed isolated mutation before accepting or rejecting the test-strength change."
+    },
+    {
+      "id": "OPU-F06",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-006"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/update.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/update.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Current CodeGraph and direct inspection retain the cited implementation, ownership, documentation, or assertion shape: WR-04 asserts staged agent and MCP lists only by existence and length."
+      },
+      "rationale": "The historical claim remains actionable in the current tree: WR-04 asserts staged agent and MCP lists only by existence and length.",
+      "destination": "Phase 2 should apply the review's stated correction and run the direct source-test coverage gate."
+    },
+    {
+      "id": "OPU-F07",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-007"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/update.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/update.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Current CodeGraph and direct inspection retain the cited implementation, ownership, documentation, or assertion shape: PUP-8 asserts only reload-hint absence and can pass with no notification."
+      },
+      "rationale": "The historical claim remains actionable in the current tree: PUP-8 asserts only reload-hint absence and can pass with no notification.",
+      "destination": "Phase 2 should apply the review's stated correction and run the direct source-test coverage gate."
+    },
+    {
+      "id": "OPU-F08",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-008"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/update.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/update.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Current CodeGraph and direct inspection retain the cited implementation, ownership, documentation, or assertion shape: PUP-9 permits duplicate errors and does not assert classified reasons."
+      },
+      "rationale": "The historical claim remains actionable in the current tree: PUP-9 permits duplicate errors and does not assert classified reasons.",
+      "destination": "Phase 2 should apply the review's stated correction and run the direct source-test coverage gate."
+    },
+    {
+      "id": "OPU-F09",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-009"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/update.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/update.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Current CodeGraph and direct inspection retain the cited implementation, ownership, documentation, or assertion shape: PUP-2 and NFR-5 incompletely assert the six git operation ledgers."
+      },
+      "rationale": "The historical claim remains actionable in the current tree: PUP-2 and NFR-5 incompletely assert the six git operation ledgers.",
+      "destination": "Phase 2 should apply the review's stated correction and run the direct source-test coverage gate."
+    },
+    {
+      "id": "OPU-F10",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-010"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/update.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/update.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Current CodeGraph and direct inspection retain the cited implementation, ownership, documentation, or assertion shape: bare-form project-before-user same-name tie-break is unexercised."
+      },
+      "rationale": "The historical claim remains actionable in the current tree: bare-form project-before-user same-name tie-break is unexercised.",
+      "destination": "Phase 2 should apply the review's stated correction and run the direct source-test coverage gate."
+    },
+    {
+      "id": "OPU-F11",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-011"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/update.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/update.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Current CodeGraph and direct inspection retain the cited implementation, ownership, documentation, or assertion shape: update tests retain stale production line and symbol narration."
+      },
+      "rationale": "The historical claim remains actionable in the current tree: update tests retain stale production line and symbol narration.",
+      "destination": "Phase 2 should apply the review's stated correction and run the direct source-test coverage gate."
+    },
+    {
+      "id": "OPU-F12",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-012"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/update.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/update.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Current CodeGraph and direct inspection retain the cited implementation, ownership, documentation, or assertion shape: finalizeUpdateRecord cascade-side gate lacks a direct case."
+      },
+      "rationale": "The historical claim remains actionable in the current tree: finalizeUpdateRecord cascade-side gate lacks a direct case.",
+      "destination": "Phase 2 should apply the review's stated correction and run the direct source-test coverage gate."
+    },
+    {
+      "id": "OPU-F13",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-013"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/update.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/update.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Current CodeGraph and direct inspection retain the cited implementation, ownership, documentation, or assertion shape: finalizeUpdateRecord updatedAt writes are unasserted."
+      },
+      "rationale": "The historical claim remains actionable in the current tree: finalizeUpdateRecord updatedAt writes are unasserted.",
+      "destination": "Phase 2 should apply the review's stated correction and run the direct source-test coverage gate."
+    },
+    {
+      "id": "OPU-F14",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-014"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/update.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/update.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Current CodeGraph and direct inspection retain the cited implementation, ownership, documentation, or assertion shape: abort and commit helpers discard commands and skills cleanup leak descriptors."
+      },
+      "rationale": "The historical claim remains actionable in the current tree: abort and commit helpers discard commands and skills cleanup leak descriptors.",
+      "destination": "Phase 2 should apply the review's stated correction and run the direct source-test coverage gate."
+    },
+    {
+      "id": "OPU-F15",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-015"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/update.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/update.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Current CodeGraph and direct inspection retain the cited implementation, ownership, documentation, or assertion shape: update failure reasons are classified by substrings over free-form user text."
+      },
+      "rationale": "The historical claim remains actionable in the current tree: update failure reasons are classified by substrings over free-form user text.",
+      "destination": "Phase 2 should apply the review's stated correction and run the direct source-test coverage gate."
+    },
+    {
+      "id": "OPU-F16",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-016"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/update.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/update.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Current CodeGraph and direct inspection retain the cited implementation, ownership, documentation, or assertion shape: update module header misstates phase-2 mutation timing and omits hooks from commit order."
+      },
+      "rationale": "The historical claim remains actionable in the current tree: update module header misstates phase-2 mutation timing and omits hooks from commit order.",
+      "destination": "Phase 2 should apply the review's stated correction and run the direct source-test coverage gate."
+    },
+    {
+      "id": "OPU-F17",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-017"
+      ],
+      "evidenceStatus": "inconclusive",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/update.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/update.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Current inspection retains the cited assertion arrangement for: dropCache-fail assertions do not discriminate completion-cache invalidation. D-11 requires an isolated surviving mutation to confirm test weakness; no mutation was run, so the claim remains explicitly inconclusive."
+      },
+      "rationale": "The historical test-strength claim remains plausible, but static inspection alone cannot satisfy the D-11 mutation requirement.",
+      "destination": "Phase 2 should run the report's proposed isolated mutation before accepting or rejecting the test-strength change."
+    },
+    {
+      "id": "OPU-F18",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-018"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/update.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/update.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Current CodeGraph and direct inspection retain the cited implementation, ownership, documentation, or assertion shape: abortHandles tests prove only record consequences and cannot observe discarded leak descriptors."
+      },
+      "rationale": "The historical claim remains actionable in the current tree: abortHandles tests prove only record consequences and cannot observe discarded leak descriptors.",
+      "destination": "Phase 2 should apply the review's stated correction and run the direct source-test coverage gate."
+    },
+    {
+      "id": "OPU-F19",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-019"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/update.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/update.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Current CodeGraph and direct inspection retain the cited implementation, ownership, documentation, or assertion shape: warm sha-pinned-cache offline proof is owned by another update slice."
+      },
+      "rationale": "The historical claim remains actionable in the current tree: warm sha-pinned-cache offline proof is owned by another update slice.",
+      "destination": "Phase 2 should apply the review's stated correction and run the direct source-test coverage gate."
+    },
+    {
+      "id": "OPU-F20",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-020"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/update.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/update.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Current CodeGraph and direct inspection retain the cited implementation, ownership, documentation, or assertion shape: AAA phase-comment absence affects most of the assigned update-test range."
+      },
+      "rationale": "The historical claim remains actionable in the current tree: AAA phase-comment absence affects most of the assigned update-test range.",
+      "destination": "Phase 2 should apply the review's stated correction and run the direct source-test coverage gate."
+    },
+    {
+      "id": "OPU-F21",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-021"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/update.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/update.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Current CodeGraph and direct inspection retain the cited implementation, ownership, documentation, or assertion shape: makeCtx hides minimal SDK doubles behind double assertions."
+      },
+      "rationale": "The historical claim remains actionable in the current tree: makeCtx hides minimal SDK doubles behind double assertions.",
+      "destination": "Phase 2 should apply the review's stated correction and run the direct source-test coverage gate."
+    },
+    {
+      "id": "OPU-F22",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-022"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/update.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/update.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Current CodeGraph and direct inspection retain the cited implementation, ownership, documentation, or assertion shape: caught unknown values are cast to Error instead of narrowed."
+      },
+      "rationale": "The historical claim remains actionable in the current tree: caught unknown values are cast to Error instead of narrowed.",
+      "destination": "Phase 2 should apply the review's stated correction and run the direct source-test coverage gate."
+    },
+    {
+      "id": "OPU-F23",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-023"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/update.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/update.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Current CodeGraph and direct inspection retain the cited implementation, ownership, documentation, or assertion shape: updateSinglePlugin reads process.cwd directly and forces chdir-based cases."
+      },
+      "rationale": "The historical claim remains actionable in the current tree: updateSinglePlugin reads process.cwd directly and forces chdir-based cases.",
+      "destination": "Phase 2 should apply the review's stated correction and run the direct source-test coverage gate."
+    },
+    {
+      "id": "OPU-F24",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-024"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/update.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/update.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Current CodeGraph and direct inspection retain the cited implementation, ownership, documentation, or assertion shape: update.ts reads wall-clock time inline rather than through a clock dependency."
+      },
+      "rationale": "The historical claim remains actionable in the current tree: update.ts reads wall-clock time inline rather than through a clock dependency.",
+      "destination": "Phase 2 should apply the review's stated correction and run the direct source-test coverage gate."
+    },
+    {
+      "id": "OPU-F25",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-025"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/update.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/update.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Current CodeGraph and direct inspection retain the cited implementation, ownership, documentation, or assertion shape: UpdatePluginsOptions lacks a top-level API comment."
+      },
+      "rationale": "The historical claim remains actionable in the current tree: UpdatePluginsOptions lacks a top-level API comment.",
+      "destination": "Phase 2 should apply the review's stated correction and run the direct source-test coverage gate."
+    },
+    {
+      "id": "OPU-F26",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-026"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/update.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/update.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Current CodeGraph and direct inspection retain the cited implementation, ownership, documentation, or assertion shape: substring-based reason classification should be swept across sibling orchestrators."
+      },
+      "rationale": "The historical claim remains actionable in the current tree: substring-based reason classification should be swept across sibling orchestrators.",
+      "destination": "Phase 2 should apply the review's stated correction and run the direct source-test coverage gate."
+    },
+    {
+      "id": "OPU-F27",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-027"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/update.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/update.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Current CodeGraph and direct inspection retain the cited implementation, ownership, documentation, or assertion shape: cleanup and commit leak-descriptor returns should be swept across orchestrators."
+      },
+      "rationale": "The historical claim remains actionable in the current tree: cleanup and commit leak-descriptor returns should be swept across orchestrators.",
+      "destination": "Phase 2 should apply the review's stated correction and run the direct source-test coverage gate."
+    },
+    {
+      "id": "OPU-F28",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-028"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/update.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/update.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Current CodeGraph and direct inspection retain the cited implementation, ownership, documentation, or assertion shape: shared fixture users need baseline-outcome discrimination checks."
+      },
+      "rationale": "The historical claim remains actionable in the current tree: shared fixture users need baseline-outcome discrimination checks.",
+      "destination": "Phase 2 should apply the review's stated correction and run the direct source-test coverage gate."
+    },
+    {
+      "id": "OPU-F29",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-029"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/update.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/update.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Current CodeGraph and direct inspection retain the cited implementation, ownership, documentation, or assertion shape: handler injection must follow migration of option-field ownership into orchestrator tests."
+      },
+      "rationale": "The historical claim remains actionable in the current tree: handler injection must follow migration of option-field ownership into orchestrator tests.",
+      "destination": "Phase 2 should apply the review's stated correction and run the direct source-test coverage gate."
+    },
+    {
+      "id": "OPU-F30",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-030"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/update.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/update.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Current CodeGraph and direct inspection retain the cited implementation, ownership, documentation, or assertion shape: closed-union return switches are compiler-guarded by noImplicitReturns and should not be framed as silent omissions."
+      },
+      "rationale": "The historical claim remains actionable in the current tree: closed-union return switches are compiler-guarded by noImplicitReturns and should not be framed as silent omissions.",
+      "destination": "Phase 2 should apply the review's stated correction and run the direct source-test coverage gate."
+    },
+    {
+      "id": "OPU-F31",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-031"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/update.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/update.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Current CodeGraph and direct inspection retain the cited implementation, ownership, documentation, or assertion shape: git fake remote allow-list support already exists; propagation should target omitted options."
+      },
+      "rationale": "The historical claim remains actionable in the current tree: git fake remote allow-list support already exists; propagation should target omitted options.",
+      "destination": "Phase 2 should apply the review's stated correction and run the direct source-test coverage gate."
+    },
+    {
+      "id": "OPU-F32",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/orchestrators-plugin-update-a.md#CLAIM-032"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/update.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/update.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph explore plus current source/test/config inspection",
+        "observed": "Current CodeGraph and direct inspection retain the cited implementation, ownership, documentation, or assertion shape: fragment-assertion remediation scope should include update.test.ts."
+      },
+      "rationale": "The historical claim remains actionable in the current tree: fragment-assertion remediation scope should include update.test.ts.",
+      "destination": "Phase 2 should apply the review's stated correction and run the direct source-test coverage gate."
+    }
+  ]
+}

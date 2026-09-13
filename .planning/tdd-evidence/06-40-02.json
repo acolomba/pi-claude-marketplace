@@ -1,0 +1,10 @@
+{
+  "taskId": "06-40-02",
+  "command": "node --test --test-isolation=none --test-reporter=tap tests/orchestrators/plugin/update-flow.test.ts",
+  "exitCode": 1,
+  "output": "TAP version 13\n# Subtest: owns plugin update flow composition\nnot ok 1 - owns plugin update flow composition\n  error: Got unwanted rejection: update-flow.ts must own plugin update operation composition\n  code: ERR_ASSERTION\n  actual: ERR_MODULE_NOT_FOUND\n1..1\n# tests 1\n# pass 0\n# fail 1",
+  "targetTest": "owns plugin update flow composition",
+  "targetFile": "tests/orchestrators/plugin/update-flow.test.ts",
+  "expected": "the named update-flow owner exports createPluginUpdateOperations",
+  "actual": "ERR_MODULE_NOT_FOUND for extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts"
+}

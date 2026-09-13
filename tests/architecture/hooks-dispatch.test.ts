@@ -3,6 +3,20 @@ import { readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 
+import { EXTENSION_ROOT_REL, HOOKS_SCHEMA_TARGETS } from "./gate-targets.ts";
+import { REPO_ROOT } from "./source-scan.ts";
+
+/**
+ * The hooks component module, named through the registry group that carries it.
+ *
+ * D-07-05: the annotation is the membership check -- naming a path the group
+ * does not carry stops compiling, so this reference cannot drift away from the
+ * set it points into, and the whole path stays one literal the registry scan
+ * can see.
+ */
+const HOOKS_COMPONENT_REL: (typeof HOOKS_SCHEMA_TARGETS)[number] =
+  "extensions/pi-claude-marketplace/domain/components/hooks.ts";
+
 async function collectTypeScriptFiles(directory: string): Promise<string[]> {
   const files: string[] = [];
   for (const entry of await readdir(directory, { withFileTypes: true })) {
@@ -21,7 +35,7 @@ async function collectTypeScriptFiles(directory: string): Promise<string[]> {
 
 test("OBS-01 keeps console.error in the shared debug-log seam only", async () => {
   // arrange
-  const extensionRoot = path.join(process.cwd(), "extensions", "pi-claude-marketplace");
+  const extensionRoot = path.join(REPO_ROOT, EXTENSION_ROOT_REL);
   const extensionStat = await stat(extensionRoot);
 
   // act
@@ -39,51 +53,9 @@ test("OBS-01 keeps console.error in the shared debug-log seam only", async () =>
   assert.deepStrictEqual(offenders.sort(), ["shared/debug-log.ts"]);
 });
 
-test("OBS-01 limits extension no-console overrides to the documented files", async () => {
-  // arrange
-  const configPath = path.join(process.cwd(), "eslint.config.js");
-  const expectedPaths = [
-    "extensions/pi-claude-marketplace/persistence/migrate.ts",
-    "extensions/pi-claude-marketplace/shared/debug-log.ts",
-    "extensions/pi-claude-marketplace/shared/notify.ts",
-  ];
-
-  // act
-  const source = await readFile(configPath, "utf8");
-  const allowedPaths: string[] = [];
-  for (const match of source.matchAll(/files:\s*\[([^\]]+)]/g)) {
-    const arraySource = match[1] ?? "";
-    if (!arraySource.includes("extensions/pi-claude-marketplace")) {
-      continue;
-    }
-
-    const objectTail = source.slice(match.index, match.index + 600);
-    if (!/["']no-console["']\s*:\s*["']off["']/.test(objectTail)) {
-      continue;
-    }
-
-    for (const pathMatch of arraySource.matchAll(/"([^"]+)"/g)) {
-      const allowedPath = pathMatch[1];
-      if (allowedPath !== undefined) {
-        allowedPaths.push(allowedPath);
-      }
-    }
-  }
-
-  // assert
-  assert.deepStrictEqual([...new Set(allowedPaths)].sort(), expectedPaths);
-});
-
 test("OBS-01 routes hook parser diagnostics through shared debug-log", async () => {
   // arrange
-  const hooksPath = path.join(
-    process.cwd(),
-    "extensions",
-    "pi-claude-marketplace",
-    "domain",
-    "components",
-    "hooks.ts",
-  );
+  const hooksPath = path.join(REPO_ROOT, HOOKS_COMPONENT_REL);
 
   // act
   const source = await readFile(hooksPath, "utf8");

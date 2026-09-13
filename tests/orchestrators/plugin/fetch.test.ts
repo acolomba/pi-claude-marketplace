@@ -1,15 +1,5 @@
 import assert from "node:assert/strict";
-import fs, {
-  chmod,
-  mkdir,
-  mkdtemp,
-  readFile,
-  readdir,
-  rm,
-  stat,
-  writeFile,
-} from "node:fs/promises";
-import { syncBuiltinESMExports } from "node:module";
+import { chmod, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -26,7 +16,14 @@ import {
   materializePluginClone,
   resolvePluginPin,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts";
-import { fetchPlugins } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/fetch.ts";
+import {
+  createFetchPlugins,
+  fetchPlugins,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/fetch.ts";
+import {
+  makePresenceProbe,
+  probeManifestEntry,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/git-source-probe.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { buildAuthCallbacks } from "../../../extensions/pi-claude-marketplace/platform/git.ts";
@@ -40,7 +37,10 @@ import type {
   GitAuthBundle,
   GitOps,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
-import type { FetchCloneCacheSeam } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/fetch.ts";
+import type {
+  FetchCloneCacheSeam,
+  FetchStatus,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/fetch.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { GitCredentials } from "../../../extensions/pi-claude-marketplace/platform/git.ts";
@@ -49,7 +49,6 @@ import type {
   ExtensionContext,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
-import type { PathLike } from "node:fs";
 
 type ManifestEntry = MarketplaceManifest["plugins"][number];
 type MarketplaceRecord = ExtensionState["marketplaces"][string];
@@ -156,8 +155,7 @@ function gitBoundary(options: GitBoundaryOptions): GitBoundary {
       schedule.push(
         `clone ${cloneOptions.url} ref=${cloneOptions.ref ?? "-"} single=${String(cloneOptions.singleBranch ?? false)} auth=${cloneOptions.auth?.host ?? "-"}`,
       );
-      const { auth: _auth, ...authlessOptions } = cloneOptions;
-      await git.gitOps.clone(authlessOptions);
+      await git.gitOps.clone(cloneOptions);
       if (options.writeHead === true) {
         await mkdir(path.join(cloneOptions.dir, ".git"), { recursive: true });
         await writeFile(path.join(cloneOptions.dir, ".git", "HEAD"), `${git.state.head}\n`);
@@ -171,8 +169,7 @@ function gitBoundary(options: GitBoundaryOptions): GitBoundary {
       schedule.push(
         `fetch remote=${options.remote ?? "-"} ref=${options.ref ?? "-"} auth=${options.auth?.host ?? "-"}`,
       );
-      const { auth: _auth, ...authlessOptions } = options;
-      await git.gitOps.fetch(authlessOptions);
+      await git.gitOps.fetch(options);
     },
     async forceUpdateRef(options) {
       schedule.push(`force-update ${options.ref}=${options.value}`);
@@ -199,8 +196,7 @@ function gitBoundary(options: GitBoundaryOptions): GitBoundary {
       schedule.push(
         `resolve-remote ${options.url} ref=${options.ref ?? "-"} auth=${options.auth?.host ?? "-"}`,
       );
-      const { auth: _auth, ...authlessOptions } = options;
-      return git.gitOps.resolveRemoteRef(authlessOptions);
+      return git.gitOps.resolveRemoteRef(options);
     },
   };
   return { gitOps, schedule };
@@ -354,6 +350,18 @@ async function withWorkspace<T>(
     await rm(cwd, { recursive: true, force: true, maxRetries: 10 });
   }
 }
+
+test("exposes a required fetch status factory", async () => {
+  // arrange
+  const fetchModule =
+    await import("../../../extensions/pi-claude-marketplace/orchestrators/plugin/fetch.ts");
+
+  // act
+  const exportNames = Object.keys(fetchModule);
+
+  // assert
+  assert.strictEqual(exportNames.includes("createFetchPlugins"), true);
+});
 
 test("keeps a path source offline through the production defaults", async () => {
   await withWorkspace(async ({ cwd }) => {
@@ -1242,7 +1250,7 @@ test("reports a successful seam with a still-cold cache as remote", async () => 
   });
 });
 
-test("reports available when the cache becomes visible between fresh probes", async (testContext) => {
+test("reports available when the cache becomes visible between fresh probes", async () => {
   await withWorkspace(async ({ cwd }) => {
     // arrange
     const cloneUrl = "https://example.com/concurrent";
@@ -1257,25 +1265,21 @@ test("reports available when the cache becomes visible between fresh probes", as
     const cloneRoot = await locations.pluginCloneDir(pluginCloneKey(cloneUrl, pin));
     const credentials = createCredentialOpsFake({ boundary: "memory" });
     const boundary = notificationBoundary("concurrent cache visibility");
-    const fileStats = await stat(marketplace.manifestPath);
-    const originalStat = fs.stat;
-    let hideDirectoryKindOnce = false;
-    const statMock = testContext.mock.method(fs, "stat", (target: PathLike) => {
-      if (hideDirectoryKindOnce && path.resolve(String(target)) === cloneRoot) {
-        hideDirectoryKindOnce = false;
-        return Promise.resolve(fileStats);
-      }
-
-      return originalStat(target);
-    });
-    syncBuiltinESMExports();
+    let postFetchProbeCalls = 0;
+    const status: FetchStatus = {
+      makePresenceProbe,
+      probeManifestEntry() {
+        postFetchProbeCalls += 1;
+        return Promise.resolve("unavailable");
+      },
+    };
+    const fetchPluginsWithStatus = createFetchPlugins(status);
     const seam: FetchCloneCacheSeam = {
       materializeOrRefreshPluginMirror() {
         return Promise.reject(new Error("unexpected mirror call"));
       },
       async materializePluginClone() {
         await writePluginTree(cloneRoot, "concurrent", "1.0.0");
-        hideDirectoryKindOnce = true;
         return cloneRoot;
       },
       resolvePluginPin() {
@@ -1284,23 +1288,18 @@ test("reports available when the cache becomes visible between fresh probes", as
     };
 
     // act
-    try {
-      await fetchPlugins({
-        cloneCacheSeam: seam,
-        credentialOps: credentials.credentialOps,
-        ctx: boundary.ctx,
-        cwd,
-        pi: boundary.pi,
-        scope: "project",
-        target: { kind: "plugin", marketplace: "marketplace", plugin: "concurrent" },
-      });
-    } finally {
-      statMock.mock.restore();
-      syncBuiltinESMExports();
-    }
+    await fetchPluginsWithStatus({
+      cloneCacheSeam: seam,
+      credentialOps: credentials.credentialOps,
+      ctx: boundary.ctx,
+      cwd,
+      pi: boundary.pi,
+      scope: "project",
+      target: { kind: "plugin", marketplace: "marketplace", plugin: "concurrent" },
+    });
 
     // assert
-    assert.strictEqual(hideDirectoryKindOnce, false);
+    assert.equal(postFetchProbeCalls, 1);
     assert.deepStrictEqual(boundary.notifications, [
       { message: "● marketplace [project]\n  ○ concurrent (available)" },
     ]);
@@ -1324,6 +1323,100 @@ test("reports available when the cache becomes visible between fresh probes", as
     ]);
     assert.deepStrictEqual(credentials.calls, { approve: [], fill: [], reject: [] });
     assert.deepStrictEqual(await stagingEntries(locations), []);
+    verifyNotifications(boundary);
+  });
+});
+
+test("renders fresh status after materialization through the required capability", async () => {
+  await withWorkspace(async ({ cwd }) => {
+    // arrange
+    const cloneUrl = "https://example.com/status-capability";
+    const networkUrl = "https://example.com/status-capability.git";
+    const pin = "acacacacacacacacacacacacacacacacacacacac";
+    const fixture = path.join(cwd, "fixture");
+    await writePluginTree(fixture, "fresh", "4.0.0");
+    const marketplace = await marketplaceRecord({
+      cwd,
+      entries: [
+        {
+          description: "Fresh plugin",
+          name: "fresh",
+          source: { source: "url", url: cloneUrl, sha: pin },
+          version: "4.0.0",
+        },
+      ],
+      name: "marketplace",
+      scope: "project",
+    });
+    const locations = await saveMarketplaces(cwd, "project", [marketplace]);
+    const stateBefore = await readFile(locations.stateJsonPath, "utf8");
+    const git = gitBoundary({ allowedRemoteUrls: [networkUrl], fixtureSourceDir: fixture });
+    const cache = cacheBoundary(git.gitOps);
+    const sequence: string[] = [];
+    const seam: FetchCloneCacheSeam = {
+      ...cache.seam,
+      async materializePluginClone(args) {
+        sequence.push("materialize");
+        return cache.seam.materializePluginClone(args);
+      },
+    };
+    const status: FetchStatus = {
+      makePresenceProbe(statusLocations) {
+        const probe = makePresenceProbe(statusLocations);
+        return async (source) => {
+          const presence = await probe(source);
+          sequence.push(`presence:${presence.kind}`);
+          return presence;
+        };
+      },
+      async probeManifestEntry(entry, marketplaceRoot, statusLocations) {
+        const classification = await probeManifestEntry(entry, marketplaceRoot, statusLocations);
+        sequence.push(`manifest:${classification}`);
+        return classification;
+      },
+    };
+    const controlledFetch = createFetchPlugins(status);
+    const credentials = createCredentialOpsFake({ boundary: "memory" });
+    const boundary = notificationBoundary("fresh status capability");
+    const cloneKey = pluginCloneKey(cloneUrl, pin);
+
+    // act
+    await controlledFetch({
+      cloneCacheSeam: seam,
+      credentialOps: credentials.credentialOps,
+      ctx: boundary.ctx,
+      cwd,
+      pi: boundary.pi,
+      scope: "project",
+      target: { kind: "plugin", marketplace: "marketplace", plugin: "fresh" },
+    });
+
+    // assert
+    assert.deepStrictEqual(boundary.notifications, [
+      {
+        message: "● marketplace [project]\n  ○ fresh v4.0.0 (available)\n    Fresh plugin",
+      },
+    ]);
+    assert.deepStrictEqual(await snapshotTree(locations.pluginClonesDir), [
+      { path: cloneKey, type: "directory" },
+      { path: path.join(cloneKey, ".claude-plugin"), type: "directory" },
+      {
+        contents: '{"name":"fresh","version":"4.0.0"}',
+        path: path.join(cloneKey, ".claude-plugin", "plugin.json"),
+        type: "file",
+      },
+      { path: path.join(cloneKey, "skills"), type: "directory" },
+      { path: path.join(cloneKey, "skills", "greet"), type: "directory" },
+      {
+        contents: "---\nname: greet\n---\n\nHello 4.0.0.\n",
+        path: path.join(cloneKey, "skills", "greet", "SKILL.md"),
+        type: "file",
+      },
+    ]);
+    assert.deepStrictEqual(credentials.calls, { approve: [], fill: [], reject: [] });
+    assert.deepStrictEqual(await stagingEntries(locations), []);
+    assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
+    assert.deepStrictEqual(sequence, ["presence:not-cached", "materialize", "manifest:available"]);
     verifyNotifications(boundary);
   });
 });

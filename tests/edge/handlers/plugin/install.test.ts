@@ -49,7 +49,7 @@
 // generated agent files -- compared as ONE whole value, which is what turns
 // "which scope, which layer, which member" into a measurement. The delegating
 // cases deliberately do NOT assert the notification body: that value belongs to
-// tests/orchestrators/plugin/install.test.ts, and re-deriving it here would
+// tests/orchestrators/plugin/install-flow.test.ts, and re-deriving it here would
 // restate a fact another pair owns at full direct coverage.
 //
 // The negative half of D-116-06 is proven in full. Every rejecting case sizes
@@ -97,10 +97,16 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { test, type TestContext } from "node:test";
 
+import {
+  createHooksRouting,
+  createHooksRuntime,
+  readHooksJson,
+} from "../../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { SCOPE_TARGET_FLAG } from "../../../../extensions/pi-claude-marketplace/edge/flag-catalog.ts";
-import { makeInstallHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/install.ts";
+import { makeInstallHandler as makeRuntimeInstallHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/install.ts";
 import { loadConfig } from "../../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { loadState } from "../../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { createCompletionCache } from "../../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
 import { mergeMarketplaceIntoState } from "../marketplace-seed.ts";
 
@@ -118,6 +124,16 @@ import type { Scope } from "../../../../extensions/pi-claude-marketplace/shared/
  */
 const MAP_MODEL_FLAG = "--map-model";
 const PARTIAL_FLAG = "--partial";
+
+function makeInstallHandler(
+  pi: Parameters<typeof makeRuntimeInstallHandler>[0],
+): ReturnType<typeof makeRuntimeInstallHandler> {
+  return makeRuntimeInstallHandler(
+    pi,
+    createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    createCompletionCache(),
+  );
+}
 
 /** The frontmatter field the AG-7 mapping emits, and the prefix that finds it. */
 const MODEL_FIELD_PREFIX = "model: ";

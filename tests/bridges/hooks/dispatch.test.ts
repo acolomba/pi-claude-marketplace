@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { describe, test } from "node:test";
+import { describe, test, type TestContext } from "node:test";
 
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 
@@ -13,13 +13,7 @@ import {
   compileIfPredicate,
   MATCH_ALL_IF,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts";
-import {
-  bumpEpoch,
-  currentEpoch,
-  pendingSessionStartContextEntries,
-  resetRoutingState,
-  setRoutingBucket,
-} from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
+import { createHooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import { parseMatcher } from "../../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 
@@ -225,13 +219,80 @@ function createRecordingExecutor(
   };
 }
 
+/** Resolve a deferred hook execution and fail clearly if it never started. */
+function finishDeferredExecution(
+  finish: ((result: HookExecResult) => void) | undefined,
+  result: HookExecResult,
+): void {
+  if (finish === undefined) {
+    throw new Error("the deferred hook executor did not start");
+  }
+
+  finish(result);
+}
+
 describe("compositeHandlerFor", () => {
-  test("requires matcher and if agreement before composing mutations in declaration order", async (t) => {
+  test("routes SessionStart context through only the supplied runtime", async () => {
     // arrange
-    resetRoutingState();
-    t.after(() => {
-      resetRoutingState();
+    const owningRuntime = createHooksRuntime();
+    const peerRuntime = createHooksRuntime();
+    const capturedGeneration = owningRuntime.advanceGeneration();
+    const entry = createRoutingEntry({
+      pluginId: "session-owner",
+      claudeEvent: "SessionStart",
+      rawMatcher: "startup",
+      declarationIndex: 0,
+      scope: "project",
+      marketplace: "owner-marketplace",
     });
+    owningRuntime.setRoutingBucket("SessionStart", [entry]);
+    peerRuntime.setRoutingBucket("SessionStart", [
+      createRoutingEntry({
+        pluginId: "peer-session",
+        claudeEvent: "SessionStart",
+        rawMatcher: "startup",
+        declarationIndex: 0,
+      }),
+    ]);
+    const context = createExtensionContext("/workspace/session-owner");
+    const executorCalls: RecordedCall[] = [];
+    const executor = createRecordingExecutor(
+      { "session-owner": { kind: "mutate", additionalContext: "owned context" } },
+      executorCalls,
+    );
+    const handler = compositeHandlerFor(
+      owningRuntime,
+      "SessionStart",
+      capturedGeneration,
+      undefined,
+      executor,
+    );
+
+    // act
+    await handler({ type: "session_start", reason: "startup" }, context);
+
+    // assert
+    assert.deepStrictEqual(owningRuntime.pendingSessionStartContextEntries(), [
+      {
+        context: "owned context",
+        scope: "project",
+        marketplace: "owner-marketplace",
+        pluginId: "session-owner",
+      },
+    ]);
+    assert.deepStrictEqual(peerRuntime.pendingSessionStartContextEntries(), []);
+    assert.deepStrictEqual(executorCalls, [
+      {
+        pluginId: "session-owner",
+        event: { type: "session_start", reason: "startup" },
+      },
+    ]);
+  });
+
+  test("requires matcher and if agreement before composing mutations in declaration order", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
     const cwd = "/workspace/dispatch-owner";
     const compileContext = { homedir: "/home/tester", cwd, projectRoot: cwd };
     const context = createExtensionContext(cwd);
@@ -344,8 +405,14 @@ describe("compositeHandlerFor", () => {
       return Promise.resolve(returned);
     };
 
-    setRoutingBucket("PreToolUse", routingBucket);
-    const handler = compositeHandlerFor("PreToolUse", currentEpoch(), undefined, executor);
+    runtime.setRoutingBucket("PreToolUse", routingBucket);
+    const handler = compositeHandlerFor(
+      runtime,
+      "PreToolUse",
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+    );
     const expectedExecutorEntries = [firstMutationEntry, secondMutationEntry];
     const expectedExecutorCalls: ExecutorCall[] = [
       {
@@ -450,12 +517,8 @@ describe("matcherFiresOnClosedSetValue", () => {
     { rawMatcher: "resume", value: "resume", expected: true },
     { rawMatcher: "fork", value: "startup", expected: false },
   ] as const) {
-    test(`reports ${String(expected)} for raw matcher ${JSON.stringify(rawMatcher)}`, (t) => {
+    test(`reports ${String(expected)} for raw matcher ${JSON.stringify(rawMatcher)}`, () => {
       // arrange
-      resetRoutingState();
-      t.after(() => {
-        resetRoutingState();
-      });
       const entry = createRoutingEntry({
         pluginId: `closed-${rawMatcher || "empty"}`,
         claudeEvent: "SessionStart",
@@ -474,12 +537,9 @@ describe("matcherFiresOnClosedSetValue", () => {
 });
 
 describe("collectBucketOutcomes", () => {
-  test("preserves matching observation order while degrading async rewake to noop", async (t) => {
+  test("preserves matching observation order while degrading async rewake to noop", async () => {
     // arrange
-    resetRoutingState();
-    t.after(() => {
-      resetRoutingState();
-    });
+    const runtime = createHooksRuntime();
     const cwd = "/workspace/dispatch-collection";
     const context = createExtensionContext(cwd);
     const compileContext = { homedir: "/home/tester", cwd, projectRoot: cwd };
@@ -604,6 +664,7 @@ describe("collectBucketOutcomes", () => {
 
     // act
     const outcomes = await collectBucketOutcomes(
+      runtime,
       bucket,
       event,
       context,
@@ -617,17 +678,15 @@ describe("collectBucketOutcomes", () => {
     assert.deepStrictEqual(executorCalls, expectedExecutorCalls);
   });
 
-  test("returns an empty outcome list for an empty bucket", async (t) => {
+  test("returns an empty outcome list for an empty bucket", async () => {
     // arrange
-    resetRoutingState();
-    t.after(() => {
-      resetRoutingState();
-    });
+    const runtime = createHooksRuntime();
     const context = createExtensionContext("/workspace/dispatch-empty-collection");
     const expectedOutcomes: readonly [] = [];
 
     // act
     const outcomes = await collectBucketOutcomes(
+      runtime,
       [],
       { phase: "stop" },
       context,
@@ -638,15 +697,65 @@ describe("collectBucketOutcomes", () => {
     // assert
     assert.deepStrictEqual(outcomes, expectedOutcomes);
   });
+
+  test("stops the bucket before a later executor when the generation changes during await", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    const context = createExtensionContext("/workspace/stale-outcome-collection");
+    const bucket = [
+      createRoutingEntry({
+        pluginId: "awaited",
+        claudeEvent: "PreToolUse",
+        rawMatcher: "Bash",
+        declarationIndex: 0,
+      }),
+      createRoutingEntry({
+        pluginId: "must-not-start",
+        claudeEvent: "PreToolUse",
+        rawMatcher: "Bash",
+        declarationIndex: 1,
+      }),
+    ];
+    const calls: string[] = [];
+    let finishExecution: ((result: HookExecResult) => void) | undefined;
+    const executor: HookExecutor = (entry) => {
+      calls.push(entry.pluginId);
+      if (entry.pluginId === "must-not-start") {
+        return Promise.resolve({ kind: "noop" });
+      }
+
+      return new Promise((resolve) => {
+        finishExecution = resolve;
+      });
+    };
+
+    const pending = collectBucketOutcomes(
+      runtime,
+      bucket,
+      createToolCallEvent(),
+      context,
+      undefined,
+      () => true,
+      executor,
+    );
+    runtime.advanceGeneration();
+
+    // act
+    finishDeferredExecution(finishExecution, { kind: "noop" });
+    const outcomes = await pending;
+
+    // assert
+    assert.deepStrictEqual(outcomes, []);
+    assert.deepStrictEqual(calls, ["awaited"]);
+  });
 });
 
 describe("composite dispatch reduction", () => {
-  test("keeps equal noop outcomes in stable declaration order", async (t) => {
+  test("keeps equal noop outcomes in stable declaration order", async () => {
     // arrange
-    resetRoutingState();
-    t.after(() => {
-      resetRoutingState();
-    });
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
     const context = createExtensionContext("/workspace/dispatch-noops");
     const entries = [
       createRoutingEntry({
@@ -677,8 +786,14 @@ describe("composite dispatch reduction", () => {
       },
       executorCalls,
     );
-    setRoutingBucket("PreToolUse", entries);
-    const handler = compositeHandlerFor("PreToolUse", currentEpoch(), undefined, executor);
+    runtime.setRoutingBucket("PreToolUse", entries);
+    const handler = compositeHandlerFor(
+      runtime,
+      "PreToolUse",
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+    );
     const expectedOutput: CompositeReturnFor<"PreToolUse"> = undefined;
     const expectedCalls: RecordedCall[] = [
       { pluginId: "noop-a", event: createToolCallEvent() },
@@ -694,12 +809,10 @@ describe("composite dispatch reduction", () => {
     assert.deepStrictEqual(executorCalls, expectedCalls);
   });
 
-  test("returns the first block and skips every later entry", async (t) => {
+  test("returns the first block and skips every later entry", async () => {
     // arrange
-    resetRoutingState();
-    t.after(() => {
-      resetRoutingState();
-    });
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
     const context = createExtensionContext("/workspace/dispatch-block");
     const entries = [
       createRoutingEntry({
@@ -730,8 +843,14 @@ describe("composite dispatch reduction", () => {
       },
       executorCalls,
     );
-    setRoutingBucket("PreToolUse", entries);
-    const handler = compositeHandlerFor("PreToolUse", currentEpoch(), undefined, executor);
+    runtime.setRoutingBucket("PreToolUse", entries);
+    const handler = compositeHandlerFor(
+      runtime,
+      "PreToolUse",
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+    );
     const expectedOutput = { block: true, reason: "first denial" };
     const expectedCalls: RecordedCall[] = [
       { pluginId: "leading-noop", event: createToolCallEvent() },
@@ -746,12 +865,10 @@ describe("composite dispatch reduction", () => {
     assert.deepStrictEqual(executorCalls, expectedCalls);
   });
 
-  test("returns on the first stop and skips every later entry", async (t) => {
+  test("returns on the first stop and skips every later entry", async () => {
     // arrange
-    resetRoutingState();
-    t.after(() => {
-      resetRoutingState();
-    });
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
     const context = createExtensionContext("/workspace/dispatch-stop");
     const entries = [
       createRoutingEntry({
@@ -775,8 +892,14 @@ describe("composite dispatch reduction", () => {
       },
       executorCalls,
     );
-    setRoutingBucket("PreToolUse", entries);
-    const handler = compositeHandlerFor("PreToolUse", currentEpoch(), undefined, executor);
+    runtime.setRoutingBucket("PreToolUse", entries);
+    const handler = compositeHandlerFor(
+      runtime,
+      "PreToolUse",
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+    );
     const expectedOutput: CompositeReturnFor<"PreToolUse"> = undefined;
     const expectedCalls: RecordedCall[] = [
       { pluginId: "first-stop", event: createToolCallEvent() },
@@ -790,12 +913,10 @@ describe("composite dispatch reduction", () => {
     assert.deepStrictEqual(executorCalls, expectedCalls);
   });
 
-  test("composes multiple mutations from left to right", async (t) => {
+  test("composes multiple mutations from left to right", async () => {
     // arrange
-    resetRoutingState();
-    t.after(() => {
-      resetRoutingState();
-    });
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
     const context = createExtensionContext("/workspace/dispatch-mutations");
     const entries = [
       createRoutingEntry({
@@ -820,8 +941,14 @@ describe("composite dispatch reduction", () => {
       },
       executorCalls,
     );
-    setRoutingBucket("PreToolUse", entries);
-    const handler = compositeHandlerFor("PreToolUse", currentEpoch(), undefined, executor);
+    runtime.setRoutingBucket("PreToolUse", entries);
+    const handler = compositeHandlerFor(
+      runtime,
+      "PreToolUse",
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+    );
     const expectedEvent = createToolCallEvent("bash", {
       command: "git status",
       preserved: true,
@@ -857,12 +984,10 @@ describe("composite dispatch reduction", () => {
 });
 
 describe("composite dispatch closure partitions", () => {
-  test("rejects an unsupported executor result through the exhaustiveness guard", async (t) => {
+  test("rejects an unsupported executor result through the exhaustiveness guard", async () => {
     // arrange
-    resetRoutingState();
-    t.after(() => {
-      resetRoutingState();
-    });
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
     const context = createExtensionContext("/workspace/dispatch-exhaustive");
     const entry = createRoutingEntry({
       pluginId: "future-result",
@@ -873,8 +998,14 @@ describe("composite dispatch closure partitions", () => {
     const unsupportedResult: HookExecResult = { kind: "noop" };
     Object.defineProperty(unsupportedResult, "kind", { value: "future" });
     const executor: HookExecutor = () => Promise.resolve(unsupportedResult);
-    setRoutingBucket("PreToolUse", [entry]);
-    const handler = compositeHandlerFor("PreToolUse", currentEpoch(), undefined, executor);
+    runtime.setRoutingBucket("PreToolUse", [entry]);
+    const handler = compositeHandlerFor(
+      runtime,
+      "PreToolUse",
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+    );
 
     // act & assert
     await assert.rejects(() => handler(createToolCallEvent(), context), {
@@ -883,12 +1014,10 @@ describe("composite dispatch closure partitions", () => {
     });
   });
 
-  test("returns undefined from a stale composite closure without dispatching", async (t) => {
+  test("returns undefined from a stale composite closure without dispatching", async () => {
     // arrange
-    resetRoutingState();
-    t.after(() => {
-      resetRoutingState();
-    });
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
     const context = createExtensionContext("/workspace/dispatch-stale");
     const entry = createRoutingEntry({
       pluginId: "stale-entry",
@@ -896,9 +1025,9 @@ describe("composite dispatch closure partitions", () => {
       rawMatcher: "Bash",
       declarationIndex: 0,
     });
-    setRoutingBucket("PreToolUse", [entry]);
-    const handler = compositeHandlerFor("PreToolUse", currentEpoch());
-    bumpEpoch();
+    runtime.setRoutingBucket("PreToolUse", [entry]);
+    const handler = compositeHandlerFor(runtime, "PreToolUse", runtime.currentGeneration());
+    runtime.advanceGeneration();
     const expectedOutput: CompositeReturnFor<"PreToolUse"> = undefined;
 
     // act
@@ -908,14 +1037,90 @@ describe("composite dispatch closure partitions", () => {
     assert.deepStrictEqual(output, expectedOutput);
   });
 
-  test("returns undefined from a live composite closure with an empty bucket", async (t) => {
+  test("drops a tool-input mutation when its executor becomes stale while awaited", async () => {
     // arrange
-    resetRoutingState();
-    t.after(() => {
-      resetRoutingState();
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    const context = createExtensionContext("/workspace/dispatch-stale-await");
+    const entry = createRoutingEntry({
+      pluginId: "stale-await-entry",
+      claudeEvent: "PreToolUse",
+      rawMatcher: "Bash",
+      declarationIndex: 0,
     });
+    runtime.setRoutingBucket("PreToolUse", [entry]);
+    let finishExecution: ((result: HookExecResult) => void) | undefined;
+    const executor: HookExecutor = () =>
+      new Promise((resolve) => {
+        finishExecution = resolve;
+      });
+    const handler = compositeHandlerFor(
+      runtime,
+      "PreToolUse",
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+    );
+    const event = createToolCallEvent();
+    const pending = handler(event, context);
+    runtime.advanceGeneration();
+
+    // act
+    finishDeferredExecution(finishExecution, {
+      kind: "mutate",
+      updatedInput: { command: "stale command" },
+    });
+    const output = await pending;
+
+    // assert
+    assert.strictEqual(output, undefined);
+    assert.deepStrictEqual(event, createToolCallEvent());
+  });
+
+  test("drops SessionStart context when its executor becomes stale while awaited", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    const context = createExtensionContext("/workspace/session-stale-await");
+    const entry = createRoutingEntry({
+      pluginId: "stale-session-entry",
+      claudeEvent: "SessionStart",
+      rawMatcher: "startup",
+      declarationIndex: 0,
+    });
+    runtime.setRoutingBucket("SessionStart", [entry]);
+    let finishExecution: ((result: HookExecResult) => void) | undefined;
+    const executor: HookExecutor = () =>
+      new Promise((resolve) => {
+        finishExecution = resolve;
+      });
+    const handler = compositeHandlerFor(
+      runtime,
+      "SessionStart",
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+    );
+    const pending = handler({ type: "session_start", reason: "startup" }, context);
+    runtime.advanceGeneration();
+
+    // act
+    finishDeferredExecution(finishExecution, {
+      kind: "mutate",
+      additionalContext: "stale context",
+    });
+    await pending;
+
+    // assert
+    assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), []);
+  });
+
+  test("returns undefined from a live composite closure with an empty bucket", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
     const context = createExtensionContext("/workspace/dispatch-empty");
-    const handler = compositeHandlerFor("PreToolUse", currentEpoch());
+    const handler = compositeHandlerFor(runtime, "PreToolUse", runtime.currentGeneration());
     const expectedOutput: CompositeReturnFor<"PreToolUse"> = undefined;
 
     // act
@@ -925,12 +1130,10 @@ describe("composite dispatch closure partitions", () => {
     assert.deepStrictEqual(output, expectedOutput);
   });
 
-  test("dispatches only match-all and exact MCP tool matchers", async (t) => {
+  test("dispatches only match-all and exact MCP tool matchers", async () => {
     // arrange
-    resetRoutingState();
-    t.after(() => {
-      resetRoutingState();
-    });
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
     const context = createExtensionContext("/workspace/dispatch-tool-matchers");
     const entries = [
       createRoutingEntry({
@@ -979,8 +1182,14 @@ describe("composite dispatch closure partitions", () => {
       },
       executorCalls,
     );
-    setRoutingBucket("PreToolUse", entries);
-    const handler = compositeHandlerFor("PreToolUse", currentEpoch(), undefined, executor);
+    runtime.setRoutingBucket("PreToolUse", entries);
+    const handler = compositeHandlerFor(
+      runtime,
+      "PreToolUse",
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+    );
     const expectedOutput: CompositeReturnFor<"PreToolUse"> = undefined;
     const expectedCalls: RecordedCall[] = [
       {
@@ -1001,12 +1210,10 @@ describe("composite dispatch closure partitions", () => {
     assert.deepStrictEqual(executorCalls, expectedCalls);
   });
 
-  test("dispatches SessionStart empty, star, and exact raw matchers in declaration order", async (t) => {
+  test("dispatches SessionStart empty, star, and exact raw matchers in declaration order", async () => {
     // arrange
-    resetRoutingState();
-    t.after(() => {
-      resetRoutingState();
-    });
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
     const context = createExtensionContext("/workspace/dispatch-session-matchers");
     const entries = [
       createRoutingEntry({
@@ -1044,8 +1251,14 @@ describe("composite dispatch closure partitions", () => {
       },
       executorCalls,
     );
-    setRoutingBucket("SessionStart", entries);
-    const handler = compositeHandlerFor("SessionStart", currentEpoch(), undefined, executor);
+    runtime.setRoutingBucket("SessionStart", entries);
+    const handler = compositeHandlerFor(
+      runtime,
+      "SessionStart",
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+    );
     const expectedCalls: RecordedCall[] = [
       { pluginId: "session-empty", event: { type: "session_start", reason: "resume" } },
       { pluginId: "session-star", event: { type: "session_start", reason: "resume" } },
@@ -1057,18 +1270,16 @@ describe("composite dispatch closure partitions", () => {
     await handler(event, context);
 
     // assert
-    assert.deepStrictEqual(pendingSessionStartContextEntries(), expectedPendingContext);
+    assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), expectedPendingContext);
     assert.deepStrictEqual(executorCalls, expectedCalls);
   });
 });
 
 describe("toolResultCompositeHandler", () => {
-  test("returns undefined from a stale tool-result closure without dispatching", async (t) => {
+  test("returns undefined from a stale tool-result closure without dispatching", async () => {
     // arrange
-    resetRoutingState();
-    t.after(() => {
-      resetRoutingState();
-    });
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
     const context = createExtensionContext("/workspace/tool-result-stale");
     const entry = createRoutingEntry({
       pluginId: "stale-result",
@@ -1076,9 +1287,9 @@ describe("toolResultCompositeHandler", () => {
       rawMatcher: "Bash",
       declarationIndex: 0,
     });
-    setRoutingBucket("PostToolUse", [entry]);
-    const handler = toolResultCompositeHandler(currentEpoch());
-    bumpEpoch();
+    runtime.setRoutingBucket("PostToolUse", [entry]);
+    const handler = toolResultCompositeHandler(runtime, runtime.currentGeneration());
+    runtime.advanceGeneration();
     const expectedOutput = undefined;
 
     // act
@@ -1088,14 +1299,48 @@ describe("toolResultCompositeHandler", () => {
     assert.deepStrictEqual(output, expectedOutput);
   });
 
-  test("returns undefined from a live tool-result closure with an empty bucket", async (t) => {
+  test("drops a tool-result decision when its executor becomes stale while awaited", async () => {
     // arrange
-    resetRoutingState();
-    t.after(() => {
-      resetRoutingState();
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    const context = createExtensionContext("/workspace/tool-result-stale-await");
+    const entry = createRoutingEntry({
+      pluginId: "stale-result-await",
+      claudeEvent: "PostToolUse",
+      rawMatcher: "Bash",
+      declarationIndex: 0,
     });
+    runtime.setRoutingBucket("PostToolUse", [entry]);
+    let finishExecution: ((result: HookExecResult) => void) | undefined;
+    const executor: HookExecutor = () =>
+      new Promise((resolve) => {
+        finishExecution = resolve;
+      });
+    const handler = toolResultCompositeHandler(
+      runtime,
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+    );
+    const event = createToolResultEvent(false);
+    const pending = handler(event, context);
+    runtime.advanceGeneration();
+
+    // act
+    finishDeferredExecution(finishExecution, { kind: "block", reason: "stale block" });
+    const output = await pending;
+
+    // assert
+    assert.strictEqual(output, undefined);
+    assert.deepStrictEqual(event, createToolResultEvent(false));
+  });
+
+  test("returns undefined from a live tool-result closure with an empty bucket", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
     const context = createExtensionContext("/workspace/tool-result-empty");
-    const handler = toolResultCompositeHandler(currentEpoch());
+    const handler = toolResultCompositeHandler(runtime, runtime.currentGeneration());
     const expectedOutput = undefined;
 
     // act
@@ -1105,12 +1350,10 @@ describe("toolResultCompositeHandler", () => {
     assert.deepStrictEqual(output, expectedOutput);
   });
 
-  test("routes a successful result only through the PostToolUse bucket", async (t) => {
+  test("routes a successful result only through the PostToolUse bucket", async () => {
     // arrange
-    resetRoutingState();
-    t.after(() => {
-      resetRoutingState();
-    });
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
     const context = createExtensionContext("/workspace/tool-result-success");
     const successEntry = createRoutingEntry({
       pluginId: "success-observer",
@@ -1132,9 +1375,14 @@ describe("toolResultCompositeHandler", () => {
       },
       executorCalls,
     );
-    setRoutingBucket("PostToolUse", [successEntry]);
-    setRoutingBucket("PostToolUseFailure", [failureEntry]);
-    const handler = toolResultCompositeHandler(currentEpoch(), undefined, executor);
+    runtime.setRoutingBucket("PostToolUse", [successEntry]);
+    runtime.setRoutingBucket("PostToolUseFailure", [failureEntry]);
+    const handler = toolResultCompositeHandler(
+      runtime,
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+    );
     const expectedOutput = undefined;
     const expectedCalls: RecordedCall[] = [
       { pluginId: "success-observer", event: createToolResultEvent(false) },
@@ -1148,12 +1396,10 @@ describe("toolResultCompositeHandler", () => {
     assert.deepStrictEqual(executorCalls, expectedCalls);
   });
 
-  test("routes a failed result only through the PostToolUseFailure bucket", async (t) => {
+  test("routes a failed result only through the PostToolUseFailure bucket", async () => {
     // arrange
-    resetRoutingState();
-    t.after(() => {
-      resetRoutingState();
-    });
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
     const context = createExtensionContext("/workspace/tool-result-failure");
     const successEntry = createRoutingEntry({
       pluginId: "success-observer",
@@ -1175,9 +1421,14 @@ describe("toolResultCompositeHandler", () => {
       },
       executorCalls,
     );
-    setRoutingBucket("PostToolUse", [successEntry]);
-    setRoutingBucket("PostToolUseFailure", [failureEntry]);
-    const handler = toolResultCompositeHandler(currentEpoch(), undefined, executor);
+    runtime.setRoutingBucket("PostToolUse", [successEntry]);
+    runtime.setRoutingBucket("PostToolUseFailure", [failureEntry]);
+    const handler = toolResultCompositeHandler(
+      runtime,
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+    );
     const expectedOutput = undefined;
     const expectedCalls: RecordedCall[] = [
       { pluginId: "failure-observer", event: createToolResultEvent(true) },
@@ -1191,12 +1442,10 @@ describe("toolResultCompositeHandler", () => {
     assert.deepStrictEqual(executorCalls, expectedCalls);
   });
 
-  test("adapts a block without a reason to an error result", async (t) => {
+  test("adapts a block without a reason to an error result", async () => {
     // arrange
-    resetRoutingState();
-    t.after(() => {
-      resetRoutingState();
-    });
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
     const context = createExtensionContext("/workspace/tool-result-block-empty");
     const entry = createRoutingEntry({
       pluginId: "block-empty",
@@ -1206,8 +1455,13 @@ describe("toolResultCompositeHandler", () => {
     });
     const executorCalls: RecordedCall[] = [];
     const executor = createRecordingExecutor({ "block-empty": { kind: "block" } }, executorCalls);
-    setRoutingBucket("PostToolUse", [entry]);
-    const handler = toolResultCompositeHandler(currentEpoch(), undefined, executor);
+    runtime.setRoutingBucket("PostToolUse", [entry]);
+    const handler = toolResultCompositeHandler(
+      runtime,
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+    );
     const expectedOutput = { isError: true };
     const expectedCalls: RecordedCall[] = [
       { pluginId: "block-empty", event: createToolResultEvent(false) },
@@ -1221,12 +1475,10 @@ describe("toolResultCompositeHandler", () => {
     assert.deepStrictEqual(executorCalls, expectedCalls);
   });
 
-  test("adapts the first reasoned block and skips the later tool-result entry", async (t) => {
+  test("adapts the first reasoned block and skips the later tool-result entry", async () => {
     // arrange
-    resetRoutingState();
-    t.after(() => {
-      resetRoutingState();
-    });
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
     const context = createExtensionContext("/workspace/tool-result-block");
     const firstEntry = createRoutingEntry({
       pluginId: "block-first",
@@ -1248,8 +1500,13 @@ describe("toolResultCompositeHandler", () => {
       },
       executorCalls,
     );
-    setRoutingBucket("PostToolUse", [firstEntry, laterEntry]);
-    const handler = toolResultCompositeHandler(currentEpoch(), undefined, executor);
+    runtime.setRoutingBucket("PostToolUse", [firstEntry, laterEntry]);
+    const handler = toolResultCompositeHandler(
+      runtime,
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+    );
     const expectedOutput = {
       isError: true,
       content: [{ type: "text", text: "tool denied" }],
@@ -1266,12 +1523,10 @@ describe("toolResultCompositeHandler", () => {
     assert.deepStrictEqual(executorCalls, expectedCalls);
   });
 
-  test("applies a tool-output mutation through the selected result bucket", async (t) => {
+  test("applies a tool-output mutation through the selected result bucket", async () => {
     // arrange
-    resetRoutingState();
-    t.after(() => {
-      resetRoutingState();
-    });
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
     const context = createExtensionContext("/workspace/tool-result-mutate");
     const entry = createRoutingEntry({
       pluginId: "result-mutation",
@@ -1294,8 +1549,13 @@ describe("toolResultCompositeHandler", () => {
       },
       executorCalls,
     );
-    setRoutingBucket("PostToolUse", [entry]);
-    const handler = toolResultCompositeHandler(currentEpoch(), undefined, executor);
+    runtime.setRoutingBucket("PostToolUse", [entry]);
+    const handler = toolResultCompositeHandler(
+      runtime,
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+    );
     const expectedOutput = undefined;
     const expectedEvent: ToolResultEvent = {
       type: "tool_result",
@@ -1319,12 +1579,10 @@ describe("toolResultCompositeHandler", () => {
     assert.deepStrictEqual(executorCalls, expectedCalls);
   });
 
-  test("drops a tool-result stop after terminating the bucket", async (t) => {
+  test("drops a tool-result stop after terminating the bucket", async () => {
     // arrange
-    resetRoutingState();
-    t.after(() => {
-      resetRoutingState();
-    });
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
     const context = createExtensionContext("/workspace/tool-result-stop");
     const entry = createRoutingEntry({
       pluginId: "result-stop",
@@ -1337,8 +1595,13 @@ describe("toolResultCompositeHandler", () => {
       { "result-stop": { kind: "stop", stopReason: "result stop" } },
       executorCalls,
     );
-    setRoutingBucket("PostToolUseFailure", [entry]);
-    const handler = toolResultCompositeHandler(currentEpoch(), undefined, executor);
+    runtime.setRoutingBucket("PostToolUseFailure", [entry]);
+    const handler = toolResultCompositeHandler(
+      runtime,
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+    );
     const expectedOutput = undefined;
     const expectedCalls: RecordedCall[] = [
       { pluginId: "result-stop", event: createToolResultEvent(true) },
@@ -1354,12 +1617,10 @@ describe("toolResultCompositeHandler", () => {
 });
 
 describe("composite per-event adapters", () => {
-  test("adapts a PreToolUse block without a reason", async (t) => {
+  test("adapts a PreToolUse block without a reason", async () => {
     // arrange
-    resetRoutingState();
-    t.after(() => {
-      resetRoutingState();
-    });
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
     const context = createExtensionContext("/workspace/pre-tool-block-empty");
     const entry = createRoutingEntry({
       pluginId: "pre-tool-block-empty",
@@ -1372,8 +1633,14 @@ describe("composite per-event adapters", () => {
       { "pre-tool-block-empty": { kind: "block" } },
       executorCalls,
     );
-    setRoutingBucket("PreToolUse", [entry]);
-    const handler = compositeHandlerFor("PreToolUse", currentEpoch(), undefined, executor);
+    runtime.setRoutingBucket("PreToolUse", [entry]);
+    const handler = compositeHandlerFor(
+      runtime,
+      "PreToolUse",
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+    );
     const expectedOutput = { block: true };
     const expectedCalls: RecordedCall[] = [
       { pluginId: "pre-tool-block-empty", event: createToolCallEvent() },
@@ -1387,12 +1654,10 @@ describe("composite per-event adapters", () => {
     assert.deepStrictEqual(executorCalls, expectedCalls);
   });
 
-  test("adapts a UserPromptSubmit block to handled", async (t) => {
+  test("adapts a UserPromptSubmit block to handled", async () => {
     // arrange
-    resetRoutingState();
-    t.after(() => {
-      resetRoutingState();
-    });
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
     const context = createExtensionContext("/workspace/input-block");
     const entry = createRoutingEntry({
       pluginId: "input-block",
@@ -1410,8 +1675,14 @@ describe("composite per-event adapters", () => {
       { "input-block": { kind: "block", reason: "handled upstream" } },
       executorCalls,
     );
-    setRoutingBucket("UserPromptSubmit", [entry]);
-    const handler = compositeHandlerFor("UserPromptSubmit", currentEpoch(), undefined, executor);
+    runtime.setRoutingBucket("UserPromptSubmit", [entry]);
+    const handler = compositeHandlerFor(
+      runtime,
+      "UserPromptSubmit",
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+    );
     const expectedOutput = { action: "handled" };
     const expectedCalls: RecordedCall[] = [
       {
@@ -1428,12 +1699,10 @@ describe("composite per-event adapters", () => {
     assert.deepStrictEqual(executorCalls, expectedCalls);
   });
 
-  test("adapts UserPromptSubmit additional context to transformed text", async (t) => {
+  test("adapts UserPromptSubmit additional context to transformed text", async () => {
     // arrange
-    resetRoutingState();
-    t.after(() => {
-      resetRoutingState();
-    });
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
     const context = createExtensionContext("/workspace/input-transform");
     const entry = createRoutingEntry({
       pluginId: "input-transform",
@@ -1451,8 +1720,14 @@ describe("composite per-event adapters", () => {
       { "input-transform": { kind: "mutate", additionalContext: "dispatch context" } },
       executorCalls,
     );
-    setRoutingBucket("UserPromptSubmit", [entry]);
-    const handler = compositeHandlerFor("UserPromptSubmit", currentEpoch(), undefined, executor);
+    runtime.setRoutingBucket("UserPromptSubmit", [entry]);
+    const handler = compositeHandlerFor(
+      runtime,
+      "UserPromptSubmit",
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+    );
     const expectedOutput = { action: "transform", text: "dispatch context" };
     const expectedCalls: RecordedCall[] = [
       {
@@ -1469,12 +1744,10 @@ describe("composite per-event adapters", () => {
     assert.deepStrictEqual(executorCalls, expectedCalls);
   });
 
-  test("drops a UserPromptSubmit mutation without additional context", async (t) => {
+  test("drops a UserPromptSubmit mutation without additional context", async () => {
     // arrange
-    resetRoutingState();
-    t.after(() => {
-      resetRoutingState();
-    });
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
     const context = createExtensionContext("/workspace/input-mutation-empty");
     const entry = createRoutingEntry({
       pluginId: "input-mutation-empty",
@@ -1492,8 +1765,14 @@ describe("composite per-event adapters", () => {
       { "input-mutation-empty": { kind: "mutate", updatedInput: { ignored: true } } },
       executorCalls,
     );
-    setRoutingBucket("UserPromptSubmit", [entry]);
-    const handler = compositeHandlerFor("UserPromptSubmit", currentEpoch(), undefined, executor);
+    runtime.setRoutingBucket("UserPromptSubmit", [entry]);
+    const handler = compositeHandlerFor(
+      runtime,
+      "UserPromptSubmit",
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+    );
     const expectedOutput = undefined;
     const expectedCalls: RecordedCall[] = [
       {
@@ -1510,12 +1789,10 @@ describe("composite per-event adapters", () => {
     assert.deepStrictEqual(executorCalls, expectedCalls);
   });
 
-  test("drops a UserPromptSubmit stop after terminating the bucket", async (t) => {
+  test("drops a UserPromptSubmit stop after terminating the bucket", async () => {
     // arrange
-    resetRoutingState();
-    t.after(() => {
-      resetRoutingState();
-    });
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
     const context = createExtensionContext("/workspace/input-stop");
     const entry = createRoutingEntry({
       pluginId: "input-stop",
@@ -1533,8 +1810,14 @@ describe("composite per-event adapters", () => {
       { "input-stop": { kind: "stop", stopReason: "input stop" } },
       executorCalls,
     );
-    setRoutingBucket("UserPromptSubmit", [entry]);
-    const handler = compositeHandlerFor("UserPromptSubmit", currentEpoch(), undefined, executor);
+    runtime.setRoutingBucket("UserPromptSubmit", [entry]);
+    const handler = compositeHandlerFor(
+      runtime,
+      "UserPromptSubmit",
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+    );
     const expectedOutput = undefined;
     const expectedCalls: RecordedCall[] = [
       {
@@ -1551,12 +1834,10 @@ describe("composite per-event adapters", () => {
     assert.deepStrictEqual(executorCalls, expectedCalls);
   });
 
-  test("passes a UserPromptSubmit noop through as undefined", async (t) => {
+  test("passes a UserPromptSubmit noop through as undefined", async () => {
     // arrange
-    resetRoutingState();
-    t.after(() => {
-      resetRoutingState();
-    });
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
     const context = createExtensionContext("/workspace/input-noop");
     const entry = createRoutingEntry({
       pluginId: "input-noop",
@@ -1571,8 +1852,14 @@ describe("composite per-event adapters", () => {
     } satisfies InputEvent;
     const executorCalls: RecordedCall[] = [];
     const executor = createRecordingExecutor({ "input-noop": { kind: "noop" } }, executorCalls);
-    setRoutingBucket("UserPromptSubmit", [entry]);
-    const handler = compositeHandlerFor("UserPromptSubmit", currentEpoch(), undefined, executor);
+    runtime.setRoutingBucket("UserPromptSubmit", [entry]);
+    const handler = compositeHandlerFor(
+      runtime,
+      "UserPromptSubmit",
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+    );
     const expectedOutput = undefined;
     const expectedCalls: RecordedCall[] = [
       {
@@ -1589,12 +1876,10 @@ describe("composite per-event adapters", () => {
     assert.deepStrictEqual(executorCalls, expectedCalls);
   });
 
-  test("captures SessionStart context with the producing entry provenance", async (t) => {
+  test("captures SessionStart context with the producing entry provenance", async () => {
     // arrange
-    resetRoutingState();
-    t.after(() => {
-      resetRoutingState();
-    });
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
     const context = createExtensionContext("/workspace/session-start-provenance");
     const entry = createRoutingEntry({
       pluginId: "session-context",
@@ -1610,8 +1895,14 @@ describe("composite per-event adapters", () => {
       { "session-context": { kind: "mutate", additionalContext: "project guidance" } },
       executorCalls,
     );
-    setRoutingBucket("SessionStart", [entry]);
-    const handler = compositeHandlerFor("SessionStart", currentEpoch(), undefined, executor);
+    runtime.setRoutingBucket("SessionStart", [entry]);
+    const handler = compositeHandlerFor(
+      runtime,
+      "SessionStart",
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+    );
     const expectedPendingContext = [
       {
         context: "project guidance",
@@ -1631,16 +1922,14 @@ describe("composite per-event adapters", () => {
     await handler(event, context);
 
     // assert
-    assert.deepStrictEqual(pendingSessionStartContextEntries(), expectedPendingContext);
+    assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), expectedPendingContext);
     assert.deepStrictEqual(executorCalls, expectedCalls);
   });
 
-  test("drops a SessionEnd block after observing it", async (t) => {
+  test("drops a SessionEnd block after observing it", async () => {
     // arrange
-    resetRoutingState();
-    t.after(() => {
-      resetRoutingState();
-    });
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
     const context = createExtensionContext("/workspace/session-end-block");
     const entry = createRoutingEntry({
       pluginId: "session-end-block",
@@ -1654,8 +1943,14 @@ describe("composite per-event adapters", () => {
       { "session-end-block": { kind: "block", reason: "ignored block" } },
       executorCalls,
     );
-    setRoutingBucket("SessionEnd", [entry]);
-    const handler = compositeHandlerFor("SessionEnd", currentEpoch(), undefined, executor);
+    runtime.setRoutingBucket("SessionEnd", [entry]);
+    const handler = compositeHandlerFor(
+      runtime,
+      "SessionEnd",
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+    );
     const expectedCalls: RecordedCall[] = [
       {
         pluginId: "session-end-block",
@@ -1670,12 +1965,10 @@ describe("composite per-event adapters", () => {
     assert.deepStrictEqual(executorCalls, expectedCalls);
   });
 
-  test("drops a PreCompact stop after observing it", async (t) => {
+  test("drops a PreCompact stop after observing it", async () => {
     // arrange
-    resetRoutingState();
-    t.after(() => {
-      resetRoutingState();
-    });
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
     const context = createExtensionContext("/workspace/pre-compact-stop");
     const entry = createRoutingEntry({
       pluginId: "pre-compact-stop",
@@ -1706,8 +1999,14 @@ describe("composite per-event adapters", () => {
       { "pre-compact-stop": { kind: "stop", stopReason: "ignored stop" } },
       executorCalls,
     );
-    setRoutingBucket("PreCompact", [entry]);
-    const handler = compositeHandlerFor("PreCompact", currentEpoch(), undefined, executor);
+    runtime.setRoutingBucket("PreCompact", [entry]);
+    const handler = compositeHandlerFor(
+      runtime,
+      "PreCompact",
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+    );
     const expectedCalls: RecordedCall[] = [
       { pluginId: "pre-compact-stop", event: structuredClone(event) },
     ];
@@ -1719,12 +2018,10 @@ describe("composite per-event adapters", () => {
     assert.deepStrictEqual(executorCalls, expectedCalls);
   });
 
-  test("passes a PostCompact noop through after observing it", async (t) => {
+  test("passes a PostCompact noop through after observing it", async () => {
     // arrange
-    resetRoutingState();
-    t.after(() => {
-      resetRoutingState();
-    });
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
     const context = createExtensionContext("/workspace/post-compact-noop");
     const entry = createRoutingEntry({
       pluginId: "post-compact-noop",
@@ -1752,8 +2049,14 @@ describe("composite per-event adapters", () => {
       { "post-compact-noop": { kind: "noop" } },
       executorCalls,
     );
-    setRoutingBucket("PostCompact", [entry]);
-    const handler = compositeHandlerFor("PostCompact", currentEpoch(), undefined, executor);
+    runtime.setRoutingBucket("PostCompact", [entry]);
+    const handler = compositeHandlerFor(
+      runtime,
+      "PostCompact",
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+    );
     const expectedCalls: RecordedCall[] = [
       { pluginId: "post-compact-noop", event: structuredClone(event) },
     ];
@@ -1763,5 +2066,246 @@ describe("composite per-event adapters", () => {
 
     // assert
     assert.deepStrictEqual(executorCalls, expectedCalls);
+  });
+});
+
+/**
+ * A real `ExtensionAPI` value for the optional `pi` collaborator. Every member
+ * throws on call: `dispatch.ts` forwards the inventory to the executor and
+ * never reads it, so a read from inside dispatch is itself the defect this
+ * value detects.
+ */
+function createPiInventory(): ExtensionAPI {
+  return {
+    on(_event: string, _handler: unknown): void {
+      throw new Error("composite dispatch must not register Pi listeners");
+    },
+    sendMessage(_message: unknown, _options: unknown): void {
+      throw new Error("composite dispatch must not send Pi messages");
+    },
+  } as ExtensionAPI;
+}
+
+/** Records the inventory each dispatch hands its executor, in call order. */
+function createPiObservingExecutor(observed: Array<ExtensionAPI | undefined>): HookExecutor {
+  return (_entry, _event, _context, pi) => {
+    observed.push(pi);
+    return Promise.resolve({ kind: "noop" });
+  };
+}
+
+/** Collects the OBS-01 debug lines a case's dispatch emits, restoring the flag after. */
+function observeHookDebug(t: TestContext): () => string[] {
+  const previous = {
+    existed: Object.hasOwn(process.env, "PI_CLAUDE_MARKETPLACE_DEBUG"),
+    value: process.env.PI_CLAUDE_MARKETPLACE_DEBUG,
+  };
+  t.after(() => {
+    if (previous.existed && previous.value !== undefined) {
+      process.env.PI_CLAUDE_MARKETPLACE_DEBUG = previous.value;
+    } else {
+      Reflect.deleteProperty(process.env, "PI_CLAUDE_MARKETPLACE_DEBUG");
+    }
+  });
+  process.env.PI_CLAUDE_MARKETPLACE_DEBUG = "1";
+  const diagnostics: string[] = [];
+  t.mock.method(console, "error", (diagnostic: unknown) => {
+    diagnostics.push(String(diagnostic));
+  });
+  return () => [...diagnostics];
+}
+
+describe("optional Pi inventory collaborator", () => {
+  test("compositeHandlerFor hands a supplied inventory to the executor and undefined without one", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    const context = createExtensionContext("/workspace/dispatch-pi-composite");
+    runtime.setRoutingBucket("PreToolUse", [
+      createRoutingEntry({
+        pluginId: "pi-observer",
+        claudeEvent: "PreToolUse",
+        rawMatcher: "Bash",
+        declarationIndex: 0,
+      }),
+    ]);
+    const inventory = createPiInventory();
+    const observed: Array<ExtensionAPI | undefined> = [];
+    const executor = createPiObservingExecutor(observed);
+    const withInventory = compositeHandlerFor(
+      runtime,
+      "PreToolUse",
+      runtime.currentGeneration(),
+      inventory,
+      executor,
+    );
+    const withoutInventory = compositeHandlerFor(
+      runtime,
+      "PreToolUse",
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+    );
+
+    // act
+    const suppliedOutput = await withInventory(createToolCallEvent(), context);
+    const omittedOutput = await withoutInventory(createToolCallEvent(), context);
+
+    // assert
+    assert.deepStrictEqual([suppliedOutput, omittedOutput], [undefined, undefined]);
+    assert.strictEqual(observed.length, 2);
+    assert.strictEqual(observed[0], inventory);
+    assert.strictEqual(observed[1], undefined);
+  });
+
+  test("toolResultCompositeHandler hands a supplied inventory to the executor and undefined without one", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    const context = createExtensionContext("/workspace/dispatch-pi-tool-result");
+    runtime.setRoutingBucket("PostToolUse", [
+      createRoutingEntry({
+        pluginId: "pi-result-observer",
+        claudeEvent: "PostToolUse",
+        rawMatcher: "Bash",
+        declarationIndex: 0,
+      }),
+    ]);
+    const inventory = createPiInventory();
+    const observed: Array<ExtensionAPI | undefined> = [];
+    const executor = createPiObservingExecutor(observed);
+    const withInventory = toolResultCompositeHandler(
+      runtime,
+      runtime.currentGeneration(),
+      inventory,
+      executor,
+    );
+    const withoutInventory = toolResultCompositeHandler(
+      runtime,
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+    );
+
+    // act
+    const suppliedOutput = await withInventory(createToolResultEvent(false), context);
+    const omittedOutput = await withoutInventory(createToolResultEvent(false), context);
+
+    // assert
+    assert.deepStrictEqual([suppliedOutput, omittedOutput], [undefined, undefined]);
+    assert.strictEqual(observed.length, 2);
+    assert.strictEqual(observed[0], inventory);
+    assert.strictEqual(observed[1], undefined);
+  });
+
+  test("collectBucketOutcomes hands a supplied inventory to the executor and undefined without one", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    const context = createExtensionContext("/workspace/dispatch-pi-outcomes");
+    const bucket = [
+      createRoutingEntry({
+        pluginId: "pi-outcome-observer",
+        claudeEvent: "PreToolUse",
+        rawMatcher: "Bash",
+        declarationIndex: 0,
+      }),
+    ];
+    const inventory = createPiInventory();
+    const observed: Array<ExtensionAPI | undefined> = [];
+    const executor = createPiObservingExecutor(observed);
+    const event = createToolCallEvent();
+
+    // act
+    const suppliedOutcomes = await collectBucketOutcomes(
+      runtime,
+      bucket,
+      event,
+      context,
+      inventory,
+      () => true,
+      executor,
+    );
+    const omittedOutcomes = await collectBucketOutcomes(
+      runtime,
+      bucket,
+      event,
+      context,
+      undefined,
+      () => true,
+      executor,
+    );
+
+    // assert
+    assert.deepStrictEqual(suppliedOutcomes, omittedOutcomes);
+    assert.strictEqual(observed.length, 2);
+    assert.strictEqual(observed[0], inventory);
+    assert.strictEqual(observed[1], undefined);
+  });
+
+  test("refuses an asyncRewake spawn through its own executor default when no inventory is supplied", async (t) => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    const context = createExtensionContext("/workspace/dispatch-pi-async-rewake");
+    runtime.setRoutingBucket("PreToolUse", [
+      createRoutingEntry({
+        pluginId: "async-rewake-plugin",
+        claudeEvent: "PreToolUse",
+        rawMatcher: "Bash",
+        declarationIndex: 0,
+        asyncRewake: true,
+      }),
+    ]);
+    const readDiagnostics = observeHookDebug(t);
+    // No executor: the module's own `dispatchHookExec` default runs, which is
+    // where an absent inventory stops being a forwarded value and starts
+    // deciding whether the async lane may spawn at all.
+    const handler = compositeHandlerFor(
+      runtime,
+      "PreToolUse",
+      runtime.currentGeneration(),
+      undefined,
+    );
+
+    // act
+    const output = await handler(createToolCallEvent(), context);
+
+    // assert
+    assert.strictEqual(output, undefined);
+    assert.deepStrictEqual(readDiagnostics(), [
+      "[hooks] async-rewake: pi missing on async dispatch (async-rewake-plugin/PreToolUse); skipping spawn",
+    ]);
+  });
+
+  test("propagates a rejecting executor rather than absorbing it into the reducer", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    const context = createExtensionContext("/workspace/dispatch-pi-throwing-executor");
+    runtime.setRoutingBucket("PreToolUse", [
+      createRoutingEntry({
+        pluginId: "throwing-executor-plugin",
+        claudeEvent: "PreToolUse",
+        rawMatcher: "Bash",
+        declarationIndex: 0,
+      }),
+    ]);
+    // The never-throws contract belongs to `dispatchHookExec`, the default this
+    // seam is defaulted to. A caller that substitutes a rejecting executor is
+    // outside that contract, and the reducer says so instead of hiding it.
+    const executor: HookExecutor = () => Promise.reject(new Error("injected executor refused"));
+    const handler = compositeHandlerFor(
+      runtime,
+      "PreToolUse",
+      runtime.currentGeneration(),
+      createPiInventory(),
+      executor,
+    );
+
+    // act & assert
+    await assert.rejects(handler(createToolCallEvent(), context), {
+      message: "injected executor refused",
+    });
   });
 });

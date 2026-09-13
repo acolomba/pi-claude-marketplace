@@ -25,13 +25,16 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 
-import { registerHooksBridge } from "../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
 import {
-  resetRoutingState,
-  routingTableEntries,
-} from "../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
+  createHooksHydration,
+  createHooksRuntime,
+  readHooksJson,
+} from "../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { type RoutingEntry } from "../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
-import { saveState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import {
+  loadState,
+  saveState,
+} from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
 import type { HookExecutor } from "../../extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts";
 import type { ExtensionState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
@@ -175,11 +178,9 @@ async function withHermeticPiHome<T>(
   }
 }
 
-test("HOOK-E2E-01: registerHooksBridge boots a user-scope hooks-only plugin and dispatches SessionStart end-to-end", async (t) => {
-  resetRoutingState();
-  t.after(() => {
-    resetRoutingState();
-  });
+test("HOOK-E2E-01: registerHooksBridge boots a user-scope hooks-only plugin and dispatches SessionStart end-to-end", async () => {
+  const runtime = createHooksRuntime();
+  const hooksHydration = createHooksHydration(runtime, { loadState, readHooksJson });
 
   await withHermeticPiHome(async ({ agentDir, projectCwd }) => {
     // Seed user-scope state.json + hooks.json on disk (the bytes the bridge
@@ -204,7 +205,7 @@ test("HOOK-E2E-01: registerHooksBridge boots a user-scope hooks-only plugin and 
     // ctx.cwd is read by the session_start handler's lazy project hydrate;
     // carry the real project cwd so the hydrate resolves the right scope root.
     const placeholderCtx = { cwd: projectCwd } as unknown as ExtensionContext;
-    await registerHooksBridge(pi, {
+    await hooksHydration.registerHooksBridge(pi, {
       ctx: placeholderCtx,
       cwd: projectCwd,
       executor: injectedExecutor,
@@ -221,7 +222,7 @@ test("HOOK-E2E-01: registerHooksBridge boots a user-scope hooks-only plugin and 
     // The routing table's SessionStart bucket must contain the plugin's
     // entry after the sequential per-scope rebuild (the cross-scope wipe
     // regression flipped this back to 0 after the project-scope rebuild).
-    const sessionStartBucket = routingTableEntries().get("SessionStart") ?? [];
+    const sessionStartBucket = runtime.routingTableEntries().get("SessionStart") ?? [];
     assert.equal(
       sessionStartBucket.length,
       1,
@@ -249,11 +250,9 @@ test("HOOK-E2E-01: registerHooksBridge boots a user-scope hooks-only plugin and 
   });
 });
 
-test("HOOK-E2E-02: project-scope SessionStart plugin dispatches via the session_start lazy project hydrate", async (t) => {
-  resetRoutingState();
-  t.after(() => {
-    resetRoutingState();
-  });
+test("HOOK-E2E-02: project-scope SessionStart plugin dispatches via the session_start lazy project hydrate", async () => {
+  const runtime = createHooksRuntime();
+  const hooksHydration = createHooksHydration(runtime, { loadState, readHooksJson });
 
   await withHermeticPiHome(async ({ agentDir, projectCwd }) => {
     // Seed PROJECT-scope state.json + hooks.json on disk under the real
@@ -285,7 +284,7 @@ test("HOOK-E2E-02: project-scope SessionStart plugin dispatches via the session_
     // is empty at boot.
     const { pi, registrations } = makeMockPi();
     const placeholderCtx = { cwd: projectCwd } as unknown as ExtensionContext;
-    await registerHooksBridge(pi, {
+    await hooksHydration.registerHooksBridge(pi, {
       ctx: placeholderCtx,
       cwd: agentDir,
       executor: injectedExecutor,
@@ -294,7 +293,7 @@ test("HOOK-E2E-02: project-scope SessionStart plugin dispatches via the session_
     // Bug condition: no SessionStart entries are dispatchable right after
     // boot, because the factory could not hydrate project scope against the
     // real project cwd.
-    const bucketBefore = routingTableEntries().get("SessionStart") ?? [];
+    const bucketBefore = runtime.routingTableEntries().get("SessionStart") ?? [];
     assert.equal(
       bucketBefore.length,
       0,
@@ -321,11 +320,9 @@ test("HOOK-E2E-02: project-scope SessionStart plugin dispatches via the session_
   });
 });
 
-test("HOOK-E2E-03: WR-05 -- session_start lazy hydrate writes nothing under a pristine project cwd", async (t) => {
-  resetRoutingState();
-  t.after(() => {
-    resetRoutingState();
-  });
+test("HOOK-E2E-03: WR-05 -- session_start lazy hydrate writes nothing under a pristine project cwd", async () => {
+  const runtime = createHooksRuntime();
+  const hooksHydration = createHooksHydration(runtime, { loadState, readHooksJson });
 
   await withHermeticPiHome(async ({ agentDir, projectCwd }) => {
     // USER scope owns the only SessionStart-declaring plugin; the project
@@ -345,7 +342,7 @@ test("HOOK-E2E-03: WR-05 -- session_start lazy hydrate writes nothing under a pr
 
     const { pi, registrations } = makeMockPi();
     const placeholderCtx = { cwd: projectCwd } as unknown as ExtensionContext;
-    await registerHooksBridge(pi, {
+    await hooksHydration.registerHooksBridge(pi, {
       ctx: placeholderCtx,
       cwd: bootCwd,
       executor: injectedExecutor,
@@ -368,11 +365,9 @@ test("HOOK-E2E-03: WR-05 -- session_start lazy hydrate writes nothing under a pr
   });
 });
 
-test("HOOK-E2E-04: a throwing lazy project hydrate never blocks SessionStart dispatch", async (t) => {
-  resetRoutingState();
-  t.after(() => {
-    resetRoutingState();
-  });
+test("HOOK-E2E-04: a throwing lazy project hydrate never blocks SessionStart dispatch", async () => {
+  const runtime = createHooksRuntime();
+  const hooksHydration = createHooksHydration(runtime, { loadState, readHooksJson });
 
   await withHermeticPiHome(async ({ agentDir, projectCwd }) => {
     // USER scope owns the SessionStart-declaring plugin, so there IS an
@@ -390,7 +385,7 @@ test("HOOK-E2E-04: a throwing lazy project hydrate never blocks SessionStart dis
     };
 
     const { pi, registrations } = makeMockPi();
-    await registerHooksBridge(pi, {
+    await hooksHydration.registerHooksBridge(pi, {
       ctx: { cwd: projectCwd } as unknown as ExtensionContext,
       cwd: projectCwd,
       executor: injectedExecutor,

@@ -20,6 +20,11 @@ import { describe, test } from "node:test";
 import lockfile from "proper-lockfile";
 import { mock, verify } from "strong-mock";
 
+import {
+  createHooksRouting,
+  createHooksRuntime,
+  readHooksJson,
+} from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
   applyBackfillForScopeIsolated,
@@ -31,10 +36,12 @@ import {
   loadState,
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { EXTENSION_VERSION } from "../../../extensions/pi-claude-marketplace/shared/extension-version.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { retryTree } from "../plugin/scope-tree-inventory.ts";
 
+import type { HooksRouting } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { PerEntryOutcome } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts";
 import type {
@@ -47,6 +54,7 @@ import type {
   ExtensionAPI,
   ExtensionContext,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { CompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import type { TestContext } from "node:test";
 
 type MarketplaceRecord = ExtensionState["marketplaces"][string];
@@ -284,7 +292,33 @@ function backfillOptions(
   cwd: string,
   gitOps: GitOps,
 ): ApplyReconcileOptions {
-  return { ctx, pi, cwd, scope: "project", gitOps };
+  return backfillOptionsWithRouting(
+    ctx,
+    pi,
+    cwd,
+    gitOps,
+    createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    createCompletionCache(),
+  );
+}
+
+function backfillOptionsWithRouting(
+  ctx: ExtensionContext,
+  pi: ExtensionAPI,
+  cwd: string,
+  gitOps: GitOps,
+  hooksRouting: HooksRouting,
+  completionCache: CompletionCache,
+): ApplyReconcileOptions {
+  return {
+    ctx,
+    pi,
+    cwd,
+    scope: "project",
+    completionCache,
+    gitOps,
+    hooksRouting,
+  };
 }
 
 function readResultFor(state: ExtensionState, stateExisted: boolean): ScopeReadResult {
@@ -935,16 +969,35 @@ describe("scanForceInstalledBackfills", () => {
     await seedState(locations, seeded);
     const { ctx, pi, verifyBoundary } = createSilentBoundary();
     const { gitOps, clonedUrls } = createOfflineGitOps();
+    const ownerRuntime = createHooksRuntime();
+    const peerRuntime = createHooksRuntime();
+    const hooksRouting = createHooksRouting(ownerRuntime, { readHooksJson });
+    const ownerCache = createCompletionCache();
+    const peerCache = createCompletionCache();
+    const cachePath = await locations.pluginCacheFile("mp");
+    const unrelatedCachePath = await locations.pluginCacheFile("unrelated");
+    await ownerCache.getPluginIndex(cachePath, "project", "mp", () =>
+      Promise.resolve([{ name: "owner-stale", status: "available" }]),
+    );
+    await rm(cachePath, { force: true });
+    await peerCache.getPluginIndex(cachePath, "project", "mp", () =>
+      Promise.resolve([{ name: "peer-stale", status: "available" }]),
+    );
+    await rm(cachePath, { force: true });
+    await ownerCache.getPluginIndex(unrelatedCachePath, "project", "unrelated", () =>
+      Promise.resolve([{ name: "owner-unrelated", status: "available" }]),
+    );
+    await rm(unrelatedCachePath, { force: true });
+    await rm(path.dirname(path.dirname(cachePath)), { recursive: true, force: true });
     const outcomes: PerEntryOutcome[] = [];
 
     // act
     const anyFailure = await scanForceInstalledBackfills(
-      backfillOptions(ctx, pi, cwd, gitOps),
+      backfillOptionsWithRouting(ctx, pi, cwd, gitOps, hooksRouting, ownerCache),
       "project",
       seeded,
       outcomes,
     );
-
     // assert
     assert.strictEqual(anyFailure, false);
     assert.deepStrictEqual(outcomes, [
@@ -1005,6 +1058,31 @@ describe("scanForceInstalledBackfills", () => {
       "pi-claude-marketplace/skills-staging/",
       "pi-claude-marketplace/state.json",
     ]);
+    const ownerRows = await ownerCache.getPluginIndex(cachePath, "project", "mp", () =>
+      Promise.resolve([{ name: "owner-fresh", status: "installed" }]),
+    );
+    const peerRows = await peerCache.getPluginIndex(cachePath, "project", "mp", () =>
+      Promise.reject(new Error("the peer cache must retain its warmed target row")),
+    );
+    const unrelatedRows = await ownerCache.getPluginIndex(
+      unrelatedCachePath,
+      "project",
+      "unrelated",
+      () => Promise.reject(new Error("the owner cache must retain its unrelated row")),
+    );
+    assert.deepStrictEqual(
+      ownerRuntime.getRoutingBucket("PreToolUse").map((entry) => ({
+        command: entry.handlerDecl["command"],
+        marketplace: entry.marketplace,
+        plugin: entry.pluginId,
+        scope: entry.scope,
+      })),
+      [{ command: "echo orphan", marketplace: "mp", plugin: "hello", scope: "project" }],
+    );
+    assert.deepStrictEqual(peerRuntime.getRoutingBucket("PreToolUse"), []);
+    assert.deepStrictEqual(ownerRows, [{ name: "owner-fresh", status: "installed" }]);
+    assert.deepStrictEqual(peerRows, [{ name: "peer-stale", status: "available" }]);
+    assert.deepStrictEqual(unrelatedRows, [{ name: "owner-unrelated", status: "available" }]);
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
   });

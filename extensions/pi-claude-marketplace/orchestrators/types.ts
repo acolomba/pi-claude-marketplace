@@ -7,8 +7,10 @@
 // D-01's escalation note about a future BridgeOps<Prep, Target>
 // belonging at this same path.
 
+import { type ContentReason } from "../shared/notification-types.ts";
+
+import type { CleanupFailure } from "../shared/errors.ts";
 import type { DegradeKind } from "../shared/notify-reasons.ts";
-import type { ContentReason } from "../shared/notify.ts";
 import type { Scope } from "../shared/types.ts";
 import type { LedgerDegradationSignals } from "./plugin/shared.ts";
 
@@ -151,6 +153,7 @@ export type UpdatePhaseBridge = "skills" | "commands" | "agents" | "hooks" | "mc
 export interface UpdatePhaseFailure {
   readonly phase: UpdatePhaseBridge;
   readonly msg: string;
+  readonly cleanupFailures?: readonly CleanupFailure[];
 }
 
 export interface PluginUpdateBase {
@@ -336,6 +339,7 @@ export interface PluginUpdateFailedOutcome extends PluginUpdateBase {
   readonly notes: readonly string[];
   readonly reasons?: readonly ContentReason[];
   readonly phaseFailures?: readonly UpdatePhaseFailure[];
+  readonly cleanupFailures?: readonly CleanupFailure[];
   readonly cause?: Error;
 }
 
@@ -359,8 +363,8 @@ export type PluginUpdateOutcome =
 /**
  * D-05 function-injection seam. (`marketplace update` with
  * `record.autoupdate === true`) calls this once per installed plugin
- * during the autoupdate cascade. `orchestrators/plugin/update.ts` ships
- * the real implementation; tests inject a mock. The
+ * during the autoupdate cascade. `orchestrators/plugin/update-flow.ts` ships
+ * the real composed operation; tests inject a mock. The
  * `index.ts` barrel performs the registration-time wiring.
  */
 export type PluginUpdateFn = (
@@ -370,9 +374,9 @@ export type PluginUpdateFn = (
 ) => Promise<PluginUpdateOutcome>;
 
 // ───────────────────────────────────────────────────────────────────────────
-// It moved here from install.ts to join its three siblings. Leaving it in the
+// It moved here from the install flow owner to join its three siblings. Leaving it in the
 // orchestrator meant install.messaging.ts could not name the type its own
-// failure classifier returns without importing back into install.ts, which
+// failure classifier returns without importing back into install-flow.ts, which
 // would close a cycle (FLOW-09).
 // ───────────────────────────────────────────────────────────────────────────
 

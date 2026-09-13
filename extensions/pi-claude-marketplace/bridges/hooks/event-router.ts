@@ -1,9 +1,8 @@
 // bridges/hooks/event-router.ts
 //
 // Hooks-bridge dispatch core: the central routing layer the Pi runtime
-// hands events to. It populates and drives four pieces of shared module
-// state, though the cells themselves live in `routing-state.ts` so the
-// dispatch chain can read them without importing back into this hub:
+// hands events to. It populates and drives four state families owned by the
+// HooksRuntime supplied by the extension root:
 //
 //   - `liveEpoch` (D-59-03): incremented on every registerHooksBridge
 //     entry; composite handlers capture the value at registration time and
@@ -38,7 +37,7 @@
 // DISP-01 / DISP-02 / DISP-03 / DISP-04 / OBS-01 anchor the contracts this
 // module enforces; D-59-01 / D-59-02 / D-59-03 anchor the decisions.
 
-import { mkdir, readFile } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 
@@ -49,30 +48,22 @@ import { locationsFor, type ScopedLocations } from "../../persistence/locations.
 import {
   DEFAULT_STATE,
   isRecordedButDisabled,
-  loadState,
   type ExtensionState,
 } from "../../persistence/state-io.ts";
+import { compareByNameThenScope } from "../../shared/compare-name-scope.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
-import { compareByNameThenScope } from "../../shared/notify.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
 import { SCOPES } from "../../shared/types.ts";
 
 import { reapOrphans, shutdownInMemoryChildren } from "./async-rewake/registry.ts";
 import { compositeHandlerFor, toolResultCompositeHandler } from "./dispatch.ts";
-import { compileIfPredicate, MATCH_ALL_IF, type IfPredicate } from "./if-field/index.ts";
+import { compileIfPredicate, MATCH_ALL_IF } from "./if-field/index.ts";
 import {
-  bumpEpoch,
-  clearPendingSessionStartContext,
-  currentEpoch,
-  deleteParsedConfig,
-  getRoutingBucket,
-  parsedConfigEntries,
-  pendingSessionStartContextEntries,
-  setParsedConfig,
-  setRoutingBucket,
+  createRoutingStateOperations,
   type CacheEntry,
   type RoutingEntry,
+  type RoutingStateOperations,
 } from "./routing-state.ts";
 import {
   agentEndCacheHandler,
@@ -82,6 +73,7 @@ import {
 } from "./settle.ts";
 
 import type { HookExecutor } from "./dispatch.ts";
+import type { HooksRuntime } from "./runtime.ts";
 import type {
   BeforeAgentStartEvent,
   BeforeAgentStartEventResult,
@@ -104,43 +96,14 @@ function cacheKey(scope: Scope, marketplace: string, pluginId: string): string {
   return `${scope}\x00${marketplace}\x00${pluginId}`;
 }
 
-// ──────────────────────────────────────────────────────────────────────────
-// Public surface
-// ──────────────────────────────────────────────────────────────────────────
-
-/**
- * D-59-02: synchronous, idempotent cache mutator. Install wires this into
- * the per-plugin lock; replays overwrite the existing entry.
- */
-export function addPluginConfigToCache(
-  scope: Scope,
-  marketplace: string,
-  pluginId: string,
-  resolvedSource: AbsolutePluginRoot,
-  config: HooksConfig,
-  ifPredicates: ReadonlyMap<string, IfPredicate>,
-): void {
-  setParsedConfig(cacheKey(scope, marketplace, pluginId), {
-    scope,
-    marketplace,
-    pluginId,
-    resolvedSource,
-    config,
-    ifPredicates,
-  });
-}
-
-/**
- * D-59-02: synchronous, idempotent cache mutator. Uninstall wires this into
- * the per-plugin lock; removing a missing entry is a no-op.
- */
-export function removePluginConfigFromCache(
-  scope: Scope,
-  marketplace: string,
-  pluginId: string,
-): void {
-  deleteParsedConfig(cacheKey(scope, marketplace, pluginId));
-}
+type EventRouterRoutingState = Pick<
+  RoutingStateOperations,
+  | "deleteParsedConfig"
+  | "getRoutingBucket"
+  | "parsedConfigEntries"
+  | "setParsedConfig"
+  | "setRoutingBucket"
+>;
 
 /**
  * Read `hooks.json` from disk, parse via `parseHooksConfig`, and
@@ -154,7 +117,7 @@ export function removePluginConfigFromCache(
  * debug-log lines so the same shared helper can serve all three
  * orchestrators without losing call-site attribution.
  */
-export async function readAndCachePluginHooks(opts: {
+export interface ReadAndCachePluginHooksOptions {
   readonly scope: Scope;
   readonly marketplace: string;
   readonly plugin: string;
@@ -162,10 +125,16 @@ export async function readAndCachePluginHooks(opts: {
   readonly hooksJsonPath: string;
   readonly cwd: string;
   readonly logPrefix: string;
-}): Promise<void> {
+}
+
+async function readAndCachePluginHooksWith(
+  reader: HooksFileReader,
+  routingState: EventRouterRoutingState,
+  opts: ReadAndCachePluginHooksOptions,
+): Promise<void> {
   let raw: string;
   try {
-    raw = await readFile(opts.hooksJsonPath, "utf8");
+    raw = await reader.readHooksJson(opts.hooksJsonPath);
   } catch (err) {
     hookDebugLog(
       `${opts.logPrefix}: hooks.json read failed for ${opts.plugin}@${opts.marketplace}: ${errorMessage(err)}`,
@@ -185,14 +154,14 @@ export async function readAndCachePluginHooks(opts: {
     return;
   }
 
-  addPluginConfigToCache(
-    opts.scope,
-    opts.marketplace,
-    opts.plugin,
-    opts.resolvedSource,
-    parsed.value,
-    parsed.ifPredicates,
-  );
+  routingState.setParsedConfig(cacheKey(opts.scope, opts.marketplace, opts.plugin), {
+    scope: opts.scope,
+    marketplace: opts.marketplace,
+    pluginId: opts.plugin,
+    resolvedSource: opts.resolvedSource,
+    config: parsed.value,
+    ifPredicates: parsed.ifPredicates,
+  });
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -222,25 +191,24 @@ export async function readAndCachePluginHooks(opts: {
  * Claude Code's SessionStart semantics where the injected text is added
  * to the session prompt once at session boot.
  */
-export function beforeAgentStartHandlerFor(
-  capturedEpoch: number,
+export function createBeforeAgentStartHandler(
+  runtime: HooksRuntime,
+  capturedGeneration: number,
 ): (
   event: BeforeAgentStartEvent,
   ctx: ExtensionContext,
 ) => Promise<BeforeAgentStartEventResult | undefined> {
   return (event) => {
-    if (capturedEpoch !== currentEpoch()) {
+    if (capturedGeneration !== runtime.currentGeneration()) {
       return Promise.resolve(undefined);
     }
 
-    if (pendingSessionStartContextEntries().length === 0) {
+    const pendingContext = runtime.drainPendingSessionStartContext();
+    if (pendingContext.length === 0) {
       return Promise.resolve(undefined);
     }
 
-    const buffered = pendingSessionStartContextEntries()
-      .map((e) => e.context)
-      .join("\n\n");
-    clearPendingSessionStartContext();
+    const buffered = pendingContext.map((entry) => entry.context).join("\n\n");
     return Promise.resolve({ systemPrompt: `${event.systemPrompt}\n\n${buffered}` });
   };
 }
@@ -277,7 +245,7 @@ export function beforeAgentStartHandlerFor(
  * Empty buckets get an empty array so the keyset stays pinned to
  * BUCKET_A_EVENTS rather than growing and shrinking with the cache.
  */
-export function rebuildRoutingTables(): void {
+function rebuildRoutingTablesWith(routingState: EventRouterRoutingState): void {
   // Pre-seed every bucket so an empty cache still clears any stale entries
   // from a prior rebuild (e.g. uninstall / disable of the last
   // hooks-declaring plugin across both scopes).
@@ -288,15 +256,45 @@ export function rebuildRoutingTables(): void {
 
   // Collect every cache entry across both scopes in cross-plugin sort
   // order; declarationIndex is assigned during flatten.
-  const sortedEntries = collectAllCachedPlugins();
+  const sortedEntries = collectAllCachedPlugins(routingState);
 
   for (const cacheEntry of sortedEntries) {
     flattenPluginIntoBuckets(cacheEntry, buckets);
   }
 
   for (const [event, list] of buckets) {
-    setRoutingBucket(event, list);
+    routingState.setRoutingBucket(event, list);
   }
+}
+
+/** Route mutation operations bound to one extension-lifecycle runtime. */
+export interface HooksRouting {
+  readonly readAndCachePluginHooks: (opts: ReadAndCachePluginHooksOptions) => Promise<void>;
+  readonly removePluginConfigFromCache: (
+    scope: Scope,
+    marketplace: string,
+    pluginId: string,
+  ) => void;
+  readonly rebuildRoutingTables: () => void;
+}
+
+/**
+ * Bind install/uninstall route effects to an explicitly supplied runtime owner
+ * and the one required hooks read port.
+ */
+export function createHooksRouting(runtime: HooksRuntime, reader: HooksFileReader): HooksRouting {
+  const routingState = createRoutingStateOperations(runtime);
+  return {
+    async readAndCachePluginHooks(opts: ReadAndCachePluginHooksOptions): Promise<void> {
+      await readAndCachePluginHooksWith(reader, routingState, opts);
+    },
+    removePluginConfigFromCache(scope: Scope, marketplace: string, pluginId: string): void {
+      routingState.deleteParsedConfig(cacheKey(scope, marketplace, pluginId));
+    },
+    rebuildRoutingTables(): void {
+      rebuildRoutingTablesWith(routingState);
+    },
+  };
 }
 
 /**
@@ -314,8 +312,8 @@ export function rebuildRoutingTables(): void {
  * from the routing table -- reconcile-apply calls rebuild again after
  * the install path's addPluginConfigToCache lands.
  */
-function collectAllCachedPlugins(): CacheEntry[] {
-  const collected = Array.from(parsedConfigEntries().values());
+function collectAllCachedPlugins(routingState: EventRouterRoutingState): CacheEntry[] {
+  const collected = Array.from(routingState.parsedConfigEntries().values());
 
   collected.sort((a, b) =>
     compareByNameThenScope(
@@ -421,6 +419,71 @@ interface HydratedScope {
   readonly loc: ScopedLocations;
 }
 
+/** True while awaited work still belongs to the lifecycle that started it. */
+type GenerationGuard = () => boolean;
+
+/**
+ * The hooks bridge's read port: the one filesystem read both the routing and
+ * the hydration chain perform, behind one substitutable object.
+ *
+ * One member and no more (D-09-05). Widening it into a general filesystem
+ * facade would put verbs nothing asked about behind a seam; `mkdir` in
+ * `ensureSharedDataDir` keeps calling `fs` directly.
+ *
+ * The port is REQUIRED at both factories and has no `?` and no `DEFAULT_*`
+ * fallback, so a new call site cannot let the obligation go quiet -- the
+ * composition root supplies the real implementation and the compiler keeps
+ * asking everywhere else.
+ *
+ * NFR-10: the port replaces the syscall, never the `assertPathInside`
+ * containment chokepoint in front of it. Callers still own containment exactly
+ * as they did, and an injected reader buys no path authority.
+ */
+export interface HooksFileReader {
+  /**
+   * Read `hooksJsonPath` as utf-8. The path arrives already contained; an
+   * implementation performs no resolution, joining or normalization of its own.
+   */
+  readonly readHooksJson: (hooksJsonPath: string) => Promise<string>;
+}
+
+/**
+ * The hooks read port plus the one persisted-state operation hydration
+ * additionally needs. The `extends` composes that port's single member into
+ * this bundle; it does not claim a dependency bundle is a kind of file reader.
+ */
+export interface HooksHydrationDeps extends HooksFileReader {
+  readonly loadState: (extensionRoot: string) => Promise<ExtensionState>;
+}
+
+/** Hooks hydration operations bound to one required state reader. */
+export interface HooksHydration {
+  readonly hydrateProjectScopeForCwd: (cwd: string) => Promise<void>;
+  readonly registerHooksBridge: (
+    pi: ExtensionAPI,
+    opts: { ctx: ExtensionContext; cwd: string; executor?: HookExecutor },
+  ) => Promise<void>;
+}
+
+type RegistrationCallbackFactory<Args extends readonly unknown[], Result> = (
+  capturedGeneration: number,
+) => (...args: Args) => Result;
+
+function bindRegistrationCallback<Args extends readonly unknown[], Result>(
+  runtime: HooksRuntime,
+  capturedGeneration: number,
+  callbackForGeneration: RegistrationCallbackFactory<Args, Result>,
+): (...args: Args) => Result | undefined {
+  const callback = callbackForGeneration(capturedGeneration);
+  return (...args: Args): Result | undefined => {
+    if (runtime.currentGeneration() !== capturedGeneration) {
+      return undefined;
+    }
+
+    return callback(...args);
+  };
+}
+
 /**
  * D-59-02 factory-time hydrate. Walks both scopes (user via
  * `getAgentDir()` indirection through `locationsFor`, project via
@@ -436,10 +499,15 @@ interface HydratedScope {
  * to `(unavailable) {unsupported hooks}` on the next state read, so a
  * silent omission here is the correct factory-time disposition.
  */
-async function hydrateCacheFromDisk(opts: {
-  ctx: ExtensionContext;
-  cwd: string;
-}): Promise<readonly HydratedScope[]> {
+async function hydrateCacheFromDisk(
+  opts: {
+    ctx: ExtensionContext;
+    cwd: string;
+  },
+  reader: HooksHydrationDeps,
+  routingState: EventRouterRoutingState,
+  generationIsCurrent: GenerationGuard,
+): Promise<readonly HydratedScope[]> {
   const hydrated: HydratedScope[] = [];
 
   for (const scope of SCOPES) {
@@ -447,7 +515,7 @@ async function hydrateCacheFromDisk(opts: {
 
     let state: ExtensionState;
     try {
-      state = await loadState(loc.extensionRoot);
+      state = await reader.loadState(loc.extensionRoot);
     } catch (err) {
       // A corrupt state.json should not block the bridge from coming up;
       // route the detail through the OBS-01 seam and use the default state
@@ -462,7 +530,7 @@ async function hydrateCacheFromDisk(opts: {
     // projectRoot for project scope; user-scope hydrate paths use
     // homedir-rooted paths so opts.cwd is the right "current project"
     // anchor for path globs.
-    await hydrateScopeFromState(state, loc, opts.cwd);
+    await hydrateScopeFromState(state, loc, opts.cwd, reader, routingState, generationIsCurrent);
     hydrated.push({ state, loc });
   }
 
@@ -480,26 +548,24 @@ async function hydrateScopeFromState(
   state: ExtensionState,
   loc: ScopedLocations,
   cwd: string,
+  reader: HooksFileReader,
+  routingState: EventRouterRoutingState,
+  generationIsCurrent: GenerationGuard,
 ): Promise<void> {
-  for (const [mpName, mpRecord] of Object.entries(state.marketplaces)) {
-    if (mpRecord.scope !== loc.scope) {
-      continue;
-    }
-
-    for (const [pluginId, pluginRecord] of Object.entries(mpRecord.plugins)) {
+  const scopedMarketplaces = Object.entries(state.marketplaces).filter(
+    ([, marketplace]) => marketplace.scope === loc.scope,
+  );
+  for (const [mpName, mpRecord] of scopedMarketplaces) {
+    const hookPlugins = Object.entries(mpRecord.plugins).filter(([, plugin]) => {
       // ENBL-14 / D-100-05: a disabled plugin's hooks must not re-register.
       // ENBL-18 keeps `resources.hooks` populated on a disabled record, so a
       // file restored by any means would hydrate again -- this guard is what
       // stops it. Read through the single predicate so this site cannot
       // drift from ENBL-05.
-      if (isRecordedButDisabled(pluginRecord)) {
-        continue;
-      }
-
+      return !isRecordedButDisabled(plugin) && plugin.resources.hooks.length > 0;
+    });
+    for (const [pluginId, pluginRecord] of hookPlugins) {
       const hookSlugs = pluginRecord.resources.hooks;
-      if (hookSlugs.length === 0) {
-        continue;
-      }
 
       // D-57-03: `resources.hooks` carries the per-plugin hooks-container-dir
       // generatedName; the on-disk file is `<hooksDir>/<generatedName>/hooks.json`.
@@ -514,7 +580,13 @@ async function hydrateScopeFromState(
           hooksJsonPath,
           loc.hooksDir,
           cwd,
+          reader,
+          routingState,
+          generationIsCurrent,
         );
+        if (!generationIsCurrent()) {
+          return;
+        }
       }
     }
   }
@@ -528,19 +600,26 @@ async function tryHydrateOnePlugin(
   hooksJsonPath: string,
   hooksDir: string,
   cwd: string,
+  reader: HooksFileReader,
+  routingState: EventRouterRoutingState,
+  generationIsCurrent: GenerationGuard,
 ): Promise<void> {
   // Defense-in-depth (NFR-10): state.json is normally written only by this
   // extension, but the slug component (`pluginRecord.resources.hooks[i]`) is
   // state-supplied data. A corrupted state record (third-party tampering or
   // future schema mismatch) carrying a traversal slug like `"../../etc"` must
-  // not let `readFile` escape `loc.hooksDir`. Mirror the WRITE-site guard at
-  // this READ site.
+  // not let the hooks.json read escape `loc.hooksDir`. Mirror the WRITE-site
+  // guard at this READ site.
   try {
     await assertPathInside(hooksDir, hooksJsonPath, "hooks.json hydrate path");
   } catch (err) {
     hookDebugLog(
       `hydrate: containment violation for ${scope}/${marketplace}/${pluginId} at ${hooksJsonPath}: ${errorMessage(err)}`,
     );
+    return;
+  }
+
+  if (!generationIsCurrent()) {
     return;
   }
 
@@ -560,11 +639,15 @@ async function tryHydrateOnePlugin(
 
   let raw: string;
   try {
-    raw = await readFile(hooksJsonPath, "utf8");
+    raw = await reader.readHooksJson(hooksJsonPath);
   } catch (err) {
     hookDebugLog(
       `hydrate: read failed for ${scope}/${marketplace}/${pluginId} at ${hooksJsonPath}: ${errorMessage(err)}`,
     );
+    return;
+  }
+
+  if (!generationIsCurrent()) {
     return;
   }
 
@@ -577,7 +660,14 @@ async function tryHydrateOnePlugin(
     return;
   }
 
-  addPluginConfigToCache(scope, marketplace, pluginId, branded, result.value, result.ifPredicates);
+  routingState.setParsedConfig(cacheKey(scope, marketplace, pluginId), {
+    scope,
+    marketplace,
+    pluginId,
+    resolvedSource: branded,
+    config: result.value,
+    ifPredicates: result.ifPredicates,
+  });
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -600,7 +690,12 @@ async function tryHydrateOnePlugin(
  * DISP-02: cache mutations only; no pi.on, no epoch bump, no rebuild --
  * the caller's `applyReconcile` rebuilds the routing tables per scope.
  */
-export async function hydrateProjectScopeForCwd(cwd: string): Promise<void> {
+async function hydrateProjectScopeForCwdWith(
+  reader: HooksHydrationDeps,
+  cwd: string,
+  routingState: EventRouterRoutingState,
+  generationIsCurrent: GenerationGuard,
+): Promise<void> {
   // WR-01: factory-time hydrate ran with `cwd = homedir()` because
   // `resources_discover` had not fired yet, so any project-scope entries
   // in `parsedConfigCache` were hydrated against the wrong project root
@@ -619,9 +714,9 @@ export async function hydrateProjectScopeForCwd(cwd: string): Promise<void> {
   // contributor-hygiene change.  A casual reader of the original loop
   // would reach for `Array.from(...)` thinking they need a snapshot;
   // hoisting it here removes that cognitive friction.
-  for (const key of Array.from(parsedConfigEntries().keys())) {
+  for (const key of Array.from(routingState.parsedConfigEntries().keys())) {
     if (key.startsWith(projectKeyPrefix)) {
-      deleteParsedConfig(key);
+      routingState.deleteParsedConfig(key);
     }
   }
 
@@ -629,7 +724,7 @@ export async function hydrateProjectScopeForCwd(cwd: string): Promise<void> {
 
   let state: ExtensionState;
   try {
-    state = await loadState(loc.extensionRoot);
+    state = await reader.loadState(loc.extensionRoot);
   } catch (err) {
     hookDebugLog(
       `hydrate-project: loadState failed for cwd=${cwd} extensionRoot=${loc.extensionRoot}: ${errorMessage(err)}`,
@@ -637,7 +732,11 @@ export async function hydrateProjectScopeForCwd(cwd: string): Promise<void> {
     return;
   }
 
-  await hydrateScopeFromState(state, loc, cwd);
+  if (!generationIsCurrent()) {
+    return;
+  }
+
+  await hydrateScopeFromState(state, loc, cwd, reader, routingState, generationIsCurrent);
 }
 
 /**
@@ -664,19 +763,15 @@ async function ensureSharedDataDir(loc: ScopedLocations): Promise<void> {
  * D-59-03 / DISP-01 / DISP-02 / DISP-03 hooks-bridge factory.
  *
  * Step order is load-bearing:
- *   1. Bump liveEpoch and capture the new value; every closure registered
+ *   1. Advance the runtime generation and capture the new value; every closure registered
  *      below sees the captured value and short-circuits on mismatch
  *      against any future bump.
- *   1.5. SIGKILL prior-cycle in-memory async-rewake children (HOOK-06) AND
- *      reap persisted orphans per scope (D-62-05). Runs AFTER the liveEpoch
- *      bump so any stale exit handlers from prior children fall through the
- *      captured-epoch guard rather than firing against the freshly hydrated
- *      session.
- *   2. Hydrate the parsed-config cache from disk for both scopes (factory-
- *      time cold-start path).
- *   3. Rebuild routing tables for both scopes so the first Pi event fires
- *      against a populated table.
- *   4. Register exactly 11 pi.on call sites -- 7 Bucket-A dispatch surfaces
+ *   2. Reset pending-context and settle transitions for the new generation.
+ *   3. SIGKILL prior-cycle in-memory async-rewake children (HOOK-06).
+ *   4. Hydrate the parsed-config cache from disk, then rebuild routing tables.
+ *   5. Prepare each required SessionStart shared directory.
+ *   6. Reap persisted orphans per scope (D-62-05).
+ *   7. Register exactly 11 pi.on call sites -- 7 Bucket-A dispatch surfaces
  *      (DISP-01) plus `before_agent_start` (the drain point for the
  *      SessionStart `additionalContext` capture buffer) plus the two
  *      settle-time surfaces `agent_end` (caches the run's last-assistant
@@ -693,7 +788,7 @@ async function ensureSharedDataDir(loc: ScopedLocations): Promise<void> {
  *
  * `opts.executor` is the hook-execution injection point, forwarded verbatim
  * to every `compositeHandlerFor` / `toolResultCompositeHandler` /
- * `settleHandlerFor` closure registered in step 4. The sole production caller
+ * `settleHandlerFor` closure registered in step 7. The sole production caller
  * -- the extension factory in `index.ts` -- does NOT pass it, so production
  * always runs on the `dispatchHookExec` default; it exists so a test can
  * register the real bridge against a spy and assert on routing without
@@ -702,33 +797,42 @@ async function ensureSharedDataDir(loc: ScopedLocations): Promise<void> {
  * interface, where a `_setExecutorForTest` module seam would instead reach
  * inside `dispatch.ts`.
  */
-export async function registerHooksBridge(
+async function registerHooksBridgeWith(
+  runtime: HooksRuntime,
+  reader: HooksHydrationDeps,
   pi: ExtensionAPI,
   opts: { ctx: ExtensionContext; cwd: string; executor?: HookExecutor },
 ): Promise<void> {
-  const capturedEpoch = bumpEpoch();
+  const routingState = createRoutingStateOperations(runtime);
+  const capturedGeneration = runtime.advanceGeneration();
+  const generationIsCurrent = (): boolean => runtime.currentGeneration() === capturedGeneration;
+  function bind<Args extends readonly unknown[], Result>(
+    callbackForGeneration: RegistrationCallbackFactory<Args, Result>,
+  ): (...args: Args) => Result | undefined {
+    return bindRegistrationCallback(runtime, capturedGeneration, callbackForGeneration);
+  }
 
   // /reload re-enters this factory and must not leak a stale SessionStart
   // additionalContext entry from the prior session into the new buffer.
   // Clearing here makes the invariant explicit: each bridge load starts
   // with an empty pending buffer, which only `adaptObservationResultForEvent`
   // (via `appendPendingSessionStartContext`) can subsequently populate.
-  clearPendingSessionStartContext();
+  runtime.preparePendingContextForRegistration();
 
   // Same epoch hygiene for the settle dispatcher's cached last-assistant
   // message: clear it so a `/reload` cannot leak the prior session's message
   // into the new one's `stopReason` gate.
-  resetSettleState();
+  resetSettleState(runtime);
 
   // HOOK-06 / D-62-05: SIGKILL every in-memory async-rewake child from
   // the prior factory invocation BEFORE the persisted-orphan reap reads
   // the PID table. The in-memory walk covers same-process /reload
   // cycles; reapOrphans below covers cross-process crash recovery.
-  shutdownInMemoryChildren();
+  shutdownInMemoryChildren(runtime);
 
-  const hydrated = await hydrateCacheFromDisk(opts);
+  const hydrated = await hydrateCacheFromDisk(opts, reader, routingState, generationIsCurrent);
   for (const { loc } of hydrated) {
-    rebuildRoutingTables();
+    rebuildRoutingTablesWith(routingState);
     // D-60-06: ensure the per-session `_shared` data dir exists so a
     // SessionStart hook's `CLAUDE_ENV_FILE = <dataRoot>/_shared/...` path
     // can be written by the hook without the bridge having to do it from
@@ -736,12 +840,13 @@ export async function registerHooksBridge(
     // actually existing in the rebuilt routing table for this scope: an
     // unsolicited mkdir on a pristine scope would create
     // `<scopeRoot>/pi-claude-marketplace/...` and violate WR-05 (the "no
-    // files on a clean reconcile" invariant pinned by
-    // tests/edge/index-handler.test.ts). When no plugin declares
-    // SessionStart hooks the env-file path will never be set, so the
-    // dir's absence is harmless. Idempotent across `/reload` via mkdir {
-    // recursive }; failures route through hookDebugLog.
-    if (getRoutingBucket("SessionStart").length > 0) {
+    // files on a clean reconcile" invariant pinned by tests/index.test.ts,
+    // which asserts that a pristine workspace reconcile leaves
+    // both scope roots untouched and emits nothing). When no plugin
+    // declares SessionStart hooks the env-file path will never be set, so
+    // the dir's absence is harmless. Idempotent across `/reload` via mkdir
+    // { recursive }; failures route through hookDebugLog.
+    if (routingState.getRoutingBucket("SessionStart").length > 0) {
       await ensureSharedDataDir(loc);
     }
 
@@ -751,7 +856,7 @@ export async function registerHooksBridge(
     // NEVER kill strangers), SIGKILL surviving owned PIDs, unlink the
     // table. Awaited so the pi.on registrations below cannot race
     // against an in-flight kill probe.
-    await reapOrphans(loc);
+    await reapOrphans(runtime, loc);
   }
 
   // SessionStart dispatch with lazy project-scope hydrate. Pi fires
@@ -780,43 +885,120 @@ export async function registerHooksBridge(
   // The pi.on call count (DISP-01: 11) and locked event-name set (10) are
   // unchanged: this wraps the existing session_start handler, it does not
   // add a registration.
-  const sessionStartHandler = compositeHandlerFor("SessionStart", capturedEpoch, pi, opts.executor);
-  pi.on("session_start", async (event, ctx) => {
-    try {
-      await hydrateProjectScopeForCwd(ctx.cwd);
-      rebuildRoutingTables();
-      if (getRoutingBucket("SessionStart").some((e) => e.scope === "project")) {
-        await ensureSharedDataDir(locationsFor("project", ctx.cwd));
-      }
-    } catch (err) {
-      hookDebugLog(`session_start lazy project hydrate skipped: ${errorMessage(err)}`);
-    }
+  pi.on(
+    "session_start",
+    bind((generation) => {
+      const sessionStartHandler = compositeHandlerFor(
+        runtime,
+        "SessionStart",
+        generation,
+        pi,
+        opts.executor,
+      );
+      return async (event, ctx) => {
+        try {
+          await hydrateProjectScopeForCwdWith(reader, ctx.cwd, routingState, generationIsCurrent);
+          if (!generationIsCurrent()) {
+            return;
+          }
 
-    return sessionStartHandler(event, ctx);
-  });
-  pi.on("session_shutdown", compositeHandlerFor("SessionEnd", capturedEpoch, pi, opts.executor));
+          rebuildRoutingTablesWith(routingState);
+          if (routingState.getRoutingBucket("SessionStart").some((e) => e.scope === "project")) {
+            await ensureSharedDataDir(locationsFor("project", ctx.cwd));
+            if (!generationIsCurrent()) {
+              return;
+            }
+          }
+        } catch (err) {
+          hookDebugLog(`session_start lazy project hydrate skipped: ${errorMessage(err)}`);
+        }
+
+        await sessionStartHandler(event, ctx);
+
+        if (!generationIsCurrent()) {
+          return;
+        }
+      };
+    }),
+  );
+  pi.on(
+    "session_shutdown",
+    bind((generation) => compositeHandlerFor(runtime, "SessionEnd", generation, pi, opts.executor)),
+  );
   pi.on(
     "session_before_compact",
-    compositeHandlerFor("PreCompact", capturedEpoch, pi, opts.executor),
+    bind((generation) => compositeHandlerFor(runtime, "PreCompact", generation, pi, opts.executor)),
   );
-  pi.on("session_compact", compositeHandlerFor("PostCompact", capturedEpoch, pi, opts.executor));
-  pi.on("input", compositeHandlerFor("UserPromptSubmit", capturedEpoch, pi, opts.executor));
-  pi.on("tool_call", compositeHandlerFor("PreToolUse", capturedEpoch, pi, opts.executor));
-  pi.on("tool_result", toolResultCompositeHandler(capturedEpoch, pi, opts.executor));
+  pi.on(
+    "session_compact",
+    bind((generation) =>
+      compositeHandlerFor(runtime, "PostCompact", generation, pi, opts.executor),
+    ),
+  );
+  pi.on(
+    "input",
+    bind((generation) =>
+      compositeHandlerFor(runtime, "UserPromptSubmit", generation, pi, opts.executor),
+    ),
+  );
+  pi.on(
+    "tool_call",
+    bind((generation) => compositeHandlerFor(runtime, "PreToolUse", generation, pi, opts.executor)),
+  );
+  pi.on(
+    "tool_result",
+    bind((generation) => toolResultCompositeHandler(runtime, generation, pi, opts.executor)),
+  );
   // SessionStart additionalContext drain: every agent turn fires
   // before_agent_start; the handler returns early when the pending
   // buffer is empty so the no-context path is a single Map lookup per
   // turn.
-  pi.on("before_agent_start", beforeAgentStartHandlerFor(capturedEpoch));
+  pi.on(
+    "before_agent_start",
+    bind((generation) => createBeforeAgentStartHandler(runtime, generation)),
+  );
   // Settle-time turn-boundary dispatch: agent_end caches the run's
   // last-assistant message; agent_settled reads it and gates on stopReason
   // to run the Stop / StopFailure buckets (STOP-01).
-  pi.on("agent_end", agentEndCacheHandler(capturedEpoch));
-  pi.on("agent_settled", settleHandlerFor(capturedEpoch, pi, opts.executor));
+  pi.on(
+    "agent_end",
+    bind((generation) => agentEndCacheHandler(runtime, generation)),
+  );
+  pi.on(
+    "agent_settled",
+    bind((generation) => settleHandlerFor(runtime, generation, pi, opts.executor)),
+  );
   // STOP-07 loop-protection reset: a dedicated second `input` subscription
   // (distinct from the UserPromptSubmit dispatch handler above) clears
   // `stop_hook_active` and resets the consecutive-block counter + one-shot cap
   // latch on a genuine user input. Bridge-injected `sendMessage` re-entries do
   // NOT pass through `input`, so the flag never self-clears.
-  pi.on("input", inputResetHandlerFor(capturedEpoch));
+  pi.on(
+    "input",
+    bind((generation) => inputResetHandlerFor(runtime, generation)),
+  );
+}
+
+/** Binds every hooks hydration path to one runtime and one required state reader. */
+export function createHooksHydration(
+  runtime: HooksRuntime,
+  reader: HooksHydrationDeps,
+): HooksHydration {
+  const routingState = createRoutingStateOperations(runtime);
+  return {
+    async hydrateProjectScopeForCwd(cwd: string): Promise<void> {
+      const capturedGeneration = runtime.currentGeneration();
+      const generationIsCurrent = (): boolean => runtime.currentGeneration() === capturedGeneration;
+      await hydrateProjectScopeForCwdWith(reader, cwd, routingState, generationIsCurrent);
+      if (!generationIsCurrent()) {
+        return;
+      }
+    },
+    async registerHooksBridge(
+      pi: ExtensionAPI,
+      opts: { ctx: ExtensionContext; cwd: string; executor?: HookExecutor },
+    ): Promise<void> {
+      await registerHooksBridgeWith(runtime, reader, pi, opts);
+    },
+  };
 }

@@ -1,0 +1,1196 @@
+{
+  "version": 1,
+  "inventoryMode": "locked-corpus",
+  "plan": "01-20",
+  "files": [
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md",
+      "category": "adversarial",
+      "assignedPlan": "01-20",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-001",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-002",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-003",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-004",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-005",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-006",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-007",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-008",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-009",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-010",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-011",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-012",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-013",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-014",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-015",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-016",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-017",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-018",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-019",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-020",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-021",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-022",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-023",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-024",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-025",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-026"
+      ],
+      "reviewStatus": "complete",
+      "outcome": "live findings"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md",
+      "category": "adversarial",
+      "assignedPlan": "01-20",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-001",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-002",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-003",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-004",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-005",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-006",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-007",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-008",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-009",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-010",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-011",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-012",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-013",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-014",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-015",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-016",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-017",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-018",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-019",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-020",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-021",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-022",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-023",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-024",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-025",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-026"
+      ],
+      "reviewStatus": "complete",
+      "outcome": "live findings"
+    }
+  ],
+  "sourceClaims": [
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-001",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md",
+      "label": "EHR-001",
+      "findingId": "EHR-F01"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-002",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md",
+      "label": "EHR-002",
+      "findingId": "EHR-F02"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-003",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md",
+      "label": "EHR-003",
+      "findingId": "EHR-F03"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-004",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md",
+      "label": "EHR-004",
+      "findingId": "EHR-F04"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-005",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md",
+      "label": "EHR-005",
+      "findingId": "EHR-F05"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-006",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md",
+      "label": "EHR-006",
+      "findingId": "EHR-F06"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-007",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md",
+      "label": "EHR-007",
+      "findingId": "EHR-F07"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-008",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md",
+      "label": "EHR-008",
+      "findingId": "EHR-F08"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-009",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md",
+      "label": "EHR-009",
+      "findingId": "EHR-F09"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-010",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md",
+      "label": "EHR-010",
+      "findingId": "EHR-F10"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-011",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md",
+      "label": "EHR-011",
+      "findingId": "EHR-F11"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-012",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md",
+      "label": "EHR-012",
+      "findingId": "EHR-F12"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-013",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md",
+      "label": "EHR-013",
+      "findingId": "EHR-F13"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-014",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md",
+      "label": "EHR-014",
+      "findingId": "EHR-F14"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-015",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md",
+      "label": "EHR-015",
+      "findingId": "EHR-F15"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-016",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md",
+      "label": "EHR-016",
+      "findingId": "EHR-F16"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-017",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md",
+      "label": "EHR-017",
+      "findingId": "EHR-F17"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-018",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md",
+      "label": "EHR-018",
+      "findingId": "EHR-F18"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-019",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md",
+      "label": "EHR-019",
+      "findingId": "EHR-F19"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-020",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md",
+      "label": "EHR-020",
+      "findingId": "EHR-F20"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-021",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md",
+      "label": "EHR-021",
+      "findingId": "EHR-F15"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-022",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md",
+      "label": "EHR-022",
+      "findingId": "EHR-F01"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-023",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md",
+      "label": "EHR-023",
+      "findingId": "EHR-F13"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-024",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md",
+      "label": "EHR-024",
+      "findingId": "EHR-F19"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-025",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md",
+      "label": "EHR-025",
+      "findingId": "EHR-F20"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-026",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md",
+      "label": "EHR-026",
+      "findingId": "EHR-F20"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-001",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md",
+      "label": "ER-001",
+      "findingId": "ER-F01"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-002",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md",
+      "label": "ER-002",
+      "findingId": "ER-F02"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-003",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md",
+      "label": "ER-003",
+      "findingId": "ER-F03"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-004",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md",
+      "label": "ER-004",
+      "findingId": "ER-F04"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-005",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md",
+      "label": "ER-005",
+      "findingId": "ER-F05"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-006",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md",
+      "label": "ER-006",
+      "findingId": "ER-F06"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-007",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md",
+      "label": "ER-007",
+      "findingId": "ER-F07"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-008",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md",
+      "label": "ER-008",
+      "findingId": "ER-F08"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-009",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md",
+      "label": "ER-009",
+      "findingId": "ER-F09"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-010",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md",
+      "label": "ER-010",
+      "findingId": "ER-F10"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-011",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md",
+      "label": "ER-011",
+      "findingId": "ER-F11"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-012",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md",
+      "label": "ER-012",
+      "findingId": "ER-F12"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-013",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md",
+      "label": "ER-013",
+      "findingId": "ER-F13"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-014",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md",
+      "label": "ER-014",
+      "findingId": "ER-F14"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-015",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md",
+      "label": "ER-015",
+      "findingId": "ER-F15"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-016",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md",
+      "label": "ER-016",
+      "findingId": "ER-F16"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-017",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md",
+      "label": "ER-017",
+      "findingId": "ER-F17"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-018",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md",
+      "label": "ER-018",
+      "findingId": "ER-F18"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-019",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md",
+      "label": "ER-019",
+      "findingId": "ER-F19"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-020",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md",
+      "label": "ER-020",
+      "findingId": "ER-F20"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-021",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md",
+      "label": "ER-021",
+      "findingId": "ER-F01"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-022",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md",
+      "label": "ER-022",
+      "findingId": "ER-F03"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-023",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md",
+      "label": "ER-023",
+      "findingId": "ER-F04"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-024",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md",
+      "label": "ER-024",
+      "findingId": "ER-F18"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-025",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md",
+      "label": "ER-025",
+      "findingId": "ER-F19"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-026",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md",
+      "label": "ER-026",
+      "findingId": "ER-F20"
+    }
+  ],
+  "findings": [
+    {
+      "id": "EHR-F01",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-001",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-022"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/edge/handlers/tools.ts" }],
+      "testRefs": [{ "path": "tests/edge/handlers/tools.test.ts" }],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "node --test .tmp-revalidation-01-20-router/tests/edge/handlers/tools.test.ts after setting applyFilter narrowed false in repository-local isolated copy",
+        "exitCode": 0,
+        "observed": "All tools cases passed, proving filter forwarding to loadPluginListPayload remains undiscriminated."
+      },
+      "rationale": "The tool-side filter masks the missing orchestrator forwarding for current fixtures.",
+      "destination": "Add the disabled-installed unavailable-filter discriminator in Phase 2."
+    },
+    {
+      "id": "EHR-F02",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-002"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/edge/handlers/tools.ts" },
+        { "path": "extensions/pi-claude-marketplace/domain/source.ts" }
+      ],
+      "testRefs": [{ "path": "tests/edge/handlers/tools.test.ts" }],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "node --test .tmp-revalidation-01-20-router/tests/edge/handlers/tools.test.ts after replacing sourceLogical(source) with source.raw in repository-local isolated copy",
+        "exitCode": 0,
+        "observed": "All tools cases passed; current fixtures still make raw and logical equal."
+      },
+      "rationale": "No non-path source discriminates the documented logical-source rendering.",
+      "destination": "Add a github-source tool case in Phase 2."
+    },
+    {
+      "id": "EHR-F03",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-003"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/edge/handlers/tools.ts" }],
+      "testRefs": [{ "path": "tests/edge/handlers/tools.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph applyFilter and current test inspection",
+        "observed": "The schema still accepts optional booleans, applyFilter still distinguishes true from false, and no explicit-false row exists."
+      },
+      "rationale": "The reachable false-valued input class remains unowned.",
+      "destination": "Add an explicit-all-false passive-filter case in Phase 2."
+    },
+    {
+      "id": "EHR-F04",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-004"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/edge/handlers/tools.ts" }],
+      "testRefs": [{ "path": "tests/edge/handlers/tools.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph pluginScopeOrFallback and current fixture inspection",
+        "observed": "Non-scope-bearing rows still fall back to marketplace scope, while available and unavailable fixtures remain project-scoped."
+      },
+      "rationale": "A literal project fallback would still satisfy the current suite.",
+      "destination": "Add a user-scope available row in Phase 2."
+    },
+    {
+      "id": "EHR-F05",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-005"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "N/A", "reason": "The claim concerns duplicated test support." }],
+      "testRefs": [
+        { "path": "tests/edge/handlers/tools.test.ts" },
+        { "path": "tests/edge/handlers/marketplace-seed.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current helper body comparison",
+        "observed": "Both installed-record builders remain, including the broad seed return and double assertion."
+      },
+      "rationale": "The same record contract still has two independently maintained implementations.",
+      "destination": "Consolidate on a typed concern seed builder in Phase 2."
+    },
+    {
+      "id": "EHR-F06",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-006"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "N/A", "reason": "The claim concerns duplicated test boundary setup." }
+      ],
+      "testRefs": [
+        { "path": "tests/edge/handlers/tools.test.ts" },
+        { "path": "tests/edge/notification-boundary.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current helper comparison",
+        "observed": "createToolBoundary still repeats the ExtensionContext and cwd expectation stanza from createNotificationBoundary."
+      },
+      "rationale": "The duplication remains real but is test-support cleanup rather than a production defect.",
+      "destination": "Rebase tool registration support on the shared edge notification boundary."
+    },
+    {
+      "id": "EHR-F07",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-007"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/edge/handlers/shared.ts" }],
+      "testRefs": [{ "path": "tests/edge/handlers/shared.test.ts" }],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "node --test .tmp-revalidation-01-20-router/tests/edge/handlers/shared.test.ts after changing the default pass-through list to include --map-model in repository-local isolated copy",
+        "exitCode": 0,
+        "observed": "All shared-handler cases passed, so the empty default remains undiscriminated."
+      },
+      "rationale": "The existing unknown-flag case uses a flag outside every catalog.",
+      "destination": "Add a default-argument case with another verb's known flag."
+    },
+    {
+      "id": "EHR-F08",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-008"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/edge/flag-catalog.ts" }],
+      "testRefs": [{ "path": "tests/edge/handlers/shared.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current imports and test-data inspection",
+        "observed": "Two shared-handler cases still compute their pass-through input with production passThroughFlagNames."
+      },
+      "rationale": "The cases still derive the input under test from production catalog behavior.",
+      "destination": "Replace it with an independently stated literal and retain catalog ownership in its paired suite."
+    },
+    {
+      "id": "EHR-F09",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-009"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/edge/handlers/tools.ts" }],
+      "testRefs": [{ "path": "tests/edge/handlers/tools.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph export and call-path census",
+        "observed": "projectRowStatus and ToolPluginStatus remain exported for the test; the only production caller passes the narrower ToolPluginRow status union, leaving nine arms unreachable."
+      },
+      "rationale": "The widened test-only surface manufactures runtime cases production cannot call.",
+      "destination": "Narrow and privatize the projection, delete unreachable arms, and retain the reachable failed guard."
+    },
+    {
+      "id": "EHR-F10",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-010"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/edge/handlers/tools.ts" }],
+      "testRefs": [
+        { "path": "N/A", "reason": "The claim is a production reachability simplification." }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph writer-to-reader trace",
+        "observed": "PluginRow.reasons is present only when pluginReasons returns a defined non-empty array, so the render length guard remains unreachable."
+      },
+      "rationale": "The second guard is redundant under the sole producer invariant.",
+      "destination": "Simplify the guard during Phase 2 cleanup."
+    },
+    {
+      "id": "EHR-F11",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-011"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/edge/handlers/tools.ts" }],
+      "testRefs": [{ "path": "tests/edge/handlers/tools.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph loader call paths",
+        "observed": "Both tool registrations still statically import their orchestrator loaders, requiring filesystem-backed integration setup for payload cases."
+      },
+      "rationale": "The absent narrow seam continues to obscure loader-error and interaction contracts.",
+      "destination": "Inject narrow defaulted loader dependencies in Phase 2."
+    },
+    {
+      "id": "EHR-F12",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-012"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/edge/handlers/tools.ts" }],
+      "testRefs": [{ "path": "tests/edge/handlers/tools.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph error-path inspection",
+        "observed": "registerListMarketplacesTool still lets loadVisibleMarketplaces reject, and marketplaceExists still executes before the plugin tool try block; no focused case owns either path."
+      },
+      "rationale": "Two reachable state failures still bypass the tool's explicit isError surface.",
+      "destination": "Unify error handling and add exact cases in Phase 2."
+    },
+    {
+      "id": "EHR-F13",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-013",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-023"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "N/A", "reason": "The claims concern test-support type safety and organization." }
+      ],
+      "testRefs": [{ "path": "tests/edge/handlers/marketplace-seed.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current seed and importer inspection",
+        "observed": "The seed retains the uncommented double assertion, missing exported-interface summary, and cross-concern import footprint; saveState still runtime-validates before write."
+      },
+      "rationale": "Compile-time safety and placement issues remain, but the historical BLOCKER consequence is overstated because invalid records fail at the save funnel.",
+      "destination": "Repair typing in Phase 2; leave final support placement to the owning concern decision."
+    },
+    {
+      "id": "EHR-F14",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-014"
+      ],
+      "evidenceStatus": "superseded",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "The claim was a severity grade, superseded by current evidence."
+        }
+      ],
+      "testRefs": [{ "path": "tests/edge/handlers/tools.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current boundary contract inspection",
+        "observed": "Exact cwd read counts still distinguish short-circuit and full-load behavior; treating the mechanism itself as a mock-role violation remains overstated."
+      },
+      "rationale": "The useful absence/sequence contract supersedes the blanket historical warning.",
+      "destination": "No implementation route beyond avoiding uniform incidental counts."
+    },
+    {
+      "id": "EHR-F15",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-015",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-021"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/edge/handlers/tools.ts" }],
+      "testRefs": [
+        { "path": "N/A", "reason": "The claims concern production naming and documentation style." }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current source inspection",
+        "observed": "ToolFilterBuckets still uses i/a/u fields, several JSDoc summaries still open imperatively, and the ParsedSource assertion remains uncommented."
+      },
+      "rationale": "The mechanical readability issues remain unchanged.",
+      "destination": "Rename bucket fields and repair comments in the owning Phase 2 edit."
+    },
+    {
+      "id": "EHR-F16",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-016"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/edge/handlers/shared.ts" }],
+      "testRefs": [{ "path": "tests/edge/handlers/shared.test.ts" }],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "npm run test:coverage:direct -- extensions/pi-claude-marketplace/edge/handlers/shared.ts",
+        "exitCode": 1,
+        "observed": "Current direct coverage is still branches 14/15 and lines 83/85 with only the dense-array indexed guard uncovered."
+      },
+      "rationale": "The shortfall is current evidence; its closability is preserved separately by the edge-root corpus claim.",
+      "destination": "Carry to the D-116-01a operator decision rather than invent a test."
+    },
+    {
+      "id": "EHR-F17",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-017"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/edge/handlers/tools.ts" }],
+      "testRefs": [{ "path": "tests/edge/handlers/tools.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph pluginReasons trace",
+        "observed": "The optional-group present-empty reasons arm remains unresolved by source types and should be settled with the list orchestrator owner."
+      },
+      "rationale": "Current evidence establishes the question but not a safe terminal simplification.",
+      "destination": "Defer to the plugin-list orchestrator revalidation before changing it."
+    },
+    {
+      "id": "EHR-F18",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-018"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "N/A", "reason": "The claim concerns retained high-quality tests." }
+      ],
+      "testRefs": [
+        { "path": "tests/edge/handlers/shared.test.ts" },
+        { "path": "tests/edge/handlers/tools.test.ts" }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test tests/edge/handlers/shared.test.ts tests/edge/handlers/tools.test.ts",
+        "exitCode": 0,
+        "observed": "Both current suites passed; whole-value assertions, strict interaction boundaries, and hermetic temporary roots remain present."
+      },
+      "rationale": "The historical positive evidence remains valid except for separately recorded missing discriminators.",
+      "destination": "Retain these patterns as Phase 2 exemplars."
+    },
+    {
+      "id": "EHR-F19",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-019",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-024"
+      ],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/edge/handlers/tools.ts" },
+        { "path": "extensions/pi-claude-marketplace/edge/handlers/shared.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/edge/handlers/shared.test.ts" },
+        { "path": "tests/edge/handlers/tools.test.ts" }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test tests/edge/handlers/shared.test.ts tests/edge/handlers/tools.test.ts",
+        "exitCode": 0,
+        "observed": "Replacement proof: both suites now ran and passed on the live tree, superseding the report's explicit statement that no test command was run."
+      },
+      "rationale": "The historical limitation is positively replaced by a current rerun without weakening live findings.",
+      "destination": "No implementation route."
+    },
+    {
+      "id": "EHR-F20",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-020",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-025",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-root.md#EHR-026"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/edge/handlers/tools.ts" }],
+      "testRefs": [
+        { "path": "tests/edge/notification-boundary.ts" },
+        { "path": "tests/edge/handlers/tools.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph export/call-path census plus current import inspection",
+        "observed": "The notification boundary remains a working zero-cast full-context pattern, tools.ts remains a direct-loader member, and the test-only exported status projection remains invisible to ordinary dead-code analysis."
+      },
+      "rationale": "The cross-cutting corrections and reference patterns remain applicable to later consolidation.",
+      "destination": "Preserve for Phase 2 sizing and meta-ledger reconciliation."
+    },
+    {
+      "id": "ER-F01",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-001",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-021"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/edge/register.ts" }],
+      "testRefs": [{ "path": "tests/edge/register.test.ts" }],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "node --test .tmp-revalidation-01-20-router/tests/edge/register.test.ts after swapping install and uninstall factories in repository-local isolated copy",
+        "exitCode": 0,
+        "observed": "The complete register suite passed, confirming the 19 key-to-factory bindings remain behaviorally unowned."
+      },
+      "rationale": "Same-typed straight-line wiring is not guaranteed by record key completeness or coverage.",
+      "destination": "Add data-driven behavioral binding cases in Phase 2."
+    },
+    {
+      "id": "ER-F02",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-002"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/edge/register.ts" }],
+      "testRefs": [{ "path": "tests/edge/register.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source and test call path",
+        "observed": "process.cwd remains inside the completion callback while both comments still claim registration-time capture; the paired case expects invocation-time cwd."
+      },
+      "rationale": "The documentation still contradicts executable behavior.",
+      "destination": "Correct both comments in Phase 2."
+    },
+    {
+      "id": "ER-F03",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-003",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-022"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/edge/router.ts" }],
+      "testRefs": [{ "path": "tests/edge/router.test.ts" }],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "node --test .tmp-revalidation-01-20-router/tests/edge/router.test.ts after replacing install return with void plus return in repository-local isolated copy",
+        "exitCode": 0,
+        "observed": "All router cases passed, proving handler promise propagation remains undiscriminated."
+      },
+      "rationale": "Synchronous interaction verification cannot observe fire-and-forget rejection behavior.",
+      "destination": "Add top-level and marketplace rejection-identity cases in Phase 2."
+    },
+    {
+      "id": "ER-F04",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-004",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-023"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/edge/router.ts" }],
+      "testRefs": [{ "path": "tests/edge/router.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph peelToken and current cases",
+        "observed": "peelToken still specifies whitespace and uses trimStart plus a whitespace regex, while current separator cases remain space-only."
+      },
+      "rationale": "Tabs remain a reachable documented input class with no discriminator.",
+      "destination": "Add leading and separating tab rows in Phase 2."
+    },
+    {
+      "id": "ER-F05",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-005"],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/edge/args.ts" }],
+      "testRefs": [{ "path": "tests/edge/args.test.ts" }],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "npm run test:coverage:direct -- extensions/pi-claude-marketplace/edge/args.ts",
+        "exitCode": 1,
+        "observed": "Live direct coverage reproduces branches 28/29, lines 86/89, with lines 35-37 uncovered; CodeGraph confirms a for-of rewrite can remove the dense-array index guard without an assertion."
+      },
+      "rationale": "The accepted compiler-forced premise is false for this iterable shape, but changing the ratified D-116-01a disposition is an operator choice.",
+      "destination": "Reopen the ledger decision and authorize a behavior-preserving loop rewrite if selected."
+    },
+    {
+      "id": "ER-F06",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-006"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "N/A", "reason": "The claim concerns paired test documentation." }],
+      "testRefs": [
+        { "path": "tests/edge/args.test.ts" },
+        { "path": "tests/edge/args-schema.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current test header inspection",
+        "observed": "Both suites still lack the owner headers used by neighboring edge suites, and args.test.ts still does not record its accepted shortfall."
+      },
+      "rationale": "The local documentation drift remains.",
+      "destination": "Add concise truthful ownership headers after the D-116-01a disposition is settled."
+    },
+    {
+      "id": "ER-F07",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-007"],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/edge/args.ts" },
+        { "path": "extensions/pi-claude-marketplace/shared/errors.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/edge/args.test.ts" },
+        { "path": "tests/edge/args-schema.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph error construction and catch path",
+        "observed": "Both parseArgs diagnostics remain bare Error values and args-schema still exposes their message through errorMessage."
+      },
+      "rationale": "The typed-error convention mismatch remains but does not weaken current exact behavior checks.",
+      "destination": "Batch with shared error taxonomy work rather than create local classes ad hoc."
+    },
+    {
+      "id": "ER-F08",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-008"],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "N/A", "reason": "The claim concerns callback test-double policy." }
+      ],
+      "testRefs": [
+        { "path": "tests/edge/args-schema.test.ts" },
+        { "path": "tests/edge/register.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current callback recorder census",
+        "observed": "All twelve args-schema cases and the relevant register cases still use hand-rolled callback recorders; no strong-mock function-mock precedent exists locally."
+      },
+      "rationale": "The concern is consistent and cross-file, but replacing a public-result recorder with a mock is a policy choice rather than an automatic correction.",
+      "destination": "Decide once for both suites; preserve whole emitted-message assertions either way."
+    },
+    {
+      "id": "ER-F09",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-009"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/edge/args-schema.ts" }],
+      "testRefs": [{ "path": "tests/edge/args-schema.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph ParsedCommandArgs and paired suite inspection",
+        "observed": "The optional mapped-type effect remains unasserted; runtime cases cannot detect changing optional string-or-undefined to string."
+      },
+      "rationale": "The exported compile-time contract still lacks positive and negative type ownership.",
+      "destination": "Add satisfies and ts-expect-error evidence in Phase 2."
+    },
+    {
+      "id": "ER-F10",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-010"],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/edge/flag-catalog.ts" }],
+      "testRefs": [{ "path": "tests/edge/flag-catalog.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph catalog data and exports",
+        "observed": "Every entry still sets parse and complete true; the private catalog provides no input that reaches either false filter arm although direct coverage reports complete."
+      },
+      "rationale": "The two-bit distinction remains speculative and unexercisable through public behavior.",
+      "destination": "Choose between collapsing visibility or documenting a deliberate exception."
+    },
+    {
+      "id": "ER-F11",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-011"],
+      "evidenceStatus": "superseded",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "N/A", "reason": "The claim concerns historical test-support placement." }
+      ],
+      "testRefs": [{ "path": "tests/edge/notification-boundary.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current placement plus retained commit rationale",
+        "observed": "The edge placement remains the deliberate concern-local decision; moving it to a generic shared/helpers directory would violate the current unit-test rule."
+      },
+      "rationale": "The first-pass placement finding remains refuted by explicit project history and current rules.",
+      "destination": "No implementation route."
+    },
+    {
+      "id": "ER-F12",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-012"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/edge/args.ts" }],
+      "testRefs": [
+        { "path": "N/A", "reason": "The claim concerns production API type consistency." }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current exported type comparison",
+        "observed": "ParsedArgs properties remain mutable while neighboring edge data contracts remain readonly."
+      },
+      "rationale": "The local type-consistency warning is unchanged.",
+      "destination": "Make ParsedArgs fields readonly in Phase 2."
+    },
+    {
+      "id": "ER-F13",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-013"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/edge/args.ts" }],
+      "testRefs": [{ "path": "N/A", "reason": "The claim concerns exported API documentation." }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current export inspection",
+        "observed": "ParsedArgs and parseArgs still lack attached JSDoc summaries."
+      },
+      "rationale": "The documentation gap remains localized and mechanical.",
+      "destination": "Document both retained exports in Phase 2."
+    },
+    {
+      "id": "ER-F14",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-014"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/edge/args-schema.ts" }],
+      "testRefs": [{ "path": "N/A", "reason": "The claim concerns documentation attachment." }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source",
+        "observed": "The parseCommandArgs example remains attached to PositionalSpec and the function still lacks its own summary."
+      },
+      "rationale": "The comment still documents the wrong declaration.",
+      "destination": "Move and split the JSDoc in Phase 2."
+    },
+    {
+      "id": "ER-F15",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-015"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/edge/args-schema.ts" }],
+      "testRefs": [
+        { "path": "N/A", "reason": "The claim concerns an implementation assertion rationale." }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source",
+        "observed": "The mapped-type return assertion remains uncommented."
+      },
+      "rationale": "The accumulator-to-mapped-type invariant is non-obvious and still undocumented.",
+      "destination": "Add the concise invariant comment in Phase 2."
+    },
+    {
+      "id": "ER-F16",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-016"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/edge/flag-catalog.ts" }],
+      "testRefs": [{ "path": "tests/edge/flag-catalog.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph return-type inspection",
+        "observed": "completionFlagEntries still returns an anonymous mutable shape whose optional description is weaker than the required source field."
+      },
+      "rationale": "The public type still understates every realizable result.",
+      "destination": "Introduce a readonly named return contract with required description."
+    },
+    {
+      "id": "ER-F17",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-017"],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/edge/types.ts" },
+        { "path": "extensions/pi-claude-marketplace/edge/router.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/edge/types.test.ts" },
+        { "path": "tests/edge/router.test.ts" },
+        { "path": "tests/edge/flag-catalog.test.ts" }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test tests/edge/flag-catalog.test.ts tests/edge/router.test.ts tests/edge/types.test.ts",
+        "exitCode": 0,
+        "observed": "The current suites passed and retain whole-value, strict interaction, aliasing, prototype-key, and type-negative evidence described by the corpus."
+      },
+      "rationale": "The positive evidence remains current, with distinct gaps routed separately.",
+      "destination": "Retain as reference patterns."
+    },
+    {
+      "id": "ER-F18",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-018",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-024"
+      ],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/edge/args.ts" },
+        { "path": "extensions/pi-claude-marketplace/edge/register.ts" },
+        { "path": "extensions/pi-claude-marketplace/edge/router.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/edge/args.test.ts" },
+        { "path": "tests/edge/args-schema.test.ts" },
+        { "path": "tests/edge/flag-catalog.test.ts" },
+        { "path": "tests/edge/register.test.ts" },
+        { "path": "tests/edge/router.test.ts" },
+        { "path": "tests/edge/types.test.ts" }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test tests/edge/args.test.ts tests/edge/args-schema.test.ts tests/edge/flag-catalog.test.ts tests/edge/register.test.ts tests/edge/router.test.ts tests/edge/types.test.ts",
+        "exitCode": 0,
+        "observed": "Replacement proof: all six current edge-root suites passed, superseding the corpus statement that no command was run and removing its coverage-artifact freshness caveat for behavioral baseline evidence."
+      },
+      "rationale": "The historical limitation is positively replaced by a live rerun.",
+      "destination": "No implementation route."
+    },
+    {
+      "id": "ER-F19",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-019",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-025"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/edge/args.ts" },
+        { "path": "extensions/pi-claude-marketplace/edge/handlers/shared.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/edge/args.test.ts" },
+        { "path": "tests/edge/handlers/shared.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph dense-array loops plus live direct coverage",
+        "observed": "Both D-116-01a guards remain uncovered and both index-loop shapes can be replaced by typed iteration without non-null assertions; direct coverage reproduced both shortfalls."
+      },
+      "rationale": "The corpus correction to two ledger premises remains factually current.",
+      "destination": "Present both together for operator disposition."
+    },
+    {
+      "id": "ER-F20",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-020",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-root.md#ER-026"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/edge/register.ts" },
+        { "path": "extensions/pi-claude-marketplace/edge/flag-catalog.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/edge/notification-boundary.ts" },
+        { "path": "tests/edge/router.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph wiring and export census",
+        "observed": "Same-typed wiring remains invisible to coverage, the notification boundary placement remains deliberate, and router.test.ts remains the strongest local silence-proof reference."
+      },
+      "rationale": "The cross-cutting meta corrections remain useful for consolidation and later plans.",
+      "destination": "Preserve for meta-ledger reconciliation and Phase 2 reference selection."
+    }
+  ],
+  "decisions": [],
+  "scopeChanges": []
+}

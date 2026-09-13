@@ -165,7 +165,7 @@ async function withHermeticHome<T>(
   }
 }
 
-test("bare list emits the exact empty notification without creating scope data", async () => {
+test("bare list emits the exact zero-row notification without creating scope data", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
     const boundary = notificationBoundary("empty list", true);
@@ -180,7 +180,9 @@ test("bare list emits the exact empty notification without creating scope data",
     await listMarketplaces(options);
 
     // assert
-    assert.deepStrictEqual(boundary.notifications, [{ message: "(no marketplaces)" }]);
+    assert.deepStrictEqual(boundary.notifications, [
+      { message: "(no marketplaces)\n\nMarketplace list: 0 successes" },
+    ]);
     assert.deepStrictEqual(await snapshotWorkspace(home, cwd), before);
     verify(boundary.ctx);
     verify(boundary.pi);
@@ -188,7 +190,7 @@ test("bare list emits the exact empty notification without creating scope data",
   });
 });
 
-test("explicit project list renders one path source as an exact statusless row", async () => {
+test("explicit project list renders the exact one-row path-source notification", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
     const locations = locationsFor("project", cwd);
@@ -216,7 +218,9 @@ test("explicit project list renders one path source as an exact statusless row",
     await listMarketplaces(options);
 
     // assert
-    assert.deepStrictEqual(boundary.notifications, [{ message: "● local [project]" }]);
+    assert.deepStrictEqual(boundary.notifications, [
+      { message: "● local [project]\n\nMarketplace list: 1 success" },
+    ]);
     assert.deepStrictEqual(await snapshotWorkspace(home, cwd), before);
     verify(boundary.ctx);
     verify(boundary.pi);
@@ -252,7 +256,9 @@ test("explicit project list renders one GitHub source without a source suffix", 
     await listMarketplaces(options);
 
     // assert
-    assert.deepStrictEqual(boundary.notifications, [{ message: "● official [project]" }]);
+    assert.deepStrictEqual(boundary.notifications, [
+      { message: "● official [project]\n\nMarketplace list: 1 success" },
+    ]);
     assert.deepStrictEqual(await snapshotWorkspace(home, cwd), before);
     verify(boundary.ctx);
     verify(boundary.pi);
@@ -296,7 +302,9 @@ test("local config overrides base config and renders the exact autoupdate marker
     await listMarketplaces(options);
 
     // assert
-    assert.deepStrictEqual(boundary.notifications, [{ message: "● auto [project] <autoupdate>" }]);
+    assert.deepStrictEqual(boundary.notifications, [
+      { message: "● auto [project] <autoupdate>\n\nMarketplace list: 1 success" },
+    ]);
     assert.deepStrictEqual(await snapshotWorkspace(home, cwd), before);
     verify(boundary.ctx);
     verify(boundary.pi);
@@ -333,7 +341,9 @@ test("lastUpdatedAt remains stored but renders no timestamp or status marker", a
     await listMarketplaces(options);
 
     // assert
-    assert.deepStrictEqual(boundary.notifications, [{ message: "● dated [project]" }]);
+    assert.deepStrictEqual(boundary.notifications, [
+      { message: "● dated [project]\n\nMarketplace list: 1 success" },
+    ]);
     assert.deepStrictEqual(await snapshotWorkspace(home, cwd), before);
     verify(boundary.ctx);
     verify(boundary.pi);
@@ -369,7 +379,9 @@ test("explicit user list renders only the user scope", async () => {
     await listMarketplaces(options);
 
     // assert
-    assert.deepStrictEqual(boundary.notifications, [{ message: "● user-only [user]" }]);
+    assert.deepStrictEqual(boundary.notifications, [
+      { message: "● user-only [user]\n\nMarketplace list: 1 success" },
+    ]);
     assert.deepStrictEqual(await snapshotWorkspace(home, cwd), before);
     verify(boundary.ctx);
     verify(boundary.pi);
@@ -377,7 +389,7 @@ test("explicit user list renders only the user scope", async () => {
   });
 });
 
-test("bare list preserves insertion order for every accepted source kind within project then user", async () => {
+test("bare list emits the exact many-row notification in project-then-user insertion order", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
     const projectLocations = locationsFor("project", cwd);
@@ -440,7 +452,7 @@ test("bare list preserves insertion order for every accepted source kind within 
         source: githubSource("https://github.com/acme/delta-user"),
       },
     ]);
-    const boundary = notificationBoundary("ordered list", true);
+    const boundary = notificationBoundary("exact many-row list", true);
     const options = {
       ctx: boundary.ctx,
       cwd,
@@ -455,7 +467,7 @@ test("bare list preserves insertion order for every accepted source kind within 
     assert.deepStrictEqual(boundary.notifications, [
       {
         message:
-          "● zulu-path [project]\n\n● alpha-github [project]\n\n● mike-url [project]\n\n● charlie-unknown [project]\n\n● echo-user [user]\n\n● delta-user [user]",
+          "● zulu-path [project]\n\n● alpha-github [project]\n\n● mike-url [project]\n\n● charlie-unknown [project]\n\n● echo-user [user]\n\n● delta-user [user]\n\nMarketplace list: 6 successes",
       },
     ]);
     assert.deepStrictEqual(await snapshotWorkspace(home, cwd), before);
@@ -502,7 +514,9 @@ test("invalid local config is ignored while the valid base autoupdate value rend
 
     // assert
     assert.deepStrictEqual(boundary.notifications, [
-      { message: "● fallback [project] <autoupdate>" },
+      {
+        message: "● fallback [project] <autoupdate>\n\nMarketplace list: 1 success",
+      },
     ]);
     assert.deepStrictEqual(await snapshotWorkspace(home, cwd), before);
     verify(boundary.ctx);

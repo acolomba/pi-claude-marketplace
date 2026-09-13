@@ -19,10 +19,7 @@ import {
   spawnAndRegister,
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts";
 import { dispatchHookExec } from "../../extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts";
-import {
-  bumpEpoch,
-  resetRoutingState,
-} from "../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
+import { createHooksRuntime } from "../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import { asAbsolutePluginRoot } from "../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 
@@ -279,9 +276,9 @@ async function waitForPidTable(
 
 test("keeps PreToolUse hook environments equal across sync and async lanes except the marker", async () => {
   // arrange
+  const runtime = createHooksRuntime();
   const root = await mkdtemp(path.join(tmpdir(), "async-architecture-pretool-parity-"));
-  resetRoutingState();
-  shutdownInMemoryChildren();
+  shutdownInMemoryChildren(runtime);
   const locations = locationsFor("project", root);
   const context = createContext(root, "session-pretool-parity");
   const pi = createPi();
@@ -291,10 +288,16 @@ test("keeps PreToolUse hook environments equal across sync and async lanes excep
 
   try {
     // act
-    await dispatchHookExec(syncEntry, { toolName: "bash", input: {} }, context.context, pi.pi, {
-      spawnImpl: processes.spawnImpl,
-    });
+    await dispatchHookExec(
+      syncEntry,
+      { toolName: "bash", input: {} },
+      context.context,
+      pi.pi,
+      runtime,
+      { spawnImpl: processes.spawnImpl },
+    );
     await spawnAndRegister(
+      runtime,
       asyncEntry,
       { toolName: "bash", input: {} },
       context.context,
@@ -309,14 +312,20 @@ test("keeps PreToolUse hook environments equal across sync and async lanes excep
     const asyncEnvironment = processes.calls[1]?.options.env ?? {};
 
     // assert
-    assert.strictEqual(processes.calls.length, 2);
+    // D-07-03: the parity claims below read `processes.calls`, and an empty
+    // harness would satisfy every one of them vacuously. Pin the spawn count
+    // first so the gate cannot report parity over two environments it never saw.
+    assert.strictEqual(
+      processes.calls.length,
+      2,
+      "D-07-03: expected one sync and one async spawn; lane parity over an unspawned lane proves nothing",
+    );
     assertLaneParity(syncEnvironment, asyncEnvironment);
     assert.strictEqual(asyncEnvironment[MARKER_ENV], "dispatch-pretool-parity");
     assert.strictEqual(Object.hasOwn(syncEnvironment, "CLAUDE_ENV_FILE"), false);
     assert.strictEqual(Object.hasOwn(asyncEnvironment, "CLAUDE_ENV_FILE"), false);
   } finally {
-    shutdownInMemoryChildren();
-    resetRoutingState();
+    shutdownInMemoryChildren(runtime);
     destroyChildren(processes.children);
     await rm(root, { recursive: true, force: true, maxRetries: 3 });
   }
@@ -324,9 +333,9 @@ test("keeps PreToolUse hook environments equal across sync and async lanes excep
 
 test("keeps SessionStart env-file identity equal across sync and async lanes", async () => {
   // arrange
+  const runtime = createHooksRuntime();
   const root = await mkdtemp(path.join(tmpdir(), "async-architecture-session-parity-"));
-  resetRoutingState();
-  shutdownInMemoryChildren();
+  shutdownInMemoryChildren(runtime);
   const locations = locationsFor("project", root);
   const context = createContext(root, "session-start-parity");
   const pi = createPi();
@@ -336,18 +345,32 @@ test("keeps SessionStart env-file identity equal across sync and async lanes", a
 
   try {
     // act
-    await dispatchHookExec(syncEntry, { reason: "startup" }, context.context, pi.pi, {
+    await dispatchHookExec(syncEntry, { reason: "startup" }, context.context, pi.pi, runtime, {
       spawnImpl: processes.spawnImpl,
     });
-    await spawnAndRegister(asyncEntry, { reason: "startup" }, context.context, pi.pi, locations, {
-      spawnImpl: processes.spawnImpl,
-      dispatchId: () => "dispatch-session-parity",
-    });
+    await spawnAndRegister(
+      runtime,
+      asyncEntry,
+      { reason: "startup" },
+      context.context,
+      pi.pi,
+      locations,
+      {
+        spawnImpl: processes.spawnImpl,
+        dispatchId: () => "dispatch-session-parity",
+      },
+    );
     const syncEnvironment = processes.calls[0]?.options.env ?? {};
     const asyncEnvironment = processes.calls[1]?.options.env ?? {};
 
     // assert
-    assert.strictEqual(processes.calls.length, 2);
+    // D-07-03: same visitation obligation as the PreToolUse lane -- an empty
+    // spawn harness would green every parity assertion below.
+    assert.strictEqual(
+      processes.calls.length,
+      2,
+      "D-07-03: expected one sync and one async spawn; lane parity over an unspawned lane proves nothing",
+    );
     assertLaneParity(syncEnvironment, asyncEnvironment);
     assert.strictEqual(asyncEnvironment[MARKER_ENV], "dispatch-session-parity");
     assert.strictEqual(
@@ -363,8 +386,7 @@ test("keeps SessionStart env-file identity equal across sync and async lanes", a
     );
     assert.strictEqual(asyncEnvironment.CLAUDE_ENV_FILE, syncEnvironment.CLAUDE_ENV_FILE);
   } finally {
-    shutdownInMemoryChildren();
-    resetRoutingState();
+    shutdownInMemoryChildren(runtime);
     destroyChildren(processes.children);
     await rm(root, { recursive: true, force: true, maxRetries: 3 });
   }
@@ -372,9 +394,9 @@ test("keeps SessionStart env-file identity equal across sync and async lanes", a
 
 test("prevents a pre-reload async child from affecting the advanced routing epoch", async () => {
   // arrange
+  const runtime = createHooksRuntime();
   const root = await mkdtemp(path.join(tmpdir(), "async-architecture-reload-"));
-  resetRoutingState();
-  shutdownInMemoryChildren();
+  shutdownInMemoryChildren(runtime);
   const locations = locationsFor("project", root);
   const context = createContext(root, "session-reload");
   const pi = createPi();
@@ -383,6 +405,7 @@ test("prevents a pre-reload async child from affecting the advanced routing epoc
 
   try {
     await spawnAndRegister(
+      runtime,
       entry,
       { toolName: "bash", input: {} },
       context.context,
@@ -395,21 +418,29 @@ test("prevents a pre-reload async child from affecting the advanced routing epoc
     );
     const child = processes.children[0];
     child?.stderr.write("stale body");
-    bumpEpoch();
+    runtime.advanceGeneration();
 
     // act
     child?.emitExit(2);
     child?.emitClose();
     await waitForPidTable(locations, []);
-    shutdownInMemoryChildren();
+    shutdownInMemoryChildren(runtime);
 
     // assert
+    // D-07-03: "the pre-reload child raised nothing" is trivially true when no
+    // child was ever spawned. Pin the spawn before concluding the advanced
+    // epoch suppressed it.
+    assert.strictEqual(
+      processes.calls.length,
+      1,
+      "D-07-03: no pre-reload child was spawned, so the epoch-isolation claim below holds over nothing",
+    );
+    assert.notStrictEqual(child, undefined, "D-07-03: the spawn harness recorded no child process");
     assert.deepStrictEqual(pi.messages, []);
     assert.deepStrictEqual(context.notifications, []);
     assert.deepStrictEqual(child?.signals, []);
   } finally {
-    shutdownInMemoryChildren();
-    resetRoutingState();
+    shutdownInMemoryChildren(runtime);
     destroyChildren(processes.children);
     await rm(root, { recursive: true, force: true, maxRetries: 3 });
   }

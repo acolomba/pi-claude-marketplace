@@ -41,44 +41,56 @@ pre-commit run --all-files
 - `npm run test:corresponding:negative` -- the negative control for the gate above. It plants each violation and asserts the gate refuses it.
 - `npm run test:coverage:direct:negative` -- the negative control for the direct-coverage gate below.
 
-### Coverage sweeps (manual)
+### Coverage sweeps
 
-Two more scripts measure direct coverage by running each owner test on its own and reading the LCOV it writes. Both are slow -- one focused test run per pair, around nine minutes for the whole tree -- so neither is in `npm run check` and neither has a CI job.
+Three scripts measure direct coverage by running each owner test on its own and reading the LCOV it writes. They are slow -- one focused test run per pair, around eight minutes for the whole tree -- so none of them is in `npm run check`.
 
 ```bash
-npm run test:coverage:direct        # the pairs your branch changed
-npm run test:coverage:direct:all    # every pair in the tree
+npm run test:coverage:direct           # the pairs your branch changed
+npm run test:coverage:direct:commit    # the pairs this commit touches
+npm run test:coverage:direct:all       # every pair in the tree
 ```
 
-Run the changed-pairs sweep before opening a pull request that adds or edits a production module. Run the whole-tree sweep at a milestone boundary. It writes one JSON row per pair to `coverage/all-pairs.jsonl` as each pair lands, so a run that stops early still leaves a readable partial result, and a run that reaches the end reads that file back before reporting -- a row lost on the way fails it. `coverage/` is gitignored.
+All three run for you: the pre-commit hook runs the commit-scoped one, and the CI job runs the branch-scoped one on a pull request and the whole-tree one on everything else. Run the whole-tree sweep by hand too, at a milestone boundary, when you want the answer before you push. It writes one JSON row per pair to `coverage/all-pairs.jsonl` as each pair lands, so a run that stops early still leaves a readable partial result, and a run that reaches the end reads that file back before reporting -- a row lost on the way fails it. `coverage/` is gitignored.
 
-Both stop at the first pair that falls short of complete direct coverage. Seven modules fall short today, each by one branch the compiler forces and no input can reach. Their readings, under `extensions/pi-claude-marketplace/`:
+All three measure every pair they select and compare every reading they took against a committed pin, `scripts/test-coverage-direct.pin.json`. So does the fourth form, `npm run test:coverage:direct -- <path>`, which measures one pair and compares it against that pair's pin row -- it is the arm you reach for while working on a module, so it is the one that most needs to tell you whether a shortfall is yours or recorded. None of them stops at the first shortfall; a shortfall is recorded, the run says so by name, and the comparison after the last pair is what refuses. Each pinned module was examined twice: once for a behavior-preserving rewrite that would remove the uncovered arm, once for a real test that would reach it. Neither worked. Every row carries the gate's own reading string, the finding ids that authorize it, and one recorded reason per uncovered site. Under `extensions/pi-claude-marketplace/`:
 
-| module                                | reading                     |
-| ------------------------------------- | --------------------------- |
-| `edge/args.ts`                        | branches 28/29, lines 86/89 |
-| `edge/completions/data.ts`            | branches 109/110            |
-| `edge/completions/provider.ts`        | branches 79/80              |
-| `edge/handlers/marketplace/update.ts` | branches 11/12              |
-| `edge/handlers/plugin/import.ts`      | branches 11/12              |
-| `edge/handlers/plugin/pending.ts`     | branches 9/10               |
-| `edge/handlers/shared.ts`             | branches 14/15, lines 83/85 |
+| module                                    | reading                           |
+| ----------------------------------------- | --------------------------------- |
+| `bridges/commands/discover.ts`            | branches 55/57, lines 412/414     |
+| `orchestrators/plugin/install-outcome.ts` | branches 109/111, lines 1034/1040 |
 
-Stopping on one of those, with that exact reading, is the expected outcome rather than a regression. Each is pinned by identity in its own pair, and each is filed in the project's broken-windows ledger with the reason the arm is unreachable. A stop on any other module -- or on one of these reporting different numbers -- is a real failure.
+Measuring one of those, with that exact reading, is a PASS: the run reports it and exits 0. Any other module falling short -- or one of these reporting different numbers, in either direction -- fails the run.
 
-The gate is deliberately not taught this list: an exception list inside the gate is a coverage pragma by another name, and the seven are already pinned where they live. That is also why neither script has a CI job, since a job that is red every run reports nothing.
+The pin is not an allow-list, and nothing in it is forgiven. An allow-list excuses the entries it names, silently and forever. This set fails on an addition, on a removal, and on a swap: a module that falls short and is not pinned fails, a pinned module whose reading moved -- better or worse -- fails, and a pinned module that now reads complete fails as a stale row. A change to the tree's coverage surface therefore has to be written down in the same commit that causes it.
+
+One gate implementation serves three scopes at one strictness. Two of them are change sets reached through an explicitly named base; the third is the whole enumeration.
+
+The local pre-commit hook `npm-coverage-direct` runs the gate commit-scoped, so it asks about the pairs the commit touches. The CI job `direct coverage (Node 24)` runs it branch-scoped against `origin/main...HEAD` on a pull request -- the authoritative change set for one. That job checks out at full depth, asserts that `origin/main` resolves before it measures anything, and then asserts the base the gate printed, because at a shallow checkout `origin/main` does not exist and the gate would diff one commit while reporting a resolved base. The gate prints the base it selected on every run, so which scope you got is never a guess.
+
+The same job runs the whole-tree sweep on every other event it fires on -- a push to `main`, and the `v*`-tag call `publish.yml` makes. On both of those `origin/main...HEAD` is empty, because `origin/main` is `HEAD`, so a changed-pair run would select nothing, measure only the pinned pairs and exit 0 having said nothing about the commit that triggered it. The whole tree is the honest change set for a commit already on `main`, and the strongest one for a release. `package` depends on the job, so a shortfall blocks the release manifest check the way every other gate does -- and on the release path it is the whole tree that has to hold, not a diff against itself.
+
+Local hooks only fire once you have run `pre-commit install` in your checkout. You can also run this one on its own, without making a commit:
+
+```bash
+pre-commit run npm-coverage-direct --all-files
+```
+
+The three scopes cost very different amounts, and that is why the hook does not take the branch-scoped base. Measured on a long-lived branch, the branch-scoped selection reached 147 pairs and about six and a half minutes, and it grows as the branch does. The commit-scoped selection costs one focused test run per pair the commit changed, plus the pinned pairs the gate measures on every run. The whole-tree sweep takes around eight minutes. When the hook stops a commit you have to land anyway, `SKIP=npm-coverage-direct` is the pre-commit-native escape, and it is written down here rather than left to be discovered: a gate that is expensive and undocumented is a gate people learn to route around. `--no-verify` stays forbidden.
+
+A complete reading is reachability evidence only. It says every arm ran under the owner test. It says nothing about whether that test asserted anything worth asserting.
 
 ### The whole-tree report (manual, not a gate)
 
-Because both sweeps stop at the first shortfall, neither can say what the rest of the tree reads. This does:
+Every sweep can say what the tree reads, but each one files a verdict on it and dies on a pin mismatch before you can read the rest. This one files no verdict, so it survives anything the pin would refuse:
 
 ```bash
 npm run test:coverage:direct:report   # every pair, recorded rather than enforced
 ```
 
-It runs the same one focused test per pair, records the gate's verdict for each, and writes one JSON row per pair to `coverage/all-pairs-report.ndjson`. It is a reporting tool, not a gate: it does not stop at a shortfall, and its exit code is not a coverage verdict -- a zero says the report was written, nothing more. Only the two commands above decide whether coverage is complete, and both still refuse a shortfall. It is as slow as they are, so it too has no CI job.
+It runs the same one focused test per pair, records the gate's verdict for each, and writes one JSON row per pair to `coverage/all-pairs-report.ndjson`. It is a reporting tool, not a gate: it does not stop at a shortfall, and its exit code is not a coverage verdict -- a zero says the report was written, nothing more. Only the three sweep commands above decide whether coverage is complete, and every one of them still refuses a reading that does not match the pin. It is as slow as they are, and it stays manual: it files no verdict, so a job would have nothing to gate on.
 
-Each row carries a `verdict` of `complete`, `type-only` or `accepted-shortfall`. The report does not read the broken-windows ledger, so `accepted-shortfall` says only that the gate refused the row. Read the refused rows against the table above: seven rows carrying those readings is the expected result today, and an eighth row -- or one of the seven reading differently -- is a real failure. Anything else that goes wrong, such as a focused test that failed, fails the report rather than filing a coverage verdict for a pair it never measured.
+Each row carries a `verdict` of `complete`, `type-only` or `accepted-shortfall`. The report does not read the pin, so `accepted-shortfall` says only that the gate refused the row. Read the refused rows against the pin above: those rows, carrying those readings, are the expected result. Any other refused row -- or one of these reading differently -- is a real failure. Anything else that goes wrong, such as a focused test that failed, fails the report rather than filing a coverage verdict for a pair it never measured.
 
 ## Vendored skills
 

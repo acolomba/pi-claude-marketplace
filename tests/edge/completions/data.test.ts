@@ -26,23 +26,16 @@
 // the classification it is checking. Likewise every expected candidate list is
 // hand-authored, compared unsorted, and compared whole.
 //
-// D-116-01a: this pair lands one branch short of complete. The right-hand side
-// of the nullish fallback at data.ts:188 -- the `?? ""` in
-// `allTokens.at(-1) ?? ""` -- cannot be entered at runtime.
-// `splitCompletionInput` has already returned for an empty input and for any
-// input whose last character is whitespace, so every input reaching line 188
-// ends in a non-whitespace character and the filtered token list is non-empty.
-// The fallback exists only because the standard library types
-// `Array.prototype.at()` as `T | undefined`; removing it needs a non-null
-// assertion or a type assertion, both barred throughout `extensions/`.
+// This pair reads COMPLETE: `branches 109/109, functions 36/36, lines 631/631`.
+// It used to carry one uncovered branch, the right-hand side of a
+// `allTokens.at(-1) ?? ""` fallback. That expression is gone from the source --
+// `data.ts:188` now reads `const [current] = allTokens.slice(-1) as [string]`,
+// which has no second arm for V8 to report. The header paragraph that described
+// the fallback, and the brute force that measured it unreachable, both outlived
+// the code they were about.
 //
-// The claim is measured, not inspected: a brute force over all 65,536 BMP code
-// points in five input shapes found zero inputs that reach the fallback, and a
-// plant that replaced its value left all 66 cases green. The shortfall is
-// pinned by its identity -- functions and lines complete, and exactly ONE
-// uncovered branch -- never by an absolute branch pair, because the branch
-// denominator tracks suite strength rather than the source. No coverage
-// exception is added and no production file is changed.
+// Which pairs fall short is recorded in one place, `scripts/test-coverage-direct.pin.json`,
+// and a pair absent from it reads complete. This one is absent from it.
 //
 // No exhaustiveness claim rides on this pair: `edge/completions/data.ts`
 // contains no `switch` and no closed-union dispatch, so a deleted-arm plant has
@@ -65,7 +58,7 @@ import {
   getPluginToMarketplacesMap,
   splitCompletionInput,
 } from "../../../extensions/pi-claude-marketplace/edge/completions/data.ts";
-import { resetCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 
 import type {
   LocationsResolver,
@@ -85,6 +78,7 @@ interface ResolverSeed {
 }
 
 interface SeededResolver {
+  readonly completionCache: ReturnType<typeof createCompletionCache>;
   readonly resolver: LocationsResolver;
 }
 
@@ -93,12 +87,11 @@ interface SeededResolver {
  * test context, which restores it after the case.
  *
  * This is a HERMETICITY DEVICE, not an offline proof, and no case asserts a
- * call count against it. `data.ts`'s whole import closure -- `edge/router.ts`,
- * `edge/flag-catalog.ts`, `platform/pi-api.ts`, `shared/atomic-json.ts`,
- * `shared/completion-cache.ts`, `shared/concerns/{hooks,soft-dep}.ts`,
- * `shared/errors.ts`, `shared/notify.ts`, `shared/types.ts` -- contains no HTTP
- * client of any kind, so a count asserted here could not rise whatever this
- * module did. What the replacement does buy is that a dial-out this surface
+ * call count against it. `data.ts`'s repository-local import closure --
+ * `shared/atomic-json.ts`, `shared/completion-cache.ts`, `shared/errors.ts`,
+ * and `shared/types.ts` -- contains no HTTP client of any kind, so a count
+ * asserted here could not rise whatever this module did. What the replacement
+ * does buy is that a dial-out this surface
  * acquires LATER fails the case where it happens instead of passing silently:
  * measured, a live `https.request` call planted in
  * `getMarketplaceNamesAcrossScopes` leaves the whole suite green while the door
@@ -117,9 +110,9 @@ function installNetworkTrap(t: TestContext): void {
 }
 
 /**
- * One temporary cache root per case. Removal and the process-global
- * completion-cache reset are registered before the module under test runs, so an
- * early throw still unwinds them.
+ * One temporary cache root and completion-cache owner per case. Removal is
+ * registered before the module under test runs, so an early throw still
+ * unwinds the filesystem fixture.
  *
  * No environment is substituted here. Neither `data.ts`, `shared/completion-
  * cache.ts` nor anything else in their import closure reads `process.env`,
@@ -133,10 +126,9 @@ async function seedResolver(
   label: string,
   seed: ResolverSeed,
 ): Promise<SeededResolver> {
-  resetCompletionCache();
+  const completionCache = createCompletionCache();
   const cacheRoot = await mkdtemp(path.join(tmpdir(), `completions-data-${label}-cache-`));
   t.after(async () => {
-    resetCompletionCache();
     await rm(cacheRoot, { recursive: true, force: true });
   });
   installNetworkTrap(t);
@@ -172,7 +164,7 @@ async function seedResolver(
     },
   } satisfies LocationsResolver;
 
-  return { resolver };
+  return { completionCache, resolver };
 }
 
 /** Every derived status the plugin-index cache can carry, in one marketplace. */
@@ -464,15 +456,41 @@ describe("getMarketplaceNamesAcrossScopes", () => {
 });
 
 describe("getPluginToMarketplacesMap", () => {
+  test("reads plugin rows through the required completion cache", async (t) => {
+    // arrange
+    const { resolver } = await seedResolver(t, "map-required-cache", {
+      marketplaces: { user: { official: {} } },
+      manifests: { user: { official: [{ name: "resolver-row", status: "installed" }] } },
+    });
+    const cache = createCompletionCache();
+    const cachePath = await resolver.pluginCachePath("user", "official");
+    await cache.getPluginIndex(cachePath, "user", "official", () =>
+      Promise.resolve([{ name: "cache-row", status: "installed" }]),
+    );
+    await rm(cachePath);
+
+    // act
+    const candidatesByPlugin = await getPluginToMarketplacesMap("uninstall", resolver, cache, {
+      targetScope: "user",
+    });
+
+    // assert
+    assert.deepStrictEqual(Array.from(candidatesByPlugin), [["cache-row", ["official"]]]);
+  });
+
   test("install offers the not-yet-installed and not-yet-fetched rows of the default user scope", async (t) => {
     // arrange
-    const { resolver } = await seedResolver(t, "map-install", {
+    const { completionCache, resolver } = await seedResolver(t, "map-install", {
       marketplaces: { user: { official: {} } },
       manifests: { user: { official: everyStatusManifest() } },
     });
 
     // act
-    const candidatesByPlugin = await getPluginToMarketplacesMap("install", resolver);
+    const candidatesByPlugin = await getPluginToMarketplacesMap(
+      "install",
+      resolver,
+      completionCache,
+    );
 
     // assert
     assert.deepStrictEqual(Array.from(candidatesByPlugin), [
@@ -484,13 +502,18 @@ describe("getPluginToMarketplacesMap", () => {
   test("install with the partial option trades the not-fetched row for the degraded one", async (t) => {
     // arrange
     const options = { partial: true } satisfies PluginMapOptions;
-    const { resolver } = await seedResolver(t, "map-install-partial", {
+    const { completionCache, resolver } = await seedResolver(t, "map-install-partial", {
       marketplaces: { user: { official: {} } },
       manifests: { user: { official: everyStatusManifest() } },
     });
 
     // act
-    const candidatesByPlugin = await getPluginToMarketplacesMap("install", resolver, options);
+    const candidatesByPlugin = await getPluginToMarketplacesMap(
+      "install",
+      resolver,
+      completionCache,
+      options,
+    );
 
     // assert
     assert.deepStrictEqual(Array.from(candidatesByPlugin), [
@@ -501,7 +524,7 @@ describe("getPluginToMarketplacesMap", () => {
 
   test("install excludes a plugin already recorded in the target scope (CMP-7)", async (t) => {
     // arrange
-    const { resolver } = await seedResolver(t, "map-install-recorded", {
+    const { completionCache, resolver } = await seedResolver(t, "map-install-recorded", {
       marketplaces: { user: { official: { plugins: { held: {} } } } },
       manifests: {
         user: {
@@ -514,7 +537,11 @@ describe("getPluginToMarketplacesMap", () => {
     });
 
     // act
-    const candidatesByPlugin = await getPluginToMarketplacesMap("install", resolver);
+    const candidatesByPlugin = await getPluginToMarketplacesMap(
+      "install",
+      resolver,
+      completionCache,
+    );
 
     // assert
     assert.deepStrictEqual(Array.from(candidatesByPlugin), [["fresh", ["official"]]]);
@@ -523,7 +550,7 @@ describe("getPluginToMarketplacesMap", () => {
   test("a project install reads project marketplaces first and falls back to unshadowed user ones (CMP-8)", async (t) => {
     // arrange
     const options = { targetScope: "project" } satisfies PluginMapOptions;
-    const { resolver } = await seedResolver(t, "map-install-project", {
+    const { completionCache, resolver } = await seedResolver(t, "map-install-project", {
       marketplaces: {
         user: { official: {}, "user-only-mp": {} },
         project: { official: {} },
@@ -538,7 +565,12 @@ describe("getPluginToMarketplacesMap", () => {
     });
 
     // act
-    const candidatesByPlugin = await getPluginToMarketplacesMap("install", resolver, options);
+    const candidatesByPlugin = await getPluginToMarketplacesMap(
+      "install",
+      resolver,
+      completionCache,
+      options,
+    );
 
     // assert
     assert.deepStrictEqual(Array.from(candidatesByPlugin), [
@@ -550,13 +582,13 @@ describe("getPluginToMarketplacesMap", () => {
   for (const mode of INSTALLED_INVENTORY_MODES) {
     test(`${mode} offers the whole installed inventory and nothing outside it`, async (t) => {
       // arrange
-      const { resolver } = await seedResolver(t, `map-inventory-${mode}`, {
+      const { completionCache, resolver } = await seedResolver(t, `map-inventory-${mode}`, {
         marketplaces: { user: { official: {} } },
         manifests: { user: { official: everyStatusManifest() } },
       });
 
       // act
-      const candidatesByPlugin = await getPluginToMarketplacesMap(mode, resolver);
+      const candidatesByPlugin = await getPluginToMarketplacesMap(mode, resolver, completionCache);
 
       // assert
       assert.deepStrictEqual(Array.from(candidatesByPlugin), [
@@ -572,13 +604,13 @@ describe("getPluginToMarketplacesMap", () => {
   for (const mode of INSTALLED_INVENTORY_MODES) {
     test(`the partial option narrows ${mode} to the rows with a newer candidate`, async (t) => {
       // arrange
-      const { resolver } = await seedResolver(t, `map-inventory-partial-${mode}`, {
+      const { completionCache, resolver } = await seedResolver(t, `map-inventory-partial-${mode}`, {
         marketplaces: { user: { official: {} } },
         manifests: { user: { official: everyStatusManifest() } },
       });
 
       // act
-      const candidatesByPlugin = await getPluginToMarketplacesMap(mode, resolver, {
+      const candidatesByPlugin = await getPluginToMarketplacesMap(mode, resolver, completionCache, {
         partial: true,
       });
 
@@ -593,7 +625,7 @@ describe("getPluginToMarketplacesMap", () => {
 
   test("an installed-inventory mode without an explicit scope reads project before user", async (t) => {
     // arrange
-    const { resolver } = await seedResolver(t, "map-inventory-both", {
+    const { completionCache, resolver } = await seedResolver(t, "map-inventory-both", {
       marketplaces: { user: { official: {} }, project: { internal: {} } },
       manifests: {
         user: { official: [{ name: "user-side", status: "installed" }] },
@@ -602,7 +634,11 @@ describe("getPluginToMarketplacesMap", () => {
     });
 
     // act
-    const candidatesByPlugin = await getPluginToMarketplacesMap("uninstall", resolver);
+    const candidatesByPlugin = await getPluginToMarketplacesMap(
+      "uninstall",
+      resolver,
+      completionCache,
+    );
 
     // assert
     assert.deepStrictEqual(Array.from(candidatesByPlugin), [
@@ -613,7 +649,7 @@ describe("getPluginToMarketplacesMap", () => {
 
   test("an explicit target scope narrows an installed-inventory mode to that scope alone", async (t) => {
     // arrange
-    const { resolver } = await seedResolver(t, "map-inventory-scoped", {
+    const { completionCache, resolver } = await seedResolver(t, "map-inventory-scoped", {
       marketplaces: { user: { official: {} }, project: { internal: {} } },
       manifests: {
         user: { official: [{ name: "user-side", status: "installed" }] },
@@ -622,9 +658,14 @@ describe("getPluginToMarketplacesMap", () => {
     });
 
     // act
-    const candidatesByPlugin = await getPluginToMarketplacesMap("uninstall", resolver, {
-      targetScope: "user",
-    });
+    const candidatesByPlugin = await getPluginToMarketplacesMap(
+      "uninstall",
+      resolver,
+      completionCache,
+      {
+        targetScope: "user",
+      },
+    );
 
     // assert
     assert.deepStrictEqual(Array.from(candidatesByPlugin), [["user-side", ["official"]]]);
@@ -632,14 +673,16 @@ describe("getPluginToMarketplacesMap", () => {
 
   test("fetch offers the warm and warmable rows and ignores the partial option", async (t) => {
     // arrange
-    const { resolver } = await seedResolver(t, "map-fetch", {
+    const { completionCache, resolver } = await seedResolver(t, "map-fetch", {
       marketplaces: { user: { official: {} } },
       manifests: { user: { official: everyStatusManifest() } },
     });
 
     // act
-    const withoutPartial = await getPluginToMarketplacesMap("fetch", resolver);
-    const withPartial = await getPluginToMarketplacesMap("fetch", resolver, { partial: true });
+    const withoutPartial = await getPluginToMarketplacesMap("fetch", resolver, completionCache);
+    const withPartial = await getPluginToMarketplacesMap("fetch", resolver, completionCache, {
+      partial: true,
+    });
 
     // assert
     assert.deepStrictEqual(Array.from(withoutPartial), [
@@ -653,7 +696,7 @@ describe("getPluginToMarketplacesMap", () => {
 
   test("an explicit target scope narrows fetch to that scope alone", async (t) => {
     // arrange
-    const { resolver } = await seedResolver(t, "map-fetch-scoped", {
+    const { completionCache, resolver } = await seedResolver(t, "map-fetch-scoped", {
       marketplaces: { user: { official: {} }, project: { internal: {} } },
       manifests: {
         user: { official: [{ name: "user-side", status: "remote" }] },
@@ -662,9 +705,14 @@ describe("getPluginToMarketplacesMap", () => {
     });
 
     // act
-    const candidatesByPlugin = await getPluginToMarketplacesMap("fetch", resolver, {
-      targetScope: "project",
-    });
+    const candidatesByPlugin = await getPluginToMarketplacesMap(
+      "fetch",
+      resolver,
+      completionCache,
+      {
+        targetScope: "project",
+      },
+    );
 
     // assert
     assert.deepStrictEqual(Array.from(candidatesByPlugin), [["project-side", ["internal"]]]);
@@ -672,7 +720,7 @@ describe("getPluginToMarketplacesMap", () => {
 
   test("info spans both scopes with no status filter and ignores the target scope", async (t) => {
     // arrange
-    const { resolver } = await seedResolver(t, "map-info", {
+    const { completionCache, resolver } = await seedResolver(t, "map-info", {
       marketplaces: { user: { official: {} }, project: { internal: {} } },
       manifests: {
         user: {
@@ -686,7 +734,7 @@ describe("getPluginToMarketplacesMap", () => {
     });
 
     // act
-    const candidatesByPlugin = await getPluginToMarketplacesMap("info", resolver, {
+    const candidatesByPlugin = await getPluginToMarketplacesMap("info", resolver, completionCache, {
       targetScope: "project",
       partial: true,
     });
@@ -701,7 +749,7 @@ describe("getPluginToMarketplacesMap", () => {
 
   test("a plugin carried by two marketplaces records both in visit order", async (t) => {
     // arrange
-    const { resolver } = await seedResolver(t, "map-two-marketplaces", {
+    const { completionCache, resolver } = await seedResolver(t, "map-two-marketplaces", {
       marketplaces: { user: { "mp-a": {}, "mp-b": {} } },
       manifests: {
         user: {
@@ -712,7 +760,11 @@ describe("getPluginToMarketplacesMap", () => {
     });
 
     // act
-    const candidatesByPlugin = await getPluginToMarketplacesMap("uninstall", resolver);
+    const candidatesByPlugin = await getPluginToMarketplacesMap(
+      "uninstall",
+      resolver,
+      completionCache,
+    );
 
     // assert
     assert.deepStrictEqual(Array.from(candidatesByPlugin), [["shared", ["mp-a", "mp-b"]]]);
@@ -720,7 +772,7 @@ describe("getPluginToMarketplacesMap", () => {
 
   test("a marketplace named in both scopes is recorded once for the same plugin", async (t) => {
     // arrange
-    const { resolver } = await seedResolver(t, "map-same-name-both-scopes", {
+    const { completionCache, resolver } = await seedResolver(t, "map-same-name-both-scopes", {
       marketplaces: { user: { official: {} }, project: { official: {} } },
       manifests: {
         user: { official: [{ name: "held", status: "installed" }] },
@@ -729,7 +781,11 @@ describe("getPluginToMarketplacesMap", () => {
     });
 
     // act
-    const candidatesByPlugin = await getPluginToMarketplacesMap("uninstall", resolver);
+    const candidatesByPlugin = await getPluginToMarketplacesMap(
+      "uninstall",
+      resolver,
+      completionCache,
+    );
 
     // assert
     assert.deepStrictEqual(Array.from(candidatesByPlugin), [["held", ["official"]]]);
@@ -737,13 +793,17 @@ describe("getPluginToMarketplacesMap", () => {
 
   test("a marketplace whose manifest cannot be loaded contributes no candidates (TC-8)", async (t) => {
     // arrange
-    const { resolver } = await seedResolver(t, "map-manifest-soft-fail", {
+    const { completionCache, resolver } = await seedResolver(t, "map-manifest-soft-fail", {
       marketplaces: { user: { official: {}, "unreadable-mp": {} } },
       manifests: { user: { official: [{ name: "held", status: "installed" }] } },
     });
 
     // act
-    const candidatesByPlugin = await getPluginToMarketplacesMap("uninstall", resolver);
+    const candidatesByPlugin = await getPluginToMarketplacesMap(
+      "uninstall",
+      resolver,
+      completionCache,
+    );
 
     // assert
     assert.deepStrictEqual(Array.from(candidatesByPlugin), [["held", ["official"]]]);
@@ -752,7 +812,7 @@ describe("getPluginToMarketplacesMap", () => {
   test("a state read failure during the candidate sweep propagates (TC-9)", async (t) => {
     // arrange
     const stateFailure = new Error("state is unreadable for project");
-    const { resolver } = await seedResolver(t, "map-state-fail", {
+    const { completionCache, resolver } = await seedResolver(t, "map-state-fail", {
       marketplaces: { user: { official: {} } },
       manifests: { user: { official: [{ name: "held", status: "installed" }] } },
       stateFailures: { project: stateFailure },
@@ -760,7 +820,7 @@ describe("getPluginToMarketplacesMap", () => {
 
     // act & assert
     await assert.rejects(
-      () => getPluginToMarketplacesMap("uninstall", resolver),
+      () => getPluginToMarketplacesMap("uninstall", resolver, completionCache),
       (error: unknown) => {
         assert.strictEqual(error, stateFailure);
         return true;
@@ -785,12 +845,19 @@ describe("getPluginRefCompletions", () => {
 
   test("the plugin half offers a fully qualified value for a plugin unique to one marketplace", async (t) => {
     // arrange
-    const { resolver } = await seedResolver(t, "ref-unique", twoMarketplaceSeed());
+    const { completionCache, resolver } = await seedResolver(t, "ref-unique", twoMarketplaceSeed());
 
     // act
-    const items = await getPluginRefCompletions("update", "so", "update", resolver, {
-      allowMarketplaceOnly: true,
-    });
+    const items = await getPluginRefCompletions(
+      "update",
+      "so",
+      "update",
+      resolver,
+      completionCache,
+      {
+        allowMarketplaceOnly: true,
+      },
+    );
 
     // assert
     assert.deepStrictEqual(items, [{ label: "solo@mp-a", value: "update solo@mp-a " }]);
@@ -798,12 +865,19 @@ describe("getPluginRefCompletions", () => {
 
   test("the plugin half stops at the separator for a plugin carried by two marketplaces", async (t) => {
     // arrange
-    const { resolver } = await seedResolver(t, "ref-multi", twoMarketplaceSeed());
+    const { completionCache, resolver } = await seedResolver(t, "ref-multi", twoMarketplaceSeed());
 
     // act
-    const items = await getPluginRefCompletions("update", "sh", "update", resolver, {
-      allowMarketplaceOnly: true,
-    });
+    const items = await getPluginRefCompletions(
+      "update",
+      "sh",
+      "update",
+      resolver,
+      completionCache,
+      {
+        allowMarketplaceOnly: true,
+      },
+    );
 
     // assert
     assert.deepStrictEqual(items, [{ label: "shared@", value: "update shared@" }]);
@@ -811,10 +885,10 @@ describe("getPluginRefCompletions", () => {
 
   test("the plugin half keeps every candidate in map order when the partial token is empty", async (t) => {
     // arrange
-    const { resolver } = await seedResolver(t, "ref-all", twoMarketplaceSeed());
+    const { completionCache, resolver } = await seedResolver(t, "ref-all", twoMarketplaceSeed());
 
     // act
-    const items = await getPluginRefCompletions("update", "", "", resolver, {
+    const items = await getPluginRefCompletions("update", "", "", resolver, completionCache, {
       allowMarketplaceOnly: true,
     });
 
@@ -827,15 +901,29 @@ describe("getPluginRefCompletions", () => {
 
   test("the plugin half matches the partial token case-sensitively, with no case folding", async (t) => {
     // arrange
-    const { resolver } = await seedResolver(t, "ref-case", twoMarketplaceSeed());
+    const { completionCache, resolver } = await seedResolver(t, "ref-case", twoMarketplaceSeed());
 
     // act
-    const upperCaseMatches = await getPluginRefCompletions("update", "SO", "update", resolver, {
-      allowMarketplaceOnly: true,
-    });
-    const exactCaseMatches = await getPluginRefCompletions("update", "so", "update", resolver, {
-      allowMarketplaceOnly: true,
-    });
+    const upperCaseMatches = await getPluginRefCompletions(
+      "update",
+      "SO",
+      "update",
+      resolver,
+      completionCache,
+      {
+        allowMarketplaceOnly: true,
+      },
+    );
+    const exactCaseMatches = await getPluginRefCompletions(
+      "update",
+      "so",
+      "update",
+      resolver,
+      completionCache,
+      {
+        allowMarketplaceOnly: true,
+      },
+    );
 
     // assert
     assert.deepStrictEqual(upperCaseMatches, []);
@@ -844,12 +932,23 @@ describe("getPluginRefCompletions", () => {
 
   test("the marketplace half offers only the marketplaces that carry the named plugin", async (t) => {
     // arrange
-    const { resolver } = await seedResolver(t, "ref-mp-half", twoMarketplaceSeed());
+    const { completionCache, resolver } = await seedResolver(
+      t,
+      "ref-mp-half",
+      twoMarketplaceSeed(),
+    );
 
     // act
-    const items = await getPluginRefCompletions("update", "shared@mp-", "update", resolver, {
-      allowMarketplaceOnly: true,
-    });
+    const items = await getPluginRefCompletions(
+      "update",
+      "shared@mp-",
+      "update",
+      resolver,
+      completionCache,
+      {
+        allowMarketplaceOnly: true,
+      },
+    );
 
     // assert
     assert.deepStrictEqual(items, [
@@ -860,12 +959,23 @@ describe("getPluginRefCompletions", () => {
 
   test("the marketplace half narrows to the typed marketplace prefix", async (t) => {
     // arrange
-    const { resolver } = await seedResolver(t, "ref-mp-half-narrow", twoMarketplaceSeed());
+    const { completionCache, resolver } = await seedResolver(
+      t,
+      "ref-mp-half-narrow",
+      twoMarketplaceSeed(),
+    );
 
     // act
-    const items = await getPluginRefCompletions("update", "shared@mp-b", "update", resolver, {
-      allowMarketplaceOnly: true,
-    });
+    const items = await getPluginRefCompletions(
+      "update",
+      "shared@mp-b",
+      "update",
+      resolver,
+      completionCache,
+      {
+        allowMarketplaceOnly: true,
+      },
+    );
 
     // assert
     assert.deepStrictEqual(items, [{ label: "shared@mp-b", value: "update shared@mp-b " }]);
@@ -873,12 +983,23 @@ describe("getPluginRefCompletions", () => {
 
   test("the marketplace half offers nothing for a plugin no marketplace carries", async (t) => {
     // arrange
-    const { resolver } = await seedResolver(t, "ref-mp-half-unknown", twoMarketplaceSeed());
+    const { completionCache, resolver } = await seedResolver(
+      t,
+      "ref-mp-half-unknown",
+      twoMarketplaceSeed(),
+    );
 
     // act
-    const items = await getPluginRefCompletions("update", "ghost@", "update", resolver, {
-      allowMarketplaceOnly: true,
-    });
+    const items = await getPluginRefCompletions(
+      "update",
+      "ghost@",
+      "update",
+      resolver,
+      completionCache,
+      {
+        allowMarketplaceOnly: true,
+      },
+    );
 
     // assert
     assert.deepStrictEqual(items, []);
@@ -886,12 +1007,19 @@ describe("getPluginRefCompletions", () => {
 
   test("the bare marketplace form lists each marketplace once when the mode allows it", async (t) => {
     // arrange
-    const { resolver } = await seedResolver(t, "ref-bare", twoMarketplaceSeed());
+    const { completionCache, resolver } = await seedResolver(t, "ref-bare", twoMarketplaceSeed());
 
     // act
-    const items = await getPluginRefCompletions("update", "@", "update", resolver, {
-      allowMarketplaceOnly: true,
-    });
+    const items = await getPluginRefCompletions(
+      "update",
+      "@",
+      "update",
+      resolver,
+      completionCache,
+      {
+        allowMarketplaceOnly: true,
+      },
+    );
 
     // assert
     assert.deepStrictEqual(items, [
@@ -902,12 +1030,23 @@ describe("getPluginRefCompletions", () => {
 
   test("the bare marketplace form narrows to the typed marketplace prefix", async (t) => {
     // arrange
-    const { resolver } = await seedResolver(t, "ref-bare-narrow", twoMarketplaceSeed());
+    const { completionCache, resolver } = await seedResolver(
+      t,
+      "ref-bare-narrow",
+      twoMarketplaceSeed(),
+    );
 
     // act
-    const items = await getPluginRefCompletions("update", "@mp-b", "update", resolver, {
-      allowMarketplaceOnly: true,
-    });
+    const items = await getPluginRefCompletions(
+      "update",
+      "@mp-b",
+      "update",
+      resolver,
+      completionCache,
+      {
+        allowMarketplaceOnly: true,
+      },
+    );
 
     // assert
     assert.deepStrictEqual(items, [{ label: "@mp-b", value: "update @mp-b " }]);
@@ -919,12 +1058,23 @@ describe("getPluginRefCompletions", () => {
   // result would be `[]` with the flag either way -- nothing would be measured.
   test("the bare marketplace form offers nothing when the mode does not allow it", async (t) => {
     // arrange
-    const { resolver } = await seedResolver(t, "ref-bare-denied", twoMarketplaceSeed());
+    const { completionCache, resolver } = await seedResolver(
+      t,
+      "ref-bare-denied",
+      twoMarketplaceSeed(),
+    );
 
     // act
-    const items = await getPluginRefCompletions("update", "@", "update", resolver, {
-      allowMarketplaceOnly: false,
-    });
+    const items = await getPluginRefCompletions(
+      "update",
+      "@",
+      "update",
+      resolver,
+      completionCache,
+      {
+        allowMarketplaceOnly: false,
+      },
+    );
 
     // assert
     assert.deepStrictEqual(items, []);
@@ -932,7 +1082,7 @@ describe("getPluginRefCompletions", () => {
 
   test("the plugin half honours the target scope and the partial option it is given", async (t) => {
     // arrange
-    const { resolver } = await seedResolver(t, "ref-options", {
+    const { completionCache, resolver } = await seedResolver(t, "ref-options", {
       marketplaces: { user: { official: {} }, project: { internal: {} } },
       manifests: {
         user: { official: everyStatusManifest() },
@@ -941,7 +1091,7 @@ describe("getPluginRefCompletions", () => {
     });
 
     // act
-    const items = await getPluginRefCompletions("update", "", "update", resolver, {
+    const items = await getPluginRefCompletions("update", "", "update", resolver, completionCache, {
       allowMarketplaceOnly: false,
       targetScope: "user",
       partial: true,

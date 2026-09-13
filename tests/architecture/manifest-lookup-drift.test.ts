@@ -29,21 +29,47 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 
+import { EXTENSION_ROOT_REL, MANIFEST_LOOKUP_TARGETS } from "./gate-targets.ts";
 import { REPO_ROOT, stripComments } from "./source-scan.ts";
 
-const EXTENSION_SOURCE_ROOT = "extensions/pi-claude-marketplace";
-
 /**
- * The module that OWNS the rule. It is the one place the raw idiom may be
- * written, because writing it there IS the definition.
+ * The group in its declared order: the rule's definition site first, then the
+ * three surfaces that judge absence, then the five that look an entry up for
+ * something else. The order is what aims each scan below, so the module
+ * basenames are pinned inside the walk case (D-07-03) -- a member reordered,
+ * added, or dropped in the registry would otherwise re-aim a scan at a file its
+ * clause was never written for and still report success.
  */
-const RULE_DEFINITION_SITE = "extensions/pi-claude-marketplace/domain/manifest-lookup.ts";
+const [
+  RULE_DEFINITION_SITE,
+  LIST_SURFACE,
+  INFO_SURFACE,
+  UPDATE_SURFACE,
+  INSTALL_LOOKUP,
+  REINSTALL_LOOKUP,
+  PENDING_LOOKUP,
+  BACKFILL_LOOKUP,
+  EDGE_DEPS_LOOKUP,
+] = MANIFEST_LOOKUP_TARGETS;
+
+/** The module basenames the destructuring above binds, in registry order. */
+const DECLARED_MODULE_ORDER: ReadonlyArray<string> = [
+  "manifest-lookup.ts",
+  "list-flow.ts",
+  "info.ts",
+  "update-preflight.ts",
+  "install-outcome.ts",
+  "reinstall-flow.ts",
+  "pending.ts",
+  "backfill.ts",
+  "edge-deps.ts",
+];
 
 /** The three surfaces that render an absence claim and must consume the rule. */
 const ABSENCE_JUDGING_SURFACES: ReadonlyArray<string> = [
-  "extensions/pi-claude-marketplace/orchestrators/plugin/list.ts",
-  "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts",
-  "extensions/pi-claude-marketplace/orchestrators/plugin/update.ts",
+  LIST_SURFACE,
+  INFO_SURFACE,
+  UPDATE_SURFACE,
 ];
 
 /**
@@ -54,27 +80,27 @@ const ABSENCE_JUDGING_SURFACES: ReadonlyArray<string> = [
  */
 const NON_ABSENCE_LOOKUPS: ReadonlyArray<{ readonly rel: string; readonly purpose: string }> = [
   {
-    rel: "extensions/pi-claude-marketplace/orchestrators/plugin/install.ts",
+    rel: INSTALL_LOOKUP,
     purpose:
       "fetches the entry it is about to INSTALL (the resolver's input). A miss throws PluginShapeError kind not-in-manifest; it renders no absence row.",
   },
   {
-    rel: "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts",
+    rel: REINSTALL_LOOKUP,
     purpose:
-      "fetches the entry it is about to REINSTALL from the cached manifest. A miss throws; it renders no absence row.",
+      "the reinstall flow fetches the entry it is about to REINSTALL from the cached manifest. A miss throws; it renders no absence row.",
   },
   {
-    rel: "extensions/pi-claude-marketplace/orchestrators/reconcile/pending.ts",
+    rel: PENDING_LOOKUP,
     purpose:
       "fetches the entry a pending install would materialize. A miss means `not a candidate` (returns undefined) -- the scan emits nothing, so no claim is made about the record.",
   },
   {
-    rel: "extensions/pi-claude-marketplace/orchestrators/reconcile/backfill.ts",
+    rel: BACKFILL_LOOKUP,
     purpose:
       "fetches the entry to resolve OFFLINE when re-materializing a recorded plugin. A miss returns undefined and the plugin is left alone.",
   },
   {
-    rel: "extensions/pi-claude-marketplace/orchestrators/edge-deps.ts",
+    rel: EDGE_DEPS_LOOKUP,
     purpose:
       "feeds the completion cache's upgrade-candidate compare (PL-5 version diff). A miss reads as `not upgradable`; the cache row carries no absence reason.",
   },
@@ -205,7 +231,7 @@ async function extensionSourceFiles(): Promise<readonly string[]> {
     }
   };
 
-  await walk(EXTENSION_SOURCE_ROOT);
+  await walk(EXTENSION_ROOT_REL);
   return out;
 }
 
@@ -213,11 +239,27 @@ test("D-99-02a: no surface re-derives the manifest-membership lookup -- the whol
   // Comments are stripped FIRST: the surviving prose in `manifest-lookup.ts`
   // and in this gate's subjects legally describes the idiom while explaining
   // why it lives in one place.
+  assert.ok(
+    MANIFEST_LOOKUP_TARGETS.length > 0,
+    "D-07-03: an empty MANIFEST_LOOKUP_TARGETS leaves every clause in this gate reporting success over zero declared targets.",
+  );
+  assert.deepEqual(
+    MANIFEST_LOOKUP_TARGETS.map((rel) => path.basename(rel)),
+    DECLARED_MODULE_ORDER,
+    "D-07-03: every clause in this gate is aimed by POSITION in MANIFEST_LOOKUP_TARGETS. A member reordered, added, or dropped in the registry re-aims a clause at a file it was never written for, and the clause would still report success.",
+  );
+
   const allowed = new Set(NON_ABSENCE_LOOKUPS.map((entry) => entry.rel));
   const offenders: string[] = [];
   const matchedAllowed = new Set<string>();
 
-  for (const rel of await extensionSourceFiles()) {
+  const sourceFiles = await extensionSourceFiles();
+  assert.ok(
+    sourceFiles.length > 0,
+    `D-07-03: walked ${EXTENSION_ROOT_REL} and found no .ts files -- a walk over zero files is a gate reporting success over nothing.`,
+  );
+
+  for (const rel of sourceFiles) {
     if (rel === RULE_DEFINITION_SITE) {
       continue;
     }
@@ -297,9 +339,16 @@ test("D-99-02a: list, info and update each import the one derivation", async () 
   // The other half of the collapse: the absence walk proves no surface
   // re-derives the rule, this proves the three CONSUME it rather than having
   // dropped the membership check altogether.
+  assert.ok(
+    ABSENCE_JUDGING_SURFACES.length > 0,
+    "D-07-03: with no absence-judging surface declared, this clause reports success having opened nothing.",
+  );
+
   const offenders: string[] = [];
+  const visited: string[] = [];
   for (const rel of ABSENCE_JUDGING_SURFACES) {
     const stripped = stripComments(await readFile(path.join(REPO_ROOT, rel), "utf8"));
+    visited.push(rel);
     if (!LOOKUP_IMPORT.test(stripped)) {
       offenders.push(`${rel} does not import lookupDeclaredPlugin from domain/manifest-lookup.ts`);
     }
@@ -309,5 +358,11 @@ test("D-99-02a: list, info and update each import the one derivation", async () 
     offenders,
     [],
     `D-99-02a violation: an absence-judging surface dropped the one derivation:\n  ${offenders.join("\n  ")}`,
+  );
+
+  assert.deepEqual(
+    visited,
+    [...ABSENCE_JUDGING_SURFACES],
+    "D-07-03: the clause must have opened every declared absence-judging surface. A surface that stopped resolving drops out of this list, which is what turns an uninspected target into a failure instead of a pass.",
   );
 });

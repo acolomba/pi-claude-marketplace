@@ -1,5 +1,6 @@
+import { type Reason } from "../notification-types.ts";
+
 import type { SoftDepStatus } from "../../platform/pi-api.ts";
-import type { Reason } from "../notify.ts";
 
 /**
  * shared/concerns/soft-dep.ts -- the soft-dep marker injection concern (D-01).

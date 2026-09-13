@@ -1,4 +1,5 @@
-import { ICON_UNINSTALLABLE, pluginRow, type PluginSkippedMessage } from "../../shared/notify.ts";
+import { pluginRow, ICON_UNINSTALLABLE } from "../../shared/notification-grammar.ts";
+import { type PluginSkippedMessage } from "../../shared/notification-types.ts";
 
 import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
 
@@ -34,7 +35,8 @@ import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
  *     record does and renders as a standalone `(disabled)` info row, keeping
  *     one render path instead of a second arm that would duplicate it.
  *
- * The shared presentation vocabulary stays central in `shared/notify.ts` (D-11)
+ * The shared presentation vocabulary stays central in
+ * `shared/notification-types.ts` and `shared/notification-grammar.ts` (D-11)
  * and is CALLED here, never duplicated.
  */
 
@@ -45,9 +47,10 @@ import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
  * shape rendered by the central standalone path, NOT here.
  *
  * This set is COMMAND-LOCAL: widening it amends no closed set in
- * `shared/notify.ts` (`skipped` is already a central `PluginStatus`). What it
- * does amend is the `as const satisfies CommandContext<...>` pin below, which
- * makes a missing render arm a compile error rather than a runtime gap.
+ * `shared/notification-types.ts` (`skipped` is already a central
+ * `PluginStatus`). What it does amend is the
+ * `as const satisfies CommandContext<...>` pin below, which makes a missing
+ * render arm a compile error rather than a runtime gap.
  */
 type PluginInfoStatus = "skipped";
 

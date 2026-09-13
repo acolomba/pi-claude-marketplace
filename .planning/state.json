@@ -1,0 +1,58 @@
+{
+  "contract": "1.0.0",
+  "flavor": "core",
+  "milestone": "refine-unit-tests — Refine Unit Tests",
+  "phases": [
+    {
+      "number": "1",
+      "name": "Live Evidence Revalidation",
+      "status": "in_progress"
+    },
+    {
+      "number": "2",
+      "name": "Containment and Input Safety",
+      "status": "complete"
+    },
+    {
+      "number": "3",
+      "name": "Production Defect Corrections",
+      "status": "complete"
+    },
+    {
+      "number": "4",
+      "name": "Hermetic Test Infrastructure",
+      "status": "complete"
+    },
+    {
+      "number": "5",
+      "name": "Injection and Ownership Design",
+      "status": "complete"
+    },
+    {
+      "number": "6",
+      "name": "Assertion and Module Refinement",
+      "status": "complete"
+    },
+    {
+      "number": "7",
+      "name": "Gate Integrity",
+      "status": "complete"
+    },
+    {
+      "number": "8",
+      "name": "Direct Coverage",
+      "status": "in_progress"
+    },
+    {
+      "number": "9",
+      "name": "Final Quality and Backlog Closure",
+      "status": "pending"
+    }
+  ],
+  "next": {
+    "command": "/gsd:progress --next",
+    "label": "Advance to the next step",
+    "reason": "Phase 09 of 9 · 11% · executing"
+  },
+  "updated_at": "2026-09-11T20:41:51.154Z"
+}

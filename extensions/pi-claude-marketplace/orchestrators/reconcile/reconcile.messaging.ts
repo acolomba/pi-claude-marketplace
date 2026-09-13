@@ -1,5 +1,4 @@
 import {
-  composeReasons,
   ICON_AVAILABLE,
   ICON_DISABLED,
   ICON_INSTALLED,
@@ -10,6 +9,9 @@ import {
   pluginRow,
   renderScopeBracket,
   renderVersion,
+  composeReasons,
+} from "../../shared/notification-grammar.ts";
+import {
   type PluginDisabledMessage,
   type PluginFailedMessage,
   type PluginInstalledMessage,
@@ -19,7 +21,7 @@ import {
   type PluginWillEnableMessage,
   type PluginWillInstallMessage,
   type PluginWillUninstallMessage,
-} from "../../shared/notify.ts";
+} from "../../shared/notification-types.ts";
 
 import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
 

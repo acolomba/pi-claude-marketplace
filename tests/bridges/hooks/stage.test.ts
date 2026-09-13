@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import fs, { type PathLike } from "node:fs";
 import {
   mkdir,
   mkdtemp,
+  lstat,
   readFile,
   readdir,
   readlink,
@@ -12,24 +12,45 @@ import {
   symlink,
   writeFile,
 } from "node:fs/promises";
-import { syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
 import {
+  createWriteHookConfig,
   hookConfigPathFor,
+  readHooksJson,
   removeHookConfig,
   writeHookConfig,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/stage.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { SymlinkRefusedError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
 
+import type { HooksTreeInspector } from "../../../extensions/pi-claude-marketplace/bridges/hooks/stage.ts";
+import type { Dirent, Stats } from "node:fs";
+
 interface CasePaths {
   readonly scopeRoot: string;
   readonly pluginRoot: string;
   readonly externalRoot: string;
   readonly locations: ReturnType<typeof locationsFor>;
+}
+
+function realHooksTreeInspector(): HooksTreeInspector {
+  return {
+    lstat(target: string): Promise<Stats> {
+      return lstat(target);
+    },
+    readdir(directory: string): Promise<Dirent[]> {
+      return readdir(directory, { withFileTypes: true });
+    },
+    readlink(target: string): Promise<string> {
+      return readlink(target);
+    },
+    realpath(target: string): Promise<string> {
+      return realpath(target);
+    },
+  };
 }
 
 async function allocateCasePaths(prefix: string): Promise<CasePaths> {
@@ -68,6 +89,12 @@ const EXPECTED_HOOKS_BYTES =
   '{\n  "PreToolUse": [\n    {\n      "matcher": "Bash",\n' +
   '      "hooks": [\n        {\n          "type": "command",\n' +
   '          "command": "echo hi"\n        }\n      ]\n    }\n  ]\n}\n';
+// The read case needs bytes no other codec reproduces, because the encoding is
+// the whole of what `readHooksJson` adds over a bare delegation. `é` (U+00E9)
+// and `✓` (U+2713) are stored as multi-byte utf-8 sequences, so a latin1, ascii
+// or utf16le read returns a different string and fails the assertion, while an
+// ASCII-only fixture would pass under every one of them.
+const NON_ASCII_HOOKS_BYTES = '{\n  "command": "echo café ✓"\n}\n';
 
 test("writes when the plugin hooks subtree is absent", async () => {
   const { locations, pluginRoot, scopeRoot } = await allocateCasePaths("hooks-stage-missing-");
@@ -324,7 +351,7 @@ test("rejects a buried directory link that escapes the plugin root", async () =>
   }
 });
 
-test("uses the unreadable target marker when escape diagnostics cannot read the link", async (t) => {
+test("uses the unreadable target marker when the required inspector cannot read the link", async () => {
   const { externalRoot, locations, pluginRoot, scopeRoot } = await allocateCasePaths(
     "hooks-stage-unreadable-link-",
   );
@@ -339,14 +366,27 @@ test("uses the unreadable target marker when escape diagnostics cannot read the 
     const readlinkError = Object.assign(new Error("link changed before diagnostics"), {
       code: "EIO",
     });
-    const linkReader = t.mock.method(fs.promises, "readlink", (): Promise<never> =>
-      Promise.reject(readlinkError),
-    );
-    t.after(() => {
-      linkReader.mock.restore();
-      syncBuiltinESMExports();
-    });
-    syncBuiltinESMExports();
+    const inspectionCalls: string[] = [];
+    const nodeInspector = realHooksTreeInspector();
+    const inspector: HooksTreeInspector = {
+      lstat(target: string): Promise<Stats> {
+        inspectionCalls.push(`lstat:${target}`);
+        return nodeInspector.lstat(target);
+      },
+      readdir(directory: string): Promise<Dirent[]> {
+        inspectionCalls.push(`readdir:${directory}`);
+        return nodeInspector.readdir(directory);
+      },
+      readlink(target: string): Promise<string> {
+        inspectionCalls.push(`readlink:${target}`);
+        return Promise.reject(readlinkError);
+      },
+      realpath(target: string): Promise<string> {
+        inspectionCalls.push(`realpath:${target}`);
+        return nodeInspector.realpath(target);
+      },
+    };
+    const writeHookConfigWithInspector = createWriteHookConfig(inspector);
     const expectedStagePath = path.join(locations.hooksDir, PLUGIN, "hooks.json");
     const expectedError = {
       name: "SymlinkRefusedError",
@@ -362,7 +402,7 @@ test("uses the unreadable target marker when escape diagnostics cannot read the 
 
     // act
     try {
-      await writeHookConfig({
+      await writeHookConfigWithInspector({
         locations,
         pluginName: PLUGIN,
         pluginRoot: normalizedPluginRoot,
@@ -388,12 +428,19 @@ test("uses the unreadable target marker when escape diagnostics cannot read the 
       expectedError,
     );
     assert.strictEqual(stagedState, "ENOENT");
+    assert.deepStrictEqual(inspectionCalls, [
+      `readdir:${path.join(normalizedPluginRoot, "hooks")}`,
+      `lstat:${linkPath}`,
+      `realpath:${linkPath}`,
+      `realpath:${normalizedPluginRoot}`,
+      `readlink:${linkPath}`,
+    ]);
   } finally {
     await rm(scopeRoot, { recursive: true, force: true, maxRetries: 3 });
   }
 });
 
-test("preserves an in-tree symlink refusal when a resolved target becomes a link", async (t) => {
+test("preserves an in-tree symlink refusal when a resolved target becomes a link", async () => {
   const { locations, pluginRoot, scopeRoot } = await allocateCasePaths(
     "hooks-stage-replaced-target-",
   );
@@ -414,33 +461,32 @@ test("preserves an in-tree symlink refusal when a resolved target becomes a link
     const initialLinkResolved = new Promise<void>((resolve) => {
       resolveInitialLink = resolve;
     });
-    const originalRealpath = fs.promises.realpath.bind(fs.promises);
-    const pathResolver = t.mock.method(fs.promises, "realpath", async (target: PathLike) => {
-      if (String(target) === linkPath) {
-        const resolved = await originalRealpath(target);
-        resolveInitialLink?.();
-        return resolved;
-      }
+    const nodeInspector = realHooksTreeInspector();
+    const inspector: HooksTreeInspector = {
+      ...nodeInspector,
+      async realpath(target: string): Promise<string> {
+        if (target === linkPath) {
+          const resolved = await nodeInspector.realpath(target);
+          resolveInitialLink?.();
+          return resolved;
+        }
 
-      if (String(target) === normalizedPluginRoot) {
-        await initialLinkResolved;
-        await rm(normalizedOriginalTarget, { recursive: true, force: true });
-        await createDirectoryLink(normalizedReplacementTarget, normalizedOriginalTarget);
-      }
+        if (target === normalizedPluginRoot) {
+          await initialLinkResolved;
+          await rm(normalizedOriginalTarget, { recursive: true, force: true });
+          await createDirectoryLink(normalizedReplacementTarget, normalizedOriginalTarget);
+        }
 
-      return originalRealpath(target);
-    });
-    t.after(() => {
-      pathResolver.mock.restore();
-      syncBuiltinESMExports();
-    });
-    syncBuiltinESMExports();
+        return nodeInspector.realpath(target);
+      },
+    };
+    const writeHookConfigWithInspector = createWriteHookConfig(inspector);
     const expectedStagePath = path.join(locations.hooksDir, PLUGIN, "hooks.json");
     let rejection: unknown;
 
     // act
     try {
-      await writeHookConfig({
+      await writeHookConfigWithInspector({
         locations,
         pluginName: PLUGIN,
         pluginRoot: normalizedPluginRoot,
@@ -482,7 +528,80 @@ test("preserves an in-tree symlink refusal when a resolved target becomes a link
   }
 });
 
-test("propagates an unexpected hook directory read failure unchanged", async (t) => {
+test("propagates a path walk failure caused by a resolved target replacement", async () => {
+  const { locations, pluginRoot, scopeRoot } = await allocateCasePaths(
+    "hooks-stage-replaced-target-file-",
+  );
+  try {
+    // arrange
+    const hooksDirectory = path.join(pluginRoot, "hooks");
+    const originalTarget = path.join(pluginRoot, "original-target");
+    const nestedTarget = path.join(originalTarget, "nested");
+    await mkdir(hooksDirectory, { recursive: true });
+    await mkdir(nestedTarget, { recursive: true });
+    const normalizedPluginRoot = await realpath(pluginRoot);
+    const normalizedOriginalTarget = await realpath(originalTarget);
+    const normalizedNestedTarget = await realpath(nestedTarget);
+    const linkPath = path.join(hooksDirectory, "alias");
+    await createDirectoryLink(normalizedNestedTarget, linkPath);
+    let resolveInitialLink: (() => void) | undefined;
+    const initialLinkResolved = new Promise<void>((resolve) => {
+      resolveInitialLink = resolve;
+    });
+    const nodeInspector = realHooksTreeInspector();
+    const inspector: HooksTreeInspector = {
+      ...nodeInspector,
+      async realpath(target: string): Promise<string> {
+        if (target === linkPath) {
+          const resolved = await nodeInspector.realpath(target);
+          resolveInitialLink?.();
+          return resolved;
+        }
+
+        if (target === normalizedPluginRoot) {
+          await initialLinkResolved;
+          await rm(normalizedOriginalTarget, { recursive: true, force: true });
+          await writeFile(normalizedOriginalTarget, "replaced by file\n");
+        }
+
+        return nodeInspector.realpath(target);
+      },
+    };
+    const writeHookConfigWithInspector = createWriteHookConfig(inspector);
+    const expectedStagePath = path.join(locations.hooksDir, PLUGIN, "hooks.json");
+    const expectedMissingPath = path.join(normalizedOriginalTarget, "nested");
+    let rejection: unknown;
+
+    // act
+    try {
+      await writeHookConfigWithInspector({
+        locations,
+        pluginName: PLUGIN,
+        pluginRoot: normalizedPluginRoot,
+        hooksValue: HOOKS_VALUE,
+      });
+    } catch (error) {
+      rejection = error;
+    }
+
+    const stagedState = await stat(expectedStagePath).then(() => "present", filesystemErrorCode);
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        code: (rejection as NodeJS.ErrnoException).code,
+        path: (rejection as NodeJS.ErrnoException).path,
+        syscall: (rejection as NodeJS.ErrnoException).syscall,
+      },
+      { code: "ENOTDIR", path: expectedMissingPath, syscall: "lstat" },
+    );
+    assert.strictEqual(stagedState, "ENOENT");
+  } finally {
+    await rm(scopeRoot, { recursive: true, force: true, maxRetries: 3 });
+  }
+});
+
+test("propagates an unexpected hook directory read failure unchanged", async () => {
   const { locations, pluginRoot, scopeRoot } = await allocateCasePaths(
     "hooks-stage-readdir-error-",
   );
@@ -491,20 +610,21 @@ test("propagates an unexpected hook directory read failure unchanged", async (t)
     await mkdir(path.join(pluginRoot, "hooks"), { recursive: true });
     const normalizedPluginRoot = await realpath(pluginRoot);
     const readError = Object.assign(new Error("hooks directory read denied"), { code: "EACCES" });
-    const directoryReader = t.mock.method(fs.promises, "readdir", (): Promise<never> =>
-      Promise.reject(readError),
-    );
-    t.after(() => {
-      directoryReader.mock.restore();
-      syncBuiltinESMExports();
-    });
-    syncBuiltinESMExports();
+    const inspectionCalls: string[] = [];
+    const inspector: HooksTreeInspector = {
+      ...realHooksTreeInspector(),
+      readdir(directory: string): Promise<Dirent[]> {
+        inspectionCalls.push(directory);
+        return Promise.reject(readError);
+      },
+    };
+    const writeHookConfigWithInspector = createWriteHookConfig(inspector);
     const expectedStagePath = path.join(locations.hooksDir, PLUGIN, "hooks.json");
     let rejection: unknown;
 
     // act
     try {
-      await writeHookConfig({
+      await writeHookConfigWithInspector({
         locations,
         pluginName: PLUGIN,
         pluginRoot: normalizedPluginRoot,
@@ -519,45 +639,47 @@ test("propagates an unexpected hook directory read failure unchanged", async (t)
     // assert
     assert.strictEqual(rejection, readError);
     assert.strictEqual(stagedState, "ENOENT");
+    assert.deepStrictEqual(inspectionCalls, [path.join(normalizedPluginRoot, "hooks")]);
   } finally {
     await rm(scopeRoot, { recursive: true, force: true, maxRetries: 3 });
   }
 });
 
-test("propagates an unexpected contained-target walk failure unchanged", async (t) => {
+test("propagates an unexpected hook entry inspection failure unchanged", async () => {
   const { locations, pluginRoot, scopeRoot } = await allocateCasePaths(
     "hooks-stage-contained-walk-error-",
   );
   try {
     // arrange
     const hooksDirectory = path.join(pluginRoot, "hooks");
-    const containedTarget = path.join(pluginRoot, "contained-target");
+    const blockedEntry = path.join(hooksDirectory, "blocked.sh");
     await mkdir(hooksDirectory, { recursive: true });
-    await mkdir(containedTarget);
+    await writeFile(blockedEntry, "#!/bin/sh\n");
     const normalizedPluginRoot = await realpath(pluginRoot);
-    const normalizedContainedTarget = await realpath(containedTarget);
-    const linkPath = path.join(hooksDirectory, "alias");
-    await createDirectoryLink(normalizedContainedTarget, linkPath);
-    const walkError = Object.assign(new Error("contained target lstat denied"), { code: "EACCES" });
-    const originalLstat = fs.promises.lstat.bind(fs.promises);
-    const pathInspector = t.mock.method(fs.promises, "lstat", async (target: PathLike) => {
-      if (String(target) === normalizedContainedTarget) {
-        throw walkError;
-      }
+    const normalizedBlockedEntry = path.join(normalizedPluginRoot, "hooks", "blocked.sh");
+    const inspectionError = Object.assign(new Error("hook entry lstat denied"), {
+      code: "EACCES",
+    });
+    const inspectionCalls: string[] = [];
+    const nodeInspector = realHooksTreeInspector();
+    const inspector: HooksTreeInspector = {
+      ...nodeInspector,
+      lstat(target: string): Promise<Stats> {
+        inspectionCalls.push(target);
+        if (target === normalizedBlockedEntry) {
+          return Promise.reject(inspectionError);
+        }
 
-      return originalLstat(target);
-    });
-    t.after(() => {
-      pathInspector.mock.restore();
-      syncBuiltinESMExports();
-    });
-    syncBuiltinESMExports();
+        return nodeInspector.lstat(target);
+      },
+    };
+    const writeHookConfigWithInspector = createWriteHookConfig(inspector);
     const expectedStagePath = path.join(locations.hooksDir, PLUGIN, "hooks.json");
     let rejection: unknown;
 
     // act
     try {
-      await writeHookConfig({
+      await writeHookConfigWithInspector({
         locations,
         pluginName: PLUGIN,
         pluginRoot: normalizedPluginRoot,
@@ -570,8 +692,9 @@ test("propagates an unexpected contained-target walk failure unchanged", async (
     const stagedState = await stat(expectedStagePath).then(() => "present", filesystemErrorCode);
 
     // assert
-    assert.strictEqual(rejection, walkError);
+    assert.strictEqual(rejection, inspectionError);
     assert.strictEqual(stagedState, "ENOENT");
+    assert.deepStrictEqual(inspectionCalls, [normalizedBlockedEntry]);
   } finally {
     await rm(scopeRoot, { recursive: true, force: true, maxRetries: 3 });
   }
@@ -754,6 +877,39 @@ test("rejects an unsafe plugin name before removal", async () => {
         return true;
       },
     );
+  } finally {
+    await rm(scopeRoot, { recursive: true, force: true, maxRetries: 3 });
+  }
+});
+
+test("reads back the exact bytes written to a hooks.json path", async () => {
+  const { scopeRoot } = await allocateCasePaths("hooks-stage-read-bytes-");
+  try {
+    // arrange
+    const hooksJsonPath = path.join(scopeRoot, "hooks.json");
+    await writeFile(hooksJsonPath, NON_ASCII_HOOKS_BYTES, "utf8");
+
+    // act
+    const raw = await readHooksJson(hooksJsonPath);
+
+    // assert
+    assert.strictEqual(raw, NON_ASCII_HOOKS_BYTES);
+  } finally {
+    await rm(scopeRoot, { recursive: true, force: true, maxRetries: 3 });
+  }
+});
+
+test("rejects when the hooks.json path does not exist", async () => {
+  const { scopeRoot } = await allocateCasePaths("hooks-stage-read-missing-");
+  try {
+    // arrange
+    const absentPath = path.join(scopeRoot, "absent", "hooks.json");
+
+    // act & assert
+    await assert.rejects(readHooksJson(absentPath), (error: unknown) => {
+      assert.strictEqual(filesystemErrorCode(error), "ENOENT");
+      return true;
+    });
   } finally {
     await rm(scopeRoot, { recursive: true, force: true, maxRetries: 3 });
   }

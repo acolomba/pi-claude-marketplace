@@ -4,9 +4,16 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 
+import {
+  createHooksRouting,
+  createHooksRuntime,
+  readHooksJson,
+} from "../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { registerClaudePluginCommand } from "../../extensions/pi-claude-marketplace/edge/register.ts";
+import { createPluginUpdateOperations } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { loadState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 
 import { makeCtx, makeMockPi } from "./_helpers.ts";
 
@@ -113,18 +120,26 @@ function registerImportCommand(cwd: string, gitOps: GitOps) {
     { name: "subagent" },
     { name: "mcp", sourceInfo: { source: "pi-mcp-adapter" } },
   ]);
-  registerClaudePluginCommand(mock.pi, {
-    gitOps,
-    pluginUpdate: () =>
-      Promise.resolve({
-        partition: "unchanged",
-        name: "unused",
-        fromVersion: "0.0.0",
-        toVersion: "0.0.0",
-        declaresAgents: false,
-        declaresMcp: false,
-      }),
-  });
+  const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
+  const completionCache = createCompletionCache();
+  registerClaudePluginCommand(
+    mock.pi,
+    {
+      completionCache,
+      gitOps,
+      pluginUpdate: () =>
+        Promise.resolve({
+          partition: "unchanged",
+          name: "unused",
+          fromVersion: "0.0.0",
+          toVersion: "0.0.0",
+          declaresAgents: false,
+          declaresMcp: false,
+        }),
+    },
+    hooksRouting,
+    createPluginUpdateOperations(hooksRouting, completionCache).updatePlugins,
+  );
   const command = mock.commands.get("claude:plugin");
   assert.ok(command, "claude:plugin command should be registered");
   const { ctx, notifications } = makeCtx(cwd);

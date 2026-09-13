@@ -1,0 +1,1617 @@
+{
+  "version": 1,
+  "inventoryMode": "locked-corpus",
+  "plan": "01-18",
+  "files": [
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md",
+      "category": "adversarial",
+      "assignedPlan": "01-18",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-001",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-002",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-003",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-004",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-005",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-006",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-007",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-008",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-009",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-010",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-011",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-012",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-013",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-014",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-015",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-016",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-017",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-018",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-019",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-020",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-021",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-022",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-023",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-024"
+      ],
+      "reviewStatus": "complete",
+      "outcome": "live findings"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md",
+      "category": "adversarial",
+      "assignedPlan": "01-18",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-001",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-002",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-003",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-004",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-005",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-006",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-007",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-008",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-009",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-010",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-011",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-012",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-013",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-014",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-015",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-016",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-017",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-018",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-019",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-020",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-021",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-022",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-023",
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-024"
+      ],
+      "reviewStatus": "complete",
+      "outcome": "live findings"
+    }
+  ],
+  "sourceClaims": [
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-001",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md",
+      "label": "EC-001",
+      "findingId": "EC-001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-002",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md",
+      "label": "EC-002",
+      "findingId": "EC-002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-003",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md",
+      "label": "EC-003",
+      "findingId": "EC-003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-004",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md",
+      "label": "EC-004",
+      "findingId": "EC-004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-005",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md",
+      "label": "EC-005",
+      "findingId": "EC-005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-006",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md",
+      "label": "EC-006",
+      "findingId": "EC-006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-007",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md",
+      "label": "EC-007",
+      "findingId": "EC-007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-008",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md",
+      "label": "EC-008",
+      "findingId": "EC-008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-009",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md",
+      "label": "EC-009",
+      "findingId": "EC-009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-010",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md",
+      "label": "EC-010",
+      "findingId": "EC-010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-011",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md",
+      "label": "EC-011",
+      "findingId": "EC-011"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-012",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md",
+      "label": "EC-012",
+      "findingId": "EC-012"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-013",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md",
+      "label": "EC-013",
+      "findingId": "EC-013"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-014",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md",
+      "label": "EC-014",
+      "findingId": "EC-014"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-015",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md",
+      "label": "EC-015",
+      "findingId": "EC-015"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-016",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md",
+      "label": "EC-016",
+      "findingId": "EC-016"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-017",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md",
+      "label": "EC-017",
+      "findingId": "EC-017"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-018",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md",
+      "label": "EC-018",
+      "findingId": "EC-018"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-019",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md",
+      "label": "EC-019",
+      "findingId": "EC-019"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-020",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md",
+      "label": "EC-020",
+      "findingId": "EC-020"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-021",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md",
+      "label": "EC-021",
+      "findingId": "EC-021"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-022",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md",
+      "label": "EC-022",
+      "findingId": "EC-022"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-023",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md",
+      "label": "EC-023",
+      "findingId": "EC-023"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-024",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md",
+      "label": "EC-024",
+      "findingId": "EC-024"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-001",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md",
+      "label": "EM-001",
+      "findingId": "EM-001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-002",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md",
+      "label": "EM-002",
+      "findingId": "EM-002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-003",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md",
+      "label": "EM-003",
+      "findingId": "EM-003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-004",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md",
+      "label": "EM-004",
+      "findingId": "EM-004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-005",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md",
+      "label": "EM-005",
+      "findingId": "EM-005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-006",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md",
+      "label": "EM-006",
+      "findingId": "EM-006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-007",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md",
+      "label": "EM-007",
+      "findingId": "EM-007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-008",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md",
+      "label": "EM-008",
+      "findingId": "EM-008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-009",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md",
+      "label": "EM-009",
+      "findingId": "EM-009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-010",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md",
+      "label": "EM-010",
+      "findingId": "EM-010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-011",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md",
+      "label": "EM-011",
+      "findingId": "EM-011"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-012",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md",
+      "label": "EM-012",
+      "findingId": "EM-012"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-013",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md",
+      "label": "EM-013",
+      "findingId": "EM-013"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-014",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md",
+      "label": "EM-014",
+      "findingId": "EM-014"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-015",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md",
+      "label": "EM-015",
+      "findingId": "EM-015"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-016",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md",
+      "label": "EM-016",
+      "findingId": "EM-016"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-017",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md",
+      "label": "EM-017",
+      "findingId": "EM-017"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-018",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md",
+      "label": "EM-018",
+      "findingId": "EM-018"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-019",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md",
+      "label": "EM-019",
+      "findingId": "EM-019"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-020",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md",
+      "label": "EM-020",
+      "findingId": "EM-020"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-021",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md",
+      "label": "EM-021",
+      "findingId": "EM-021"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-022",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md",
+      "label": "EM-022",
+      "findingId": "EM-022"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-023",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md",
+      "label": "EM-023",
+      "findingId": "EM-023"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-024",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md",
+      "label": "EM-024",
+      "findingId": "EM-024"
+    }
+  ],
+  "findings": [
+    {
+      "id": "EC-001",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-001"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/edge/completions/data.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/edge/completions/data.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "node --test isolated-copy focused owner suite after the described mutation",
+        "exitCode": 0,
+        "observed": "Changing all four data.ts prefix predicates to substring predicates in an isolated repository-local copy left data.test.ts green."
+      },
+      "rationale": "Changing all four data.ts prefix predicates to substring predicates in an isolated repository-local copy left data.test.ts green.",
+      "destination": "Add substring decoys to each affected seed in Phase 2."
+    },
+    {
+      "id": "EC-002",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-002"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/edge/completions/data.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/edge/completions/data.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "node --test isolated-copy focused owner suite after the described mutation",
+        "exitCode": 0,
+        "observed": "The live same-named cross-scope case still seeds indistinguishable rows; a constant-scope/cache-key collision remains observationally equivalent."
+      },
+      "rationale": "The live same-named cross-scope case still seeds indistinguishable rows; a constant-scope/cache-key collision remains observationally equivalent.",
+      "destination": "Give same-named marketplaces different per-scope rows in Phase 2."
+    },
+    {
+      "id": "EC-003",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-003"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/edge/completions/data.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/edge/completions/data.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source/test inspection and focused node:test rerun",
+        "observed": "Current source retains the user-target early return and the owner test still lacks a project marketplace; provider coverage is incidental ownership."
+      },
+      "rationale": "Current source retains the user-target early return and the owner test still lacks a project marketplace; provider coverage is incidental ownership.",
+      "destination": "Add a project decoy to the owner test in Phase 2."
+    },
+    {
+      "id": "EC-004",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-004"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/edge/completions/data.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/edge/completions/data.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source/test inspection and focused node:test rerun",
+        "observed": "The expected withPartial value is still derived from withoutPartial rather than an independent literal."
+      },
+      "rationale": "The expected withPartial value is still derived from withoutPartial rather than an independent literal.",
+      "destination": "Replace the derived expectation in Phase 2."
+    },
+    {
+      "id": "EC-005",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-005"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/edge/completions/provider.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/edge/completions/provider.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source/test inspection and focused node:test rerun",
+        "observed": "The six-member marketplace-name verb set remains, while current cases do not independently exercise every member and both exclusions."
+      },
+      "rationale": "The six-member marketplace-name verb set remains, while current cases do not independently exercise every member and both exclusions.",
+      "destination": "Expand the table across the closed set in Phase 2."
+    },
+    {
+      "id": "EC-006",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-006"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/edge/completions/provider.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/edge/completions/provider.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "node --test isolated-copy focused owner suite after the described mutation",
+        "exitCode": 0,
+        "observed": "Changing only scope, flag, and marketplace-subcommand filters from startsWith to includes in an isolated copy left provider.test.ts green."
+      },
+      "rationale": "Changing only scope, flag, and marketplace-subcommand filters from startsWith to includes in an isolated copy left provider.test.ts green.",
+      "destination": "Add discriminating substring decoys in Phase 2."
+    },
+    {
+      "id": "EC-007",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-007"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/edge/completions/provider.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/edge/completions/provider.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source/test inspection and focused node:test rerun",
+        "observed": "Exact-token promotion remains generic for top-level verbs but the owner suite still proves the no-space transition only through marketplace."
+      },
+      "rationale": "Exact-token promotion remains generic for top-level verbs but the owner suite still proves the no-space transition only through marketplace.",
+      "destination": "Add install and list exact-token cases in Phase 2."
+    },
+    {
+      "id": "EC-008",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-008"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/edge/completions/provider.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/edge/completions/provider.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source/test inspection and focused node:test rerun",
+        "observed": "The partial option still flows into the marketplace-only branch and no bare-at partial row independently pins it."
+      },
+      "rationale": "The partial option still flows into the marketplace-only branch and no bare-at partial row independently pins it.",
+      "destination": "Add the partial bare-at row in Phase 2."
+    },
+    {
+      "id": "EC-009",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-009"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/edge/completions/normalize.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/edge/completions/normalize.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source/test inspection and focused node:test rerun",
+        "observed": "Current normalization still deletes whitespace only from the cursor forward while the test lacks a multi-space-before-cursor discriminator."
+      },
+      "rationale": "Current normalization still deletes whitespace only from the cursor forward while the test lacks a multi-space-before-cursor discriminator.",
+      "destination": "Add the discriminator and correct the header in Phase 2."
+    },
+    {
+      "id": "EC-010",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-010"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/edge/completions/normalize.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/edge/completions/normalize.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source/test inspection and focused node:test rerun",
+        "observed": "The command regex still uses whitespace-class matching and the table still lacks a tab separator row."
+      },
+      "rationale": "The command regex still uses whitespace-class matching and the table still lacks a tab separator row.",
+      "destination": "Add a tab row or intentionally narrow the contract in Phase 2."
+    },
+    {
+      "id": "EC-011",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-011"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "tests/edge/completions/provider.test.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/edge/completions/data.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source/test inspection and focused node:test rerun",
+        "observed": "Both suites still carry duplicated resolver and network-trap support within the same concern."
+      },
+      "rationale": "Both suites still carry duplicated resolver and network-trap support within the same concern.",
+      "destination": "Consolidate concern-local support in Phase 2."
+    },
+    {
+      "id": "EC-012",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-012"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/edge/completions/provider.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/edge/completions/provider.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source/test inspection and focused node:test rerun",
+        "observed": "optionalDescription and its empty arm remain solely because the flag list preserves an optional description type."
+      },
+      "rationale": "optionalDescription and its empty arm remain solely because the flag list preserves an optional description type.",
+      "destination": "Narrow the flag contract and remove the dead arm in Phase 2."
+    },
+    {
+      "id": "EC-013",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-013"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/edge/completions/data.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/edge/completions/data.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source/test inspection and focused node:test rerun",
+        "observed": "The marketplaceNamesCachePath contract member remains unused by completion production flow and implemented by doubles."
+      },
+      "rationale": "The marketplaceNamesCachePath contract member remains unused by completion production flow and implemented by doubles.",
+      "destination": "Route removal through operator decision because it spans cache and persistence ownership."
+    },
+    {
+      "id": "EC-014",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-014"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/edge/completions/data.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/edge/completions/data.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source/test inspection and focused node:test rerun",
+        "observed": "marketplaceNamesForScope remains a one-line alias and the adjacent rebuild-closure heading remains misleading."
+      },
+      "rationale": "marketplaceNamesForScope remains a one-line alias and the adjacent rebuild-closure heading remains misleading.",
+      "destination": "Remove or rename the alias in Phase 2."
+    },
+    {
+      "id": "EC-015",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-015"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/edge/completions/data.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/edge/completions/data.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source/test inspection and focused node:test rerun",
+        "observed": "getInstalledPluginToMarketplacesMap still accepts and ignores _mode."
+      },
+      "rationale": "getInstalledPluginToMarketplacesMap still accepts and ignores _mode.",
+      "destination": "Drop the dead parameter in Phase 2."
+    },
+    {
+      "id": "EC-016",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-016"
+      ],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "tests/edge/completions/data.test.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/edge/completions/data.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source/test inspection and focused node:test rerun",
+        "observed": "The fused case-sensitivity criticism remains overstated: current rows preserve both outcomes and the focused suite reran green."
+      },
+      "rationale": "The fused case-sensitivity criticism remains overstated: current rows preserve both outcomes and the focused suite reran green.",
+      "destination": "Evidence-only closure."
+    },
+    {
+      "id": "EC-017",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-017"
+      ],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/completion-cache.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/completion-cache.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source/test inspection and focused node:test rerun",
+        "observed": "The prescribed Error-cause conversion remains a regression because the current replacement preserves the stable public wrapper-message contract and its owner suite."
+      },
+      "rationale": "The prescribed Error-cause conversion remains a regression because the current replacement preserves the stable public wrapper-message contract and its owner suite.",
+      "destination": "Evidence-only closure."
+    },
+    {
+      "id": "EC-018",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-018"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/edge/completions/data.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/edge/completions/data.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source/test inspection and focused node:test rerun",
+        "observed": "The three data exports still lack entrypoint-level ownership documentation beyond surrounding prose."
+      },
+      "rationale": "The three data exports still lack entrypoint-level ownership documentation beyond surrounding prose.",
+      "destination": "Add concise export documentation in Phase 2."
+    },
+    {
+      "id": "EC-019",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-019"
+      ],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/edge/completions/normalize.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/edge/completions/normalize.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source/test inspection and focused node:test rerun",
+        "observed": "The current file header documents both normalize exports, invalidating the historical stronger prescription; the focused suite reran green."
+      },
+      "rationale": "The current file header documents both normalize exports, invalidating the historical stronger prescription; the focused suite reran green.",
+      "destination": "Evidence-only closure."
+    },
+    {
+      "id": "EC-020",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-020"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/edge/completions/provider.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/edge/completions/provider.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source/test inspection and focused node:test rerun",
+        "observed": "PluginRefMode still duplicates the completion data mode union and getArgumentCompletions still lacks its own JSDoc."
+      },
+      "rationale": "PluginRefMode still duplicates the completion data mode union and getArgumentCompletions still lacks its own JSDoc.",
+      "destination": "Deduplicate the type and document the entrypoint in Phase 2."
+    },
+    {
+      "id": "EC-021",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-021"
+      ],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/edge/completions/data.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/edge/completions/data.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source/test inspection and focused node:test rerun",
+        "observed": "The summary's two-unavoidable-shortfalls premise is invalid: current proof separates compiler-forced branches from provider's removable arm, and all focused suites reran green."
+      },
+      "rationale": "The summary's two-unavoidable-shortfalls premise is invalid: current proof separates compiler-forced branches from provider's removable arm, and all focused suites reran green.",
+      "destination": "Evidence-only closure."
+    },
+    {
+      "id": "EC-022",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-022"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/edge/completions/data.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/edge/completions/data.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source/test inspection and focused node:test rerun",
+        "observed": "Current source confirms test-only references can keep production-dead cache surface alive and repeated prefix filters remain weakly discriminated."
+      },
+      "rationale": "Current source confirms test-only references can keep production-dead cache surface alive and repeated prefix filters remain weakly discriminated.",
+      "destination": "Carry both cross-cutting lessons into Phase 2 planning."
+    },
+    {
+      "id": "EC-023",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-023"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/edge/completions/provider.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/edge/completions/provider.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source/test inspection and focused node:test rerun",
+        "observed": "Current types confirm a supposedly unavoidable coverage arm can be removed by narrowing the upstream required-description contract."
+      },
+      "rationale": "Current types confirm a supposedly unavoidable coverage arm can be removed by narrowing the upstream required-description contract.",
+      "destination": "Route the contract choice through operator decision."
+    },
+    {
+      "id": "EC-024",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-completions.md#EC-024"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "tests/edge/completions/provider.test.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/edge/completions/provider.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source/test inspection and focused node:test rerun",
+        "observed": "The network trap remains a useful hermetic positive control and all three focused suites pass offline."
+      },
+      "rationale": "The network trap remains a useful hermetic positive control and all three focused suites pass offline.",
+      "destination": "Preserve as evidence-only positive practice."
+    },
+    {
+      "id": "EM-001",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-001"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/edge/handlers/marketplace/shared.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/edge/handlers/marketplace/shared.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "node --test isolated-copy focused owner suite after the described mutation",
+        "exitCode": 0,
+        "observed": "Removing await from the shared handler delegate in an isolated repository-local copy left shared.test.ts green."
+      },
+      "rationale": "Removing await from the shared handler delegate in an isolated repository-local copy left shared.test.ts green.",
+      "destination": "Add deferred rejection and delayed-emission cases in Phase 2."
+    },
+    {
+      "id": "EM-002",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-002"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/edge/handlers/marketplace/shared.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/edge/handlers/marketplace/shared.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source/test inspection and focused node:test rerun",
+        "observed": "The two shared exports still apply different unknown-long-flag policies without a documented product rule."
+      },
+      "rationale": "The two shared exports still apply different unknown-long-flag policies without a documented product rule.",
+      "destination": "Resolve the policy through operator decision."
+    },
+    {
+      "id": "EM-003",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-003"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/edge/handlers/marketplace/shared.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/edge/handlers/marketplace/shared.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source/test inspection and focused node:test rerun",
+        "observed": "The second test handler remains named for remove although remove no longer consumes that factory."
+      },
+      "rationale": "The second test handler remains named for remove although remove no longer consumes that factory.",
+      "destination": "Rename concern-local test terminology in Phase 2."
+    },
+    {
+      "id": "EM-004",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-004"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/edge/handlers/marketplace/update.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/edge/handlers/marketplace/update.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source/test inspection and focused node:test rerun",
+        "observed": "The update collapse arm remains unreachable because the required positional prevents the parser from returning usage unchanged."
+      },
+      "rationale": "The update collapse arm remains unreachable because the required positional prevents the parser from returning usage unchanged.",
+      "destination": "Delete the dead arm in Phase 2."
+    },
+    {
+      "id": "EM-005",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-005"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/edge/handlers/marketplace/shared.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/edge/handlers/marketplace/shared.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source/test inspection and focused node:test rerun",
+        "observed": "Two shared doc comments still name remove as a consumer after it moved to openMarketplaceCommand."
+      },
+      "rationale": "Two shared doc comments still name remove as a consumer after it moved to openMarketplaceCommand.",
+      "destination": "Correct the comments in Phase 2."
+    },
+    {
+      "id": "EM-006",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-006"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/edge/handlers/marketplace/shared.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/edge/handlers/marketplace/shared.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source/test inspection and focused node:test rerun",
+        "observed": "Unknown long flags still have three policies across the six marketplace handlers."
+      },
+      "rationale": "Unknown long flags still have three policies across the six marketplace handlers.",
+      "destination": "Resolve the user-facing contract through operator decision."
+    },
+    {
+      "id": "EM-007",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-007"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/edge/handlers/marketplace/shared.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/edge/handlers/marketplace/shared.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source/test inspection and focused node:test rerun",
+        "observed": "Six handler factories still lack entrypoint JSDoc while shared's factories are documented."
+      },
+      "rationale": "Six handler factories still lack entrypoint JSDoc while shared's factories are documented.",
+      "destination": "Add concise factory documentation in Phase 2."
+    },
+    {
+      "id": "EM-008",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-008"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/persistence/locations.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/edge/handlers/marketplace/add.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source/test inspection and focused node:test rerun",
+        "observed": "Five suites still seed and inspect scope footprints through locationsFor, so the address oracle participates on both sides."
+      },
+      "rationale": "Five suites still seed and inspect scope footprints through locationsFor, so the address oracle participates on both sides.",
+      "destination": "Replace circular scope proofs after injection seams in Phase 2."
+    },
+    {
+      "id": "EM-009",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-009"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/edge/handlers/marketplace/add.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/edge/handlers/marketplace/add.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source/test inspection and focused node:test rerun",
+        "observed": "Marketplace handler suites still call real orchestrators and duplicate rendered rows and persistence effects owned by orchestrator suites."
+      },
+      "rationale": "Marketplace handler suites still call real orchestrators and duplicate rendered rows and persistence effects owned by orchestrator suites.",
+      "destination": "Inject workflow delegates and narrow handler ownership in Phase 2."
+    },
+    {
+      "id": "EM-010",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-010"
+      ],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "tests/edge/handlers/marketplace/autoupdate.test.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/edge/handlers/marketplace/autoupdate.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source/test inspection and focused node:test rerun",
+        "observed": "The alleged conditional autoupdate loop remains absent; current rows differ only in data and the focused suite reran green."
+      },
+      "rationale": "The alleged conditional autoupdate loop remains absent; current rows differ only in data and the focused suite reran green.",
+      "destination": "Evidence-only closure."
+    },
+    {
+      "id": "EM-011",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-011"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/edge/handlers/marketplace/info.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/edge/handlers/marketplace/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source/test inspection and focused node:test rerun",
+        "observed": "The info factory remains a tiny delegate wrapper tested through a large real-orchestrator fixture, duplicating shared parse and orchestrator output ownership."
+      },
+      "rationale": "The info factory remains a tiny delegate wrapper tested through a large real-orchestrator fixture, duplicating shared parse and orchestrator output ownership.",
+      "destination": "Prioritize the info injection seam in Phase 2."
+    },
+    {
+      "id": "EM-012",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-012"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "tests/edge/handlers/marketplace/update.test.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/edge/handlers/marketplace/update.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source/test inspection and focused node:test rerun",
+        "observed": "The update data loop still contains a conditional that makes structurally different per-row promises."
+      },
+      "rationale": "The update data loop still contains a conditional that makes structurally different per-row promises.",
+      "destination": "Split into named cases in Phase 2."
+    },
+    {
+      "id": "EM-013",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-013"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/edge/handlers/marketplace/shared.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/edge/handlers/marketplace/shared.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source/test inspection and focused node:test rerun",
+        "observed": "The generic cast remains necessary under current typing but still has no explanatory comment."
+      },
+      "rationale": "The generic cast remains necessary under current typing but still has no explanatory comment.",
+      "destination": "Document the type-system bridge in Phase 2."
+    },
+    {
+      "id": "EM-014",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-014"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "tests/edge/notification-boundary.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/edge/handlers/marketplace/shared.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source/test inspection and focused node:test rerun",
+        "observed": "The notification boundary still provides a strict zero-interaction proof and all focused suites pass with it."
+      },
+      "rationale": "The notification boundary still provides a strict zero-interaction proof and all focused suites pass with it.",
+      "destination": "Preserve as evidence-only positive practice."
+    },
+    {
+      "id": "EM-015",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-015"
+      ],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/edge/handlers/marketplace/add.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/edge/handlers/marketplace/add.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source/test inspection and focused node:test rerun",
+        "observed": "The six separate BLOCKER labels remain overstated: current evidence supports one grouped design warning while duplication cost remains live."
+      },
+      "rationale": "The six separate BLOCKER labels remain overstated: current evidence supports one grouped design warning while duplication cost remains live.",
+      "destination": "Evidence-only severity closure; retain EM-009."
+    },
+    {
+      "id": "EM-016",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-016"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/edge/handlers/marketplace/update.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/edge/handlers/marketplace/update.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source/test inspection and focused node:test rerun",
+        "observed": "The dead branch is removable rather than compiler-forced or prototype-only."
+      },
+      "rationale": "The dead branch is removable rather than compiler-forced or prototype-only.",
+      "destination": "Delete through EM-004 in Phase 2."
+    },
+    {
+      "id": "EM-017",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-017"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/persistence/locations.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/edge/handlers/marketplace/autoupdate.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source/test inspection and focused node:test rerun",
+        "observed": "Fixture-address circularity remains a cross-cutting weakness beyond this handler cluster."
+      },
+      "rationale": "Fixture-address circularity remains a cross-cutting weakness beyond this handler cluster.",
+      "destination": "Carry the scope-proof pattern into Phase 2 audit."
+    },
+    {
+      "id": "EM-018",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-018"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/edge/handlers/marketplace/shared.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/edge/handlers/marketplace/shared.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source/test inspection and focused node:test rerun",
+        "observed": "Current doc comments still misname consumers, confirming caller-naming comments drift after refactors."
+      },
+      "rationale": "Current doc comments still misname consumers, confirming caller-naming comments drift after refactors.",
+      "destination": "Repair through EM-005."
+    },
+    {
+      "id": "EM-019",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-019"
+      ],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/edge/handlers/marketplace/shared.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/edge/handlers/marketplace/shared.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source/test inspection and focused node:test rerun",
+        "observed": "META's six-versus-one comparison remains a granularity mismatch, not six independent defects; current focused suites reran green."
+      },
+      "rationale": "META's six-versus-one comparison remains a granularity mismatch, not six independent defects; current focused suites reran green.",
+      "destination": "Evidence-only correction."
+    },
+    {
+      "id": "EM-020",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-020"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "tests/platform/git-ops-fake.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/edge/handlers/marketplace/add.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source/test inspection and focused node:test rerun",
+        "observed": "The git fake's structuredClone limitation still constrains fixtures and requires production-shape workarounds in multiple suites."
+      },
+      "rationale": "The git fake's structuredClone limitation still constrains fixtures and requires production-shape workarounds in multiple suites.",
+      "destination": "Repair the fake in Phase 2."
+    },
+    {
+      "id": "EM-021",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-021"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "tests/edge/handlers/marketplace-seed.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/edge/handlers/marketplace/info.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source/test inspection and focused node:test rerun",
+        "observed": "The marketplace seed's double cast remains on the load path of five suites and suppresses structural fixture checking."
+      },
+      "rationale": "The marketplace seed's double cast remains on the load path of five suites and suppresses structural fixture checking.",
+      "destination": "Replace the cast with checked builders in Phase 2."
+    },
+    {
+      "id": "EM-022",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-022"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "tests/edge/handlers/marketplace/update.test.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/edge/handlers/marketplace/add.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source/test inspection and focused node:test rerun",
+        "observed": "Add and update tests still document planted offline-gate controls, including an honest transport limitation."
+      },
+      "rationale": "Add and update tests still document planted offline-gate controls, including an honest transport limitation.",
+      "destination": "Preserve as evidence-only guidance."
+    },
+    {
+      "id": "EM-023",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-023"
+      ],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "tests/edge/notification-boundary.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/edge/notification-boundary.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source/test inspection and focused node:test rerun",
+        "observed": "The old notification-boundary path is stale; the current replacement is tests/edge/notification-boundary.ts and all seven focused suites pass using it."
+      },
+      "rationale": "The old notification-boundary path is stale; the current replacement is tests/edge/notification-boundary.ts and all seven focused suites pass using it.",
+      "destination": "Evidence-only closure."
+    },
+    {
+      "id": "EM-024",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/edge-handlers-marketplace.md#EM-024"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "tests/orchestrators/marketplace/update.test.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/edge/handlers/marketplace/update.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source/test inspection and focused node:test rerun",
+        "observed": "Handler and orchestrator tiers still overlap on rendered grammar and disk footprints; injection would place forwarding in handlers and effects in orchestrators."
+      },
+      "rationale": "Handler and orchestrator tiers still overlap on rendered grammar and disk footprints; injection would place forwarding in handlers and effects in orchestrators.",
+      "destination": "Use the report's ownership split in Phase 2."
+    }
+  ]
+}

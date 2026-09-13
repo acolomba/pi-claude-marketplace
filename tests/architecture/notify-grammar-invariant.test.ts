@@ -27,10 +27,8 @@
 import assert from "node:assert/strict";
 import test, { mock } from "node:test";
 
-import {
-  notify,
-  type NotificationMessage,
-} from "../../extensions/pi-claude-marketplace/shared/notify.ts";
+import { notify } from "../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
+import { type NotificationMessage } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
 // ---------------------------------------------------------------------------
 // Mock helpers -- mirror the catalog-uat harness (makeCtx + piWith*Loaded).
@@ -395,7 +393,7 @@ const DISABLED_VARIANT_FIXTURES: readonly GrammarFixture[] = [
 test("DIFF-02: every will-* row renders subject-first `<glyph> <name> [<scope>] (will ...)` with the status token AFTER the subject", () => {
   for (const fixture of WILL_VARIANT_FIXTURES) {
     const ctx = makeCtx();
-    notify(ctx as never, fixture.pi as never, fixture.message);
+    notify(ctx as never, fixture.pi, fixture.message);
     assert.equal(
       ctx.ui.notify.mock.calls.length,
       1,
@@ -435,7 +433,7 @@ test("DIFF-02: every will-* row renders subject-first `<glyph> <name> [<scope>] 
 test("D-54-01 / ENBL-04: every (disabled) row renders subject-first `◍ <name> [<scope>] v<version> (disabled)` with the status token AFTER the subject", () => {
   for (const fixture of DISABLED_VARIANT_FIXTURES) {
     const ctx = makeCtx();
-    notify(ctx as never, fixture.pi as never, fixture.message);
+    notify(ctx as never, fixture.pi, fixture.message);
     assert.equal(
       ctx.ui.notify.mock.calls.length,
       1,
@@ -550,7 +548,7 @@ const RECONCILE_APPLIED_FIXTURES: readonly GrammarFixture[] = [
 test("RECON-04: reconcile-applied-cascade NEVER emits `/reload to pick up changes` even on cascades with realized transition tokens", () => {
   for (const fixture of RECONCILE_APPLIED_FIXTURES) {
     const ctx = makeCtx();
-    notify(ctx as never, fixture.pi as never, fixture.message);
+    notify(ctx as never, fixture.pi, fixture.message);
     assert.equal(
       ctx.ui.notify.mock.calls.length,
       1,
@@ -578,7 +576,7 @@ test("RECON-04: every reconcile-applied-cascade row renders subject-first `<glyp
   const ROW_ICONS_AT_START = ["●", "○", "⊘"];
   for (const fixture of RECONCILE_APPLIED_FIXTURES) {
     const ctx = makeCtx();
-    notify(ctx as never, fixture.pi as never, fixture.message);
+    notify(ctx as never, fixture.pi, fixture.message);
     const args = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
     const emitted = args[0];
 
@@ -612,7 +610,7 @@ test("RECON-04: every reconcile-applied-cascade row renders subject-first `<glyp
 test("GRAM-01/04/05: every error/warning emission has a non-empty summary first line distinct from the detail block", () => {
   for (const fixture of FIXTURES) {
     const ctx = makeCtx();
-    notify(ctx as never, fixture.pi as never, fixture.message);
+    notify(ctx as never, fixture.pi, fixture.message);
 
     assert.equal(
       ctx.ui.notify.mock.calls.length,
@@ -683,7 +681,7 @@ test("GRAM-01/04/05: every error/warning emission has a non-empty summary first 
 test("CMP-4 / SCOPE-01: the scope word inside the reason brace equals the scope inside the row bracket", () => {
   for (const fixture of CROSS_SCOPE_FIXTURES) {
     const ctx = makeCtx();
-    notify(ctx as never, fixture.pi as never, fixture.message);
+    notify(ctx as never, fixture.pi, fixture.message);
     const args = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
     const emitted = args[0];
     const row = emitted.slice(emitted.indexOf("\n\n") + 2);
@@ -716,7 +714,7 @@ test("CMP-4 / SCOPE-01: the scope word inside the reason brace equals the scope 
 test("SCOPE-01: the scope word inside the cross-scope reason brace is the OPPOSITE of the scope in the marketplace header bracket", () => {
   for (const fixture of CROSS_SCOPE_ROW_FIXTURES) {
     const ctx = makeCtx();
-    notify(ctx as never, fixture.pi as never, fixture.message);
+    notify(ctx as never, fixture.pi, fixture.message);
     const args = ctx.ui.notify.mock.calls[0]!.arguments as [string, string?];
     const emitted = args[0];
     const body = emitted.slice(emitted.indexOf("\n\n") + 2);

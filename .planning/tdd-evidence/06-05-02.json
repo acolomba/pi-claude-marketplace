@@ -1,0 +1,9 @@
+{
+  "command": "node --test-reporter tap tests/domain/unsupported-components.test.ts",
+  "exitCode": 1,
+  "output": "TAP version 13\n# Subtest: exports the exact supported and unsupported closed sets\nnot ok 1 - exports the exact supported and unsupported closed sets\n  ---\n  error: Got unwanted rejection: unsupported-components.ts is absent\n  code: ERR_ASSERTION\n  ...\n1..6\n# tests 6\n# suites 0\n# pass 0\n# fail 6\n# cancelled 0\n# skipped 0\n# todo 0\n",
+  "targetTest": "exports the exact supported and unsupported closed sets",
+  "targetFile": "tests/domain/unsupported-components.test.ts",
+  "expected": "The unsupported-components owner exports the exact closed sets and predicates.",
+  "actual": "The dynamic import rejected because unsupported-components.ts does not exist before extraction."
+}

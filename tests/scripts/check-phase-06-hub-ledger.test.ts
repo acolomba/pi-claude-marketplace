@@ -1,0 +1,300 @@
+import assert from "node:assert/strict";
+import { describe, test } from "node:test";
+
+// @ts-expect-error The production validator is intentionally a directly executable .mjs CLI.
+import * as hubLedgerModule from "../../scripts/check-phase-06-hub-ledger.mjs";
+
+interface CensusRow {
+  readonly id: string;
+  readonly sourcePath: string;
+  readonly symbol: string;
+  readonly ownerTest: string;
+  readonly graph: string;
+  readonly route: "phase-06" | "phase-08" | "retained" | "already-removed";
+  readonly evidence: string;
+}
+
+interface HubLedgerApi {
+  readonly CATALOG_FIXTURES: readonly string[];
+  readonly CENSUS_ROWS: readonly CensusRow[];
+  readonly LEGACY_HUBS: readonly string[];
+  readonly MF_DEC_01_IDS: readonly string[];
+  readonly OWNER_PAIRS: readonly (readonly [string, string])[];
+  readonly validateCensus: (input: {
+    readonly decision: string;
+    readonly source: unknown;
+    readonly codegraph: string;
+    readonly rows: readonly CensusRow[];
+    readonly trackedPaths: ReadonlySet<string>;
+  }) => string[];
+  readonly validatePreedit: (input: {
+    readonly hub: string;
+    readonly legacyTest: string;
+    readonly ledger: string;
+    readonly codegraph: string;
+    readonly trackedPaths: ReadonlySet<string>;
+  }) => string[];
+  readonly validateClosure: (input: {
+    readonly files: ReadonlyMap<string, string>;
+    readonly ownerCount: number;
+    readonly catalogFixtureCount: number;
+    readonly legacyHubs: readonly string[];
+    readonly syncFiles: number;
+    readonly syncCalls: number;
+    readonly requireFiles: number;
+    readonly requireCalls: number;
+  }) => string[];
+}
+
+const {
+  CATALOG_FIXTURES,
+  CENSUS_ROWS,
+  LEGACY_HUBS,
+  MF_DEC_01_IDS,
+  OWNER_PAIRS,
+  validateCensus,
+  validateClosure,
+  validatePreedit,
+} = hubLedgerModule as HubLedgerApi;
+
+function decisionSource(ids: readonly string[] = MF_DEC_01_IDS): unknown {
+  return {
+    decisions: [
+      {
+        id: "MF-DEC-01",
+        status: "resolved",
+        premiseFindingIds: ids,
+        selectedOption: "Trace-preserving removal",
+      },
+    ],
+  };
+}
+
+function codegraphEvidence(ids: readonly string[] = MF_DEC_01_IDS): string {
+  return ids.map((id) => `===== ${id} =====\ncaller -> dependency -> owner`).join("\n");
+}
+
+describe("MF-DEC-01 census", () => {
+  test("accepts exactly 24 mapped canonical rows with fresh evidence", () => {
+    assert.deepStrictEqual(
+      validateCensus({
+        decision: "MF-DEC-01",
+        source: decisionSource(),
+        codegraph: codegraphEvidence(),
+        rows: CENSUS_ROWS,
+        trackedPaths: new Set(CENSUS_ROWS.flatMap((row) => [row.sourcePath, row.ownerTest])),
+      }),
+      [],
+    );
+  });
+
+  test("fails closed for duplicate, missing, stale, and unmapped rows", () => {
+    const duplicateIds = [...MF_DEC_01_IDS.slice(0, -1), MF_DEC_01_IDS[0]!];
+    assert.match(
+      validateCensus({
+        decision: "MF-DEC-01",
+        source: decisionSource(duplicateIds),
+        codegraph: codegraphEvidence(),
+        rows: CENSUS_ROWS,
+        trackedPaths: new Set(CENSUS_ROWS.flatMap((row) => [row.sourcePath, row.ownerTest])),
+      }).join("\n"),
+      /duplicate|missing/i,
+    );
+    assert.match(
+      validateCensus({
+        decision: "MF-DEC-01",
+        source: decisionSource(),
+        codegraph: codegraphEvidence(MF_DEC_01_IDS.slice(1)),
+        rows: CENSUS_ROWS,
+        trackedPaths: new Set(CENSUS_ROWS.flatMap((row) => [row.sourcePath, row.ownerTest])),
+      }).join("\n"),
+      /CodeGraph.*BA-009/i,
+    );
+    assert.match(
+      validateCensus({
+        decision: "MF-DEC-01",
+        source: decisionSource(),
+        codegraph: codegraphEvidence(),
+        rows: CENSUS_ROWS,
+        trackedPaths: new Set(),
+      }).join("\n"),
+      /stale path/i,
+    );
+  });
+});
+
+describe("PRE-EDIT ledger", () => {
+  const hub = "fixtures/example-hub.ts";
+  const legacyTest = "fixtures/example-hub.test.ts";
+  const ledger = `# Example PRE-EDIT Ledger
+
+Status: READY
+Hub: ${hub}
+Legacy test: ${legacyTest}
+
+| Category | Current owner | Destination | Evidence |
+| --- | --- | --- | --- |
+| exported symbol | ListPluginsOptions | orchestrators/plugin/list-flow.ts | tracked |
+| production caller | fixtures/example-caller.ts | fixtures/example-flow.ts | CodeGraph |
+| source-scanning gate | fixtures/example-gate.ts | fixtures/example-flow.ts | tracked |
+| documentation comment | fixtures/example-design.md | fixtures/example-leaf.ts | tracked |
+| test ownership | example-hub.test.ts row cases | example-leaf.test.ts | exact owner |
+| completeness invariant | zero/one/many cardinality and stable rows | example-flow.test.ts | inverse walk |
+| dependency edge | example hub to installed rows | example leaf to notification grammar | acyclic |
+`;
+
+  test("accepts a READY ledger with every repoint category", () => {
+    assert.deepStrictEqual(
+      validatePreedit({
+        hub,
+        legacyTest,
+        ledger,
+        codegraph: `callers and dependencies for ${hub}`,
+        trackedPaths: new Set([
+          hub,
+          legacyTest,
+          "fixtures/example-leaf.ts",
+          "fixtures/example-leaf.test.ts",
+        ]),
+      }),
+      [],
+    );
+  });
+
+  test("fails closed for unmapped, duplicate-owner, stale, or cyclic ledgers", () => {
+    assert.match(
+      validatePreedit({
+        hub,
+        legacyTest,
+        ledger: ledger.replace(/\| completeness invariant .*\n/, ""),
+        codegraph: hub,
+        trackedPaths: new Set([hub, legacyTest]),
+      }).join("\n"),
+      /completeness invariant/i,
+    );
+    assert.match(
+      validatePreedit({
+        hub,
+        legacyTest,
+        ledger: `${ledger}| test ownership | duplicate | example-leaf.test.ts | duplicate |\n`,
+        codegraph: hub,
+        trackedPaths: new Set([hub, legacyTest]),
+      }).join("\n"),
+      /duplicate owner/i,
+    );
+    assert.match(
+      validatePreedit({
+        hub,
+        legacyTest,
+        ledger: ledger.replace("acyclic", "cycle"),
+        codegraph: hub,
+        trackedPaths: new Set([hub, legacyTest]),
+      }).join("\n"),
+      /cycle/i,
+    );
+  });
+});
+
+describe("Phase 6 closure", () => {
+  test("tracks the exact seven retired hubs independently from PRE-EDIT fixtures", () => {
+    assert.deepStrictEqual(LEGACY_HUBS, [
+      ["extensions/pi-claude-marketplace", "domain", "resolver.ts"].join("/"),
+      ["extensions/pi-claude-marketplace", "shared", "notify.ts"].join("/"),
+      ["tests", "architecture", "catalog-uat.test.ts"].join("/"),
+      ["extensions/pi-claude-marketplace", "orchestrators", "plugin", "install.ts"].join("/"),
+      ["extensions/pi-claude-marketplace", "orchestrators", "plugin", "update.ts"].join("/"),
+      ["extensions/pi-claude-marketplace", "orchestrators", "plugin", "reinstall.ts"].join("/"),
+      ["extensions/pi-claude-marketplace", "orchestrators", "plugin", "list.ts"].join("/"),
+    ]);
+  });
+
+  function validClosureFiles(): Map<string, string> {
+    // Keep the repository census limited to executable patch calls while the
+    // fixture still assembles the exact tokens consumed by the validator.
+    const syncToken = "syncBuiltinESM" + "Exports(";
+    const requireToken = "create" + "Require(";
+    const files = new Map<string, string>();
+    for (const [source, owner] of OWNER_PAIRS) {
+      files.set(source, "export const owner = true;\n");
+      files.set(owner, "test('owner', () => {});\n");
+    }
+
+    for (const fixture of CATALOG_FIXTURES) {
+      files.set(fixture, "export const fixture = {};\n");
+    }
+
+    files.set(
+      "tests/bridges/skills/stage.test.ts",
+      `${`${syncToken});\n`.repeat(16)}${requireToken}import.meta.url);\n`,
+    );
+    files.set(
+      "tests/orchestrators/plugin/uninstall.test.ts",
+      `${`${syncToken});\n`.repeat(2)}${requireToken}import.meta.url);\n`,
+    );
+    files.set("scripts/check-phase-06-hub-ledger.mjs", `${syncToken} ${requireToken}`);
+    files.set("tests/scripts/check-phase-06-hub-ledger.test.ts", `${syncToken} ${requireToken}`);
+    return files;
+  }
+
+  test("accepts 30 owner pairs, 20 fixtures, seven absent hubs, and the exact residual census", () => {
+    assert.deepStrictEqual(
+      validateClosure({
+        files: validClosureFiles(),
+        ownerCount: 30,
+        catalogFixtureCount: 20,
+        legacyHubs: LEGACY_HUBS,
+        syncFiles: 2,
+        syncCalls: 18,
+        requireFiles: 2,
+        requireCalls: 2,
+      }),
+      [],
+    );
+  });
+
+  test("fails closed for missing owners, stale hubs, and residual count drift", () => {
+    const missingOwner = validClosureFiles();
+    missingOwner.delete(OWNER_PAIRS[0]?.[1] ?? "");
+    assert.match(
+      validateClosure({
+        files: missingOwner,
+        ownerCount: 30,
+        catalogFixtureCount: 20,
+        legacyHubs: LEGACY_HUBS,
+        syncFiles: 2,
+        syncCalls: 18,
+        requireFiles: 2,
+        requireCalls: 2,
+      }).join("\n"),
+      /missing owner/i,
+    );
+    const staleHub = validClosureFiles();
+    staleHub.set(LEGACY_HUBS[0] ?? "legacy.ts", "stale\n");
+    assert.match(
+      validateClosure({
+        files: staleHub,
+        ownerCount: 30,
+        catalogFixtureCount: 20,
+        legacyHubs: LEGACY_HUBS,
+        syncFiles: 2,
+        syncCalls: 18,
+        requireFiles: 2,
+        requireCalls: 2,
+      }).join("\n"),
+      /legacy hub/i,
+    );
+    assert.match(
+      validateClosure({
+        files: validClosureFiles(),
+        ownerCount: 30,
+        catalogFixtureCount: 20,
+        legacyHubs: LEGACY_HUBS,
+        syncFiles: 2,
+        syncCalls: 17,
+        requireFiles: 2,
+        requireCalls: 2,
+      }).join("\n"),
+      /syncBuiltinESMExports/i,
+    );
+  });
+});

@@ -1,17 +1,19 @@
 import {
-  ICON_UNINSTALLABLE,
   pluginRow,
   renderAvailableRow,
   renderPartiallyAvailableRow,
   renderRemoteRow,
   renderUnavailableRow,
+  ICON_UNINSTALLABLE,
+} from "../../shared/notification-grammar.ts";
+import {
   type PluginAvailableMessage,
   type PluginFailedMessage,
   type PluginPartiallyAvailableMessage,
   type PluginRemoteMessage,
   type PluginSkippedMessage,
   type PluginUnavailableMessage,
-} from "../../shared/notify.ts";
+} from "../../shared/notification-types.ts";
 
 import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
 
@@ -20,8 +22,8 @@ import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
  * `/claude:plugin fetch` (FTCH-02). Co-locates fetch's private status set, its
  * cascade row message shapes, and a render map total over fetch's OWN statuses
  * (D-10) whose arms DELEGATE to the shared per-row renderers. The shared
- * presentation vocabulary stays central in `shared/notify.ts` (D-11) and is
- * CALLED here, never duplicated. No closed set (ICON / STATUS_TOKENS /
+ * presentation vocabulary stays central in `shared/notification-grammar.ts`
+ * (D-11) and is CALLED here, never duplicated. No closed set (ICON / STATUS_TOKENS /
  * PLUGIN_STATUSES / REASONS) grows -- every member fetch needs already exists.
  */
 

@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
 
-const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+import { RECONCILE_PURITY_TARGETS } from "./gate-targets.ts";
+import { REPO_ROOT } from "./source-scan.ts";
 
 /**
  * DIFF-01 architecture purity gate.
@@ -26,7 +26,7 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..
  * the planner be unit-tested in isolation and that load-time apply can call from
  * inside `resources_discover` without dragging in any I/O surface.
  */
-const TARGET = "extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts";
+const TARGET = RECONCILE_PURITY_TARGETS[0];
 
 const FORBIDDEN_PATTERNS: ReadonlyArray<{ name: string; pattern: RegExp }> = [
   { name: "import from node:fs", pattern: /from\s+["']node:fs["']/ },
@@ -52,6 +52,12 @@ function stripComments(src: string): string {
 
 test("DIFF-01: planReconcile is pure (no fs/network/notify/save/lock imports)", async () => {
   const offenders: string[] = [];
+
+  assert.ok(
+    RECONCILE_PURITY_TARGETS.length > 0,
+    "D-07-03: an empty target group leaves this gate reading nothing and reporting zero offenders over zero files.",
+  );
+
   const src = await readFile(path.join(REPO_ROOT, TARGET), "utf8");
   const stripped = stripComments(src);
   for (const { name, pattern } of FORBIDDEN_PATTERNS) {

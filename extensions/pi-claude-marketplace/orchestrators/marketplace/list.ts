@@ -72,14 +72,16 @@ export async function listMarketplaces(opts: ListMarketplacesOptions): Promise<v
       //   when the state record carries `lastUpdatedAt`, OMITTED otherwise so
       //   the renderer emits a bare `● <name> [<scope>]` row (list-surface
       //   sub-branch A).
-      // - Severity (info; no 2nd arg) and reload-hint are computed by
-      //  notify (list surface emits neither).
+      // - Explicit info severity marks this statusless inventory row as an
+      //   operation for the plural tally. The UI still receives no 2nd arg.
+      //   Reload-hint is computed by notify (list surface emits none).
       // - Reference: catalog UAT `mixed-scopes` fixture (binding
       //   `<autoupdate>` + `<last-updated <iso>>` tokens).
       const autoupdate = merged.marketplaces[record.name]?.entry.autoupdate ?? false;
       marketplaces.push({
         name: record.name,
         scope: record.scope,
+        severity: "info",
         ...(autoupdate || record.lastUpdatedAt !== undefined
           ? {
               details: {
@@ -101,5 +103,5 @@ export async function listMarketplaces(opts: ListMarketplacesOptions): Promise<v
   // OUT-07 / D-12: the inventory is a bulk surface -> Plural cardinality. The
   // list-arm headers render via the central renderMpHeader seam the spine
   // reuses; LIST_CONTEXT carries the localized list vocabulary.
-  notifyWithContext(opts.ctx, opts.pi, LIST_CONTEXT, marketplaces);
+  notifyWithContext(opts.ctx, opts.pi, LIST_CONTEXT, marketplaces, undefined, "plural");
 }

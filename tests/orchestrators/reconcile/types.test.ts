@@ -4,6 +4,11 @@ import { describe, test } from "node:test";
 import { mock } from "strong-mock";
 
 import {
+  createHooksRouting,
+  createHooksRuntime,
+  readHooksJson,
+} from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
+import {
   emptyReconcilePlan,
   plannedSourceMismatchSubject,
   type ApplyReconcileOptions,
@@ -21,6 +26,7 @@ import {
   type ReconcilePlan,
   type ScopeReadResult,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts";
+import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 
 import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
@@ -37,6 +43,8 @@ const extensionApi = mock<ExtensionAPI>({
   exactParams: true,
   name: "extension API type evidence",
 });
+const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
+const completionCache = createCompletionCache();
 const gitOps = mock<GitOps>({ exactParams: true, name: "Git operations type evidence" });
 
 const plannedMarketplaceAdd = {
@@ -117,13 +125,17 @@ void ({
   ctx: extensionContext,
   pi: extensionApi,
   cwd: "/work/project",
+  completionCache,
+  hooksRouting,
 } satisfies ApplyReconcileOptions);
 void ({
   ctx: extensionContext,
   pi: extensionApi,
   cwd: "/work/project",
+  completionCache,
   scope: "project",
   gitOps,
+  hooksRouting,
 } satisfies ApplyReconcileOptions);
 
 const extensionState = {
@@ -276,12 +288,19 @@ void ({
   pluginsToDisable: [],
   // @ts-expect-error reconcile plans always expose their mismatch bucket
 } satisfies ReconcilePlan);
-// @ts-expect-error apply options always expose the Pi context
-void ({ pi: extensionApi, cwd: "/work/project" } satisfies ApplyReconcileOptions);
+void ({
+  pi: extensionApi,
+  cwd: "/work/project",
+  completionCache,
+  hooksRouting,
+  // @ts-expect-error apply options always expose the Pi context
+} satisfies ApplyReconcileOptions);
 void ({
   ctx: extensionContext,
   pi: extensionApi,
   cwd: "/work/project",
+  completionCache,
+  hooksRouting,
   scope: undefined,
   // @ts-expect-error exact optional properties reject an explicitly undefined scope
 } satisfies ApplyReconcileOptions);
@@ -289,6 +308,8 @@ void ({
   ctx: extensionContext,
   pi: extensionApi,
   cwd: "/work/project",
+  completionCache,
+  hooksRouting,
   gitOps: undefined,
   // @ts-expect-error exact optional properties reject explicitly undefined Git operations
 } satisfies ApplyReconcileOptions);

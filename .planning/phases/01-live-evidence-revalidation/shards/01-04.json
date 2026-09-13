@@ -1,0 +1,268 @@
+{
+  "version": 1,
+  "inventoryMode": "shard",
+  "plan": "01-04",
+  "files": [
+    {
+      "path": ".planning/reviews/unit-test-adversarial/_CLEAN-LIST-REPAIR.md",
+      "category": "control",
+      "assignedPlan": "01-04",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/_CLEAN-LIST-REPAIR.md#REPAIR-SCOPE",
+        ".planning/reviews/unit-test-adversarial/_CLEAN-LIST-REPAIR.md#DEFICIENCY-CENSUS",
+        ".planning/reviews/unit-test-adversarial/_CLEAN-LIST-REPAIR.md#RECONSTRUCTION-METHOD",
+        ".planning/reviews/unit-test-adversarial/_CLEAN-LIST-REPAIR.md#KNOWN-REPAIRS",
+        ".planning/reviews/unit-test-adversarial/_CLEAN-LIST-REPAIR.md#ENTRY-TOTAL",
+        ".planning/reviews/unit-test-adversarial/_CLEAN-LIST-REPAIR.md#EDGE-ACCURACY-FIX",
+        ".planning/reviews/unit-test-adversarial/_CLEAN-LIST-REPAIR.md#META-EXCLUSION",
+        ".planning/reviews/unit-test-adversarial/_CLEAN-LIST-REPAIR.md#NO-INDETERMINATE"
+      ],
+      "reviewStatus": "complete",
+      "outcome": "live findings"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/_FIRST-PASS-BRIEF.md",
+      "category": "control",
+      "assignedPlan": "01-04",
+      "claimIds": [],
+      "reviewStatus": "complete",
+      "outcome": "control document"
+    }
+  ],
+  "sourceClaims": [
+    {
+      "id": ".planning/reviews/unit-test-adversarial/_CLEAN-LIST-REPAIR.md#REPAIR-SCOPE",
+      "filePath": ".planning/reviews/unit-test-adversarial/_CLEAN-LIST-REPAIR.md",
+      "label": "REPAIR-SCOPE",
+      "findingId": "CLR-001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/_CLEAN-LIST-REPAIR.md#DEFICIENCY-CENSUS",
+      "filePath": ".planning/reviews/unit-test-adversarial/_CLEAN-LIST-REPAIR.md",
+      "label": "DEFICIENCY-CENSUS",
+      "findingId": "CLR-002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/_CLEAN-LIST-REPAIR.md#RECONSTRUCTION-METHOD",
+      "filePath": ".planning/reviews/unit-test-adversarial/_CLEAN-LIST-REPAIR.md",
+      "label": "RECONSTRUCTION-METHOD",
+      "findingId": "CLR-003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/_CLEAN-LIST-REPAIR.md#KNOWN-REPAIRS",
+      "filePath": ".planning/reviews/unit-test-adversarial/_CLEAN-LIST-REPAIR.md",
+      "label": "KNOWN-REPAIRS",
+      "findingId": "CLR-004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/_CLEAN-LIST-REPAIR.md#ENTRY-TOTAL",
+      "filePath": ".planning/reviews/unit-test-adversarial/_CLEAN-LIST-REPAIR.md",
+      "label": "ENTRY-TOTAL",
+      "findingId": "CLR-004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/_CLEAN-LIST-REPAIR.md#EDGE-ACCURACY-FIX",
+      "filePath": ".planning/reviews/unit-test-adversarial/_CLEAN-LIST-REPAIR.md",
+      "label": "EDGE-ACCURACY-FIX",
+      "findingId": "CLR-005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/_CLEAN-LIST-REPAIR.md#META-EXCLUSION",
+      "filePath": ".planning/reviews/unit-test-adversarial/_CLEAN-LIST-REPAIR.md",
+      "label": "META-EXCLUSION",
+      "findingId": "CLR-006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/_CLEAN-LIST-REPAIR.md#NO-INDETERMINATE",
+      "filePath": ".planning/reviews/unit-test-adversarial/_CLEAN-LIST-REPAIR.md",
+      "label": "NO-INDETERMINATE",
+      "findingId": "CLR-007"
+    }
+  ],
+  "findings": [
+    {
+      "id": "CLR-001",
+      "claimIds": [".planning/reviews/unit-test-adversarial/_CLEAN-LIST-REPAIR.md#REPAIR-SCOPE"],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "sourceRefs": [
+        { "path": ".planning/reviews/unit-test-adversarial/_CLEAN-LIST-REPAIR.md" },
+        { "path": ".planning/reviews/unit-test-adversarial" }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "Repair scope and repository history are non-executable corpus metadata."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "git path history and current worktree status",
+        "observed": "The retained repair report and review corpus entered the archived tree together, and the current source and test trees have no uncommitted changes. The report remains evidence about corpus maintenance, not authority to change product files."
+      },
+      "rationale": "The historical read-only scope is consistent with retained repository evidence and imposes no current implementation work.",
+      "destination": "Preserve the scope statement as evidence-only corpus provenance.",
+      "duplicateOf": null
+    },
+    {
+      "id": "CLR-002",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/_CLEAN-LIST-REPAIR.md#DEFICIENCY-CENSUS"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "sourceRefs": [
+        { "path": ".planning/reviews/unit-test-adversarial/_CLEAN-LIST-REPAIR.md" },
+        { "path": ".planning/reviews/unit-test-adversarial" }
+      ],
+      "testRefs": [
+        { "path": "N/A", "reason": "Heading completeness is a static corpus property." }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "independent current heading census plus archived repair report",
+        "observed": "All 45 first-pass area reports now contain exactly two Clean files headings. The report preserves the pre-repair census of two reports with zero headings and seven with one; the repaired current state has no deficient area report."
+      },
+      "rationale": "The pre-repair count is historical provenance, while the current census positively confirms that the named deficiency is closed.",
+      "destination": "Retain as evidence-only closure of the clean-list completeness repair.",
+      "duplicateOf": null
+    },
+    {
+      "id": "CLR-003",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/_CLEAN-LIST-REPAIR.md#RECONSTRUCTION-METHOD"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "sourceRefs": [
+        { "path": ".planning/reviews/unit-test-adversarial/_CLEAN-LIST-REPAIR.md" },
+        { "path": ".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md" },
+        { "path": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md" }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "Clean-set derivation is a static relation between report scope, findings, and clean-list prose."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current report section inspection",
+        "observed": "Repaired lists are expressed as scope-minus-finding sets: named clean paths remain under both sections, while fully finding-bearing sections explicitly say None and enumerate the affected files."
+      },
+      "rationale": "The retained documents visibly implement the stated reconstruction rule and distinguish empty clean sets from missing sections.",
+      "destination": "Preserve the reconstruction rule as corpus-maintenance evidence.",
+      "duplicateOf": null
+    },
+    {
+      "id": "CLR-004",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/_CLEAN-LIST-REPAIR.md#KNOWN-REPAIRS",
+        ".planning/reviews/unit-test-adversarial/_CLEAN-LIST-REPAIR.md#ENTRY-TOTAL"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "sourceRefs": [
+        { "path": ".planning/reviews/unit-test-adversarial/bridges-hooks-async-rewake.md" },
+        { "path": ".planning/reviews/unit-test-adversarial/transaction.md" },
+        { "path": ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md" },
+        { "path": ".planning/reviews/unit-test-adversarial/bridges-commands.md" },
+        { "path": ".planning/reviews/unit-test-adversarial/bridges-hooks-dispatch.md" },
+        { "path": ".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md" },
+        { "path": ".planning/reviews/unit-test-adversarial/domain-components-hooks.md" },
+        { "path": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-install.md" },
+        { "path": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-reinstall.md" }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "The nine repaired lists and their entry count are static corpus metadata."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current inspection of all nine named first-pass reports",
+        "observed": "Each named report has both Clean files sections. The added non-empty entries are ring-buffer.test.ts, ring-buffer.ts, rollback.test.ts, phase-ledger.ts, rollback.ts, compat-01-no-expansion.test.ts, unstage.ts, types.ts, and index.ts; the four named all-finding sections explicitly record None."
+      },
+      "rationale": "The retained current corpus positively matches the complete nine-entry repair inventory.",
+      "destination": "Close the repair inventory and total as confirmed evidence-only metadata.",
+      "duplicateOf": null
+    },
+    {
+      "id": "CLR-005",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/_CLEAN-LIST-REPAIR.md#EDGE-ACCURACY-FIX"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "sourceRefs": [{ "path": ".planning/reviews/unit-test-adversarial/edge-handlers-plugin.md" }],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "Clean-list membership versus a report-local finding is a static corpus consistency claim."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current edge-handlers-plugin report inspection",
+        "observed": "The production finding still names nine direct-import handlers, while the Production Clean files section contains only bootstrap.ts; enable-disable.ts, uninstall.ts, update.ts, and reinstall.ts are absent from that clean list."
+      },
+      "rationale": "The current report positively retains the correction and no longer contradicts its own cross-cutting finding.",
+      "destination": "Preserve the accuracy fix as evidence-only corpus maintenance.",
+      "duplicateOf": null
+    },
+    {
+      "id": "CLR-006",
+      "claimIds": [".planning/reviews/unit-test-adversarial/_CLEAN-LIST-REPAIR.md#META-EXCLUSION"],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "sourceRefs": [
+        { "path": ".planning/reviews/unit-test-adversarial/META-FINDINGS.md" },
+        { "path": ".planning/reviews/unit-test-adversarial/_CLEAN-LIST-REPAIR.md" }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "META-FINDINGS classification is a static document-structure property."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current document structure inspection",
+        "observed": "META-FINDINGS remains a cross-cutting synthesis without the per-area Scope, Test files reviewed, Production modules reviewed, or paired Clean files structure used by first-pass area reports."
+      },
+      "rationale": "Its exclusion from the clean-list repair census remains structurally justified.",
+      "destination": "Retain the classification as evidence-only corpus provenance.",
+      "duplicateOf": null
+    },
+    {
+      "id": "CLR-007",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/_CLEAN-LIST-REPAIR.md#NO-INDETERMINATE"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "sourceRefs": [
+        { "path": ".planning/reviews/unit-test-adversarial/_CLEAN-LIST-REPAIR.md" },
+        { "path": ".planning/reviews/unit-test-adversarial/bridges-hooks-if-field.md" },
+        { "path": ".planning/reviews/unit-test-adversarial/domain-components-hooks.md" }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "Indeterminate-status accounting is a static corpus metadata property."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current inspection of repaired report findings and clean sections",
+        "observed": "Every repaired non-empty entry is named under Clean files and every repaired empty set cites the report-local finding-bearing files; the repair report records no guessed path and no Not covered addition for indeterminate clean status."
+      },
+      "rationale": "The retained positive clean or finding evidence supports the historical no-indeterminate conclusion.",
+      "destination": "Close the repair confidence claim as evidence-only metadata.",
+      "duplicateOf": null
+    }
+  ],
+  "decisions": [],
+  "scopeChanges": []
+}

@@ -1,0 +1,1186 @@
+{
+  "plan": "01-54",
+  "files": [
+    {
+      "path": ".planning/reviews/unit-test-adversarial/shared-notify.md",
+      "category": "first-pass",
+      "assignedPlan": "01-54",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-001",
+        ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-002",
+        ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-003",
+        ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-004",
+        ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-005",
+        ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-006",
+        ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-007",
+        ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-008",
+        ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-009",
+        ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-010",
+        ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-011",
+        ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-012",
+        ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-013",
+        ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-014",
+        ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-015",
+        ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-016",
+        ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-017",
+        ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-018",
+        ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-019",
+        ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-020",
+        ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-021",
+        ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-022",
+        ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-023",
+        ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-024",
+        ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-025",
+        ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-026",
+        ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-027",
+        ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-028",
+        ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-029",
+        ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-030",
+        ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-031"
+      ],
+      "reviewStatus": "complete",
+      "outcome": "live findings"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/transaction.md",
+      "category": "first-pass",
+      "assignedPlan": "01-54",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-001",
+        ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-002",
+        ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-003",
+        ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-004",
+        ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-005",
+        ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-006",
+        ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-007",
+        ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-008",
+        ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-009",
+        ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-010",
+        ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-011",
+        ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-012",
+        ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-013",
+        ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-014",
+        ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-015",
+        ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-016",
+        ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-017",
+        ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-018",
+        ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-019",
+        ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-020",
+        ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-021",
+        ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-022",
+        ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-023",
+        ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-024",
+        ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-025",
+        ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-026",
+        ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-027",
+        ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-028",
+        ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-029"
+      ],
+      "reviewStatus": "complete",
+      "outcome": "no live findings"
+    }
+  ],
+  "sourceClaims": [
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-001",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-notify.md",
+      "label": "CLAIM-001",
+      "findingId": "SNFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-002",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-notify.md",
+      "label": "CLAIM-002",
+      "findingId": "SNFP-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-003",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-notify.md",
+      "label": "CLAIM-003",
+      "findingId": "SNFP-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-004",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-notify.md",
+      "label": "CLAIM-004",
+      "findingId": "SNFP-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-005",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-notify.md",
+      "label": "CLAIM-005",
+      "findingId": "SNFP-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-006",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-notify.md",
+      "label": "CLAIM-006",
+      "findingId": "SNFP-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-007",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-notify.md",
+      "label": "CLAIM-007",
+      "findingId": "SNFP-F003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-008",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-notify.md",
+      "label": "CLAIM-008",
+      "findingId": "SNFP-F003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-009",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-notify.md",
+      "label": "CLAIM-009",
+      "findingId": "SNFP-F003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-010",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-notify.md",
+      "label": "CLAIM-010",
+      "findingId": "SNFP-F004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-011",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-notify.md",
+      "label": "CLAIM-011",
+      "findingId": "SNFP-F004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-012",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-notify.md",
+      "label": "CLAIM-012",
+      "findingId": "SNFP-F005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-013",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-notify.md",
+      "label": "CLAIM-013",
+      "findingId": "SNFP-F005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-014",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-notify.md",
+      "label": "CLAIM-014",
+      "findingId": "SNFP-F006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-015",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-notify.md",
+      "label": "CLAIM-015",
+      "findingId": "SNFP-F006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-016",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-notify.md",
+      "label": "CLAIM-016",
+      "findingId": "SNFP-F006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-017",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-notify.md",
+      "label": "CLAIM-017",
+      "findingId": "SNFP-F007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-018",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-notify.md",
+      "label": "CLAIM-018",
+      "findingId": "SNFP-F008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-019",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-notify.md",
+      "label": "CLAIM-019",
+      "findingId": "SNFP-F008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-020",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-notify.md",
+      "label": "CLAIM-020",
+      "findingId": "SNFP-F009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-021",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-notify.md",
+      "label": "CLAIM-021",
+      "findingId": "SNFP-F009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-022",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-notify.md",
+      "label": "CLAIM-022",
+      "findingId": "SNFP-F010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-023",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-notify.md",
+      "label": "CLAIM-023",
+      "findingId": "SNFP-F011"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-024",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-notify.md",
+      "label": "CLAIM-024",
+      "findingId": "SNFP-F012"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-025",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-notify.md",
+      "label": "CLAIM-025",
+      "findingId": "SNFP-F013"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-026",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-notify.md",
+      "label": "CLAIM-026",
+      "findingId": "SNFP-F013"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-027",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-notify.md",
+      "label": "CLAIM-027",
+      "findingId": "SNFP-F013"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-028",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-notify.md",
+      "label": "CLAIM-028",
+      "findingId": "SNFP-F014"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-029",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-notify.md",
+      "label": "CLAIM-029",
+      "findingId": "SNFP-F014"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-030",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-notify.md",
+      "label": "CLAIM-030",
+      "findingId": "SNFP-F015"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-031",
+      "filePath": ".planning/reviews/unit-test-adversarial/shared-notify.md",
+      "label": "CLAIM-031",
+      "findingId": "SNFP-F015"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-001",
+      "filePath": ".planning/reviews/unit-test-adversarial/transaction.md",
+      "label": "CLAIM-001",
+      "findingId": "TXFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-002",
+      "filePath": ".planning/reviews/unit-test-adversarial/transaction.md",
+      "label": "CLAIM-002",
+      "findingId": "TXFP-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-003",
+      "filePath": ".planning/reviews/unit-test-adversarial/transaction.md",
+      "label": "CLAIM-003",
+      "findingId": "TXFP-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-004",
+      "filePath": ".planning/reviews/unit-test-adversarial/transaction.md",
+      "label": "CLAIM-004",
+      "findingId": "TXFP-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-005",
+      "filePath": ".planning/reviews/unit-test-adversarial/transaction.md",
+      "label": "CLAIM-005",
+      "findingId": "TXFP-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-006",
+      "filePath": ".planning/reviews/unit-test-adversarial/transaction.md",
+      "label": "CLAIM-006",
+      "findingId": "TXFP-F004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-007",
+      "filePath": ".planning/reviews/unit-test-adversarial/transaction.md",
+      "label": "CLAIM-007",
+      "findingId": "TXFP-F007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-008",
+      "filePath": ".planning/reviews/unit-test-adversarial/transaction.md",
+      "label": "CLAIM-008",
+      "findingId": "TXFP-F005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-009",
+      "filePath": ".planning/reviews/unit-test-adversarial/transaction.md",
+      "label": "CLAIM-009",
+      "findingId": "TXFP-F003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-010",
+      "filePath": ".planning/reviews/unit-test-adversarial/transaction.md",
+      "label": "CLAIM-010",
+      "findingId": "TXFP-F003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-011",
+      "filePath": ".planning/reviews/unit-test-adversarial/transaction.md",
+      "label": "CLAIM-011",
+      "findingId": "TXFP-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-012",
+      "filePath": ".planning/reviews/unit-test-adversarial/transaction.md",
+      "label": "CLAIM-012",
+      "findingId": "TXFP-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-013",
+      "filePath": ".planning/reviews/unit-test-adversarial/transaction.md",
+      "label": "CLAIM-013",
+      "findingId": "TXFP-F010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-014",
+      "filePath": ".planning/reviews/unit-test-adversarial/transaction.md",
+      "label": "CLAIM-014",
+      "findingId": "TXFP-F004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-015",
+      "filePath": ".planning/reviews/unit-test-adversarial/transaction.md",
+      "label": "CLAIM-015",
+      "findingId": "TXFP-F004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-016",
+      "filePath": ".planning/reviews/unit-test-adversarial/transaction.md",
+      "label": "CLAIM-016",
+      "findingId": "TXFP-F005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-017",
+      "filePath": ".planning/reviews/unit-test-adversarial/transaction.md",
+      "label": "CLAIM-017",
+      "findingId": "TXFP-F005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-018",
+      "filePath": ".planning/reviews/unit-test-adversarial/transaction.md",
+      "label": "CLAIM-018",
+      "findingId": "TXFP-F006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-019",
+      "filePath": ".planning/reviews/unit-test-adversarial/transaction.md",
+      "label": "CLAIM-019",
+      "findingId": "TXFP-F006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-020",
+      "filePath": ".planning/reviews/unit-test-adversarial/transaction.md",
+      "label": "CLAIM-020",
+      "findingId": "TXFP-F007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-021",
+      "filePath": ".planning/reviews/unit-test-adversarial/transaction.md",
+      "label": "CLAIM-021",
+      "findingId": "TXFP-F007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-022",
+      "filePath": ".planning/reviews/unit-test-adversarial/transaction.md",
+      "label": "CLAIM-022",
+      "findingId": "TXFP-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-023",
+      "filePath": ".planning/reviews/unit-test-adversarial/transaction.md",
+      "label": "CLAIM-023",
+      "findingId": "TXFP-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-024",
+      "filePath": ".planning/reviews/unit-test-adversarial/transaction.md",
+      "label": "CLAIM-024",
+      "findingId": "TXFP-F007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-025",
+      "filePath": ".planning/reviews/unit-test-adversarial/transaction.md",
+      "label": "CLAIM-025",
+      "findingId": "TXFP-F007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-026",
+      "filePath": ".planning/reviews/unit-test-adversarial/transaction.md",
+      "label": "CLAIM-026",
+      "findingId": "TXFP-F008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-027",
+      "filePath": ".planning/reviews/unit-test-adversarial/transaction.md",
+      "label": "CLAIM-027",
+      "findingId": "TXFP-F008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-028",
+      "filePath": ".planning/reviews/unit-test-adversarial/transaction.md",
+      "label": "CLAIM-028",
+      "findingId": "TXFP-F009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-029",
+      "filePath": ".planning/reviews/unit-test-adversarial/transaction.md",
+      "label": "CLAIM-029",
+      "findingId": "TXFP-F009"
+    }
+  ],
+  "findings": [
+    {
+      "id": "SNFP-F001",
+      "claimIds": [".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-001"],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "SNA-F012",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/notify.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/notify.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test tests/shared/notify.test.ts",
+        "exitCode": 0,
+        "observed": "The current mirrored owner passed and directly imports the live notify surface."
+      },
+      "rationale": "The owner-pair census duplicates the already revalidated notify export-ownership finding.",
+      "destination": "Retain pairing evidence under SNA-F012."
+    },
+    {
+      "id": "SNFP-F002",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-002",
+        ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-003",
+        ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-004",
+        ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-005",
+        ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-006"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "SNA-F023",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/notify.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/notify.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test tests/shared/notify.test.ts",
+        "exitCode": 0,
+        "observed": "The current owner passes with fresh case-local fixtures, sibling row cases, and a large body of independently authored exact output assertions."
+      },
+      "rationale": "These positive first-pass claims duplicate the adversarial no-change constraints.",
+      "destination": "Preserve the exact rendering and hermetic case patterns under SNA-F023."
+    },
+    {
+      "id": "SNFP-F003",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-007",
+        ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-008",
+        ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-009"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "SNA-F013",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/notify.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/notify.test.ts"
+        },
+        {
+          "path": "tests/architecture/catalog-uat.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore and current assertion census",
+        "observed": "Fragment-only assertions remain at the cited owner cases; complete catalog coverage backstops many bytes but does not replace direct owner discrimination."
+      },
+      "rationale": "The first-pass assertion-strength class is already revalidated with per-site qualification.",
+      "destination": "Resolve through SNA-F013 during Phase 2 owner-test cleanup."
+    },
+    {
+      "id": "SNFP-F004",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-010",
+        ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-011"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "SNA-F014",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/notify.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/notify.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current test inspection",
+        "observed": "The already-no-autoupdate row still checks emission shape and severity without reading the emitted body."
+      },
+      "rationale": "This is the exact first-pass zero-content gap revalidated by SNA-F014.",
+      "destination": "Assert the complete expected notification through SNA-F014."
+    },
+    {
+      "id": "SNFP-F005",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-012",
+        ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-013"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "SNA-F015",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "Redundant assertion claim concerns tests only."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/notify.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current assertion census",
+        "observed": "Redundant includes and negative checks remain adjacent to complete output comparisons."
+      },
+      "rationale": "The maintenance-only duplication is already represented by SNA-F015.",
+      "destination": "Remove redundant checks through SNA-F015."
+    },
+    {
+      "id": "SNFP-F006",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-014",
+        ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-015",
+        ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-016"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "SNA-F016",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/notify.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/notify.test.ts"
+        },
+        {
+          "path": "tests/shared/notify-context.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore and current token census",
+        "observed": "The current owner contains 187 as-never occurrences, but the cast-free strict-mock sibling proves wide SDK parameters are not the sole cause."
+      },
+      "rationale": "The unsafe-cast defect is live while the historical causal explanation is qualified by current evidence.",
+      "destination": "Remove test casts through SNA-F016 without waiting on a production port change."
+    },
+    {
+      "id": "SNFP-F007",
+      "claimIds": [".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-017"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "SNA-F017",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "Literal typing idiom is test-only."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/notify.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current test inspection",
+        "observed": "Explicit NotificationMessage annotations and satisfies-based literals still coexist."
+      },
+      "rationale": "The first-pass style finding exactly overlaps SNA-F017.",
+      "destination": "Normalize the idiom during Phase 2 through SNA-F017."
+    },
+    {
+      "id": "SNFP-F008",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-018",
+        ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-019"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "Prototype mutation and mock restoration are test-only."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/notify.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current test inspection",
+        "observed": "The path-redaction edge case still patches String.prototype.lastIndexOf and calls t.mock.restoreAll manually before its assertion."
+      },
+      "rationale": "The synchronous case currently passes and restores state, so this is a shared-process risk and cleanup item rather than a demonstrated leak.",
+      "destination": "Prefer a non-global seam or document the synchronous safety; remove the redundant manual restoration."
+    },
+    {
+      "id": "SNFP-F009",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-020",
+        ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-021"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "deferred backlog",
+      "duplicateOf": "SNA-F018",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/notify.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/notify-context.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore",
+        "observed": "Notification entrypoints still accept full host interfaces, while a strict sibling harness builds compliant doubles without unsafe casts."
+      },
+      "rationale": "Port narrowing remains optional design cleanup, not the prerequisite the first pass implied.",
+      "destination": "Consider the port only with the eventual module split through SNA-F018."
+    },
+    {
+      "id": "SNFP-F010",
+      "claimIds": [".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-022"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "SNA-F019",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/notify.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/notify-context.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore",
+        "observed": "notify still calls softDepStatus once per entry and threads the result only into rendering; strict sibling expectations provide the missing cardinality pattern."
+      },
+      "rationale": "The bounded probe is sanctioned, but direct owner proof of its cardinality remains live.",
+      "destination": "Keep the seam and strengthen the owner under SNA-F019."
+    },
+    {
+      "id": "SNFP-F011",
+      "claimIds": [".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-023"],
+      "evidenceStatus": "superseded",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/notify.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/notify-context.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current call-graph and adversarial reconciliation",
+        "observed": "Current evidence retained the one-probe renderer seam and routes only missing owner cardinality to Phase 2; moving the probe into every producer would broaden duplication without a behavior defect."
+      },
+      "rationale": "The original relocation prescription is replaced by the narrower revalidated remedy.",
+      "destination": "Close the relocation prescription and follow SNA-F019."
+    },
+    {
+      "id": "SNFP-F012",
+      "claimIds": [".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-024"],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "SNA-F020",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/notify.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/notify.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore",
+        "observed": "computeSeverity retains the documented closed failed-versus-nonfailed plugin-info lookup and does not infer reasons."
+      },
+      "rationale": "This positive clarification exactly overlaps SNA-F020.",
+      "destination": "Preserve the closed lookup under SNA-F020."
+    },
+    {
+      "id": "SNFP-F013",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-025",
+        ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-026",
+        ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-027"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "operator decision",
+      "duplicateOf": "SNA-F021",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/notify.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/notify.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore module and caller graph",
+        "observed": "notify.ts remains 4217 lines and combines the five named concerns behind one heavily consumed public surface."
+      },
+      "rationale": "The decomposition and leaf-placement prescriptions are architectural choices already routed by SNA-F021.",
+      "destination": "Resolve module boundaries through the existing operator decision."
+    },
+    {
+      "id": "SNFP-F014",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-028",
+        ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-029"
+      ],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/notify.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/notify.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "npm run test:coverage:direct -- extensions/pi-claude-marketplace/shared/notify.ts",
+        "exitCode": 0,
+        "observed": "The current owner rerun passed and direct coverage reports branches 388/388, functions 84/84, and lines 4217/4217."
+      },
+      "rationale": "A positive current rerun replaces the historical absence of executed coverage evidence; assertion-strength findings remain separate.",
+      "destination": "Close the historical unrun-evidence limitation."
+    },
+    {
+      "id": "SNFP-F015",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-030",
+        ".planning/reviews/unit-test-adversarial/shared-notify.md#CLAIM-031"
+      ],
+      "evidenceStatus": "superseded",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/shared/notify.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/shared/notify-context.test.ts"
+        },
+        {
+          "path": "tests/shared/notify-reasons.test.ts"
+        },
+        {
+          "path": "tests/edge/notification-boundary.ts"
+        },
+        {
+          "path": "tests/architecture/notify-producer-wire-coverage.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore and earlier canonical shard reconciliation",
+        "observed": "The formerly excluded sibling owners and notification boundary have independent current evidence in earlier shards, so this report-local limitation no longer creates an unresolved evidence gap."
+      },
+      "rationale": "The scope exclusions remain historical facts but are superseded as current evidence limitations.",
+      "destination": "Retain traceability and rely on the owning canonical findings."
+    },
+    {
+      "id": "TXFP-F001",
+      "claimIds": [".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-001"],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "TXA-F012",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/transaction/phase-ledger.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/transaction/rollback.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/transaction/with-state-guard.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/transaction/phase-ledger.test.ts"
+        },
+        {
+          "path": "tests/transaction/rollback.test.ts"
+        },
+        {
+          "path": "tests/transaction/with-state-guard.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test tests/transaction/phase-ledger.test.ts tests/transaction/rollback.test.ts tests/transaction/with-state-guard.test.ts",
+        "exitCode": 0,
+        "observed": "All three mirrored owner suites passed against their current production modules."
+      },
+      "rationale": "The transaction owner census duplicates TXA-F012.",
+      "destination": "Retain the current ownership evidence under TXA-F012."
+    },
+    {
+      "id": "TXFP-F002",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-002",
+        ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-003",
+        ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-004",
+        ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-005",
+        ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-011",
+        ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-012",
+        ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-022",
+        ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-023"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "TXA-F020",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/transaction/phase-ledger.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/transaction/rollback.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/transaction/with-state-guard.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/transaction/phase-ledger.test.ts"
+        },
+        {
+          "path": "tests/transaction/rollback.test.ts"
+        },
+        {
+          "path": "tests/transaction/with-state-guard.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test tests/transaction/phase-ledger.test.ts tests/transaction/rollback.test.ts tests/transaction/with-state-guard.test.ts",
+        "exitCode": 0,
+        "observed": "The owner suites pass and retain exact event-order, whole-result, identity, containment, release, cause-chain, and case-owned filesystem evidence."
+      },
+      "rationale": "These positive first-pass claims duplicate TXA-F020's preserved no-change constraints.",
+      "destination": "Preserve these contracts under TXA-F020."
+    },
+    {
+      "id": "TXFP-F003",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-009",
+        ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-010"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "TXA-F015",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "Compile-time fixture is test-local."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/transaction/phase-ledger.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current test inspection",
+        "observed": "SCHEDULE_TYPE_EVIDENCE remains a named value immediately void-discarded without an adjacent purpose comment."
+      },
+      "rationale": "The historical fixture finding is already represented by TXA-F015.",
+      "destination": "Resolve the fixture through TXA-F015."
+    },
+    {
+      "id": "TXFP-F004",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-006",
+        ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-014",
+        ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-015"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "TXA-F013",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/transaction/with-state-guard.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/transaction/with-state-guard.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "npm run test:coverage:direct -- extensions/pi-claude-marketplace/transaction/with-state-guard.ts",
+        "exitCode": 0,
+        "observed": "The current direct pair reports branches 41/41, functions 9/9, and lines 179/179, positively replacing the historical two-arm shortfall premise."
+      },
+      "rationale": "The original coverage diagnosis and its prescribed cases are stale under current measured coverage.",
+      "destination": "Close through TXA-F013; retain independent mutation-strength findings."
+    },
+    {
+      "id": "TXFP-F005",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-008",
+        ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-016",
+        ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-017"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "TXA-F016",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "Describe grouping is a test-structure claim."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/transaction/with-state-guard.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current unit-test skill and owner inspection",
+        "observed": "The applicable skill permits flat top-level tests and requires describe only when used, so the current flat owner is conforming."
+      },
+      "rationale": "The historical mandatory-grouping premise is stale and already closed by TXA-F016.",
+      "destination": "Keep the flat cases unless a later readability-only rewrite is independently justified."
+    },
+    {
+      "id": "TXFP-F006",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-018",
+        ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-019"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "TXA-F017",
+      "sourceRefs": [
+        {
+          "path": "N/A",
+          "reason": "Shared order-log choice is test-local."
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/transaction/with-state-guard.test.ts"
+        },
+        {
+          "path": "tests/transaction/phase-ledger.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current unit-test skill and log inspection",
+        "observed": "The cited arrays are shared cross-collaborator order logs, the sanctioned tool when sequence across dependencies is the promise; separate call lists would weaken that evidence."
+      },
+      "rationale": "The old call-log criticism and replacement prescription are stale under the current role-based double rule.",
+      "destination": "Retain the shared logs through TXA-F017."
+    },
+    {
+      "id": "TXFP-F007",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-007",
+        ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-020",
+        ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-021",
+        ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-024",
+        ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-025"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "TXA-F018",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/transaction/with-state-guard.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/transaction/with-state-guard.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore and current double census",
+        "observed": "with-state-guard still imports proper-lockfile directly and seven owner cases replace lockfile.lock with t.mock.method."
+      },
+      "rationale": "The hidden-dependency and singleton-patch claims remain live and overlap TXA-F018.",
+      "destination": "Add one narrow acquisition port with exact option assertions through TXA-F018."
+    },
+    {
+      "id": "TXFP-F008",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-026",
+        ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-027"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "TXA-F019",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/transaction/with-state-guard.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/transaction/with-state-guard.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "codegraph explore",
+        "observed": "LockedStateTransaction and LockedStateTransactionDeps remain exported without adjacent JSDoc while both functions are documented."
+      },
+      "rationale": "The export-documentation warning remains live and is already bundled in TXA-F019.",
+      "destination": "Document the retained exports through TXA-F019."
+    },
+    {
+      "id": "TXFP-F009",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-028",
+        ".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-029"
+      ],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/transaction/phase-ledger.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/transaction/rollback.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/transaction/with-state-guard.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/transaction/phase-ledger.test.ts"
+        },
+        {
+          "path": "tests/transaction/rollback.test.ts"
+        },
+        {
+          "path": "tests/transaction/with-state-guard.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "npm run test:coverage:direct -- <each transaction source module>",
+        "exitCode": 0,
+        "observed": "Fresh direct runs report phase-ledger 30/30 branches, 3/3 functions, 173/173 lines; rollback 6/6, 1/1, 75/75; with-state-guard 41/41, 9/9, 179/179."
+      },
+      "rationale": "Current executed owner and direct-coverage evidence replaces the historical no-run limitation.",
+      "destination": "Close the historical evidence gap while retaining separate value-strength findings."
+    },
+    {
+      "id": "TXFP-F010",
+      "claimIds": [".planning/reviews/unit-test-adversarial/transaction.md#CLAIM-013"],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "TXA-F020",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/transaction/rollback.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/transaction/rollback.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test tests/transaction/rollback.test.ts",
+        "exitCode": 0,
+        "observed": "The current owner passes with independently authored whole RollbackErrorResult values and separate Error identity assertions."
+      },
+      "rationale": "The structured-output clarification is positive evidence already preserved by TXA-F020.",
+      "destination": "Preserve the structured result contract under TXA-F020."
+    }
+  ]
+}

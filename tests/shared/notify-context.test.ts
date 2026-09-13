@@ -3,6 +3,12 @@ import { test, type TestContext } from "node:test";
 
 import { mock, verify, when } from "strong-mock";
 
+import { type PluginAvailableMessage } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
+import {
+  type PluginDisabledMessage,
+  type PluginNotificationMessage,
+  type Severity,
+} from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 import {
   notifyReconcileAppliedWithContext,
   notifyUpdateNoOpWithContext,
@@ -21,12 +27,6 @@ import type {
   ExtensionContext,
   SoftDepStatus,
 } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
-import type {
-  PluginAvailableMessage,
-  PluginDisabledMessage,
-  PluginNotificationMessage,
-  Severity,
-} from "../../extensions/pi-claude-marketplace/shared/notify.ts";
 import type { Scope } from "../../extensions/pi-claude-marketplace/shared/types.ts";
 
 type ControlledMessage = PluginAvailableMessage | PluginDisabledMessage;
@@ -107,6 +107,18 @@ interface ControlledContext {
   readonly calls: RenderCall[];
 }
 
+function omissionMustRemainATypeError(
+  ctx: ExtensionContext,
+  pi: ExtensionAPI,
+  context: CommandContext<ControlledStatus, ControlledMessage>,
+  rows: readonly MarketplaceRows<ControlledMessage>[],
+): void {
+  // @ts-expect-error -- cardinality is mandatory even when kind is explicitly undefined.
+  notifyWithContext(ctx, pi, context, rows, undefined);
+}
+
+void omissionMustRemainATypeError;
+
 function createHarness(notification: NotificationRecord): Harness {
   const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
   const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
@@ -153,16 +165,45 @@ function disabledRow(name: string): PluginDisabledMessage {
   return { status: "disabled", name, severity: "info", needsReload: false };
 }
 
-test("an empty cascade notifies once without invoking a renderer", (t) => {
+test("an empty plural cascade retains its zero-success tally", (t) => {
   // arrange
-  const harness = createHarness({ message: "(no marketplaces)" });
+  const harness = createHarness({
+    message: "(no marketplaces)\n\nPlugin inspect: 0 successes",
+  });
   const controlled = createControlledContext(t, "Plugin inspect");
 
   // act
-  notifyWithContext(harness.ctx, harness.pi, controlled.context, []);
+  notifyWithContext(harness.ctx, harness.pi, controlled.context, [], undefined, "plural");
 
   // assert
   assert.deepStrictEqual(controlled.calls, []);
+  verify(harness.ctx);
+  verify(harness.pi);
+  verify(harness.ui);
+});
+
+test("a one-row plural cascade retains its one-success tally", (t) => {
+  // arrange
+  const harness = createHarness({
+    message: "● official [user]\n  controlled available alpha [user]\n\nPlugin inspect: 1 success",
+  });
+  const controlled = createControlledContext(t, "Plugin inspect");
+  const rows: readonly MarketplaceRows<ControlledMessage>[] = [
+    { name: "official", scope: "user", plugins: [availableRow("alpha")] },
+  ];
+
+  // act
+  notifyWithContext(harness.ctx, harness.pi, controlled.context, rows, undefined, "plural");
+
+  // assert
+  assert.deepStrictEqual(controlled.calls, [
+    {
+      status: "available",
+      name: "alpha",
+      probe: { piSubagentsLoaded: false, piMcpAdapterLoaded: false },
+      scope: "user",
+    },
+  ]);
   verify(harness.ctx);
   verify(harness.pi);
   verify(harness.ui);
@@ -299,7 +340,7 @@ test("the no-op update wrapper emits its fixed headline for no rows", (t) => {
   const controlled = createControlledContext(t, "Plugin update");
 
   // act
-  notifyUpdateNoOpWithContext(harness.ctx, harness.pi, controlled.context, []);
+  notifyUpdateNoOpWithContext(harness.ctx, harness.pi, controlled.context, [], "plural");
 
   // assert
   assert.deepStrictEqual(controlled.calls, []);
@@ -320,7 +361,7 @@ test("the no-op update wrapper dispatches surviving rows before its headline", (
   ];
 
   // act
-  notifyUpdateNoOpWithContext(harness.ctx, harness.pi, controlled.context, rows);
+  notifyUpdateNoOpWithContext(harness.ctx, harness.pi, controlled.context, rows, "plural");
 
   // assert
   assert.deepStrictEqual(controlled.calls, [
@@ -367,7 +408,7 @@ test("a missing render arm reports its named row before the adjacent present arm
   ];
 
   // act
-  notifyWithContext(harness.ctx, harness.pi, context, rows);
+  notifyWithContext(harness.ctx, harness.pi, context, rows, undefined, "single");
 
   // assert
   assert.deepStrictEqual(missing, {
@@ -417,7 +458,7 @@ test("a frozen unnamed missing-arm row still precedes the adjacent present arm",
   ];
 
   // act
-  notifyWithContext(harness.ctx, harness.pi, context, rows);
+  notifyWithContext(harness.ctx, harness.pi, context, rows, undefined, "single");
 
   // assert
   assert.deepStrictEqual(calls, [

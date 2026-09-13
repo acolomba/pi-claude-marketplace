@@ -258,7 +258,10 @@ test("flips every marketplace in both scopes when no scope flag narrows the comm
 
   // assert
   assert.deepStrictEqual(notifications, [
-    { message: "● alpha [project] <autoupdate>\n\n● beta [user] <autoupdate>" },
+    {
+      message:
+        "● alpha [project] <autoupdate>\n\n● beta [user] <autoupdate>\n\nMarketplace autoupdate: 2 successes",
+    },
   ]);
   assert.deepStrictEqual(await readConfigFootprint(workspace), {
     projectBase: PROJECT_ALPHA_ON,
@@ -362,12 +365,12 @@ for (const { enable, expectedMessage, expectedProjectBase, subcommand } of [
 for (const { expectedFootprint, expectedMessage, scopeValue } of [
   {
     scopeValue: "project",
-    expectedMessage: "● alpha [project] <autoupdate>",
+    expectedMessage: "● alpha [project] <autoupdate>\n\nMarketplace autoupdate: 1 success",
     expectedFootprint: PROJECT_BASE_ONLY,
   },
   {
     scopeValue: "user",
-    expectedMessage: "● beta [user] <autoupdate>",
+    expectedMessage: "● beta [user] <autoupdate>\n\nMarketplace autoupdate: 1 success",
     expectedFootprint: {
       projectBase: undefined,
       projectLocal: undefined,
@@ -434,7 +437,11 @@ test("accepts a scope flag beside the scope-target flag and honors both selector
   await autoupdateHandler("--scope project --local", ctx);
 
   // assert
-  assert.deepStrictEqual(notifications, [{ message: "● alpha [project] <autoupdate>" }]);
+  assert.deepStrictEqual(notifications, [
+    {
+      message: "● alpha [project] <autoupdate>\n\nMarketplace autoupdate: 1 success",
+    },
+  ]);
   assert.deepStrictEqual(await readConfigFootprint(workspace), PROJECT_OVERRIDE_ONLY);
   verifyBoundary();
 });

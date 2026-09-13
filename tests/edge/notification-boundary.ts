@@ -2,7 +2,7 @@
 //
 // WR-08: four suites carried byte-identical copies of this factory and its four
 // types. The contract they encode is not theirs -- it belongs to
-// `shared/notify.ts`: `notify()` runs one soft-dependency probe per emission,
+// `shared/notification-dispatch.ts`: `notify()` runs one soft-dependency probe per emission,
 // and that probe reads `pi.getAllTools()` twice. When the probe count changes,
 // one shared definition breaks once instead of four suites drifting apart, and a
 // drifted `times()` count weakens the IL-2 sizing proof silently rather than

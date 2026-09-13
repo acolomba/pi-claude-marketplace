@@ -35,10 +35,10 @@
 //                  install-state exclusion. The info surface accepts any
 //                  known plugin.
 
-import { getPluginIndex, ManifestSoftFailError } from "../../shared/completion-cache.ts";
+import { ManifestSoftFailError } from "../../shared/completion-cache.ts";
 import { SCOPES } from "../../shared/types.ts";
 
-import type { PluginIndexRow } from "../../shared/completion-cache.ts";
+import type { CompletionCache, PluginIndexRow } from "../../shared/completion-cache.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AutocompleteItem } from "@earendil-works/pi-tui";
 
@@ -185,7 +185,7 @@ export function splitCompletionInput(input: string): { tokens: string[]; current
     return { tokens: allTokens, current: "" };
   }
 
-  const current = allTokens.at(-1) ?? "";
+  const [current] = allTokens.slice(-1) as [string];
   return { tokens: allTokens.slice(0, -1), current };
 }
 
@@ -355,6 +355,7 @@ async function installedNamesInTarget(
 
 async function getInstallPluginToMarketplacesMap(
   resolver: LocationsResolver,
+  completionCache: CompletionCache,
   targetScope: Scope,
   partial: boolean,
 ): Promise<Map<string, string[]>> {
@@ -366,8 +367,11 @@ async function getInstallPluginToMarketplacesMap(
   for (const source of await sourceMarketplacesForInstall(resolver, targetScope)) {
     const targetInstalled = await installedNamesInTarget(resolver, targetScope, source.marketplace);
     const cachePath = await resolver.pluginCachePath(source.scope, source.marketplace);
-    const rows = await getPluginIndex(cachePath, source.scope, source.marketplace, () =>
-      rebuildPluginIndex(resolver, source.scope, source.marketplace),
+    const rows = await completionCache.getPluginIndex(
+      cachePath,
+      source.scope,
+      source.marketplace,
+      () => rebuildPluginIndex(resolver, source.scope, source.marketplace),
     );
 
     for (const row of rows) {
@@ -385,6 +389,7 @@ async function getInstallPluginToMarketplacesMap(
 async function getInstalledPluginToMarketplacesMap(
   _mode: Exclude<PluginRefCompletionMode, "install" | "info">,
   resolver: LocationsResolver,
+  completionCache: CompletionCache,
   explicitScope: Scope | undefined,
   partial: boolean,
 ): Promise<Map<string, string[]>> {
@@ -397,7 +402,7 @@ async function getInstalledPluginToMarketplacesMap(
   // (`upgradable` + `partially-upgradable` + `partially-installed-upgradable`) -- plain
   // `installed` / `partially-installed` have no newer candidate to upgrade to.
   const allowed = partial ? PARTIAL_UPDATE_STATUSES : INSTALLED_INVENTORY_STATUSES;
-  return collectPluginToMarketplacesMap(resolver, explicitScope, allowed);
+  return collectPluginToMarketplacesMap(resolver, completionCache, explicitScope, allowed);
 }
 
 /**
@@ -408,6 +413,7 @@ async function getInstalledPluginToMarketplacesMap(
  */
 async function collectPluginToMarketplacesMap(
   resolver: LocationsResolver,
+  completionCache: CompletionCache,
   explicitScope: Scope | undefined,
   allowed: ReadonlySet<PluginIndexRow["status"]>,
 ): Promise<Map<string, string[]>> {
@@ -418,7 +424,7 @@ async function collectPluginToMarketplacesMap(
     const names = await marketplaceNamesForScope(resolver, scope);
     for (const mp of names) {
       const cachePath = await resolver.pluginCachePath(scope, mp);
-      const rows = await getPluginIndex(cachePath, scope, mp, () =>
+      const rows = await completionCache.getPluginIndex(cachePath, scope, mp, () =>
         rebuildPluginIndex(resolver, scope, mp),
       );
       for (const row of rows) {
@@ -445,9 +451,10 @@ async function collectPluginToMarketplacesMap(
  */
 async function getFetchPluginToMarketplacesMap(
   resolver: LocationsResolver,
+  completionCache: CompletionCache,
   explicitScope: Scope | undefined,
 ): Promise<Map<string, string[]>> {
-  return collectPluginToMarketplacesMap(resolver, explicitScope, FETCH_STATUSES);
+  return collectPluginToMarketplacesMap(resolver, completionCache, explicitScope, FETCH_STATUSES);
 }
 
 /**
@@ -459,13 +466,14 @@ async function getFetchPluginToMarketplacesMap(
  */
 async function getInfoPluginToMarketplacesMap(
   resolver: LocationsResolver,
+  completionCache: CompletionCache,
 ): Promise<Map<string, string[]>> {
   const result = new Map<string, string[]>();
   for (const scope of SCOPES) {
     const names = await marketplaceNamesForScope(resolver, scope);
     for (const mp of names) {
       const cachePath = await resolver.pluginCachePath(scope, mp);
-      const rows = await getPluginIndex(cachePath, scope, mp, () =>
+      const rows = await completionCache.getPluginIndex(cachePath, scope, mp, () =>
         rebuildPluginIndex(resolver, scope, mp),
       );
       for (const row of rows) {
@@ -487,19 +495,21 @@ async function getInfoPluginToMarketplacesMap(
 export async function getPluginToMarketplacesMap(
   mode: PluginRefCompletionMode,
   resolver: LocationsResolver,
+  completionCache: CompletionCache,
   options: PluginMapOptions = {},
 ): Promise<Map<string, string[]>> {
   if (mode === "info") {
-    return getInfoPluginToMarketplacesMap(resolver);
+    return getInfoPluginToMarketplacesMap(resolver, completionCache);
   }
 
   if (mode === "fetch") {
-    return getFetchPluginToMarketplacesMap(resolver, options.targetScope);
+    return getFetchPluginToMarketplacesMap(resolver, completionCache, options.targetScope);
   }
 
   if (mode === "install") {
     return getInstallPluginToMarketplacesMap(
       resolver,
+      completionCache,
       options.targetScope ?? "user",
       options.partial ?? false,
     );
@@ -508,6 +518,7 @@ export async function getPluginToMarketplacesMap(
   return getInstalledPluginToMarketplacesMap(
     mode,
     resolver,
+    completionCache,
     options.targetScope,
     options.partial ?? false,
   );
@@ -518,9 +529,10 @@ async function getPluginHalfCompletions(
   currentPrefix: string,
   argumentTextPrefix: string,
   resolver: LocationsResolver,
+  completionCache: CompletionCache,
   options: PluginMapOptions,
 ): Promise<AutocompleteItem[]> {
-  const map = await getPluginToMarketplacesMap(mode, resolver, options);
+  const map = await getPluginToMarketplacesMap(mode, resolver, completionCache, options);
   const items: AutocompleteItem[] = [];
   for (const [name, mps] of map) {
     if (!name.startsWith(currentPrefix)) {
@@ -543,6 +555,7 @@ async function getMarketplaceOnlyCompletions(
   marketplacePart: string,
   argumentTextPrefix: string,
   resolver: LocationsResolver,
+  completionCache: CompletionCache,
   allowMarketplaceOnly: boolean,
   options: PluginMapOptions,
 ): Promise<AutocompleteItem[]> {
@@ -553,7 +566,7 @@ async function getMarketplaceOnlyCompletions(
   // Build the offered marketplace set from the SAME candidate map the plugin
   // half uses so `@<mp>` only lists marketplaces that carry a mode-relevant
   // plugin (update/reinstall -> installed inventory; fetch -> fetchable set).
-  const map = await getPluginToMarketplacesMap(mode, resolver, options);
+  const map = await getPluginToMarketplacesMap(mode, resolver, completionCache, options);
   const all = Array.from(new Set(Array.from(map.values()).flat()));
   return all
     .filter((m) => m.startsWith(marketplacePart))
@@ -579,12 +592,20 @@ export async function getPluginRefCompletions(
   currentPrefix: string,
   argumentTextPrefix: string,
   resolver: LocationsResolver,
+  completionCache: CompletionCache,
   options: { allowMarketplaceOnly: boolean; targetScope?: Scope; partial?: boolean },
 ): Promise<AutocompleteItem[]> {
   const at = currentPrefix.indexOf("@");
 
   if (at === -1) {
-    return getPluginHalfCompletions(mode, currentPrefix, argumentTextPrefix, resolver, options);
+    return getPluginHalfCompletions(
+      mode,
+      currentPrefix,
+      argumentTextPrefix,
+      resolver,
+      completionCache,
+      options,
+    );
   }
 
   const pluginPart = currentPrefix.slice(0, at);
@@ -596,12 +617,13 @@ export async function getPluginRefCompletions(
       marketplacePart,
       argumentTextPrefix,
       resolver,
+      completionCache,
       options.allowMarketplaceOnly,
       options,
     );
   }
 
-  const map = await getPluginToMarketplacesMap(mode, resolver, options);
+  const map = await getPluginToMarketplacesMap(mode, resolver, completionCache, options);
   const mps = map.get(pluginPart) ?? [];
   return mps
     .filter((m) => m.startsWith(marketplacePart))

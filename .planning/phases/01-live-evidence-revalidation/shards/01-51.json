@@ -1,0 +1,1679 @@
+{
+  "plan": "01-51",
+  "files": [
+    {
+      "path": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md",
+      "category": "first-pass",
+      "assignedPlan": "01-51",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md#OPUFP-C001",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md#OPUFP-C002",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md#OPUFP-C003",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md#OPUFP-C004",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md#OPUFP-C005",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md#OPUFP-C006",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md#OPUFP-C007",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md#OPUFP-C008",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md#OPUFP-C009",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md#OPUFP-C010",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md#OPUFP-C011",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md#OPUFP-C012",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md#OPUFP-C013",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md#OPUFP-C014",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md#OPUFP-C015",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md#OPUFP-C016",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md#OPUFP-C017",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md#OPUFP-C018",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md#OPUFP-C019",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md#OPUFP-C020"
+      ],
+      "reviewStatus": "complete",
+      "outcome": "live findings"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md",
+      "category": "first-pass",
+      "assignedPlan": "01-51",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md#ORAFP-C001",
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md#ORAFP-C002",
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md#ORAFP-C003",
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md#ORAFP-C004",
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md#ORAFP-C005",
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md#ORAFP-C006",
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md#ORAFP-C007",
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md#ORAFP-C008",
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md#ORAFP-C009",
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md#ORAFP-C010",
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md#ORAFP-C011",
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md#ORAFP-C012",
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md#ORAFP-C013",
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md#ORAFP-C014",
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md#ORAFP-C015",
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md#ORAFP-C016",
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md#ORAFP-C017",
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md#ORAFP-C018",
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md#ORAFP-C019"
+      ],
+      "reviewStatus": "complete",
+      "outcome": "live findings"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md",
+      "category": "first-pass",
+      "assignedPlan": "01-51",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md#ORNFP-C001",
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md#ORNFP-C002",
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md#ORNFP-C003",
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md#ORNFP-C004",
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md#ORNFP-C005",
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md#ORNFP-C006",
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md#ORNFP-C007",
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md#ORNFP-C008",
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md#ORNFP-C009",
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md#ORNFP-C010",
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md#ORNFP-C011",
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md#ORNFP-C012",
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md#ORNFP-C013",
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md#ORNFP-C014",
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md#ORNFP-C015",
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md#ORNFP-C016",
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md#ORNFP-C017",
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md#ORNFP-C018",
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md#ORNFP-C019",
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md#ORNFP-C020",
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md#ORNFP-C021",
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md#ORNFP-C022"
+      ],
+      "reviewStatus": "complete",
+      "outcome": "live findings"
+    }
+  ],
+  "sourceClaims": [
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md#OPUFP-C001",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md",
+      "label": "OPUFP-C001",
+      "findingId": "OPUFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md#OPUFP-C002",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md",
+      "label": "OPUFP-C002",
+      "findingId": "OPUFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md#OPUFP-C003",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md",
+      "label": "OPUFP-C003",
+      "findingId": "OPUFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md#OPUFP-C004",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md",
+      "label": "OPUFP-C004",
+      "findingId": "OPUFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md#OPUFP-C005",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md",
+      "label": "OPUFP-C005",
+      "findingId": "OPUFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md#OPUFP-C006",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md",
+      "label": "OPUFP-C006",
+      "findingId": "OPUFP-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md#OPUFP-C007",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md",
+      "label": "OPUFP-C007",
+      "findingId": "OPUFP-F003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md#OPUFP-C008",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md",
+      "label": "OPUFP-C008",
+      "findingId": "OPUFP-F004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md#OPUFP-C009",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md",
+      "label": "OPUFP-C009",
+      "findingId": "OPUFP-F005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md#OPUFP-C010",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md",
+      "label": "OPUFP-C010",
+      "findingId": "OPUFP-F006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md#OPUFP-C011",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md",
+      "label": "OPUFP-C011",
+      "findingId": "OPUFP-F007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md#OPUFP-C012",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md",
+      "label": "OPUFP-C012",
+      "findingId": "OPUFP-F007A"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md#OPUFP-C013",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md",
+      "label": "OPUFP-C013",
+      "findingId": "OPUFP-F007B"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md#OPUFP-C014",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md",
+      "label": "OPUFP-C014",
+      "findingId": "OPUFP-F007C"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md#OPUFP-C015",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md",
+      "label": "OPUFP-C015",
+      "findingId": "OPUFP-F008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md#OPUFP-C016",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md",
+      "label": "OPUFP-C016",
+      "findingId": "OPUFP-F008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md#OPUFP-C017",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md",
+      "label": "OPUFP-C017",
+      "findingId": "OPUFP-F009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md#OPUFP-C018",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md",
+      "label": "OPUFP-C018",
+      "findingId": "OPUFP-F010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md#OPUFP-C019",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md",
+      "label": "OPUFP-C019",
+      "findingId": "OPUFP-F011"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md#OPUFP-C020",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md",
+      "label": "OPUFP-C020",
+      "findingId": "OPUFP-F012"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md#ORAFP-C001",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md",
+      "label": "ORAFP-C001",
+      "findingId": "ORAFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md#ORAFP-C002",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md",
+      "label": "ORAFP-C002",
+      "findingId": "ORAFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md#ORAFP-C003",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md",
+      "label": "ORAFP-C003",
+      "findingId": "ORAFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md#ORAFP-C004",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md",
+      "label": "ORAFP-C004",
+      "findingId": "ORAFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md#ORAFP-C005",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md",
+      "label": "ORAFP-C005",
+      "findingId": "ORAFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md#ORAFP-C006",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md",
+      "label": "ORAFP-C006",
+      "findingId": "ORAFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md#ORAFP-C007",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md",
+      "label": "ORAFP-C007",
+      "findingId": "ORAFP-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md#ORAFP-C008",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md",
+      "label": "ORAFP-C008",
+      "findingId": "ORAFP-F003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md#ORAFP-C009",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md",
+      "label": "ORAFP-C009",
+      "findingId": "ORAFP-F004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md#ORAFP-C010",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md",
+      "label": "ORAFP-C010",
+      "findingId": "ORAFP-F005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md#ORAFP-C011",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md",
+      "label": "ORAFP-C011",
+      "findingId": "ORAFP-F006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md#ORAFP-C012",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md",
+      "label": "ORAFP-C012",
+      "findingId": "ORAFP-F006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md#ORAFP-C013",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md",
+      "label": "ORAFP-C013",
+      "findingId": "ORAFP-F007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md#ORAFP-C014",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md",
+      "label": "ORAFP-C014",
+      "findingId": "ORAFP-F008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md#ORAFP-C015",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md",
+      "label": "ORAFP-C015",
+      "findingId": "ORAFP-F009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md#ORAFP-C016",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md",
+      "label": "ORAFP-C016",
+      "findingId": "ORAFP-F009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md#ORAFP-C017",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md",
+      "label": "ORAFP-C017",
+      "findingId": "ORAFP-F009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md#ORAFP-C018",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md",
+      "label": "ORAFP-C018",
+      "findingId": "ORAFP-F010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md#ORAFP-C019",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md",
+      "label": "ORAFP-C019",
+      "findingId": "ORAFP-F011"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md#ORNFP-C001",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md",
+      "label": "ORNFP-C001",
+      "findingId": "ORNFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md#ORNFP-C002",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md",
+      "label": "ORNFP-C002",
+      "findingId": "ORNFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md#ORNFP-C003",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md",
+      "label": "ORNFP-C003",
+      "findingId": "ORNFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md#ORNFP-C004",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md",
+      "label": "ORNFP-C004",
+      "findingId": "ORNFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md#ORNFP-C005",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md",
+      "label": "ORNFP-C005",
+      "findingId": "ORNFP-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md#ORNFP-C006",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md",
+      "label": "ORNFP-C006",
+      "findingId": "ORNFP-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md#ORNFP-C007",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md",
+      "label": "ORNFP-C007",
+      "findingId": "ORNFP-F003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md#ORNFP-C008",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md",
+      "label": "ORNFP-C008",
+      "findingId": "ORNFP-F004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md#ORNFP-C009",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md",
+      "label": "ORNFP-C009",
+      "findingId": "ORNFP-F005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md#ORNFP-C010",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md",
+      "label": "ORNFP-C010",
+      "findingId": "ORNFP-F006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md#ORNFP-C011",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md",
+      "label": "ORNFP-C011",
+      "findingId": "ORNFP-F007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md#ORNFP-C012",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md",
+      "label": "ORNFP-C012",
+      "findingId": "ORNFP-F008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md#ORNFP-C013",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md",
+      "label": "ORNFP-C013",
+      "findingId": "ORNFP-F007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md#ORNFP-C014",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md",
+      "label": "ORNFP-C014",
+      "findingId": "ORNFP-F009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md#ORNFP-C015",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md",
+      "label": "ORNFP-C015",
+      "findingId": "ORNFP-F007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md#ORNFP-C016",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md",
+      "label": "ORNFP-C016",
+      "findingId": "ORNFP-F010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md#ORNFP-C017",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md",
+      "label": "ORNFP-C017",
+      "findingId": "ORNFP-F011"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md#ORNFP-C018",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md",
+      "label": "ORNFP-C018",
+      "findingId": "ORNFP-F012"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md#ORNFP-C019",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md",
+      "label": "ORNFP-C019",
+      "findingId": "ORNFP-F013"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md#ORNFP-C020",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md",
+      "label": "ORNFP-C020",
+      "findingId": "ORNFP-F007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md#ORNFP-C021",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md",
+      "label": "ORNFP-C021",
+      "findingId": "ORNFP-F014"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md#ORNFP-C022",
+      "filePath": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md",
+      "label": "ORNFP-C022",
+      "findingId": "ORNFP-F015"
+    }
+  ],
+  "findings": [
+    {
+      "id": "OPUFP-F001",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md#OPUFP-C001",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md#OPUFP-C002",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md#OPUFP-C003",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md#OPUFP-C004",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md#OPUFP-C005"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/update.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/update.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test tests/orchestrators/plugin/update.test.ts",
+        "exitCode": 0,
+        "observed": "The focused update suite passed; its current cases use temporary roots, injected Git/filesystem collaborators, exact outcomes, negative controls, and ordered multi-item expectations."
+      },
+      "rationale": "The current source-test pair and successful focused rerun support the report's positive structure, hermeticity, and behavior claims.",
+      "destination": "No implementation change; retain as validated evidence."
+    },
+    {
+      "id": "OPUFP-F002",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md#OPUFP-C006"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "OPU-B-F18",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/update.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/update.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current test inspection",
+        "observed": "The drop-cache failure path still swallows the exception, while the named case asserts only the successful update result; no isolated mutation was run in this pass."
+      },
+      "rationale": "This is the same currently inconclusive test-strength claim already owned by OPU-B-F18 under D-11.",
+      "destination": "Use OPU-B-F18 for any isolated mutation and Phase 2 strengthening."
+    },
+    {
+      "id": "OPUFP-F003",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md#OPUFP-C007"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "OPU-B-F19",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/update.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/update.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current test inspection",
+        "observed": "Abort helpers still call partial-handle cleanup, but current cases observe state consequences rather than an independent cleanup effect; no mutation was run."
+      },
+      "rationale": "OPU-B-F19 already preserves this D-11-inconclusive cleanup-strength claim.",
+      "destination": "Retain the canonical Phase 2 mutation route in OPU-B-F19."
+    },
+    {
+      "id": "OPUFP-F004",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md#OPUFP-C008"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "OPU-B-F20",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/update.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/update.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current test inspection",
+        "observed": "The warm-cache SHA case still records cloneCalls rather than asserting the complete Git operation transcript; no isolated mutation was run."
+      },
+      "rationale": "The same unproven assertion-strength observation is canonically owned by OPU-B-F20.",
+      "destination": "Use OPU-B-F20 for the isolated mutation and any exact-call enhancement."
+    },
+    {
+      "id": "OPUFP-F005",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md#OPUFP-C009"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "OPU-B-F21",
+      "sourceRefs": [
+        {
+          "path": "tests/orchestrators/plugin/update.test.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "This is a test readability observation."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current test-file structure inspection",
+        "observed": "The file still mixes commented and uncommented Arrange-Act-Assert structure."
+      },
+      "rationale": "OPU-B-F21 already owns the same readability cleanup.",
+      "destination": "Consolidate any comment cleanup under OPU-B-F21."
+    },
+    {
+      "id": "OPUFP-F006",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md#OPUFP-C010"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "OPU-B-F22",
+      "sourceRefs": [
+        {
+          "path": "tests/orchestrators/plugin/update.test.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "The finding concerns test-double typing."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current TypeScript inspection",
+        "observed": "makeCtx still uses double casts to supply minimal collaborators for broad interfaces."
+      },
+      "rationale": "This is the same test-double design issue already owned by OPU-B-F22.",
+      "destination": "Use OPU-B-F22 for any narrow test-port refactor."
+    },
+    {
+      "id": "OPUFP-F007",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md#OPUFP-C011"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "OPU-B-F23",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/update.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "This is a production error-normalization observation."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current catch-block inspection",
+        "observed": "Direct unknown-to-Error casts remain in the current production module."
+      },
+      "rationale": "OPU-B-F23 already owns the same error-normalization cleanup.",
+      "destination": "Apply any Phase 2 normalization under OPU-B-F23."
+    },
+    {
+      "id": "OPUFP-F007A",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md#OPUFP-C012"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "OPU-B-F24",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/update.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "This is a production dependency observation."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current symbol inspection",
+        "observed": "updateSinglePlugin still reads process.cwd directly."
+      },
+      "rationale": "OPU-B-F24 already owns the same hidden working-directory dependency.",
+      "destination": "Resolve the dependency under OPU-B-F24."
+    },
+    {
+      "id": "OPUFP-F007B",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md#OPUFP-C013"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "OPU-B-F25",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/update.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "This is a production clock-dependency observation."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current constructor inspection",
+        "observed": "Production update logic still constructs Date values inline."
+      },
+      "rationale": "OPU-B-F25 already owns the same hidden clock dependency.",
+      "destination": "Resolve the clock dependency under OPU-B-F25."
+    },
+    {
+      "id": "OPUFP-F007C",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md#OPUFP-C014"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "OPU-B-F26",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/update.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "This is an exported-contract documentation observation."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current type declaration inspection",
+        "observed": "UpdatePluginsOptions still lacks top-level documentation."
+      },
+      "rationale": "OPU-B-F26 already owns the same documentation cleanup.",
+      "destination": "Document the exported options under OPU-B-F26."
+    },
+    {
+      "id": "OPUFP-F008",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md#OPUFP-C015",
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md#OPUFP-C016"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "OPU-B-F28",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/update.ts"
+        },
+        {
+          "path": "tests/orchestrators/plugin/update.test.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "This is a module-boundary recommendation."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph module inspection",
+        "observed": "The production and test files remain large and combine preflight, swap, cascade, and cleanup responsibilities."
+      },
+      "rationale": "OPU-B-F28 already owns the same split recommendation.",
+      "destination": "Consider the split only through OPU-B-F28 after behavior-preserving tests remain green."
+    },
+    {
+      "id": "OPUFP-F009",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md#OPUFP-C017"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "operator decision",
+      "duplicateOf": "OPU-B-F12",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/plugin/update.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/update.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph call-path inspection",
+        "observed": "The default update path still binds its cascade integration directly rather than through an injected dependency."
+      },
+      "rationale": "This is the same seam decision already owned by OPU-B-F12.",
+      "destination": "Resolve dependency ownership under OPU-B-F12 before implementation."
+    },
+    {
+      "id": "OPUFP-F010",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md#OPUFP-C018"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "OPU-B-F34",
+      "sourceRefs": [
+        {
+          "path": "tests/orchestrators/plugin/update.test.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/update.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current test comparison",
+        "observed": "Sibling cases retain literal whole-message and ordered whole-array expectations."
+      },
+      "rationale": "OPU-B-F34 already records this positive reference pattern.",
+      "destination": "Retain OPU-B-F34 as the canonical example."
+    },
+    {
+      "id": "OPUFP-F011",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md#OPUFP-C019"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "This is an explicit corpus scope boundary."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Review scope and assignment comparison",
+        "observed": "The report explicitly excludes messaging-row and support modules; separate assigned corpus records own those files."
+      },
+      "rationale": "The scope boundary is current and prevents accidental duplicate ownership.",
+      "destination": "No implementation action."
+    },
+    {
+      "id": "OPUFP-F012",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md#OPUFP-C020"
+      ],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": ".planning/reviews/unit-test-adversarial/orchestrators-plugin-update.md"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/plugin/update.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "npm run test:coverage:direct -- extensions/pi-claude-marketplace/orchestrators/plugin/update.ts",
+        "exitCode": 0,
+        "observed": "Current revalidation passed the paired suite with 100% direct branch, function, and line coverage, replacing the historical no-command premise."
+      },
+      "rationale": "The statement was historically accurate but is stale after this positive replacement rerun.",
+      "destination": "Close with the recorded current probe; coverage does not independently settle mutation-strength claims."
+    },
+    {
+      "id": "ORAFP-F001",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md#ORAFP-C001",
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md#ORAFP-C002",
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md#ORAFP-C003",
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md#ORAFP-C004",
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md#ORAFP-C005",
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md#ORAFP-C006"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/reconcile/plan.test.ts"
+        },
+        {
+          "path": "tests/orchestrators/reconcile/apply.test.ts"
+        },
+        {
+          "path": "tests/orchestrators/reconcile/apply-outcomes.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test tests/orchestrators/reconcile/apply.test.ts tests/orchestrators/reconcile/apply-outcomes.test.ts tests/orchestrators/reconcile/plan.test.ts",
+        "exitCode": 0,
+        "observed": "All three focused suites passed, including plan purity/determinism, enabled-state distinctions, real-orchestrator behavior, exact notification calls, and clean/hybrid outcome cases."
+      },
+      "rationale": "Current focused behavior supports the report's positive apply-stack claims.",
+      "destination": "No implementation change; retain as validated evidence."
+    },
+    {
+      "id": "ORAFP-F002",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md#ORAFP-C007"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "ORA-F18",
+      "sourceRefs": [
+        {
+          "path": "tests/orchestrators/reconcile/apply.test.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "This is a test naming observation."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current test inspection",
+        "observed": "The generic result identifier remains in the cited apply cases."
+      },
+      "rationale": "ORA-F18 already owns this naming cleanup.",
+      "destination": "Use ORA-F18 if the readability cleanup is selected."
+    },
+    {
+      "id": "ORAFP-F003",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md#ORAFP-C008"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "ORA-F20",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/reconcile/apply.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current test inspection",
+        "observed": "No focused fixture deletes only the recorded artifact while preserving the config-to-record mismatch; no isolated mutation was run."
+      },
+      "rationale": "ORA-F20 already owns this D-11-inconclusive test-strength claim.",
+      "destination": "Use ORA-F20 for an isolated mutation or discriminating Phase 2 case."
+    },
+    {
+      "id": "ORAFP-F004",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md#ORAFP-C009"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "operator decision",
+      "duplicateOf": "ORA-F21",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "This is a production exhaustiveness-policy decision."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current switch inspection",
+        "observed": "diffMarketplaces still switches over match without an explicit default."
+      },
+      "rationale": "ORA-F21 canonically owns this current structural decision.",
+      "destination": "Choose the nonthrow fallback policy under ORA-F21."
+    },
+    {
+      "id": "ORAFP-F005",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md#ORAFP-C010"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "operator decision",
+      "duplicateOf": "ORA-F22",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "This is a production exhaustiveness-policy decision."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current switch inspection",
+        "observed": "applySourceMismatches still switches over cause without an explicit default."
+      },
+      "rationale": "ORA-F22 canonically owns this current structural decision.",
+      "destination": "Choose the fallback policy under ORA-F22."
+    },
+    {
+      "id": "ORAFP-F006",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md#ORAFP-C011",
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md#ORAFP-C012"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "operator decision",
+      "duplicateOf": "ORA-F23",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/reconcile/apply.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph import and call-path inspection",
+        "observed": "Apply still statically imports and invokes the five concrete orchestrators, so tests cannot replace those boundaries with lightweight doubles."
+      },
+      "rationale": "ORA-F23 already owns the dependency-seam decision while ORA-F19 preserves evidence that current real-orchestrator tests are behaviorally sound.",
+      "destination": "Resolve the seam under ORA-F23 without weakening the behavior covered by ORA-F19."
+    },
+    {
+      "id": "ORAFP-F007",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md#ORAFP-C013"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "ORA-F24",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "The post-switch fallback makes this a structural pin."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current control-flow inspection",
+        "observed": "classifyOrchestratorThrow still lacks an explicit switch default, but execution reaches an existing conservative fallback."
+      },
+      "rationale": "ORA-F24 owns the optional explicit structural pin; no runtime defect is claimed.",
+      "destination": "Use ORA-F24 for Phase 2 exhaustiveness cleanup."
+    },
+    {
+      "id": "ORAFP-F008",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md#ORAFP-C014"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "ORA-F25",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "This is a production documentation defect."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current symbol source",
+        "observed": "The exported classifyOrchestratorThrow helper still has documentation describing the fallback as module-private."
+      },
+      "rationale": "ORA-F25 already owns this misleading documentation.",
+      "destination": "Correct the wording under ORA-F25."
+    },
+    {
+      "id": "ORAFP-F009",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md#ORAFP-C015",
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md#ORAFP-C016",
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md#ORAFP-C017"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "ORA-F35",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/reconcile/plan.test.ts"
+        },
+        {
+          "path": "tests/orchestrators/reconcile/apply.test.ts"
+        },
+        {
+          "path": "tests/orchestrators/reconcile/apply-outcomes.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current test comparison",
+        "observed": "Current compiler-forced branches and literal whole-value notification expectations retain the reference patterns summarized by ORA-F35; no additional defect was found."
+      },
+      "rationale": "ORA-F35 is the canonical positive reference finding for the reviewed stack.",
+      "destination": "Retain ORA-F35 as evidence-only guidance."
+    },
+    {
+      "id": "ORAFP-F010",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md#ORAFP-C018"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "This is an explicit corpus scope boundary."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Review scope and assignment comparison",
+        "observed": "The report explicitly excludes background reconcile helpers, which are owned by separate review records."
+      },
+      "rationale": "The boundary is current and prevents duplicate ownership.",
+      "destination": "No implementation action."
+    },
+    {
+      "id": "ORAFP-F011",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md#ORAFP-C019"
+      ],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-apply.md"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/reconcile/apply.test.ts"
+        },
+        {
+          "path": "tests/orchestrators/reconcile/apply-outcomes.test.ts"
+        },
+        {
+          "path": "tests/orchestrators/reconcile/plan.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test tests/orchestrators/reconcile/apply.test.ts tests/orchestrators/reconcile/apply-outcomes.test.ts tests/orchestrators/reconcile/plan.test.ts",
+        "exitCode": 0,
+        "observed": "The current revalidation reran all three focused suites successfully; separate direct coverage runs also reached 100% branch, function, and line coverage for each paired source file."
+      },
+      "rationale": "The historical no-command limitation is positively replaced by current successful reruns.",
+      "destination": "Close with current probe evidence; retain D-11 caution for unmutated test-strength claims."
+    },
+    {
+      "id": "ORNFP-F001",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md#ORNFP-C001",
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md#ORNFP-C002",
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md#ORNFP-C003",
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md#ORNFP-C004",
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md#ORNFP-C005"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/backfill.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/pending.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/reconcile.messaging.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/reconcile/notify.test.ts"
+        },
+        {
+          "path": "tests/orchestrators/reconcile/backfill.test.ts"
+        },
+        {
+          "path": "tests/orchestrators/reconcile/pending.test.ts"
+        },
+        {
+          "path": "tests/orchestrators/reconcile/types.test.ts"
+        },
+        {
+          "path": "tests/orchestrators/reconcile/reconcile.messaging.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test tests/orchestrators/reconcile/notify.test.ts tests/orchestrators/reconcile/backfill.test.ts tests/orchestrators/reconcile/pending.test.ts tests/orchestrators/reconcile/types.test.ts tests/orchestrators/reconcile/reconcile.messaging.test.ts",
+        "exitCode": 0,
+        "observed": "All five focused suites passed, including temporary-root filesystem cases, exact ordered notification calls, severity tri-state, and row grammar."
+      },
+      "rationale": "Current focused behavior supports the report's positive structure, hermeticity, and boundary claims.",
+      "destination": "No implementation change; retain as validated evidence."
+    },
+    {
+      "id": "ORNFP-F002",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md#ORNFP-C006"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "ORN-F019",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/reconcile/notify.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test tests/orchestrators/reconcile/notify.test.ts",
+        "exitCode": 0,
+        "observed": "The current suite contains and passes an exact case mapping reason 'marketplace not added' to ['not found'], positively replacing the report's broad no-sentinel-case premise."
+      },
+      "rationale": "ORN-F019 already owns this stale broad claim and its positive replacement.",
+      "destination": "Close under ORN-F019; do not generalize this case to unproduced scope-qualified sentinels."
+    },
+    {
+      "id": "ORNFP-F003",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md#ORNFP-C007"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "operator decision",
+      "duplicateOf": "ORN-F011",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/reconcile/notify.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph producer/reference inspection",
+        "observed": "The remaining scope-qualified structural sentinels are mapped by reasonAsContent but still have no current producer."
+      },
+      "rationale": "ORN-F011 already owns the question of retaining, producing, or removing these branches.",
+      "destination": "Resolve sentinel ownership under ORN-F011 before changing tests or production."
+    },
+    {
+      "id": "ORNFP-F004",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md#ORNFP-C008"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "ORN-F015",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/backfill.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/reconcile/backfill.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current test inspection",
+        "observed": "The unavailable path remains reachable, but no focused case or isolated mutation was established in this pass."
+      },
+      "rationale": "D-11 keeps the test-strength verdict inconclusive, as already recorded by ORN-F015.",
+      "destination": "Use ORN-F015 for an isolated mutation or focused Phase 2 case."
+    },
+    {
+      "id": "ORNFP-F005",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md#ORNFP-C009"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "operator decision",
+      "duplicateOf": "ORN-F016",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/backfill.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/reconcile/backfill.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current call-path inspection",
+        "observed": "Validated data reaches the entry guard, leaving the invalid-entry branch unreachable through current public control flow."
+      },
+      "rationale": "ORN-F016 already owns the safety-sensitive decision to remove, relocate, or expose this defensive guard.",
+      "destination": "Resolve under ORN-F016; do not add a dishonest unreachable test."
+    },
+    {
+      "id": "ORNFP-F006",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md#ORNFP-C010"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "ORN-F020",
+      "sourceRefs": [
+        {
+          "path": "tests/orchestrators/reconcile/backfill.test.ts"
+        },
+        {
+          "path": "tests/orchestrators/reconcile/pending.test.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "This is duplicated test-infrastructure structure."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current helper comparison",
+        "observed": "The backfill and pending suites retain equivalent temporary-root setup helpers."
+      },
+      "rationale": "ORN-F020 already owns the consolidation opportunity.",
+      "destination": "Consolidate only under ORN-F020 without weakening hermetic cleanup."
+    },
+    {
+      "id": "ORNFP-F007",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md#ORNFP-C011",
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md#ORNFP-C013",
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md#ORNFP-C015",
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md#ORNFP-C020"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "ORN-F025",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/pending.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/reconcile.messaging.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/reconcile/pending.test.ts"
+        },
+        {
+          "path": "tests/orchestrators/reconcile/types.test.ts"
+        },
+        {
+          "path": "tests/orchestrators/reconcile/reconcile.messaging.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test tests/orchestrators/reconcile/pending.test.ts tests/orchestrators/reconcile/types.test.ts tests/orchestrators/reconcile/reconcile.messaging.test.ts",
+        "exitCode": 0,
+        "observed": "The three focused suites passed and retain exact whole-value, ordering, isolation, readonly, runtime, and compile-time reference patterns."
+      },
+      "rationale": "ORN-F025 already canonically records these positive reference patterns.",
+      "destination": "Retain ORN-F025 as evidence-only guidance."
+    },
+    {
+      "id": "ORNFP-F008",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md#ORNFP-C012"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "ORN-F021",
+      "sourceRefs": [
+        {
+          "path": "tests/orchestrators/reconcile/types.test.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "This is a test naming observation."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current test inspection",
+        "observed": "The generic subject identifier remains in types.test.ts."
+      },
+      "rationale": "ORN-F021 already owns this readability cleanup.",
+      "destination": "Use ORN-F021 if the naming cleanup is selected."
+    },
+    {
+      "id": "ORNFP-F009",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md#ORNFP-C014"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "operator decision",
+      "duplicateOf": "ORN-F029",
+      "sourceRefs": [
+        {
+          "path": "tests/orchestrators/reconcile/types.test.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "This is a type-test ownership decision."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current TypeScript type-test inspection",
+        "observed": "The option mocks remain wider than the properties exercised by runtime assertions."
+      },
+      "rationale": "ORN-F029 already owns the decision between narrower ports and full contract pins.",
+      "destination": "Resolve type-test ownership under ORN-F029."
+    },
+    {
+      "id": "ORNFP-F010",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md#ORNFP-C016"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "ORN-F022",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "This is a production readability observation."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current symbol inspection",
+        "observed": "Terse single-letter callback parameter names remain in notify.ts."
+      },
+      "rationale": "ORN-F022 already owns the naming cleanup.",
+      "destination": "Use ORN-F022 for Phase 2 readability work."
+    },
+    {
+      "id": "ORNFP-F011",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md#ORNFP-C017"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "ORN-F023",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/backfill.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "This is an import-style observation."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source inspection",
+        "observed": "backfill.ts retains the inline import type."
+      },
+      "rationale": "ORN-F023 already owns this style cleanup.",
+      "destination": "Use ORN-F023 if the import is normalized."
+    },
+    {
+      "id": "ORNFP-F012",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md#ORNFP-C018"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "operator decision",
+      "duplicateOf": "ORN-F024",
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/backfill.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/reconcile/backfill.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph reference inspection",
+        "observed": "scanForceInstalledBackfills remains exported with only internal and test consumers."
+      },
+      "rationale": "ORN-F024 already owns the decision to remove the test-only export or establish a production contract.",
+      "destination": "Resolve the export under ORN-F024."
+    },
+    {
+      "id": "ORNFP-F013",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md#ORNFP-C019"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/backfill.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/pending.ts"
+        },
+        {
+          "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/reconcile/backfill.test.ts"
+        },
+        {
+          "path": "tests/orchestrators/reconcile/pending.test.ts"
+        },
+        {
+          "path": "tests/orchestrators/reconcile/types.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph dependency inspection",
+        "observed": "The three reviewed modules keep filesystem/environment effects behind supplied paths or collaborators; no new direct network or credential access was found."
+      },
+      "rationale": "Current source supports the report's bounded clean-production observation.",
+      "destination": "No implementation change."
+    },
+    {
+      "id": "ORNFP-F014",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md#ORNFP-C021"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "evidence-only closure",
+      "duplicateOf": "ORN-F030",
+      "sourceRefs": [
+        {
+          "path": "tests/orchestrators/reconcile/notify.test.ts"
+        },
+        {
+          "path": "tests/orchestrators/reconcile/backfill.test.ts"
+        },
+        {
+          "path": "tests/orchestrators/reconcile/pending.test.ts"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "This adjudicates an assertion-style claim."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "Current assertion inspection",
+        "observed": "The current suites use strict node:assert forms; the broad loose-alias concern is not present."
+      },
+      "rationale": "ORN-F030 already records the historical assertion-alias concern as spurious/stale.",
+      "destination": "No change; retain current strict assertions."
+    },
+    {
+      "id": "ORNFP-F015",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md#ORNFP-C022"
+      ],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        {
+          "path": ".planning/reviews/unit-test-adversarial/orchestrators-reconcile-notify.md"
+        }
+      ],
+      "testRefs": [
+        {
+          "path": "tests/orchestrators/reconcile/notify.test.ts"
+        },
+        {
+          "path": "tests/orchestrators/reconcile/backfill.test.ts"
+        },
+        {
+          "path": "tests/orchestrators/reconcile/pending.test.ts"
+        },
+        {
+          "path": "tests/orchestrators/reconcile/types.test.ts"
+        },
+        {
+          "path": "tests/orchestrators/reconcile/reconcile.messaging.test.ts"
+        }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test tests/orchestrators/reconcile/notify.test.ts tests/orchestrators/reconcile/backfill.test.ts tests/orchestrators/reconcile/pending.test.ts tests/orchestrators/reconcile/types.test.ts tests/orchestrators/reconcile/reconcile.messaging.test.ts",
+        "exitCode": 0,
+        "observed": "All five focused suites passed; separate direct coverage reruns reached 100% branch, function, and line coverage for each paired source module."
+      },
+      "rationale": "The historical no-command limitation is positively replaced by current successful reruns.",
+      "destination": "Close with current probe evidence; coverage does not replace D-11 mutation proof."
+    }
+  ]
+}

@@ -38,15 +38,17 @@
 
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import https from "node:https";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
 
+import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { It, when } from "strong-mock";
 
 import claudeMarketplaceExtension from "../extensions/pi-claude-marketplace/index.ts";
+import { EXTENSION_VERSION } from "../extensions/pi-claude-marketplace/shared/extension-version.ts";
 
 import { createNotificationBoundary } from "./edge/notification-boundary.ts";
 
@@ -66,6 +68,7 @@ import type {
   SessionShutdownEvent,
   SessionStartEvent,
   ToolCallEvent,
+  ToolCallEventResult,
   ToolResultEvent,
 } from "../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
@@ -76,6 +79,18 @@ import type {
  * has to be named per registration.
  */
 type EventListener<TEvent> = (event: TEvent, ctx: ExtensionContext) => void;
+
+/** The bridge's project-hydrating session-start listener is asynchronous. */
+type BridgeSessionStartListener = (
+  event: SessionStartEvent,
+  ctx: ExtensionContext,
+) => Promise<void>;
+
+/** The hook-bridge listener whose return value can deny a tool call. */
+type ToolCallListener = (
+  event: ToolCallEvent,
+  ctx: ExtensionContext,
+) => Promise<ToolCallEventResult | undefined>;
 
 /** The discover listener, which answers with the discovered resource set. */
 type DiscoverListener = (
@@ -95,8 +110,10 @@ interface HermeticScope {
 }
 
 interface LoadedExtension {
+  readonly bridgeSessionStart: BridgeSessionStartListener;
   readonly discover: DiscoverListener;
   readonly sessionEnv: EventListener<SessionStartEvent>;
+  readonly toolCall: ToolCallListener;
   readonly command: CommandRegistration;
   readonly tools: readonly (ToolRegistration | undefined)[];
   readonly ctx: ExtensionCommandContext;
@@ -118,9 +135,9 @@ const EMPTY_DISCOVERY: ResourcesDiscoverResult = { skillPaths: [], promptPaths: 
  *
  * Each of the three named ordinals has its own case, and each case asserts an
  * observable only its own stage produces -- otherwise the ordinal is decoration
- * and the case's title is a claim about a stage it is not pinned to. The fourth
- * read has no case: the resource aggregation is the one stage outside a try, so
- * refusing it is a throw out of the handler rather than an NFR-2 containment.
+ * and the case's title is a claim about a stage it is not pinned to. The aggregate
+ * discovery case counts all four reads across two calls while a real filesystem
+ * fault targets the fourth stage without a synthetic event refusal.
  */
 const CWD_READ_DEFERRED_HYDRATE = 1;
 const CWD_READ_RECONCILE = 2;
@@ -134,6 +151,17 @@ const RECONCILE_CASCADE_FOR_UNREADABLE_STATE =
   "  ⊘ state.json (failed) {unreadable}\n" +
   "    cause: state.json at state.json has an unsupported schema version\n\n" +
   "Reconcile: 2 failures";
+
+/** The cascade for unreadable install state in both project-first reconcile scopes. */
+const RECONCILE_CASCADE_FOR_TWO_UNREADABLE_STATES =
+  "Some operations have failed.\n\n" +
+  "⊘ state.json [project] (failed) {unreadable}\n" +
+  "  ⊘ state.json (failed) {unreadable}\n" +
+  "    cause: state.json at state.json has an unsupported schema version\n\n" +
+  "⊘ state.json [user] (failed) {unreadable}\n" +
+  "  ⊘ state.json (failed) {unreadable}\n" +
+  "    cause: state.json at state.json has an unsupported schema version\n\n" +
+  "Reconcile: 4 failures";
 
 /** The cascade the reconcile renders for a project scope whose config is invalid. */
 const RECONCILE_CASCADE_FOR_INVALID_CONFIG =
@@ -232,16 +260,20 @@ async function createHermeticScope(t: TestContext, label: string): Promise<Herme
  * and captures only the callback, so `verifyBoundary()` fails a registration
  * under any other name, an extra registration, and a missing one alike.
  */
-async function loadExtension(emissions: number, toolProbes: number): Promise<LoadedExtension> {
+async function loadExtension(
+  emissions: number,
+  toolProbes: number,
+  cwd?: { readonly value: string; readonly reads: number },
+): Promise<LoadedExtension> {
   const { ctx, pi, notifications, verifyBoundary } = createNotificationBoundary(
     emissions,
     toolProbes,
+    cwd,
   );
+  const bridgeSessionStartListener =
+    It.willCapture<BridgeSessionStartListener>("bridge session start");
   when(() => {
-    pi.on(
-      "session_start",
-      It.willCapture<EventListener<SessionStartEvent>>("bridge session start"),
-    );
+    pi.on("session_start", bridgeSessionStartListener);
   })
     .thenReturn()
     .times(1);
@@ -271,8 +303,9 @@ async function loadExtension(emissions: number, toolProbes: number): Promise<Loa
   })
     .thenReturn()
     .times(1);
+  const toolCallListener = It.willCapture<ToolCallListener>("tool call");
   when(() => {
-    pi.on("tool_call", It.willCapture<EventListener<ToolCallEvent>>("tool call"));
+    pi.on("tool_call", toolCallListener);
   })
     .thenReturn()
     .times(1);
@@ -346,15 +379,25 @@ async function loadExtension(emissions: number, toolProbes: number): Promise<Loa
   await claudeMarketplaceExtension(pi);
 
   const discover = discoverListener.value;
+  const bridgeSessionStart = bridgeSessionStartListener.value;
   const sessionEnv = sessionEnvListener.value;
+  const toolCall = toolCallListener.value;
   const command = commandRegistration.value;
-  if (discover === undefined || sessionEnv === undefined || command === undefined) {
-    throw new Error("the extension factory installed no discover, session or command callback");
+  if (
+    bridgeSessionStart === undefined ||
+    discover === undefined ||
+    sessionEnv === undefined ||
+    toolCall === undefined ||
+    command === undefined
+  ) {
+    throw new Error("the extension factory installed an incomplete callback surface");
   }
 
   return {
+    bridgeSessionStart,
     discover,
     sessionEnv,
+    toolCall,
     command,
     tools: [firstTool.value, secondTool.value],
     ctx,
@@ -381,6 +424,12 @@ interface CwdRefusal {
   readonly readCount: () => number;
 }
 
+interface CwdReplacement {
+  readonly event: ResourcesDiscoverEvent;
+  readonly replaced: () => boolean;
+  readonly readCount: () => number;
+}
+
 function eventRefusingCwdRead(event: ResourcesDiscoverEvent, nth: number): CwdRefusal {
   let reads = 0;
   let refused = false;
@@ -401,6 +450,35 @@ function eventRefusingCwdRead(event: ResourcesDiscoverEvent, nth: number): CwdRe
   return {
     event: proxy,
     refused: () => refused,
+    readCount: () => reads,
+  };
+}
+
+/** A discover event that substitutes one owned working-directory read. */
+function eventReplacingCwdRead(
+  event: ResourcesDiscoverEvent,
+  nth: number,
+  replacement: string,
+): CwdReplacement {
+  let reads = 0;
+  let replaced = false;
+  const proxy = new Proxy(event, {
+    get(target, property, receiver): unknown {
+      if (property === "cwd") {
+        reads += 1;
+        if (reads === nth) {
+          replaced = true;
+          return replacement;
+        }
+      }
+
+      return Reflect.get(target, property, receiver);
+    },
+  });
+
+  return {
+    event: proxy,
+    replaced: () => replaced,
     readCount: () => reads,
   };
 }
@@ -466,6 +544,132 @@ function discoverEvent(cwd: string): ResourcesDiscoverEvent {
   return { type: "resources_discover", cwd, reason: "startup" };
 }
 
+/** A complete context for exercising a production hook callback. */
+function hookContext(cwd: string, sessionId: string): ExtensionContext {
+  return {
+    get ui(): ExtensionContext["ui"] {
+      throw new Error("the synchronous hook path must not read ui");
+    },
+    mode: "print",
+    hasUI: false,
+    cwd,
+    sessionManager: SessionManager.inMemory(cwd, { id: sessionId }),
+    get modelRegistry(): ExtensionContext["modelRegistry"] {
+      throw new Error("the synchronous hook path must not read modelRegistry");
+    },
+    model: undefined,
+    scopedModels: [],
+    isIdle(): never {
+      throw new Error("the synchronous hook path must not inspect idle state");
+    },
+    isProjectTrusted(): never {
+      throw new Error("the synchronous hook path must not inspect trust");
+    },
+    signal: undefined,
+    abort(): never {
+      throw new Error("the synchronous hook path must not abort Pi");
+    },
+    hasPendingMessages(): never {
+      throw new Error("the synchronous hook path must not inspect pending messages");
+    },
+    shutdown(): never {
+      throw new Error("the synchronous hook path must not shut down Pi");
+    },
+    getContextUsage(): never {
+      throw new Error("the synchronous hook path must not inspect context usage");
+    },
+    compact(): never {
+      throw new Error("the synchronous hook path must not compact the session");
+    },
+    getSystemPrompt(): never {
+      throw new Error("the synchronous hook path must not read the system prompt");
+    },
+  };
+}
+
+/** Seed one enabled project plugin whose PreToolUse hook denies Bash. */
+async function seedBlockingHookPlugin(cwd: string): Promise<void> {
+  const extensionRoot = path.join(cwd, ".pi", "pi-claude-marketplace");
+  const marketplaceRoot = path.join(cwd, "hook-marketplace");
+  const pluginRoot = path.join(marketplaceRoot, "plugins", "hook-owner");
+  const hookRoot = path.join(extensionRoot, "hooks", "hook-owner");
+  await mkdir(hookRoot, { recursive: true });
+  await writeFile(
+    path.join(hookRoot, "hooks.json"),
+    JSON.stringify({
+      hooks: {
+        PreToolUse: [
+          {
+            matcher: "Bash",
+            hooks: [
+              {
+                type: "command",
+                command: `printf '%s' '{"decision":"block","reason":"owned hook"}'`,
+              },
+            ],
+          },
+        ],
+      },
+    }),
+    "utf8",
+  );
+  await writeFile(
+    path.join(extensionRoot, "state.json"),
+    JSON.stringify({
+      schemaVersion: 2,
+      marketplaces: {
+        hooks: {
+          name: "hooks",
+          scope: "project",
+          source: { kind: "path", raw: marketplaceRoot },
+          addedFromCwd: cwd,
+          manifestPath: path.join(marketplaceRoot, ".claude-plugin", "marketplace.json"),
+          marketplaceRoot,
+          plugins: {
+            "hook-owner": {
+              version: "1.0.0",
+              resolvedSource: pluginRoot,
+              compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+              resources: {
+                skills: [],
+                prompts: [],
+                agents: [],
+                mcpServers: [],
+                hooks: ["hook-owner"],
+              },
+              enabled: true,
+              installedAt: "2026-09-08T00:00:00.000Z",
+              updatedAt: "2026-09-08T00:00:00.000Z",
+            },
+          },
+        },
+      },
+    }),
+    "utf8",
+  );
+}
+
+/** Seed a path marketplace accepted by the public `marketplace add` command. */
+async function seedMarketplaceSource(
+  cwd: string,
+  name: string,
+  pluginName: string,
+): Promise<string> {
+  const sourceRoot = path.join(cwd, `${name}-source`);
+  await mkdir(path.join(sourceRoot, ".claude-plugin"), { recursive: true });
+  await mkdir(path.join(sourceRoot, "plugins", pluginName), { recursive: true });
+  await writeFile(
+    path.join(sourceRoot, ".claude-plugin", "marketplace.json"),
+    JSON.stringify({
+      name,
+      owner: { name: `${name} owner` },
+      plugins: [{ name: pluginName, source: `./plugins/${pluginName}`, version: "1.0.0" }],
+    }),
+    "utf8",
+  );
+  return sourceRoot;
+}
+
 /** Write one prompt file into a scope root's discovered prompt directory. */
 async function seedPrompt(root: string, fileName: string): Promise<string> {
   const promptsDir = path.join(root, ".pi", "pi-claude-marketplace", "resources", "prompts");
@@ -518,6 +722,11 @@ async function seedEnabledPlugin(cwd: string, resolvedSource: string): Promise<v
  */
 async function seedUnreadableState(cwd: string): Promise<string> {
   const extensionRoot = path.join(cwd, ".pi", "pi-claude-marketplace");
+  return seedUnreadableStateAt(extensionRoot);
+}
+
+/** Record install state the loader refuses at the given extension root. */
+async function seedUnreadableStateAt(extensionRoot: string): Promise<string> {
   await mkdir(extensionRoot, { recursive: true });
   const statePath = path.join(extensionRoot, "state.json");
   await writeFile(statePath, JSON.stringify({ schemaVersion: 99, marketplaces: {} }), "utf8");
@@ -554,6 +763,89 @@ test("registers the slash command and the two read-only tools alongside the brid
   );
   assert.deepStrictEqual(typeof command.handler, "function");
   verifyBoundary();
+});
+
+test("constructs one runtime and completion cache for edge registration, hook hydration, and plugin update", async () => {
+  // arrange
+  const source = await readFile(
+    path.join(import.meta.dirname, "../extensions/pi-claude-marketplace/index.ts"),
+    "utf8",
+  );
+  const runtimeConstructions = source.match(/createHooksRuntime\(\)/g) ?? [];
+  const cacheConstructions = source.match(/createCompletionCache\(\)/g) ?? [];
+  const routingConstructions =
+    source.match(/createHooksRouting\(hooksRuntime, \{ readHooksJson \}\)/g) ?? [];
+  const updateConstructions =
+    source.match(/createPluginUpdateOperations\(hooksRouting, completionCache\)/g) ?? [];
+
+  // act
+  const hydrationConstruction = source.match(
+    /createHooksHydration\(hooksRuntime, \{ loadState, readHooksJson \}\)/g,
+  );
+
+  // assert
+  assert.deepStrictEqual(runtimeConstructions, ["createHooksRuntime()"]);
+  assert.deepStrictEqual(cacheConstructions, ["createCompletionCache()"]);
+  assert.deepStrictEqual(routingConstructions, [
+    "createHooksRouting(hooksRuntime, { readHooksJson })",
+  ]);
+  assert.deepStrictEqual(updateConstructions, [
+    "createPluginUpdateOperations(hooksRouting, completionCache)",
+  ]);
+  assert.deepStrictEqual(hydrationConstruction, [
+    "createHooksHydration(hooksRuntime, { loadState, readHooksJson })",
+  ]);
+});
+
+test("keeps hook routing and command completion state inside each extension-load owner graph", async (t) => {
+  // arrange
+  const scope = await createHermeticScope(t, "owner-graph");
+  const ownerCwd = scope.cwd;
+  const peerCwd = path.join(scope.cwd, "peer-project");
+  await mkdir(peerCwd, { recursive: true });
+  await seedBlockingHookPlugin(ownerCwd);
+  const ownerMarketplace = await seedMarketplaceSource(ownerCwd, "owned-rows", "hello");
+  process.chdir(ownerCwd);
+  const owner = await loadExtension(1, 2, { value: ownerCwd, reads: 1 });
+  const ownerHookContext = hookContext(ownerCwd, "owner-graph-session");
+  await owner.bridgeSessionStart({ type: "session_start", reason: "startup" }, ownerHookContext);
+  const toolEvent: ToolCallEvent = {
+    type: "tool_call",
+    toolCallId: "owner-graph-call",
+    toolName: "bash",
+    input: { command: "git status" },
+  };
+
+  // act
+  const ownerHookBeforeMutation = await owner.toolCall(
+    structuredClone(toolEvent),
+    ownerHookContext,
+  );
+  await owner.command.handler(`marketplace add ${ownerMarketplace} --scope project`, owner.ctx);
+  const ownerCandidates = await owner.command.getArgumentCompletions?.("install --scope project ");
+  process.chdir(peerCwd);
+  const peer = await loadExtension(0, 0);
+  const peerHookContext = hookContext(peerCwd, "peer-graph-session");
+  await peer.bridgeSessionStart({ type: "session_start", reason: "startup" }, peerHookContext);
+  const peerHookResult = await peer.toolCall(structuredClone(toolEvent), peerHookContext);
+  const peerCandidates = await peer.command.getArgumentCompletions?.("install --scope project ");
+  process.chdir(ownerCwd);
+  const ownerHookAfterPeerLoad = await owner.toolCall(structuredClone(toolEvent), ownerHookContext);
+
+  // assert
+  assert.deepStrictEqual(ownerHookBeforeMutation, { block: true, reason: "owned hook" });
+  assert.strictEqual(peerHookResult, undefined);
+  assert.deepStrictEqual(ownerCandidates, [
+    {
+      label: "hello@owned-rows",
+      value: "install --scope project hello@owned-rows ",
+    },
+  ]);
+  assert.deepStrictEqual(peerCandidates, []);
+  assert.deepStrictEqual(ownerHookAfterPeerLoad, { block: true, reason: "owned hook" });
+  assert.deepStrictEqual(owner.notifications, [{ message: "● owned-rows [project] (added)" }]);
+  owner.verifyBoundary();
+  peer.verifyBoundary();
 });
 
 test("discovers prompts under the working directory the event names, not the one the process runs in", async (t) => {
@@ -610,6 +902,108 @@ test("appends the recorded plugin's binaries to the process PATH and records the
   assert.deepStrictEqual(process.env.PI_CLAUDE_MARKETPLACE_PATH, binDir);
   verifyBoundary();
 });
+
+test(
+  "contains one aggregate discovery failure and recovers through the same callback",
+  { concurrency: false },
+  async (t) => {
+    // arrange
+    const scope = await createHermeticScope(t, "discovery-recovery");
+    const resolvedSource = path.join(scope.cwd, "vendored-plugin");
+    const binDir = path.join(resolvedSource, "bin");
+    await seedEnabledPlugin(scope.cwd, resolvedSource);
+    const promptPath = await seedPrompt(scope.cwd, "recovered.md");
+    const skillPath = path.join(
+      scope.cwd,
+      ".pi",
+      "pi-claude-marketplace",
+      "resources",
+      "skills",
+      "recovered-skill",
+    );
+    await mkdir(skillPath, { recursive: true });
+    await writeFile(path.join(skillPath, "SKILL.md"), "---\nname: recovered-skill\n---\nbody\n");
+    const { discover, ctx, notifications, verifyBoundary } = await loadExtension(0, 0);
+    process.env.PATH = "/usr/bin";
+    Reflect.deleteProperty(process.env, "PI_CLAUDE_MARKETPLACE_PATH");
+    const invalidProjectCwd = `${scope.cwd}\0`;
+    const replacement = eventReplacingCwdRead(
+      discoverEvent(scope.cwd),
+      CWD_READS_PER_DISCOVER,
+      invalidProjectCwd,
+    );
+    const statePath = path.join(scope.cwd, ".pi", "pi-claude-marketplace", "state.json");
+    const configPath = path.join(scope.cwd, ".pi", "claude-plugins.json");
+    const expectedState = {
+      schemaVersion: 2,
+      marketplaces: {
+        mp: {
+          name: "mp",
+          scope: "project",
+          source: {
+            kind: "path",
+            logical: path.join(scope.cwd, "mp-src"),
+            raw: path.join(scope.cwd, "mp-src"),
+          },
+          addedFromCwd: scope.cwd,
+          manifestPath: path.join(scope.cwd, "mp-src", ".claude-plugin", "marketplace.json"),
+          marketplaceRoot: path.join(scope.cwd, "mp-src"),
+          plugins: {
+            plug: {
+              version: "1.0.0",
+              resolvedSource,
+              compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+              resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
+              enabled: true,
+              installedAt: "2026-08-03T00:00:00.000Z",
+              updatedAt: "2026-08-03T00:00:00.000Z",
+            },
+          },
+        },
+      },
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+    };
+    const expectedConfig = {
+      schemaVersion: 1,
+      marketplaces: { mp: { source: path.join(scope.cwd, "mp-src") } },
+      plugins: { "plug@mp": {} },
+    };
+    const expectedPath = `/usr/bin${path.delimiter}${binDir}`;
+    const expectedDiscovery: ResourcesDiscoverResult = {
+      skillPaths: [skillPath],
+      promptPaths: [promptPath],
+    };
+
+    // act
+    const failedDiscovery = await discover(replacement.event, ctx);
+
+    // assert
+    assert.deepStrictEqual(failedDiscovery, EMPTY_DISCOVERY);
+    assert.deepStrictEqual(JSON.parse(await readFile(statePath, "utf8")), expectedState);
+    assert.deepStrictEqual(JSON.parse(await readFile(configPath, "utf8")), expectedConfig);
+    assert.deepStrictEqual(process.env.PATH, expectedPath);
+    assert.deepStrictEqual(process.env.PI_CLAUDE_MARKETPLACE_PATH, binDir);
+    assert.deepStrictEqual(
+      { replaced: replacement.replaced(), reads: replacement.readCount() },
+      { replaced: true, reads: CWD_READS_PER_DISCOVER },
+    );
+    assert.deepStrictEqual(notifications, []);
+    const stateBytesAfterFailure = await readFile(statePath, "utf8");
+    const configBytesAfterFailure = await readFile(configPath, "utf8");
+
+    // act
+    const recoveredDiscovery = await discover(discoverEvent(scope.cwd), ctx);
+
+    // assert
+    assert.deepStrictEqual(recoveredDiscovery, expectedDiscovery);
+    assert.deepStrictEqual(await readFile(statePath, "utf8"), stateBytesAfterFailure);
+    assert.deepStrictEqual(await readFile(configPath, "utf8"), configBytesAfterFailure);
+    assert.deepStrictEqual(process.env.PATH, expectedPath);
+    assert.deepStrictEqual(process.env.PI_CLAUDE_MARKETPLACE_PATH, binDir);
+    assert.deepStrictEqual(notifications, []);
+    verifyBoundary();
+  },
+);
 
 test("reports the scope whose install state it cannot read once as a reconcile failure and once as a plugin PATH warning (PENV-01)", async (t) => {
   // arrange
@@ -808,6 +1202,69 @@ test("still answers when the plugin PATH warning notification is refused (NFR-2)
 
   // assert
   assert.deepStrictEqual(discovered, EMPTY_DISCOVERY);
+  assert.deepStrictEqual(attempted, expectedAttempts);
+  verifyBoundary();
+});
+
+test("attempts every skipped-scope PATH warning when every host notification throws", async (t) => {
+  // arrange
+  const scope = await createHermeticScope(t, "all-path-warnings-refused");
+  const projectStatePath = await seedUnreadableState(scope.cwd);
+  const userStatePath = await seedUnreadableStateAt(
+    path.join(scope.home, ".pi", "agent", "pi-claude-marketplace"),
+  );
+  const invalidStateBytes = JSON.stringify({ schemaVersion: 99, marketplaces: {} });
+  const validStateBytes = JSON.stringify({
+    schemaVersion: 2,
+    lastReconciledExtensionVersion: EXTENSION_VERSION,
+    marketplaces: {},
+  });
+  const staleUserBin = path.join(scope.home, "stale-user", "bin");
+  const staleProjectBin = path.join(scope.cwd, "stale-project", "bin");
+  process.env.PATH = ["/usr/bin", staleUserBin, staleProjectBin].join(path.delimiter);
+  process.env.PI_CLAUDE_MARKETPLACE_PATH = [staleUserBin, staleProjectBin].join(path.delimiter);
+  const { discover, ctx, verifyBoundary } = await loadExtension(0, 2);
+  const attempted: Notification[] = [];
+  const refusing = contextNotifyingThrough(ctx, refuseEveryNotification(attempted));
+  const expectedAttempts: readonly Notification[] = [
+    { message: RECONCILE_CASCADE_FOR_TWO_UNREADABLE_STATES, severity: "error" },
+    { message: "reconcile aborted: host notification refused", severity: "error" },
+    {
+      message:
+        "plugin PATH not refreshed for user scope (install state unreadable): " +
+        `state.json at ${userStatePath} has an unsupported schema version`,
+      severity: "warning",
+    },
+    {
+      message:
+        "plugin PATH not refreshed for project scope (install state unreadable): " +
+        `state.json at ${projectStatePath} has an unsupported schema version`,
+      severity: "warning",
+    },
+  ];
+
+  // act
+  const discovered = await discover(discoverEvent(scope.cwd), refusing);
+
+  // assert
+  assert.deepStrictEqual(discovered, EMPTY_DISCOVERY);
+  assert.deepStrictEqual(await readFile(projectStatePath, "utf8"), invalidStateBytes);
+  assert.deepStrictEqual(await readFile(userStatePath, "utf8"), invalidStateBytes);
+  assert.deepStrictEqual(process.env.PATH, "/usr/bin");
+  assert.deepStrictEqual(process.env.PI_CLAUDE_MARKETPLACE_PATH, "");
+  assert.deepStrictEqual(attempted, expectedAttempts);
+  await writeFile(projectStatePath, validStateBytes, "utf8");
+  await writeFile(userStatePath, validStateBytes, "utf8");
+
+  // act
+  const followingDiscovery = await discover(discoverEvent(scope.cwd), refusing);
+
+  // assert
+  assert.deepStrictEqual(followingDiscovery, EMPTY_DISCOVERY);
+  assert.deepStrictEqual(await readFile(projectStatePath, "utf8"), validStateBytes);
+  assert.deepStrictEqual(await readFile(userStatePath, "utf8"), validStateBytes);
+  assert.deepStrictEqual(process.env.PATH, "/usr/bin");
+  assert.deepStrictEqual(process.env.PI_CLAUDE_MARKETPLACE_PATH, "");
   assert.deepStrictEqual(attempted, expectedAttempts);
   verifyBoundary();
 });

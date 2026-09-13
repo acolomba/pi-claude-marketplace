@@ -58,10 +58,21 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { test, type TestContext } from "node:test";
 
+import {
+  createHooksRouting,
+  createHooksRuntime,
+  readHooksJson,
+} from "../../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
+import { asAbsolutePluginRoot } from "../../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import { makeUninstallHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/uninstall.ts";
+import { createCompletionCache } from "../../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
 import { buildInstalledPluginRecord, mergeMarketplaceIntoState } from "../marketplace-seed.ts";
 
+import type {
+  HooksRouting,
+  HooksRuntime,
+} from "../../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import type { Scope } from "../../../../extensions/pi-claude-marketplace/shared/types.ts";
 
 /** The usage block, written out here rather than read back off the handler. */
@@ -108,6 +119,46 @@ const USER_OVERRIDE_REJECTED = {
     'A plugin operation has failed.\n\n● alpha [user]\n  ⊘ demo (failed) {invalid manifest}\n    cause: Config file "claude-plugins.local.json" failed schema validation.',
   severity: "error",
 };
+
+/** Construct one isolated registered-handler routing owner per test case. */
+function makeHandlerUnderTest(pi: Parameters<typeof makeUninstallHandler>[0]) {
+  return makeUninstallHandler(
+    pi,
+    createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    createCompletionCache(),
+  );
+}
+
+/** Populate a real lifecycle owner with one observable hook route. */
+async function populateRuntimeRoute(
+  workspace: HermeticWorkspace,
+  runtime: HooksRuntime,
+  plugin: string,
+  command: string,
+): Promise<HooksRouting> {
+  const pluginRoot = path.join(workspace.cwd, "runtime-routes", `${plugin}-${command}`);
+  const hooksJsonPath = path.join(pluginRoot, "hooks.json");
+  await mkdir(pluginRoot, { recursive: true });
+  await writeFile(
+    hooksJsonPath,
+    JSON.stringify({
+      PreToolUse: [{ hooks: [{ command, type: "command" }], matcher: "" }],
+    }),
+    "utf8",
+  );
+  const hooksRouting = createHooksRouting(runtime, { readHooksJson });
+  await hooksRouting.readAndCachePluginHooks({
+    cwd: workspace.cwd,
+    hooksJsonPath,
+    logPrefix: "uninstall-handler-owner-test",
+    marketplace: "alpha",
+    plugin,
+    resolvedSource: asAbsolutePluginRoot(pluginRoot),
+    scope: "project",
+  });
+  hooksRouting.rebuildRoutingTables();
+  return hooksRouting;
+}
 
 interface HermeticWorkspace {
   /** The project working directory the handler forwards as `ctx.cwd`. */
@@ -238,7 +289,12 @@ test("removes the project-scope record when the reference alone selects the plug
     value: workspace.cwd,
     reads: 1,
   });
-  const uninstallHandler = makeUninstallHandler(pi);
+  const ownerRuntime = createHooksRuntime();
+  const peerRuntime = createHooksRuntime();
+  const hooksRouting = await populateRuntimeRoute(workspace, ownerRuntime, "demo", "owner-target");
+  await populateRuntimeRoute(workspace, ownerRuntime, "other", "owner-unrelated");
+  await populateRuntimeRoute(workspace, peerRuntime, "demo", "peer-target");
+  const uninstallHandler = makeUninstallHandler(pi, hooksRouting, createCompletionCache());
 
   // act
   await uninstallHandler("demo@alpha", ctx);
@@ -246,6 +302,14 @@ test("removes the project-scope record when the reference alone selects the plug
   // assert
   assert.deepStrictEqual(notifications, [PROJECT_UNINSTALLED]);
   assert.deepStrictEqual(await readObservedEffects(workspace), PROJECT_RECORD_REMOVED);
+  assert.deepStrictEqual(
+    ownerRuntime.getRoutingBucket("PreToolUse").map((entry) => entry.pluginId),
+    ["other"],
+  );
+  assert.deepStrictEqual(
+    peerRuntime.getRoutingBucket("PreToolUse").map((entry) => entry.pluginId),
+    ["demo"],
+  );
   verifyBoundary();
 });
 
@@ -254,7 +318,7 @@ test("reports a missing plugin reference and removes nothing (D-116-06)", async 
   const workspace = await createHermeticWorkspace(t, "no-positional");
   await seedBothScopes(workspace);
   const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-  const uninstallHandler = makeUninstallHandler(pi);
+  const uninstallHandler = makeHandlerUnderTest(pi);
 
   // act
   await uninstallHandler("", ctx);
@@ -275,7 +339,7 @@ test("drops a surplus positional token and removes the plugin the first token na
     value: workspace.cwd,
     reads: 1,
   });
-  const uninstallHandler = makeUninstallHandler(pi);
+  const uninstallHandler = makeHandlerUnderTest(pi);
 
   // act
   await uninstallHandler("demo@alpha surplus", ctx);
@@ -296,7 +360,7 @@ for (const { malformedRef, shape } of [
     const workspace = await createHermeticWorkspace(t, "malformed-reference");
     await seedBothScopes(workspace);
     const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-    const uninstallHandler = makeUninstallHandler(pi);
+    const uninstallHandler = makeHandlerUnderTest(pi);
 
     // act
     await uninstallHandler(malformedRef, ctx);
@@ -333,7 +397,7 @@ for (const { expectedEffects, expectedNotification, scopeValue } of [
       value: workspace.cwd,
       reads: 1,
     });
-    const uninstallHandler = makeUninstallHandler(pi);
+    const uninstallHandler = makeHandlerUnderTest(pi);
 
     // act
     await uninstallHandler(`demo@alpha --scope ${scopeValue}`, ctx);
@@ -359,7 +423,7 @@ for (const { args, placement } of [
       value: workspace.cwd,
       reads: 1,
     });
-    const uninstallHandler = makeUninstallHandler(pi);
+    const uninstallHandler = makeHandlerUnderTest(pi);
 
     // act
     await uninstallHandler(args, ctx);
@@ -380,7 +444,7 @@ test("reads the base layer and removes the record when the scope-target flag is 
     value: workspace.cwd,
     reads: 1,
   });
-  const uninstallHandler = makeUninstallHandler(pi);
+  const uninstallHandler = makeHandlerUnderTest(pi);
 
   // act
   await uninstallHandler("demo@alpha --scope project", ctx);
@@ -400,7 +464,7 @@ test("honors the scope flag and the scope-target flag together", async (t) => {
     value: workspace.cwd,
     reads: 1,
   });
-  const uninstallHandler = makeUninstallHandler(pi);
+  const uninstallHandler = makeHandlerUnderTest(pi);
 
   // act
   await uninstallHandler("demo@alpha --scope user --local", ctx);
@@ -416,7 +480,7 @@ test("reports an unknown long flag and removes nothing (D-116-06)", async (t) =>
   const workspace = await createHermeticWorkspace(t, "unknown-flag");
   await seedBothScopes(workspace);
   const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-  const uninstallHandler = makeUninstallHandler(pi);
+  const uninstallHandler = makeHandlerUnderTest(pi);
 
   // act
   await uninstallHandler("demo@alpha --frobnicate", ctx);
@@ -438,7 +502,7 @@ for (const { rejectedToken, shape } of [
     const workspace = await createHermeticWorkspace(t, "invalid-scope-value");
     await seedBothScopes(workspace);
     const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-    const uninstallHandler = makeUninstallHandler(pi);
+    const uninstallHandler = makeHandlerUnderTest(pi);
 
     // act
     await uninstallHandler(`demo@alpha --scope ${rejectedToken}`, ctx);

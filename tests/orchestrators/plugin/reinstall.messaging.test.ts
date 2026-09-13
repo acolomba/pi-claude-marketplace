@@ -11,6 +11,7 @@ import {
   reinstalledRowFromOutcome,
   type ReinstallMsg,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts";
+import { type Severity } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
 import type {
   ReinstallFailedOutcome,
@@ -21,7 +22,6 @@ import type {
   ExtensionAPI,
   ExtensionContext,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
-import type { Severity } from "../../../extensions/pi-claude-marketplace/shared/notify.ts";
 import type { ToolInfo } from "@earendil-works/pi-coding-agent";
 
 void ({

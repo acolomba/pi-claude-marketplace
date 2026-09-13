@@ -29,12 +29,15 @@ import {
   errorMessage,
   MarketplaceNotFoundError,
 } from "../../shared/errors.ts";
+import { notify, notifyDiagnostic } from "../../shared/notification-dispatch.ts";
+import { type ContentReason } from "../../shared/notification-types.ts";
+import { type PluginSkippedMessage } from "../../shared/notification-types.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
-import { notify, notifyDiagnostic, redactAbsolutePaths } from "../../shared/notify.ts";
+import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import { crossScopeFlag, marketplaceInOtherScope } from "../marketplace/shared.ts";
 
 import type { PluginEntry } from "../../domain/components/plugin.ts";
-import type { MaterializablePlugin } from "../../domain/resolver.ts";
+import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
 import type {
   ConfigLoadResult,
   PluginConfigEntry,
@@ -42,11 +45,10 @@ import type {
 } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
-import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
+import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type { CommandContext } from "../../shared/notify-context.ts";
 import type { DegradeKind } from "../../shared/notify-reasons.ts";
-import type { ContentReason, PluginSkippedMessage } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 
 /**
@@ -56,9 +58,9 @@ import type { Scope } from "../../shared/types.ts";
  * bridges, so a signal one row names and the other omits is a row that
  * contradicts its own ledger.
  *
- * The shape lives here, in the module `install.ts` and `enable-disable.ts` BOTH
+ * The shape lives here because `install-flow.ts` and `enable-disable.ts` BOTH
  * already import, rather than in either of them: `enable-disable.ts` imports
- * `runInstallLedger` from `install.ts`, so declaring it there and importing it
+ * `runInstallLedger` from `install-outcome.ts`, so declaring it there and importing it
  * back would close a module cycle (IN-07 / D-98-01).
  *
  * Consumed by `freshEnableRow` (standalone enable), `enabledRowFromOutcome` and
@@ -87,7 +89,7 @@ export interface LedgerDegradationSignals {
    * WARN-01 / D-86-03: the component kinds whose source frontmatter could not
    * be parsed and installed in degraded form. Each kind contributes one
    * `{malformed skill}` / `{malformed command}` token AND raises the row from
-   * `info` to `warning` -- the same raise `install.ts::composeInstalledRow`
+   * `info` to `warning` -- the same raise `install-flow.ts::composeInstalledRow`
    * applies, because a degraded component is carried out but short of ideal
    * whichever verb materialized it.
    */
@@ -109,7 +111,7 @@ export interface LedgerDegradationSignals {
 
 /**
  * SEV-01 / D-98-02: derive the closed-set `Dependency[]` an enable row declares
- * from the ledger's staged-count signals -- the same derivation `install.ts`
+ * from the ledger's staged-count signals -- the same derivation `install-flow.ts`
  * runs off `installCtx.stagedAgentNames` / `stagedMcpServerNames` for the same
  * ledger run. Shared by the standalone enable row and the reconcile enable
  * projection so the two row composers cannot drift.
@@ -604,7 +606,7 @@ function readableConfig(result: ConfigLoadResult): ScopeConfig | undefined {
  * creates a file.
  *
  * This is the WRITE-side counterpart of the READ-side rule
- * `install.ts::readDeclaredEnabled` states -- the local file wins by IDENTITY,
+ * `install-declared-enabled.ts` states -- the local file wins by IDENTITY,
  * not by precedence. `targetIsLocal` reports the selection's locality so
  * callers reading across both files do not re-derive it by comparing paths.
  *
@@ -939,16 +941,6 @@ export async function resolvePluginVersion(
   return computeHashVersion(installable.pluginRoot);
 }
 
-/** Bridge adapter for the resolver's `componentPaths.agents` array shape. */
-export function pickAgentsSourceDir(installable: MaterializablePlugin): string | null {
-  const first = installable.componentPaths.agents[0];
-  if (first === undefined) {
-    return null;
-  }
-
-  return path.isAbsolute(first) ? first : path.join(installable.pluginRoot, first);
-}
-
 function compareNames(a: string, b: string): number {
   return a.localeCompare(b);
 }
@@ -1243,8 +1235,8 @@ export function applyPartialCascadeFold(
  * re-read the sibling `state.json` only to re-derive that same `false`.
  */
 export function emitMarketplaceNotAdded(args: {
-  readonly ctx: ExtensionContext;
-  readonly pi: ExtensionAPI;
+  readonly ctx: NotificationContext;
+  readonly pi: ToolInventory;
   readonly marketplace: string;
   readonly requestedScope: Scope | undefined;
   readonly orchestrated: boolean;
@@ -1312,30 +1304,38 @@ export function emitMarketplaceNotAdded(args: {
  * would close a module cycle.
  */
 export async function emitMarketplaceNotAddedSignal(args: {
-  readonly ctx: ExtensionContext;
-  readonly pi: ExtensionAPI;
+  readonly ctx: NotificationContext;
+  readonly pi: ToolInventory;
   readonly cwd: string;
   readonly context: CommandContext<"skipped", PluginSkippedMessage>;
+  readonly cardinality: "single" | "plural";
   readonly err: MarketplaceNotAddedSignal;
 }): Promise<void> {
-  const { ctx, pi, cwd, context, err } = args;
+  const { ctx, pi, cwd, context, cardinality, err } = args;
 
   if (err.notInstalledAt !== undefined && err.plugin !== undefined) {
-    notifyWithContext(ctx, pi, context, [
-      {
-        name: err.marketplace,
-        scope: err.notInstalledAt,
-        plugins: [
-          {
-            status: "skipped",
-            name: err.plugin,
-            reasons: absentTargetReasons(err.notInstalledAt),
-            severity: "error",
-            needsReload: false,
-          },
-        ],
-      },
-    ]);
+    notifyWithContext(
+      ctx,
+      pi,
+      context,
+      [
+        {
+          name: err.marketplace,
+          scope: err.notInstalledAt,
+          plugins: [
+            {
+              status: "skipped",
+              name: err.plugin,
+              reasons: absentTargetReasons(err.notInstalledAt),
+              severity: "error",
+              needsReload: false,
+            },
+          ],
+        },
+      ],
+      undefined,
+      cardinality,
+    );
     return;
   }
 
@@ -1373,7 +1373,7 @@ export async function emitMarketplaceNotAddedSignal(args: {
  * that drift (and so `sonarjs/no-identical-functions` and `fallow dupes` have
  * nothing to find).
  *
- * `install.ts` does NOT call this. Its ledger phases push each bridge's
+ * `install-outcome.ts` does NOT call this. Its ledger phases push each bridge's
  * warnings onto the right array inline, one push per phase, because each
  * phase already holds exactly one bridge's result. It shares the RENDERER
  * below, not this classifier -- so two of the three verbs share the
@@ -1405,7 +1405,7 @@ export function splitStagingWarnings(warnings: {
  * user, exactly as the reconcile composer does.
  */
 export function surfaceDiscoveryWarnings(
-  ctx: ExtensionContext,
+  ctx: NotificationContext,
   args: {
     readonly plugin: string;
     readonly verb: "installed" | "updated" | "reinstalled";

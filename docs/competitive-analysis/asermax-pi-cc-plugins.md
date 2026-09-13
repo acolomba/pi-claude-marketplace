@@ -206,7 +206,7 @@ They register no command. The complete user-facing surface is one CLI flag and t
 
 Their output is four `ctx.ui.notify` calls in `index.ts`. One reports a count of what loaded. One reports the missing MCP adapter. One reports warnings, and one reports errors. The error call passes severity `"warning"` (`index.ts:300-304`), so a failed clone and a skipped MCP entry read the same.
 
-Our surface is `/claude:plugin` with sixteen subcommands. A flag catalog is guarded against router drift by `tests/architecture/flag-catalog-drift.test.ts`. A tab-completion provider carries five branches. A closed output vocabulary of 26 status tokens and about 40 reasons is held byte-exact against `docs/output-catalog.md` by `tests/architecture/catalog-uat.test.ts`.
+Our surface is `/claude:plugin` with sixteen subcommands. A flag catalog is guarded against router drift by `tests/architecture/flag-catalog-drift.test.ts`. A tab-completion provider carries five branches. A closed output vocabulary of 26 status tokens and about 40 reasons is held byte-exact against `docs/output-catalog.md` by `tests/architecture/catalog-uat/catalog-contract.test.ts`.
 
 ## What they have that we do not
 

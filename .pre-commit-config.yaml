@@ -120,3 +120,22 @@ repos:
         language: system
         pass_filenames: false
         files: '^(\.fallowrc\.json|tsconfig\.json|eslint\.config\.js|(extensions|tests)/.*\.(ts|mjs)|scripts/.*\.mjs|package(-lock)?\.json)$'
+      # RCOV-03. The same changed-pair gate the CI `direct-coverage` job runs,
+      # at the same strictness, with a commit-scoped base instead of the
+      # branch-scoped default (D-08-A07). Cost: one focused test run per pair
+      # this commit touches, plus the pinned pairs the gate always measures.
+      #
+      # The test-root alternative is `tests/.*\.ts`, deliberately wider than the
+      # gate's own correspondence rule (`tests/**/*.test.ts`). Over-matching
+      # costs a sub-second run: the gate passes over a non-test file under the
+      # test root with a stated reason and resolves zero pairs. Under-matching
+      # would skip a changed owner test silently, which is indistinguishable
+      # from a pass.
+      #
+      # The pin file is listed so a pin edit re-runs the comparison.
+      - id: npm-coverage-direct
+        name: npm direct coverage (changed pairs)
+        entry: npm run test:coverage:direct:commit
+        language: system
+        pass_filenames: false
+        files: '^(extensions/pi-claude-marketplace/.*\.ts|tests/.*\.ts|scripts/test-coverage-direct\.pin\.json)$'

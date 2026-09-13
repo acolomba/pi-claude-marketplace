@@ -96,9 +96,9 @@ export interface ScopedLocations {
   readonly cacheDir: string;
   /**
    * `<extensionRoot>/cache/marketplace-names.json` -- D-03 file-backed
-   * marketplace-names cache (per scope). Holds the union of marketplace
-   * names visible in this scope; consumed by `getMarketplaceNames(scope)`
-   * in `shared/completion-cache.ts`.
+   * marketplace-names artifact (per scope). Marketplace add and remove unlink
+   * this schema-2 path so older or concurrent completion processes cannot
+   * retain stale names.
    */
   readonly marketplaceNamesCacheFile: string;
 

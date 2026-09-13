@@ -12,9 +12,7 @@
 // `renderPluginRow` `updated` / `skipped` / `failed` arms, so dispatch is
 // byte-identical.
 
-import { skipSeverity } from "../../shared/notify-reasons.ts";
 import {
-  ICON_INSTALLED,
   ICON_UNINSTALLABLE,
   composeReasons,
   composeVersionArrow,
@@ -22,12 +20,16 @@ import {
   joinTokens,
   pluginRow,
   renderScopeBracket,
+  ICON_INSTALLED,
+} from "../../shared/notification-grammar.ts";
+import {
   type ContentReason,
   type PluginFailedMessage,
   type PluginPartiallyInstalledMessage,
   type PluginSkippedMessage,
   type PluginUpdatedMessage,
-} from "../../shared/notify.ts";
+} from "../../shared/notification-types.ts";
+import { skipSeverity } from "../../shared/notify-reasons.ts";
 import { updatedRowFromOutcome } from "../plugin/update-row.ts";
 
 import type { CommandContext } from "../../shared/notify-context.ts";
@@ -100,7 +102,7 @@ export const UPDATE_CONTEXT = {
 
 /**
  * Map a `PluginUpdateOutcome` to a discriminated `UpdateRowMsg`.
- * The renderer (`renderPluginRow` in shared/notify.ts) owns the icon
+ * The renderer (`renderPluginRow` in shared/notification-grammar.ts) owns the icon
  * dispatch, the version-arrow composition, the reasons-brace composition, and
  * the per-row soft-dep marker injection. The mapper's job is structural --
  * pick the variant that matches the partition and forward the

@@ -1,30 +1,29 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
+import { createHooksHydration as definingCreateHooksHydration } from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
 import {
-  hydrateProjectScopeForCwd as definingHydrateProjectScopeForCwd,
-  readAndCachePluginHooks as definingReadAndCachePluginHooks,
-  rebuildRoutingTables as definingRebuildRoutingTables,
-  registerHooksBridge as definingRegisterHooksBridge,
-  removePluginConfigFromCache as definingRemovePluginConfigFromCache,
-} from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
-import {
-  hydrateProjectScopeForCwd,
-  readAndCachePluginHooks,
-  rebuildRoutingTables,
-  registerHooksBridge,
+  createHooksHydration,
+  readHooksJson,
   removeHookConfig,
-  removePluginConfigFromCache,
   writeHookConfig,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
+import { createHooksRuntime as definingCreateHooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import {
+  readHooksJson as definingReadHooksJson,
   removeHookConfig as definingRemoveHookConfig,
   writeHookConfig as definingWriteHookConfig,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/stage.ts";
 
 import type * as HooksBarrel from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
+import type { HooksHydrationDeps } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 
 type Public<Name extends keyof typeof HooksBarrel> = Name;
+
+void ({
+  loadState: () => Promise.resolve({ schemaVersion: 2, marketplaces: {} }),
+  readHooksJson: () => Promise.resolve("{}"),
+} satisfies HooksHydrationDeps);
 
 // @ts-expect-error the barrel keeps accumulateStream internal
 void ("accumulateStream" satisfies Public<"accumulateStream">);
@@ -71,55 +70,44 @@ void ("STDOUT_MAX_BYTES" satisfies Public<"STDOUT_MAX_BYTES">);
 // @ts-expect-error the barrel keeps TRANSLATORS internal
 void ("TRANSLATORS" satisfies Public<"TRANSLATORS">);
 
-describe("hydrateProjectScopeForCwd", () => {
+describe("createHooksHydration", () => {
   test("re-exports the defining binding", () => {
     // arrange
-    const expectedHydrateProjectScopeForCwd = definingHydrateProjectScopeForCwd;
+    const expectedCreateHooksHydration = definingCreateHooksHydration;
 
     // act
-    const hooksHydrateProjectScopeForCwd = hydrateProjectScopeForCwd;
+    const hooksCreateHooksHydration = createHooksHydration;
 
     // assert
-    assert.strictEqual(hooksHydrateProjectScopeForCwd, expectedHydrateProjectScopeForCwd);
+    assert.strictEqual(hooksCreateHooksHydration, expectedCreateHooksHydration);
   });
 });
 
-describe("readAndCachePluginHooks", () => {
-  test("re-exports the defining binding", () => {
+describe("createHooksRuntime", () => {
+  test("re-exports the lifecycle owner factory", async () => {
     // arrange
-    const expectedReadAndCachePluginHooks = definingReadAndCachePluginHooks;
+    const hooksBarrel =
+      await import("../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts");
+    const expectedCreateHooksRuntime = definingCreateHooksRuntime;
 
     // act
-    const hooksReadAndCachePluginHooks = readAndCachePluginHooks;
+    const hooksCreateHooksRuntime = Reflect.get(hooksBarrel, "createHooksRuntime");
 
     // assert
-    assert.strictEqual(hooksReadAndCachePluginHooks, expectedReadAndCachePluginHooks);
+    assert.strictEqual(hooksCreateHooksRuntime, expectedCreateHooksRuntime);
   });
 });
 
-describe("rebuildRoutingTables", () => {
+describe("readHooksJson", () => {
   test("re-exports the defining binding", () => {
     // arrange
-    const expectedRebuildRoutingTables = definingRebuildRoutingTables;
+    const expectedReadHooksJson = definingReadHooksJson;
 
     // act
-    const hooksRebuildRoutingTables = rebuildRoutingTables;
+    const hooksReadHooksJson = readHooksJson;
 
     // assert
-    assert.strictEqual(hooksRebuildRoutingTables, expectedRebuildRoutingTables);
-  });
-});
-
-describe("registerHooksBridge", () => {
-  test("re-exports the defining binding", () => {
-    // arrange
-    const expectedRegisterHooksBridge = definingRegisterHooksBridge;
-
-    // act
-    const hooksRegisterHooksBridge = registerHooksBridge;
-
-    // assert
-    assert.strictEqual(hooksRegisterHooksBridge, expectedRegisterHooksBridge);
+    assert.strictEqual(hooksReadHooksJson, expectedReadHooksJson);
   });
 });
 
@@ -133,19 +121,6 @@ describe("removeHookConfig", () => {
 
     // assert
     assert.strictEqual(hooksRemoveHookConfig, expectedRemoveHookConfig);
-  });
-});
-
-describe("removePluginConfigFromCache", () => {
-  test("re-exports the defining binding", () => {
-    // arrange
-    const expectedRemovePluginConfigFromCache = definingRemovePluginConfigFromCache;
-
-    // act
-    const hooksRemovePluginConfigFromCache = removePluginConfigFromCache;
-
-    // assert
-    assert.strictEqual(hooksRemovePluginConfigFromCache, expectedRemovePluginConfigFromCache);
   });
 });
 

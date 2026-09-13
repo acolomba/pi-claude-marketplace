@@ -1,0 +1,10 @@
+{
+  "taskId": "06-36-01",
+  "command": "node --test --test-isolation=none --test-reporter=tap tests/orchestrators/plugin/install-flow.test.ts",
+  "exitCode": 1,
+  "output": "TAP version 13\n# Subtest: owns the required install transaction factory\nnot ok 1 - owns the required install transaction factory\n  error: Got unwanted rejection: install-flow.ts must own install transaction composition\n  code: ERR_ASSERTION\n  actual: ERR_MODULE_NOT_FOUND\n# Subtest: owns the production install transaction factory\nnot ok 2 - owns the production install transaction factory\n  error: Got unwanted rejection: install-flow.ts must own install transaction composition\n  code: ERR_ASSERTION\n  actual: ERR_MODULE_NOT_FOUND\n1..2\n# tests 2\n# pass 0\n# fail 2",
+  "targetTest": "owns the required install transaction factory",
+  "targetFile": "tests/orchestrators/plugin/install-flow.test.ts",
+  "expected": "The named install-flow owner exports createInstallPlugin and createNodeInstallPlugin.",
+  "actual": "The direct owner module does not exist, so its import is rejected with ERR_MODULE_NOT_FOUND."
+}

@@ -51,24 +51,17 @@
 // claim. A deleted arm is a behavior change, not a compiler diagnostic, and a
 // missing-arm plant has no target here.
 //
-// D-116-01a: this pair lands one branch short of complete. The empty-object
-// side of the conditional at provider.ts:125 -- the `description === undefined`
-// arm of `optionalDescription` -- cannot be entered at runtime. The only two
-// producers of the entry list in `flagCompletions` are a written-out literal
-// that carries a description and `completionFlagEntries`, whose every element
-// is built from a `FlagEntry` whose `description` field is REQUIRED. The
-// declared element type keeps `description` optional, so the guard must exist;
-// nothing reachable through the module's single export can supply an entry
-// without one. The reason is structural, not a compiler setting.
+// This pair reads COMPLETE: `branches 78/78, functions 19/19, lines 340/340`.
+// It used to carry one uncovered branch, the `description === undefined` arm of
+// an `optionalDescription` conditional that existed because the declared element
+// type kept `description` optional while nothing reachable could omit it. The
+// conditional is gone: `flagCompletions` now builds its entry list as
+// `{ name: string; description: string }[]`, with `description` required, so the
+// arm the paragraph justified has no source left.
 //
-// The claim is measured, not inspected: a plant replacing the empty-object arm
-// with a distinguishable description left every case green, and an independent
-// route drove every top-level head, every marketplace subcommand and two
-// unknown heads at a long-flag cursor and found every emitted item carrying a
-// description. The shortfall is pinned by its identity -- functions and lines
-// complete, exactly ONE uncovered branch -- never by an absolute branch pair,
-// because the branch denominator tracks suite strength rather than the source.
-// No coverage exception is added and no production file is changed.
+// Which pairs fall short is recorded in one place, `scripts/test-coverage-direct.pin.json`,
+// and a pair absent from it reads complete. This one is absent from it.
+//
 
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -78,7 +71,7 @@ import path from "node:path";
 import test, { type TestContext } from "node:test";
 
 import { getArgumentCompletions } from "../../../extensions/pi-claude-marketplace/edge/completions/provider.ts";
-import { resetCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 
 import type {
   LocationsResolver,
@@ -95,6 +88,7 @@ interface Suggestion {
 }
 
 interface SeededResolver {
+  readonly completionCache: ReturnType<typeof createCompletionCache>;
   readonly resolver: LocationsResolver;
 }
 
@@ -165,9 +159,9 @@ function installNetworkTrap(t: TestContext): void {
 }
 
 /**
- * One temporary cache root per case. Removal and the process-global
- * completion-cache reset are registered before the act, so an early throw still
- * unwinds them.
+ * One temporary cache root and completion-cache owner per case. Removal is
+ * registered before the act, so an early throw still unwinds the filesystem
+ * fixture.
  *
  * No environment is substituted here. Neither `provider.ts`, `data.ts` nor
  * `shared/completion-cache.ts` -- nor anything else in their import closure --
@@ -176,10 +170,9 @@ function installNetworkTrap(t: TestContext): void {
  * observable, so this helper does not carry one.
  */
 async function seedResolver(t: TestContext, label: string): Promise<SeededResolver> {
-  resetCompletionCache();
+  const completionCache = createCompletionCache();
   const cacheRoot = await mkdtemp(path.join(tmpdir(), `provider-${label}-cache-`));
   t.after(async () => {
-    resetCompletionCache();
     await rm(cacheRoot, { recursive: true, force: true });
   });
   installNetworkTrap(t);
@@ -209,7 +202,7 @@ async function seedResolver(t: TestContext, label: string): Promise<SeededResolv
     },
   } satisfies LocationsResolver;
 
-  return { resolver };
+  return { completionCache, resolver };
 }
 
 // ---------------------------------------------------------------------------
@@ -218,10 +211,10 @@ async function seedResolver(t: TestContext, label: string): Promise<SeededResolv
 
 test("TC-1 offers the whole top-level vocabulary at an empty prefix, in declaration order", async (t) => {
   // arrange
-  const { resolver } = await seedResolver(t, "top-level-empty");
+  const { completionCache, resolver } = await seedResolver(t, "top-level-empty");
 
   // act
-  const suggestions = await getArgumentCompletions("", resolver);
+  const suggestions = await getArgumentCompletions("", resolver, completionCache);
 
   // assert
   assert.deepStrictEqual(suggestions, [
@@ -256,10 +249,10 @@ for (const { prefix, expected } of [
 ] satisfies readonly { prefix: string; expected: readonly Suggestion[] }[]) {
   test(`TC-1 narrows the top-level vocabulary to ${String(expected.length)} entr(ies) for ${JSON.stringify(prefix)}`, async (t) => {
     // arrange
-    const { resolver } = await seedResolver(t, `top-level-${prefix}`);
+    const { completionCache, resolver } = await seedResolver(t, `top-level-${prefix}`);
 
     // act
-    const suggestions = await getArgumentCompletions(prefix, resolver);
+    const suggestions = await getArgumentCompletions(prefix, resolver, completionCache);
 
     // assert
     assert.deepStrictEqual(suggestions, expected);
@@ -274,10 +267,10 @@ for (const { prefix, expected } of [
 
 test("a top-level token one character short still offers the subcommand vocabulary", async (t) => {
   // arrange
-  const { resolver } = await seedResolver(t, "promote-short");
+  const { completionCache, resolver } = await seedResolver(t, "promote-short");
 
   // act
-  const suggestions = await getArgumentCompletions("marketplac", resolver);
+  const suggestions = await getArgumentCompletions("marketplac", resolver, completionCache);
 
   // assert
   assert.deepStrictEqual(suggestions, [{ label: "marketplace", value: "marketplace " }]);
@@ -285,10 +278,10 @@ test("a top-level token one character short still offers the subcommand vocabula
 
 test("TC-2 promotes an exact top-level token with no trailing space to the next argument", async (t) => {
   // arrange
-  const { resolver } = await seedResolver(t, "promote-exact");
+  const { completionCache, resolver } = await seedResolver(t, "promote-exact");
 
   // act
-  const suggestions = await getArgumentCompletions("marketplace", resolver);
+  const suggestions = await getArgumentCompletions("marketplace", resolver, completionCache);
 
   // assert
   assert.deepStrictEqual(suggestions, [
@@ -306,10 +299,10 @@ test("TC-2 promotes an exact top-level token with no trailing space to the next 
 
 test("TC-2 offers the marketplace vocabulary after the marketplace token and a space", async (t) => {
   // arrange
-  const { resolver } = await seedResolver(t, "marketplace-space");
+  const { completionCache, resolver } = await seedResolver(t, "marketplace-space");
 
   // act
-  const suggestions = await getArgumentCompletions("marketplace ", resolver);
+  const suggestions = await getArgumentCompletions("marketplace ", resolver, completionCache);
 
   // assert
   assert.deepStrictEqual(suggestions, [
@@ -338,10 +331,10 @@ for (const { prefix, expected } of [
 ] satisfies readonly { prefix: string; expected: readonly Suggestion[] }[]) {
   test(`TC-2 narrows the marketplace vocabulary to ${String(expected.length)} entr(ies) for ${JSON.stringify(prefix)}`, async (t) => {
     // arrange
-    const { resolver } = await seedResolver(t, "marketplace-narrow");
+    const { completionCache, resolver } = await seedResolver(t, "marketplace-narrow");
 
     // act
-    const suggestions = await getArgumentCompletions(prefix, resolver);
+    const suggestions = await getArgumentCompletions(prefix, resolver, completionCache);
 
     // assert
     assert.deepStrictEqual(suggestions, expected);
@@ -350,10 +343,10 @@ for (const { prefix, expected } of [
 
 test("TC-2 promotes an exact marketplace subcommand token to the name argument", async (t) => {
   // arrange
-  const { resolver } = await seedResolver(t, "promote-nested");
+  const { completionCache, resolver } = await seedResolver(t, "promote-nested");
 
   // act
-  const suggestions = await getArgumentCompletions("marketplace remove", resolver);
+  const suggestions = await getArgumentCompletions("marketplace remove", resolver, completionCache);
 
   // assert
   assert.deepStrictEqual(suggestions, [
@@ -395,10 +388,10 @@ for (const { prefix, expected } of [
 ] satisfies readonly { prefix: string; expected: readonly Suggestion[] }[]) {
   test(`TC-5 offers marketplace names from both scopes for ${JSON.stringify(prefix)}`, async (t) => {
     // arrange
-    const { resolver } = await seedResolver(t, "marketplace-names");
+    const { completionCache, resolver } = await seedResolver(t, "marketplace-names");
 
     // act
-    const suggestions = await getArgumentCompletions(prefix, resolver);
+    const suggestions = await getArgumentCompletions(prefix, resolver, completionCache);
 
     // assert
     assert.deepStrictEqual(suggestions, expected);
@@ -407,10 +400,10 @@ for (const { prefix, expected } of [
 
 test("TC-5 offers no name argument for a marketplace verb that takes none", async (t) => {
   // arrange
-  const { resolver } = await seedResolver(t, "marketplace-add");
+  const { completionCache, resolver } = await seedResolver(t, "marketplace-add");
 
   // act
-  const suggestions = await getArgumentCompletions("marketplace add ", resolver);
+  const suggestions = await getArgumentCompletions("marketplace add ", resolver, completionCache);
 
   // assert
   assert.strictEqual(suggestions, null);
@@ -418,10 +411,10 @@ test("TC-5 offers no name argument for a marketplace verb that takes none", asyn
 
 test("TC-5 offers nothing past the single marketplace name a list head accepts", async (t) => {
   // arrange
-  const { resolver } = await seedResolver(t, "list-surplus");
+  const { completionCache, resolver } = await seedResolver(t, "list-surplus");
 
   // act
-  const suggestions = await getArgumentCompletions("list hub ", resolver);
+  const suggestions = await getArgumentCompletions("list hub ", resolver, completionCache);
 
   // assert
   assert.strictEqual(suggestions, null);
@@ -452,10 +445,10 @@ for (const { prefix, expected } of [
 ] satisfies readonly { prefix: string; expected: readonly Suggestion[] }[]) {
   test(`TC-4 offers the scope values after the scope flag for ${JSON.stringify(prefix)}`, async (t) => {
     // arrange
-    const { resolver } = await seedResolver(t, "scope-values");
+    const { completionCache, resolver } = await seedResolver(t, "scope-values");
 
     // act
-    const suggestions = await getArgumentCompletions(prefix, resolver);
+    const suggestions = await getArgumentCompletions(prefix, resolver, completionCache);
 
     // assert
     assert.deepStrictEqual(suggestions, expected);
@@ -464,10 +457,10 @@ for (const { prefix, expected } of [
 
 test("TC-4 offers nothing for a scope flag pair that carries no subcommand", async (t) => {
   // arrange
-  const { resolver } = await seedResolver(t, "scope-only");
+  const { completionCache, resolver } = await seedResolver(t, "scope-only");
 
   // act
-  const suggestions = await getArgumentCompletions("--scope user ", resolver);
+  const suggestions = await getArgumentCompletions("--scope user ", resolver, completionCache);
 
   // assert
   assert.strictEqual(suggestions, null);
@@ -481,10 +474,10 @@ test("TC-4 offers nothing for a scope flag pair that carries no subcommand", asy
 
 test("TC-3 prepends the global scope flag before a verb's own completable flags", async (t) => {
   // arrange
-  const { resolver } = await seedResolver(t, "flags-install");
+  const { completionCache, resolver } = await seedResolver(t, "flags-install");
 
   // act
-  const suggestions = await getArgumentCompletions("install -", resolver);
+  const suggestions = await getArgumentCompletions("install -", resolver, completionCache);
 
   // assert
   assert.deepStrictEqual(suggestions, [
@@ -510,10 +503,10 @@ test("TC-3 prepends the global scope flag before a verb's own completable flags"
 
 test("TC-3 resolves the ls alias to the list flag entries", async (t) => {
   // arrange
-  const { resolver } = await seedResolver(t, "flags-ls");
+  const { completionCache, resolver } = await seedResolver(t, "flags-ls");
 
   // act
-  const suggestions = await getArgumentCompletions("ls -", resolver);
+  const suggestions = await getArgumentCompletions("ls -", resolver, completionCache);
 
   // assert
   assert.deepStrictEqual(suggestions, [
@@ -532,10 +525,10 @@ test("TC-3 resolves the ls alias to the list flag entries", async (t) => {
 
 test("TC-3 offers the global scope flag alone for a head the catalog does not carry", async (t) => {
   // arrange
-  const { resolver } = await seedResolver(t, "flags-marketplace");
+  const { completionCache, resolver } = await seedResolver(t, "flags-marketplace");
 
   // act
-  const suggestions = await getArgumentCompletions("marketplace -", resolver);
+  const suggestions = await getArgumentCompletions("marketplace -", resolver, completionCache);
 
   // assert
   assert.deepStrictEqual(suggestions, [
@@ -545,10 +538,10 @@ test("TC-3 offers the global scope flag alone for a head the catalog does not ca
 
 test("TC-3 narrows the flag entries by the typed long-flag prefix", async (t) => {
   // arrange
-  const { resolver } = await seedResolver(t, "flags-narrow");
+  const { completionCache, resolver } = await seedResolver(t, "flags-narrow");
 
   // act
-  const suggestions = await getArgumentCompletions("install --m", resolver);
+  const suggestions = await getArgumentCompletions("install --m", resolver, completionCache);
 
   // assert
   assert.deepStrictEqual(suggestions, [
@@ -648,10 +641,10 @@ for (const { prefix, mode, expected } of [
 ] satisfies readonly { prefix: string; mode: string; expected: readonly Suggestion[] }[]) {
   test(`TC-6 completes plugin references for ${JSON.stringify(prefix)} through the ${mode} mode`, async (t) => {
     // arrange
-    const { resolver } = await seedResolver(t, `ref-${mode}`);
+    const { completionCache, resolver } = await seedResolver(t, `ref-${mode}`);
 
     // act
-    const suggestions = await getArgumentCompletions(prefix, resolver);
+    const suggestions = await getArgumentCompletions(prefix, resolver, completionCache);
 
     // assert
     assert.deepStrictEqual(suggestions, expected);
@@ -694,10 +687,10 @@ for (const { prefix, mode, expected } of [
 ] satisfies readonly { prefix: string; mode: string; expected: readonly Suggestion[] }[]) {
   test(`TC-6 offers ${String(expected.length)} bare marketplace target(s) for ${JSON.stringify(prefix)}`, async (t) => {
     // arrange
-    const { resolver } = await seedResolver(t, `bare-${mode}`);
+    const { completionCache, resolver } = await seedResolver(t, `bare-${mode}`);
 
     // act
-    const suggestions = await getArgumentCompletions(prefix, resolver);
+    const suggestions = await getArgumentCompletions(prefix, resolver, completionCache);
 
     // assert
     assert.deepStrictEqual(suggestions, expected);
@@ -785,10 +778,10 @@ for (const { prefix, mode, expected } of [
 ] satisfies readonly { prefix: string; mode: string; expected: readonly Suggestion[] }[]) {
   test(`TC-6 carries an explicit scope into the ${mode} mode for ${JSON.stringify(prefix)}`, async (t) => {
     // arrange
-    const { resolver } = await seedResolver(t, `ref-scoped-${mode}`);
+    const { completionCache, resolver } = await seedResolver(t, `ref-scoped-${mode}`);
 
     // act
-    const suggestions = await getArgumentCompletions(prefix, resolver);
+    const suggestions = await getArgumentCompletions(prefix, resolver, completionCache);
 
     // assert
     assert.deepStrictEqual(suggestions, expected);
@@ -812,10 +805,10 @@ for (const { prefix, mode, expected } of [
 ] satisfies readonly { prefix: string; mode: string; expected: readonly Suggestion[] }[]) {
   test(`TC-6 shifts the ${mode} candidate set when the partial flag precedes the reference`, async (t) => {
     // arrange
-    const { resolver } = await seedResolver(t, `ref-partial-${mode}`);
+    const { completionCache, resolver } = await seedResolver(t, `ref-partial-${mode}`);
 
     // act
-    const suggestions = await getArgumentCompletions(prefix, resolver);
+    const suggestions = await getArgumentCompletions(prefix, resolver, completionCache);
 
     // assert
     assert.deepStrictEqual(suggestions, expected);
@@ -824,10 +817,14 @@ for (const { prefix, mode, expected } of [
 
 test("TC-6 treats the partial flag as a positional for a head that does not accept it", async (t) => {
   // arrange
-  const { resolver } = await seedResolver(t, "ref-partial-reinstall");
+  const { completionCache, resolver } = await seedResolver(t, "ref-partial-reinstall");
 
   // act
-  const suggestions = await getArgumentCompletions("reinstall --partial ", resolver);
+  const suggestions = await getArgumentCompletions(
+    "reinstall --partial ",
+    resolver,
+    completionCache,
+  );
 
   // assert
   assert.strictEqual(suggestions, null);
@@ -841,12 +838,31 @@ test("TC-6 treats the partial flag as a positional for a head that does not acce
 for (const prefix of ["pending ", "import ", "bootstrap ", "frobnicate ", "install alpha extra "]) {
   test(`offers nothing at the argument after ${JSON.stringify(prefix)}`, async (t) => {
     // arrange
-    const { resolver } = await seedResolver(t, "no-completion");
+    const { completionCache, resolver } = await seedResolver(t, "no-completion");
 
     // act
-    const suggestions = await getArgumentCompletions(prefix, resolver);
+    const suggestions = await getArgumentCompletions(prefix, resolver, completionCache);
 
     // assert
     assert.strictEqual(suggestions, null);
   });
 }
+
+test("TC-6 routes plugin references through the required completion cache", async (t) => {
+  // arrange
+  const { resolver } = await seedResolver(t, "ref-required-cache");
+  const cache = createCompletionCache();
+  const cachePath = await resolver.pluginCachePath("user", "hub");
+  await cache.getPluginIndex(cachePath, "user", "hub", () =>
+    Promise.resolve([{ name: "cache-row", status: "installed" }]),
+  );
+  await rm(cachePath);
+
+  // act
+  const suggestions = await getArgumentCompletions("uninstall --scope user ", resolver, cache);
+
+  // assert
+  assert.deepStrictEqual(suggestions, [
+    { label: "cache-row@hub", value: "uninstall --scope user cache-row@hub " },
+  ]);
+});

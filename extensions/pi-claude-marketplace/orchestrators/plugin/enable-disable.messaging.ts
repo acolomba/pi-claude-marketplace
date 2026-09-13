@@ -1,19 +1,21 @@
 import { isErrnoException, PluginShapeError } from "../../shared/errors.ts";
 import {
-  ICON_INSTALLED,
   ICON_UNINSTALLABLE,
   installedLikeRow,
   partiallyInstalledRow,
   pluginRow,
   renderDisabledRow,
   renderVersion,
+  ICON_INSTALLED,
+} from "../../shared/notification-grammar.ts";
+import {
   type PluginDisabledMessage,
   type PluginFailedMessage,
   type PluginInstalledMessage,
   type PluginPartiallyInstalledMessage,
   type PluginSkippedMessage,
   type ContentReason,
-} from "../../shared/notify.ts";
+} from "../../shared/notification-types.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 
 import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
@@ -25,7 +27,7 @@ import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
  * contexts -- `ENABLE_CONTEXT` and `DISABLE_CONTEXT` -- each with its OWN render
  * map total over its OWN statuses (D-10). The render-arm bodies are lifted
  * VERBATIM from the central `renderPluginRow` switch; the shared presentation
- * vocabulary stays central in `shared/notify.ts` (D-11) and is CALLED here,
+ * vocabulary stays central in `shared/notification-grammar.ts` (D-11) and is CALLED here,
  * never duplicated.
  *
  * UAT-03 / RLD-05 / D-07: the fresh-disable `(disabled)` row's

@@ -1,6 +1,6 @@
 # Command Output Catalog
 
-Per-command rendered output for each user-visible state. Catalog v2.0 supersedes the v1.0 grammar (single-plugin one-line carve-out, V1 wrapper-name severity routing, frontmatter-driven closed sets) with the structured-`NotificationMessage` grammar emitted by the Phase 16 `notify(ctx, pi, message)` renderer at `extensions/pi-claude-marketplace/shared/notify.ts`. Every fenced output block in this catalog is byte-equal to what `notify()` emits given a corresponding structured fixture; `tests/architecture/catalog-uat.test.ts` drives that byte-equality as the user-contract gate.
+Per-command rendered output for each user-visible state. Catalog v2.0 supersedes the v1.0 grammar (single-plugin one-line carve-out, V1 wrapper-name severity routing, frontmatter-driven closed sets) with the structured-`NotificationMessage` contract owned by `extensions/pi-claude-marketplace/shared/notification-types.ts`, rendered by `notification-grammar.ts`, folded by `notification-summary.ts`, and emitted by `notification-dispatch.ts`. Redaction remains in `redact-absolute-paths.ts`, and stable name/scope ordering remains in `compare-name-scope.ts`. Every fenced output block in this catalog is byte-equal to what `notify()` emits given a corresponding structured fixture; `tests/architecture/catalog-uat/catalog-contract.test.ts` drives that byte-equality as the user-contract gate.
 
 ## Conventions
 
@@ -37,12 +37,12 @@ On THIS list surface (mp.status === undefined) the marker token `<autoupdate>` a
 <icon> <name> [<scope>]? <version-token>? (<status>) {<reasons>}?
 ```
 
-- `<icon>` -- one of `●` / `○` / `⊘` / `⊖` / `◉` / `◌` / `◍` per the effective-state rule above. The seven characters are the seven `ICON_*` constants `shared/notify.ts` exports; the COMPAT-01 gate pins each code point and the export count.
+- `<icon>` -- one of `●` / `○` / `⊘` / `⊖` / `◉` / `◌` / `◍` per the effective-state rule above. The seven characters are the seven `ICON_*` constants `shared/notification-grammar.ts` exports; the COMPAT-01 gate pins each code point and the export count.
 - `<name>` -- the plugin name from `p.name`. The `@<marketplace>` suffix is NEVER emitted on a plugin row in v2; the marketplace is already in the header above.
 - `[<scope>]` -- emitted ONLY in the orphan-fold case (plugin's `scope` field is explicitly set AND differs from the marketplace's scope). Same-scope rows omit the bracket because the header carries it. The `available`, `partially-available`, and `unavailable` variants have no `scope` field at all (SNM-11 carve-out) and never emit the bracket.
 - `<version-token>` -- `v<version>` on most variants when `version` is set; `v<from> → v<to>` on the `updated` variant (required from-/to-fields per D-15-04). A persisted PI-7 hash-version (`hash-<12hex>`) renders as a git-style short SHA `v#<7hex>` -- the `hash-` prefix is stripped and only the first 7 of the 12 hex chars are shown (matching git `--short=7`); e.g. `hash-2ea95f85703d` renders `v#2ea95f8`. Persistence is unchanged (`state.json` keeps the full `hash-<12hex>`, PI-7 intact, no migration); the short form exists only at render time (SNM-35, D-23-04 / D-23-05).
 - `(<status>)` -- the discriminator literal. `(manual recovery)` includes the space verbatim.
-- `{<reasons>}` -- single brace block, comma-space separated, emitted only on the 9 reason-bearing variants and only when the composed reasons list is non-empty. A variant is reason-bearing when its message interface in `shared/notify.ts` declares a `reasons` field; that set is `installed | unavailable | upgradable | failed | skipped | manual recovery | partially-installed | partially-upgradable | partially-available`, listed in `PLUGIN_STATUSES` order. The remaining 10 of the 19 plugin statuses have no `reasons` field and therefore cannot carry a brace. `installed` is the one variant whose `reasons` field is OPTIONAL: the list inventory row stamps it for the durable absence fact (INV-01) and the install cascade stamps it for `orphan rewake` (SURF-05), while every other producer omits it. When the composed list is empty -- no typed reasons and no soft-dependency marker -- `composeReasons` returns the empty string and NO brace is emitted, so the row renders with the status token as its last token.
+- `{<reasons>}` -- single brace block, comma-space separated, emitted only on the 9 reason-bearing variants and only when the composed reasons list is non-empty. A variant is reason-bearing when its message interface in `shared/notification-types.ts` declares a `reasons` field; that set is `installed | unavailable | upgradable | failed | skipped | manual recovery | partially-installed | partially-upgradable | partially-available`, listed in `PLUGIN_STATUSES` order. The remaining 10 of the 19 plugin statuses have no `reasons` field and therefore cannot carry a brace. `installed` is the one variant whose `reasons` field is OPTIONAL: the list inventory row stamps it for the durable absence fact (INV-01) and the install cascade stamps it for `orphan rewake` (SURF-05), while every other producer omits it. When the composed list is empty -- no typed reasons and no soft-dependency marker -- `composeReasons` returns the empty string and NO brace is emitted, so the row renders with the status token as its last token.
 
 ### Conditional plugin-row scope bracket
 
@@ -56,11 +56,11 @@ The plugin-row `[<scope>]` bracket is emitted ONLY when the plugin's `scope` fie
 - `rollbackPartial` child rows on `failed` variants at 4-space indent (each phase: `[<phase>] (rollback failed)`); each phase's optional `cause?: Error` renders a 6-space-indent cause-chain trailer below it.
 - One blank line between marketplace blocks.
 
-This 0 / 2 / 4 / 6 ladder is the byte-exact contract `notify()` emits at the `ctx.ui.notify` boundary, captured **before** any markdown/tui display layer. The interactive pi-tui markdown renderer can add a single leading space when it displays the message, so a header may **appear** at one space and plugin rows at three (a "1/3" visual). That appearance is a display-layer artifact, not a renderer deviation: the binding contract is the pre-tui byte ladder above, which `tests/architecture/catalog-uat.test.ts` (byte-equality) and `tests/shared/snm38-indent-ladder.test.ts` (explicit leading-whitespace) both lock at 0 / 2 / 4 / 6 (SNM-38 / G-MIL-03, D-25-09 -- refuted: not a renderer bug).
+This 0 / 2 / 4 / 6 ladder is the byte-exact contract `notify()` emits at the `ctx.ui.notify` boundary, captured **before** any markdown/tui display layer. The interactive pi-tui markdown renderer can add a single leading space when it displays the message, so a header may **appear** at one space and plugin rows at three (a "1/3" visual). That appearance is a display-layer artifact, not a renderer deviation: the binding contract is the pre-tui byte ladder above, which `tests/architecture/catalog-uat/catalog-contract.test.ts` (byte-equality) and `tests/shared/snm38-indent-ladder.test.ts` (explicit leading-whitespace) both lock at 0 / 2 / 4 / 6 (SNM-38 / G-MIL-03, D-25-09 -- refuted: not a renderer bug).
 
 ### Reasons rendering
 
-Reasons render inside a single `{}` block, comma-space separated. Each reason is 1-3 words lowercase, hyphenated where natural (`{up-to-date}`, `{rollback partial}`, `{not in manifest}`). Typed-kind carve-outs render `{lsp}` for `lspServers` and `{workflows}` for `workflows`. HOOK-04 / D-58-02: `{unsupported hooks}` is a normal 2-word reason (no longer a manifest-field carve-out -- under v1.13 the `hooks` component kind is supported, and the reason is sourced through `shared/probe-classifiers.ts::narrowResolverNotes` against `parseHooksConfig` prefix tokens). The 44-member `extensions/pi-claude-marketplace/shared/notify.ts::REASONS` tuple defines the closed set. The typed `workflows` kind maps to the final append-only member, `{workflows}`.
+Reasons render inside a single `{}` block, comma-space separated. Each reason is 1-3 words lowercase, hyphenated where natural (`{up-to-date}`, `{rollback partial}`, `{not in manifest}`). Typed-kind carve-outs render `{lsp}` for `lspServers` and `{workflows}` for `workflows`. HOOK-04 / D-58-02: `{unsupported hooks}` is a normal 2-word reason (no longer a manifest-field carve-out -- under v1.13 the `hooks` component kind is supported, and the reason is sourced through `shared/probe-classifiers.ts::narrowResolverNotes` against `parseHooksConfig` prefix tokens). The 44-member `extensions/pi-claude-marketplace/shared/notification-types.ts::REASONS` tuple defines the closed set. The typed `workflows` kind maps to the final append-only member, `{workflows}`.
 
 Structural `unavailable` rows derive reasons from resolver notes through `narrowResolverNotes`. Partial rows derive typed unsupported kinds through `narrowUnsupportedKinds`. The typed `workflows` kind uses the second path.
 
@@ -173,6 +173,8 @@ ______________________________________________________________________
 
 Plugin-list surface. Marketplaces render as list-surface headers (`mp.status === undefined`); `mp.details.autoupdate` drives the `<autoupdate>` marker; plugin rows indent two spaces beneath.
 
+The command is structurally plural, independent of the number of rows it finds. Every example therefore ends with a `Plugin list:` tally, including the zero-result sentinel and one-result inventories. Plugin leaf rows are the counted operations; an empty marketplace header is grouping context, while a failed marketplace with no plugin children counts as one failure.
+
 The optional filter flags (`--installed`, `--available`, `--unavailable`, `--partial`) select buckets by union; with no flag every bucket renders. They partition cleanly (LIST-01 / D-67-01): `--installed` spans the full installed inventory -- `installed`, `upgradable`, `disabled`, and the derived `partially-installed` / `partially-upgradable` rows; `--available` selects not-installed installable plugins; `--partial` selects not-installed plugins that resolve `partially-available` (the partially-available candidates); `--unavailable` selects only structurally-unavailable plugins. The list surface de-collapses the render token by resolver state (USTAT-01 / D-64-01): a not-installed plugin resolving `partially-available` renders `(partially-available)` / `⊖`, while a structurally-unavailable plugin renders `(unavailable)` / `⊘`. The `--partial` / `--unavailable` filters key on the internal resolver-state bucket, which is independent of the render token (so the partition is unaffected by the token split). There is no `--upgradable` filter.
 
 ### Empty -- no marketplaces configured
@@ -181,9 +183,11 @@ The optional filter flags (`--installed`, `--available`, `--unavailable`, `--par
 
 ```text
 (no marketplaces)
+
+Plugin list: 0 successes
 ```
 
-The renderer emits the literal `(no marketplaces)` body for an empty top-level `marketplaces: []` (per D-16-17). No reload-hint, no severity arg (info).
+The renderer emits the literal `(no marketplaces)` body for an empty top-level `marketplaces: []` (per D-16-17), followed by the structural plural zero-result tally. No reload-hint, no severity arg (info).
 
 ### Single marketplace, mixed plugin statuses (user scope)
 
@@ -196,6 +200,8 @@ The renderer emits the literal `(no marketplaces)` body for an empty top-level `
   ⊘ delta (unavailable) {unsupported hooks}
   ⊖ epsilon (partially-available) {unsupported hooks, lsp}
   ○ gamma v2.0.0 (available)
+
+Plugin list: 5 successes
 ```
 
 Notes:
@@ -215,6 +221,8 @@ Notes:
 
 ● official [user] <autoupdate>
   ● alpha v1.0.0 (installed)
+
+Plugin list: 2 successes
 ```
 
 Two marketplace blocks; one per scope. Joined by one blank line (D-16-07). Plugin rows omit the scope bracket because `p.scope === mp.scope`.
@@ -227,6 +235,8 @@ Two marketplace blocks; one per scope. Joined by one blank line (D-16-07). Plugi
 ● official [user] <autoupdate>
   ● alpha [project] v0.9.0 (installed)
   ● alpha v1.0.0 (installed)
+
+Plugin list: 2 successes
 ```
 
 `official [project]` does not exist; the project-scoped `alpha` is folded under the user-scope marketplace header. Its row carries the explicit `[project]` bracket because `plugin.scope !== marketplace.scope` (Phase 16 D-16-17). The user-scoped `alpha` row omits the bracket because `plugin.scope === marketplace.scope` -- the orphan-fold rule applies symmetrically.
@@ -240,6 +250,8 @@ Two marketplace blocks; one per scope. Joined by one blank line (D-16-07). Plugi
   ● dual v0.5.0 (installed) {requires pi-subagents, requires pi-mcp}
   ● helper v1.0.0 (installed) {requires pi-subagents}
   ● mcp-tool v2.0.0 (installed) {requires pi-mcp}
+
+Plugin list: 3 successes
 ```
 
 Each `(installed)` row's `dependencies` field drives the soft-dep probe; the probe runs once per `notify()` invocation (D-16-14). Markers appear inside the same brace block as any typed reasons (D-16-15).
@@ -255,6 +267,8 @@ A marketplace operation has failed.
   ● helper v1.0.0 (installed)
 
 ⊘ unparseable-mp [user] (failed)
+
+Plugin list: 1 failure, 1 success
 ```
 
 When a marketplace's manifest fails to parse, the marketplace renders as a bare `(failed)` header at column 0; the other parseable marketplaces in the list render normally. `notify()` does not emit a marketplace-level `cause:` trailer for failed marketplaces with empty `plugins: []` -- the v2 type model places `cause?: Error` on plugin variants only. Orchestrators wanting to surface the parse error must construct the payload as a per-plugin failed/manual-recovery row carrying the diagnostic as `cause?: Error`, or include a per-plugin error row inside the failed marketplace block. Severity: `error` (any failed → error). No reload-hint trailer fires on the list surface: the failed marketplace header is not in the marketplace-status trigger set (per D-16-12 + the SNM-15 ladder), and the other marketplace's `installed` plugin row is, on the list surface, the steady-state inventory token deliberately excluded from the trigger set (UAT gap G-21-01).
@@ -268,6 +282,8 @@ When a marketplace's manifest fails to parse, the marketplace renders as a bare 
 
 ● official [user] <autoupdate>
   ● alpha v1.0.0 (installed)
+
+Plugin list: 1 success
 ```
 
 An empty `plugins: []` renders as the bare marketplace header alone (D-15-08); the renderer does NOT emit a `(no plugins)` body line under it. The two marketplace blocks are joined by one blank line (D-16-07).
@@ -286,6 +302,8 @@ An empty `plugins: []` renders as the bare marketplace header alone (D-15-08); t
 
 ● zeta-mp [user]
   ● tool v1.0.0 (installed) {requires pi-subagents}
+
+Plugin list: 4 successes
 ```
 
 Three marketplace blocks; each joined by one blank line (D-16-07). `zeta-mp` is path-source (no `<autoupdate>` marker). `beta` omits the scope bracket per MSG-PL-6 (the `available` variant has no `scope` field). `tool` declares an agents dependency; the probe reports `pi-subagents` unloaded so the row fires `{requires pi-subagents}`.
@@ -297,6 +315,8 @@ Three marketplace blocks; each joined by one blank line (D-16-07). `zeta-mp` is 
 ```text
 ● official [user]
   ● hashed-plugin v#2ea95f8 (installed)
+
+Plugin list: 1 success
 ```
 
 The plugin's persisted version is the PI-7 content hash `hash-2ea95f85703d`; the list row renders it as the git-style short SHA `v#2ea95f8` (first 7 of the 12 hex chars). Persistence is unchanged -- `state.json` retains the full `hash-2ea95f85703d` (PI-7 intact, no migration); the short form is renderer-only (SNM-35, D-23-04). The `installed` inventory row carries no `/reload` trailer on the list surface.
@@ -308,6 +328,8 @@ The plugin's persisted version is the PI-7 content hash `hash-2ea95f85703d`; the
 ```text
 ● official [user]
   ● git-plugin v#a1b2c3d (installed)
+
+Plugin list: 1 success
 ```
 
 A git-source plugin (url / git-subdir / github) records its version as `sha-<12hex>` from the resolved commit (D-77-01, PURL-09); the list row renders it as the git-style short SHA `v#a1b2c3d` (the `sha-` prefix is stripped and only the first 7 of the 12 hex chars are shown, matching git `--short=7`). Persistence is unchanged -- `state.json` keeps the full `sha-a1b2c3d4e5f6` version plus the full 40-hex `resolvedSha` (D-77-02); the short form is renderer-only, and it never truncates the `resolvedSha` used for later comparison. The `installed` inventory row carries no `/reload` trailer on the list surface.
@@ -326,6 +348,8 @@ A git-source plugin (url / git-subdir / github) records its version as `sha-<12h
     Installable plugin with a description.
   ⊘ delta (unavailable) {unsupported hooks}
     Unavailable plugin that still surfaces its description.
+
+Plugin list: 4 successes
 ```
 
 ### Disabled inventory row (D-54-01 / ENBL-04)
@@ -335,11 +359,13 @@ A git-source plugin (url / git-subdir / github) records its version as `sha-<12h
 ```text
 ● official [user] <autoupdate>
   ◍ foo-plugin v1.2.3 (disabled)
+
+Plugin list: 1 success
 ```
 
 Triggered when the state record carries the explicit `enabled: false` marker (ENBL-05: the load-bearing predicate is `persistence/state-io.ts::isRecordedButDisabled`, which reads that boolean alone). Availability (`compatibility.installable`) is an ORTHOGONAL axis and is not part of the marker, so a partially-installed record the user disabled renders this same row -- ENBL-06, and the reason why no `(partially-installed)`-style brace appears on it. The `(disabled)` token is the new closed-set `PluginStatus` token (D-54-01); the row uses the `◍` glyph (D-80-01: reassigned from `◌`, which now marks `(remote)`; shared with `will disable` to match the realized/pending-tense precedent: `●` for `(installed)` / `(will install)`, `○` for `(available)` / `(will uninstall)`). Structurally distinct from `(unavailable)`: the byte form differs (`(disabled)` vs `(unavailable)`). The row carries at most ONE reason, `{not in manifest}`, and it carries that one only in the state below (ENBL-16 / D-100-07, which supersedes INV-04's "never carries a reason brace" clause); every other reason stays off a disabled row. The recorded version pin (ENBL-02) is preserved and rendered in the `v<version>` slot. Severity `info`; no reload-hint (inventory row, not a state-changer). The `/claude:plugin disable` command's fresh cascade reuses this exact row byte form WITH the reload-hint trailer via the `disable-cascade` kind (UAT-03; see [`## /claude:plugin disable`](#claudeplugin-disable-pluginmarketplace)); the fresh-disable site stamps no reason, so that row stays bare.
 
-PL-4: when the manifest entry carries a non-empty `description` field, the renderer emits it on a second line indented four spaces beneath the plugin row. Descriptions longer than 66 characters are truncated to 63 characters and suffixed with `"..."` (landing exactly at column 66). Nine list-surface variants (`installed`, `upgradable`, `available`, `remote`, `partially-available`, `partially-installed`, `partially-upgradable`, `unavailable`, `disabled`) support the description field; the cascade-only variants (`updated`, `reinstalled`, `uninstalled`) do not. The count mirrors a runtime authority rather than a hand-kept list: a variant supports the line exactly when its message interface in `extensions/pi-claude-marketplace/shared/notify.ts` declares `description?`, and the two degraded-inventory variants (`PluginPartiallyInstalledMessage`, `PluginPartiallyUpgradableMessage`) are what last moved it off seven. The renderer emits the description line only when the field is defined and non-empty.
+PL-4: when the manifest entry carries a non-empty `description` field, the renderer emits it on a second line indented four spaces beneath the plugin row. Descriptions longer than 66 characters are truncated to 63 characters and suffixed with `"..."` (landing exactly at column 66). Nine list-surface variants (`installed`, `upgradable`, `available`, `remote`, `partially-available`, `partially-installed`, `partially-upgradable`, `unavailable`, `disabled`) support the description field; the cascade-only variants (`updated`, `reinstalled`, `uninstalled`) do not. The count mirrors a runtime authority rather than a hand-kept list: a variant supports the line exactly when its message interface in `extensions/pi-claude-marketplace/shared/notification-types.ts` declares `description?`, and the two degraded-inventory variants (`PluginPartiallyInstalledMessage`, `PluginPartiallyUpgradableMessage`) are what last moved it off seven. The renderer emits the description line only when the field is defined and non-empty.
 
 ### Disabled inventory row with a description (PL-4)
 
@@ -349,6 +375,8 @@ PL-4: when the manifest entry carries a non-empty `description` field, the rende
 ● official [user] <autoupdate>
   ◍ foo-plugin v1.2.3 (disabled)
     Disabled plugin that still surfaces its description.
+
+Plugin list: 1 success
 ```
 
 ### Disabled inventory row -- not in manifest (ENBL-16 / D-100-07)
@@ -358,6 +386,8 @@ PL-4: when the manifest entry carries a non-empty `description` field, the rende
 ```text
 ● official [user] <autoupdate>
   ◍ foo-plugin v1.2.3 (disabled) {not in manifest}
+
+Plugin list: 1 success
 ```
 
 Two conditions cause this row. The state record carries the explicit `enabled: false` marker, and the marketplace manifest loaded successfully but does not declare the plugin.
@@ -377,6 +407,8 @@ A manifest that failed to load backs no absence claim (BOUND-01 / D-95-05). Such
 ```text
 ● official [user] <autoupdate>
   ○ helper v1.0.0 (available) {installs disabled}
+
+Plugin list: 1 success
 ```
 
 A not-installed plugin whose marketplace ENTRY declares `defaultEnabled: false` carries the closed-set `{installs disabled}` token on its `(available)` row, so the reader sees the author's install-time declaration BEFORE running the install rather than after it. Two declarations decide the token, in the order `install` itself applies them. Your own `enabled` value for the plugin in `claude-plugins.json` wins: where you have set one, in either direction, the marketplace default does not apply and the row stays bare. Where you have set none, the marketplace entry answers -- and it is readable from the cached `marketplace.json` for every declared plugin whatever its clone state, so this row reads no source tree and fires no network call to make the claim. The post-install row for the same plugin is the `install-disabled` state under `## /claude:plugin install <plugin>@<marketplace>`; the two blocks side by side are the whole story of the token for `helper`. Severity `info`; no reload-hint (inventory row) -- and for a different reason than the install row's: there the desired state WAS reached, while here nothing has happened at all, so the row states a fact about a future action rather than a shortfall of a completed one.
@@ -388,6 +420,8 @@ A not-installed plugin whose marketplace ENTRY declares `defaultEnabled: false` 
 ```text
 ● official [user] <autoupdate>
   ◌ git-plugin v1.2.3 (remote)
+
+Plugin list: 1 success
 ```
 
 A not-installed git-source plugin (source `url` / `git-subdir` / `github`) whose clone/mirror is not yet materialized locally renders `(remote)` instead of the manifest-only `(available)` over-claim (RSTA-01). The row uses the dedicated `◌` glyph (`ICON_REMOTE`, U+25CC), reassigned from the disabled rows which now wear `◍` (D-80-01). Bare row: no scope bracket (SNM-11 carve-out family, joining `available` / `partially-available` / `unavailable`), and no reasons brace. What the row excludes is every reason derived from a tree it does not have -- probe-derived reasons and the soft-dependency markers alike. The closed REASONS set still does not grow either way (parity with `available`, D-80-03), but that is no longer what keeps this row bare. The one token the row family now admits is derived from the marketplace ENTRY rather than from a tree, and this block's own fixture entry declares nothing, which is why its bytes are unchanged; for the declaring case see the `remote-installs-disabled` state below (OUT-05 / RSTA-01). Severity `info`; no reload-hint (inventory row).
@@ -400,6 +434,8 @@ A not-installed git-source plugin (source `url` / `git-subdir` / `github`) whose
 ● official [user] <autoupdate>
   ◌ git-plugin v1.2.3 (remote)
     Remote git-source plugin not yet fetched locally.
+
+Plugin list: 1 success
 ```
 
 Same `remote-inventory` row as above, now carrying a `description`. The PL-4 second line renders identically to the other list-surface variants: 4-space indent, truncated at column 66. Severity `info`; no reload-hint.
@@ -413,6 +449,8 @@ Same `disabled-inventory` row as above, now carrying a `description`. The PL-4 s
 ```text
 ● official [user] <autoupdate>
   ◌ git-plugin v1.2.3 (remote) {installs disabled}
+
+Plugin list: 1 success
 ```
 
 The same not-yet-materialized git-source plugin as the `remote-inventory` row above, whose marketplace ENTRY declares `defaultEnabled: false`. This NARROWS that block's bare-row rule rather than reversing it (OUT-05 / RSTA-01). The row still refuses every probe-derived reason and both soft-dependency markers, because no materialized tree exists to derive either from; it admits exactly one declaration-derived token, on the terms the `available-installs-disabled` state above sets out. That token needs no tree at all, which is what lets the reader furthest from having fetched anything still see the author's install-time declaration. Severity `info`; no reload-hint (inventory row): nothing has happened at all, so the row states a fact about a future action rather than a shortfall of a completed one.
@@ -424,6 +462,8 @@ The same not-yet-materialized git-source plugin as the `remote-inventory` row ab
 ```text
 ● official [user] <autoupdate>
   ◉ degraded-plugin v1.0.0 (partially-installed) {lsp}
+
+Plugin list: 1 success
 ```
 
 A recorded-installed plugin that currently re-resolves `partially-available` (installed with one or more components dropped) is DERIVED as `partially-installed` -- no persisted flag, no migration (FSTAT-01 / D-66-01). The row uses the dedicated `◉` glyph (`ICON_PARTIALLY_INSTALLED`), DISTINCT from the clean `(installed)` row's `●` so the degraded install is visually separable (FSTAT-02). The reasons brace carries the degradation detail, composed exactly like the `upgradable` row. Severity `info`; no reload-hint (inventory row). Once a fully-supported upgrade rewrites the recorded resolution the same deriver yields `(installed)` with no lingering state (FSTAT-03).
@@ -435,6 +475,8 @@ A recorded-installed plugin that currently re-resolves `partially-available` (in
 ```text
 ● official [user]
   ⊖ helper v1.0.0 (partially-available) {workflows}
+
+Plugin list: 1 success
 ```
 
 A workflow-bearing plugin uses the existing partial status before installation. The row has info severity and no hint or reload trailer.
@@ -448,6 +490,8 @@ This state adds no workflow-specific glyph, heading, or wrapping rule.
 ```text
 ● official [user] <autoupdate>
   ◉ hook-plugin v1.0.0 (partially-installed) {unsupported hooks}
+
+Plugin list: 1 success
 ```
 
 A partial-hook plugin -- one whose `hooks.json` parses and validates cleanly but declares an unsupportable event (a non-bucket-A event such as `Notification`) or matcher group -- partially installs its supported components PLUS the supportable hook handlers, staging a `hooks.json` that is a strict subset of the source with only the unsupportable handlers dropped (PHOOK-04). Once recorded-installed it re-resolves `partially-available` and is DERIVED as `partially-installed`, identical to any other dropped-component degrade. The `hooks` kind rides the SINGLE aggregate `{unsupported hooks}` brace regardless of how many events / matcher groups dropped (D-71-04); the per-handler `event(matcher) (unsupported)` breakdown lives on the `info` surface (D-71-05). The aggregate marker is sourced through `shared/probe-classifiers.ts::narrowUnsupportedKinds` (the typed `unsupported` kind list), distinct from the structural `narrowResolverNotes` path that an `unavailable` malformed-`hooks.json` row uses. Severity `info`; no reload-hint (inventory row).
@@ -459,6 +503,8 @@ A partial-hook plugin -- one whose `hooks.json` parses and validates cleanly but
 ```text
 ● official [user] <autoupdate>
   ● clean-plugin v1.0.0 (partially-upgradable) {unsupported component}
+
+Plugin list: 1 success
 ```
 
 A currently-clean installed plugin whose newer no-network cache candidate would NEWLY degrade it is DERIVED as `partially-upgradable` (FSTAT-04 / D-66-02). The candidate is resolved without network (FSTAT-05). The row REUSES the `●` glyph (`ICON_INSTALLED`) because it is clean today -- only its candidate would degrade -- mirroring the `upgradable` precedent. A plugin already `partially-installed` is never `partially-upgradable` (already degraded). This is a list-inventory-only row; severity `info`, no reload-hint.
@@ -470,6 +516,8 @@ A currently-clean installed plugin whose newer no-network cache candidate would 
 ```text
 ● official [user] <autoupdate>
   ● orphan-plugin v1.0.0 (installed) {not in manifest}
+
+Plugin list: 1 success
 ```
 
 An installed record whose marketplace manifest LOADED successfully but does not declare it carries the `not in manifest` reason (INV-01). The inventory is manifest-independent because it is RECORD-backed: `list` enumerates the installation records in `state.json` and the manifest supplies only decoration -- the PL-5 version compare and the PL-4 description. The list surface never checks whether the record's artifacts are materialized on disk, and it does not need to: the record is the statement that the install happened, and reconcile is what keeps the disk agreeing with it. So the row keeps the clean `(installed)` token and the `●` glyph, and the brace states the one fact the manifest settles. The claim is made ONLY about a manifest that was actually READ, and it is judged against the manifest the plugin's OWN marketplace record names (INV-01) -- on the cross-scope orphan fold that is the project-side record's manifest, even though the row renders under the user-scope header. A manifest-read failure claims nothing: a same-scope failure renders the bare `(failed)` marketplace header instead (BOUND-01), and a folded row whose own manifest failed to read keeps its bare `(installed)` form with no brace (BOUND-03 / D-95-05). A folded row describes the manifest that its own record names. This rule applies to the absence claim, the upgradable derivation and the description (D-96-02). If a marketplace cannot read its own manifest, the block shows the bare `(failed)` header with no child rows, and it also hides the folded rows that come from the other scope (BOUND-01). Severity `info`; no reload-hint (inventory row).
@@ -481,6 +529,8 @@ An installed record whose marketplace manifest LOADED successfully but does not 
 ```text
 ● official [user] <autoupdate>
   ◉ degraded-plugin v1.0.0 (partially-installed) {not in manifest, lsp}
+
+Plugin list: 1 success
 ```
 
 A degraded record that is ALSO absent from a manifest that loaded prepends `not in manifest` to the dropped-component kinds (INV-02). The absence reason comes first because it describes the record's relationship to the marketplace, and the kinds describe the install itself; `narrowUnsupportedKinds` stays the sole producer of the kind tokens. The row keeps the `◉` glyph and the `partially-installed` token -- manifest absence is a separate axis from degradation and never changes the status. Severity `info`; no reload-hint (inventory row).
@@ -1459,9 +1509,23 @@ Marketplace-list surface. Each marketplace renders as a list-surface header carr
 
 ```text
 (no marketplaces)
+
+Marketplace list: 0 successes
 ```
 
-Empty top-level `marketplaces: []` renders the sentinel literal per D-16-17. No reload-hint, no severity arg.
+Empty top-level `marketplaces: []` renders the sentinel literal per D-16-17. Because list is structurally plural, the zero-result tally remains visible. No reload-hint, no severity arg.
+
+### Single marketplace
+
+<!-- catalog-state: single -->
+
+```text
+● alpha [project]
+
+Marketplace list: 1 success
+```
+
+A one-row result is still a plural list invocation. Cardinality follows the command shape, not the result count.
 
 ### Mixed scopes -- per-scope rendering
 
@@ -1475,9 +1539,11 @@ Empty top-level `marketplaces: []` renders the sentinel literal per D-16-17. No 
 ● beta [user]
 
 ● zeta [project] <autoupdate>
+
+Marketplace list: 4 successes
 ```
 
-Four marketplace blocks joined by one blank line each (D-16-07). Each list-surface header is SUB-BRANCH B (mp.status undefined; details set). `<autoupdate>` appears only when `details.autoupdate === true`. The `details.lastUpdatedAt` field is retained in state but is not rendered (UXG-01). Caller-supplied order is preserved (D-16-06); the catalog uses an alphabetic ordering for readability. No reload-hint, no severity arg.
+Four marketplace blocks joined by one blank line each (D-16-07), followed by the plural tally. Each list-surface header is SUB-BRANCH B (mp.status undefined; details set). `<autoupdate>` appears only when `details.autoupdate === true`. The `details.lastUpdatedAt` field is retained in state but is not rendered (UXG-01). Caller-supplied order is preserved (D-16-06); the catalog uses an alphabetic ordering for readability. No reload-hint, no severity arg.
 
 ______________________________________________________________________
 
@@ -1864,7 +1930,7 @@ Some plugin operations need attention.
 
 ### Success -- available single scope
 
-Triggered by `plugin info <plugin>@<marketplace>` against a plugin declared in `marketplace.json` but NOT installed in the requested scope. The status glyph switches to `○` (per `pluginInfoStatusGlyph` in `shared/notify.ts`) and the row reads `(available)`. Components remain rendered for path-source plugins because the marketplace clone is local and the plugin entry's source can be resolved without a fetch. Severity `info` (only the `failed` plugin-info row routes to error).
+Triggered by `plugin info <plugin>@<marketplace>` against a plugin declared in `marketplace.json` but NOT installed in the requested scope. The status glyph switches to `○` (per `pluginInfoStatusGlyph` in `shared/notification-grammar.ts`) and the row reads `(available)`. Components remain rendered for path-source plugins because the marketplace clone is local and the plugin entry's source can be resolved without a fetch. Severity `info` (only the `failed` plugin-info row routes to error).
 
 <!-- catalog-state: available-single-scope -->
 
@@ -2349,9 +2415,55 @@ A marketplace operation has failed.
 
 ______________________________________________________________________
 
-## `/claude:plugin marketplace update <name>`
+## `/claude:plugin marketplace update [<name>]`
 
-Single marketplace, multi-plugin cascade. The marketplace header carries `(updated)`; plugin rows indent two spaces underneath. On the autoupdate-OFF path (manifest-only refresh, no plugin cascade) the header distinguishes a no-op from a genuine change: an unchanged manifest renders `(skipped) {up-to-date}` (UXG-05), a changed manifest renders `(updated)`. The same no-op vs changed distinction applies on the autoupdate-ON cascade path: when the validated manifest content is unchanged AND every cascaded plugin is `unchanged` (up-to-date), the marketplace converges to the SAME `(skipped) {up-to-date}` byte form (`plugins: []`, no cascade rows) rather than `(updated)`.
+With `<name>`, this is a single marketplace, multi-plugin cascade and emits no tally. Without `<name>`, it is structurally plural before target discovery. The all-marketplaces implementation preserves one notification per target; each notification carries the plural tally because cardinality follows the invocation rather than that notification's row count. The marketplace header carries `(updated)`; plugin rows indent two spaces underneath. On the autoupdate-OFF path (manifest-only refresh, no plugin cascade) the header distinguishes a no-op from a genuine change: an unchanged manifest renders `(skipped) {up-to-date}` (UXG-05), a changed manifest renders `(updated)`. The same no-op vs changed distinction applies on the autoupdate-ON cascade path: when the validated manifest content is unchanged AND every cascaded plugin is `unchanged` (up-to-date), the marketplace converges to the SAME `(skipped) {up-to-date}` byte form (`plugins: []`, no cascade rows) rather than `(updated)`.
+
+### All marketplaces -- empty
+
+<!-- catalog-state: update-all-empty -->
+
+```text
+(no marketplaces)
+
+Marketplace update: 0 successes
+```
+
+The no-name invocation remains plural when target discovery finds nothing.
+
+### All marketplaces -- one target
+
+<!-- catalog-state: update-all-one -->
+
+```text
+● alpha [project] (skipped) {up-to-date}
+
+Marketplace update: 1 success
+```
+
+One discovered target does not change the invocation to single.
+
+### All marketplaces -- many targets, first notification
+
+<!-- catalog-state: update-all-many-alpha -->
+
+```text
+● alpha [project] (skipped) {up-to-date}
+
+Marketplace update: 1 success
+```
+
+### All marketplaces -- many targets, second notification
+
+<!-- catalog-state: update-all-many-beta -->
+
+```text
+● beta [project] (skipped) {up-to-date}
+
+Marketplace update: 1 success
+```
+
+The two blocks above are the ordered notifications from one two-target invocation. The command keeps its existing per-target emission behavior; both emissions retain the all-target invocation's plural cardinality.
 
 ### Autoupdate-off manifest refresh -- no change (no-op)
 
@@ -2395,7 +2507,7 @@ A plugin operation needs attention.
   ⊘ hello (skipped) {not in manifest}
 ```
 
-LIFE-06 / D-98-13: the refreshed `marketplace.json` no longer lists an installed record's entry, so the shared update preflight stamps `partition: "skipped"` with `reasons: ["not in manifest"]` and `cascadeAutoupdates` passes that outcome through untouched (only a THROW is caught and converted). The cascade row carries NO version token, and the omission is deliberate: `outcomeToCascadePluginMessage`'s `skipped` arm forwards name, scope and reasons only, while the single-plugin `update` surface renders the SAME skip as `⊘ hello v1.0.0 (skipped) {not in manifest}`. Both forms are byte-pinned -- the cascade one in `tests/orchestrators/marketplace/update.test.ts`, the version-carrying one in `tests/orchestrators/plugin/update.test.ts` -- so adding a version here would move a locked contract rather than correct a rendering bug. `not in manifest` is failure-class and not idempotent, so `skipSeverity` stamps the row `warning` and the cascade prepends the `A plugin operation needs attention.` summary line. The marketplace header keeps `(updated)`: a `skipped` outcome is not `unchanged`, so it leaves the all-unchanged no-op gate (UXG-05) exactly as the disabled re-pin above does. The record is left untouched -- a skipped plugin is a fixed point for the cascade, so a repeated `marketplace update` renders byte-identically. No reload-hint: a `skipped` plugin row materialized nothing (SNM-33 / D-22-01).
+LIFE-06 / D-98-13: the refreshed `marketplace.json` no longer lists an installed record's entry, so the shared update preflight stamps `partition: "skipped"` with `reasons: ["not in manifest"]` and `cascadeAutoupdates` passes that outcome through untouched (only a THROW is caught and converted). The cascade row carries NO version token, and the omission is deliberate: `outcomeToCascadePluginMessage`'s `skipped` arm forwards name, scope and reasons only, while the single-plugin `update` surface renders the SAME skip as `⊘ hello v1.0.0 (skipped) {not in manifest}`. Both forms are byte-pinned -- the cascade one in `tests/orchestrators/marketplace/update.test.ts`, the version-carrying one in `tests/orchestrators/plugin/update-flow.test.ts` -- so adding a version here would move a locked contract rather than correct a rendering bug. `not in manifest` is failure-class and not idempotent, so `skipSeverity` stamps the row `warning` and the cascade prepends the `A plugin operation needs attention.` summary line. The marketplace header keeps `(updated)`: a `skipped` outcome is not `unchanged`, so it leaves the all-unchanged no-op gate (UXG-05) exactly as the disabled re-pin above does. The record is left untouched -- a skipped plugin is a fixed point for the cascade, so a repeated `marketplace update` renders byte-identically. No reload-hint: a `skipped` plugin row materialized nothing (SNM-33 / D-22-01).
 
 ### Autoupdate-off manifest refresh -- changed
 
@@ -2723,9 +2835,9 @@ Triggered when the target config file fails CFG-03 validation. The orchestrator 
 
 ______________________________________________________________________
 
-## `/claude:plugin marketplace autoupdate|noautoupdate <name>`
+## `/claude:plugin marketplace autoupdate|noautoupdate [<name>]`
 
-Marketplace-only flag flip. The orchestrator emits a single marketplace block with no plugin children; the block's `mp.status` discriminates between the V2 outcomes. V2 distinguishes six user-visible states for this surface: fresh-flip enable, fresh-flip disable, idempotent enable (no-op), idempotent disable (no-op), and -- when the marketplace persistence record cannot be found -- the standalone `{marketplace not added}` failure in two forms (explicit `--scope` carrying the scope bracket, and the bare absent-from-both form; ATTR-05 / D-48-C Shape 1). The per-state catalog blocks below give the exact byte form for each outcome. UXG-04: the flip surface now renders the autoupdate state as the `<autoupdate>` / `<no autoupdate>` marker (byte-form parity with the list surface), reversing the Phase 17.1 / D-18-05 status-token design; fresh flips render the bare marker, idempotent no-ops render the marker plus an `{already autoupdate}` / `{already no autoupdate}` idempotence brace. This shares byte form with the list-surface markers documented under [`## /claude:plugin marketplace list`](#claudeplugin-marketplace-list), but the two surfaces differ: the **list** surface conveys autoupdate-off by marker _absence_ (it emits `<autoupdate>` iff `mp.details.autoupdate === true`, with no off-marker), whereas this **flip** surface emits the explicit `<no autoupdate>` off-marker. The `<no autoupdate>` off-marker is therefore emitted only on this flip surface, never on the list surface (UXG-04 does not change the list surface).
+Marketplace-only flag flip. With `<name>`, the invocation is structurally single and emits no tally. Without `<name>`, it targets all marketplaces, is structurally plural, and emits a tally for zero, one, or many results. Cardinality is selected from invocation structure before any rows exist. Each marketplace block has no plugin children; the block's `mp.status` discriminates between the V2 outcomes. UXG-04: the flip surface renders the autoupdate state as the `<autoupdate>` / `<no autoupdate>` marker. Fresh flips render the bare marker, while idempotent no-ops add an `{already autoupdate}` / `{already no autoupdate}` brace. This shares byte form with the list-surface markers documented under [`## /claude:plugin marketplace list`](#claudeplugin-marketplace-list), but the two surfaces differ: the **list** surface conveys autoupdate-off by marker _absence_, whereas this **flip** surface emits the explicit `<no autoupdate>` off-marker.
 
 ### Fresh enable
 
@@ -2766,6 +2878,44 @@ Idempotent no-op -- the flag was already in the requested state. `mp.status` = `
 ```
 
 Idempotent no-op -- the flag was already in the requested state. `mp.status` = `"skipped"`; `mp.reasons` = `["already no autoupdate"]`; UXG-04 renders the explicit `<no autoupdate>` off-marker plus the `{already no autoupdate}` idempotence brace (no `(skipped)` token); severity = `info` (`already no autoupdate` is in the benign closed set, so this benign no-op computes info -- the second arg is omitted -- per UXG-02 / D-28-06/07); reload-hint suppressed.
+
+### All marketplaces -- empty
+
+<!-- catalog-state: all-empty -->
+
+```text
+(no marketplaces)
+
+Marketplace autoupdate: 0 successes
+```
+
+The no-name invocation is plural even when no marketplace rows exist.
+
+### All marketplaces -- one result
+
+<!-- catalog-state: all-one -->
+
+```text
+● foo [project] <autoupdate>
+
+Marketplace autoupdate: 1 success
+```
+
+One result does not turn the plural invocation into a single-target operation.
+
+### All marketplaces -- many results
+
+<!-- catalog-state: all-many -->
+
+```text
+● foo [project] <autoupdate>
+
+● bar [user] <autoupdate> {already autoupdate}
+
+Marketplace autoupdate: 2 successes
+```
+
+Changed and already-correct rows both count as successful plural outcomes.
 
 ### Failure -- missing marketplace (explicit `--scope`)
 
@@ -2850,7 +3000,7 @@ ______________________________________________________________________
 
 Notifications emitted directly via `ctx.ui.notify(message, severity?)` from outside the structured `notify(ctx, pi, NotificationMessage)` entrypoint. These bypass the renderer's severity / reload-hint / soft-dep pipeline and are reserved for surfaces that pre-date the `NotificationMessage` payload contract (e.g. interactive Device Flow prompts where the message is produced by a domain-tier state machine, not an orchestrator-tier outcome).
 
-The byte form is locked by per-surface unit tests (NOT by `tests/architecture/catalog-uat.test.ts`, whose driver only knows the structured `notify()` entrypoint). The `<!-- catalog-state: -->` annotations below are for human-readable discoverability; the catalog-uat parser intentionally skips this section because its H2 title is not a `/claude:plugin` command header.
+The byte form is locked by per-surface unit tests (NOT by `tests/architecture/catalog-uat/catalog-contract.test.ts`, whose driver only knows the structured `notify()` entrypoint). The `<!-- catalog-state: -->` annotations below are for human-readable discoverability; the catalog-uat parser intentionally skips this section because its H2 title is not a `/claude:plugin` command header.
 
 ### Device Flow user-code prompt (AUTH-03)
 
@@ -2862,7 +3012,7 @@ Open https://github.com/login/device and enter: ABCD-1234
 
 Emitted exactly once by `initiateDeviceFlow` (in `extensions/pi-claude-marketplace/domain/github-auth.ts`) after a successful `POST /login/device/code` and before the poll loop starts. The literal example shows GitHub's standard verification URL plus a mock user code; the production string interpolates `deviceCode.verification_uri` and `deviceCode.user_code` from the GitHub response. Severity: `info` (the second arg to `ctx.ui.notify` is the magic string `"info"`).
 
-AUTH-03 contract: the user is shown a one-time code (`user_code`) AND a verification URL (`verification_uri`) so they can authorize the OAuth App from any browser. AUTH-09 contract: the access token is NOT yet acquired when this notification fires (the poll loop runs AFTER), so `access_token` / `accessToken` / `cred.password` are NOT interpolatable into this message. The byte form is locked by `tests/shared/device-flow-prompt.test.ts` -- any change to the emission string requires a lockstep update of the catalog AND the byte-form lock test.
+AUTH-03 contract: the user is shown a one-time code (`user_code`) AND a verification URL (`verification_uri`) so they can authorize the OAuth App from any browser. AUTH-09 contract: the access token is NOT yet acquired when this notification fires (the poll loop runs AFTER), so `access_token` / `accessToken` / `cred.password` are NOT interpolatable into this message. The byte form is locked by `tests/domain/github-auth.test.ts` -- any change to the emission string requires a lockstep update of the catalog AND the byte-form lock test.
 
 Triggers: `marketplace add <owner>/<private-repo>` (first access; Phase 35 Plan 35-01) and -- rarely -- `marketplace update <name>` when the stored credential has been evicted from the OS keychain (Phase 35 Plan 35-02). The post-Phase-35-01 happy path on `marketplace update` is silent reuse (AUTH-02): the stored token in the keychain hits on `credentialOps.fill`, no Device Flow runs, no notification fires.
 
@@ -2876,15 +3026,20 @@ Stop hook override cap reached.
 `ralph-wiggum`'s Stop hook blocked 8 times in a row; the turn ended despite its active block.
 ```
 
-Emitted exactly once by the settle dispatcher (`extensions/pi-claude-marketplace/bridges/hooks/settle.ts`) via `notifyStopHookOverrideCap` when Stop hooks drive 8 consecutive bridge re-entries -- block decisions and `additionalContext` continuations share one consecutive-re-entry counter (D-88-08). The loop protection (STOP-07) suppresses the 8th re-entry so a livelocking hook cannot spin the agent forever, and this warning surfaces the override so the suppression is never silent (D-88-01 transparency). Severity: `warning` (the second arg to `ctx.ui.notify` is the magic string `"warning"`) -- the turn ended (the protection worked) but the plugin's block was overridden. The one-shot latch is per-session: a plain-allow outcome with no re-entry resets the counter and re-arms it (D-88-08), so a fresh 8-re-entry run is required before the warning fires again. The literal example names a mock `ralph-wiggum` plugin; the production string interpolates the blocking plugin's id. The byte form is locked by `tests/architecture/hooks-cap-notify.test.ts` (NOT `catalog-uat.test.ts`, whose driver only knows the structured `notify()` entrypoint -- this seam is a bridge diagnostic, not a `NotificationMessage`).
+Emitted exactly once by the settle dispatcher (`extensions/pi-claude-marketplace/bridges/hooks/settle.ts`) via `notifyStopHookOverrideCap` when Stop hooks drive 8 consecutive bridge re-entries -- block decisions and `additionalContext` continuations share one consecutive-re-entry counter (D-88-08). The loop protection (STOP-07) suppresses the 8th re-entry so a livelocking hook cannot spin the agent forever, and this warning surfaces the override so the suppression is never silent (D-88-01 transparency). Severity: `warning` (the second arg to `ctx.ui.notify` is the magic string `"warning"`) -- the turn ended (the protection worked) but the plugin's block was overridden. The one-shot latch is per-session: a plain-allow outcome with no re-entry resets the counter and re-arms it (D-88-08), so a fresh 8-re-entry run is required before the warning fires again. The literal example names a mock `ralph-wiggum` plugin; the production string interpolates the blocking plugin's id. The byte form is locked by `tests/architecture/hooks-cap-notify.test.ts` (NOT `tests/architecture/catalog-uat/catalog-contract.test.ts`, whose driver only knows the structured `notify()` entrypoint -- this seam is a bridge diagnostic, not a `NotificationMessage`).
 
 ______________________________________________________________________
 
 ## Cross-references
 
-- [`docs/messaging-style-guide.md`](messaging-style-guide.md) -- v2.0 thin-pointer style guide; binding closed-set authority via `as const` tuples in `shared/notify.ts`.
+- [`docs/messaging-style-guide.md`](messaging-style-guide.md) -- v2.0 thin-pointer style guide; binding closed-set authority via `as const` tuples in `shared/notification-types.ts`.
 - [`docs/adr/v2-001-structured-notify.md`](adr/v2-001-structured-notify.md) -- design rationale for the v1.4 structured `NotificationMessage` model; landed via Phase 17 -- spec + catalog UAT migration.
-- [`extensions/pi-claude-marketplace/shared/notify.ts`](../extensions/pi-claude-marketplace/shared/notify.ts) -- the v2 renderer (`notify(ctx, pi, message)` + `notifyUsageError(ctx, message)`); SOLE site for v2 grammar emission.
+- [`extensions/pi-claude-marketplace/shared/notification-types.ts`](../extensions/pi-claude-marketplace/shared/notification-types.ts) -- closed notification tuples and unions.
+- [`extensions/pi-claude-marketplace/shared/notification-grammar.ts`](../extensions/pi-claude-marketplace/shared/notification-grammar.ts) -- icon, row, header, trailer, and information-body rendering.
+- [`extensions/pi-claude-marketplace/shared/notification-summary.ts`](../extensions/pi-claude-marketplace/shared/notification-summary.ts) -- severity, tally, reload, and cascade-summary folding.
+- [`extensions/pi-claude-marketplace/shared/notification-dispatch.ts`](../extensions/pi-claude-marketplace/shared/notification-dispatch.ts) -- `notify(ctx, pi, message)`, `notifyUsageError(ctx, message)`, diagnostic, hook, and raw entrypoints; SOLE direct Pi output owner.
+- [`extensions/pi-claude-marketplace/shared/redact-absolute-paths.ts`](../extensions/pi-claude-marketplace/shared/redact-absolute-paths.ts) -- notification diagnostic path redaction.
+- [`extensions/pi-claude-marketplace/shared/compare-name-scope.ts`](../extensions/pi-claude-marketplace/shared/compare-name-scope.ts) -- stable name-first, project-before-user ordering.
 - [`extensions/pi-claude-marketplace/shared/notify-reasons.ts`](../extensions/pi-claude-marketplace/shared/notify-reasons.ts) -- compile-time closed-set membership proof: the `_UncoveredReason` / `_ExtraReason` reason-coverage check, plus the per-command `satisfies CommandContext` checks in the `*.messaging.ts` modules.
-- [`tests/architecture/catalog-uat.test.ts`](../tests/architecture/catalog-uat.test.ts) -- user-contract gate; drives this catalog's `<!-- catalog-state: STATE -->` annotated fixtures through `notify()` via mock `ctx` and asserts byte-equality (rewritten in Plan 17-03; until then the V1 catalog UAT byte-mismatches against the v2 catalog -- Pitfall 2 documented in 17-RESEARCH.md).
+- [`tests/architecture/catalog-uat/catalog-contract.test.ts`](../tests/architecture/catalog-uat/catalog-contract.test.ts) -- user-contract gate; drives this catalog's `<!-- catalog-state: STATE -->` annotated fixtures through `notify()` via mock `ctx` and asserts byte-equality.
 - [`docs/prd/pi-claude-marketplace-prd.md`](prd/pi-claude-marketplace-prd.md) §6.12 ES-5 -- the stable user-contract strings origin; the 5 ES-5 markers were superseded by the v1.3 style guide and remain blocked by `tests/architecture/no-legacy-markers.test.ts`.

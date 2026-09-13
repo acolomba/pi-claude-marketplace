@@ -21,8 +21,9 @@
  *   exact code point, written as an escape so the pin states the code point
  *   rather than relying on the reader to identify a character by eye. There is
  *   no exported COLLECTION of glyphs, so an EIGHTH glyph export cannot be caught
- *   by comparing a tuple; the export-declaration count in the notify module is
- *   the only way to catch one, and it is the one clause here that scans source.
+ *   by comparing a tuple; the notification grammar owner's export-declaration
+ *   count is the only way to catch one, and it is the one clause here that
+ *   scans source.
  *
  *   Persistence (COMPAT-01) -- the persisted install record's key set is exactly
  *   the eight fields it already had, and neither a manifest-snapshot-shaped key
@@ -86,19 +87,34 @@ import {
   ICON_PARTIALLY_INSTALLED,
   ICON_REMOTE,
   ICON_UNINSTALLABLE,
+} from "../../extensions/pi-claude-marketplace/shared/notification-grammar.ts";
+import {
   MARKETPLACE_STATUSES,
   PLUGIN_STATUSES,
   REASONS,
   STATUS_TOKENS,
-} from "../../extensions/pi-claude-marketplace/shared/notify.ts";
+} from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
+import { COMPAT_NO_EXPANSION_TARGETS, NETWORK_FREE_TARGETS } from "./gate-targets.ts";
 import { REPO_ROOT, stripComments } from "./source-scan.ts";
 
 import type { LedgerDegradationSignals } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts";
 import type { InstallPluginOutcome } from "../../extensions/pi-claude-marketplace/orchestrators/types.ts";
 
-const NOTIFY_REL = "extensions/pi-claude-marketplace/shared/notify.ts";
-const NETWORK_GATE_REL = "tests/architecture/no-orchestrator-network.test.ts";
+/**
+ * The two files this gate reads as data, taken from the registry (D-07-05) so
+ * the paths are named once for every gate rather than once per gate. The tuple
+ * order is the group's own: grammar owner first, then the catalog it must not
+ * outgrow.
+ */
+const NOTIFICATION_GRAMMAR_REL = COMPAT_NO_EXPANSION_TARGETS[0];
+const OUTPUT_CATALOG_REL = COMPAT_NO_EXPANSION_TARGETS[1];
+
+/**
+ * The registry module the delegation clause below reads. A test path, not a
+ * production one, so D-07-05 does not cover it and it is spelled here.
+ */
+const NETWORK_GATE_REL = "tests/architecture/gate-targets.ts";
 
 /**
  * WR-07: one glyph-declaration pattern in two flavours -- `GLYPH_DECLARATIONS`
@@ -329,7 +345,7 @@ test("COMPAT-01: the catalog names each glyph the way the code-point pins above 
   ];
 
   // act
-  const catalog = await readFile(path.join(REPO_ROOT, "docs/output-catalog.md"), "utf8");
+  const catalog = await readFile(path.join(REPO_ROOT, OUTPUT_CATALOG_REL), "utf8");
   const mismatches = expected
     .filter(([glyph, name]) => !catalog.includes(`- \`${glyph}\` -- ${name}`))
     .map(([glyph, name]) => `${glyph} is not named "${name}" in the catalog's Glyphs section`);
@@ -342,7 +358,7 @@ test("COMPAT-01: the catalog names each glyph the way the code-point pins above 
   );
 });
 
-test("COMPAT-01: the notify module declares no eighth glyph export", async () => {
+test("COMPAT-01: the notification grammar owner declares no eighth glyph export", async () => {
   // arrange
   // The one clause here that scans source: an eighth glyph export cannot be
   // caught by comparing runtime constants, because the glyphs are seven
@@ -357,9 +373,15 @@ test("COMPAT-01: the notify module declares no eighth glyph export", async () =>
   const expectedCount = 7;
 
   // act
-  const declarations = (await readStrippedSource(NOTIFY_REL)).match(GLYPH_DECLARATIONS);
+  const declarations = (await readStrippedSource(NOTIFICATION_GRAMMAR_REL)).match(
+    GLYPH_DECLARATIONS,
+  );
 
   // assert
+  assert.ok(
+    COMPAT_NO_EXPANSION_TARGETS.length > 0,
+    "D-07-03: an empty target group leaves this clause and the catalog clause reading nothing and reporting success over zero files.",
+  );
   assert.equal(
     declarations?.length,
     expectedCount,
@@ -512,12 +534,18 @@ test("COMPAT-01: the default state still declares the current schema version", (
 test("COMPAT-01: the network clause is covered by the orchestrator-network gate", async () => {
   // arrange
   // DELEGATION (D-98-09): the NFR-5 gate runs the actual assertion. This clause
-  // only proves the two info surfaces are still in its target list, so removing
-  // one there fails here rather than silently uncovering the clause. WR-06: that
+  // only proves the two info surfaces are still in its target list, which
+  // D-07-05 keeps in the registry module, so removing one there fails here
+  // rather than silently uncovering the clause. WR-06: that
   // the named files still EXIST is the shared scanner's job -- it fails on a
   // missing target rather than skipping it, so a rename cannot leave both gates
   // green over a file neither read.
-  const requiredTargets = [
+  //
+  // The annotation is the load-bearing half: `(typeof NETWORK_FREE_TARGETS)[number]`
+  // is the union of the group's own entries, so dropping either surface from the
+  // registry stops this file compiling. The scrape below stays as the runtime
+  // half, and covers the case where the registry module itself moves.
+  const requiredTargets: ReadonlyArray<(typeof NETWORK_FREE_TARGETS)[number]> = [
     "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts",
     "extensions/pi-claude-marketplace/orchestrators/marketplace/info.ts",
   ];

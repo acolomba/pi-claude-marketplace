@@ -10,7 +10,7 @@
 //
 // Locking model: exactly ONE per-scope lock owns the
 // whole critical section. The enable branch calls `runInstallLedger` (the
-// guard-FREE ledger body exported by install.ts) against THIS transaction's
+// guard-FREE ledger body exported by install-outcome.ts) against THIS transaction's
 // state snapshot -- calling `installPlugin` here would nest a second
 // `withStateGuard` on the same `stateLockFile`, and `proper-lockfile`
 // (`retries: 0`) is not re-entrant, so every fresh enable would self-deadlock
@@ -61,15 +61,18 @@
 
 import path from "node:path";
 
-import { rebuildRoutingTables, removePluginConfigFromCache } from "../../bridges/hooks/index.ts";
+import { asAbsolutePluginRoot } from "../../domain/plugin-root.ts";
 import { isRecordedButDisabled, toDisabledRecord } from "../../persistence/state-io.ts";
 import { softDepStatus } from "../../platform/pi-api.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage, StateLockHeldError } from "../../shared/errors.ts";
+import { createRemovalOps } from "../../shared/fs-utils.ts";
+import { type ContentReason } from "../../shared/notification-types.ts";
+import { type PluginFailedMessage, type Reason } from "../../shared/notification-types.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
 import { companionSeverity, malformedReasonsForKinds } from "../../shared/notify-reasons.ts";
-import { redactAbsolutePaths } from "../../shared/notify.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
+import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 import { cascadeUnstagePlugin } from "../marketplace/shared.ts";
 
@@ -82,7 +85,7 @@ import {
   type DisableMsg,
   type EnableMsg,
 } from "./enable-disable.messaging.ts";
-import { runInstallLedger } from "./install.ts";
+import { runInstallLedger } from "./install-outcome.ts";
 import {
   absentTargetReasons,
   applyPartialCascadeFold,
@@ -97,11 +100,11 @@ import {
   writeAdoptingConfigEntries,
 } from "./shared.ts";
 
-import type { InstallFailureCapture, InstallLedgerResult } from "./install.ts";
+import type { InstallFailureCapture, InstallLedgerResult } from "./install-outcome.ts";
+import type { HooksRouting } from "../../bridges/hooks/index.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { DisabledPluginRecord, ExtensionState } from "../../persistence/state-io.ts";
-import type { ExtensionAPI, ExtensionContext, SoftDepStatus } from "../../platform/pi-api.ts";
-import type { ContentReason, PluginFailedMessage, Reason } from "../../shared/notify.ts";
+import type { NotificationContext, SoftDepStatus, ToolInventory } from "../../platform/pi-api.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { RollbackPartial } from "../../transaction/phase-ledger.ts";
 import type { UnstageOutcome } from "../marketplace/shared.ts";
@@ -136,9 +139,9 @@ function assertRecordedStateLedgerInstalled(
  * shared `LedgerDegradationSignals` shape, kept under the enable-side name its
  * consumers already import (`reconcile/apply-outcomes.ts`, `reconcile/apply.ts`).
  *
- * The shape itself lives in `./shared.ts` because `install.ts` intersects it
- * too and this module imports `runInstallLedger` from `install.ts` -- declaring
- * it here would close a module cycle (IN-07 / D-98-01).
+ * The shape itself lives in `./shared.ts` because the install outcome owner
+ * intersects it too. Keeping the shared shape below both consumers preserves
+ * the one-way module graph (IN-07 / D-98-01).
  */
 export type EnableDegradationSignals = LedgerDegradationSignals;
 
@@ -181,9 +184,9 @@ export type EnableDisablePluginOutcome =
  * for the per-machine override file.
  */
 export interface EnableDisablePluginOptions {
-  readonly ctx: ExtensionContext;
+  readonly ctx: NotificationContext;
   /** Factory `pi` reference -- threaded into `notify()` for the single softDepStatus(pi) probe. */
-  readonly pi: ExtensionAPI;
+  readonly pi: ToolInventory;
   /** Project-scope cwd (ignored for user scope; see locationsFor). */
   readonly cwd: string;
   readonly marketplace: string;
@@ -204,11 +207,40 @@ export interface EnableDisablePluginOptions {
   readonly notifications?: EnableDisablePluginNotifications;
 }
 
+/** Owns only the semantic transaction steps composed by enable and disable. */
+export interface EnableDisableTransaction {
+  readonly cascadeUnstagePlugin: typeof cascadeUnstagePlugin;
+  readonly runInstallLedger: typeof runInstallLedger;
+  readonly selectConfigWriteTarget: typeof selectDeclaringConfigWriteTarget;
+  readonly withLockedStateTransaction: typeof withLockedStateTransaction;
+  readonly writeConfigEntries: typeof writeAdoptingConfigEntries;
+}
+
+const REAL_ENABLE_DISABLE_TRANSACTION: EnableDisableTransaction = {
+  cascadeUnstagePlugin,
+  runInstallLedger,
+  selectConfigWriteTarget: selectDeclaringConfigWriteTarget,
+  withLockedStateTransaction,
+  writeConfigEntries: writeAdoptingConfigEntries,
+};
+
+/** Hook route effects required by enable and disable after durable state changes. */
+export type EnableDisableHooksRouting = Pick<
+  HooksRouting,
+  "readAndCachePluginHooks" | "rebuildRoutingTables" | "removePluginConfigFromCache"
+>;
+
+interface EnableRouteEffect {
+  readonly hooksJsonPath: string;
+  readonly resolvedSource: ReturnType<typeof asAbsolutePluginRoot>;
+}
+
 /** Outcome sentinel populated by the withStateGuard closure. */
 type SetEnabledOutcome =
   | { kind: "idempotent" }
   | ({
       kind: "fresh";
+      addRoutesAfterSave?: EnableRouteEffect;
       version?: string;
     } & EnableDegradationSignals)
   | { kind: "invalid-config" }
@@ -241,6 +273,7 @@ type SetEnabledOutcome =
  * `StateLockHeldError` and every fresh enable would fail.
  */
 async function runEnableBranch(
+  transaction: EnableDisableTransaction,
   opts: EnableDisablePluginOptions,
   scope: Scope,
   locations: ScopedLocations,
@@ -278,7 +311,7 @@ async function runEnableBranch(
   // it rethrows (D-02 PI-14 bypass preserves the raw error).
   const capture: InstallFailureCapture = { rollbackPartials: [], version: undefined };
   try {
-    const result = await runInstallLedger(
+    const result = await transaction.runInstallLedger(
       state,
       locations,
       {
@@ -290,6 +323,10 @@ async function runEnableBranch(
         pinVersionOverride: recordedVersion,
         allowExistingRecord: true,
         partial,
+        // D-08-12: the enable branch reaches the ledger without going through
+        // `install-flow.ts`, so it is the second composition root that supplies
+        // the required removal port.
+        removalOps: createRemovalOps(),
       },
       capture,
     );
@@ -298,7 +335,7 @@ async function runEnableBranch(
     // ENBL-07 / FSTAT-07 / D-66-04 / SURF-05 / WARN-01: thread the LIVE
     // degradation signals out of the ledger. The enable branch runs the SAME
     // `runInstallLedger` over the SAME bridges as `install`, so all three
-    // signals `install.ts` composes off its own ledger context are carried on
+    // signals `install-flow.ts` composes off the ledger summary are carried on
     // the returned summary and all three are read here -- a row that named only
     // one of them would contradict the ledger that produced it just as surely
     // as an `(installed)` row over a `partially-available` resolution does.
@@ -313,6 +350,12 @@ async function runEnableBranch(
     const degradedKinds = Array.from(new Set(summary.frontmatterDegradations.map((d) => d.kind)));
     return {
       kind: "fresh",
+      ...(resolved.hooksConfigPath !== undefined && {
+        addRoutesAfterSave: {
+          hooksJsonPath: path.join(resolved.pluginRoot, resolved.hooksConfigPath),
+          resolvedSource: asAbsolutePluginRoot(resolved.pluginRoot),
+        },
+      }),
       version: recordedVersion,
       ...(resolved.state === "partially-available" && {
         unsupported: [...resolved.unsupported],
@@ -348,13 +391,23 @@ async function runEnableBranch(
  * error here, not a runtime corruption.
  */
 async function runDisableBranch(
+  transaction: EnableDisableTransaction,
   opts: EnableDisablePluginOptions,
-  scope: Scope,
   locations: ScopedLocations,
   installed: InstalledPluginRecord,
-): Promise<{ outcome: SetEnabledOutcome; saveShrunken: boolean; disabled?: DisabledPluginRecord }> {
+): Promise<{
+  outcome: SetEnabledOutcome;
+  saveShrunken: boolean;
+  removeRoutesAfterSave: boolean;
+  disabled?: DisabledPluginRecord;
+}> {
   const recordedVersion = installed.version;
-  const cascade = await cascadeUnstagePlugin(opts.plugin, opts.marketplace, locations, installed);
+  const cascade = await transaction.cascadeUnstagePlugin(
+    opts.plugin,
+    opts.marketplace,
+    locations,
+    installed,
+  );
   if (isFailedUnstageOutcome(cascade)) {
     // I3: cascade.dropped lists artifacts already unstaged before the throw.
     // Fold them into the record so state.json never claims artifacts gone
@@ -368,10 +421,6 @@ async function runDisableBranch(
     // parsed-config cache entry and rebuild the routing table in lockstep
     // so dispatch does not try to spawn a now-deleted handler. Mirrors
     // the uninstall.ts cache-mutation invariant.
-    if (cascade.dropped.hooks.length > 0) {
-      dropCachedHooks(scope, opts.marketplace, opts.plugin, "partial-cascade ", false);
-    }
-
     return {
       outcome: {
         kind: "disable-failed",
@@ -379,6 +428,7 @@ async function runDisableBranch(
         recordedVersion,
       },
       saveShrunken: true,
+      removeRoutesAfterSave: cascade.dropped.hooks.length > 0,
     };
   }
 
@@ -403,9 +453,12 @@ async function runDisableBranch(
   // drop the parsed-config cache entry and rebuild the routing table in
   // lockstep so subsequent dispatch events bypass the now-disabled plugin
   // without requiring /reload (NFR-2). Mirrors the uninstall.ts invariant.
-  dropCachedHooks(scope, opts.marketplace, opts.plugin, "", true);
-
-  return { outcome: { kind: "fresh", version: recordedVersion }, saveShrunken: false, disabled };
+  return {
+    outcome: { kind: "fresh", version: recordedVersion },
+    saveShrunken: false,
+    removeRoutesAfterSave: true,
+    disabled,
+  };
 }
 
 type FailedUnstageOutcome = UnstageOutcome & {
@@ -450,6 +503,7 @@ function primaryDisableFailureReason(cause: Error): ContentReason {
  * expected secondary symptom of the cascade throw, so it stays terse.
  */
 function dropCachedHooks(
+  hooksRouting: EnableDisableHooksRouting,
   scope: Scope,
   marketplace: string,
   plugin: string,
@@ -457,8 +511,8 @@ function dropCachedHooks(
   unexpected: boolean,
 ): void {
   try {
-    removePluginConfigFromCache(scope, marketplace, plugin);
-    rebuildRoutingTables();
+    hooksRouting.removePluginConfigFromCache(scope, marketplace, plugin);
+    hooksRouting.rebuildRoutingTables();
   } catch (cacheErr) {
     const consequence = unexpected
       ? " -- hooks for this plugin remain active in the running process until the disable's /reload rebuilds the routing table from state.json"
@@ -467,6 +521,59 @@ function dropCachedHooks(
       `disable: ${logPrefix}cache/routing mutation failed for ${plugin}@${marketplace}: ${errorMessage(cacheErr)}${consequence}`,
     );
   }
+}
+
+function dropCachedHooksAfterSave(
+  hooksRouting: EnableDisableHooksRouting,
+  opts: EnableDisablePluginOptions,
+  scope: Scope,
+  shouldRemove: boolean,
+  logPrefix: string,
+  unexpected: boolean,
+): void {
+  if (!shouldRemove) {
+    return;
+  }
+
+  dropCachedHooks(hooksRouting, scope, opts.marketplace, opts.plugin, logPrefix, unexpected);
+}
+
+/** Publish one freshly enabled hooks config after state and config are durable. */
+async function addCachedHooks(
+  hooksRouting: EnableDisableHooksRouting,
+  opts: EnableDisablePluginOptions,
+  scope: Scope,
+  effect: EnableRouteEffect,
+): Promise<void> {
+  try {
+    await hooksRouting.readAndCachePluginHooks({
+      cwd: opts.cwd,
+      hooksJsonPath: effect.hooksJsonPath,
+      logPrefix: "enable",
+      marketplace: opts.marketplace,
+      plugin: opts.plugin,
+      resolvedSource: effect.resolvedSource,
+      scope,
+    });
+    hooksRouting.rebuildRoutingTables();
+  } catch (cacheErr) {
+    hookDebugLog(
+      `enable: post-save cache/routing mutation failed for ${opts.plugin}@${opts.marketplace}: ${errorMessage(cacheErr)}`,
+    );
+  }
+}
+
+async function addCachedHooksAfterSave(
+  hooksRouting: EnableDisableHooksRouting,
+  opts: EnableDisablePluginOptions,
+  scope: Scope,
+  outcome: Extract<SetEnabledOutcome, { kind: "fresh" }>,
+): Promise<void> {
+  if (outcome.addRoutesAfterSave === undefined) {
+    return;
+  }
+
+  await addCachedHooks(hooksRouting, opts, scope, outcome.addRoutesAfterSave);
 }
 
 /**
@@ -516,11 +623,12 @@ type SelectedConfigWriteTarget = Extract<DeclaringConfigWriteTarget, { kind: "se
  * acknowledged trade-off pending a return-type widen.
  */
 async function writeEnabledFlagBack(
+  transaction: EnableDisableTransaction,
   write: EnabledFlagWriteTarget,
   selection: SelectedConfigWriteTarget,
   state: ExtensionState,
 ): Promise<void> {
-  await writeAdoptingConfigEntries({
+  await transaction.writeConfigEntries({
     current: selection.current,
     sibling: selection.sibling,
     state,
@@ -547,6 +655,7 @@ async function writeEnabledFlagBack(
  * classification as-is, exactly like the autoupdate analog.
  */
 async function resolveIdempotentOutcome(
+  transaction: EnableDisableTransaction,
   write: EnabledFlagWriteTarget,
   selection: SelectedConfigWriteTarget,
   state: ExtensionState,
@@ -558,7 +667,7 @@ async function resolveIdempotentOutcome(
     return { kind: "idempotent" };
   }
 
-  await writeEnabledFlagBack(write, selection, state);
+  await writeEnabledFlagBack(transaction, write, selection, state);
   return { kind: "fresh", version: installed.version };
 }
 
@@ -574,8 +683,8 @@ async function resolveIdempotentOutcome(
  * plugin that merely is not installed.
  */
 async function emitUnresolvedTarget(args: {
-  readonly ctx: ExtensionContext;
-  readonly pi: ExtensionAPI;
+  readonly ctx: NotificationContext;
+  readonly pi: ToolInventory;
   readonly cwd: string;
   readonly marketplace: string;
   readonly plugin: string;
@@ -642,14 +751,9 @@ async function emitUnresolvedTarget(args: {
  * and asserts the complete cascade, so a regression on an exercised path fails
  * there. An arm the matrix does not reach is not covered by either.
  */
-export function setPluginEnabled(
-  opts: EnableDisablePluginOptions & { notifications: { mode: "orchestrated" } },
-): Promise<EnableDisablePluginOutcome>;
-export function setPluginEnabled(
-  opts: EnableDisablePluginOptions,
-): Promise<EnableDisablePluginOutcome | undefined>;
-
-export async function setPluginEnabled(
+async function setPluginEnabledWithTransaction(
+  transaction: EnableDisableTransaction,
+  hooksRouting: EnableDisableHooksRouting,
   opts: EnableDisablePluginOptions,
 ): Promise<EnableDisablePluginOutcome | undefined> {
   const { ctx, pi, cwd, marketplace, plugin, enable } = opts;
@@ -725,7 +829,7 @@ export async function setPluginEnabled(
     // enable/disable branch dispatch, the I3 shrunken-record save, and the
     // UAT-05 config write-back; keeping that order visible here is what makes
     // the save-vs-throw discipline auditable.
-    outcome = await withLockedStateTransaction(
+    outcome = await transaction.withLockedStateTransaction(
       locations,
       async (tx): Promise<SetEnabledOutcome> => {
         // D-103-13: ONE selection, made before anything reads a config path, so
@@ -734,7 +838,7 @@ export async function setPluginEnabled(
         // the local config -- the WB-01 discipline that sibling reads happen
         // fresh under the lock the write also holds. UAT-05: the sibling path is
         // the scope's OTHER file, for the merged-view membership test only.
-        const selection = await selectDeclaringConfigWriteTarget({
+        const selection = await transaction.selectConfigWriteTarget({
           locations,
           local: opts.local,
           key: `${plugin}@${marketplace}`,
@@ -770,15 +874,24 @@ export async function setPluginEnabled(
         // disabled PARTIAL record is idempotent on `disable` and re-materializes
         // on `enable`, at parity with the canonical disabled record.
         if (isRecordedButDisabled(installed) === !enable) {
-          return resolveIdempotentOutcome(write, selection, state, installed);
+          return resolveIdempotentOutcome(transaction, write, selection, state, installed);
         }
 
         let branchOutcome: SetEnabledOutcome;
+        let removeRoutesAfterSave = false;
         if (enable) {
-          branchOutcome = await runEnableBranch(opts, scope, locations, state, installed);
+          branchOutcome = await runEnableBranch(
+            transaction,
+            opts,
+            scope,
+            locations,
+            state,
+            installed,
+          );
         } else {
-          const disableResult = await runDisableBranch(opts, scope, locations, installed);
+          const disableResult = await runDisableBranch(transaction, opts, locations, installed);
           branchOutcome = disableResult.outcome;
+          removeRoutesAfterSave = disableResult.removeRoutesAfterSave;
           // ENBL-02: on a clean disable, replace the map slot with the branded
           // `DisabledPluginRecord` the branch built via `toDisabledRecord`
           // (rather than mutating `installed` in place). The terminal
@@ -794,6 +907,15 @@ export async function setPluginEnabled(
           // post-guard branch that surfaces the failed row.
           if (disableResult.saveShrunken) {
             await tx.save();
+            dropCachedHooksAfterSave(
+              hooksRouting,
+              opts,
+              scope,
+              disableResult.removeRoutesAfterSave,
+              "partial-cascade ",
+              false,
+            );
+
             return branchOutcome;
           }
         }
@@ -811,10 +933,13 @@ export async function setPluginEnabled(
         // user-authored base declaration. The config is the reconcile's INPUT;
         // only standalone commands author declarations.
         if (!orchestrated) {
-          await writeEnabledFlagBack(write, selection, state);
+          await writeEnabledFlagBack(transaction, write, selection, state);
         }
 
         await tx.save();
+        await addCachedHooksAfterSave(hooksRouting, opts, scope, branchOutcome);
+        dropCachedHooksAfterSave(hooksRouting, opts, scope, removeRoutesAfterSave, "", true);
+
         return branchOutcome;
       },
     );
@@ -859,6 +984,40 @@ export async function setPluginEnabled(
   return undefined;
 }
 
+/** Bind enable/disable orchestration to one required semantic transaction owner. */
+export interface SetPluginEnabledOperation {
+  (
+    opts: EnableDisablePluginOptions & { notifications: { mode: "orchestrated" } },
+  ): Promise<EnableDisablePluginOutcome>;
+  (opts: EnableDisablePluginOptions): Promise<EnableDisablePluginOutcome | undefined>;
+}
+
+export function createSetPluginEnabled(
+  transaction: EnableDisableTransaction,
+  hooksRouting: EnableDisableHooksRouting,
+): SetPluginEnabledOperation {
+  function configuredSetPluginEnabled(
+    opts: EnableDisablePluginOptions & { notifications: { mode: "orchestrated" } },
+  ): Promise<EnableDisablePluginOutcome>;
+  function configuredSetPluginEnabled(
+    opts: EnableDisablePluginOptions,
+  ): Promise<EnableDisablePluginOutcome | undefined>;
+  function configuredSetPluginEnabled(
+    opts: EnableDisablePluginOptions,
+  ): Promise<EnableDisablePluginOutcome | undefined> {
+    return setPluginEnabledWithTransaction(transaction, hooksRouting, opts);
+  }
+
+  return configuredSetPluginEnabled;
+}
+
+/** Compose the real enable/disable transaction with one required routing owner. */
+export function createNodeSetPluginEnabled(
+  hooksRouting: EnableDisableHooksRouting,
+): SetPluginEnabledOperation {
+  return createSetPluginEnabled(REAL_ENABLE_DISABLE_TRANSACTION, hooksRouting);
+}
+
 /**
  * Closed-set reason for an orchestrated transaction
  * throw. The transaction body also runs loadConfig, writeConfigEntry /
@@ -885,8 +1044,8 @@ function classifyTransactionThrow(cause: Error): ContentReason {
  * row always carries a scope token (no ambiguous bareheader).
  */
 function emitResolutionFailure(args: {
-  ctx: ExtensionContext;
-  pi: ExtensionAPI;
+  ctx: NotificationContext;
+  pi: ToolInventory;
   marketplace: string;
   plugin: string;
   requestedScope: Scope | undefined;
@@ -937,8 +1096,8 @@ function emitResolutionFailure(args: {
  * keeps its own `Status` / `Msg` instantiation.
  */
 function emitEnableDisableFailedRow(args: {
-  readonly ctx: ExtensionContext;
-  readonly pi: ExtensionAPI;
+  readonly ctx: NotificationContext;
+  readonly pi: ToolInventory;
   readonly enable: boolean;
   readonly marketplace: string;
   readonly scope: Scope;
@@ -946,9 +1105,23 @@ function emitEnableDisableFailedRow(args: {
 }): void {
   const { ctx, pi, enable, marketplace, scope, row } = args;
   if (enable) {
-    notifyWithContext(ctx, pi, ENABLE_CONTEXT, [{ name: marketplace, scope, plugins: [row] }]);
+    notifyWithContext(
+      ctx,
+      pi,
+      ENABLE_CONTEXT,
+      [{ name: marketplace, scope, plugins: [row] }],
+      undefined,
+      "single",
+    );
   } else {
-    notifyWithContext(ctx, pi, DISABLE_CONTEXT, [{ name: marketplace, scope, plugins: [row] }]);
+    notifyWithContext(
+      ctx,
+      pi,
+      DISABLE_CONTEXT,
+      [{ name: marketplace, scope, plugins: [row] }],
+      undefined,
+      "single",
+    );
   }
 }
 
@@ -1080,8 +1253,8 @@ function outcomeToTypedResult(args: {
  * orchestrator's cognitive complexity within the project's lint budget.
  */
 function dispatchOutcome(args: {
-  readonly ctx: ExtensionContext;
-  readonly pi: ExtensionAPI;
+  readonly ctx: NotificationContext;
+  readonly pi: ToolInventory;
   readonly marketplace: string;
   readonly scope: Scope;
   readonly plugin: string;
@@ -1118,17 +1291,27 @@ function dispatchOutcome(args: {
     // or `partially-installed`, never `disabled`), so narrowing to the
     // ENABLE_CONTEXT row type is sound.
     const enableRow = row as EnableMsg;
-    notifyWithContext(ctx, pi, ENABLE_CONTEXT, [
-      { name: marketplace, scope, plugins: [enableRow] },
-    ]);
+    notifyWithContext(
+      ctx,
+      pi,
+      ENABLE_CONTEXT,
+      [{ name: marketplace, scope, plugins: [enableRow] }],
+      undefined,
+      "single",
+    );
   } else {
     // D-10: the `!enable` branch only ever yields a `DisableMsg` (its `fresh`
     // arm emits `disabled`, never `installed`), so narrowing to the
     // DISABLE_CONTEXT row type is sound.
     const disableRow = row as DisableMsg;
-    notifyWithContext(ctx, pi, DISABLE_CONTEXT, [
-      { name: marketplace, scope, plugins: [disableRow] },
-    ]);
+    notifyWithContext(
+      ctx,
+      pi,
+      DISABLE_CONTEXT,
+      [{ name: marketplace, scope, plugins: [disableRow] }],
+      undefined,
+      "single",
+    );
   }
 }
 
@@ -1142,7 +1325,7 @@ function dispatchOutcome(args: {
  * (NREG-01).
  *
  * SURF-05 / WARN-01: the row also carries the ledger's other two degradation
- * signals in `install.ts`'s emit order -- `{orphan rewake}` first, then the
+ * signals in `install-flow.ts`'s emit order -- `{orphan rewake}` first, then the
  * per-kind `{malformed skill}` / `{malformed command}` tokens, then the dropped
  * kinds -- so the brace stays byte-comparable across the two verbs that share
  * the ledger.
@@ -1153,7 +1336,7 @@ function dispatchOutcome(args: {
  * state was reached, the same stance the `install --partial` success row and
  * the still-degraded `plugin-backfilled` arm take. A MALFORMED component is a
  * different fact: it is a degrade the ledger just produced, not a pre-existing
- * shortfall, so it takes the same `warning` raise `install.ts::composeInstalledRow`
+ * shortfall, so it takes the same `warning` raise `install-flow.ts::composeInstalledRow`
  * applies (WARN-01 / D-86-03) on whichever verb materialized it.
  *
  * SEV-01 / D-98-02: a MISSING companion is the second, independent raise. The
@@ -1172,7 +1355,7 @@ function freshEnableRow(
     ...(outcome.orphanRewake === true ? (["orphan rewake"] as const) : []),
     ...malformed,
   ];
-  // SEV-01: the enable row derives the SAME dependency list `install.ts` derives
+  // SEV-01: the enable row derives the SAME dependency list `install-flow.ts` derives
   // for the same ledger run, so the `{requires pi-...}` markers fire on a
   // re-enable exactly as on an install.
   const dependencies = enableRowDependencies(outcome);

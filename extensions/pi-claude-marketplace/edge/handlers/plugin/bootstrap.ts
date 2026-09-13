@@ -12,7 +12,7 @@
 // is empty, so we parse `args` directly with `parseArgs` and assert
 // `positional.length === 0` ourselves.
 //
-// IL-2: all user-visible output flows through `shared/notify.ts`. The
+// IL-2: all user-visible output flows through `shared/notification-dispatch.ts`. The
 // success path is emitted by the composed orchestrators. `addMarketplace`
 // signals failures by THROWING (it does not notify), so the handler wraps
 // `bootstrapClaudePlugin` in a catch that routes a thrown failure through
@@ -24,7 +24,7 @@ import {
   BOOTSTRAP_MARKETPLACE_NAME,
 } from "../../../orchestrators/plugin/bootstrap.ts";
 import { errorMessage } from "../../../shared/errors.ts";
-import { notify, notifyUsageError } from "../../../shared/notify.ts";
+import { notify, notifyUsageError } from "../../../shared/notification-dispatch.ts";
 import { parseArgs } from "../../args.ts";
 
 import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
@@ -34,7 +34,7 @@ const USAGE = "Usage: /claude:plugin bootstrap";
 
 export function makeBootstrapHandler(
   pi: ExtensionAPI,
-  deps: EdgeDeps,
+  deps: Pick<EdgeDeps, "completionCache" | "gitOps">,
 ): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
   return async (args, ctx): Promise<void> => {
     let parsed;
@@ -64,6 +64,7 @@ export function makeBootstrapHandler(
         ctx,
         pi,
         cwd: ctx.cwd,
+        completionCache: deps.completionCache,
         gitOps: deps.gitOps,
       });
     } catch {

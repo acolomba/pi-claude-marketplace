@@ -6,10 +6,11 @@ import { describe, test } from "node:test";
 
 import {
   loadMarketplaceManifest,
-  MARKETPLACE_VALIDATOR,
   type MarketplaceManifest,
 } from "../../extensions/pi-claude-marketplace/domain/manifest.ts";
 import { InvalidMarketplaceManifestError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
+
+import type { TestContext } from "node:test";
 
 void ({ name: "marketplace", plugins: [] } satisfies MarketplaceManifest);
 void ({
@@ -23,21 +24,26 @@ void ({ name: "marketplace" } satisfies MarketplaceManifest);
 // @ts-expect-error The strict declaration is boolean when present.
 void ({ name: "marketplace", plugins: [], strict: "false" } satisfies MarketplaceManifest);
 
-describe("MARKETPLACE_VALIDATOR", () => {
-  test("accepts a minimal marketplace", () => {
-    // arrange
-    const marketplaceManifest = { name: "marketplace", plugins: [] };
-
-    // act
-    const isValid = MARKETPLACE_VALIDATOR.Check(marketplaceManifest);
-
-    // assert
-    assert.strictEqual(isValid, true);
+/**
+ * MM-1: the compiled validator is module-private, so a schema case reaches it
+ * the way production does -- by reading a manifest off disk. Each case owns the
+ * directory it writes into and removes it, and a fresh directory per case also
+ * keeps the D-01 per-path memo from serving one case's parse to another.
+ */
+async function manifestFileWith(t: TestContext, manifestBody: string): Promise<string> {
+  const directory = await mkdtemp(path.join(tmpdir(), "marketplace-manifest-"));
+  t.after(async () => {
+    await rm(directory, { force: true, recursive: true });
   });
+  const manifestPath = path.join(directory, "marketplace.json");
+  await writeFile(manifestPath, manifestBody, "utf8");
+  return manifestPath;
+}
 
-  test("accepts the complete marketplace shape and unknown fields", () => {
-    // arrange
-    const marketplaceManifest = {
+describe("marketplace manifest schema", () => {
+  for (const marketplaceManifest of [
+    { name: "marketplace", plugins: [] },
+    {
       name: "marketplace",
       plugins: [
         {
@@ -50,53 +56,54 @@ describe("MARKETPLACE_VALIDATOR", () => {
       strict: true,
       owner: { name: "Owner" },
       vendorField: { enabled: true },
-    };
-
-    // act
-    const isValid = MARKETPLACE_VALIDATOR.Check(marketplaceManifest);
-
-    // assert
-    assert.strictEqual(isValid, true);
-  });
-
-  test("accepts non-strict marketplaces", () => {
-    // arrange
-    const marketplaceManifest = {
-      name: "marketplace",
-      plugins: [],
-      strict: false,
-    };
-
-    // act
-    const isValid = MARKETPLACE_VALIDATOR.Check(marketplaceManifest);
-
-    // assert
-    assert.strictEqual(isValid, true);
-  });
-
-  for (const marketplaceManifest of [
-    null,
-    [],
-    { plugins: [] },
-    { name: "marketplace" },
-    { name: 42, plugins: [] },
-    { name: "marketplace", plugins: null },
-    { name: "marketplace", plugins: {} },
-    { name: "marketplace", plugins: [{ name: "plugin" }] },
-    { name: "marketplace", plugins: [], strict: "false" },
-    { name: "marketplace", plugins: [], owner: null },
-    { name: "marketplace", plugins: [], owner: {} },
-    { name: "marketplace", plugins: [], owner: { name: 42 } },
+    },
+    { name: "marketplace", plugins: [], strict: false },
   ]) {
-    test(`rejects ${JSON.stringify(marketplaceManifest)}`, () => {
+    test(`accepts ${JSON.stringify(marketplaceManifest)}`, async (t) => {
       // arrange
-      const invalidMarketplaceManifest = marketplaceManifest;
+      const manifestPath = await manifestFileWith(t, JSON.stringify(marketplaceManifest));
 
       // act
-      const isValid = MARKETPLACE_VALIDATOR.Check(invalidMarketplaceManifest);
+      const loadedMarketplaceManifest = await loadMarketplaceManifest(manifestPath);
 
       // assert
-      assert.strictEqual(isValid, false);
+      assert.deepStrictEqual(loadedMarketplaceManifest, marketplaceManifest);
+    });
+  }
+
+  // Each row pairs a rejected manifest with the exact defect the loader reports
+  // for it, so a schema arm that stops firing is named rather than merely
+  // counted.
+  for (const [marketplaceManifest, schemaDefect] of [
+    [null, "<root>: must be object"],
+    [[], "<root>: must be object"],
+    [{ plugins: [] }, "<root>: must have required properties name"],
+    [{ name: "marketplace" }, "<root>: must have required properties plugins"],
+    [{ name: 42, plugins: [] }, "/name: must be string"],
+    [{ name: "marketplace", plugins: null }, "/plugins: must be array"],
+    [{ name: "marketplace", plugins: {} }, "/plugins: must be array"],
+    [
+      { name: "marketplace", plugins: [{ name: "plugin" }] },
+      "/plugins/0: must have required properties source",
+    ],
+    [{ name: "marketplace", plugins: [], strict: "false" }, "/strict: must be boolean"],
+    [{ name: "marketplace", plugins: [], owner: null }, "/owner: must be object"],
+    [{ name: "marketplace", plugins: [], owner: {} }, "/owner: must have required properties name"],
+    [{ name: "marketplace", plugins: [], owner: { name: 42 } }, "/owner/name: must be string"],
+  ] as const) {
+    test(`rejects ${JSON.stringify(marketplaceManifest)}`, async (t) => {
+      // arrange
+      const manifestPath = await manifestFileWith(t, JSON.stringify(marketplaceManifest));
+
+      // act & assert
+      await assert.rejects(
+        () => loadMarketplaceManifest(manifestPath),
+        (error: unknown) => {
+          assert.ok(error instanceof InvalidMarketplaceManifestError);
+          assert.strictEqual(error.message, `marketplace.json schema invalid: ${schemaDefect}`);
+          return true;
+        },
+      );
     });
   }
 });

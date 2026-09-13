@@ -1,0 +1,1775 @@
+{
+  "version": 1,
+  "inventoryMode": "locked-corpus",
+  "plan": "01-16",
+  "files": [
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md",
+      "category": "adversarial",
+      "assignedPlan": "01-16",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-001",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-002",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-003",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-004",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-005",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-006",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-007",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-008",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-009",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-010",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-011",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-012",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-013",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-014",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-015",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-016",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-017",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-018",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-019",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-020",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-021",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-022",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-023",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-024",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-025",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-026",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-027",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-028",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-029",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-030",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-031",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-032",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-033",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-034",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-035"
+      ],
+      "reviewStatus": "complete",
+      "outcome": "live findings"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md",
+      "category": "adversarial",
+      "assignedPlan": "01-16",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-001",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-002",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-003",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-004",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-005",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-006",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-007",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-008",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-009",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-010",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-011",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-012",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-013",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-014",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-015",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-016",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-017",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-018",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-019",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-020",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-021",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-022",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-023",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-024",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-025",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-026",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-027",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-028",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-029",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-030",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-031",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-032"
+      ],
+      "reviewStatus": "complete",
+      "outcome": "live findings"
+    }
+  ],
+  "sourceClaims": [
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-001",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md",
+      "label": "DC-001",
+      "findingId": "DC-001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-002",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md",
+      "label": "DC-002",
+      "findingId": "DC-002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-003",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md",
+      "label": "DC-003",
+      "findingId": "DC-003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-004",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md",
+      "label": "DC-004",
+      "findingId": "DC-004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-005",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md",
+      "label": "DC-005",
+      "findingId": "DC-005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-006",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md",
+      "label": "DC-006",
+      "findingId": "DC-006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-007",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md",
+      "label": "DC-007",
+      "findingId": "DC-007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-008",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md",
+      "label": "DC-008",
+      "findingId": "DC-008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-009",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md",
+      "label": "DC-009",
+      "findingId": "DC-009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-010",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md",
+      "label": "DC-010",
+      "findingId": "DC-010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-011",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md",
+      "label": "DC-011",
+      "findingId": "DC-011"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-012",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md",
+      "label": "DC-012",
+      "findingId": "DC-012"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-013",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md",
+      "label": "DC-013",
+      "findingId": "DC-013"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-014",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md",
+      "label": "DC-014",
+      "findingId": "DC-014"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-015",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md",
+      "label": "DC-015",
+      "findingId": "DC-015"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-016",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md",
+      "label": "DC-016",
+      "findingId": "DC-016"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-017",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md",
+      "label": "DC-017",
+      "findingId": "DC-017"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-018",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md",
+      "label": "DC-018",
+      "findingId": "DC-018"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-019",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md",
+      "label": "DC-019",
+      "findingId": "DC-019"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-020",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md",
+      "label": "DC-020",
+      "findingId": "DC-020"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-021",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md",
+      "label": "DC-021",
+      "findingId": "DC-021"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-022",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md",
+      "label": "DC-022",
+      "findingId": "DC-022"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-023",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md",
+      "label": "DC-023",
+      "findingId": "DC-023"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-024",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md",
+      "label": "DC-024",
+      "findingId": "DC-024"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-025",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md",
+      "label": "DC-025",
+      "findingId": "DC-025"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-026",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md",
+      "label": "DC-026",
+      "findingId": "DC-026"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-027",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md",
+      "label": "DC-027",
+      "findingId": "DC-027"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-028",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md",
+      "label": "DC-028",
+      "findingId": "DC-028"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-029",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md",
+      "label": "DC-029",
+      "findingId": "DC-029"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-030",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md",
+      "label": "DC-030",
+      "findingId": "DC-030"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-031",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md",
+      "label": "DC-031",
+      "findingId": "DC-031"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-032",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md",
+      "label": "DC-032",
+      "findingId": "DC-032"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-033",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md",
+      "label": "DC-033",
+      "findingId": "DC-033"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-034",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md",
+      "label": "DC-034",
+      "findingId": "DC-034"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-035",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md",
+      "label": "DC-035",
+      "findingId": "DC-035"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-001",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md",
+      "label": "DCORE-001",
+      "findingId": "DCORE-001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-002",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md",
+      "label": "DCORE-002",
+      "findingId": "DCORE-002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-003",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md",
+      "label": "DCORE-003",
+      "findingId": "DCORE-003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-004",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md",
+      "label": "DCORE-004",
+      "findingId": "DCORE-004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-005",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md",
+      "label": "DCORE-005",
+      "findingId": "DCORE-005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-006",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md",
+      "label": "DCORE-006",
+      "findingId": "DCORE-006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-007",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md",
+      "label": "DCORE-007",
+      "findingId": "DCORE-007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-008",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md",
+      "label": "DCORE-008",
+      "findingId": "DCORE-008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-009",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md",
+      "label": "DCORE-009",
+      "findingId": "DCORE-009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-010",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md",
+      "label": "DCORE-010",
+      "findingId": "DCORE-010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-011",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md",
+      "label": "DCORE-011",
+      "findingId": "DCORE-011"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-012",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md",
+      "label": "DCORE-012",
+      "findingId": "DCORE-012"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-013",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md",
+      "label": "DCORE-013",
+      "findingId": "DCORE-013"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-014",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md",
+      "label": "DCORE-014",
+      "findingId": "DCORE-014"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-015",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md",
+      "label": "DCORE-015",
+      "findingId": "DCORE-015"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-016",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md",
+      "label": "DCORE-016",
+      "findingId": "DCORE-016"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-017",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md",
+      "label": "DCORE-017",
+      "findingId": "DCORE-017"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-018",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md",
+      "label": "DCORE-018",
+      "findingId": "DCORE-018"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-019",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md",
+      "label": "DCORE-019",
+      "findingId": "DCORE-019"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-020",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md",
+      "label": "DCORE-020",
+      "findingId": "DCORE-020"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-021",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md",
+      "label": "DCORE-021",
+      "findingId": "DCORE-021"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-022",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md",
+      "label": "DCORE-022",
+      "findingId": "DCORE-022"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-023",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md",
+      "label": "DCORE-023",
+      "findingId": "DCORE-023"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-024",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md",
+      "label": "DCORE-024",
+      "findingId": "DCORE-024"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-025",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md",
+      "label": "DCORE-025",
+      "findingId": "DCORE-025"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-026",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md",
+      "label": "DCORE-026",
+      "findingId": "DCORE-026"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-027",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md",
+      "label": "DCORE-027",
+      "findingId": "DCORE-027"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-028",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md",
+      "label": "DCORE-028",
+      "findingId": "DCORE-028"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-029",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md",
+      "label": "DCORE-029",
+      "findingId": "DCORE-029"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-030",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md",
+      "label": "DCORE-030",
+      "findingId": "DCORE-030"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-031",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md",
+      "label": "DCORE-031",
+      "findingId": "DCORE-031"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-032",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-core.md",
+      "label": "DCORE-032",
+      "findingId": "DCORE-032"
+    }
+  ],
+  "findings": [
+    {
+      "id": "DC-001",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-001"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/domain/components/hook-tool-names.ts" }
+      ],
+      "testRefs": [{ "path": "tests/domain/components/hook-tool-names.test.ts" }],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node isolated mapPiToClaudeToolName prototype-key probe",
+        "exitCode": 1,
+        "observed": "constructor and toString returned functions and __proto__ returned an object, violating the declared string result."
+      },
+      "rationale": "The unguarded plain-object lookup and unsafe assertion remain live and author-controlled custom names reach it.",
+      "destination": "Guard the lookup with Object.hasOwn and add prototype-key cases in Phase 2."
+    },
+    {
+      "id": "DC-002",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-002"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/domain/components/hooks/matcher.ts" },
+        { "path": "extensions/pi-claude-marketplace/domain/components/hook-tool-names.ts" }
+      ],
+      "testRefs": [{ "path": "tests/domain/components/hooks/matcher.test.ts" }],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node isolated parseMatcher prototype-key probe",
+        "exitCode": 1,
+        "observed": "Current matcher still indexes the exported plain object by an open token, so Object.prototype names resolve as mapped values rather than unmapped tokens."
+      },
+      "rationale": "The adjacent same-root production defect remains present after the hook module split.",
+      "destination": "Centralize a guarded Claude-to-Pi mapping function in Phase 2."
+    },
+    {
+      "id": "DC-003",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-003"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/components/plugin.ts" }],
+      "testRefs": [{ "path": "tests/domain/components/plugin.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current schema-owner inspection",
+        "observed": "PLUGIN_MANIFEST_VALIDATOR remains tested only through boolean samples; no Type() whole-schema pin exists, while optional unknown fields remain deletion-insensitive."
+      },
+      "rationale": "The manifest property-list contract remains unowned even though the entry schema is pinned whole.",
+      "destination": "Pin the validator Type() result to an independent complete literal in Phase 2."
+    },
+    {
+      "id": "DC-004",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-004"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/components/hooks.ts" }],
+      "testRefs": [{ "path": "tests/domain/components/hooks.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current key-fixture census",
+        "observed": "The only asserted ifPredicates key remains PostToolUse|0|0; group/handler index swapping and raw-versus-filtered index arithmetic are not distinguished."
+      },
+      "rationale": "Three distinct indices are still required to pin this producer-consumer contract.",
+      "destination": "Add a multi-group filtered-handler discriminator in Phase 2."
+    },
+    {
+      "id": "DC-005",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-005"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/components/mcp.ts" }],
+      "testRefs": [{ "path": "tests/domain/components/mcp.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current test and consumer method census",
+        "observed": "The reject loop still compares one constant ParseError identity and never calls the Check or Errors methods used by resolver."
+      },
+      "rationale": "The rejection reason and production-used validator methods remain unowned.",
+      "destination": "Assert structured Errors output and direct Check behavior in Phase 3."
+    },
+    {
+      "id": "DC-006",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-006"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/domain/components/hook-if-targets.ts" }
+      ],
+      "testRefs": [{ "path": "tests/domain/components/hook-if-targets.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current reference inspection",
+        "observed": "The header still says architecture-test introspection, while the only Object.keys pin remains the paired unit test."
+      },
+      "rationale": "The gate exists but its documented location is still false.",
+      "destination": "Correct the comment in Phase 3."
+    },
+    {
+      "id": "DC-007",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-007"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/domain/components/hook-events.ts" }
+      ],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "The claim concerns an unobservable private-tuple documentation statement."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph consumer inspection",
+        "observed": "DISPATCHABLE_EVENTS remains private and feeds only a set and union, yet its comment still claims downstream deterministic registration order."
+      },
+      "rationale": "No downstream consumer can observe the tuple order through these uses.",
+      "destination": "Remove or restate the sentence as a readability convention in Phase 3."
+    },
+    {
+      "id": "DC-008",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-008"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/domain/components/hook-events.ts" }
+      ],
+      "testRefs": [{ "path": "tests/domain/components/hook-events.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current type and tuple equivalence inspection",
+        "observed": "The false arm remains unreachable for legal BucketAEvent input and reject cases still force invalid strings through casts."
+      },
+      "rationale": "Widening the guard input to string or deleting compiler-forced cases remains a product/test-design choice.",
+      "destination": "Resolve the defensive-guard signature decision before implementation."
+    },
+    {
+      "id": "DC-009",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-009"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/components/plugin.ts" }],
+      "testRefs": [{ "path": "tests/domain/components/plugin.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current comment and type-evidence comparison",
+        "observed": "The header still falsely describes Type.Optional as required T|undefined although absent fields satisfy PluginEntry."
+      },
+      "rationale": "The downstream undefined advice is sound but its stated TypeBox premise remains wrong.",
+      "destination": "Correct the library-fact comment in Phase 3."
+    },
+    {
+      "id": "DC-010",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-010"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/components/plugin.ts" }],
+      "testRefs": [{ "path": "tests/domain/components/plugin.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current runtime-schema and Static type comparison",
+        "observed": "Unknown vendorField remains runtime-accepted while PluginEntry exposes no index signature or documented open-shape divergence."
+      },
+      "rationale": "The validator narrowing remains less expressive than the accepted runtime object.",
+      "destination": "Document or explicitly model the open shape in Phase 3."
+    },
+    {
+      "id": "DC-011",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-011"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/components/hooks.ts" }],
+      "testRefs": [{ "path": "tests/domain/components/hooks.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current export/import census",
+        "observed": "The aggregate module still re-exports matcher/schema runtime and type symbols and declares four public types without binding or type-contract cases in its owner."
+      },
+      "rationale": "Production imports through the barrel, so its public re-export contract remains unowned.",
+      "destination": "Add runtime binding and compile-time contract evidence in Phase 3."
+    },
+    {
+      "id": "DC-012",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-012"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "N/A", "reason": "The claim concerns test naming." }],
+      "testRefs": [{ "path": "tests/domain/components/hooks.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current local-name census",
+        "observed": "Multiple cases still name the public parse result result rather than parsedHooks or another production role."
+      },
+      "rationale": "The owner remains the directory's naming-convention outlier.",
+      "destination": "Rename values by role in Phase 3."
+    },
+    {
+      "id": "DC-013",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-013"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "N/A", "reason": "The claim concerns test-support placement." }],
+      "testRefs": [
+        { "path": "tests/domain/components/hooks.test.ts" },
+        { "path": "tests/fixtures/hookify-hooks.json" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current fixture path inspection",
+        "observed": "FIXTURE_DIR still names the test directory and four paths still traverse to the shared tests/fixtures area."
+      },
+      "rationale": "The fixtures remain outside their concern and the constant remains misleading.",
+      "destination": "Move fixtures beside the owner and rename the path constant in Phase 3."
+    },
+    {
+      "id": "DC-014",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-014"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/components/hooks.ts" }],
+      "testRefs": [{ "path": "tests/domain/components/hooks.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current callback observation inspection",
+        "observed": "The compileIf recorder still observes only rawIf, event, and cwd, leaving homedir and projectRoot changes undetected."
+      },
+      "rationale": "The complete collaborator argument is part of the public injected-callback promise.",
+      "destination": "Assert the whole context in Phase 3."
+    },
+    {
+      "id": "DC-015",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-015"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "N/A", "reason": "The claim concerns test case structure." }],
+      "testRefs": [{ "path": "tests/domain/components/hooks.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current AAA marker inspection",
+        "observed": "Data-driven cases still contain arrange markers with no case-local arrangement."
+      },
+      "rationale": "Empty phases reduce rather than improve case readability.",
+      "destination": "Remove or populate the markers in Phase 3."
+    },
+    {
+      "id": "DC-016",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-016"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/components/hooks.ts" }],
+      "testRefs": [{ "path": "tests/domain/components/hooks.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current wrapper-input census",
+        "observed": "Own hooks values that are null or arrays remain absent, so the third isPluginWrapper arm and its distinct downstream outcomes remain unowned."
+      },
+      "rationale": "Both surprising direct-config outcomes are executable and need whole-result expectations.",
+      "destination": "Add null and array wrapper rows in Phase 3."
+    },
+    {
+      "id": "DC-017",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-017"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/domain/components/hook-tool-names.ts" }
+      ],
+      "testRefs": [{ "path": "tests/domain/components/hook-tool-names.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current test overlap and subject inspection",
+        "observed": "Seven direct inverse lookup rows remain subsumed by the whole-object assertion, and passthrough rows still reimplement a lookup instead of calling a production subject."
+      },
+      "rationale": "The redundant rows add no mutation discrimination and the fabricated passthrough encodes the opposite consumer contract.",
+      "destination": "Delete redundancy and test a guarded exported mapper in Phase 3."
+    },
+    {
+      "id": "DC-018",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-018"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "N/A", "reason": "The claim concerns owner-test organization." }],
+      "testRefs": [{ "path": "tests/domain/components/hooks.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current describe census",
+        "observed": "The file remains flat despite owning multiple exported entry points, unlike sibling owners."
+      },
+      "rationale": "Public-entrypoint grouping remains inconsistent.",
+      "destination": "Group one level by exported entrypoint in Phase 3."
+    },
+    {
+      "id": "DC-019",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-019"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/components/hooks.ts" }],
+      "testRefs": [{ "path": "tests/domain/components/hooks.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current case responsibility inspection",
+        "observed": "One parse case still owns validation, partitioning, callback behavior, and the sole ifPredicates key assertion."
+      },
+      "rationale": "The multi-behavior case obscures which promise failed and carries the weak zero-index fixture.",
+      "destination": "Split by public behavior while retaining strengthened key evidence in Phase 3."
+    },
+    {
+      "id": "DC-020",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-020"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/components/hooks.ts" }],
+      "testRefs": [{ "path": "tests/domain/components/hooks.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current error-boundary ownership inspection",
+        "observed": "The JSON.parse suffix remains engine-owned and an exact full-message assertion would be Node-version fragile."
+      },
+      "rationale": "The historical partial-regex complaint remains overstated; the current stable project-owned portion is sufficient.",
+      "destination": "Retain only as an informational evidence note."
+    },
+    {
+      "id": "DC-021",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-021"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/domain/components/hook-events.ts" }
+      ],
+      "testRefs": [{ "path": "tests/domain/components/hook-events.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current assertion dependency inspection",
+        "observed": "The filtered tool-event case remains fully determined by adjacent whole-literal tuple cases and cannot uniquely fail."
+      },
+      "rationale": "Replacing its expected set would not make the logically redundant case discriminating.",
+      "destination": "Delete the tautological case in Phase 3."
+    },
+    {
+      "id": "DC-022",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-022"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/domain/components/hook-if-targets.ts" }
+      ],
+      "testRefs": [{ "path": "tests/domain/components/hook-if-targets.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current assertion semantics",
+        "observed": "The uniqueness assertion remains vacuous because Object.keys of one object cannot contain duplicate keys."
+      },
+      "rationale": "No implementation mutation can make this assertion uniquely fail.",
+      "destination": "Delete the assertion in Phase 3."
+    },
+    {
+      "id": "DC-023",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-023"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/domain/components/hooks.ts" },
+        { "path": "extensions/pi-claude-marketplace/shared/debug-log.ts" }
+      ],
+      "testRefs": [{ "path": "tests/domain/components/hooks.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph dependency and environment-read inspection",
+        "observed": "parseHooksConfig still calls the imported debug singleton and debug-log still reads process.env inside the function; owner failures do not neutralize console output."
+      },
+      "rationale": "This is a repo-wide seam decision with a concrete hermeticity symptom, not a local isolated edit.",
+      "destination": "Include in the shared debug/environment seam decision."
+    },
+    {
+      "id": "DC-024",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-024"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/domain/components/mcp.ts" },
+        { "path": "extensions/pi-claude-marketplace/domain/components/plugin.ts" }
+      ],
+      "testRefs": [{ "path": "N/A", "reason": "The claim concerns per-export documentation." }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current JSDoc comparison",
+        "observed": "MCP schema/validator documentation and the analogous plugin validator wording remain inconsistent."
+      },
+      "rationale": "The low-value documentation asymmetry remains current.",
+      "destination": "Reconcile both modules together in Phase 3 or explicitly defer."
+    },
+    {
+      "id": "DC-025",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-025"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/components/hooks.ts" }],
+      "testRefs": [{ "path": "tests/domain/components/hooks.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current branch census",
+        "observed": "Non-tool compileIf observation and multi-event/multi-group side-map traversal remain absent from the owner."
+      },
+      "rationale": "The report's reachable-branch census remains materially current.",
+      "destination": "Cover executable public outcomes in Phase 3."
+    },
+    {
+      "id": "DC-026",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-026"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/domain/components/hook-events.ts" },
+        { "path": "extensions/pi-claude-marketplace/domain/components/hook-tool-names.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/domain/components/hook-events.test.ts" },
+        { "path": "tests/domain/components/hook-tool-names.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current compiler-constraint inspection",
+        "observed": "The total records and satisfies constraints still enforce the compiler-only branches identified by the report."
+      },
+      "rationale": "These branches are compile-time evidence and should not be forced into runtime cases.",
+      "destination": "Preserve as D-116-01a evidence-only closure."
+    },
+    {
+      "id": "DC-027",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-027"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/domain/components/hook-if-targets.ts" },
+        { "path": "extensions/pi-claude-marketplace/domain/components/hook-events.ts" },
+        { "path": "extensions/pi-claude-marketplace/domain/components/plugin.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/domain/components/hook-if-targets.test.ts" },
+        { "path": "tests/domain/components/hook-events.test.ts" },
+        { "path": "tests/domain/components/plugin.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current whole-value assertion inspection",
+        "observed": "The report's positive whole-table and entry-schema observations remain true outside the separately recorded redundant or unreachable cases."
+      },
+      "rationale": "Positive clean evidence is retained without erasing the live exceptions.",
+      "destination": "Evidence-only closure for the independently pinned contracts."
+    },
+    {
+      "id": "DC-028",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-028"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/domain/components/hooks.ts" },
+        { "path": "extensions/pi-claude-marketplace/domain/components/mcp.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/domain/components/hooks.test.ts" },
+        { "path": "tests/domain/components/mcp.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current implementation and whole-result census",
+        "observed": "Projection/partition behavior remains strongly whole-value asserted and no additional production defect was found beyond the separately linked claims."
+      },
+      "rationale": "The report's bounded clean observations remain current and traceable.",
+      "destination": "Evidence-only closure."
+    },
+    {
+      "id": "DC-029",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-029"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/domain/components/hook-tool-names.ts" },
+        { "path": "extensions/pi-claude-marketplace/domain/components/hooks/matcher.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/domain/components/hook-tool-names.test.ts" },
+        { "path": "tests/domain/components/hooks/matcher.test.ts" }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node isolated prototype-key probes for both lookup directions",
+        "exitCode": 1,
+        "observed": "Both open-string lookups still admit Object.prototype members; safe literal-precheck and Object.hasOwn patterns remain available nearby."
+      },
+      "rationale": "The cross-cutting unguarded lookup defect class is positively reproduced at its two named sites.",
+      "destination": "Fix both sites and scan other open-key tables in Phase 2."
+    },
+    {
+      "id": "DC-030",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-030"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/domain/components/plugin.ts" },
+        { "path": "extensions/pi-claude-marketplace/domain/components/mcp.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/domain/components/plugin.test.ts" },
+        { "path": "tests/domain/components/mcp.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current schema-pin comparison",
+        "observed": "Exported schemas remain pinned whole while the private manifest schema remains sampled only through booleans."
+      },
+      "rationale": "The report's whole-schema testing recommendation remains applicable and cheaper than duplicating every library error.",
+      "destination": "Propagate whole-schema ownership in Phase 3."
+    },
+    {
+      "id": "DC-031",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-031"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/domain/components/hook-if-targets.ts" },
+        { "path": "extensions/pi-claude-marketplace/domain/components/plugin.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/domain/components/hook-if-targets.test.ts" },
+        { "path": "tests/domain/components/plugin.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current comment-to-gate comparison",
+        "observed": "Both the mislocated architecture-gate statement and false TypeBox statement remain in current comments."
+      },
+      "rationale": "The proposed comment-truth audit has two surviving local premises.",
+      "destination": "Include these in the Phase 3 comment-truth sweep."
+    },
+    {
+      "id": "DC-032",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-032"
+      ],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/domain/components/hooks/schema.ts" }
+      ],
+      "testRefs": [{ "path": "tests/architecture/no-hooks-strict-additional-properties.test.ts" }],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test tests/architecture/no-hooks-strict-additional-properties.test.ts",
+        "exitCode": 0,
+        "observed": "After the Phase 108 module split, the current gate and paired schema owner execute successfully against the replacement schema.ts location."
+      },
+      "rationale": "The historical wrong-file premise referred to the pre-split aggregate module; current replacement-plus-rerun evidence shows the gate now reaches the schema owner.",
+      "destination": "Close the historical gate-location claim only; other split documentation claims remain separate."
+    },
+    {
+      "id": "DC-033",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-033"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/domain/components/hook-events.ts" }
+      ],
+      "testRefs": [{ "path": "tests/domain/components/hook-events.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current signature and cast inspection",
+        "observed": "The defensive false arm remains compiler-unreachable under BucketAEvent and current tests still use casts to reach it."
+      },
+      "rationale": "This remains the report's unreachable-branch decision in a lower-cost form.",
+      "destination": "Decide signature widening versus case deletion."
+    },
+    {
+      "id": "DC-034",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-034"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/components/hooks.ts" }],
+      "testRefs": [{ "path": "tests/domain/components/hooks.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current sibling comparison",
+        "observed": "The hooks owner remains the outlier for grouping, type pins, role naming, and concern-local fixtures."
+      },
+      "rationale": "The dominant sibling-drift claim retains multiple independent current examples.",
+      "destination": "Normalize the owner in Phase 3."
+    },
+    {
+      "id": "DC-035",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-components.md#DC-035"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/domain/components/hook-tool-names.ts" },
+        { "path": "extensions/pi-claude-marketplace/domain/components/plugin.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/domain/components/hook-tool-names.test.ts" },
+        { "path": "tests/domain/components/plugin.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current clean-list revalidation",
+        "observed": "Multiple files historically called clean still carry confirmed live findings, including a reproduced shipping defect."
+      },
+      "rationale": "The corpus-wide warning that clean verdicts are less reliable remains supported.",
+      "destination": "Retain as evidence protocol guidance."
+    },
+    {
+      "id": "DCORE-001",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-001"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/domain/auth-registry.ts" },
+        { "path": "extensions/pi-claude-marketplace/orchestrators/auth-host.ts" }
+      ],
+      "testRefs": [{ "path": "tests/domain/auth-registry.test.ts" }],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "isolated copy: widen GitHub host equality to endsWith, then node --test auth-registry owner",
+        "exitCode": 0,
+        "observed": "The focused owner passed, proving suffix lookalikes remain undiscriminated while the consumer binds provider credentials by this result."
+      },
+      "rationale": "Exact host equality is a documented security invariant with no hostile suffix or subdomain row.",
+      "destination": "Add hostile neighbors and provider disjointness cases in Phase 2."
+    },
+    {
+      "id": "DCORE-002",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-002"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/auth-registry.ts" }],
+      "testRefs": [{ "path": "tests/domain/auth-registry.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current descriptor assertion inspection",
+        "observed": "Both provider cases still compare hand-picked projections and do not pin the descriptor key sets."
+      },
+      "rationale": "A newly added provider field remains invisible to the owner.",
+      "destination": "Add exact sorted key-set assertions in Phase 3."
+    },
+    {
+      "id": "DCORE-003",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-003"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "N/A", "reason": "The claim concerns test naming." }],
+      "testRefs": [{ "path": "tests/domain/auth-registry.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current data-loop inspection",
+        "observed": "The remoteHost alias remains a no-op rename of the row's host value."
+      },
+      "rationale": "The alias adds no production-role meaning.",
+      "destination": "Use host directly in Phase 3."
+    },
+    {
+      "id": "DCORE-004",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-004"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/name.ts" }],
+      "testRefs": [{ "path": "tests/domain/name.test.ts" }],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "isolated copy: start the control-character loop at index 1, then node --test name owner",
+        "exitCode": 0,
+        "observed": "All owner cases passed because every control character remains mid-string."
+      },
+      "rationale": "Plugin-tree names can place control bytes at either boundary, so both loop bounds remain unpinned.",
+      "destination": "Add leading and trailing control-character neighbors in Phase 2."
+    },
+    {
+      "id": "DCORE-005",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-005"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/name.ts" }],
+      "testRefs": [{ "path": "tests/domain/name.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current exported-signature evidence census",
+        "observed": "Runtime misuse evidence exists, but the four exported signatures still lack dedicated positive/negative compile-time pins."
+      },
+      "rationale": "This is lower-value sibling drift, not the loop-bound correctness defect.",
+      "destination": "Add focused type evidence in Phase 3."
+    },
+    {
+      "id": "DCORE-006",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-006"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/source.ts" }],
+      "testRefs": [{ "path": "tests/domain/source.test.ts" }],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "isolated copy: remove planned.ref equality from samePlannedSource, then node --test source owner",
+        "exitCode": 0,
+        "observed": "The owner passed; its v2 hash row parses the suffix as repository text instead of a ref."
+      },
+      "rationale": "The named GitHub-ref case remains malformed and does not decide the ref conjunct.",
+      "destination": "Use at-ref syntax and add an equal-ref control in Phase 2."
+    },
+    {
+      "id": "DCORE-007",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-007"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/source.ts" }],
+      "testRefs": [{ "path": "tests/domain/source.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current planned-input parse inspection",
+        "observed": "The git-subdir and npm comparison rows still pass strings that parse to other kinds, so neither reaches its shared comparison arm."
+      },
+      "rationale": "Correctness-relevant reconcile identity comparisons remain unowned for two source kinds.",
+      "destination": "Add object-source equal and adjacent-different rows in Phase 2."
+    },
+    {
+      "id": "DCORE-008",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-008"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/source.ts" }],
+      "testRefs": [{ "path": "tests/domain/source.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current parser-row census",
+        "observed": "A one-segment github.com URL and a valid owner/repo with an empty at-ref remain absent from parser rows."
+      },
+      "rationale": "Both executable fallthrough branches remain unowned.",
+      "destination": "Add exact whole-value rows in Phase 3."
+    },
+    {
+      "id": "DCORE-009",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-009"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/source.ts" }],
+      "testRefs": [{ "path": "tests/domain/source.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current error-validator inspection",
+        "observed": "pathSource and githubSource cases still use object-pattern throws assertions and Reflect.apply remains for one invalid typed input."
+      },
+      "rationale": "The owner remains weaker and less direct than the adjacent name error pattern.",
+      "destination": "Assert class identity and use a documented expect-error in Phase 3."
+    },
+    {
+      "id": "DCORE-010",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-010"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/source.ts" }],
+      "testRefs": [{ "path": "tests/domain/source.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current type import census",
+        "observed": "Seven exported source variants remain absent from paired compile-time contract evidence."
+      },
+      "rationale": "The GitBackedSource alias and individual shapes are consumed broadly but only incidental union annotations exist here.",
+      "destination": "Add satisfies positives and expect-error negatives in Phase 3."
+    },
+    {
+      "id": "DCORE-011",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-011"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/github-auth.ts" }],
+      "testRefs": [
+        { "path": "tests/domain/github-auth.test.ts" },
+        { "path": "tests/domain/device-flow-contract.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current interaction-observation inspection",
+        "observed": "The AUTH-03 case still records notification and polling in independent mocks/arrays with no shared event order log."
+      },
+      "rationale": "Moving notification after polling remains observationally equivalent to every current assertion.",
+      "destination": "Add one shared ordered event log to the contract and owner in Phase 2."
+    },
+    {
+      "id": "DCORE-012",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-012"],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/github-auth.ts" }],
+      "testRefs": [{ "path": "tests/domain/github-auth.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current clock and expires_in census",
+        "observed": "runPollLoop still calls Date.now directly; tests still use only zero or a long window that resolves before the deadline."
+      },
+      "rationale": "Deadline arithmetic and boundary comparison remain untestable without choosing an injected clock seam.",
+      "destination": "Decide and implement the clock seam, then add a bounded deadline case."
+    },
+    {
+      "id": "DCORE-013",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-013"],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/github-auth.ts" }],
+      "testRefs": [{ "path": "tests/domain/github-auth.test.ts" }],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "npm run typecheck plus node --test tests/domain/github-auth.test.ts",
+        "exitCode": 0,
+        "observed": "The Phase 108 replacement owner now includes carrier compile-time gates and the focused runtime suite passes."
+      },
+      "rationale": "The historical missing discriminant type evidence was replaced by the Phase 108 carrier-gate commit and rerun; ordering/deadline gaps remain separate.",
+      "destination": "Close this historical type-evidence clause only."
+    },
+    {
+      "id": "DCORE-014",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-014"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/plugin-root.ts" }],
+      "testRefs": [{ "path": "tests/domain/plugin-root.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current row assertion inspection",
+        "observed": "The contained-path mapping assertion remains built solely from row inputs and never observes asAbsolutePluginRoot."
+      },
+      "rationale": "It passes for every implementation and should be removed without weakening the real result assertions.",
+      "destination": "Delete the decorative row fields and assertion in Phase 3."
+    },
+    {
+      "id": "DCORE-015",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-015"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/plugin-root.ts" }],
+      "testRefs": [{ "path": "tests/domain/plugin-root.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current filesystem-use inspection",
+        "observed": "The pure string validator owner still creates per-case temporary directories despite production performing no I/O."
+      },
+      "rationale": "One real no-write case is sufficient; other cases can use an absolute constant.",
+      "destination": "Reduce unnecessary filesystem setup in Phase 3."
+    },
+    {
+      "id": "DCORE-016",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-016"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/version.ts" }],
+      "testRefs": [{ "path": "tests/domain/version.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current skip-list and BOM fixture census",
+        "observed": "No adjacent skip-name controls or exact three-byte BOM input exists in the owner."
+      },
+      "rationale": "Prefix widening and the BOM guard off-by-one remain undiscriminated.",
+      "destination": "Add adjacent file names and the exact BOM boundary in Phase 3."
+    },
+    {
+      "id": "DCORE-017",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-017"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/manifest.ts" }],
+      "testRefs": [{ "path": "tests/domain/manifest.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current invalid-manifest row census",
+        "observed": "No case presents two simultaneous schema defects, so slice(0,1) remains unpinned."
+      },
+      "rationale": "The one-error product contract can widen without a failure.",
+      "destination": "Add a two-defect exact-prefix case in Phase 3."
+    },
+    {
+      "id": "DCORE-018",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-018"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/manifest.ts" }],
+      "testRefs": [{ "path": "tests/domain/manifest.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current malformed-JSON assertion inspection",
+        "observed": "The test still pins the engine-owned SyntaxError tail instead of only the project-owned prefix and cause class."
+      },
+      "rationale": "Node-major wording is not the marketplace contract.",
+      "destination": "Retain cause identity and pin only the owned prefix in Phase 3."
+    },
+    {
+      "id": "DCORE-019",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-019"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/manifest-cache.ts" }],
+      "testRefs": [{ "path": "tests/domain/manifest-cache.test.ts" }],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "isolated copy: remove size equality from cache hit, then node --test manifest-cache owner",
+        "exitCode": 0,
+        "observed": "The focused owner passed because its size-change write also changes mtime."
+      },
+      "rationale": "The size half of the documented composite invalidation key remains unowned.",
+      "destination": "Restore the original mtime after changing size in Phase 2."
+    },
+    {
+      "id": "DCORE-020",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-020"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/github-auth.ts" }],
+      "testRefs": [{ "path": "tests/domain/github-auth.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current switch control-flow inspection",
+        "observed": "runPollLoop still switches on the closed PollResult union without a default and continues the enclosing loop afterward."
+      },
+      "rationale": "A future union member compiles into silent repeated polling because noImplicitReturns cannot protect this shape.",
+      "destination": "Add assertNever as the final switch arm in Phase 3."
+    },
+    {
+      "id": "DCORE-021",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-021"],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/github-auth.ts" }],
+      "testRefs": [{ "path": "tests/domain/github-auth.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph field-read census",
+        "observed": "PollResult success tokenType and scope remain produced and fixture-pinned but unread by production flow."
+      },
+      "rationale": "Dropping wire-mirroring fields versus documenting them is a public type-contract choice.",
+      "destination": "Resolve the PollResult shape decision."
+    },
+    {
+      "id": "DCORE-022",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-022"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/source.ts" }],
+      "testRefs": [
+        {
+          "path": "N/A",
+          "reason": "The claim concerns production switch style and compiler behavior."
+        }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current switch and tsconfig control-flow inspection",
+        "observed": "samePlannedSource and sourceLogical still omit default arms, but both return from every arm so noImplicitReturns protects future members."
+      },
+      "rationale": "The claims remain style and defense-in-depth warnings, not the silent-hang severity of runPollLoop.",
+      "destination": "Add assertNever for consistency in Phase 3 if the style rule is enforced."
+    },
+    {
+      "id": "DCORE-023",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-023"],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/manifest.ts" }],
+      "testRefs": [{ "path": "tests/domain/manifest.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph external-consumer census",
+        "observed": "MARKETPLACE_VALIDATOR remains exported, used internally, and otherwise referenced only by its owner test."
+      },
+      "rationale": "The test-only-looking export remains a public-API versus internalization decision.",
+      "destination": "Decide whether to internalize the validator or document a real external seam."
+    },
+    {
+      "id": "DCORE-024",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-024"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/manifest-cache.ts" }],
+      "testRefs": [{ "path": "tests/domain/manifest-cache.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current double-role inspection",
+        "observed": "The counting load function remains a node:test stub with decisive call-count and argument assertions across cache cases."
+      },
+      "rationale": "Its prescribed interactions make it a mock under the project rules.",
+      "destination": "Convert to strict interaction mocks in Phase 3."
+    },
+    {
+      "id": "DCORE-025",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-025"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "N/A", "reason": "The claim concerns shared test-contract completeness." }
+      ],
+      "testRefs": [
+        { "path": "tests/domain/device-flow-contract.ts" },
+        { "path": "tests/domain/device-flow-fake.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current contract-category and inventory inspection",
+        "observed": "Validation alone is recorded inapplicable; overwrite and deletion remain neither covered nor explained, and case-name inventory remains instead of participant inventory."
+      },
+      "rationale": "The negative control stays valuable but the shared contract remains incomplete.",
+      "destination": "Record category dispositions and replace case inventory with participants in Phase 3."
+    },
+    {
+      "id": "DCORE-026",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-026"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 3",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "N/A", "reason": "The claim concerns an orphaned test fixture." }],
+      "testRefs": [
+        { "path": "tests/domain/fixtures/hash-stability/sample-plugin/skills/foo.md" },
+        { "path": "tests/domain/version.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current fixture-reference census",
+        "observed": "hash-stability appears only inside its own fixture content and remains unwired to version.test.ts."
+      },
+      "rationale": "The committed fixture is still orphaned despite the current version owner's strong generated-file cases.",
+      "destination": "Wire it to a pinned hash or remove it in Phase 3."
+    },
+    {
+      "id": "DCORE-027",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-027"],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/github-auth.ts" }],
+      "testRefs": [{ "path": "tests/domain/github-auth.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current interface modifier inspection",
+        "observed": "InitiateDeviceFlowOpts and DeviceFlowResult fields remain mutable unlike adjacent domain contracts."
+      },
+      "rationale": "Readonly normalization is a consistency choice with no observed runtime defect.",
+      "destination": "Resolve with the broader public type-shape decision."
+    },
+    {
+      "id": "DCORE-028",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-028"],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/domain/manifest-lookup.ts" },
+        { "path": "extensions/pi-claude-marketplace/domain/version.ts" },
+        { "path": "extensions/pi-claude-marketplace/domain/clone-key.ts" },
+        { "path": "extensions/pi-claude-marketplace/domain/manifest-cache.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/domain/manifest-lookup.test.ts" },
+        { "path": "tests/domain/version.test.ts" },
+        { "path": "tests/domain/clone-key.test.ts" },
+        { "path": "tests/domain/manifest-cache.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current whole-value and boundary-case inspection",
+        "observed": "The report's named strong cases and independent literal pins remain present outside the separately recorded holes."
+      },
+      "rationale": "Positive clean evidence is preserved without treating it as proof against distinct claims.",
+      "destination": "Evidence-only closure."
+    },
+    {
+      "id": "DCORE-029",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-029"],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/domain/name.ts" },
+        { "path": "extensions/pi-claude-marketplace/domain/manifest-cache.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/domain/name.test.ts" },
+        { "path": "tests/domain/manifest-cache.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current adjacency and factory-state inspection",
+        "observed": "Safe-neighbor boundary testing remains a strong propagatable pattern and cache state remains factory-owned without a reset hook."
+      },
+      "rationale": "The report's positive architecture and testing-pattern claims remain current.",
+      "destination": "Retain as evidence and propagate adjacency where separately routed."
+    },
+    {
+      "id": "DCORE-030",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-030"],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 7",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/manifest.ts" }],
+      "testRefs": [{ "path": "tests/domain/manifest.test.ts" }, { "path": ".fallowrc.json" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current export-use and Fallow configuration census",
+        "observed": "A production export used only internally and by its own test remains invisible to dead-code analysis when tests count as consumers."
+      },
+      "rationale": "The named MARKETPLACE_VALIDATOR instance still proves the architectural gate blind spot.",
+      "destination": "Include in the Phase 7 unused production-export gate work."
+    },
+    {
+      "id": "DCORE-031",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-031"],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/domain/github-auth.ts" },
+        { "path": "extensions/pi-claude-marketplace/domain/source.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/domain/github-auth.test.ts" },
+        { "path": "tests/domain/source.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current control-flow severity comparison",
+        "observed": "The source switches remain compiler-protected while runPollLoop still has code after its switch and can silently continue."
+      },
+      "rationale": "The report's correction to split exhaustiveness severity remains technically current.",
+      "destination": "Use this distinction during scope consolidation."
+    },
+    {
+      "id": "DCORE-032",
+      "claimIds": [".planning/reviews/unit-test-adversarial/adversarial/domain-core.md#DCORE-032"],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/domain/auth-registry.ts" },
+        { "path": "extensions/pi-claude-marketplace/domain/source.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/domain/auth-registry.test.ts" },
+        { "path": "tests/domain/source.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current clean-list revalidation",
+        "observed": "Multiple security and correctness mutations remain viable in files historically declared clean, while fragment-assertion absence remains a valid positive counterexample."
+      },
+      "rationale": "The report's meta-conclusion that low finding count did not establish strength remains supported with both positive and negative evidence.",
+      "destination": "Retain as corpus calibration evidence."
+    }
+  ]
+}

@@ -161,61 +161,73 @@ async function withHermeticHome<T>(
   }
 }
 
-test("enables one project marketplace in the base config without rewriting state", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    // arrange
-    const locations = locationsFor("project", cwd);
-    const disabledPlugin: PluginInstallRecord = {
-      compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-      enabled: false,
-      installedAt: "2026-01-01T00:00:00.000Z",
-      resolvedSource: "/fixture/plugins/example",
-      resources: { agents: [], hooks: [], mcpServers: [], prompts: [], skills: [] },
-      updatedAt: "2026-01-01T00:00:00.000Z",
-      version: "1.0.0",
-    };
-    await saveMarketplaces(locations, [
-      marketplaceRecord("mp", "project", cwd, pathSource("./src"), {
-        example: disabledPlugin,
-      }),
-    ]);
-    const stateBytes = await readFile(locations.stateJsonPath, "utf8");
-    const boundary = notificationBoundary({
-      message: "● mp [project] <autoupdate>",
-    });
-    const expectedConfigBytes = [
-      "{",
-      '  "schemaVersion": 1,',
-      '  "marketplaces": {',
-      '    "mp": {',
-      '      "autoupdate": true,',
-      '      "source": "./src"',
-      "    }",
-      "  },",
-      '  "plugins": {}',
-      "}",
-      "",
-    ].join("\n");
+const oneRowInvocationCases = [
+  {
+    expectedMessage: "● mp [project] <autoupdate>",
+    invocation: { name: "mp", scope: "project" as const },
+    label: "named invocation stays structurally single and omits the tally",
+  },
+  {
+    expectedMessage: "● mp [project] <autoupdate>\n\nMarketplace autoupdate: 1 success",
+    invocation: { scope: "project" as const },
+    label: "unnamed invocation stays structurally plural and retains its tally",
+  },
+] as const;
 
-    // act
-    await setMarketplaceAutoupdate({
-      ctx: boundary.ctx,
-      pi: boundary.pi,
-      name: "mp",
-      enable: true,
-      scope: "project",
-      cwd,
-    });
+for (const scenario of oneRowInvocationCases) {
+  test(`one rendered row: ${scenario.label}`, async () => {
+    await withHermeticHome(async ({ cwd }) => {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const disabledPlugin: PluginInstallRecord = {
+        compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+        enabled: false,
+        installedAt: "2026-01-01T00:00:00.000Z",
+        resolvedSource: "/fixture/plugins/example",
+        resources: { agents: [], hooks: [], mcpServers: [], prompts: [], skills: [] },
+        updatedAt: "2026-01-01T00:00:00.000Z",
+        version: "1.0.0",
+      };
+      await saveMarketplaces(locations, [
+        marketplaceRecord("mp", "project", cwd, pathSource("./src"), {
+          example: disabledPlugin,
+        }),
+      ]);
+      const stateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const boundary = notificationBoundary({ message: scenario.expectedMessage });
+      const expectedConfigBytes = [
+        "{",
+        '  "schemaVersion": 1,',
+        '  "marketplaces": {',
+        '    "mp": {',
+        '      "autoupdate": true,',
+        '      "source": "./src"',
+        "    }",
+        "  },",
+        '  "plugins": {}',
+        "}",
+        "",
+      ].join("\n");
 
-    // assert
-    assert.equal(await readFile(locations.configJsonPath, "utf8"), expectedConfigBytes);
-    assert.equal(await readOptionalBytes(locations.configLocalJsonPath), undefined);
-    assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
-    verify(boundary.ctx);
-    verify(boundary.pi);
-    verify(boundary.ui);
+      // act
+      await setMarketplaceAutoupdate({
+        ctx: boundary.ctx,
+        pi: boundary.pi,
+        enable: true,
+        cwd,
+        ...scenario.invocation,
+      });
+
+      // assert
+      assert.equal(await readFile(locations.configJsonPath, "utf8"), expectedConfigBytes);
+      assert.equal(await readOptionalBytes(locations.configLocalJsonPath), undefined);
+      assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
+      verify(boundary.ctx);
+      verify(boundary.pi);
+      verify(boundary.ui);
+    });
   });
-});
+}
 
 test("disables one project marketplace when base config is enabled", async () => {
   await withHermeticHome(async ({ cwd }) => {
@@ -354,6 +366,8 @@ test("enables all project marketplaces in changed-before-unchanged order with on
         "● to-flip [project] <autoupdate>",
         "",
         "● already [project] <autoupdate> {already autoupdate}",
+        "",
+        "Marketplace autoupdate: 2 successes",
       ].join("\n"),
     });
     const expectedConfigBytes = [
@@ -397,7 +411,9 @@ test("reports an empty implicit two-scope inventory without creating files", asy
     // arrange
     const projectLocations = locationsFor("project", cwd);
     const userLocations = locationsFor("user", cwd);
-    const boundary = notificationBoundary({ message: "(no marketplaces)" });
+    const boundary = notificationBoundary({
+      message: "(no marketplaces)\n\nMarketplace autoupdate: 0 successes",
+    });
 
     // act
     await setMarketplaceAutoupdate({
@@ -865,6 +881,8 @@ test("reports a held unnamed scope lock against the unknown aggregate subject", 
         "⊘ (unknown) [project] (failed)",
         "  ⊘ (unknown) (failed) {lock held}",
         `    cause: Another pi-claude-marketplace operation is in progress for project scope (${locations.stateLockFile}). Retry after it completes. -> Lock file is already being held`,
+        "",
+        "Marketplace noautoupdate: 2 failures",
       ].join("\n"),
       severity: "error",
     });

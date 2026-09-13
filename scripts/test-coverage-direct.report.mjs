@@ -1,3 +1,13 @@
+/**
+ * The whole-tree direct-coverage report: every source-test pair measured, one JSON object per line,
+ * no verdict filed.
+ *
+ * It reads no record of which shortfalls are accepted, which is what keeps it independent of the
+ * gate it generates the coverage pin for. `shortfallReadingOf` does not weaken that: it parses the
+ * gate's own refusal message and consults nothing, so what this tool knows is still exactly what the
+ * gate answered for the pair in front of it.
+ */
+
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -7,6 +17,7 @@ import {
   pairForPath,
   productionPaths,
   runPair,
+  shortfallReadingOf,
 } from "./test-coverage-direct.mjs";
 
 const usage = `Usage: node scripts/test-coverage-direct.report.mjs <report-path>
@@ -14,29 +25,32 @@ const usage = `Usage: node scripts/test-coverage-direct.report.mjs <report-path>
 Records the direct-coverage gate's verdict for every source-test pair, one JSON
 object per line.
 
-This is a reporting tool, not a gate. It does not stop at a coverage shortfall,
-and its exit code is not a coverage verdict: a zero says the report was written,
-nothing more. The gate is \`npm run test:coverage:direct\` and
-\`npm run test:coverage:direct:all\`, which still refuse a shortfall.
-`;
+This is a reporting tool, not a gate. It files no verdict, and its exit code is
+not a coverage verdict: a zero says the report was written, nothing more.
 
-// How the gate states a shortfall, and the only refusal this report records rather than propagates.
-const shortfallPattern = /^Incomplete direct coverage for (?<sourcePath>[^:]+): (?<counts>.+)$/;
+The gate arms are \`npm run test:coverage:direct\`,
+\`npm run test:coverage:direct:commit\` and \`npm run test:coverage:direct:all\`.
+They measure every pair they select and compare every reading they took against
+\`scripts/test-coverage-direct.pin.json\`, refusing any divergence in either
+direction. This tool compares against nothing, which is why it survives a pin
+mismatch and they do not.
+`;
 
 /**
  * The verdict for one pair, given what the gate answered for it: the coverage summary it returned,
  * or the error it threw.
  *
- * A shortfall is recorded because recording it is the whole point -- the gate stops at the first
- * one, so nothing downstream of it ever sees the rest of the tree. Every other refusal propagates.
- * A focused test that failed, or an LCOV that could not be read, is not a coverage verdict, and a
- * report that filed it as one would be reporting on a tree it never measured. The message has to
- * name THIS pair's source for the same reason.
+ * A shortfall is recorded because recording it is the whole point -- this tool files no verdict, so
+ * a refused row is a reading like any other and belongs in the report beside the complete ones.
+ * Every other refusal propagates. A focused test that failed, or an LCOV that could not be read, is
+ * not a coverage verdict, and a report that filed it as one would be reporting on a tree it never
+ * measured. The message has to name THIS pair's source for the same reason.
  *
  * `accepted-shortfall` is the retained artifact's vocabulary for a refused row, not a claim this
  * report can make on its own: it does not read the broken-windows ledger and so cannot tell an
- * accepted shortfall from a new one. Compare the rows it emits against the readings documented in
- * CONTRIBUTING.md.
+ * accepted shortfall from a new one. Compare the rows it emits against
+ * `scripts/test-coverage-direct.pin.json`, which is the machine-readable record; CONTRIBUTING.md's
+ * table is a rendering of it.
  */
 export function verdictFor(sourcePath, answer) {
   if (typeof answer === "string") {
@@ -47,13 +61,13 @@ export function verdictFor(sourcePath, answer) {
     };
   }
 
-  const match = shortfallPattern.exec(answer.message);
+  const reading = shortfallReadingOf(answer, sourcePath);
 
-  if (match === null || match.groups.sourcePath !== sourcePath) {
+  if (reading === undefined) {
     throw answer;
   }
 
-  return { verdict: "accepted-shortfall", coverage: match.groups.counts, exitCode: 1 };
+  return { verdict: "accepted-shortfall", coverage: reading, exitCode: 1 };
 }
 
 async function rowFor(pair) {
@@ -109,7 +123,10 @@ async function main() {
   // still leaves a readable partial result.
   writeFileSync(reportPath, "");
 
-  for (const pair of modulePaths.map(pairForPath)) {
+  // The callback passes exactly one argument. `pairForPath` takes a repository root as its second
+  // parameter, and `Array.prototype.map` supplies the element index there, which resolves a path
+  // against a number.
+  for (const pair of modulePaths.map((modulePath) => pairForPath(modulePath))) {
     const record = await rowFor(pair);
     appendFileSync(reportPath, `${JSON.stringify(record)}\n`);
 

@@ -32,7 +32,7 @@
 // on the flip surface, for byte-form parity with the marketplace-list surface
 // header. Fresh flips render the bare marker; idempotent flips render the
 // marker + the `{already autoupdate}` / `{already no autoupdate}` brace. The
-// renderer (shared/notify.ts) owns the byte composition; per CLAUDE.md IL-2
+// renderer (shared/notification-dispatch.ts) owns the byte composition; per CLAUDE.md IL-2
 // all output still flows through notify(). The `autoupdate enabled` /
 // `autoupdate disabled` / `skipped` MarketplaceStatus discriminators carry the
 // outcome; the REASONS members are `already autoupdate` / `already no
@@ -66,21 +66,22 @@ import { loadConfig } from "../../persistence/config-io.ts";
 import { writeBatchedConfigEntries } from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { MarketplaceNotFoundError, StateLockHeldError } from "../../shared/errors.ts";
+import { notify } from "../../shared/notification-dispatch.ts";
+import { type ContentReason } from "../../shared/notification-types.ts";
+import { type PluginFailedMessage } from "../../shared/notification-types.ts";
 import {
   notifyWithContext,
   type MarketplaceRows,
   type Plural,
   type Single,
 } from "../../shared/notify-context.ts";
-import { notify } from "../../shared/notify.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 
 import { AUTOUPDATE_CONTEXT, NOAUTOUPDATE_CONTEXT } from "./autoupdate.messaging.ts";
 import { classifyAutoupdateFlip, crossScopeFlag } from "./shared.ts";
 
 import type { MarketplaceConfigEntry, ScopeConfig } from "../../persistence/config-io.ts";
-import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
-import type { ContentReason, PluginFailedMessage } from "../../shared/notify.ts";
+import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
 import type { Scope } from "../../shared/types.ts";
 
 /**
@@ -94,14 +95,14 @@ export type AutoupdateNotifications =
   { readonly mode: "standalone" } | { readonly mode: "orchestrated" };
 
 export interface AutoupdateOptions {
-  readonly ctx: ExtensionContext;
+  readonly ctx: NotificationContext;
   /**
    * Soft-dep probe target, consumed by the `notify(ctx, pi, message)` calls
    * below to drive the single per-invocation soft-dep probe -- even though
    * mp-level rows never inject soft-dep markers, the probe is threaded through
    * every notify entry for invariant symmetry.
    */
-  readonly pi: ExtensionAPI;
+  readonly pi: ToolInventory;
   /** When undefined, flip every marketplace in target scope(s). */
   readonly name?: string;
   /** true -> autoupdate; false -> noautoupdate. */
@@ -207,7 +208,12 @@ function flipContextFor(enable: boolean): typeof AUTOUPDATE_CONTEXT | typeof NOA
  * renderer's depth-5 cause-chain trailer (the MarketplaceNotificationMessage
  * header carries no `cause` per SNM-10).
  */
-function notifyAutoupdateScopeFailure(opts: AutoupdateOptions, scope: Scope, err: Error): void {
+function notifyAutoupdateScopeFailure(
+  opts: AutoupdateOptions,
+  scope: Scope,
+  err: Error,
+  cardinality: "single" | "plural",
+): void {
   const failureName = opts.name ?? "(unknown)";
 
   // OUT-07 / D-12: one marketplace block carrying the synthetic failed child
@@ -224,7 +230,14 @@ function notifyAutoupdateScopeFailure(opts: AutoupdateOptions, scope: Scope, err
       plugins: [autoupdateFailedRow(failureName, err)],
     },
   ];
-  notifyWithContext(opts.ctx, opts.pi, flipContextFor(opts.enable), failedRows);
+  notifyWithContext(
+    opts.ctx,
+    opts.pi,
+    flipContextFor(opts.enable),
+    failedRows,
+    undefined,
+    cardinality,
+  );
 }
 
 /**
@@ -475,6 +488,7 @@ function collectFlipRows(
 }
 
 export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise<void> {
+  const cardinality = opts.name === undefined ? "plural" : "single";
   const scopes: readonly Scope[] = opts.scope === undefined ? ["project", "user"] : [opts.scope];
 
   // The autoupdate / noautoupdate commands share this orchestrator, selected by
@@ -498,7 +512,7 @@ export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise
         // `withLockedStateTransaction` normalizes every rejection through
         // `toError` before `flipOneScope` rejects, so this caught value is an
         // Error on every reachable path.
-        notifyAutoupdateScopeFailure(opts, scope, err as Error);
+        notifyAutoupdateScopeFailure(opts, scope, err as Error, cardinality);
         return;
       }
 
@@ -540,7 +554,7 @@ export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise
   // OUT-07 / D-12: empty inventory -> Plural (zero rows).
   if (rows.length === 0) {
     const emptyRows: Plural<MarketplaceRows<PluginFailedMessage>> = [];
-    notifyWithContext(opts.ctx, opts.pi, flipContext, emptyRows);
+    notifyWithContext(opts.ctx, opts.pi, flipContext, emptyRows, undefined, cardinality);
     return;
   }
 
@@ -606,5 +620,5 @@ export async function setMarketplaceAutoupdate(opts: AutoupdateOptions): Promise
   // OUT-07 / D-12: bulk multi-marketplace flip cascade -> Plural. The
   // autoupdate enabled/disabled/skipped/failed headers render via the central
   // seam; the command is selected by the boolean `opts.enable` flag.
-  notifyWithContext(opts.ctx, opts.pi, flipContext, marketplaces);
+  notifyWithContext(opts.ctx, opts.pi, flipContext, marketplaces, undefined, cardinality);
 }

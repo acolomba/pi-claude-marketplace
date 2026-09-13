@@ -19,7 +19,7 @@
 // outcome -- matching how `--scope` is consumed by the downstream parser
 // itself.
 
-import { notifyUsageError } from "../../shared/notify.ts";
+import { notifyUsageError } from "../../shared/notification-dispatch.ts";
 import { SCOPE_TARGET_FLAG } from "../flag-catalog.ts";
 
 import type { ExtensionCommandContext } from "../../platform/pi-api.ts";
@@ -47,22 +47,22 @@ export function extractLocalFlag(
 ): { local: boolean; residualArgs: string } | undefined {
   let local = false;
   const tokens = args.split(/\s+/).filter((t) => t.length > 0);
-  let i = 0;
-  while (i < tokens.length) {
-    const tok = tokens[i];
-    if (tok === undefined) {
-      break;
+  let skipValue = false;
+  for (const tok of tokens) {
+    if (skipValue) {
+      // The `--scope` value, handled by the downstream domain parser. ER-F19:
+      // skipping it here is what keeps it out of the flag tests below.
+      skipValue = false;
+      continue;
     }
 
     if (tok === "--scope") {
-      // Consume the value (handled by the downstream domain parser).
-      i += 2;
+      skipValue = true;
       continue;
     }
 
     if (tok === SCOPE_TARGET_FLAG) {
       local = true;
-      i += 1;
       continue;
     }
 
@@ -70,15 +70,12 @@ export function extractLocalFlag(
       if (passThroughLongFlags.includes(tok)) {
         // Known downstream-consumed long flag (e.g. --map-model). Preserve
         // verbatim in residualArgs for the domain parser.
-        i += 1;
         continue;
       }
 
       notifyUsageError(ctx, { message: `Unknown flag: "${tok}".`, usage });
       return undefined;
     }
-
-    i += 1;
   }
 
   return { local, residualArgs: tokens.filter((t) => t !== SCOPE_TARGET_FLAG).join(" ") };

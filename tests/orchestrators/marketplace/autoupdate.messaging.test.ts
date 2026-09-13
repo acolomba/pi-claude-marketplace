@@ -5,9 +5,9 @@ import {
   AUTOUPDATE_CONTEXT,
   NOAUTOUPDATE_CONTEXT,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/autoupdate.messaging.ts";
+import { type PluginFailedMessage } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
 import type { SoftDepStatus } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
-import type { PluginFailedMessage } from "../../../extensions/pi-claude-marketplace/shared/notify.ts";
 
 test("exports complete and distinct autoupdate command contexts", () => {
   // arrange

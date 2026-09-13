@@ -1,7 +1,7 @@
 // extensions/pi-claude-marketplace/orchestrators/plugin/discover-names.ts
 //
 // Shared helper for plugin orchestrators that need the set of generated
-// names a plugin would produce when staged. `install.ts`, `update.ts` and
+// names a plugin would produce when staged. `install-outcome.ts`, `update.ts` and
 // `reinstall.ts` all use it for the same two purposes: wiring the
 // agents-knownSkills validator and building cross-plugin conflict inputs.
 //
@@ -13,19 +13,25 @@
 // no-cross-bridge-imports boundary rule, so the per-kind barrels are the
 // only bridge entry points here.
 
+import path from "node:path";
+
 import { discoverPluginAgents } from "../../bridges/agents/index.ts";
 import { discoverPluginCommands } from "../../bridges/commands/index.ts";
 import { discoverPluginSkills } from "../../bridges/skills/index.ts";
 
-import { pickAgentsSourceDir } from "./shared.ts";
-
-import type { MaterializablePlugin } from "../../domain/resolver.ts";
+import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
 
 export interface DiscoveredGeneratedNames {
   readonly skills: readonly string[];
   readonly commands: readonly string[];
   readonly agents: readonly string[];
-  readonly agentsSourceDir: string | null;
+  readonly agentsDirs: readonly string[];
+}
+
+function resolvedAgentsDirs(resolved: MaterializablePlugin): readonly string[] {
+  return resolved.componentPaths.agents.map((agentsDir) =>
+    path.resolve(resolved.pluginRoot, agentsDir),
+  );
 }
 
 /**
@@ -33,7 +39,7 @@ export interface DiscoveredGeneratedNames {
  * this function drops them on purpose.
  *
  * Every caller runs the same walk again during staging, and that pass is the
- * one that reports: `install.ts` folds each `prepareStage*` result onto
+ * one that reports: `install-outcome.ts` folds each `prepareStage*` result onto
  * `discoveryWarnings` and `reinstall.ts` aggregates the same four results in
  * `collectStagingWarnings`. Reporting here as well would print every warning
  * twice for one install.
@@ -51,16 +57,13 @@ export async function discoverGeneratedNames(
     pluginName: plugin,
     resolved,
   });
-  const agentsSourceDir = pickAgentsSourceDir(resolved);
-  const agentsDiscovery =
-    agentsSourceDir === null
-      ? { discovered: [] as readonly { readonly generatedName: string }[] }
-      : await discoverPluginAgents({ pluginName: plugin, agentsDirs: [agentsSourceDir] });
+  const agentsDirs = resolvedAgentsDirs(resolved);
+  const agentsDiscovery = await discoverPluginAgents({ pluginName: plugin, agentsDirs });
 
   return {
     skills: skillsDiscovery.discovered.map((s) => s.generatedName),
     commands: commandsDiscovery.discovered.map((c) => c.generatedName),
     agents: agentsDiscovery.discovered.map((a) => a.generatedName),
-    agentsSourceDir,
+    agentsDirs,
   };
 }

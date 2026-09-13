@@ -1,20 +1,22 @@
-import { notifyWithContext } from "../../shared/notify-context.ts";
-import { malformedReasonsForKinds, skipSeverity } from "../../shared/notify-reasons.ts";
+import { compareByNameThenScope } from "../../shared/compare-name-scope.ts";
 import {
-  compareByNameThenScope,
   ICON_INSTALLED,
   ICON_UNINSTALLABLE,
   installedLikeRow,
   pluginRow,
   renderVersion,
+} from "../../shared/notification-grammar.ts";
+import {
   type ContentReason,
   type PluginFailedMessage,
   type PluginManualRecoveryMessage,
   type PluginReinstalledMessage,
   type PluginSkippedMessage,
-} from "../../shared/notify.ts";
+} from "../../shared/notification-types.ts";
+import { notifyWithContext } from "../../shared/notify-context.ts";
+import { malformedReasonsForKinds, skipSeverity } from "../../shared/notify-reasons.ts";
 
-import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
+import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type {
   CommandContext,
@@ -35,7 +37,7 @@ import type {
  * set, its cascade row message shapes, and a render map total over reinstall's
  * OWN statuses (D-10) lifting the matching `renderPluginRow` arm bodies
  * VERBATIM. The shared presentation vocabulary stays central in
- * `shared/notify.ts` (D-11) and is CALLED here, never duplicated.
+ * `shared/notification-grammar.ts` (D-11) and is CALLED here, never duplicated.
  *
  * NFR-9: the `manual recovery` / `failed` cause-chain and rollback-partial
  * trailing lines are NOT composed here. The render map renders only the single
@@ -142,8 +144,8 @@ export const REINSTALL_CONTEXT = {
 //   callers MUST NOT compose them.
 // - Reference: catalog UAT plugin-reinstall fixtures.
 export function renderReinstallPartitionAndNotify(
-  ctx: ExtensionContext,
-  pi: ExtensionAPI,
+  ctx: NotificationContext,
+  pi: ToolInventory,
   outcomes: readonly ReinstallPluginOutcome[],
   cardinality: "single" | "plural",
 ): void {
@@ -265,7 +267,7 @@ export function reinstalledRowFromOutcome(
  *
  * Orphan-fold scope-bracket suppression: per-row `scope?` is
  * OMITTED when it matches the marketplace's scope. The renderer's
- * `renderScopeBracket` contract at `shared/notify.ts` suppresses
+ * `renderScopeBracket` contract in `shared/notification-grammar.ts` suppresses
  * `[<scope>]` brackets when the row's scope is absent.
  */
 export function outcomeToPluginMessage(

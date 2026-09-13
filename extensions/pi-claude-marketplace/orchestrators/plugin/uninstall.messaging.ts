@@ -1,10 +1,12 @@
 import {
-  ICON_UNINSTALLABLE,
   pluginRow,
   renderUninstalledRow,
+  ICON_UNINSTALLABLE,
+} from "../../shared/notification-grammar.ts";
+import {
   type PluginFailedMessage,
   type PluginUninstalledMessage,
-} from "../../shared/notify.ts";
+} from "../../shared/notification-types.ts";
 
 import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
 
@@ -14,7 +16,7 @@ import type { CommandContext, RenderFn } from "../../shared/notify-context.ts";
  * set, its row message shapes, its command-private reason, and a render map
  * total over uninstall's OWN statuses (D-10) lifting the matching
  * `renderPluginRow` arm bodies VERBATIM. Shared presentation vocabulary stays
- * central in `shared/notify.ts` (D-11) and is CALLED here, never duplicated.
+ * central in `shared/notification-grammar.ts` (D-11) and is CALLED here, never duplicated.
  */
 
 /**

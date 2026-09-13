@@ -40,32 +40,9 @@
 // positional is never inspected and is silently dropped -- one above the range
 // is not a rejection here, and the row table states the drop.
 //
-// The parse-failure callback collapses a diagnostic equal to the usage string to
-// `Missing required argument.`; with the only positional declared optional,
-// `parseCommandArgs` never calls back with the usage string, so that arm has no
-// reachable target through the module's exports and no case can discriminate it.
-// The reachable half -- a tokenizer diagnostic reaching the user verbatim -- is
-// what the rejection case pins.
-//
-// D-116-01a: this pair lands one branch short of complete. The
-// `message === USAGE` arm at update.ts:41 -- the collapse half of
-// `message === USAGE ? "Missing required argument." : message` -- cannot be
-// entered at runtime through this handler. No compiler setting forces it; it is
-// dead here for a structural reason. `parseCommandArgs` passes the usage string
-// to the callback only for a REQUIRED positional, and this schema declares its
-// sole positional `required: false`, so the callback is only ever reached with a
-// tokenizer diagnostic, which can never equal the usage string. The same arm is
-// LIVE for the sibling handlers that declare a required positional, so the
-// shortfall is a property of this module, not of the collapse expression.
-//
-// The claim is measured, not inspected: 170 argument shapes produced no
-// notification beginning `Missing required argument.`; a plant that replaced the
-// arm's literal left all 7 cases green; and an inverted-condition plant
-// (`message !== USAGE`) turned the rejection case red, proving the pass-through
-// arm is the one that runs. The shortfall is pinned by its identity -- functions
-// and lines complete, and exactly ONE uncovered branch -- never by an absolute
-// branch pair, because the branch denominator tracks suite strength rather than
-// the source. No coverage exception is added and no production file is changed.
+// The only positional is optional, so `parseCommandArgs` can reach the failure
+// callback only with a tokenizer diagnostic. The rejection case pins that
+// diagnostic's exact pass-through and the handler-owned usage suffix.
 //
 // No exhaustiveness claim: the selection is an `if` over an optional value, not a
 // switch over a closed union, so a missing-arm plant has no target here. No case
@@ -85,6 +62,7 @@ import { mock, verify, when } from "strong-mock";
 
 import { makeMarketplaceUpdateHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/marketplace/update.ts";
 import { locationsFor } from "../../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { createCompletionCache } from "../../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { createGitOpsFake } from "../../../platform/git-ops-fake.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
 import { mergeMarketplaceIntoState, seedAutoupdateConfig } from "../marketplace-seed.ts";
@@ -105,6 +83,11 @@ const USAGE = "Usage: /claude:plugin marketplace update [<name>] [--scope user|p
 const PROJECT_ALPHA_ROW = "● alpha [project] (skipped) {up-to-date}";
 const PROJECT_BETA_ROW = "● beta [project] (skipped) {up-to-date}";
 const USER_ALPHA_ROW = "● alpha [user] (skipped) {up-to-date}";
+
+/** A fan-out update remains plural even when one marketplace occupies an emission. */
+function pluralUpdateMessage(row: string): string {
+  return `${row}\n\nMarketplace update: 1 success`;
+}
 
 /** The manifest both the pre- and post-refresh reads see, so every row is a no-op. */
 const MARKETPLACE_MANIFEST = `{
@@ -291,6 +274,7 @@ test("updates every recorded marketplace in both scopes when no name is supplied
   const pluginUpdate = mock<PluginUpdate>({ exactParams: true, name: "plugin update" });
   when(() => pluginUpdate("hello", "alpha", "project")).thenResolve(unchangedHello());
   const marketplaceUpdateHandler = makeMarketplaceUpdateHandler(pi, {
+    completionCache: createCompletionCache(),
     gitOps: git.gitOps,
     pluginUpdate,
   });
@@ -300,9 +284,9 @@ test("updates every recorded marketplace in both scopes when no name is supplied
 
   // assert
   assert.deepStrictEqual(notifications, [
-    { message: PROJECT_ALPHA_ROW },
-    { message: PROJECT_BETA_ROW },
-    { message: USER_ALPHA_ROW },
+    { message: pluralUpdateMessage(PROJECT_ALPHA_ROW) },
+    { message: pluralUpdateMessage(PROJECT_BETA_ROW) },
+    { message: pluralUpdateMessage(USER_ALPHA_ROW) },
   ]);
   assert.deepStrictEqual(git.state.calls.fetch, [
     fetchOf(clones.projectAlpha),
@@ -330,6 +314,7 @@ for (const { args, label, arity } of [
     const pluginUpdate = mock<PluginUpdate>({ exactParams: true, name: "plugin update" });
     when(() => pluginUpdate("hello", "alpha", "project")).thenResolve(unchangedHello());
     const marketplaceUpdateHandler = makeMarketplaceUpdateHandler(pi, {
+      completionCache: createCompletionCache(),
       gitOps: git.gitOps,
       pluginUpdate,
     });
@@ -387,6 +372,7 @@ for (const { emissions, probes, rows, scope, touched } of [
     }
 
     const marketplaceUpdateHandler = makeMarketplaceUpdateHandler(pi, {
+      completionCache: createCompletionCache(),
       gitOps: git.gitOps,
       pluginUpdate,
     });
@@ -397,7 +383,7 @@ for (const { emissions, probes, rows, scope, touched } of [
     // assert
     assert.deepStrictEqual(
       notifications,
-      rows.map((message) => ({ message })),
+      rows.map((row) => ({ message: pluralUpdateMessage(row) })),
     );
     assert.deepStrictEqual(git.state.calls.fetch, touched(clones).map(fetchOf));
     assert.strictEqual(networkCallCount(), 0);
@@ -417,6 +403,7 @@ test("takes the scope-target flag as the marketplace name instead of rejecting i
   const git = createGitOpsFake({ boundary: "memory" });
   const pluginUpdate = mock<PluginUpdate>({ exactParams: true, name: "plugin update" });
   const marketplaceUpdateHandler = makeMarketplaceUpdateHandler(pi, {
+    completionCache: createCompletionCache(),
     gitOps: git.gitOps,
     pluginUpdate,
   });
@@ -446,6 +433,7 @@ test("reports an unrecognised scope value with the update usage block and never 
   const git = createGitOpsFake({ boundary: "memory" });
   const pluginUpdate = mock<PluginUpdate>({ exactParams: true, name: "plugin update" });
   const marketplaceUpdateHandler = makeMarketplaceUpdateHandler(pi, {
+    completionCache: createCompletionCache(),
     gitOps: git.gitOps,
     pluginUpdate,
   });

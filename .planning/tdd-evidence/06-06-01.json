@@ -1,0 +1,9 @@
+{
+  "command": "node --test-reporter tap tests/domain/component-paths.test.ts",
+  "exitCode": 1,
+  "output": "TAP version 13\n# Subtest: collects strict paths in declaration order with first-wins deduplication\nnot ok 1 - collects strict paths in declaration order with first-wins deduplication\n  ---\n  error: Got unwanted rejection: component-paths.ts is absent\n  code: ERR_ASSERTION\n  ...\n1..12\n# tests 12\n# suites 0\n# pass 0\n# fail 12\n# cancelled 0\n# skipped 0\n# todo 0\n",
+  "targetTest": "collects strict paths in declaration order with first-wins deduplication",
+  "targetFile": "tests/domain/component-paths.test.ts",
+  "expected": "The component-paths owner collects entry, manifest, and implicit component paths in stable first-wins order.",
+  "actual": "The dynamic import rejected because component-paths.ts does not exist before extraction."
+}

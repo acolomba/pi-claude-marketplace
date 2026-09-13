@@ -1,0 +1,9 @@
+{
+  "command": "node --test-reporter tap tests/domain/plugin-resolver.test.ts",
+  "exitCode": 1,
+  "output": "TAP version 13\n# Subtest: resolves a local plugin through the public composition owner\nnot ok 1 - resolves a local plugin through the public composition owner\n  ---\n  error: Got unwanted rejection: plugin-resolver.ts is absent\n  code: ERR_ASSERTION\n  ...\n1..1\n# tests 1\n# pass 0\n# fail 1\n",
+  "targetTest": "resolves a local plugin through the public composition owner",
+  "targetFile": "tests/domain/plugin-resolver.test.ts",
+  "expected": "The public plugin-resolver owner preserves strict local-source resolution and returns the complete installable union arm.",
+  "actual": "The dynamic import rejected because plugin-resolver.ts does not exist before extraction."
+}

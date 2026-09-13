@@ -28,7 +28,7 @@ import type { ResolvedMcpServers, ResolvePluginMcpServersInput } from "./types.t
  */
 export function parseMcpServers(value: unknown, label: string): Record<string, unknown> {
   // MCPR-01: a string `mcpServers` is a reference to a wrapped .mcp.json,
-  // resolved upstream by domain/resolver.ts::applyStrictMcp. The mcp bridge only
+  // resolved upstream by domain/mcp-resolution.ts::resolveStrictMcp. The mcp bridge only
   // ever receives an already-resolved map; a string here means the raw field was
   // wired past the resolver -- fail clearly instead of mislabeling it as a
   // malformed shape ("must be an object").

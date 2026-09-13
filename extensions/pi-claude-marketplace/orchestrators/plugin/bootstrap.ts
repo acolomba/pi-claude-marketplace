@@ -1,6 +1,7 @@
 // orchestrators/plugin/bootstrap.ts
 //
 // One-keystroke onboarding for the Anthropic marketplace.
+// behavioral-composition-exception: bootstrapClaudePlugin
 //
 // Composes the two already-idempotent orchestrators
 // (`addMarketplace` + `setMarketplaceAutoupdate`) under hard-coded
@@ -10,7 +11,7 @@
 //
 // Notes / forbidden patterns (reviewer guard rails):
 //   - No direct `ctx.ui.notify` here. All user-visible signals come
-//     from the two composed orchestrators via shared/notify.ts (BLOCK A).
+//     from the two composed orchestrators via shared/notification-dispatch.ts (BLOCK A).
 //     MOD-01: bootstrap owns NO notification vocabulary of its own; the
 //     delegated `addMarketplace` / `setMarketplaceAutoupdate` emit through
 //     their own command contexts (ADD_CONTEXT / AUTOUPDATE_CONTEXT), so the
@@ -42,6 +43,7 @@ import { addMarketplace } from "../marketplace/add.ts";
 import { setMarketplaceAutoupdate } from "../marketplace/autoupdate.ts";
 
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
+import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { GitOps } from "../marketplace/shared.ts";
 
 /**
@@ -70,6 +72,7 @@ export interface BootstrapOptions {
    */
   readonly pi: ExtensionAPI;
   readonly cwd: string;
+  readonly completionCache: CompletionCache;
   /** D-12 injection seam. Always provided by the edge handler via EdgeDeps. */
   readonly gitOps: GitOps;
 }
@@ -106,6 +109,7 @@ export async function bootstrapClaudePlugin(opts: BootstrapOptions): Promise<voi
       scope: "user",
       cwd: opts.cwd,
       rawSource: BOOTSTRAP_SOURCE,
+      completionCache: opts.completionCache,
       gitOps: opts.gitOps,
       // ATTR-07: re-throw the typed precondition (incl. MarketplaceDuplicateName
       // Error) instead of emitting a `(failed)` row, so the catch below can

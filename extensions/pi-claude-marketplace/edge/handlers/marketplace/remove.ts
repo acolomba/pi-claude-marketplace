@@ -18,12 +18,14 @@ import { removeMarketplace } from "../../../orchestrators/marketplace/remove.ts"
 import { openMarketplaceCommand } from "./shared.ts";
 
 import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
+import type { EdgeDeps } from "../../types.ts";
 
 const USAGE =
   "Usage: /claude:plugin marketplace <remove|rm> <name> [--scope user|project] [--local]";
 
 export function makeRemoveHandler(
   pi: ExtensionAPI,
+  deps: Pick<EdgeDeps, "completionCache">,
 ): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
   return async (args, ctx): Promise<void> => {
     const opened = openMarketplaceCommand(args, ctx, {
@@ -38,6 +40,7 @@ export function makeRemoveHandler(
       ctx,
       pi,
       name: opened.name,
+      completionCache: deps.completionCache,
       cwd: ctx.cwd,
       ...(opened.scope !== undefined && { scope: opened.scope }),
       ...(opened.local && { local: true }),

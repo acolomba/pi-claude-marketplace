@@ -18,13 +18,13 @@ import { INSTALL_CONTEXT } from "../../extensions/pi-claude-marketplace/orchestr
 import { REINSTALL_CONTEXT } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts";
 import { UNINSTALL_CONTEXT } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.messaging.ts";
 import { UPDATE_CONTEXT } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/update.messaging.ts";
+import { type Severity } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 import { notifyWithContext } from "../../extensions/pi-claude-marketplace/shared/notify-context.ts";
 
 import type {
   ExtensionAPI,
   ExtensionContext,
 } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
-import type { Severity } from "../../extensions/pi-claude-marketplace/shared/notify.ts";
 
 interface CapturedNotification {
   readonly message: string;
@@ -77,37 +77,51 @@ test("enable and disable realized transitions share info severity and a reload t
   const disable = createWireHarness("disable");
 
   // act
-  notifyWithContext(enable.ctx, enable.pi, ENABLE_CONTEXT, [
-    {
-      name: "official",
-      scope: "user",
-      plugins: [
-        {
-          status: "installed",
-          name: "alpha",
-          dependencies: [],
-          version: "1.0.0",
-          severity: "info",
-          needsReload: true,
-        },
-      ],
-    },
-  ]);
-  notifyWithContext(disable.ctx, disable.pi, DISABLE_CONTEXT, [
-    {
-      name: "official",
-      scope: "user",
-      plugins: [
-        {
-          status: "disabled",
-          name: "alpha",
-          version: "1.0.0",
-          severity: "info",
-          needsReload: true,
-        },
-      ],
-    },
-  ]);
+  notifyWithContext(
+    enable.ctx,
+    enable.pi,
+    ENABLE_CONTEXT,
+    [
+      {
+        name: "official",
+        scope: "user",
+        plugins: [
+          {
+            status: "installed",
+            name: "alpha",
+            dependencies: [],
+            version: "1.0.0",
+            severity: "info",
+            needsReload: true,
+          },
+        ],
+      },
+    ],
+    undefined,
+    "single",
+  );
+  notifyWithContext(
+    disable.ctx,
+    disable.pi,
+    DISABLE_CONTEXT,
+    [
+      {
+        name: "official",
+        scope: "user",
+        plugins: [
+          {
+            status: "disabled",
+            name: "alpha",
+            version: "1.0.0",
+            severity: "info",
+            needsReload: true,
+          },
+        ],
+      },
+    ],
+    undefined,
+    "single",
+  );
   const enableWire = wireFacts(enable.notifications);
   const disableWire = wireFacts(disable.notifications);
 
@@ -128,37 +142,51 @@ test("install and uninstall realized transitions share info severity and a reloa
   const uninstall = createWireHarness("uninstall");
 
   // act
-  notifyWithContext(install.ctx, install.pi, INSTALL_CONTEXT, [
-    {
-      name: "official",
-      scope: "user",
-      plugins: [
-        {
-          status: "installed",
-          name: "beta",
-          dependencies: [],
-          version: "2.0.0",
-          severity: "info",
-          needsReload: true,
-        },
-      ],
-    },
-  ]);
-  notifyWithContext(uninstall.ctx, uninstall.pi, UNINSTALL_CONTEXT, [
-    {
-      name: "official",
-      scope: "user",
-      plugins: [
-        {
-          status: "uninstalled",
-          name: "beta",
-          version: "2.0.0",
-          severity: "info",
-          needsReload: true,
-        },
-      ],
-    },
-  ]);
+  notifyWithContext(
+    install.ctx,
+    install.pi,
+    INSTALL_CONTEXT,
+    [
+      {
+        name: "official",
+        scope: "user",
+        plugins: [
+          {
+            status: "installed",
+            name: "beta",
+            dependencies: [],
+            version: "2.0.0",
+            severity: "info",
+            needsReload: true,
+          },
+        ],
+      },
+    ],
+    undefined,
+    "single",
+  );
+  notifyWithContext(
+    uninstall.ctx,
+    uninstall.pi,
+    UNINSTALL_CONTEXT,
+    [
+      {
+        name: "official",
+        scope: "user",
+        plugins: [
+          {
+            status: "uninstalled",
+            name: "beta",
+            version: "2.0.0",
+            severity: "info",
+            needsReload: true,
+          },
+        ],
+      },
+    ],
+    undefined,
+    "single",
+  );
   const installWire = wireFacts(install.notifications);
   const uninstallWire = wireFacts(uninstall.notifications);
 
@@ -179,39 +207,53 @@ test("reinstall and update realized transitions share info severity and a reload
   const update = createWireHarness("update");
 
   // act
-  notifyWithContext(reinstall.ctx, reinstall.pi, REINSTALL_CONTEXT, [
-    {
-      name: "official",
-      scope: "project",
-      plugins: [
-        {
-          status: "reinstalled",
-          name: "gamma",
-          dependencies: [],
-          version: "3.0.0",
-          severity: "info",
-          needsReload: true,
-        },
-      ],
-    },
-  ]);
-  notifyWithContext(update.ctx, update.pi, UPDATE_CONTEXT, [
-    {
-      name: "official",
-      scope: "project",
-      plugins: [
-        {
-          status: "updated",
-          name: "gamma",
-          from: "2.0.0",
-          to: "3.0.0",
-          dependencies: [],
-          severity: "info",
-          needsReload: true,
-        },
-      ],
-    },
-  ]);
+  notifyWithContext(
+    reinstall.ctx,
+    reinstall.pi,
+    REINSTALL_CONTEXT,
+    [
+      {
+        name: "official",
+        scope: "project",
+        plugins: [
+          {
+            status: "reinstalled",
+            name: "gamma",
+            dependencies: [],
+            version: "3.0.0",
+            severity: "info",
+            needsReload: true,
+          },
+        ],
+      },
+    ],
+    undefined,
+    "single",
+  );
+  notifyWithContext(
+    update.ctx,
+    update.pi,
+    UPDATE_CONTEXT,
+    [
+      {
+        name: "official",
+        scope: "project",
+        plugins: [
+          {
+            status: "updated",
+            name: "gamma",
+            from: "2.0.0",
+            to: "3.0.0",
+            dependencies: [],
+            severity: "info",
+            needsReload: true,
+          },
+        ],
+      },
+    ],
+    undefined,
+    "single",
+  );
   const reinstallWire = wireFacts(reinstall.notifications);
   const updateWire = wireFacts(update.notifications);
 
@@ -232,36 +274,50 @@ test("enable and disable idempotent skips share info severity without a reload t
   const disable = createWireHarness("disable");
 
   // act
-  notifyWithContext(enable.ctx, enable.pi, ENABLE_CONTEXT, [
-    {
-      name: "official",
-      scope: "user",
-      plugins: [
-        {
-          status: "skipped",
-          name: "delta",
-          reasons: ["already enabled"],
-          severity: "info",
-          needsReload: false,
-        },
-      ],
-    },
-  ]);
-  notifyWithContext(disable.ctx, disable.pi, DISABLE_CONTEXT, [
-    {
-      name: "official",
-      scope: "user",
-      plugins: [
-        {
-          status: "skipped",
-          name: "delta",
-          reasons: ["already disabled"],
-          severity: "info",
-          needsReload: false,
-        },
-      ],
-    },
-  ]);
+  notifyWithContext(
+    enable.ctx,
+    enable.pi,
+    ENABLE_CONTEXT,
+    [
+      {
+        name: "official",
+        scope: "user",
+        plugins: [
+          {
+            status: "skipped",
+            name: "delta",
+            reasons: ["already enabled"],
+            severity: "info",
+            needsReload: false,
+          },
+        ],
+      },
+    ],
+    undefined,
+    "single",
+  );
+  notifyWithContext(
+    disable.ctx,
+    disable.pi,
+    DISABLE_CONTEXT,
+    [
+      {
+        name: "official",
+        scope: "user",
+        plugins: [
+          {
+            status: "skipped",
+            name: "delta",
+            reasons: ["already disabled"],
+            severity: "info",
+            needsReload: false,
+          },
+        ],
+      },
+    ],
+    undefined,
+    "single",
+  );
   const enableWire = wireFacts(enable.notifications);
   const disableWire = wireFacts(disable.notifications);
 
@@ -282,36 +338,50 @@ test("install and uninstall failures share error severity without a reload trail
   const uninstall = createWireHarness("uninstall");
 
   // act
-  notifyWithContext(install.ctx, install.pi, INSTALL_CONTEXT, [
-    {
-      name: "official",
-      scope: "project",
-      plugins: [
-        {
-          status: "failed",
-          name: "epsilon",
-          reasons: ["network unreachable"],
-          severity: "error",
-          needsReload: false,
-        },
-      ],
-    },
-  ]);
-  notifyWithContext(uninstall.ctx, uninstall.pi, UNINSTALL_CONTEXT, [
-    {
-      name: "official",
-      scope: "project",
-      plugins: [
-        {
-          status: "failed",
-          name: "epsilon",
-          reasons: ["permission denied"],
-          severity: "error",
-          needsReload: false,
-        },
-      ],
-    },
-  ]);
+  notifyWithContext(
+    install.ctx,
+    install.pi,
+    INSTALL_CONTEXT,
+    [
+      {
+        name: "official",
+        scope: "project",
+        plugins: [
+          {
+            status: "failed",
+            name: "epsilon",
+            reasons: ["network unreachable"],
+            severity: "error",
+            needsReload: false,
+          },
+        ],
+      },
+    ],
+    undefined,
+    "single",
+  );
+  notifyWithContext(
+    uninstall.ctx,
+    uninstall.pi,
+    UNINSTALL_CONTEXT,
+    [
+      {
+        name: "official",
+        scope: "project",
+        plugins: [
+          {
+            status: "failed",
+            name: "epsilon",
+            reasons: ["permission denied"],
+            severity: "error",
+            needsReload: false,
+          },
+        ],
+      },
+    ],
+    undefined,
+    "single",
+  );
   const installWire = wireFacts(install.notifications);
   const uninstallWire = wireFacts(uninstall.notifications);
 
@@ -332,36 +402,50 @@ test("reinstall and update absent-target skips share error severity without a re
   const update = createWireHarness("update");
 
   // act
-  notifyWithContext(reinstall.ctx, reinstall.pi, REINSTALL_CONTEXT, [
-    {
-      name: "official",
-      scope: "project",
-      plugins: [
-        {
-          status: "skipped",
-          name: "zeta",
-          reasons: ["not installed"],
-          severity: "error",
-          needsReload: false,
-        },
-      ],
-    },
-  ]);
-  notifyWithContext(update.ctx, update.pi, UPDATE_CONTEXT, [
-    {
-      name: "official",
-      scope: "project",
-      plugins: [
-        {
-          status: "skipped",
-          name: "zeta",
-          reasons: ["not installed"],
-          severity: "error",
-          needsReload: false,
-        },
-      ],
-    },
-  ]);
+  notifyWithContext(
+    reinstall.ctx,
+    reinstall.pi,
+    REINSTALL_CONTEXT,
+    [
+      {
+        name: "official",
+        scope: "project",
+        plugins: [
+          {
+            status: "skipped",
+            name: "zeta",
+            reasons: ["not installed"],
+            severity: "error",
+            needsReload: false,
+          },
+        ],
+      },
+    ],
+    undefined,
+    "single",
+  );
+  notifyWithContext(
+    update.ctx,
+    update.pi,
+    UPDATE_CONTEXT,
+    [
+      {
+        name: "official",
+        scope: "project",
+        plugins: [
+          {
+            status: "skipped",
+            name: "zeta",
+            reasons: ["not installed"],
+            severity: "error",
+            needsReload: false,
+          },
+        ],
+      },
+    ],
+    undefined,
+    "single",
+  );
   const reinstallWire = wireFacts(reinstall.notifications);
   const updateWire = wireFacts(update.notifications);
 

@@ -8,19 +8,33 @@ import assert from "node:assert/strict";
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, test } from "node:test";
-import { fileURLToPath } from "node:url";
 
+// The import above is a MODULE SPECIFIER, not a gate target: the loader
+// resolves it, so a stale one breaks `npm run typecheck` or throws at load --
+// louder than anything a gate could report. Only the repository-relative paths
+// a clause OPENS come from the registry (D-07-05), which is why a gate whose
+// only reach into production is `await import("../../extensions/...")` needs no
+// registry import at all.
 import { isRecordedButDisabled } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
-const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-const EXTENSION_SOURCE_ROOT = "extensions/pi-claude-marketplace";
-const PREDICATE_DEFINITION_SITE = "extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { DISABLED_STATE_TARGETS, EXTENSION_ROOT_REL } from "./gate-targets.ts";
+import { REPO_ROOT } from "./source-scan.ts";
 
-const FORMER_DEFINITION_SITES: readonly string[] = [
-  "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts",
-  "extensions/pi-claude-marketplace/orchestrators/plugin/plugin-state-classifier.ts",
-  "extensions/pi-claude-marketplace/orchestrators/plugin/update.ts",
-  "extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts",
+/**
+ * The ENBL-05 group in its declared order: the predicate's definition site
+ * first, then every module that classifies on it. Position is what separates
+ * the one site allowed to write the rule from the sites that must import it,
+ * so the module basenames are pinned in the walk case (D-07-03).
+ */
+const [PREDICATE_DEFINITION_SITE, ...FORMER_DEFINITION_SITES] = DISABLED_STATE_TARGETS;
+
+/** The module basenames the destructuring above binds, in registry order. */
+const DECLARED_MODULE_ORDER: readonly string[] = [
+  "state-io.ts",
+  "enable-disable.ts",
+  "plugin-state-classifier.ts",
+  "update-preflight.ts",
+  "plan.ts",
 ];
 
 const TWO_AXIS_CONJUNCTION = /compatibility\.installable\s*&&\s*![\w.]+\.enabled/;
@@ -92,7 +106,7 @@ async function extensionSourceFiles(): Promise<readonly string[]> {
     }
   };
 
-  await walk(EXTENSION_SOURCE_ROOT);
+  await walk(EXTENSION_ROOT_REL);
   return sourceFiles;
 }
 
@@ -167,8 +181,22 @@ describe("disabled-state classification architecture", () => {
 
   test("detects disabled-state twins across the complete extension source tree", async () => {
     // arrange
+    assert.ok(
+      DISABLED_STATE_TARGETS.length > 0,
+      "D-07-03: an empty DISABLED_STATE_TARGETS leaves the definition site and every consuming site undeclared, so both clauses in this gate report success over nothing.",
+    );
+    assert.deepEqual(
+      DISABLED_STATE_TARGETS.map((relativePath) => path.basename(relativePath)),
+      DECLARED_MODULE_ORDER,
+      "D-07-03: the definition site is separated from the consuming sites by POSITION in DISABLED_STATE_TARGETS. A member reordered, added, or dropped in the registry exempts the wrong file from the twin walk, and the walk would still report success.",
+    );
+
     const offenders: string[] = [];
     const sourceFiles = await extensionSourceFiles();
+    assert.ok(
+      sourceFiles.length > 0,
+      `D-07-03: walked ${EXTENSION_ROOT_REL} and found no .ts files -- a walk over zero files is a gate reporting success over nothing.`,
+    );
 
     // act
     for (const relativePath of sourceFiles) {
@@ -288,11 +316,17 @@ describe("disabled-state classification architecture", () => {
 
   test("requires every former definition site to import the single predicate", async () => {
     // arrange
+    assert.ok(
+      FORMER_DEFINITION_SITES.length > 0,
+      "D-07-03: with no consuming site declared, this clause reports success having opened nothing.",
+    );
     const offenders: string[] = [];
+    const visited: string[] = [];
 
     // act
     for (const relativePath of FORMER_DEFINITION_SITES) {
       const source = await readFile(path.join(REPO_ROOT, relativePath), "utf8");
+      visited.push(relativePath);
       if (!SINGLE_PREDICATE_IMPORT.test(stripComments(source))) {
         offenders.push(relativePath);
       }
@@ -300,5 +334,10 @@ describe("disabled-state classification architecture", () => {
 
     // assert
     assert.deepStrictEqual(offenders, []);
+    assert.deepStrictEqual(
+      visited,
+      FORMER_DEFINITION_SITES,
+      "D-07-03: the clause must have opened every declared consuming site. A site that stopped resolving drops out of this list, which is what turns an uninspected target into a failure instead of a pass.",
+    );
   });
 });

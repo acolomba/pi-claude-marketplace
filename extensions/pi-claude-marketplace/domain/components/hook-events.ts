@@ -34,8 +34,9 @@ import type { ClaudeHookEvent } from "../../shared/concerns/hooks.ts";
  * other events open/advance one. Both are admitted at the resolver layer
  * here; their matcher dispositions live in the tables below (`Stop`: the
  * `null` no-matcher sentinel like `UserPromptSubmit`; `StopFailure`: the
- * closed error-type set like `SessionStart`). Whether an admitted event is
- * actually dispatchable is tracked separately by `DISPATCHABLE_EVENTS`.
+ * closed error-type set like `SessionStart`). Every admitted event currently
+ * has a dispatch translator; each dispatch owner pins that invariant with an
+ * exhaustive record keyed by `DispatchableEvent`.
  */
 export const BUCKET_A_EVENTS = [
   "SessionStart",
@@ -55,15 +56,39 @@ export const BUCKET_A_EVENTS = [
  * the source of truth lives in exactly one place.
  *
  * SURF-02 / D-63-06: `BucketAEvent` is a structural duplicate of the
- * `ClaudeHookEvent` literal-union declared in `shared/notify.ts`. The
- * `as const satisfies readonly ClaudeHookEvent[]` assertion above is the
- * single-source-of-truth pin -- adding/removing a value from
- * `BUCKET_A_EVENTS` here without the matching `ClaudeHookEvent` edit (or
- * vice versa) breaks the typecheck at that assertion site. The two
- * declarations exist on opposite sides of the `shared/` <- `domain/`
- * import-direction fence (`import-x/no-restricted-paths`).
+ * `ClaudeHookEvent` literal-union declared in `shared/concerns/hooks.ts`. The
+ * two declarations sit on opposite sides of the `shared/` <- `domain/`
+ * import-direction fence (`import-x/no-restricted-paths`), and holding them
+ * in step takes one mechanism per direction:
+ *
+ *   - The `as const satisfies readonly ClaudeHookEvent[]` assertion above
+ *     proves every `BUCKET_A_EVENTS` member is a `ClaudeHookEvent`. A tuple
+ *     entry outside the union fails at that assertion site.
+ *   - `_BucketAEventsCoverageProof` below proves every `ClaudeHookEvent` is
+ *     a `BUCKET_A_EVENTS` member. A union member left unregistered fails
+ *     there.
+ *
+ * SCN-F025 / GGAT-04: `satisfies readonly T[]` constrains the tuple against
+ * the union and not the union against the tuple, so the reverse proof is what
+ * makes an unregistered event a compile error rather than an event the
+ * resolver admits and no dispatch translator routes.
  */
 export type BucketAEvent = (typeof BUCKET_A_EVENTS)[number];
+
+/**
+ * SCN-F025 / GGAT-04 completeness proof for the second direction described
+ * above. `Exclude<ClaudeHookEvent, BucketAEvent>` resolves to `never` only
+ * when the tuple registers the whole union; an unregistered member leaves a
+ * non-`never` type, which violates `_AssertNever`'s constraint and is a
+ * TS2344 build failure. Type-only, with no runtime footprint. The export is
+ * what keeps `noUnusedLocals` quiet -- `_AssertNever` and
+ * `_UnregisteredHookEvent` are the proof's own internals and mean nothing to
+ * a caller.
+ */
+type _AssertNever<T extends never> = T;
+type _UnregisteredHookEvent = Exclude<ClaudeHookEvent, BucketAEvent>;
+// fallow-ignore-next-line private-type-leak -- SCN-F025 completeness proof; a non-never result is a TS2344 build failure, and the export is what keeps `noUnusedLocals` quiet. `_AssertNever` / `_UnregisteredHookEvent` are the proof's own internals, meaningless to a caller.
+export type _BucketAEventsCoverageProof = _AssertNever<_UnregisteredHookEvent>;
 
 /**
  * The three bucket-A events whose matcher targets a Claude tool name
@@ -84,57 +109,19 @@ export const TOOL_EVENTS = [
 export type ToolEvent = (typeof TOOL_EVENTS)[number];
 
 /**
- * The bucket-A events whose Pi-side payload translators are wired -- a
- * subset of `BUCKET_A_EVENTS` that the dispatch/rewake tables and the
- * translator-test tables key on. The subset is retained (rather than
- * collapsed back into `BucketAEvent`) because the two-step
- * admission-then-dispatch pattern is reused by future bucket promotions:
- * an event can be admitted at the resolver layer before its dispatch
- * translator exists (D-87-04). `Stop` / `StopFailure` are now folded in --
- * they are dispatched by the settle handler off `agent_settled` rather than
- * a per-Pi-event composite, so the subset currently equals the full
- * admission tuple.
- *
- * The `as const satisfies readonly BucketAEvent[]` pin makes "every
- * dispatchable event is an admitted bucket-A event" a compile-time
- * invariant -- same shape as the `TOOL_EVENTS` subset above. Order
- * matches `BUCKET_A_EVENTS` as a deterministic registration order for
- * downstream consumers.
+ * Compatibility name for the exact admitted event union and the key domain
+ * for the dispatch/rewake/translator tables (D-87-04). Both dispatch owners
+ * accept the admitted union directly and index exhaustive records without a
+ * runtime membership guard. `Stop` / `StopFailure` are dispatched by the
+ * settle handler off `agent_settled` rather than a per-Pi-event composite.
  */
-const DISPATCHABLE_EVENTS = [
-  "SessionStart",
-  "UserPromptSubmit",
-  "PreToolUse",
-  "PostToolUse",
-  "PostToolUseFailure",
-  "PreCompact",
-  "PostCompact",
-  "SessionEnd",
-  "Stop",
-  "StopFailure",
-] as const satisfies readonly BucketAEvent[];
-
-/**
- * Literal union of dispatchable event names. Subset of `BucketAEvent`;
- * the key domain for the dispatch/rewake/translator tables (D-87-04).
- */
-export type DispatchableEvent = (typeof DISPATCHABLE_EVENTS)[number];
-
-/**
- * Runtime membership set + type guard for the dispatchable subset. The
- * dispatch index sites (`dispatch-exec.buildPayload`,
- * `async-rewake/registry`) narrow a `BucketAEvent` to `DispatchableEvent`
- * before indexing the translator tables. Every admitted event is now
- * dispatchable, so the non-dispatchable arm those sites guard is a defensive
- * belt (debug-log + noop) that no live event reaches; the guard is retained
- * so a future admission that outruns its translator degrades to noop rather
- * than a type error (D-87-04).
- */
-const DISPATCHABLE_MEMBERS: ReadonlySet<string> = new Set(DISPATCHABLE_EVENTS);
-
-export function isDispatchableEvent(event: BucketAEvent): event is DispatchableEvent {
-  return DISPATCHABLE_MEMBERS.has(event);
-}
+// D-87-04: the alias is structurally equal to `BucketAEvent` today but names a
+// different concept -- the key domain of the dispatch/rewake/translator tables.
+// `Record<DispatchableEvent, ...>` at three table literals states which set the table
+// must be total over; collapsing it to `BucketAEvent` would erase that at 24 call
+// sites to satisfy a structural rule.
+// eslint-disable-next-line sonarjs/redundant-type-aliases -- see the note above
+export type DispatchableEvent = BucketAEvent;
 
 /**
  * Literal union of non-tool bucket-A event names. The complement of
@@ -271,10 +258,11 @@ export const NON_TOOL_EVENT_CLOSED_SETS = {
   // safe value with the Claude SessionEnd reason vocabulary.
   // Empty set -- every non-empty matcher trips TOOL-02.
   SessionEnd: new Set<string>([]),
-  // D-58-06: Pi compact events carry no `trigger` field. Empty set --
-  // every non-empty matcher trips TOOL-02 (only match-all supportable).
-  PreCompact: new Set<string>([]),
-  PostCompact: new Set<string>([]),
+  // D-58-06 / PDEF-08: Pi compact reasons project onto Claude's complete
+  // trigger vocabulary: `manual` remains manual, while threshold and overflow
+  // both project to `auto`.
+  PreCompact: new Set(["manual", "auto"]),
+  PostCompact: new Set(["manual", "auto"]),
   // UserPromptSubmit and Stop intentionally omitted -- the null sentinel in
   // NON_TOOL_EVENT_FIELDS is their no-matcher-support disposition.
   // SFAIL-03: the closed error-type vocabulary for StopFailure, built from
