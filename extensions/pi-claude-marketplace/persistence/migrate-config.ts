@@ -172,8 +172,9 @@ export function buildConfigFromState(state: ExtensionState): ScopeConfig & {
  * On the `absent` arm: builds the projection and writes via saveConfig.
  * Atomicity, NFR-10 containment, and CONFIG_VALIDATOR revalidation are all
  * inherited from saveConfig (SPLIT-02 sole sanctioned writer). No notify(),
- * no console.warn -- saveConfig errors propagate; the caller routes
- * messaging through `shared/notify.ts`.
+ * no console.warn -- saveConfig errors propagate; the reconciliation caller
+ * routes structured outcomes through `shared/notify-context.ts` to
+ * `shared/notification-dispatch.ts`.
  */
 export async function migrateFirstRunConfig(
   loc: ScopedLocations,

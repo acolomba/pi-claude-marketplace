@@ -119,7 +119,23 @@ describe("findProviderForHost", () => {
     assert.strictEqual(provider, GITLAB_PROVIDER);
   });
 
-  for (const host of ["", "GitHub.com", "GitLab.com", "githvb.com", "gitlab.cam"]) {
+  const hostileHosts = [
+    "",
+    "GitHub.com",
+    "GitLab.com",
+    "evilgithub.com",
+    "github.com.evil",
+    "api.github.com",
+    "github.com:443",
+    "githvb.com",
+    "evilgitlab.com",
+    "gitlab.com.evil",
+    "api.gitlab.com",
+    "gitlab.com:443",
+    "gitlab.cam",
+  ] as const;
+
+  for (const host of hostileHosts) {
     test(`returns undefined for unknown host ${JSON.stringify(host)}`, () => {
       // arrange
       const remoteHost = host;
@@ -131,4 +147,18 @@ describe("findProviderForHost", () => {
       assert.strictEqual(provider, undefined);
     });
   }
+
+  test("keeps the GitHub and GitLab provider predicates disjoint", () => {
+    // arrange
+    const githubHost = "github.com";
+    const gitlabHost = "gitlab.com";
+
+    // act
+    const githubClaimsGitLab = GITHUB_PROVIDER.hostMatch(gitlabHost);
+    const gitlabClaimsGitHub = GITLAB_PROVIDER.hostMatch(githubHost);
+
+    // assert
+    assert.strictEqual(githubClaimsGitLab, false);
+    assert.strictEqual(gitlabClaimsGitHub, false);
+  });
 });

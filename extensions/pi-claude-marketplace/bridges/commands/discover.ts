@@ -52,7 +52,7 @@ import { causeChainTrailer, errorMessage, isErrnoException } from "../../shared/
 import { isPlainMarkdownFile, readDirEntriesTolerant } from "../../shared/fs-utils.ts";
 
 import type { DiscoveredCommand } from "./types.ts";
-import type { MaterializablePlugin } from "../../domain/resolver.ts";
+import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
 import type { Dirent } from "node:fs";
 
 /** D-07 return shape: `{ discovered, warnings }`. */

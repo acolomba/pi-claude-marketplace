@@ -1,0 +1,9 @@
+{
+  "command": "node --test-reporter tap tests/shared/redact-absolute-paths.test.ts",
+  "exitCode": 1,
+  "output": "TAP version 13\n# Subtest: exports absolute-path redaction from its named owner\nnot ok 1 - exports absolute-path redaction from its named owner\n  ---\n  error: Got unwanted rejection: redact-absolute-paths.ts is absent\n  code: ERR_ASSERTION\n  ...\n1..9\n# tests 9\n# pass 0\n# fail 9\n",
+  "targetTest": "exports absolute-path redaction from its named owner",
+  "targetFile": "tests/shared/redact-absolute-paths.test.ts",
+  "expected": "The named redact-absolute-paths owner exports deterministic, byte-preserving, idempotent redaction.",
+  "actual": "The assertion failed because redact-absolute-paths.ts does not exist before extraction."
+}

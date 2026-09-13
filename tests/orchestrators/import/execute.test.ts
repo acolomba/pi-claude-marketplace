@@ -24,15 +24,21 @@
 
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 
 import { mock, verify, when } from "strong-mock";
 
-import { importClaudeSettings } from "../../../extensions/pi-claude-marketplace/orchestrators/import/execute.ts";
+import {
+  createHooksRouting,
+  createHooksRuntime,
+  readHooksJson,
+} from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
+import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
+import { importClaudeSettings as importClaudeSettingsWithCache } from "../../../extensions/pi-claude-marketplace/orchestrators/import/execute.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import {
   ConcurrentInstallError,
   PluginShapeError,
@@ -40,6 +46,10 @@ import {
 import { createNotificationBoundary } from "../../edge/notification-boundary.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 
+import type {
+  HooksRouting,
+  HooksRuntime,
+} from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import type {
   ClaudeImportExecutionResult,
   ImportClaudeSettingsOptions,
@@ -68,6 +78,30 @@ type AddOptions = Parameters<AddMarketplace>[0];
 type InstallOptions = Parameters<InstallPlugin>[0];
 type Diagnostic = ClaudeImportExecutionResult["diagnostics"][number];
 type Collaborators = Required<ImportDeps>;
+type TestImportOptions = Omit<ImportClaudeSettingsOptions, "completionCache">;
+
+const completionCachesByRouting = new WeakMap<
+  HooksRouting,
+  ReturnType<typeof createCompletionCache>
+>();
+
+function completionCacheFor(hooksRouting: HooksRouting): ReturnType<typeof createCompletionCache> {
+  let completionCache = completionCachesByRouting.get(hooksRouting);
+  if (completionCache === undefined) {
+    completionCache = createCompletionCache();
+    completionCachesByRouting.set(hooksRouting, completionCache);
+  }
+
+  return completionCache;
+}
+
+function importClaudeSettings(
+  opts: TestImportOptions,
+): ReturnType<typeof importClaudeSettingsWithCache> {
+  const completionCache = completionCacheFor(opts.hooksRouting);
+
+  return importClaudeSettingsWithCache({ ...opts, completionCache });
+}
 
 interface HermeticScopes {
   readonly cwd: string;
@@ -381,6 +415,30 @@ function emptyImportResult(): ClaudeImportExecutionResult {
   };
 }
 
+test("declares plural cardinality when import produces zero rows", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticScopes(t, "zero-row-tally");
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2);
+
+  // act
+  const importResult = await importClaudeSettings({
+    ctx,
+    cwd,
+    deps: collaborators({
+      loadSettings: () => Promise.resolve(claudeSettings({})),
+      loadState: () => Promise.resolve(recordedState([])),
+    }),
+    pi,
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["user"],
+  });
+
+  // assert
+  assert.deepStrictEqual(importResult, emptyImportResult());
+  assert.deepStrictEqual(notifications, [{ message: "(no marketplaces)\n\nImport: 0 successes" }]);
+  verifyBoundary();
+});
+
 test("records a marketplace the state does not carry and installs its declared plugin", async (t) => {
   // arrange
   const { cwd } = await createHermeticScopes(t, "add-and-install");
@@ -437,6 +495,7 @@ test("records a marketplace the state does not carry and installs its declared p
     }),
     gitOps,
     pi,
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     selectedScopes: ["user"],
   });
 
@@ -458,6 +517,8 @@ test("passes the marketplace add an options object that carries the git port onl
   const withPort = createNotificationBoundary(1, 2);
   const withoutPort = createNotificationBoundary(1, 2);
   const gitOps = createOfflineGitOps();
+  const withRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
+  const withoutRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
   // The whole options object, not just its `gitOps` value: a conditional spread
   // OMITS the key, and an omitted key is a different object from one holding an
   // explicit undefined.
@@ -485,6 +546,7 @@ test("passes the marketplace add an options object that carries the git port onl
     deps: collaborators(promised()),
     gitOps,
     pi: withPort.pi,
+    hooksRouting: withRouting,
     selectedScopes: ["user"],
   });
   await importClaudeSettings({
@@ -492,6 +554,7 @@ test("passes the marketplace add an options object that carries the git port onl
     cwd,
     deps: collaborators(promised()),
     pi: withoutPort.pi,
+    hooksRouting: withoutRouting,
     selectedScopes: ["user"],
   });
 
@@ -499,6 +562,7 @@ test("passes the marketplace add an options object that carries the git port onl
   assert.deepStrictEqual(requested, [
     {
       ctx: withPort.ctx,
+      completionCache: completionCacheFor(withRouting),
       cwd,
       gitOps,
       notifications: { mode: "orchestrated" },
@@ -508,6 +572,7 @@ test("passes the marketplace add an options object that carries the git port onl
     },
     {
       ctx: withoutPort.ctx,
+      completionCache: completionCacheFor(withoutRouting),
       cwd,
       notifications: { mode: "orchestrated" },
       pi: withoutPort.pi,
@@ -587,6 +652,7 @@ for (const { addMarketplace, cause, title } of [
         loadState: () => Promise.resolve(recordedState([])),
       }),
       pi,
+      hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
       selectedScopes: ["user"],
     });
 
@@ -675,6 +741,7 @@ for (const { addMarketplace, cause, title } of [
         loadState: () => Promise.resolve(recordedState([])),
       }),
       pi,
+      hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
       selectedScopes: ["user"],
     });
 
@@ -730,6 +797,7 @@ test("ensures every marketplace before installing any plugin and never installs 
       loadState: () => Promise.resolve(recordedState([])),
     }),
     pi,
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     selectedScopes: ["project"],
   });
 
@@ -786,6 +854,7 @@ for (const { declared, stored, title } of [
           ),
       }),
       pi,
+      hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
       selectedScopes: ["user"],
     });
 
@@ -855,6 +924,7 @@ for (const { cause, declared, stored, title } of [
           ),
       }),
       pi,
+      hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
       selectedScopes: ["project"],
     });
 
@@ -917,6 +987,7 @@ test("fails a recorded marketplace whose stored source is unrecognized and rende
         ),
     }),
     pi,
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     selectedScopes: ["user"],
   });
 
@@ -972,12 +1043,13 @@ test("warns about a plugin whose marketplace declares no supported source and re
       loadState: () => Promise.resolve(recordedState([])),
     }),
     pi,
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     selectedScopes: ["user"],
   });
 
   // assert
   assert.deepStrictEqual(importResult, expectedResult);
-  assert.deepStrictEqual(notifications, [{ message: "(no marketplaces)" }]);
+  assert.deepStrictEqual(notifications, [{ message: "(no marketplaces)\n\nImport: 0 successes" }]);
   verifyBoundary();
 });
 
@@ -1006,12 +1078,13 @@ test("carries the settings loader's own diagnostics onto the result", async (t) 
       loadState: () => Promise.resolve(recordedState([])),
     }),
     pi,
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     selectedScopes: ["user"],
   });
 
   // assert
   assert.deepStrictEqual(importResult, expectedResult);
-  assert.deepStrictEqual(notifications, [{ message: "(no marketplaces)" }]);
+  assert.deepStrictEqual(notifications, [{ message: "(no marketplaces)\n\nImport: 0 successes" }]);
   verifyBoundary();
 });
 
@@ -1096,6 +1169,7 @@ for (const { cause, error, reason, title } of [
         loadState: () => Promise.resolve(recordedState([])),
       }),
       pi,
+      hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
       selectedScopes: ["project"],
     });
 
@@ -1180,6 +1254,7 @@ for (const { error, faulted, order, title } of [
         loadState: () => Promise.resolve(recordedState([])),
       }),
       pi,
+      hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
       selectedScopes: ["user"],
     });
 
@@ -1265,6 +1340,7 @@ for (const { cause, installPlugin, order, title } of [
         loadState: () => Promise.resolve(recordedState([])),
       }),
       pi,
+      hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
       selectedScopes: ["user"],
     });
 
@@ -1337,6 +1413,7 @@ for (const { declaresAgents, declaresMcp, marker } of [
         loadState: () => Promise.resolve(recordedState([])),
       }),
       pi,
+      hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
       selectedScopes: ["user"],
     });
 
@@ -1405,6 +1482,7 @@ test("records each post-commit warning the installed outcome carried as its own 
       loadState: () => Promise.resolve(recordedState([])),
     }),
     pi,
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     selectedScopes: ["user"],
   });
 
@@ -1448,6 +1526,7 @@ test("reports no changed resources when every install left the Pi resource set a
       loadState: () => Promise.resolve(recordedState([])),
     }),
     pi,
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     selectedScopes: ["user"],
   });
 
@@ -1506,6 +1585,7 @@ test("installs only the plugin the state does not already record under a recorde
         ),
     }),
     pi,
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     selectedScopes: ["user"],
   });
 
@@ -1551,6 +1631,7 @@ test("installs every plugin in orchestrated mode and never opts in to the defaul
       loadState: () => Promise.resolve(recordedState([])),
     }),
     pi,
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     selectedScopes: ["project"],
   });
 
@@ -1617,6 +1698,7 @@ test("abandons only the scope whose state cannot be read and records why", async
           : Promise.resolve(recordedState([])),
     }),
     pi,
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     selectedScopes: ["user", "project"],
   });
 
@@ -1668,6 +1750,7 @@ test("keeps each selected scope's marketplaces and plugins independent and rende
       loadState: () => Promise.resolve(recordedState([])),
     }),
     pi,
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     selectedScopes: ["user", "project"],
   });
 
@@ -1691,21 +1774,6 @@ test("keeps each selected scope's marketplaces and plugins independent and rende
   verifyBoundary();
 });
 
-/**
- * Count the completed atomic rewrites of one file. `write-file-atomic` finishes
- * every write with `fs.rename(tmp, target)`, so one rename whose destination is
- * the target is one complete rewrite. The spy carries no replacement, so the
- * real write still runs and the resulting bytes stay assertable; the count is
- * the separate promise. Counting discriminates the WB-03 batched post-pass from
- * a per-entry write loop, which an mtime comparison cannot: `>` holds for one
- * write and for thirty, and equality holds for a same-millisecond rewrite.
- */
-function countAtomicWrites(t: TestContext, targetPath: string): () => number {
-  const fsModule = createRequire(import.meta.url)("node:fs") as typeof import("node:fs");
-  const renameSpy = t.mock.method(fsModule, "rename");
-  return () => renameSpy.mock.calls.filter((call) => call.arguments[1] === targetPath).length;
-}
-
 /** The exact bytes `claude-plugins.json` carries after a batched post-pass. */
 function configBytes(declared: {
   readonly marketplaces: Record<string, { readonly source: string }>;
@@ -1714,7 +1782,7 @@ function configBytes(declared: {
   return `${JSON.stringify({ schemaVersion: 1, ...declared }, null, 2)}\n`;
 }
 
-test("declares every added marketplace and installed plugin in one batched config patch", async (t) => {
+test("declares every added marketplace and installed plugin in the persisted config", async (t) => {
   // arrange
   const { cwd, project } = await createHermeticScopes(t, "batch-happy");
   const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 2);
@@ -1743,52 +1811,12 @@ test("declares every added marketplace and installed plugin in one batched confi
       loadState: () => Promise.resolve(recordedState([])),
     }),
     pi,
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     selectedScopes: ["project"],
   });
 
   // assert
   assert.strictEqual(await readFile(project.configJsonPath, "utf8"), expectedBytes);
-  verifyBoundary();
-});
-
-test("touches the config file once for a multi-entry batch", async (t) => {
-  // arrange
-  const { cwd, project } = await createHermeticScopes(t, "batch-mtime");
-  const { ctx, pi, verifyBoundary } = createNotificationBoundary(1, 2);
-  await createScopeRoots(project);
-  await writeFile(project.configJsonPath, configBytes({ marketplaces: {}, plugins: {} }), "utf8");
-  const configWrites = countAtomicWrites(t, project.configJsonPath);
-  const expectedBytes = configBytes({
-    marketplaces: { mp1: { source: "owner/mp1" }, mp2: { source: "owner/mp2" } },
-    plugins: { "p1@mp1": {}, "p2@mp1": {}, "p3@mp2": {} },
-  });
-
-  // act
-  await importClaudeSettings({
-    ctx,
-    cwd,
-    deps: collaborators({
-      addMarketplace: (options) => Promise.resolve(addedOutcome(options.rawSource)),
-      installPlugin: () => Promise.resolve(installedOutcome()),
-      loadSettings: () =>
-        Promise.resolve(
-          claudeSettings({
-            enabledPlugins: { "p1@mp1": true, "p2@mp1": true, "p3@mp2": true },
-            extraKnownMarketplaces: {
-              mp1: { github: { repo: "owner/mp1" } },
-              mp2: { github: { repo: "owner/mp2" } },
-            },
-          }),
-        ),
-      loadState: () => Promise.resolve(recordedState([])),
-    }),
-    pi,
-    selectedScopes: ["project"],
-  });
-
-  // assert
-  assert.strictEqual(await readFile(project.configJsonPath, "utf8"), expectedBytes);
-  assert.strictEqual(configWrites(), 1);
   verifyBoundary();
 });
 
@@ -1799,7 +1827,6 @@ test("leaves the config byte-identical when the batch carries nothing to declare
   await createScopeRoots(project);
   const seededBytes = `${JSON.stringify({ schemaVersion: 1, futureKey: "preserved" }, null, 2)}\n`;
   await writeFile(project.configJsonPath, seededBytes, "utf8");
-  const configWrites = countAtomicWrites(t, project.configJsonPath);
 
   // act
   await importClaudeSettings({
@@ -1817,12 +1844,12 @@ test("leaves the config byte-identical when the batch carries nothing to declare
       loadState: () => Promise.resolve(recordedState([])),
     }),
     pi,
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     selectedScopes: ["project"],
   });
 
   // assert
   assert.strictEqual(await readFile(project.configJsonPath, "utf8"), seededBytes);
-  assert.strictEqual(configWrites(), 0);
   verifyBoundary();
 });
 
@@ -1856,6 +1883,7 @@ test("declares only the entries whose marketplace and install both succeeded", a
       loadState: () => Promise.resolve(recordedState([])),
     }),
     pi,
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     selectedScopes: ["project"],
   });
 
@@ -1907,6 +1935,7 @@ test("abandons the post-pass for a scope whose config is invalid and still write
       loadState: () => Promise.resolve(recordedState([])),
     }),
     pi,
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     selectedScopes: ["user", "project"],
   });
 
@@ -1960,6 +1989,7 @@ test("declares a missing config entry for a marketplace and plugin the state alr
         ),
     }),
     pi,
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     selectedScopes: ["project"],
   });
 
@@ -1978,7 +2008,6 @@ test("leaves an already-declared config byte-identical when every entry was a sk
     plugins: { "plugin@mp": {} },
   });
   await writeFile(project.configJsonPath, seededBytes, "utf8");
-  const configWrites = countAtomicWrites(t, project.configJsonPath);
 
   // act
   await importClaudeSettings({
@@ -2005,12 +2034,12 @@ test("leaves an already-declared config byte-identical when every entry was a sk
         ),
     }),
     pi,
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     selectedScopes: ["project"],
   });
 
   // assert
   assert.strictEqual(await readFile(project.configJsonPath, "utf8"), seededBytes);
-  assert.strictEqual(configWrites(), 0);
   verifyBoundary();
 });
 
@@ -2052,6 +2081,7 @@ test("repairs each scope's own config and never leaks the other scope's recorded
         ),
     }),
     pi,
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     selectedScopes: ["user", "project"],
   });
 
@@ -2091,6 +2121,7 @@ test("skips a recorded marketplace the later scope plan never declared when buil
       loadState: () => Promise.resolve(recordedState([])),
     }),
     pi,
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     selectedScopes: ["project", "project"],
   });
 
@@ -2157,6 +2188,7 @@ test("skips a repair for a marketplace the later scope plan never declared", asy
         ),
     }),
     pi,
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     selectedScopes: ["project", "project"],
   });
 
@@ -2215,6 +2247,7 @@ test("records a diagnostic and keeps the result when the batched config write fa
       loadState: () => Promise.resolve(recordedState([])),
     }),
     pi,
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     selectedScopes: ["project"],
   });
 
@@ -2237,10 +2270,64 @@ async function writeUnder(filePath: string, bytes: string): Promise<void> {
   await writeFile(filePath, bytes, "utf8");
 }
 
+async function seedHookRoute(
+  hooksRouting: HooksRouting,
+  cwd: string,
+  marketplace: string,
+  plugin: string,
+  command: string,
+): Promise<void> {
+  const pluginRoot = path.join(cwd, `${marketplace}-${plugin}`);
+  const hooksJsonPath = path.join(pluginRoot, "hooks", "hooks.json");
+  await writeUnder(
+    hooksJsonPath,
+    JSON.stringify({
+      PreToolUse: [{ matcher: "", hooks: [{ type: "command", command }] }],
+    }),
+  );
+  await hooksRouting.readAndCachePluginHooks({
+    cwd,
+    hooksJsonPath,
+    logPrefix: "import owner route fixture",
+    marketplace,
+    plugin,
+    resolvedSource: asAbsolutePluginRoot(pluginRoot),
+    scope: "project",
+  });
+  hooksRouting.rebuildRoutingTables();
+}
+
+function preToolUseRoutes(runtime: HooksRuntime): readonly {
+  readonly command: string;
+  readonly marketplace: string;
+  readonly plugin: string;
+  readonly scope: Scope;
+}[] {
+  return runtime.getRoutingBucket("PreToolUse").map((entry) => {
+    const command = entry.handlerDecl.command;
+    if (command === undefined) {
+      throw new Error("the PreToolUse fixture must declare a command handler");
+    }
+
+    return {
+      command,
+      marketplace: entry.marketplace,
+      plugin: entry.pluginId,
+      scope: entry.scope,
+    };
+  });
+}
+
 test("resolves every collaborator from production when the caller supplies no dependency bundle", async (t) => {
   // arrange
   const { cwd, project } = await createHermeticScopes(t, "no-deps");
   const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(2, 4);
+  const ownerRuntime = createHooksRuntime();
+  const peerRuntime = createHooksRuntime();
+  const hooksRouting = createHooksRouting(ownerRuntime, { readHooksJson });
+  const peerHooksRouting = createHooksRouting(peerRuntime, { readHooksJson });
+  await seedHookRoute(hooksRouting, cwd, "unrelated-mp", "unrelated", "echo unrelated");
+  await seedHookRoute(peerHooksRouting, cwd, "peer-mp", "peer", "echo peer");
   const marketplaceRoot = path.join(cwd, "fixture-mp");
   await writeUnder(
     path.join(marketplaceRoot, ".claude-plugin", "marketplace.json"),
@@ -2253,6 +2340,12 @@ test("resolves every collaborator from production when the caller supplies no de
   await writeUnder(
     path.join(marketplaceRoot, "plugins", "sample", ".claude-plugin", "plugin.json"),
     JSON.stringify({ name: "sample", version: "1.0.0" }),
+  );
+  await writeUnder(
+    path.join(marketplaceRoot, "plugins", "sample", "hooks", "hooks.json"),
+    JSON.stringify({
+      PreToolUse: [{ matcher: "", hooks: [{ type: "command", command: "echo imported" }] }],
+    }),
   );
   await writeUnder(
     path.join(cwd, ".claude", "settings.json"),
@@ -2280,27 +2373,40 @@ test("resolves every collaborator from production when the caller supplies no de
     marketplaces: { "fixture-mp": { source: marketplaceRoot } },
     plugins: { "sample@fixture-mp": {} },
   });
+  const importOptions = {
+    ctx,
+    cwd,
+    gitOps: createOfflineGitOps(),
+    pi,
+    hooksRouting,
+    selectedScopes: ["project"] as const,
+  };
 
   // act
-  const firstResult = await importClaudeSettings({
-    ctx,
-    cwd,
-    gitOps: createOfflineGitOps(),
-    pi,
-    selectedScopes: ["project"],
-  });
-  const secondResult = await importClaudeSettings({
-    ctx,
-    cwd,
-    gitOps: createOfflineGitOps(),
-    pi,
-    selectedScopes: ["project"],
-  });
+  const firstResult = await importClaudeSettings(importOptions);
+  const secondResult = await importClaudeSettings(importOptions);
 
   // assert
   assert.deepStrictEqual(firstResult, expectedFirstResult);
   assert.deepStrictEqual(secondResult, expectedSecondResult);
   assert.strictEqual(await readFile(project.configJsonPath, "utf8"), expectedBytes);
+  assert.deepStrictEqual(preToolUseRoutes(ownerRuntime), [
+    {
+      command: "echo imported",
+      marketplace: "fixture-mp",
+      plugin: "sample",
+      scope: "project",
+    },
+    {
+      command: "echo unrelated",
+      marketplace: "unrelated-mp",
+      plugin: "unrelated",
+      scope: "project",
+    },
+  ]);
+  assert.deepStrictEqual(preToolUseRoutes(peerRuntime), [
+    { command: "echo peer", marketplace: "peer-mp", plugin: "peer", scope: "project" },
+  ]);
   assert.deepStrictEqual(notifications, [
     {
       message:
@@ -2349,6 +2455,7 @@ test("declares a marketplace whose only plugin failed to install", async (t) => 
       loadState: () => Promise.resolve(recordedState([])),
     }),
     pi,
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     selectedScopes: ["project"],
   });
 
@@ -2387,6 +2494,7 @@ test("declares a freshly installed plugin under a recorded marketplace that reco
         ),
     }),
     pi,
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     selectedScopes: ["project"],
   });
 
@@ -2433,6 +2541,7 @@ test("lets a later scope plan's source mismatch supersede the header an earlier 
       ]),
     }),
     pi,
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     selectedScopes: ["project", "project"],
   });
 

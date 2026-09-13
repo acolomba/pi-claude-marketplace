@@ -8,19 +8,20 @@ import {
   abortPreparedMcp,
   commitPreparedMcp,
   finalizeMcpReplacement,
+  MalformedMcpServersError,
   prepareStageMcpServers,
   replacePreparedMcp,
   rollbackMcpReplacement,
 } from "../../../extensions/pi-claude-marketplace/bridges/mcp/stage.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { McpServerCollisionError } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
+import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
 async function createProjectScope(
   t: TestContext,
   prefix: string,
 ): Promise<{ cwd: string; locations: ReturnType<typeof locationsFor> }> {
-  const cwd = await mkdtemp(path.join(tmpdir(), prefix));
-  t.after(() => rm(cwd, { recursive: true, force: true, maxRetries: 3 }));
+  const { cwd } = await createHermeticEnvironment(t, prefix);
   return { cwd, locations: locationsFor("project", cwd) };
 }
 
@@ -62,6 +63,45 @@ describe("prepareStageMcpServers", () => {
     assert.strictEqual(Object.isFrozen(prepared.result.recorded), true);
     assert.strictEqual(Object.isFrozen(prepared.result.warnings), true);
     assert.strictEqual(await pathExists(locations.mcpJsonPath), false);
+  });
+
+  test("ignores an ambient user MCP server during project staging", async (t) => {
+    // arrange
+    const ambientAgentDir = await mkdtemp(path.join(tmpdir(), "mcp-stage-ambient-"));
+    const hadAgentDir = Object.hasOwn(process.env, "PI_CODING_AGENT_DIR");
+    const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
+    process.env.PI_CODING_AGENT_DIR = ambientAgentDir;
+    t.after(async () => {
+      if (hadAgentDir && previousAgentDir !== undefined) {
+        process.env.PI_CODING_AGENT_DIR = previousAgentDir;
+      } else {
+        delete process.env.PI_CODING_AGENT_DIR;
+      }
+
+      await rm(ambientAgentDir, { recursive: true, force: true });
+    });
+    const ambientMcpPath = locationsFor("user", "/ambient-cwd").mcpJsonPath;
+    const ambientBytes = '{"mcpServers":{"ambient":{"command":"host-only"}}}\n';
+    await mkdir(path.dirname(ambientMcpPath), { recursive: true });
+    await writeFile(ambientMcpPath, ambientBytes);
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-isolated-");
+
+    // act
+    const prepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot: path.join(cwd, "plugins", "acme"),
+      pluginData: path.join(cwd, "data", "acme"),
+      servers: { ambient: { command: "case-owned" } },
+    });
+
+    // assert
+    assert.strictEqual(prepared.kind, "staged");
+    assert.strictEqual(await readFile(ambientMcpPath, "utf8"), ambientBytes);
+
+    abortPreparedMcp(prepared);
   });
 
   test("replaces owned servers and preserves complete foreign content", async (t) => {
@@ -200,39 +240,77 @@ describe("prepareStageMcpServers", () => {
     });
   });
 
-  test("treats an array server map as empty while preserving top-level fields", async (t) => {
-    // arrange
-    const { cwd, locations } = await createProjectScope(t, "mcp-stage-array-");
-    await mkdir(path.dirname(locations.mcpJsonPath), { recursive: true });
-    await writeFile(locations.mcpJsonPath, '{"foreignTopLevel":"keep","mcpServers":[]}');
+  for (const { description, storedValue, valueKind } of [
+    { description: "a null", storedValue: "null", valueKind: "null" },
+    { description: "a string", storedValue: '"foreign"', valueKind: "string" },
+    { description: "an array", storedValue: '[{"command":"foreign"}]', valueKind: "array" },
+    { description: "a boolean", storedValue: "true", valueKind: "boolean" },
+    { description: "a number", storedValue: "17", valueKind: "number" },
+  ]) {
+    test(`rejects ${description} mcpServers field without changing the scoped document`, async (t) => {
+      // arrange
+      const { cwd, locations } = await createProjectScope(t, "mcp-stage-malformed-field-");
+      const storedBytes = `{"foreignTopLevel":"keep","mcpServers":${storedValue}}\n`;
+      await mkdir(path.dirname(locations.mcpJsonPath), { recursive: true });
+      await writeFile(locations.mcpJsonPath, storedBytes, "utf8");
+      const storedMetadata = await stat(locations.mcpJsonPath, { bigint: true });
 
-    // act
-    const prepared = await prepareStageMcpServers({
-      locations,
-      cwd,
-      marketplaceName: "catalog",
-      pluginName: "acme",
-      pluginRoot: path.join(cwd, "plugins", "acme"),
-      pluginData: path.join(cwd, "data", "acme"),
-      servers: { server: { url: "https://mcp.example.test" } },
-    });
+      // act & assert
+      await assert.rejects(
+        () =>
+          prepareStageMcpServers({
+            locations,
+            cwd,
+            marketplaceName: "catalog",
+            pluginName: "acme",
+            pluginRoot: path.join(cwd, "plugins", "acme"),
+            pluginData: path.join(cwd, "data", "acme"),
+            servers: { server: { url: "https://mcp.example.test" } },
+          }),
+        (error: unknown) => {
+          assert.strictEqual(error instanceof MalformedMcpServersError, true);
+          if (!(error instanceof MalformedMcpServersError)) {
+            return false;
+          }
 
-    // assert
-    assert.strictEqual(prepared.kind, "staged");
-    if (prepared.kind !== "staged") {
-      return;
-    }
-
-    assert.deepStrictEqual(prepared._nextDoc, {
-      foreignTopLevel: "keep",
-      mcpServers: {
-        server: {
-          url: "https://mcp.example.test",
-          _piClaudeMarketplace: { plugin: "acme", marketplace: "catalog" },
+          assert.deepStrictEqual(
+            {
+              constructor: error.constructor,
+              name: error.name,
+              message: error.message,
+              mcpJsonPath: error.mcpJsonPath,
+              valueKind: error.valueKind,
+            },
+            {
+              constructor: MalformedMcpServersError,
+              name: "MalformedMcpServersError",
+              message: `mcpServers at ${locations.mcpJsonPath} must be an object; received ${valueKind}.`,
+              mcpJsonPath: locations.mcpJsonPath,
+              valueKind,
+            },
+          );
+          return true;
         },
-      },
+      );
+      const retainedBytes = await readFile(locations.mcpJsonPath, "utf8");
+      const retainedMetadata = await stat(locations.mcpJsonPath, { bigint: true });
+      assert.strictEqual(retainedBytes, storedBytes);
+      assert.deepStrictEqual(
+        {
+          ino: retainedMetadata.ino,
+          size: retainedMetadata.size,
+          mtimeNs: retainedMetadata.mtimeNs,
+          ctimeNs: retainedMetadata.ctimeNs,
+        },
+        {
+          ino: storedMetadata.ino,
+          size: storedMetadata.size,
+          mtimeNs: storedMetadata.mtimeNs,
+          ctimeNs: storedMetadata.ctimeNs,
+        },
+      );
     });
-  });
+  }
 
   test("normalizes malformed server values with complete ordered warnings", async (t) => {
     // arrange
@@ -472,19 +550,7 @@ describe("prepareStageMcpServers", () => {
 
   test("omits project substitution and injection in a user scope", async (t) => {
     // arrange
-    const cwd = await mkdtemp(path.join(tmpdir(), "mcp-stage-user-cwd-"));
-    const agentDirectory = await mkdtemp(path.join(tmpdir(), "mcp-stage-user-agent-"));
-    t.after(() => rm(cwd, { recursive: true, force: true, maxRetries: 3 }));
-    t.after(() => rm(agentDirectory, { recursive: true, force: true, maxRetries: 3 }));
-    const previousAgentDirectory = process.env.PI_CODING_AGENT_DIR;
-    t.after(() => {
-      if (previousAgentDirectory === undefined) {
-        delete process.env.PI_CODING_AGENT_DIR;
-      } else {
-        process.env.PI_CODING_AGENT_DIR = previousAgentDirectory;
-      }
-    });
-    process.env.PI_CODING_AGENT_DIR = agentDirectory;
+    const { cwd } = await createHermeticEnvironment(t, "mcp-stage-user-");
     const locations = locationsFor("user", cwd);
     const pluginRoot = path.join(cwd, "plugins", "acme");
     const pluginData = path.join(cwd, "data", "acme");

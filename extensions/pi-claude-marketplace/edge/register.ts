@@ -16,8 +16,11 @@
 //       * delegates to registerListMarketplacesTool + registerListPluginsTool.
 //
 // `process.cwd()` is acceptable here at the registration glue layer --
-// this is the one site where it is sanctioned. The cwd captured here is
-// per-command-registration.
+// this is the one site where it is sanctioned. The read happens inside
+// the `getArgumentCompletions` callback, once per completion lookup, so
+// completions resolve against the directory the process is in at the
+// moment the user types, and no directory value is retained between
+// lookups.
 //
 // BLOCK C: this file imports from edge/* (sibling), orchestrators/* (one
 // allowed up-import), shared/* (leaf), and the Pi peer dep. The
@@ -32,6 +35,7 @@
 // provider but does NOT emit user-visible messages.
 
 import { makeLocationsResolver } from "../orchestrators/edge-deps.ts";
+import { createNodeReinstallPlugins } from "../orchestrators/plugin/reinstall-flow.ts";
 
 import {
   isClaudePluginCommandLine,
@@ -60,6 +64,8 @@ import { routeClaudePlugin } from "./router.ts";
 
 import type { SubcommandHandlers } from "./router.ts";
 import type { EdgeDeps } from "./types.ts";
+import type { InstallHooksRouting } from "../orchestrators/plugin/install-disable-cascade.ts";
+import type { UpdatePluginsFn } from "../orchestrators/plugin/update-flow.ts";
 import type { ExtensionAPI } from "../platform/pi-api.ts";
 
 const COMMAND_DESCRIPTION =
@@ -75,25 +81,35 @@ const COMMAND_DESCRIPTION =
  * `deps.gitOps` and `deps.pluginUpdate` are threaded into the marketplace
  * add/update/remove handlers per D-04 EdgeDeps.
  */
-export function registerClaudePluginCommand(pi: ExtensionAPI, deps: EdgeDeps): void {
+export function registerClaudePluginCommand(
+  pi: ExtensionAPI,
+  deps: EdgeDeps,
+  hooksRouting: InstallHooksRouting,
+  updatePlugins: UpdatePluginsFn,
+): void {
+  const reinstallPlugins = createNodeReinstallPlugins(hooksRouting, deps.completionCache);
   const handlers: SubcommandHandlers = {
     bootstrap: makeBootstrapHandler(pi, deps),
-    install: makeInstallHandler(pi),
-    uninstall: makeUninstallHandler(pi),
-    update: makeUpdateHandler(pi),
+    install: makeInstallHandler(pi, hooksRouting, deps.completionCache),
+    uninstall: makeUninstallHandler(pi, hooksRouting, deps.completionCache),
+    update: makeUpdateHandler(pi, updatePlugins),
     fetch: makeFetchHandler(pi),
-    reinstall: makeReinstallHandler(pi),
+    reinstall: makeReinstallHandler(pi, reinstallPlugins),
     list: makeListHandler(pi),
     pluginInfo: makePluginInfoHandler(pi),
     pending: makePendingHandler(pi),
-    enable: makeEnableDisableHandler(pi, true),
-    disable: makeEnableDisableHandler(pi, false),
-    import: makeImportHandler(pi, deps),
+    enable: makeEnableDisableHandler(pi, true, hooksRouting),
+    disable: makeEnableDisableHandler(pi, false, hooksRouting),
+    import: makeImportHandler(pi, deps, hooksRouting),
     marketplaceAdd: makeAddHandler(pi, deps),
-    marketplaceRemove: makeRemoveHandler(pi),
+    marketplaceRemove: makeRemoveHandler(pi, deps),
     marketplaceList: makeMarketplaceListHandler(pi),
     marketplaceInfo: makeMarketplaceInfoHandler(pi),
-    marketplaceUpdate: makeMarketplaceUpdateHandler(pi, deps),
+    marketplaceUpdate: makeMarketplaceUpdateHandler(pi, {
+      completionCache: deps.completionCache,
+      gitOps: deps.gitOps,
+      pluginUpdate: deps.pluginUpdate,
+    }),
     marketplaceAutoupdate: makeAutoupdateHandler(pi, true),
     marketplaceNoautoupdate: makeAutoupdateHandler(pi, false),
   };
@@ -102,10 +118,14 @@ export function registerClaudePluginCommand(pi: ExtensionAPI, deps: EdgeDeps): v
     description: COMMAND_DESCRIPTION,
     handler: (args, ctx) => routeClaudePlugin(args, handlers, ctx),
     // This `process.cwd()` is the single sanctioned site.
-    // Captured at registration time; threads through every keystroke's
-    // completion lookup via the closed-over resolver.
+    // The arrow body runs per completion lookup and reads
+    // `process.cwd()` there, so a fresh `makeLocationsResolver` is
+    // built from the current directory on each lookup -- the read
+    // happens per lookup, not once when the command is registered.
+    // Pinned by `tests/edge/register.test.ts`, test "resolves argument
+    // completions against the working directory the callback runs in".
     getArgumentCompletions: (prefix) =>
-      getArgumentCompletions(prefix, makeLocationsResolver(process.cwd())),
+      getArgumentCompletions(prefix, makeLocationsResolver(process.cwd()), deps.completionCache),
   });
 
   // TC-7 autocomplete wrapper. Installed unconditionally on every

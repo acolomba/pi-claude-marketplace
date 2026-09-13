@@ -1,0 +1,9 @@
+{
+  "command": "node --test --test-isolation=none --test-reporter=tap tests/shared/notification-dispatch.test.ts",
+  "exitCode": 1,
+  "output": "TAP version 13\n# Subtest: exports the sole notification dispatch owner\nnot ok 1 - exports the sole notification dispatch owner\n  error: Got unwanted rejection: notification-dispatch.ts must own Pi dispatch\n  code: ERR_ASSERTION\n  actual: ERR_MODULE_NOT_FOUND\n1..1\n# tests 1\n# suites 0\n# pass 0\n# fail 1",
+  "targetTest": "exports the sole notification dispatch owner",
+  "targetFile": "tests/shared/notification-dispatch.test.ts",
+  "expected": "the named notification dispatch owner can be imported",
+  "actual": "ERR_MODULE_NOT_FOUND for extensions/pi-claude-marketplace/shared/notification-dispatch.ts"
+}

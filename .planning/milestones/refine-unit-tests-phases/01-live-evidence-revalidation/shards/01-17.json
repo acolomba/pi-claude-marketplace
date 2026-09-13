@@ -1,0 +1,1191 @@
+{
+  "version": 1,
+  "inventoryMode": "locked-corpus",
+  "plan": "01-17",
+  "files": [
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md",
+      "category": "adversarial",
+      "assignedPlan": "01-17",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-001",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-002",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-003",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-004",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-005",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-006",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-007",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-008",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-009",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-010",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-011",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-012",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-013",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-014",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-015",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-016",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-017",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-018",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-019",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-020",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-021",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-022",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-023",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-024",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-025",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-026",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-027",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-028"
+      ],
+      "reviewStatus": "complete",
+      "outcome": "live findings"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md",
+      "category": "adversarial",
+      "assignedPlan": "01-17",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-001",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-002",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-003",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-004",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-005",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-006",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-007",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-008",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-009",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-010",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-011",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-012",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-013",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-014",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-015",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-016",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-017",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-018",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-019",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-020",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-021",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-022",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-023",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-024"
+      ],
+      "reviewStatus": "complete",
+      "outcome": "live findings"
+    }
+  ],
+  "sourceClaims": [
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-001",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md",
+      "label": "DRA-001",
+      "findingId": "DRA-001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-002",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md",
+      "label": "DRA-002",
+      "findingId": "DRA-002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-003",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md",
+      "label": "DRA-003",
+      "findingId": "DRA-003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-004",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md",
+      "label": "DRA-004",
+      "findingId": "DRA-004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-005",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md",
+      "label": "DRA-005",
+      "findingId": "DRA-005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-006",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md",
+      "label": "DRA-006",
+      "findingId": "DRA-006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-007",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md",
+      "label": "DRA-007",
+      "findingId": "DRA-007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-008",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md",
+      "label": "DRA-008",
+      "findingId": "DRA-008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-009",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md",
+      "label": "DRA-009",
+      "findingId": "DRA-009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-010",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md",
+      "label": "DRA-010",
+      "findingId": "DRA-010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-011",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md",
+      "label": "DRA-011",
+      "findingId": "DRA-011"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-012",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md",
+      "label": "DRA-012",
+      "findingId": "DRA-012"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-013",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md",
+      "label": "DRA-013",
+      "findingId": "DRA-013"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-014",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md",
+      "label": "DRA-014",
+      "findingId": "DRA-014"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-015",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md",
+      "label": "DRA-015",
+      "findingId": "DRA-015"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-016",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md",
+      "label": "DRA-016",
+      "findingId": "DRA-016"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-017",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md",
+      "label": "DRA-017",
+      "findingId": "DRA-017"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-018",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md",
+      "label": "DRA-018",
+      "findingId": "DRA-018"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-019",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md",
+      "label": "DRA-019",
+      "findingId": "DRA-019"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-020",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md",
+      "label": "DRA-020",
+      "findingId": "DRA-020"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-021",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md",
+      "label": "DRA-021",
+      "findingId": "DRA-021"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-022",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md",
+      "label": "DRA-022",
+      "findingId": "DRA-022"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-023",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md",
+      "label": "DRA-023",
+      "findingId": "DRA-023"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-024",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md",
+      "label": "DRA-024",
+      "findingId": "DRA-024"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-025",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md",
+      "label": "DRA-025",
+      "findingId": "DRA-025"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-026",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md",
+      "label": "DRA-026",
+      "findingId": "DRA-026"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-027",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md",
+      "label": "DRA-027",
+      "findingId": "DRA-027"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-028",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md",
+      "label": "DRA-028",
+      "findingId": "DRA-028"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-001",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md",
+      "label": "DRB-001",
+      "findingId": "DRB-001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-002",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md",
+      "label": "DRB-002",
+      "findingId": "DRB-002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-003",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md",
+      "label": "DRB-003",
+      "findingId": "DRB-003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-004",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md",
+      "label": "DRB-004",
+      "findingId": "DRB-004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-005",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md",
+      "label": "DRB-005",
+      "findingId": "DRB-005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-006",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md",
+      "label": "DRB-006",
+      "findingId": "DRB-006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-007",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md",
+      "label": "DRB-007",
+      "findingId": "DRB-007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-008",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md",
+      "label": "DRB-008",
+      "findingId": "DRA-004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-009",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md",
+      "label": "DRB-009",
+      "findingId": "DRB-008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-010",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md",
+      "label": "DRB-010",
+      "findingId": "DRB-009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-011",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md",
+      "label": "DRB-011",
+      "findingId": "DRB-010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-012",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md",
+      "label": "DRB-012",
+      "findingId": "DRA-022"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-013",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md",
+      "label": "DRB-013",
+      "findingId": "DRB-011"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-014",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md",
+      "label": "DRB-014",
+      "findingId": "DRB-012"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-015",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md",
+      "label": "DRB-015",
+      "findingId": "DRB-013"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-016",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md",
+      "label": "DRB-016",
+      "findingId": "DRA-016"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-017",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md",
+      "label": "DRB-017",
+      "findingId": "DRA-023"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-018",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md",
+      "label": "DRB-018",
+      "findingId": "DRA-006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-019",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md",
+      "label": "DRB-019",
+      "findingId": "DRA-024"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-020",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md",
+      "label": "DRB-020",
+      "findingId": "DRA-026"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-021",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md",
+      "label": "DRB-021",
+      "findingId": "DRA-025"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-022",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md",
+      "label": "DRB-022",
+      "findingId": "DRA-027"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-023",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md",
+      "label": "DRB-023",
+      "findingId": "DRB-014"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-024",
+      "filePath": ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md",
+      "label": "DRB-024",
+      "findingId": "DRA-028"
+    }
+  ],
+  "findings": [
+    {
+      "id": "DRA-001",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-001"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/resolver.ts" }],
+      "testRefs": [{ "path": "tests/domain/resolver.test.ts" }],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "node --test tests/domain/resolver.test.ts in isolated copy after hardcoding resolved names",
+        "exitCode": 0,
+        "observed": "The focused suite passed after both resolution constructors were changed to return name p1."
+      },
+      "rationale": "All resolving fixtures still use p1, so the public name field remains undiscriminated.",
+      "destination": "Vary entry names and assert complete resolved values in Phase 2."
+    },
+    {
+      "id": "DRA-002",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-002"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/resolver.ts" }],
+      "testRefs": [{ "path": "tests/domain/resolver.test.ts" }],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "node --test tests/domain/resolver.test.ts in isolated copy after removing agents from supported path kinds",
+        "exitCode": 0,
+        "observed": "The focused suite passed with agents removed from SUPPORTED_COMPONENT_PATH_KINDS."
+      },
+      "rationale": "No positive agents declaration or conventional agents directory is asserted by the paired test.",
+      "destination": "Add a positive agents resolution case in Phase 2."
+    },
+    {
+      "id": "DRA-003",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-003"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/resolver.ts" }],
+      "testRefs": [
+        { "path": "tests/domain/resolver.test.ts" },
+        { "path": "tests/architecture/hooks-foundation.test.ts" }
+      ],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "node --test tests/domain/resolver.test.ts in isolated copy after removing channels and userConfig",
+        "exitCode": 0,
+        "observed": "The paired suite passed; current architecture coverage still only negatively excludes hooks."
+      },
+      "rationale": "The two declaration-only unsupported kinds remain unpinned by a full closed-tuple assertion.",
+      "destination": "Pin the closed tuple and add declaration cases in Phase 2."
+    },
+    {
+      "id": "DRA-004",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-004",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-008"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/resolver.ts" }],
+      "testRefs": [{ "path": "tests/domain/resolver.test.ts" }],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "node --test tests/domain/resolver.test.ts in isolated copy after replacing the path-source plugin root with marketplaceRoot/wrong",
+        "exitCode": 0,
+        "observed": "The focused suite passed with the wrong plugin root."
+      },
+      "rationale": "Five narrowing cases still assert only that pluginRoot is a string.",
+      "destination": "Compare pluginRoot to the exact expected path in Phase 2."
+    },
+    {
+      "id": "DRA-005",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-005"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/resolver.ts" }],
+      "testRefs": [{ "path": "tests/domain/resolver.test.ts" }],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "node --test tests/domain/resolver.test.ts in isolated copy after reversing unsupported-kind iteration",
+        "exitCode": 0,
+        "observed": "The focused suite passed with notes and unsupported arrays emitted in reverse order."
+      },
+      "rationale": "Multi-element reason arrays are still checked by membership instead of ordered whole values.",
+      "destination": "Assert exact notes and unsupported array order in Phase 2."
+    },
+    {
+      "id": "DRA-006",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-006",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-018"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/resolver.ts" }],
+      "testRefs": [{ "path": "tests/domain/resolver.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current test inspection",
+        "observed": "Lines 1-2000 still contain projection assertions and no complete ResolvedPlugin comparison."
+      },
+      "rationale": "The first half of the paired suite remains uniformly projection-based.",
+      "destination": "Replace weak projections with independently built whole-value expectations in Phase 2."
+    },
+    {
+      "id": "DRA-007",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-007"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/resolver.ts" }],
+      "testRefs": [{ "path": "tests/domain/resolver.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source/test inspection",
+        "observed": "declaresUnsupportedKind still reads manifest top-level kinds and no paired case supplies one."
+      },
+      "rationale": "The manifest disjunct remains reachable and unowned.",
+      "destination": "Add a top-level manifest unsupported-kind case in Phase 2."
+    },
+    {
+      "id": "DRA-008",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-008"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/resolver.ts" }],
+      "testRefs": [{ "path": "tests/domain/resolver.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source/test inspection",
+        "observed": "nestedExperimentalValue still accepts entry data while the paired positive case supplies experimental data only through plugin.json."
+      },
+      "rationale": "The entry-side disjunct remains reachable and untested.",
+      "destination": "Add an entry experimental-themes case in Phase 2."
+    },
+    {
+      "id": "DRA-009",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-009"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/resolver.ts" }],
+      "testRefs": [{ "path": "tests/domain/resolver.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current source/test inspection",
+        "observed": "Every unsupported convention case still matches the expected filesystem kind; no existing-path kind mismatch is covered."
+      },
+      "rationale": "A file where a directory is required can still be misclassified without failing this suite.",
+      "destination": "Add a separately named convention-kind mismatch case in Phase 2."
+    },
+    {
+      "id": "DRA-010",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-010"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/resolver.ts" }],
+      "testRefs": [{ "path": "tests/domain/resolver.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current TypeBox boundary and call-graph inspection",
+        "observed": "The entry contract is validated before normal resolution; a non-boolean entry defaultEnabled is caller-contract-invalid, while undefined fallthrough is covered."
+      },
+      "rationale": "The historical report treats defense-in-depth for invalid typed input as a test gap, but whether to preserve that behavior is policy rather than a production defect.",
+      "destination": "Decide whether invalid typed entry values deserve an explicit defensive contract."
+    },
+    {
+      "id": "DRA-011",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-011"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "N/A", "reason": "Claim concerns a test comment." }],
+      "testRefs": [{ "path": "tests/domain/resolver.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current DFEN case census",
+        "observed": "The comment still promises the whole precedence table although four enumerated cells are absent."
+      },
+      "rationale": "The current comment overstates the case matrix even though existing rows discriminate the implementation.",
+      "destination": "Reword the comment or add the four named rows in Phase 2."
+    },
+    {
+      "id": "DRA-012",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-012"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "N/A", "reason": "Claim concerns duplicate tests." }],
+      "testRefs": [{ "path": "tests/domain/resolver.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current case comparison",
+        "observed": "The URL-without-clone cases at the beginning and PURL block still arrange and assert the same behavior."
+      },
+      "rationale": "The duplicate remains and the later PURL case is the clearer owner.",
+      "destination": "Consolidate the duplicate case in Phase 2."
+    },
+    {
+      "id": "DRA-013",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-013"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/domain/resolver.ts" },
+        { "path": "extensions/pi-claude-marketplace/domain/name.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/domain/resolver.test.ts" },
+        { "path": "tests/orchestrators/plugin/list.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph export and caller inspection",
+        "observed": "resolveStrict still calls assertSafeName, but the propagation throw remains asserted only through the list orchestrator."
+      },
+      "rationale": "The paired resolver test still does not own this exported behavior.",
+      "destination": "Add a structured resolver rejection case in Phase 2."
+    },
+    {
+      "id": "DRA-014",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-014"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/resolver.ts" }],
+      "testRefs": [{ "path": "tests/domain/resolver.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current branch and fixture inspection",
+        "observed": "readPathOrArray still has a null-as-undeclared arm and no case supplies a null component path."
+      },
+      "rationale": "Legal third-party JSON can reach the branch and the paired suite does not distinguish it.",
+      "destination": "Add a null component-declaration case in Phase 2."
+    },
+    {
+      "id": "DRA-015",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-015"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/resolver.ts" }],
+      "testRefs": [{ "path": "tests/domain/resolver.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current collector and multi-kind case inspection",
+        "observed": "seenPaths remains per-kind and the sole multi-kind case still uses distinct paths."
+      },
+      "rationale": "Cross-kind isolation is still not discriminated.",
+      "destination": "Use one shared relative path across two supported kinds and assert both in Phase 2."
+    },
+    {
+      "id": "DRA-016",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-016",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-016"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "N/A", "reason": "Claim concerns assertion structure." }],
+      "testRefs": [{ "path": "tests/domain/resolver.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current test inspection",
+        "observed": "The first slice still contains 22 state-equality checks followed by conditional assertion blocks; each is currently non-vacuous."
+      },
+      "rationale": "The guards remain fragile structure, though no present case passes vacuously.",
+      "destination": "Use assertion-function narrowing or whole-value assertions in Phase 2."
+    },
+    {
+      "id": "DRA-017",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-017"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/resolver.ts" }],
+      "testRefs": [{ "path": "tests/domain/resolver.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current assertion inspection",
+        "observed": "The referenced MCP parity case still compares production outputs before its independent literal assertion."
+      },
+      "rationale": "The first comparison is redundant and would be unsafe without the following literal.",
+      "destination": "Keep only independent expected-value comparisons in Phase 2."
+    },
+    {
+      "id": "DRA-018",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-018"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/resolver.ts" }],
+      "testRefs": [{ "path": "N/A", "reason": "Dead computation has no behavioral owner." }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph call-path inspection",
+        "observed": "addUnsupportedKindNotes remains Promise<boolean>; its sole caller awaits and discards the result."
+      },
+      "rationale": "The dirty accumulator return is still dead computation.",
+      "destination": "Change the helper to Promise<void> in Phase 2."
+    },
+    {
+      "id": "DRA-019",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-019"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/resolver.ts" }],
+      "testRefs": [
+        { "path": "N/A", "reason": "Defensive source shape is a static maintainability claim." }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current preflight control-flow inspection",
+        "observed": "The seven short-circuit results still spread partial.notes before any path can populate it."
+      },
+      "rationale": "The empty prefixes are live dead defensive structure, not a runtime defect.",
+      "destination": "Simplify or explicitly document the defensive shape after higher-risk fixes."
+    },
+    {
+      "id": "DRA-020",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-020"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/resolver.ts" }],
+      "testRefs": [{ "path": "tests/domain/resolver.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current reader/case inspection",
+        "observed": "readManifest and readStandaloneMcp still catch reads while referenced MCP and hooks readers hoist reads; a current standalone-MCP case pins wrapping."
+      },
+      "rationale": "The inconsistent I/O taxonomy remains, but changing it changes a currently asserted user-visible contract.",
+      "destination": "Choose a consistent read-error ownership policy before implementation."
+    },
+    {
+      "id": "DRA-021",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-021"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/resolver.ts" }],
+      "testRefs": [{ "path": "N/A", "reason": "Claim concerns misleading documentation." }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current result-type and caller inspection",
+        "observed": "GitPluginRootResult still documents resolvedSha as version-recording data while the resolver intentionally discards it and install carries it via a side channel."
+      },
+      "rationale": "Behavior is correct but the local type comment remains misleading.",
+      "destination": "Clarify resolvedSha ownership in documentation."
+    },
+    {
+      "id": "DRA-022",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-022",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-012"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/resolver.ts" }],
+      "testRefs": [
+        { "path": "tests/architecture/hooks-foundation.test.ts" },
+        { "path": "tests/domain/resolver.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph export ownership inspection",
+        "observed": "Both public component-kind tuples remain owned by hooks-foundation rather than the mirrored resolver test; the unsupported tuple assertion remains negative-only."
+      },
+      "rationale": "The export ownership and weak closed-set gate claims remain current.",
+      "destination": "Move unit ownership to resolver.test.ts and retain only cross-module architecture assertions."
+    },
+    {
+      "id": "DRA-023",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-023",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-017"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/resolver.ts" }],
+      "testRefs": [{ "path": "tests/domain/resolver.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current export census",
+        "observed": "ResolvedPluginSchema remains a runtime export with no runtime consumer or paired case; compiler constraints explain why it is exported."
+      },
+      "rationale": "Adding a permissive TypeBox Check case would not strengthen the exact-key contract, so deletion or acceptance is an ownership choice.",
+      "destination": "Decide whether to retain the compiler-forced runtime export without a direct case."
+    },
+    {
+      "id": "DRA-024",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-024",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-019"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/resolver.ts" }],
+      "testRefs": [{ "path": "tests/domain/resolver.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current rejection assertions",
+        "observed": "Four gate rejection cases still accept Error plus a message fragment instead of PluginShapeError structured fields."
+      },
+      "rationale": "A plain Error with matching prose can still satisfy these assertions.",
+      "destination": "Assert PluginShapeError and its complete shape in Phase 2."
+    },
+    {
+      "id": "DRA-025",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-025",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-021"
+      ],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/resolver.ts" }],
+      "testRefs": [
+        { "path": "tests/domain/components/hooks.test.ts" },
+        { "path": "tests/orchestrators/plugin/info.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph replacement-consumer inspection plus node --test tests/domain/resolver.test.ts",
+        "observed": "The fixtures still have multiple concern consumers, and the focused resolver suite passes; moving them beside resolver would break legitimate shared use."
+      },
+      "rationale": "The premise that the five fixtures exist solely for resolver tests is false on the current tree.",
+      "destination": "Preserve the shared fixtures; no remediation."
+    },
+    {
+      "id": "DRA-026",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-026",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-020"
+      ],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/resolver.ts" }],
+      "testRefs": [{ "path": "tests/domain/resolver.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current branch ownership plus node --test tests/domain/resolver.test.ts",
+        "observed": "The dev-null stat remains a read-only POSIX probe and the focused suite passes; it uniquely covers the non-file/non-directory branch without external state mutation."
+      },
+      "rationale": "The historical warning overstates hermeticity risk; replacing it with mkfifo would be less portable.",
+      "destination": "Accept the read-only probe unless platform support changes."
+    },
+    {
+      "id": "DRA-027",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-027",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-022"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/resolver.ts" }],
+      "testRefs": [{ "path": "tests/domain/resolver.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph readStandaloneHooks call path",
+        "observed": "readStandaloneHooks still computes ifCtx and a bound noopCompileIf, while parseHooksConfig with skipIfMap true does not consume either value."
+      },
+      "rationale": "The advertised pure resolver still reads process environment for dead work and retains an unchecked bind cast.",
+      "destination": "Delete the dead context computation and bind in Phase 2."
+    },
+    {
+      "id": "DRA-028",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-a.md#DRA-028",
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-024"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "operator decision",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/resolver.ts" }],
+      "testRefs": [{ "path": "tests/domain/resolver.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph responsibility and branch census",
+        "observed": "The resolver remains a 1757-line module spanning source, manifest, component, MCP, hooks, defaults, and gate concerns; the named test gaps cluster at these seams."
+      },
+      "rationale": "A split remains reasonable but should follow correctness and test-strength repairs to avoid multiplying change surfaces.",
+      "destination": "Choose and sequence a resolver module split after Phase 2 behavior repairs."
+    },
+    {
+      "id": "DRB-001",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-001"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/resolver.ts" }],
+      "testRefs": [{ "path": "tests/domain/resolver.test.ts" }],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "node --test tests/domain/resolver.test.ts in isolated copy after invoking resolveGitPluginRoot twice",
+        "exitCode": 0,
+        "observed": "The focused suite passed after the resolver called its injected git-root collaborator twice with the parsed source."
+      },
+      "rationale": "The zero-parameter gitCtx callback still discards arguments and records no invocation count, so the resolver's only injected interaction is unverified.",
+      "destination": "Use an exact interaction mock, including zero-call cases, in Phase 2."
+    },
+    {
+      "id": "DRB-002",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-002"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/resolver.ts" }],
+      "testRefs": [{ "path": "tests/domain/resolver.test.ts" }],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "node --test tests/domain/resolver.test.ts in isolated copy after changing not installed to not cached",
+        "exitCode": 0,
+        "observed": "The focused suite passed with the not-cached arm's contract text changed."
+      },
+      "rationale": "The not-cached case still checks only the unavailable state and absent pluginRoot, unlike its sibling arms.",
+      "destination": "Assert the complete unavailable verdict including notes in Phase 2."
+    },
+    {
+      "id": "DRB-003",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-003"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/resolver.ts" }],
+      "testRefs": [{ "path": "tests/domain/resolver.test.ts" }],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "node --test tests/domain/resolver.test.ts in isolated copy after collapsing MCP detail branches",
+        "exitCode": 0,
+        "observed": "The focused suite passed when loose and strict malformed-MCP notes always used the detailed form."
+      },
+      "rationale": "All current assertions use an includes fragment and do not distinguish the deliberate strict/loose text contract.",
+      "destination": "Pin one exact strict and one exact loose malformed-MCP result in Phase 2."
+    },
+    {
+      "id": "DRB-004",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-004"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/resolver.ts" }],
+      "testRefs": [{ "path": "tests/domain/resolver.test.ts" }],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "npm run typecheck in isolated copy after widening requireInstallable to MaterializablePlugin",
+        "exitCode": 0,
+        "observed": "Typecheck passed after widening the strict assertion signature."
+      },
+      "rationale": "The NFR-7 proof block still lacks a direction-specific compile-time proof for requireInstallable.",
+      "destination": "Add positive and negative strict-gate narrowing proofs in Phase 2."
+    },
+    {
+      "id": "DRB-005",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-005"
+      ],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/resolver.ts" }],
+      "testRefs": [{ "path": "tests/domain/resolver.test.ts" }],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "npm run typecheck in isolated copy after narrowing requirePartialInstallable to ResolvedPluginInstallable",
+        "exitCode": 2,
+        "observed": "Current typecheck rejected the mutation at four partially-available call sites because their narrowed intersection became never."
+      },
+      "rationale": "The historical premise that over-narrowing passes no longer holds: current runtime cases themselves provide positive replacement proof at the type boundary.",
+      "destination": "No new proof is required for this mutation; preserve the current rejecting call sites."
+    },
+    {
+      "id": "DRB-006",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-006"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/resolver.ts" }],
+      "testRefs": [{ "path": "tests/domain/resolver.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current assertion and construction-order inspection",
+        "observed": "The only multi-element supported assertion still sorts the production array in place before comparison; production emits skills then commands."
+      },
+      "rationale": "The test destroys and therefore cannot pin the public order.",
+      "destination": "Compare the unsorted whole array in Phase 2."
+    },
+    {
+      "id": "DRB-007",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-007"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/resolver.ts" }],
+      "testRefs": [{ "path": "tests/domain/resolver.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current D-101-08 case inspection",
+        "observed": "The metadata-conflict case still asserts only state is not unavailable and negative note fragments, allowing partially-available."
+      },
+      "rationale": "The standalone negative assertion does not establish the promised installable result.",
+      "destination": "Assert the complete installable verdict in Phase 2."
+    },
+    {
+      "id": "DRB-008",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-009"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/resolver.ts" }],
+      "testRefs": [{ "path": "tests/domain/resolver.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current loose-MCP assertion inspection",
+        "observed": "The valid loose MCP case still compares only Object.keys of mcpServers."
+      },
+      "rationale": "A server record with the correct key and corrupted value still passes.",
+      "destination": "Compare the complete MCP map in Phase 2."
+    },
+    {
+      "id": "DRB-009",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-010"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "N/A", "reason": "Claim concerns test fixture construction." }],
+      "testRefs": [{ "path": "tests/domain/resolver.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current fixture inspection",
+        "observed": "The invalid defaultEnabled case still uses Object.defineProperty without enumerable, writable, or configurable flags."
+      },
+      "rationale": "The fixture does not model an ordinary JSON-derived own enumerable property.",
+      "destination": "Use the existing LooseEntry helper pattern in Phase 2."
+    },
+    {
+      "id": "DRB-010",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-011"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/resolver.ts" }],
+      "testRefs": [{ "path": "tests/domain/resolver.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current NFR-7 proof and schema inspection",
+        "observed": "The proof still excludes only pluginRoot and defaultEnabled from unavailable; seven other forbidden materializable fields lack an exact-key guard."
+      },
+      "rationale": "Optional widening of the unavailable schema remains compile-clean and runtime-byte-neutral.",
+      "destination": "Add a bidirectional keyof exactness proof in Phase 2."
+    },
+    {
+      "id": "DRB-011",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-013"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/resolver.ts" }],
+      "testRefs": [{ "path": "tests/domain/resolver.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current import and resolveContext inspection",
+        "observed": "The test helper still hand-repeats StatKind and callback signatures rather than importing StatKindReader or deriving ResolveContext members."
+      },
+      "rationale": "The primary fake can drift from exported consumer contracts.",
+      "destination": "Type helper members from the production exports in Phase 2."
+    },
+    {
+      "id": "DRB-012",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-014"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/resolver.ts" }],
+      "testRefs": [{ "path": "tests/domain/resolver.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current PluginShapeError assertion comparison",
+        "observed": "The update-partial requireInstallable case still asserts only error.shape.kind while three siblings compare complete shapes."
+      },
+      "rationale": "Wrong partialable and unsupportedKinds values remain invisible on the update path.",
+      "destination": "Compare the complete structured error shape in Phase 2."
+    },
+    {
+      "id": "DRB-013",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-015"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/domain/resolver.ts" }],
+      "testRefs": [{ "path": "tests/domain/resolver.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current strict-order scenario comparison",
+        "observed": "The two declared-order cases remain near-duplicates; the earlier weak case uniquely covers absent conventional skills."
+      },
+      "rationale": "Deleting the weak copy would lose a branch, but its unique premise can be isolated and asserted strongly.",
+      "destination": "Rewrite it as the absent-convention case with a whole verdict in Phase 2."
+    },
+    {
+      "id": "DRB-014",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/adversarial/domain-resolver-b.md#DRB-023"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "Phase 2",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "N/A", "reason": "Claim concerns fixture path resolution in tests." }
+      ],
+      "testRefs": [
+        { "path": "tests/orchestrators/plugin/info.test.ts" },
+        { "path": "tests/domain/resolver.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph and current fixture-call inspection",
+        "observed": "Resolver and hooks tests resolve fixtures from import.meta.url, while plugin info still reads literal tests/fixtures paths from process.cwd()."
+      },
+      "rationale": "The cross-suite launch-directory dependency remains live outside the resolver pair.",
+      "destination": "Route fixture-path hermeticity repair to the owning plugin-info pair in Phase 2."
+    }
+  ]
+}

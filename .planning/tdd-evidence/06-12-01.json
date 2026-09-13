@@ -1,0 +1,9 @@
+{
+  "command": "node --test-reporter tap tests/shared/notification-types.test.ts",
+  "exitCode": 1,
+  "output": "TAP version 13\n# Subtest: exports the exact notification vocabulary from its named owner\nnot ok 1 - exports the exact notification vocabulary from its named owner\n  ---\n  error: Got unwanted rejection: notification-types.ts is absent\n  code: ERR_ASSERTION\n  ...\n1..5\n# tests 5\n# pass 0\n# fail 5\n",
+  "targetTest": "exports the exact notification vocabulary from its named owner",
+  "targetFile": "tests/shared/notification-types.test.ts",
+  "expected": "The named notification-types owner exports the exact tuples and discriminated-union contract.",
+  "actual": "The assertion failed because notification-types.ts does not exist before extraction."
+}

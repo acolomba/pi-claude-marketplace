@@ -1,0 +1,9 @@
+{
+  "command": "node --test --test-isolation=none --test-reporter=tap tests/orchestrators/plugin/install-disable-cascade.test.ts",
+  "exitCode": 1,
+  "output": "TAP version 13\n# Subtest: disables a freshly installed record after a clean five-kind cascade\nnot ok 1 - disables a freshly installed record after a clean five-kind cascade\n  error: Got unwanted rejection: install-disable-cascade.ts must own the disabled-install contract\n  code: ERR_ASSERTION\n  actual: ERR_MODULE_NOT_FOUND\n1..8\n# tests 8\n# pass 0\n# fail 8",
+  "targetTest": "disables a freshly installed record after a clean five-kind cascade",
+  "targetFile": "tests/orchestrators/plugin/install-disable-cascade.test.ts",
+  "expected": "the named install disable-cascade owner exports the direct cascade and exact-row contract",
+  "actual": "ERR_MODULE_NOT_FOUND for extensions/pi-claude-marketplace/orchestrators/plugin/install-disable-cascade.ts"
+}

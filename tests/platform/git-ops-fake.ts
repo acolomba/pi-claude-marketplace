@@ -73,6 +73,30 @@ function notFound(ref: string): Error & { code: string } {
   return Object.assign(error, { code: "NotFoundError" });
 }
 
+function snapshotCloneCall(
+  options: Parameters<GitOps["clone"]>[0],
+): GitOpsFakeCalls["clone"][number] {
+  const { auth, ...dataOptions } = options;
+  const snapshot = structuredClone(dataOptions);
+  return auth === undefined ? snapshot : { ...snapshot, auth };
+}
+
+function snapshotFetchCall(
+  options: Parameters<GitOps["fetch"]>[0],
+): GitOpsFakeCalls["fetch"][number] {
+  const { auth, ...dataOptions } = options;
+  const snapshot = structuredClone(dataOptions);
+  return auth === undefined ? snapshot : { ...snapshot, auth };
+}
+
+function snapshotRemoteRefCall(
+  options: Parameters<GitOps["resolveRemoteRef"]>[0],
+): GitOpsFakeCalls["resolveRemoteRef"][number] {
+  const { auth, ...dataOptions } = options;
+  const snapshot = structuredClone(dataOptions);
+  return auth === undefined ? snapshot : { ...snapshot, auth };
+}
+
 export function createGitOpsFake(options: GitOpsFakeOptions): GitOpsFake {
   if (options.boundary !== "memory") {
     throw new Error("createGitOpsFake requires the explicit memory boundary");
@@ -126,7 +150,7 @@ export function createGitOpsFake(options: GitOpsFakeOptions): GitOpsFake {
 
   const gitOps: GitOps = {
     async clone(cloneOptions) {
-      calls.clone.push(structuredClone(cloneOptions));
+      calls.clone.push(snapshotCloneCall(cloneOptions));
       requireRemote(cloneOptions.url);
       if (options.cloneError !== undefined) {
         throw options.cloneError;
@@ -143,7 +167,7 @@ export function createGitOpsFake(options: GitOpsFakeOptions): GitOpsFake {
       updateWorktree(cloneOptions.dir, remoteHead);
     },
     async fetch(fetchOptions) {
-      calls.fetch.push(structuredClone(fetchOptions));
+      calls.fetch.push(snapshotFetchCall(fetchOptions));
       if (options.fetchError !== undefined) {
         throw options.fetchError;
       }
@@ -200,7 +224,7 @@ export function createGitOpsFake(options: GitOpsFakeOptions): GitOpsFake {
       return state.branch;
     },
     async resolveRemoteRef(resolveOptions) {
-      calls.resolveRemoteRef.push(structuredClone(resolveOptions));
+      calls.resolveRemoteRef.push(snapshotRemoteRefCall(resolveOptions));
       requireRemote(resolveOptions.url);
       if (options.resolveRemoteRefError !== undefined) {
         throw options.resolveRemoteRefError;

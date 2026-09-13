@@ -19,15 +19,14 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
 
 import { migrateLegacyMarketplaceRecords } from "../../extensions/pi-claude-marketplace/persistence/migrate.ts";
 
-const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-const HOOKS_TS_PATH = path.join(
-  REPO_ROOT,
-  "extensions/pi-claude-marketplace/domain/components/hooks.ts",
-);
+import { HOOKS_SCHEMA_TARGETS } from "./gate-targets.ts";
+import { REPO_ROOT } from "./source-scan.ts";
+
+const HOOKS_SCHEMA_REL = HOOKS_SCHEMA_TARGETS[0];
+const HOOKS_TS_PATH = path.join(REPO_ROOT, HOOKS_SCHEMA_REL);
 
 /**
  * Strip line + block comments so a doc-comment that legally mentions the
@@ -42,6 +41,11 @@ function stripComments(src: string): string {
 
 test("HOOK-03: hooks.ts source never carries 'additionalProperties: false' (defense-in-depth)", async () => {
   // arrange
+  assert.ok(
+    HOOKS_SCHEMA_TARGETS.length > 0,
+    "D-07-03: an empty target group leaves this gate reading nothing and reporting absence over zero files.",
+  );
+
   const src = await readFile(HOOKS_TS_PATH, "utf8");
 
   // act

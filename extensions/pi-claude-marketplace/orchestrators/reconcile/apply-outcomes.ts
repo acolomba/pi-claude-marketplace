@@ -26,10 +26,11 @@
 import path from "node:path";
 
 import { PluginShapeError, StateLockHeldError } from "../../shared/errors.ts";
+import { type ContentReason } from "../../shared/notification-types.ts";
+import { type Reason } from "../../shared/notification-types.ts";
 import { narrowProbeError } from "../../shared/probe-classifiers.ts";
 
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
-import type { ContentReason, Reason } from "../../shared/notify.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { EnableDegradationSignals } from "../plugin/enable-disable.ts";
 
@@ -372,9 +373,7 @@ export type PerEntryOutcome =
  * Exported for direct unit-test exercise of the closed-set mapping
  * (the function is otherwise module-private).
  */
-export function classifyOrchestratorThrow(
-  err: unknown,
-): import("../../shared/notify.ts").ContentReason {
+export function classifyOrchestratorThrow(err: unknown): ContentReason {
   if (err instanceof StateLockHeldError) {
     return "lock held";
   }
@@ -418,9 +417,7 @@ export class MigrateConfigSaveError extends Error {
  * SyntaxError one level deep in `Error.cause`, so unwrap before falling back
  * to the generic probe classifier).
  */
-export function classifyReadPassThrow(
-  err: unknown,
-): import("../../shared/notify.ts").ContentReason {
+export function classifyReadPassThrow(err: unknown): ContentReason {
   if (err instanceof StateLockHeldError) {
     return "lock held";
   }

@@ -3,11 +3,10 @@ import { spawn, type ChildProcess, type SpawnOptions } from "node:child_process"
 import { EventEmitter } from "node:events";
 import * as fs from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { PassThrough } from "node:stream";
-import { test, beforeEach, type TestContext } from "node:test";
+import { test, type TestContext } from "node:test";
 
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 
@@ -23,40 +22,33 @@ import {
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts";
 import { adaptObservationResultForEvent } from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts";
 import {
-  addPluginConfigToCache,
-  beforeAgentStartHandlerFor,
-  hydrateProjectScopeForCwd,
-  readAndCachePluginHooks,
-  rebuildRoutingTables,
-  registerHooksBridge,
-  removePluginConfigFromCache,
+  createBeforeAgentStartHandler,
+  createHooksHydration,
+  createHooksRouting,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
 import { MATCH_ALL_IF } from "../../../extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts";
+import { readHooksJson } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import {
-  bumpEpoch,
-  getRoutingBucket,
-  parsedConfigEntries,
-  pendingSessionStartContextEntries,
-  resetRoutingState,
-  routingTableEntries,
-} from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
-import {
-  currentEpoch,
+  createRoutingStateOperations,
   type RoutingEntry,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
+import { createHooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import {
-  agentEndCacheHandler,
-  resetSettleState,
-  settleHandlerFor,
-} from "../../../extensions/pi-claude-marketplace/bridges/hooks/settle.ts";
-import { type BucketAEvent } from "../../../extensions/pi-claude-marketplace/domain/components/hook-events.ts";
+  BUCKET_A_EVENTS,
+  type BucketAEvent,
+} from "../../../extensions/pi-claude-marketplace/domain/components/hook-events.ts";
 import { parseMatcher } from "../../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
-import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import {
+  loadState,
+  saveState,
+} from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
 import type { SpawnDeps } from "../../../extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts";
 import type { HookExecutor } from "../../../extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts";
+import type { HooksHydrationDeps } from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
+import type { HooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import type { HooksConfig } from "../../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type {
@@ -84,15 +76,96 @@ import type {
  * primitives.
  */
 
-beforeEach(() => {
-  resetRoutingState();
-});
+interface RuntimeChildHarness {
+  readonly child: ChildProcess;
+  readonly signals: Array<number | NodeJS.Signals>;
+  destroy(): void;
+}
+
+function createRuntimeChild(pid: number): RuntimeChildHarness {
+  const events = new EventEmitter();
+  const stdin = new PassThrough();
+  const stdout = new PassThrough();
+  const stderr = new PassThrough();
+  const signals: Array<number | NodeJS.Signals> = [];
+  const child = Object.assign(events, {
+    stdin,
+    stdout,
+    stderr,
+    stdio: [stdin, stdout, stderr, undefined, undefined] as ChildProcess["stdio"],
+    connected: false,
+    pid,
+    exitCode: null,
+    signalCode: null,
+    killed: false,
+    spawnargs: [],
+    spawnfile: "",
+    kill(signal?: NodeJS.Signals | number): boolean {
+      signals.push(signal ?? "SIGTERM");
+      return true;
+    },
+    disconnect(): void {
+      return;
+    },
+    send(): boolean {
+      return false;
+    },
+    ref(): void {
+      return;
+    },
+    unref(): void {
+      return;
+    },
+    [Symbol.dispose](): void {
+      return;
+    },
+  });
+
+  return {
+    child,
+    signals,
+    destroy(): void {
+      child.removeAllListeners();
+      stdin.destroy();
+      stdout.destroy();
+      stderr.destroy();
+    },
+  };
+}
 
 test(
   "reload resets lifecycle state before hydrating routes, reaping orphans, and registering handlers",
-  { concurrency: false },
+  {
+    concurrency: false,
+    skip: process.platform === "linux" ? false : "orphan ownership markers use Linux /proc",
+  },
   async (t) => {
     // arrange
+    const operationLog: string[] = [];
+    let traceReload = false;
+    let routingWrites = 0;
+    const runtimeState = createHooksRuntime();
+    const runtime = new Proxy(runtimeState, {
+      get(target, property, receiver): unknown {
+        if (property === "setRoutingBucket") {
+          return (...args: Parameters<typeof target.setRoutingBucket>): void => {
+            if (traceReload) {
+              if (routingWrites % BUCKET_A_EVENTS.length === 0) {
+                operationLog.push("routing:rebuild");
+              }
+
+              routingWrites += 1;
+            }
+
+            target.setRoutingBucket(...args);
+          };
+        }
+
+        return Reflect.get(target, property, receiver);
+      },
+    });
+    const peerRuntime = createHooksRuntime();
+    const peerChild = createRuntimeChild(43_108);
     const root = await mkdtemp(path.join(tmpdir(), "hooks-router-reload-"));
     const projectRoot = path.join(root, "project");
     const userAgentRoot = path.join(root, "user-agent");
@@ -101,9 +174,9 @@ test(
     process.env.HOME = path.join(root, "home");
     process.env.PI_CODING_AGENT_DIR = userAgentRoot;
     t.after(async () => {
-      shutdownInMemoryChildren();
-      resetSettleState();
-      resetRoutingState();
+      shutdownInMemoryChildren(runtime);
+      shutdownInMemoryChildren(peerRuntime);
+      peerChild.destroy();
       if (originalHome === undefined) {
         delete process.env.HOME;
       } else {
@@ -118,10 +191,20 @@ test(
 
       await rm(root, { recursive: true, force: true, maxRetries: 3 });
     });
-    resetSettleState();
-    shutdownInMemoryChildren();
+    shutdownInMemoryChildren(runtime);
     const userLocations = locationsFor("user", projectRoot);
     const projectLocations = locationsFor("project", projectRoot);
+    const hydration = createHooksHydration(runtime, {
+      async loadState(extensionRoot: string): Promise<ExtensionState> {
+        if (traceReload) {
+          const scope = extensionRoot === userLocations.extensionRoot ? "user" : "project";
+          operationLog.push(`hydrate:${scope}-state`);
+        }
+
+        return loadState(extensionRoot);
+      },
+      readHooksJson,
+    });
     const userHooksPath = path.join(userLocations.hooksDir, "user-hooks", "hooks.json");
     const projectHooksPath = path.join(projectLocations.hooksDir, "project-hooks", "hooks.json");
     const userPluginRoot = path.join(root, "plugins", "user-plugin");
@@ -250,8 +333,6 @@ test(
     } satisfies ExtensionContext;
     const registrations: Array<{ readonly event: string; readonly handler: unknown }> = [];
     const sentMessages: Array<{ readonly message: unknown; readonly options: unknown }> = [];
-    const operationLog: string[] = [];
-    let traceReload = false;
     const pi = {
       on(event: string, handler: unknown): void {
         registrations.push({ event, handler });
@@ -269,15 +350,20 @@ test(
       return Promise.resolve({ kind: "noop" });
     };
 
-    await registerHooksBridge(pi, { ctx: context, cwd: projectRoot, executor });
-    const previousEpoch = currentEpoch();
+    await hydration.registerHooksBridge(pi, { ctx: context, cwd: projectRoot, executor });
+    const previousEpoch = runtime.currentGeneration();
     const staleToolCallHandler = registrations.find(({ event }) => event === "tool_call")?.handler;
+    const staleAgentEndHandler = registrations.find(({ event }) => event === "agent_end")?.handler;
+    const staleAgentSettledHandler = registrations.find(
+      ({ event }) => event === "agent_settled",
+    )?.handler;
     registrations.length = 0;
-    adaptObservationResultForEvent(
-      { kind: "mutate", additionalContext: "stale context" },
-      "SessionStart",
-      { scope: "user", marketplace: "user-catalog", pluginId: "user-plugin" },
-    );
+    runtime.appendPendingSessionStartContext({
+      context: "stale context",
+      scope: "user",
+      marketplace: "user-catalog",
+      pluginId: "user-plugin",
+    });
     const previousEnding = {
       type: "agent_end",
       messages: [
@@ -289,13 +375,12 @@ test(
         },
       ],
     } as AgentEndEvent;
-    agentEndCacheHandler(previousEpoch)(previousEnding);
+    if (typeof staleAgentEndHandler === "function") {
+      await Reflect.apply(staleAgentEndHandler, undefined, [previousEnding, context]);
+    }
+
     const settleResetCalls: string[] = [];
     const settleResetPromises: Promise<void>[] = [];
-    const settleResetExecutor: HookExecutor = (entry) => {
-      settleResetCalls.push(entry.pluginId);
-      return Promise.resolve({ kind: "noop" });
-    };
 
     const childEvents = new EventEmitter();
     const childStdin = new PassThrough();
@@ -317,15 +402,18 @@ test(
       spawnargs: [],
       spawnfile: "",
       kill(signal?: NodeJS.Signals | number): boolean {
-        assert.strictEqual(currentEpoch(), previousEpoch + 1);
+        assert.strictEqual(runtime.currentGeneration(), previousEpoch + 1);
         operationLog.push("epoch:bumped");
-        assert.deepStrictEqual(pendingSessionStartContextEntries(), []);
+        assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), []);
         operationLog.push("pending:reset");
-        const settleReset = settleHandlerFor(
-          currentEpoch(),
-          pi,
-          settleResetExecutor,
-        )({ type: "agent_settled" }, context);
+        const settleResult =
+          typeof staleAgentSettledHandler === "function"
+            ? (Reflect.apply(staleAgentSettledHandler, undefined, [
+                { type: "agent_settled" },
+                context,
+              ]) as Promise<void> | undefined)
+            : undefined;
+        const settleReset = Promise.resolve(settleResult);
         settleResetPromises.push(settleReset);
         assert.deepStrictEqual(settleResetCalls, []);
         operationLog.push("settle:reset");
@@ -370,7 +458,20 @@ test(
       toolName: "bash",
       input: { command: "printf reload" },
     } satisfies ToolCallEvent;
-    await spawnAndRegister(asyncEntry, toolCall, context, pi, userLocations, {
+    await spawnAndRegister(
+      peerRuntime,
+      { ...asyncEntry, pluginId: "peer-plugin" },
+      toolCall,
+      context,
+      pi,
+      userLocations,
+      {
+        spawnImpl: (() => peerChild.child) as NonNullable<SpawnDeps["spawnImpl"]>,
+        dispatchId: () => "router-peer-child",
+        pidTableWriter: () => Promise.resolve(),
+      },
+    );
+    await spawnAndRegister(runtime, asyncEntry, toolCall, context, pi, userLocations, {
       spawnImpl,
       dispatchId: () => "router-in-memory-child",
     });
@@ -420,50 +521,6 @@ test(
       throw new Error(`persisted orphan row was not written: ${persistedOrphanBytes}`);
     }
 
-    const processPlatform = Object.getOwnPropertyDescriptor(process, "platform");
-    if (processPlatform === undefined) {
-      throw new Error("process.platform descriptor is unavailable");
-    }
-
-    t.after(() => {
-      Object.defineProperty(process, "platform", processPlatform);
-    });
-    Object.defineProperty(process, "platform", { ...processPlatform, value: "linux" });
-    const originalReadFile = fs.promises.readFile.bind(fs.promises);
-    const readFile = t.mock.method(
-      fs.promises,
-      "readFile",
-      async (
-        target: Parameters<typeof originalReadFile>[0],
-        options?: Parameters<typeof originalReadFile>[1],
-      ) => {
-        const targetPath = typeof target === "string" ? target : "";
-        if (targetPath === path.join(userLocations.extensionRoot, "state.json")) {
-          operationLog.push("hydrate:user-state");
-        } else if (targetPath === userHooksPath) {
-          operationLog.push("hydrate:user-hooks");
-        } else if (targetPath === path.join(projectLocations.extensionRoot, "state.json")) {
-          operationLog.push("hydrate:project-state");
-        } else if (targetPath === projectHooksPath) {
-          operationLog.push("hydrate:project-hooks");
-        } else if (targetPath === pidTablePath(projectLocations)) {
-          if (traceReload) {
-            operationLog.push("orphan:table");
-          }
-
-          return persistedOrphanBytes;
-        } else if (targetPath === `/proc/${persistedOrphanPid.toString()}/environ`) {
-          operationLog.push("orphan:marker");
-        }
-
-        return originalReadFile(target, options);
-      },
-    );
-    t.after(() => {
-      readFile.mock.restore();
-      syncBuiltinESMExports();
-    });
-    syncBuiltinESMExports();
     const seededOrphans = await readPidTable(projectLocations);
     if (seededOrphans.length !== 1 || seededOrphans[0]?.dispatchId !== "router-persisted-orphan") {
       throw new Error("persisted orphan row could not be read before reload");
@@ -472,56 +529,75 @@ test(
     traceReload = true;
 
     // act
-    await registerHooksBridge(pi, { ctx: context, cwd: projectRoot, executor });
+    await hydration.registerHooksBridge(pi, { ctx: context, cwd: projectRoot, executor });
     const persistedOrphanOutcome = await persistedOrphanExit;
     await Promise.all(settleResetPromises);
     if (typeof staleToolCallHandler === "function") {
       await Reflect.apply(staleToolCallHandler, undefined, [toolCall, context]);
     }
 
-    const cacheAfterReload = Array.from(parsedConfigEntries().values()).map((entry) => ({
+    const staleBeforeAgentResult = await createBeforeAgentStartHandler(runtime, previousEpoch)(
+      {
+        type: "before_agent_start",
+        prompt: "",
+        systemPrompt: "stale",
+        systemPromptOptions: {},
+      } as unknown as BeforeAgentStartEvent,
+      context,
+    );
+    assert.strictEqual(staleBeforeAgentResult, undefined);
+    const cacheAfterReload = Array.from(runtime.parsedConfigEntries().values()).map((entry) => ({
       scope: entry.scope,
       marketplace: entry.marketplace,
       pluginId: entry.pluginId,
       resolvedSource: entry.resolvedSource,
     }));
-    const epochAfterReload = currentEpoch();
-    const pendingAfterReload = [...pendingSessionStartContextEntries()];
+    const epochAfterReload = runtime.currentGeneration();
+    const pendingAfterReload = [...runtime.pendingSessionStartContextEntries()];
     const orphanTableExistsAfterReload = fs.existsSync(pidTablePath(projectLocations));
+    const sharedDirectoriesAfterReload = {
+      user: fs.existsSync(path.join(userLocations.dataRoot, "_shared")),
+      project: fs.existsSync(path.join(projectLocations.dataRoot, "_shared")),
+    };
     const routesAfterReload = {
-      preToolUse: getRoutingBucket("PreToolUse").map((entry) => ({
+      preToolUse: runtime.getRoutingBucket("PreToolUse").map((entry) => ({
         scope: entry.scope,
         pluginId: entry.pluginId,
         command: entry.handlerDecl.command,
       })),
-      sessionStart: getRoutingBucket("SessionStart").map((entry) => ({
+      sessionStart: runtime.getRoutingBucket("SessionStart").map((entry) => ({
         scope: entry.scope,
         pluginId: entry.pluginId,
         command: entry.handlerDecl.command,
       })),
     };
-    shutdownInMemoryChildren();
-    resetSettleState();
-    resetRoutingState();
-    const stateAfterCleanup = {
-      epoch: currentEpoch(),
-      cache: Array.from(parsedConfigEntries()),
-      routes: Array.from(routingTableEntries()),
-      pending: [...pendingSessionStartContextEntries()],
-    };
+    const peerEntriesAfterReload = peerRuntime.pidTableEntries(userLocations);
+    const peerSignalsAfterReload = [...peerChild.signals];
+    shutdownInMemoryChildren(runtime);
 
     // assert
+    assert.deepStrictEqual(peerEntriesAfterReload, [
+      {
+        pid: 43_108,
+        dispatchId: "router-peer-child",
+        scope: "user",
+        marketplace: "user-catalog",
+        plugin: "peer-plugin",
+        spawnedAt: peerEntriesAfterReload[0]?.spawnedAt,
+      },
+    ]);
+    assert.deepStrictEqual(peerSignalsAfterReload, []);
+    assert.deepStrictEqual(sentMessages, []);
+    assert.deepStrictEqual(notifications, []);
     assert.deepStrictEqual(operationLog, [
       "epoch:bumped",
       "pending:reset",
       "settle:reset",
       "child:shutdown",
       "hydrate:user-state",
-      "hydrate:user-hooks",
       "hydrate:project-state",
-      "hydrate:project-hooks",
-      "orphan:table",
-      "orphan:marker",
+      "routing:rebuild",
+      "routing:rebuild",
       "register:session_start",
       "register:session_shutdown",
       "register:session_before_compact",
@@ -568,24 +644,16 @@ test(
     assert.deepStrictEqual(pendingAfterReload, []);
     assert.strictEqual(childKilled, true);
     assert.strictEqual(orphanTableExistsAfterReload, false);
+    assert.deepStrictEqual(sharedDirectoriesAfterReload, { user: true, project: true });
     assert.deepStrictEqual(persistedOrphanOutcome, { code: null, signal: "SIGKILL" });
     assert.deepStrictEqual(routesAfterReload, {
       preToolUse: [{ scope: "project", pluginId: "project-plugin", command: "PreToolUse-0" }],
       sessionStart: [{ scope: "user", pluginId: "user-plugin", command: "SessionStart-0" }],
     });
-    assert.deepStrictEqual(
-      getRoutingBucket("SessionStart").map((entry) => ({
-        scope: entry.scope,
-        pluginId: entry.pluginId,
-        command: entry.handlerDecl.command,
-      })),
-      [],
-    );
     assert.deepStrictEqual(settleResetCalls, []);
     assert.deepStrictEqual(dispatched, []);
     assert.deepStrictEqual(sentMessages, []);
     assert.deepStrictEqual(notifications, []);
-    assert.deepStrictEqual(stateAfterCleanup, { epoch: 0, cache: [], routes: [], pending: [] });
   },
 );
 
@@ -659,6 +727,72 @@ function makeScopeState(input: {
   };
 }
 
+interface ProjectHookFixture {
+  readonly root: string;
+  readonly factoryRoot: string;
+  readonly projectRoot: string;
+  readonly locations: ReturnType<typeof locationsFor>;
+  readonly hookPath: string;
+  readonly hookBytes: string;
+  readonly state: ExtensionState;
+}
+
+interface Deferred<T> {
+  readonly promise: Promise<T>;
+  readonly resolve: (value: T) => void;
+}
+
+function createDeferred<T>(): Deferred<T> {
+  let resolvePromise: ((value: T) => void) | undefined;
+  const promise = new Promise<T>((resolve) => {
+    resolvePromise = resolve;
+  });
+  return {
+    promise,
+    resolve(value: T): void {
+      if (resolvePromise === undefined) {
+        throw new Error("the deferred operation was not initialized");
+      }
+
+      resolvePromise(value);
+    },
+  };
+}
+
+async function makeProjectHookFixture(
+  t: TestContext,
+  label: string,
+  event: "PreToolUse" | "SessionStart",
+): Promise<ProjectHookFixture> {
+  const root = await mkdtemp(path.join(tmpdir(), `hooks-router-${label}-`));
+  t.after(() => rm(root, { recursive: true, force: true, maxRetries: 3 }));
+  const factoryRoot = path.join(root, "factory");
+  const projectRoot = path.join(root, "project");
+  const locations = locationsFor("project", projectRoot);
+  const hookPath = path.join(locations.hooksDir, "owner-hooks", "hooks.json");
+  const hookBytes = JSON.stringify(makeConfig([{ event, handlers: 1 }]));
+  await mkdir(path.dirname(hookPath), { recursive: true });
+  await writeFile(hookPath, hookBytes, "utf8");
+  return {
+    root,
+    factoryRoot,
+    projectRoot,
+    locations,
+    hookPath,
+    hookBytes,
+    state: makeScopeState({
+      scope: "project",
+      cwd: projectRoot,
+      plugins: {
+        owner: makeStoredPlugin({
+          root: path.join(root, "plugins", "owner"),
+          hooks: ["owner-hooks"],
+        }),
+      },
+    }),
+  };
+}
+
 function makeContext(cwd: string, sessionRoot: string): ExtensionContext {
   return {
     ui: {
@@ -728,15 +862,6 @@ function registeredHandler(
   return handler as (...args: unknown[]) => unknown;
 }
 
-function ownRoutingState(t: TestContext): void {
-  resetRoutingState();
-  t.after(() => {
-    shutdownInMemoryChildren();
-    resetSettleState();
-    resetRoutingState();
-  });
-}
-
 function ownAgentRoot(t: TestContext, agentRoot: string): void {
   const previousAgentRoot = process.env.PI_CODING_AGENT_DIR;
   process.env.PI_CODING_AGENT_DIR = agentRoot;
@@ -749,16 +874,37 @@ function ownAgentRoot(t: TestContext, agentRoot: string): void {
   });
 }
 
-test("cache keys separate scope, marketplace, and plugin while mutations stay idempotent", (t) => {
+function seedPluginConfig(
+  runtime: HooksRuntime,
+  scope: "project" | "user",
+  marketplace: string,
+  pluginId: string,
+  resolvedSource: ReturnType<typeof asAbsolutePluginRoot>,
+  config: HooksConfig,
+  ifPredicates: ReadonlyMap<string, RoutingEntry["ifPredicate"]>,
+): void {
+  const routingState = createRoutingStateOperations(runtime);
+  routingState.setParsedConfig(`${scope}\u0000${marketplace}\u0000${pluginId}`, {
+    scope,
+    marketplace,
+    pluginId,
+    resolvedSource,
+    config,
+    ifPredicates,
+  });
+}
+
+test("cache keys separate scope, marketplace, and plugin while mutations stay idempotent", () => {
   // arrange
-  ownRoutingState(t);
+  const runtime = createHooksRuntime();
   const firstConfig = makeConfig([{ event: "PreToolUse", handlers: 1, prefix: "first" }]);
   const replacementConfig = makeConfig([
     { event: "PreToolUse", handlers: 1, prefix: "replacement" },
   ]);
 
   // act
-  addPluginConfigToCache(
+  seedPluginConfig(
+    runtime,
     "user",
     "alpha",
     "shared",
@@ -766,7 +912,8 @@ test("cache keys separate scope, marketplace, and plugin while mutations stay id
     firstConfig,
     new Map(),
   );
-  addPluginConfigToCache(
+  seedPluginConfig(
+    runtime,
     "user",
     "alpha",
     "shared",
@@ -774,7 +921,8 @@ test("cache keys separate scope, marketplace, and plugin while mutations stay id
     replacementConfig,
     new Map(),
   );
-  addPluginConfigToCache(
+  seedPluginConfig(
+    runtime,
     "user",
     "beta",
     "shared",
@@ -782,7 +930,8 @@ test("cache keys separate scope, marketplace, and plugin while mutations stay id
     firstConfig,
     new Map(),
   );
-  addPluginConfigToCache(
+  seedPluginConfig(
+    runtime,
     "project",
     "alpha",
     "shared",
@@ -790,9 +939,9 @@ test("cache keys separate scope, marketplace, and plugin while mutations stay id
     firstConfig,
     new Map(),
   );
-  removePluginConfigFromCache("user", "beta", "shared");
-  removePluginConfigFromCache("user", "beta", "shared");
-  const cache = Array.from(parsedConfigEntries().values()).map((entry) => ({
+  runtime.deleteParsedConfig("user\u0000beta\u0000shared");
+  runtime.deleteParsedConfig("user\u0000beta\u0000shared");
+  const cache = Array.from(runtime.parsedConfigEntries().values()).map((entry) => ({
     scope: entry.scope,
     marketplace: entry.marketplace,
     pluginId: entry.pluginId,
@@ -808,7 +957,7 @@ test("cache keys separate scope, marketplace, and plugin while mutations stay id
 
 test("readAndCachePluginHooks reads and parses one case-owned config", async (t) => {
   // arrange
-  ownRoutingState(t);
+  const runtime = createHooksRuntime();
   const root = await mkdtemp(path.join(tmpdir(), "hooks-router-read-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const hooksJsonPath = path.join(root, "hooks.json");
@@ -821,7 +970,7 @@ test("readAndCachePluginHooks reads and parses one case-owned config", async (t)
   );
 
   // act
-  await readAndCachePluginHooks({
+  await createHooksRouting(runtime, { readHooksJson }).readAndCachePluginHooks({
     scope: "project",
     marketplace: "catalog",
     plugin: "reader",
@@ -830,7 +979,7 @@ test("readAndCachePluginHooks reads and parses one case-owned config", async (t)
     cwd: root,
     logPrefix: "install",
   });
-  const cache = Array.from(parsedConfigEntries().values()).map((entry) => ({
+  const cache = Array.from(runtime.parsedConfigEntries().values()).map((entry) => ({
     scope: entry.scope,
     marketplace: entry.marketplace,
     pluginId: entry.pluginId,
@@ -852,14 +1001,60 @@ test("readAndCachePluginHooks reads and parses one case-owned config", async (t)
   ]);
 });
 
+test("runtime-bound routing mutations update only their supplied lifecycle owner", async (t) => {
+  // arrange
+  const root = await mkdtemp(path.join(tmpdir(), "hooks-router-owner-"));
+  t.after(async () => {
+    await rm(root, { recursive: true, force: true });
+  });
+  const hooksJsonPath = path.join(root, "hooks.json");
+  await writeFile(
+    hooksJsonPath,
+    JSON.stringify({
+      PreToolUse: [{ matcher: "", hooks: [{ type: "command", command: "echo owner" }] }],
+    }),
+    "utf8",
+  );
+  const ownerRuntime = createHooksRuntime();
+  const peerRuntime = createHooksRuntime();
+  const routing = createHooksRouting(ownerRuntime, { readHooksJson });
+
+  // act
+  await routing.readAndCachePluginHooks({
+    scope: "project",
+    marketplace: "catalog",
+    plugin: "owned",
+    resolvedSource: asAbsolutePluginRoot(root),
+    hooksJsonPath,
+    cwd: root,
+    logPrefix: "owner-test",
+  });
+  routing.rebuildRoutingTables();
+
+  // assert
+  assert.deepStrictEqual(
+    ownerRuntime.getRoutingBucket("PreToolUse").map((entry) => entry.pluginId),
+    ["owned"],
+  );
+  assert.deepStrictEqual(peerRuntime.getRoutingBucket("PreToolUse"), []);
+
+  // act
+  routing.removePluginConfigFromCache("project", "catalog", "owned");
+  routing.rebuildRoutingTables();
+
+  // assert
+  assert.deepStrictEqual(ownerRuntime.getRoutingBucket("PreToolUse"), []);
+  assert.deepStrictEqual(peerRuntime.getRoutingBucket("PreToolUse"), []);
+});
+
 test("readAndCachePluginHooks leaves the cache unchanged after a read failure", async (t) => {
   // arrange
-  ownRoutingState(t);
+  const runtime = createHooksRuntime();
   const root = await mkdtemp(path.join(tmpdir(), "hooks-router-read-missing-"));
   t.after(() => rm(root, { recursive: true, force: true }));
 
   // act
-  await readAndCachePluginHooks({
+  await createHooksRouting(runtime, { readHooksJson }).readAndCachePluginHooks({
     scope: "project",
     marketplace: "catalog",
     plugin: "missing",
@@ -870,19 +1065,19 @@ test("readAndCachePluginHooks leaves the cache unchanged after a read failure", 
   });
 
   // assert
-  assert.deepStrictEqual(Array.from(parsedConfigEntries()), []);
+  assert.deepStrictEqual(Array.from(runtime.parsedConfigEntries()), []);
 });
 
 test("readAndCachePluginHooks leaves the cache unchanged after a parse failure", async (t) => {
   // arrange
-  ownRoutingState(t);
+  const runtime = createHooksRuntime();
   const root = await mkdtemp(path.join(tmpdir(), "hooks-router-read-invalid-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const hooksJsonPath = path.join(root, "hooks.json");
   await writeFile(hooksJsonPath, "{", "utf8");
 
   // act
-  await readAndCachePluginHooks({
+  await createHooksRouting(runtime, { readHooksJson }).readAndCachePluginHooks({
     scope: "project",
     marketplace: "catalog",
     plugin: "invalid",
@@ -893,23 +1088,26 @@ test("readAndCachePluginHooks leaves the cache unchanged after a parse failure",
   });
 
   // assert
-  assert.deepStrictEqual(Array.from(parsedConfigEntries()), []);
+  assert.deepStrictEqual(Array.from(runtime.parsedConfigEntries()), []);
 });
 
-test("beforeAgentStartHandlerFor drains ordered context once and leaves an empty turn unchanged", async (t) => {
+test("createBeforeAgentStartHandler drains ordered context once and leaves an empty turn unchanged", async () => {
   // arrange
-  ownRoutingState(t);
+  const runtime = createHooksRuntime();
+  const capturedGeneration = runtime.advanceGeneration();
   adaptObservationResultForEvent(
+    runtime,
     { kind: "mutate", additionalContext: "alpha context" },
     "SessionStart",
     { scope: "project", marketplace: "catalog", pluginId: "alpha" },
   );
   adaptObservationResultForEvent(
+    runtime,
     { kind: "mutate", additionalContext: "beta context" },
     "SessionStart",
     { scope: "user", marketplace: "catalog", pluginId: "beta" },
   );
-  const handler = beforeAgentStartHandlerFor(currentEpoch());
+  const handler = createBeforeAgentStartHandler(runtime, capturedGeneration);
   const event = {
     type: "before_agent_start",
     prompt: "prompt",
@@ -926,20 +1124,21 @@ test("beforeAgentStartHandlerFor drains ordered context once and leaves an empty
     systemPrompt: "base prompt\n\nalpha context\n\nbeta context",
   });
   assert.strictEqual(secondTurn, undefined);
-  assert.deepStrictEqual(pendingSessionStartContextEntries(), []);
+  assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), []);
 });
 
-test("beforeAgentStartHandlerFor rejects a stale epoch without draining live context", async (t) => {
+test("createBeforeAgentStartHandler rejects a stale epoch without draining live context", async () => {
   // arrange
-  ownRoutingState(t);
-  const staleEpoch = currentEpoch();
-  bumpEpoch();
+  const runtime = createHooksRuntime();
+  const staleGeneration = runtime.advanceGeneration();
+  runtime.advanceGeneration();
   adaptObservationResultForEvent(
+    runtime,
     { kind: "mutate", additionalContext: "live context" },
     "SessionStart",
     { scope: "project", marketplace: "catalog", pluginId: "live" },
   );
-  const handler = beforeAgentStartHandlerFor(staleEpoch);
+  const handler = createBeforeAgentStartHandler(runtime, staleGeneration);
   const event = {
     type: "before_agent_start",
     prompt: "prompt",
@@ -952,7 +1151,7 @@ test("beforeAgentStartHandlerFor rejects a stale epoch without draining live con
 
   // assert
   assert.strictEqual(promptUpdate, undefined);
-  assert.deepStrictEqual(pendingSessionStartContextEntries(), [
+  assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), [
     {
       context: "live context",
       scope: "project",
@@ -962,9 +1161,9 @@ test("beforeAgentStartHandlerFor rejects a stale epoch without draining live con
   ]);
 });
 
-test("rebuildRoutingTables preserves stable plugin and declaration order in all ten buckets", (t) => {
+test("rebuildRoutingTables preserves stable plugin and declaration order in all ten buckets", () => {
   // arrange
-  ownRoutingState(t);
+  const runtime = createHooksRuntime();
   const eventInventory = [
     "PostCompact",
     "PostToolUse",
@@ -992,7 +1191,8 @@ test("rebuildRoutingTables preserves stable plugin and declaration order in all 
         ],
       ]),
     );
-  addPluginConfigToCache(
+  seedPluginConfig(
+    runtime,
     "user",
     "catalog",
     "shared",
@@ -1000,7 +1200,8 @@ test("rebuildRoutingTables preserves stable plugin and declaration order in all 
     configFor("user-shared"),
     new Map([["PreToolUse|0|0", MATCH_ALL_IF]]),
   );
-  addPluginConfigToCache(
+  seedPluginConfig(
+    runtime,
     "user",
     "catalog",
     "zulu",
@@ -1008,7 +1209,8 @@ test("rebuildRoutingTables preserves stable plugin and declaration order in all 
     configFor("user-zulu"),
     new Map(),
   );
-  addPluginConfigToCache(
+  seedPluginConfig(
+    runtime,
     "project",
     "catalog",
     "shared",
@@ -1018,8 +1220,8 @@ test("rebuildRoutingTables preserves stable plugin and declaration order in all 
   );
 
   // act
-  rebuildRoutingTables();
-  const table = Array.from(routingTableEntries(), ([event, entries]) => ({
+  createHooksRouting(runtime, { readHooksJson }).rebuildRoutingTables();
+  const table = Array.from(runtime.routingTableEntries(), ([event, entries]) => ({
     event,
     entries: entries.map((entry) => ({
       scope: entry.scope,
@@ -1084,9 +1286,9 @@ test("rebuildRoutingTables preserves stable plugin and declaration order in all 
   }
 });
 
-test("rebuildRoutingTables tolerates valid record keys and sparse arrays defensively", (t) => {
+test("rebuildRoutingTables tolerates valid record keys and sparse arrays defensively", () => {
   // arrange
-  ownRoutingState(t);
+  const runtime = createHooksRuntime();
   const sparseHooks: Array<{ type: string; command: string }> = [];
   sparseHooks.length = 2;
   sparseHooks[1] = { type: "command", command: "kept-handler" };
@@ -1097,7 +1299,8 @@ test("rebuildRoutingTables tolerates valid record keys and sparse arrays defensi
     FutureEvent: [{ hooks: [{ type: "command", command: "future-handler" }] }],
     PreToolUse: sparseGroups,
   };
-  addPluginConfigToCache(
+  seedPluginConfig(
+    runtime,
     "project",
     "catalog",
     "defensive",
@@ -1107,8 +1310,8 @@ test("rebuildRoutingTables tolerates valid record keys and sparse arrays defensi
   );
 
   // act
-  rebuildRoutingTables();
-  const table = Array.from(routingTableEntries(), ([event, entries]) => ({
+  createHooksRouting(runtime, { readHooksJson }).rebuildRoutingTables();
+  const table = Array.from(runtime.routingTableEntries(), ([event, entries]) => ({
     event,
     commands: entries.map((entry) => entry.handlerDecl.command),
   })).sort((left, right) => left.event.localeCompare(right.event));
@@ -1133,7 +1336,7 @@ test(
   { concurrency: false },
   async (t) => {
     // arrange
-    ownRoutingState(t);
+    const runtime = createHooksRuntime();
     const root = await mkdtemp(path.join(tmpdir(), "hooks-router-hydrate-matrix-"));
     t.after(() => rm(root, { recursive: true, force: true, maxRetries: 3 }));
     const locations = locationsFor("project", root);
@@ -1223,16 +1426,18 @@ test(
     await saveState(locations.extensionRoot, state);
 
     // act
-    await hydrateProjectScopeForCwd(root);
-    rebuildRoutingTables();
-    const cache = Array.from(parsedConfigEntries().values()).map((entry) => ({
+    await createHooksHydration(runtime, { loadState, readHooksJson }).hydrateProjectScopeForCwd(
+      root,
+    );
+    createHooksRouting(runtime, { readHooksJson }).rebuildRoutingTables();
+    const cache = Array.from(runtime.parsedConfigEntries().values()).map((entry) => ({
       scope: entry.scope,
       marketplace: entry.marketplace,
       pluginId: entry.pluginId,
       resolvedSource: entry.resolvedSource,
       config: entry.config,
     }));
-    const routes = Array.from(routingTableEntries(), ([event, entries]) => ({
+    const routes = Array.from(runtime.routingTableEntries(), ([event, entries]) => ({
       event,
       plugins: entries.map((entry) => entry.pluginId),
       commands: entries.map((entry) => entry.handlerDecl.command),
@@ -1266,47 +1471,64 @@ test(
   { concurrency: false },
   async (t) => {
     // arrange
-    ownRoutingState(t);
     const root = await mkdtemp(path.join(tmpdir(), "hooks-router-project-replace-"));
     t.after(() => rm(root, { recursive: true, force: true, maxRetries: 3 }));
     const locations = locationsFor("project", root);
-    await mkdir(locations.extensionRoot, { recursive: true });
-    await writeFile(path.join(locations.extensionRoot, "state.json"), "{", "utf8");
+    const readRoots: string[] = [];
+    const loadError = new Error("project state refused");
+    const hydrationReader: HooksHydrationDeps = {
+      loadState(extensionRoot: string): Promise<ExtensionState> {
+        readRoots.push(extensionRoot);
+        return Promise.reject(loadError);
+      },
+      readHooksJson,
+    };
     const config = makeConfig([{ event: "PreToolUse", handlers: 1, prefix: "cached" }]);
-    addPluginConfigToCache(
-      "project",
-      "alpha",
-      "first",
-      asAbsolutePluginRoot(path.join(root, "old", "first")),
+    const runtime = createHooksRuntime();
+    runtime.setParsedConfig("project\x00alpha\x00first", {
+      scope: "project",
+      marketplace: "alpha",
+      pluginId: "first",
+      resolvedSource: asAbsolutePluginRoot(path.join(root, "old", "first")),
       config,
-      new Map(),
-    );
-    addPluginConfigToCache(
-      "project",
-      "beta",
-      "second",
-      asAbsolutePluginRoot(path.join(root, "old", "second")),
+      ifPredicates: new Map(),
+    });
+    runtime.setParsedConfig("project\x00beta\x00second", {
+      scope: "project",
+      marketplace: "beta",
+      pluginId: "second",
+      resolvedSource: asAbsolutePluginRoot(path.join(root, "old", "second")),
       config,
-      new Map(),
-    );
-    addPluginConfigToCache(
-      "user",
-      "alpha",
-      "first",
-      asAbsolutePluginRoot(path.join(root, "user", "first")),
+      ifPredicates: new Map(),
+    });
+    runtime.setParsedConfig("user\x00alpha\x00first", {
+      scope: "user",
+      marketplace: "alpha",
+      pluginId: "first",
+      resolvedSource: asAbsolutePluginRoot(path.join(root, "user", "first")),
+      config,
+      ifPredicates: new Map(),
+    });
+    seedPluginConfig(
+      runtime,
+      "project",
+      "transition",
+      "stale",
+      asAbsolutePluginRoot(path.join(root, "transition", "stale")),
       config,
       new Map(),
     );
 
     // act
-    await hydrateProjectScopeForCwd(root);
-    const cache = Array.from(parsedConfigEntries().values()).map((entry) => ({
+    const hooksHydration = createHooksHydration(runtime, hydrationReader);
+
+    await hooksHydration.hydrateProjectScopeForCwd(root);
+    const cache = Array.from(runtime.parsedConfigEntries().values()).map((entry) => ({
       scope: entry.scope,
       marketplace: entry.marketplace,
       pluginId: entry.pluginId,
       resolvedSource: entry.resolvedSource,
     }));
-
     // assert
     assert.deepStrictEqual(cache, [
       {
@@ -1316,15 +1538,579 @@ test(
         resolvedSource: path.join(root, "user", "first"),
       },
     ]);
+    assert.deepStrictEqual(readRoots, [locations.extensionRoot]);
   },
 );
+
+test(
+  "registerHooksBridge shares one reader across ordered factory and lazy hydration",
+  { concurrency: false },
+  async (t) => {
+    // arrange
+    const root = await mkdtemp(path.join(tmpdir(), "hooks-router-reader-order-"));
+    t.after(() => rm(root, { recursive: true, force: true, maxRetries: 3 }));
+    const factoryRoot = path.join(root, "factory");
+    const projectRoot = path.join(root, "project");
+    ownAgentRoot(t, path.join(root, "agent"));
+    const userLocations = locationsFor("user", factoryRoot);
+    const factoryProjectLocations = locationsFor("project", factoryRoot);
+    const projectLocations = locationsFor("project", projectRoot);
+    const readRoots: string[] = [];
+    const hydrationReader: HooksHydrationDeps = {
+      loadState(extensionRoot: string): Promise<ExtensionState> {
+        readRoots.push(extensionRoot);
+        if (extensionRoot === factoryProjectLocations.extensionRoot) {
+          return Promise.reject(new Error("factory project state refused"));
+        }
+
+        return Promise.resolve({ schemaVersion: 2, marketplaces: {} });
+      },
+      readHooksJson,
+    };
+    const previousDebug = process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+    process.env.PI_CLAUDE_MARKETPLACE_DEBUG = "1";
+    t.after(() => {
+      if (previousDebug === undefined) {
+        delete process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+      } else {
+        process.env.PI_CLAUDE_MARKETPLACE_DEBUG = previousDebug;
+      }
+    });
+    const diagnostics: string[] = [];
+    t.mock.method(console, "error", (diagnostic: unknown) => {
+      diagnostics.push(String(diagnostic));
+    });
+    const { pi, registrations, messages } = makeRecordingPi();
+    const context = makeContext(projectRoot, root);
+    const runtime = createHooksRuntime();
+
+    const hooksHydration = createHooksHydration(runtime, hydrationReader);
+    await hooksHydration.registerHooksBridge(pi, {
+      ctx: context,
+      cwd: factoryRoot,
+    });
+    const sessionStart = registeredHandler(registrations, "session_start");
+
+    // act
+    const sessionStartUpdate = await sessionStart(
+      { type: "session_start", reason: "startup" },
+      context,
+    );
+
+    // assert
+    assert.strictEqual(sessionStartUpdate, undefined);
+    assert.deepStrictEqual(Array.from(runtime.parsedConfigEntries()), []);
+    assert.deepStrictEqual(messages, []);
+    assert.strictEqual(registrations.length, 11);
+    assert.deepStrictEqual(diagnostics, [
+      `[hooks] hydrate: loadState failed for scope=project extensionRoot=${factoryProjectLocations.extensionRoot}: factory project state refused`,
+    ]);
+    assert.deepStrictEqual(readRoots, [
+      userLocations.extensionRoot,
+      factoryProjectLocations.extensionRoot,
+      projectLocations.extensionRoot,
+    ]);
+  },
+);
+
+test("same-runtime registration invalidates an earlier callback before lazy hydration", async (t) => {
+  // arrange
+  const root = await mkdtemp(path.join(tmpdir(), "hooks-router-runtime-generation-"));
+  t.after(() => rm(root, { recursive: true, force: true, maxRetries: 3 }));
+  ownAgentRoot(t, path.join(root, "agent"));
+  const factoryRoot = path.join(root, "factory");
+  const projectRoot = path.join(root, "project");
+  const readRoots: string[] = [];
+  const hydrationReader: HooksHydrationDeps = {
+    loadState(extensionRoot: string): Promise<ExtensionState> {
+      readRoots.push(extensionRoot);
+      return Promise.resolve({ schemaVersion: 2, marketplaces: {} });
+    },
+    readHooksJson,
+  };
+  const runtime = createHooksRuntime();
+  const hooksHydration = createHooksHydration(runtime, hydrationReader);
+  const { pi, registrations, messages } = makeRecordingPi();
+  const context = makeContext(projectRoot, root);
+  await hooksHydration.registerHooksBridge(pi, { ctx: context, cwd: factoryRoot });
+  const staleSessionStart = registeredHandler(registrations, "session_start");
+  await hooksHydration.registerHooksBridge(pi, { ctx: context, cwd: factoryRoot });
+  const liveSessionStart = registeredHandler(registrations, "session_start", 1);
+  const readsAfterRegistration = [...readRoots];
+
+  // act
+  const staleUpdate = await staleSessionStart(
+    { type: "session_start", reason: "startup" },
+    context,
+  );
+  const readsAfterStaleCallback = [...readRoots];
+  const liveUpdate = await liveSessionStart({ type: "session_start", reason: "startup" }, context);
+
+  // assert
+  assert.strictEqual(staleUpdate, undefined);
+  assert.strictEqual(liveUpdate, undefined);
+  assert.strictEqual(runtime.currentGeneration(), 2);
+  assert.deepStrictEqual(readsAfterStaleCallback, readsAfterRegistration);
+  assert.deepStrictEqual(readRoots, [
+    ...readsAfterRegistration,
+    locationsFor("project", projectRoot).extensionRoot,
+  ]);
+  assert.deepStrictEqual(messages, []);
+  assert.strictEqual(registrations.length, 22);
+});
+
+test(
+  "same-runtime registration stops stale lazy hydration before post-await route and file effects",
+  { concurrency: false },
+  async (t) => {
+    // arrange
+    const root = await mkdtemp(path.join(tmpdir(), "hooks-router-stale-hydration-"));
+    t.after(() => rm(root, { recursive: true, force: true, maxRetries: 3 }));
+    ownAgentRoot(t, path.join(root, "agent"));
+    const factoryRoot = path.join(root, "factory");
+    const projectRoot = path.join(root, "project");
+    const projectLocations = locationsFor("project", projectRoot);
+    const hookPath = path.join(projectLocations.hooksDir, "stale-owner", "hooks.json");
+    await mkdir(path.dirname(hookPath), { recursive: true });
+    await writeFile(
+      hookPath,
+      JSON.stringify(makeConfig([{ event: "PreToolUse", handlers: 1 }])),
+      "utf8",
+    );
+    const staleState = {
+      schemaVersion: 2,
+      marketplaces: {
+        stale: {
+          name: "stale",
+          scope: "project",
+          source: { kind: "path", raw: path.join(root, "marketplace") },
+          addedFromCwd: projectRoot,
+          manifestPath: path.join(root, "marketplace", ".claude-plugin", "marketplace.json"),
+          marketplaceRoot: path.join(root, "marketplace"),
+          plugins: {
+            "stale-owner": {
+              version: "1.0.0",
+              resolvedSource: path.join(root, "marketplace", "plugins", "stale-owner"),
+              compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+              resources: {
+                skills: [],
+                prompts: [],
+                agents: [],
+                mcpServers: [],
+                hooks: ["stale-owner"],
+              },
+              enabled: true,
+              installedAt: "2026-09-08T00:00:00.000Z",
+              updatedAt: "2026-09-08T00:00:00.000Z",
+            },
+          },
+        },
+      },
+    } satisfies ExtensionState;
+    let releaseStaleState: ((state: ExtensionState) => void) | undefined;
+    let deferProjectRead = false;
+    const reader: HooksHydrationDeps = {
+      loadState(extensionRoot: string): Promise<ExtensionState> {
+        if (deferProjectRead && extensionRoot === projectLocations.extensionRoot) {
+          deferProjectRead = false;
+          return new Promise((resolve) => {
+            releaseStaleState = resolve;
+          });
+        }
+
+        return Promise.resolve({ schemaVersion: 2, marketplaces: {} });
+      },
+      readHooksJson,
+    };
+    const runtime = createHooksRuntime();
+    const hydration = createHooksHydration(runtime, reader);
+    const { pi, registrations, messages } = makeRecordingPi();
+    const context = makeContext(projectRoot, root);
+    await hydration.registerHooksBridge(pi, { ctx: context, cwd: factoryRoot });
+    const staleSessionStart = registeredHandler(registrations, "session_start");
+    deferProjectRead = true;
+    const staleCompletion = staleSessionStart(
+      { type: "session_start", reason: "startup" },
+      context,
+    );
+    await hydration.registerHooksBridge(pi, { ctx: context, cwd: factoryRoot });
+
+    // act
+    releaseStaleState?.(staleState);
+    const staleUpdate = await staleCompletion;
+
+    // assert
+    assert.strictEqual(staleUpdate, undefined);
+    assert.strictEqual(runtime.currentGeneration(), 2);
+    assert.deepStrictEqual(Array.from(runtime.parsedConfigEntries()), []);
+    assert.deepStrictEqual(runtime.getRoutingBucket("PreToolUse"), []);
+    assert.deepStrictEqual(messages, []);
+    assert.strictEqual(registrations.length, 22);
+  },
+);
+
+test(
+  "stale SessionStart stops after an injected dispatch await",
+  { concurrency: false },
+  async (t) => {
+    // arrange
+    const fixture = await makeProjectHookFixture(t, "stale-session-effects", "SessionStart");
+    ownAgentRoot(t, path.join(fixture.root, "agent"));
+    const reader: HooksHydrationDeps = {
+      loadState(extensionRoot: string): Promise<ExtensionState> {
+        return Promise.resolve(
+          extensionRoot === fixture.locations.extensionRoot
+            ? fixture.state
+            : { schemaVersion: 2, marketplaces: {} },
+        );
+      },
+      readHooksJson,
+    };
+    const runtime = createHooksRuntime();
+    const hydration = createHooksHydration(runtime, reader);
+    const { pi, registrations, messages } = makeRecordingPi();
+    const context = makeContext(fixture.projectRoot, fixture.root);
+    const dispatchStarted = createDeferred<undefined>();
+    const releaseDispatch = createDeferred<undefined>();
+    let deferDispatch = false;
+    const executor: HookExecutor = () => {
+      if (!deferDispatch) {
+        return Promise.resolve({ kind: "noop" });
+      }
+
+      deferDispatch = false;
+      dispatchStarted.resolve(undefined);
+      return releaseDispatch.promise.then(() => ({ kind: "noop" }));
+    };
+
+    await hydration.registerHooksBridge(pi, { ctx: context, cwd: fixture.factoryRoot, executor });
+    const currentSessionStart = registeredHandler(registrations, "session_start");
+    deferDispatch = true;
+    const staleAtDispatch = currentSessionStart(
+      { type: "session_start", reason: "startup" },
+      context,
+    );
+    await dispatchStarted.promise;
+    await hydration.registerHooksBridge(pi, { ctx: context, cwd: fixture.factoryRoot, executor });
+
+    // act
+    releaseDispatch.resolve(undefined);
+    await staleAtDispatch;
+
+    // assert
+    assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), []);
+    assert.deepStrictEqual(messages, []);
+  },
+);
+
+test("runtime hydration stops before mirroring when registration advances its generation", async (t) => {
+  // arrange
+  const fixture = await makeProjectHookFixture(t, "stale-public-hydration", "PreToolUse");
+  ownAgentRoot(t, path.join(fixture.root, "agent"));
+  const readStarted = createDeferred<undefined>();
+  const releaseRead = createDeferred<undefined>();
+  let deferProjectRead = true;
+  const reader: HooksHydrationDeps = {
+    loadState(extensionRoot: string): Promise<ExtensionState> {
+      if (deferProjectRead && extensionRoot === fixture.locations.extensionRoot) {
+        deferProjectRead = false;
+        readStarted.resolve(undefined);
+        return releaseRead.promise.then(() => fixture.state);
+      }
+
+      return Promise.resolve({ schemaVersion: 2, marketplaces: {} });
+    },
+    readHooksJson,
+  };
+  const runtime = createHooksRuntime();
+  const hydration = createHooksHydration(runtime, reader);
+  const pendingHydration = hydration.hydrateProjectScopeForCwd(fixture.projectRoot);
+  await readStarted.promise;
+  const { pi } = makeRecordingPi();
+  await hydration.registerHooksBridge(pi, {
+    ctx: makeContext(fixture.factoryRoot, fixture.root),
+    cwd: fixture.factoryRoot,
+  });
+
+  // act
+  releaseRead.resolve(undefined);
+  await pendingHydration;
+
+  // assert
+  assert.strictEqual(runtime.currentGeneration(), 1);
+  assert.deepStrictEqual(Array.from(runtime.parsedConfigEntries()), []);
+  assert.deepStrictEqual(runtime.getRoutingBucket("PreToolUse"), []);
+});
+
+test(
+  "factory hydration stops at the containment guard when a concurrent registration advances the generation",
+  { concurrency: false },
+  async (t) => {
+    // arrange
+    const fixture = await makeProjectHookFixture(t, "stale-factory-hydration", "PreToolUse");
+    ownAgentRoot(t, path.join(fixture.root, "agent"));
+    const readStarted = createDeferred<undefined>();
+    const releaseRead = createDeferred<undefined>();
+    let deferProjectRead = true;
+    const reader: HooksHydrationDeps = {
+      loadState(extensionRoot: string): Promise<ExtensionState> {
+        if (deferProjectRead && extensionRoot === fixture.locations.extensionRoot) {
+          deferProjectRead = false;
+          readStarted.resolve(undefined);
+          return releaseRead.promise.then(() => fixture.state);
+        }
+
+        return Promise.resolve({ schemaVersion: 2, marketplaces: {} });
+      },
+      readHooksJson,
+    };
+    const runtime = createHooksRuntime();
+    const hydration = createHooksHydration(runtime, reader);
+    const { pi, messages } = makeRecordingPi();
+    const context = makeContext(fixture.projectRoot, fixture.root);
+    const staleRegistration = hydration.registerHooksBridge(pi, {
+      ctx: context,
+      cwd: fixture.projectRoot,
+    });
+    await readStarted.promise;
+    // The second registration reads from `factoryRoot`, where no state
+    // declares a hooks plugin, so the only thing it contributes to the
+    // assertions below is the generation advance.
+    await hydration.registerHooksBridge(pi, { ctx: context, cwd: fixture.factoryRoot });
+
+    // act
+    releaseRead.resolve(undefined);
+    await staleRegistration;
+
+    // assert
+    assert.strictEqual(runtime.currentGeneration(), 2);
+    assert.deepStrictEqual(Array.from(runtime.parsedConfigEntries()), []);
+    assert.deepStrictEqual(runtime.getRoutingBucket("PreToolUse"), []);
+    assert.deepStrictEqual(messages, []);
+  },
+);
+
+test("project hydration parses a plugin's hooks.json into the parsed-config cache", async (t) => {
+  // arrange
+  const fixture = await makeProjectHookFixture(t, "live-project-hydration", "PreToolUse");
+  ownAgentRoot(t, path.join(fixture.root, "agent"));
+  const reader: HooksHydrationDeps = {
+    loadState(extensionRoot: string): Promise<ExtensionState> {
+      return Promise.resolve(
+        extensionRoot === fixture.locations.extensionRoot
+          ? fixture.state
+          : { schemaVersion: 2, marketplaces: {} },
+      );
+    },
+    readHooksJson,
+  };
+  const runtime = createHooksRuntime();
+
+  // act
+  await createHooksHydration(runtime, reader).hydrateProjectScopeForCwd(fixture.projectRoot);
+
+  // assert
+  assert.deepStrictEqual(
+    Array.from(runtime.parsedConfigEntries().values()).map((entry) => ({
+      scope: entry.scope,
+      marketplace: entry.marketplace,
+      pluginId: entry.pluginId,
+    })),
+    [{ scope: "project", marketplace: "catalog", pluginId: "owner" }],
+  );
+  // The routing bucket stays empty on purpose: `hydrateProjectScopeForCwd` fills
+  // the parsed-config cache, and registration is what builds the routing table
+  // from it. The bucket is therefore NOT a discriminator for this entrypoint --
+  // it reads empty on a hydration that completed and on one that stopped at the
+  // first guard alike.
+  assert.deepStrictEqual(runtime.getRoutingBucket("PreToolUse"), []);
+});
+
+test("project hydration stops before parsing a plugin's hooks.json read under a stale generation", async (t) => {
+  // arrange
+  const fixture = await makeProjectHookFixture(t, "stale-after-hooks-read", "PreToolUse");
+  ownAgentRoot(t, path.join(fixture.root, "agent"));
+  const runtime = createHooksRuntime();
+  // The trigger is named, not counted: the generation advances from inside the
+  // injected hooks read, which runs at exactly the point this case is about, so
+  // nothing here depends on a `currentGeneration()` call index (D-09-05 /
+  // D-09-07).
+  //
+  // The sibling above hydrates this same fixture with an undecorated reader and
+  // reads back one parsed-config entry, so the empty `parsedConfigEntries()`
+  // below is a hydration that was stopped, not a fixture that never hydrates.
+  // That sibling also records why `getRoutingBucket` is not a discriminator for
+  // this entrypoint.
+  const reader: HooksHydrationDeps = {
+    loadState(extensionRoot: string): Promise<ExtensionState> {
+      return Promise.resolve(
+        extensionRoot === fixture.locations.extensionRoot
+          ? fixture.state
+          : { schemaVersion: 2, marketplaces: {} },
+      );
+    },
+    readHooksJson(hooksJsonPath: string): Promise<string> {
+      runtime.advanceGeneration();
+      // The call below is the imported production reader, not this member --
+      // an object-literal method name binds no identifier in its own body.
+      return readHooksJson(hooksJsonPath);
+    },
+  };
+  const hydration = createHooksHydration(runtime, reader);
+
+  // act
+  await hydration.hydrateProjectScopeForCwd(fixture.projectRoot);
+
+  // assert
+  assert.strictEqual(runtime.currentGeneration(), 1);
+  assert.deepStrictEqual(Array.from(runtime.parsedConfigEntries()), []);
+  assert.deepStrictEqual(runtime.getRoutingBucket("PreToolUse"), []);
+});
+
+test(
+  "SessionStart stops after preparing the shared data dir when the routing read advances the generation",
+  { concurrency: false },
+  async (t) => {
+    // arrange
+    const fixture = await makeProjectHookFixture(t, "stale-session-shared-dir", "SessionStart");
+    ownAgentRoot(t, path.join(fixture.root, "agent"));
+    const reader: HooksHydrationDeps = {
+      loadState(extensionRoot: string): Promise<ExtensionState> {
+        return Promise.resolve(
+          extensionRoot === fixture.locations.extensionRoot
+            ? fixture.state
+            : { schemaVersion: 2, marketplaces: {} },
+        );
+      },
+      readHooksJson,
+    };
+    const runtime = createHooksRuntime();
+    let advanceOnTheSessionStartRead = false;
+    // The SessionStart routing bucket is read immediately before the shared
+    // data dir is awaited, so delegating that read and then advancing the
+    // generation leaves only the guard after the await for this case to
+    // measure. Registration reads the same bucket once per hydrated scope, so
+    // the advance is armed only for the dispatch.
+    const runtimeGoingStaleOnTheSessionStartRead: HooksRuntime = {
+      ...runtime,
+      getRoutingBucket(event: BucketAEvent): readonly RoutingEntry[] {
+        const entries = runtime.getRoutingBucket(event);
+        if (advanceOnTheSessionStartRead && event === "SessionStart") {
+          runtime.advanceGeneration();
+        }
+
+        return entries;
+      },
+    };
+    const hydration = createHooksHydration(runtimeGoingStaleOnTheSessionStartRead, reader);
+    const { pi, registrations, messages } = makeRecordingPi();
+    const context = makeContext(fixture.projectRoot, fixture.root);
+    const dispatched: string[] = [];
+    const executor: HookExecutor = (entry) => {
+      dispatched.push(entry.pluginId);
+      return Promise.resolve({ kind: "noop" });
+    };
+
+    await hydration.registerHooksBridge(pi, { ctx: context, cwd: fixture.projectRoot, executor });
+    const sessionStart = registeredHandler(registrations, "session_start");
+    advanceOnTheSessionStartRead = true;
+
+    // act
+    const update = await sessionStart({ type: "session_start", reason: "startup" }, context);
+
+    // assert
+    assert.strictEqual(update, undefined);
+    assert.strictEqual(runtime.currentGeneration(), 2);
+    assert.deepStrictEqual(dispatched, []);
+    assert.deepStrictEqual(messages, []);
+  },
+);
+
+test("separate runtimes keep their current callbacks live and route through their own buckets", async (t) => {
+  // arrange
+  const root = await mkdtemp(path.join(tmpdir(), "hooks-router-runtime-isolation-"));
+  t.after(() => rm(root, { recursive: true, force: true, maxRetries: 3 }));
+  ownAgentRoot(t, path.join(root, "agent"));
+  const reader: HooksHydrationDeps = {
+    loadState(): Promise<ExtensionState> {
+      return Promise.resolve({ schemaVersion: 2, marketplaces: {} });
+    },
+    readHooksJson,
+  };
+  const firstRuntime = createHooksRuntime();
+  const secondRuntime = createHooksRuntime();
+  const firstHydration = createHooksHydration(firstRuntime, reader);
+  const secondHydration = createHooksHydration(secondRuntime, reader);
+  const firstPi = makeRecordingPi();
+  const secondPi = makeRecordingPi();
+  const firstDispatched: string[] = [];
+  const secondDispatched: string[] = [];
+  const firstExecutor: HookExecutor = (entry) => {
+    firstDispatched.push(entry.pluginId);
+    return Promise.resolve({ kind: "noop" });
+  };
+
+  const secondExecutor: HookExecutor = (entry) => {
+    secondDispatched.push(entry.pluginId);
+    return Promise.resolve({ kind: "noop" });
+  };
+
+  const firstCwd = path.join(root, "first");
+  const secondCwd = path.join(root, "second");
+  await firstHydration.registerHooksBridge(firstPi.pi, {
+    ctx: makeContext(firstCwd, root),
+    cwd: firstCwd,
+    executor: firstExecutor,
+  });
+  await secondHydration.registerHooksBridge(secondPi.pi, {
+    ctx: makeContext(secondCwd, root),
+    cwd: secondCwd,
+    executor: secondExecutor,
+  });
+  const entryFor = (pluginId: string, cwd: string): RoutingEntry => ({
+    scope: "project",
+    marketplace: "catalog",
+    pluginId,
+    resolvedSource: asAbsolutePluginRoot(path.join(cwd, pluginId)),
+    claudeEvent: "PreToolUse",
+    matcher: parseMatcher("Bash"),
+    rawMatcher: "Bash",
+    handlerDecl: { type: "command", command: `run-${pluginId}` },
+    declarationIndex: 0,
+    ifPredicate: MATCH_ALL_IF,
+  });
+  firstRuntime.setRoutingBucket("PreToolUse", [entryFor("first-plugin", firstCwd)]);
+  secondRuntime.setRoutingBucket("PreToolUse", [entryFor("second-plugin", secondCwd)]);
+  const toolCall = {
+    type: "tool_call",
+    toolCallId: "runtime-isolation-call",
+    toolName: "bash",
+    input: { command: "printf isolated" },
+  } satisfies ToolCallEvent;
+
+  // act
+  await registeredHandler(firstPi.registrations, "tool_call")(
+    toolCall,
+    makeContext(firstCwd, root),
+  );
+  await registeredHandler(secondPi.registrations, "tool_call")(
+    toolCall,
+    makeContext(secondCwd, root),
+  );
+
+  // assert
+  assert.deepStrictEqual(firstDispatched, ["first-plugin"]);
+  assert.deepStrictEqual(secondDispatched, ["second-plugin"]);
+  assert.deepStrictEqual(firstPi.messages, []);
+  assert.deepStrictEqual(secondPi.messages, []);
+});
 
 test(
   "registerHooksBridge degrades corrupt scope state and leaves unused shared directories absent",
   { concurrency: false },
   async (t) => {
     // arrange
-    ownRoutingState(t);
+    const runtime = createHooksRuntime();
     const root = await mkdtemp(path.join(tmpdir(), "hooks-router-corrupt-state-"));
     t.after(() => rm(root, { recursive: true, force: true, maxRetries: 3 }));
     const projectRoot = path.join(root, "project");
@@ -1340,7 +2126,10 @@ test(
     const context = makeContext(projectRoot, root);
 
     // act
-    await registerHooksBridge(pi, { ctx: context, cwd: projectRoot });
+    await createHooksHydration(runtime, { loadState, readHooksJson }).registerHooksBridge(pi, {
+      ctx: context,
+      cwd: projectRoot,
+    });
     const sharedState = {
       user: fs.existsSync(path.join(userLocations.dataRoot, "_shared")),
       project: fs.existsSync(path.join(projectLocations.dataRoot, "_shared")),
@@ -1363,7 +2152,7 @@ test(
         { event: "input", handlerType: "function" },
       ],
     );
-    assert.deepStrictEqual(Array.from(parsedConfigEntries()), []);
+    assert.deepStrictEqual(Array.from(runtime.parsedConfigEntries()), []);
     assert.deepStrictEqual(sharedState, { user: false, project: false });
     assert.deepStrictEqual(messages, []);
   },
@@ -1374,7 +2163,7 @@ test(
   { concurrency: false },
   async (t) => {
     // arrange
-    ownRoutingState(t);
+    const runtime = createHooksRuntime();
     const root = await mkdtemp(path.join(tmpdir(), "hooks-router-shared-dir-"));
     t.after(() => rm(root, { recursive: true, force: true, maxRetries: 3 }));
     const projectRoot = path.join(root, "project");
@@ -1386,7 +2175,8 @@ test(
     const userSharedPath = path.join(userLocations.dataRoot, "_shared");
     const projectSharedPath = path.join(projectLocations.dataRoot, "_shared");
     await writeFile(userSharedPath, "regular-file-boundary", "utf8");
-    addPluginConfigToCache(
+    seedPluginConfig(
+      runtime,
       "user",
       "catalog",
       "session",
@@ -1398,7 +2188,10 @@ test(
     const context = makeContext(projectRoot, root);
 
     // act
-    await registerHooksBridge(pi, { ctx: context, cwd: projectRoot });
+    await createHooksHydration(runtime, { loadState, readHooksJson }).registerHooksBridge(pi, {
+      ctx: context,
+      cwd: projectRoot,
+    });
     const userSharedBytes = await fs.promises.readFile(userSharedPath, "utf8");
     const projectSharedStat = await fs.promises.stat(projectSharedPath);
 
@@ -1414,7 +2207,7 @@ test(
   { concurrency: false },
   async (t) => {
     // arrange
-    ownRoutingState(t);
+    const runtime = createHooksRuntime();
     const root = await mkdtemp(path.join(tmpdir(), "hooks-router-lazy-project-"));
     t.after(() => rm(root, { recursive: true, force: true, maxRetries: 3 }));
     const factoryRoot = path.join(root, "factory-cwd");
@@ -1458,7 +2251,11 @@ test(
       });
     };
 
-    await registerHooksBridge(pi, { ctx: context, cwd: factoryRoot, executor });
+    await createHooksHydration(runtime, { loadState, readHooksJson }).registerHooksBridge(pi, {
+      ctx: context,
+      cwd: factoryRoot,
+      executor,
+    });
     const sessionStart = registeredHandler(registrations, "session_start");
     const beforeAgentStart = registeredHandler(registrations, "before_agent_start");
     const beforeAgentEvent = {
@@ -1475,12 +2272,12 @@ test(
     );
     const firstTurn = await beforeAgentStart(beforeAgentEvent, context);
     const secondTurn = await beforeAgentStart(beforeAgentEvent, context);
-    const routes = getRoutingBucket("SessionStart").map((entry) => ({
+    const routes = runtime.getRoutingBucket("SessionStart").map((entry) => ({
       scope: entry.scope,
       pluginId: entry.pluginId,
       command: entry.handlerDecl.command,
     }));
-    const cache = Array.from(parsedConfigEntries().values()).map((entry) => ({
+    const cache = Array.from(runtime.parsedConfigEntries().values()).map((entry) => ({
       scope: entry.scope,
       marketplace: entry.marketplace,
       pluginId: entry.pluginId,
@@ -1508,14 +2305,14 @@ test(
       { scope: "project", marketplace: "catalog", pluginId: "alpha" },
     ]);
     assert.strictEqual(projectSharedStat.isDirectory(), true);
-    assert.deepStrictEqual(pendingSessionStartContextEntries(), []);
+    assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), []);
     assert.deepStrictEqual(messages, []);
   },
 );
 
 test("session_start contains a lazy project cwd failure and still delegates safely", async (t) => {
   // arrange
-  ownRoutingState(t);
+  const runtime = createHooksRuntime();
   const root = await mkdtemp(path.join(tmpdir(), "hooks-router-lazy-failure-"));
   t.after(() => rm(root, { recursive: true, force: true, maxRetries: 3 }));
   const projectRoot = path.join(root, "project");
@@ -1528,7 +2325,11 @@ test("session_start contains a lazy project cwd failure and still delegates safe
     return Promise.resolve({ kind: "noop" });
   };
 
-  await registerHooksBridge(pi, { ctx: context, cwd: projectRoot, executor });
+  await createHooksHydration(runtime, { loadState, readHooksJson }).registerHooksBridge(pi, {
+    ctx: context,
+    cwd: projectRoot,
+    executor,
+  });
   const sessionStart = registeredHandler(registrations, "session_start");
   Object.defineProperty(context, "cwd", {
     configurable: true,
@@ -1548,4 +2349,159 @@ test("session_start contains a lazy project cwd failure and still delegates safe
   assert.deepStrictEqual(dispatches, []);
   assert.deepStrictEqual(messages, []);
   assert.strictEqual(registrations.length, 11);
+});
+
+/** Collects the OBS-01 debug lines a case emits, restoring the flag afterwards. */
+function observeRouterDebug(t: TestContext): () => string[] {
+  const previousDebug = process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+  process.env.PI_CLAUDE_MARKETPLACE_DEBUG = "1";
+  t.after(() => {
+    if (previousDebug === undefined) {
+      delete process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+    } else {
+      process.env.PI_CLAUDE_MARKETPLACE_DEBUG = previousDebug;
+    }
+  });
+  const diagnostics: string[] = [];
+  t.mock.method(console, "error", (diagnostic: unknown) => {
+    diagnostics.push(String(diagnostic));
+  });
+  return () => [...diagnostics];
+}
+
+/** An empty-state reader, so registration hydrates without touching disk state. */
+const EMPTY_STATE_READER: HooksHydrationDeps = {
+  loadState(): Promise<ExtensionState> {
+    return Promise.resolve({ schemaVersion: 2, marketplaces: {} });
+  },
+  readHooksJson,
+};
+
+function preToolUseEntry(pluginId: string, cwd: string): RoutingEntry {
+  return {
+    scope: "project",
+    marketplace: "catalog",
+    pluginId,
+    resolvedSource: asAbsolutePluginRoot(path.join(cwd, pluginId)),
+    claudeEvent: "PreToolUse",
+    matcher: parseMatcher("Bash"),
+    rawMatcher: "Bash",
+    handlerDecl: { type: "command", command: `run-${pluginId}` },
+    declarationIndex: 0,
+    ifPredicate: MATCH_ALL_IF,
+  };
+}
+
+/**
+ * A tool call whose `input` accessor refuses. The bridge's own default
+ * executor reads `input` while translating and announces the refusal through
+ * OBS-01 before it reaches the process boundary, so a case can tell the
+ * default apart from a supplied executor by an observed line rather than by an
+ * absence.
+ */
+function refusingToolCall(): ToolCallEvent {
+  return {
+    type: "tool_call",
+    toolCallId: "executor-seam-call",
+    toolName: "bash",
+    get input(): never {
+      throw new Error("executor seam input refused");
+    },
+  } satisfies ToolCallEvent;
+}
+
+test(
+  "registerHooksBridge routes through a supplied executor and through its own default without one",
+  { concurrency: false },
+  async (t) => {
+    // arrange
+    const root = await mkdtemp(path.join(tmpdir(), "hooks-router-executor-seam-"));
+    t.after(() => rm(root, { recursive: true, force: true, maxRetries: 3 }));
+    ownAgentRoot(t, path.join(root, "agent"));
+    const readDiagnostics = observeRouterDebug(t);
+    const suppliedRuntime = createHooksRuntime();
+    const defaultedRuntime = createHooksRuntime();
+    const suppliedPi = makeRecordingPi();
+    const defaultedPi = makeRecordingPi();
+    const dispatched: string[] = [];
+    const executor: HookExecutor = (entry) => {
+      dispatched.push(entry.pluginId);
+      return Promise.resolve({ kind: "noop" });
+    };
+
+    const suppliedCwd = path.join(root, "supplied");
+    const defaultedCwd = path.join(root, "defaulted");
+    await createHooksHydration(suppliedRuntime, EMPTY_STATE_READER).registerHooksBridge(
+      suppliedPi.pi,
+      { ctx: makeContext(suppliedCwd, root), cwd: suppliedCwd, executor },
+    );
+    await createHooksHydration(defaultedRuntime, EMPTY_STATE_READER).registerHooksBridge(
+      defaultedPi.pi,
+      { ctx: makeContext(defaultedCwd, root), cwd: defaultedCwd },
+    );
+    suppliedRuntime.setRoutingBucket("PreToolUse", [
+      preToolUseEntry("supplied-executor-plugin", suppliedCwd),
+    ]);
+    defaultedRuntime.setRoutingBucket("PreToolUse", [
+      preToolUseEntry("defaulted-executor-plugin", defaultedCwd),
+    ]);
+    const registrationDiagnostics = readDiagnostics().length;
+
+    // act
+    const suppliedOutput = await registeredHandler(suppliedPi.registrations, "tool_call")(
+      refusingToolCall(),
+      makeContext(suppliedCwd, root),
+    );
+    const afterSupplied = readDiagnostics().slice(registrationDiagnostics);
+    const defaultedOutput = await registeredHandler(defaultedPi.registrations, "tool_call")(
+      refusingToolCall(),
+      makeContext(defaultedCwd, root),
+    );
+    const afterDefaulted = readDiagnostics().slice(registrationDiagnostics + afterSupplied.length);
+
+    // assert
+    assert.deepStrictEqual([suppliedOutput, defaultedOutput], [undefined, undefined]);
+    assert.deepStrictEqual(dispatched, ["supplied-executor-plugin"]);
+    assert.deepStrictEqual(afterSupplied, []);
+    assert.deepStrictEqual(afterDefaulted, [
+      "[hooks] exec: caught (defaulted-executor-plugin/PreToolUse): executor seam input refused",
+    ]);
+    assert.deepStrictEqual(suppliedPi.messages, []);
+    assert.deepStrictEqual(defaultedPi.messages, []);
+  },
+);
+
+test("propagates a rejecting supplied executor out of the registered tool_call callback", async (t) => {
+  // arrange
+  const root = await mkdtemp(path.join(tmpdir(), "hooks-router-executor-refusal-"));
+  t.after(() => rm(root, { recursive: true, force: true, maxRetries: 3 }));
+  ownAgentRoot(t, path.join(root, "agent"));
+  const runtime = createHooksRuntime();
+  const { pi, registrations, messages } = makeRecordingPi();
+  const cwd = path.join(root, "project");
+  // The never-throws contract belongs to the default this seam falls back to.
+  // A caller that substitutes a rejecting executor leaves that contract, and
+  // the registered callback surfaces the refusal instead of hiding it.
+  const executor: HookExecutor = () => Promise.reject(new Error("supplied executor refused"));
+  await createHooksHydration(runtime, EMPTY_STATE_READER).registerHooksBridge(pi, {
+    ctx: makeContext(cwd, root),
+    cwd,
+    executor,
+  });
+  runtime.setRoutingBucket("PreToolUse", [preToolUseEntry("refusing-executor-plugin", cwd)]);
+  const toolCall = {
+    type: "tool_call",
+    toolCallId: "executor-refusal-call",
+    toolName: "bash",
+    input: { command: "printf refused" },
+  } satisfies ToolCallEvent;
+
+  // act & assert
+  await assert.rejects(
+    Promise.resolve(
+      registeredHandler(registrations, "tool_call")(toolCall, makeContext(cwd, root)),
+    ),
+    { message: "supplied executor refused" },
+  );
+  assert.deepStrictEqual(messages, []);
 });

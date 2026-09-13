@@ -2,6 +2,49 @@
 
 *A living document updated after each milestone. Lessons feed forward into future planning.*
 
+## Milestone: refine-unit-tests -- Refine Unit Tests
+
+**Shipped:** 2026-09-13 (no npm release -- internal quality milestone)
+**Phases:** 9 (1-9) | **Plans:** 213 | **Tasks:** 412 | **Requirements:** 30/30 | **Tests:** 5,971 unit + 32 integration, 0 failures | **Audit:** tech_debt (no blockers; 9/9 phases, 6/6 integration seams) | **Sonar:** 0 open issues on PR #181, down from 38
+
+### What Was Built
+- An evidence gate ahead of the work rather than behind it. Phase 1 revalidated the entire adversarial-review corpus against the post-v1.19 tree and routed **all 2437 findings** to terminal dispositions with none left awaiting triage: 1525 to phases 2-8, 523 closed evidence-only, 226 deferred to backlog, 163 to operator decision. Later phases were allowed to act only on premises that still reproduced.
+- **Six gates found reporting success without scanning anything.** Phase 7 predicted the class and then found them live -- two cases returning early on `assert.ok(true, "... not yet authored")`, two loops skipping every candidate with `if (!exists) continue;`. A rename of `platform/git-credential.ts` would have greened the AUTH-09 gate over zero inspected bytes.
+- Direct per-pair coverage replaced share-of-aggregate measurement, cutting accepted shortfalls from seven to two. The pin compares the whole reading string, so it refuses an improvement as loudly as a regression.
+- Test-only module seams replaced with injected collaborators, making the dependency part of each function's public interface instead of a hole punched into the module from a test.
+- The window ledger fully disposed: open 0 / waived 13 / fixed 18 / total 31, each waive carrying a measured reason rather than a transcribed one.
+
+### What Worked
+- **Starting from revalidation instead of a fix list.** The corpus was months old and the tree had moved under it. Several findings were closed as *positively stale* with evidence, rather than fixed to satisfy a claim that no longer held. One window-ledger entry turned out to be the stale artifact itself -- the document it faulted had been corrected six days before the entry was written.
+- **Planning agents re-deriving counts instead of trusting handoffs.** The Sonar handoff said `maybeBackfillPlugin` had 8 call sites; measured, it had **one**, and six of the eight were doc-comment mentions. All four functions in that work were module-private with exactly one caller. The whole refactor's blast radius was four files and no test file.
+- **Proving a rule is wired, not just green.** After enabling `@typescript-eslint/max-params`, a green `npm run lint` would not have distinguished a working rule from an inert one. `eslint --print-config` was used to show `[2, {"max": 7}]` on an `extensions/` file and *nothing* on a `tests/` file. This mattered: an inert rule is exactly what the S3863 exclusion turned out to be.
+- **Measuring before asking.** The question "should `max-params` be enabled at 7" was settled by running it: exactly three violations, the same three Sonar reported, no fourth offender. The decision cost nothing extra, which is only knowable by measuring first.
+
+### What Was Inefficient
+- **An unproven inference was written into a config file as settled fact -- and argued against the correct fix.** The `S3863` exclusion was inert. The diagnosis recorded 34 lines of comment concluding that SonarCloud silently drops `sonar.issue.ignore.*` from the properties file, reasoning from the *absence* of an issue-exclusion log line. That absence proved nothing: it was never established that the scanner logs issue exclusions at all. The restriction that does exist applies to SonarCloud **automatic analysis**, which is off here. Worse, the comment explicitly told the next reader not to try the `resourceKey` pattern -- which was the actual bug. It cost a full CI cycle and only surfaced because the operator pushed back on the comment being too long.
+- **A verification query that counted fixed findings as open.** `api/issues/search` returns CLOSED issues unless `resolved=false` is passed. The first post-push read came back "S107+S7737 = 4" and looked like a total failure; all four were already `status: CLOSED`. A win nearly got reported as a regression by a missing query parameter.
+- **Phase verification staleness, structurally unresolvable.** Eight of nine phases read `stale` at close because their `covered_files` include `REQUIREMENTS.md`, `ROADMAP.md` and `STATE.md` -- which every later plan rewrites. Re-verifying re-stales them, so the loop never converges. This is the second milestone to carry it; it is a `covered_files` design problem, not a verification problem.
+- **The pre-close audit's signal ratio was bad again, and in a new way.** Four open items of 21. Two of the four were *stale rather than deferred*: the condition one described had already been fixed, and the other's work had fully landed. Acknowledging them as debt would have recorded two falsehoods in the archive.
+- **`milestone complete` needed three hand corrections.** It left 681 original-path deletions unstaged, wrote `completed_phases: 1` / `percent: 11` for a 9-of-9 milestone, and generated 204 "key accomplishments" -- nearly all of them Phase 1 evidence-shard one-liners.
+
+### Patterns Established
+- **A config comment states *why*; status belongs where it gets revisited.** `sonar-project.properties` now carries six lines of rationale and nothing else. A comment tracking a live question goes stale in place, because nothing ever re-reads it.
+- **The absence of a log line is not evidence.** Before inferring from silence, establish that the tool speaks when the thing happens. This is the same shape as the gates that pass without scanning -- silence read as success.
+- **Convert a table-shaped deferred item rather than re-disclosing it.** v1.19 disclosed that phase 25's deferred items could never be acknowledged because they live in a markdown table the writer cannot match. It resurfaced here, as predicted. Converting the row to bullets with every cell preserved verbatim closed it permanently.
+- **A stale finding is closed with evidence, not fixed to satisfy it.** Re-pointing a stale reference at a live file turns a visibly broken claim into an invisibly wrong one. The 945 unsafe-reference paths were left as the expected staleness of a historical record.
+
+### Key Lessons
+1. **Never write a diagnosis into the repo until it is proven.** The S3863 comment asserted a mechanism, dismissed the right hypothesis, and would have cost the next reader the same detour. If the evidence supports "it does not work" but not "here is why", record only the first.
+2. **Verify a suppression is in effect, the same way you verify a gate fires.** An excluded rule and an inert exclusion look identical from a green pipeline. The count is the proof.
+3. **Check the query before trusting the number.** A default filter silently changed the meaning of `total`. When a measurement contradicts a change you watched land, suspect the measurement first.
+4. **`covered_files` that include STATE.md make a verification self-staling.** Third milestone touched by this. Either scope `covered_files` to what the phase actually verified, or treat `stale` as a timestamp verdict everywhere in the tooling.
+5. **Audit items deserve triage, not blanket acknowledgement.** Two of four were already resolved. "Acknowledge all" is the fast path and it writes falsehoods into the permanent record.
+
+### Cost Observations
+- Model mix: opus planner and executors, sonnet checkers; `use_worktrees: false`, so every plan ran sequentially on the main tree
+- Phases: 9 over 10 days (2026-09-04 -> 2026-09-13), 213 plans, 1079 commits on the branch
+- Notable: 386 source files changed (+57,744 / -31,980) excluding `.planning/`. The milestone's most transferable finding -- six gates that reported success without scanning -- came from a phase that went looking for exactly that class, having predicted it in advance.
+
 ## Milestone: v1.19 -- Unit Test Refactor
 
 **Shipped:** 2026-09-04 (no npm release -- internal quality milestone)

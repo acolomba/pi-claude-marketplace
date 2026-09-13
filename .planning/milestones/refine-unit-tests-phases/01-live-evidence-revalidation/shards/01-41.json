@@ -1,0 +1,1381 @@
+{
+  "plan": "01-41",
+  "files": [
+    {
+      "path": ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md",
+      "category": "first-pass",
+      "assignedPlan": "01-41",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-001",
+        ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-002",
+        ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-003",
+        ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-004",
+        ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-005",
+        ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-006",
+        ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-007",
+        ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-008",
+        ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-009",
+        ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-010",
+        ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-011",
+        ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-012",
+        ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-013",
+        ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-014",
+        ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-015",
+        ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-016",
+        ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-017",
+        ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-018",
+        ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-019",
+        ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-020",
+        ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-021",
+        ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-022",
+        ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-023",
+        ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-024",
+        ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-025",
+        ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-026",
+        ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-027",
+        ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-028"
+      ],
+      "reviewStatus": "complete",
+      "outcome": "live findings"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/bridges-agents.md",
+      "category": "first-pass",
+      "assignedPlan": "01-41",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/bridges-agents.md#CLAIM-001",
+        ".planning/reviews/unit-test-adversarial/bridges-agents.md#CLAIM-002",
+        ".planning/reviews/unit-test-adversarial/bridges-agents.md#CLAIM-003",
+        ".planning/reviews/unit-test-adversarial/bridges-agents.md#CLAIM-004",
+        ".planning/reviews/unit-test-adversarial/bridges-agents.md#CLAIM-005",
+        ".planning/reviews/unit-test-adversarial/bridges-agents.md#CLAIM-006",
+        ".planning/reviews/unit-test-adversarial/bridges-agents.md#CLAIM-007",
+        ".planning/reviews/unit-test-adversarial/bridges-agents.md#CLAIM-008",
+        ".planning/reviews/unit-test-adversarial/bridges-agents.md#CLAIM-009",
+        ".planning/reviews/unit-test-adversarial/bridges-agents.md#CLAIM-010",
+        ".planning/reviews/unit-test-adversarial/bridges-agents.md#CLAIM-011",
+        ".planning/reviews/unit-test-adversarial/bridges-agents.md#CLAIM-012"
+      ],
+      "reviewStatus": "complete",
+      "outcome": "live findings"
+    },
+    {
+      "path": ".planning/reviews/unit-test-adversarial/bridges-commands.md",
+      "category": "first-pass",
+      "assignedPlan": "01-41",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/bridges-commands.md#CLAIM-001",
+        ".planning/reviews/unit-test-adversarial/bridges-commands.md#CLAIM-002",
+        ".planning/reviews/unit-test-adversarial/bridges-commands.md#CLAIM-003",
+        ".planning/reviews/unit-test-adversarial/bridges-commands.md#CLAIM-004",
+        ".planning/reviews/unit-test-adversarial/bridges-commands.md#CLAIM-005",
+        ".planning/reviews/unit-test-adversarial/bridges-commands.md#CLAIM-006",
+        ".planning/reviews/unit-test-adversarial/bridges-commands.md#CLAIM-007",
+        ".planning/reviews/unit-test-adversarial/bridges-commands.md#CLAIM-008",
+        ".planning/reviews/unit-test-adversarial/bridges-commands.md#CLAIM-009",
+        ".planning/reviews/unit-test-adversarial/bridges-commands.md#CLAIM-010",
+        ".planning/reviews/unit-test-adversarial/bridges-commands.md#CLAIM-011",
+        ".planning/reviews/unit-test-adversarial/bridges-commands.md#CLAIM-012",
+        ".planning/reviews/unit-test-adversarial/bridges-commands.md#CLAIM-013"
+      ],
+      "reviewStatus": "complete",
+      "outcome": "live findings"
+    }
+  ],
+  "sourceClaims": [
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-001",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md",
+      "label": "CLAIM-001",
+      "findingId": "ASG-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-002",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md",
+      "label": "CLAIM-002",
+      "findingId": "ASG-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-003",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md",
+      "label": "CLAIM-003",
+      "findingId": "ASG-F003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-004",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md",
+      "label": "CLAIM-004",
+      "findingId": "ASG-F004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-005",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md",
+      "label": "CLAIM-005",
+      "findingId": "ASG-F005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-006",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md",
+      "label": "CLAIM-006",
+      "findingId": "ASG-F006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-007",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md",
+      "label": "CLAIM-007",
+      "findingId": "ASG-F007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-008",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md",
+      "label": "CLAIM-008",
+      "findingId": "ASG-F008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-009",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md",
+      "label": "CLAIM-009",
+      "findingId": "ASG-F009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-010",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md",
+      "label": "CLAIM-010",
+      "findingId": "ASG-F010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-011",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md",
+      "label": "CLAIM-011",
+      "findingId": "ASG-F011"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-012",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md",
+      "label": "CLAIM-012",
+      "findingId": "ASG-F012"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-013",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md",
+      "label": "CLAIM-013",
+      "findingId": "ASG-F013"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-014",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md",
+      "label": "CLAIM-014",
+      "findingId": "ASG-F014"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-015",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md",
+      "label": "CLAIM-015",
+      "findingId": "ASG-F015"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-016",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md",
+      "label": "CLAIM-016",
+      "findingId": "ASG-F016"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-017",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md",
+      "label": "CLAIM-017",
+      "findingId": "ASG-F017"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-018",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md",
+      "label": "CLAIM-018",
+      "findingId": "ASG-F018"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-019",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md",
+      "label": "CLAIM-019",
+      "findingId": "ASG-F019"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-020",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md",
+      "label": "CLAIM-020",
+      "findingId": "ASG-F020"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-021",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md",
+      "label": "CLAIM-021",
+      "findingId": "ASG-F021"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-022",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md",
+      "label": "CLAIM-022",
+      "findingId": "ASG-F022"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-023",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md",
+      "label": "CLAIM-023",
+      "findingId": "ASG-F023"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-024",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md",
+      "label": "CLAIM-024",
+      "findingId": "ASG-F024"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-025",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md",
+      "label": "CLAIM-025",
+      "findingId": "ASG-F025"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-026",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md",
+      "label": "CLAIM-026",
+      "findingId": "ASG-F026"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-027",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md",
+      "label": "CLAIM-027",
+      "findingId": "ASG-F027"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-028",
+      "filePath": ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md",
+      "label": "CLAIM-028",
+      "findingId": "ASG-F028"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-agents.md#CLAIM-001",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-agents.md",
+      "label": "CLAIM-001",
+      "findingId": "BAG-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-agents.md#CLAIM-002",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-agents.md",
+      "label": "CLAIM-002",
+      "findingId": "BAG-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-agents.md#CLAIM-003",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-agents.md",
+      "label": "CLAIM-003",
+      "findingId": "BAG-F003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-agents.md#CLAIM-004",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-agents.md",
+      "label": "CLAIM-004",
+      "findingId": "BAG-F004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-agents.md#CLAIM-005",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-agents.md",
+      "label": "CLAIM-005",
+      "findingId": "BAG-F005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-agents.md#CLAIM-006",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-agents.md",
+      "label": "CLAIM-006",
+      "findingId": "BAG-F006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-agents.md#CLAIM-007",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-agents.md",
+      "label": "CLAIM-007",
+      "findingId": "BAG-F007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-agents.md#CLAIM-008",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-agents.md",
+      "label": "CLAIM-008",
+      "findingId": "BAG-F008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-agents.md#CLAIM-009",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-agents.md",
+      "label": "CLAIM-009",
+      "findingId": "BAG-F009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-agents.md#CLAIM-010",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-agents.md",
+      "label": "CLAIM-010",
+      "findingId": "BAG-F010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-agents.md#CLAIM-011",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-agents.md",
+      "label": "CLAIM-011",
+      "findingId": "BAG-F011"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-agents.md#CLAIM-012",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-agents.md",
+      "label": "CLAIM-012",
+      "findingId": "BAG-F012"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-commands.md#CLAIM-001",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-commands.md",
+      "label": "CLAIM-001",
+      "findingId": "BCG-F001"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-commands.md#CLAIM-002",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-commands.md",
+      "label": "CLAIM-002",
+      "findingId": "BCG-F002"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-commands.md#CLAIM-003",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-commands.md",
+      "label": "CLAIM-003",
+      "findingId": "BCG-F003"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-commands.md#CLAIM-004",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-commands.md",
+      "label": "CLAIM-004",
+      "findingId": "BCG-F004"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-commands.md#CLAIM-005",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-commands.md",
+      "label": "CLAIM-005",
+      "findingId": "BCG-F005"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-commands.md#CLAIM-006",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-commands.md",
+      "label": "CLAIM-006",
+      "findingId": "BCG-F006"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-commands.md#CLAIM-007",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-commands.md",
+      "label": "CLAIM-007",
+      "findingId": "BCG-F007"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-commands.md#CLAIM-008",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-commands.md",
+      "label": "CLAIM-008",
+      "findingId": "BCG-F008"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-commands.md#CLAIM-009",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-commands.md",
+      "label": "CLAIM-009",
+      "findingId": "BCG-F009"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-commands.md#CLAIM-010",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-commands.md",
+      "label": "CLAIM-010",
+      "findingId": "BCG-F010"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-commands.md#CLAIM-011",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-commands.md",
+      "label": "CLAIM-011",
+      "findingId": "BCG-F011"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-commands.md#CLAIM-012",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-commands.md",
+      "label": "CLAIM-012",
+      "findingId": "BCG-F012"
+    },
+    {
+      "id": ".planning/reviews/unit-test-adversarial/bridges-commands.md#CLAIM-013",
+      "filePath": ".planning/reviews/unit-test-adversarial/bridges-commands.md",
+      "label": "CLAIM-013",
+      "findingId": "BCG-F013"
+    }
+  ],
+  "findings": [
+    {
+      "id": "ASG-F001",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-001"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "tests/architecture/manifest-lookup-drift.test.ts" },
+        { "path": "tests/architecture/disabled-state-classification.test.ts" },
+        { "path": "tests/architecture/config-state-write-seams.test.ts" }
+      ],
+      "testRefs": [{ "path": "tests/architecture/manifest-lookup-drift.test.ts" }],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test tests/architecture/{config-state-consistency,compat-01-no-expansion,cross-op-convergence,manifest-lookup-drift,disabled-state-classification,config-state-write-seams,scope-fences-63,scope-order-drift,flag-catalog-drift,manifest-read-seam}.test.ts",
+        "exitCode": 0,
+        "observed": "All ten assigned architecture gates passed; the three named model gates retain planted offenders and benign controls."
+      },
+      "rationale": "The summary's positive assessment of self-testing drift gates remains current.",
+      "destination": "Retain as positive gate-design evidence."
+    },
+    {
+      "id": "ASG-F002",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-002"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts" }
+      ],
+      "testRefs": [{ "path": "tests/architecture/config-state-consistency.test.ts" }],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test tests/architecture/config-state-consistency.test.ts",
+        "exitCode": 0,
+        "observed": "The current test still drives real orchestrators over temporary files and its focused rerun passed."
+      },
+      "rationale": "The behavioral round-trip characterization remains accurate.",
+      "destination": "Retain as positive evidence."
+    },
+    {
+      "id": "ASG-F003",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-003"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "ASD-038",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts" }
+      ],
+      "testRefs": [{ "path": "tests/architecture/config-state-consistency.test.ts" }],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "isolated copy: stamp marketplacesToAdd.configSource as local; node --test tests/architecture/config-state-consistency.test.ts",
+        "exitCode": 0,
+        "observed": "The focused test passed with the wrong configSource value, confirming the assertion gap without modifying live files."
+      },
+      "rationale": "The test still checks marketplace and source but omits item scope and configSource.",
+      "destination": "Use canonical finding ASD-038."
+    },
+    {
+      "id": "ASG-F004",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-004"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "ASD-039",
+      "sourceRefs": [{ "path": "tests/architecture/config-state-consistency.test.ts" }],
+      "testRefs": [{ "path": "N/A", "reason": "The claim is structural test-file cleanup." }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph plus current source inspection",
+        "observed": "The inaccurate symmetry comment and void saveConfig statement remain while saveConfig is directly called later."
+      },
+      "rationale": "The cleanup claim remains live.",
+      "destination": "Use canonical finding ASD-039."
+    },
+    {
+      "id": "ASG-F005",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-005"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "ASD-040",
+      "sourceRefs": [{ "path": "tests/architecture/config-state-consistency.test.ts" }],
+      "testRefs": [{ "path": "N/A", "reason": "Comment style is non-executable." }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current source inspection",
+        "observed": "Numbered narrative setup/action comments remain in the assigned test."
+      },
+      "rationale": "The AAA-label recommendation remains applicable.",
+      "destination": "Use canonical finding ASD-040."
+    },
+    {
+      "id": "ASG-F006",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-006"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "ASD-041",
+      "sourceRefs": [{ "path": "tests/architecture/config-state-consistency.test.ts" }],
+      "testRefs": [{ "path": "N/A", "reason": "Import placement is structural." }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current source inspection",
+        "observed": "Repeated dynamic imports inside test bodies remain."
+      },
+      "rationale": "The static-import cleanup is still live.",
+      "destination": "Use canonical finding ASD-041."
+    },
+    {
+      "id": "ASG-F007",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-007"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "ASD-042",
+      "sourceRefs": [{ "path": "tests/architecture/config-state-consistency.test.ts" }],
+      "testRefs": [{ "path": "N/A", "reason": "Double shape is a structural typing concern." }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph call-path inspection",
+        "observed": "The ctx and pi doubles still use as never casts because production entrypoints accept broad host types."
+      },
+      "rationale": "The narrow-port recommendation remains live and cross-cutting.",
+      "destination": "Use canonical finding ASD-042."
+    },
+    {
+      "id": "ASG-F008",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-008"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "tests/architecture/compat-01-no-expansion.test.ts" }],
+      "testRefs": [{ "path": "tests/architecture/compat-01-no-expansion.test.ts" }],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test tests/architecture/compat-01-no-expansion.test.ts",
+        "exitCode": 0,
+        "observed": "The literal closed-set pins and planted compile/source checks remain and the focused test passed."
+      },
+      "rationale": "The file remains a strong positive model.",
+      "destination": "Retain as positive evidence."
+    },
+    {
+      "id": "ASG-F009",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-009"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/shared/notify.ts" }],
+      "testRefs": [{ "path": "tests/architecture/cross-op-convergence.test.ts" }],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test tests/architecture/cross-op-convergence.test.ts",
+        "exitCode": 0,
+        "observed": "The gate still invokes real orchestrators and compares notifications to canonical bytes; focused execution passed."
+      },
+      "rationale": "The convergence-strength claim remains supported.",
+      "destination": "Retain as positive evidence."
+    },
+    {
+      "id": "ASG-F010",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-010"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "ASD-043",
+      "sourceRefs": [{ "path": "tests/architecture/cross-op-convergence.test.ts" }],
+      "testRefs": [{ "path": "N/A", "reason": "Test registration shape is structural." }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current source inspection",
+        "observed": "Three data loops remain nested in three test callbacks rather than registering sibling cases."
+      },
+      "rationale": "The failure-locality concern remains live.",
+      "destination": "Use canonical finding ASD-043."
+    },
+    {
+      "id": "ASG-F011",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-011"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "ASD-044",
+      "sourceRefs": [{ "path": "tests/architecture/cross-op-convergence.test.ts" }],
+      "testRefs": [{ "path": "N/A", "reason": "Double shape is structural." }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current source inspection",
+        "observed": "makeCtx still double-casts through unknown to broad host types."
+      },
+      "rationale": "The narrow-port follow-up remains live.",
+      "destination": "Use canonical finding ASD-044."
+    },
+    {
+      "id": "ASG-F012",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-012"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "ASD-045",
+      "sourceRefs": [{ "path": "tests/architecture/manifest-lookup-drift.test.ts" }],
+      "testRefs": [{ "path": "tests/architecture/manifest-lookup-drift.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current source inspection plus focused rerun",
+        "observed": "The planted-twin gate remains effective and extensionSourceFiles remains a local recursive walker."
+      },
+      "rationale": "Positive strength is retained while the duplicate walker remains actionable.",
+      "destination": "Use ASD-045 for cleanup; retain the passing gate evidence."
+    },
+    {
+      "id": "ASG-F013",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-013"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "ASD-046",
+      "sourceRefs": [{ "path": "tests/architecture/disabled-state-classification.test.ts" }],
+      "testRefs": [{ "path": "tests/architecture/disabled-state-classification.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current source inspection plus focused rerun",
+        "observed": "The predicate and planted twins remain covered, but one catch-all describe still combines behavioral and drift concerns."
+      },
+      "rationale": "The grouping cleanup remains live.",
+      "destination": "Use canonical finding ASD-046."
+    },
+    {
+      "id": "ASG-F014",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-014"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "ASD-047",
+      "sourceRefs": [{ "path": "tests/architecture/disabled-state-classification.test.ts" }],
+      "testRefs": [{ "path": "tests/architecture/disabled-state-classification.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current source inspection",
+        "observed": "The first behavior rows still carry functionally irrelevant array-shaped resources values despite the predicate's enabled-only port."
+      },
+      "rationale": "The fixture-shape cleanup remains live.",
+      "destination": "Use canonical finding ASD-047."
+    },
+    {
+      "id": "ASG-F015",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-015"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "ASD-048",
+      "sourceRefs": [{ "path": "tests/architecture/disabled-state-classification.test.ts" }],
+      "testRefs": [{ "path": "N/A", "reason": "Helper ownership is structural." }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current source inspection",
+        "observed": "Local source-root/comment helpers remain instead of using the architecture source-scan seam."
+      },
+      "rationale": "The duplicate-helper cleanup remains live.",
+      "destination": "Use canonical finding ASD-048."
+    },
+    {
+      "id": "ASG-F016",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-016"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "ASD-049",
+      "sourceRefs": [{ "path": "tests/architecture/config-state-write-seams.test.ts" }],
+      "testRefs": [{ "path": "tests/architecture/config-state-write-seams.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current source inspection plus focused rerun",
+        "observed": "The five planted offenders still prove the gate, and the local walkTsFiles helper remains duplicated."
+      },
+      "rationale": "The gate is strong and its helper cleanup remains live.",
+      "destination": "Use canonical finding ASD-049."
+    },
+    {
+      "id": "ASG-F017",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-017"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "ASD-050",
+      "sourceRefs": [{ "path": "tests/architecture/scope-fences-63.test.ts" }],
+      "testRefs": [{ "path": "tests/architecture/scope-fences-63.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current source inspection plus focused rerun",
+        "observed": "The real token scan passes but the filename still does not identify SURF-03, SURF-04, and HOOK-04 locks; no planted self-test was added."
+      },
+      "rationale": "The naming cleanup and documented residual risk remain live.",
+      "destination": "Use canonical finding ASD-050."
+    },
+    {
+      "id": "ASG-F018",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-018"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "ASD-051",
+      "sourceRefs": [{ "path": "tests/architecture/scope-order-drift.test.ts" }],
+      "testRefs": [{ "path": "tests/architecture/scope-order-drift.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current source inspection plus focused rerun",
+        "observed": "The repo scan remains green, while both test titles still carry the dated review tag."
+      },
+      "rationale": "The durable-title cleanup remains live.",
+      "destination": "Use canonical finding ASD-051."
+    },
+    {
+      "id": "ASG-F019",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-019"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "ASD-052",
+      "sourceRefs": [{ "path": "tests/architecture/scope-order-drift.test.ts" }],
+      "testRefs": [{ "path": "N/A", "reason": "Helper ownership is structural." }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current source inspection",
+        "observed": "The local recursive walkTsFiles implementation remains."
+      },
+      "rationale": "The duplicate-helper cleanup remains live.",
+      "destination": "Use canonical finding ASD-052."
+    },
+    {
+      "id": "ASG-F020",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-020"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/edge/flag-catalog.ts" }],
+      "testRefs": [{ "path": "tests/architecture/flag-catalog-drift.test.ts" }],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test tests/architecture/flag-catalog-drift.test.ts",
+        "exitCode": 0,
+        "observed": "Real catalog functions and the independent handler parse-set pin all passed."
+      },
+      "rationale": "The gate remains non-inert despite two derived-to-derived comparisons.",
+      "destination": "Retain as positive evidence."
+    },
+    {
+      "id": "ASG-F021",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-021"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "ASD-053",
+      "sourceRefs": [{ "path": "tests/architecture/flag-catalog-drift.test.ts" }],
+      "testRefs": [{ "path": "N/A", "reason": "Test registration shape is structural." }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current source inspection",
+        "observed": "COMPLETION_HEADS and CATALOG_VERBS are still iterated inside test callbacks."
+      },
+      "rationale": "The sibling-case registration cleanup remains live.",
+      "destination": "Use canonical finding ASD-053."
+    },
+    {
+      "id": "ASG-F022",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-022"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 2",
+      "duplicateOf": "ASD-054",
+      "sourceRefs": [{ "path": "tests/architecture/manifest-read-seam.test.ts" }],
+      "testRefs": [{ "path": "tests/architecture/manifest-read-seam.test.ts" }],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "isolated copy: add a second marketplace.json read through a manifestPath variable; node --test tests/architecture/manifest-read-seam.test.ts",
+        "exitCode": 0,
+        "observed": "The static gate passed despite a real second read, proving the regex direction blind spot and absent planted test."
+      },
+      "rationale": "The original report understated this as only a self-test gap; the live gap can miss variable-mediated reads.",
+      "destination": "Use canonical finding ASD-054 and strengthen its acceptance case."
+    },
+    {
+      "id": "ASG-F023",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-023"
+      ],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "ASD-055",
+      "sourceRefs": [{ "path": "tests/architecture/manifest-read-seam.test.ts" }],
+      "testRefs": [{ "path": "N/A", "reason": "Helper duplication is structural." }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current source inspection",
+        "observed": "stripComments and collectTypeScriptFiles remain local duplicates."
+      },
+      "rationale": "The shared-helper cleanup remains live.",
+      "destination": "Use canonical finding ASD-055."
+    },
+    {
+      "id": "ASG-F024",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-024"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "tests/architecture/compat-01-no-expansion.test.ts" }],
+      "testRefs": [{ "path": "tests/architecture/compat-01-no-expansion.test.ts" }],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test tests/architecture/compat-01-no-expansion.test.ts",
+        "exitCode": 0,
+        "observed": "The sole file listed clean remains passing and no contrary issue was found in its assigned surface."
+      },
+      "rationale": "Preserve the clean-file claim as positive evidence.",
+      "destination": "Evidence-only closure."
+    },
+    {
+      "id": "ASG-F025",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-025"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/persistence/state-io.ts" },
+        { "path": "extensions/pi-claude-marketplace/persistence/config-io.ts" },
+        { "path": "extensions/pi-claude-marketplace/domain/manifest.ts" },
+        { "path": "extensions/pi-claude-marketplace/edge/flag-catalog.ts" }
+      ],
+      "testRefs": [{ "path": "tests/architecture/config-state-consistency.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph source and call-path review",
+        "observed": "The reviewed persistence, manifest, flag, shared-type, and reconcile surfaces retain their narrow responsibilities; no new defect was established."
+      },
+      "rationale": "The production clean-list claim remains positive evidence, bounded to the named reviewed exports.",
+      "destination": "Evidence-only closure."
+    },
+    {
+      "id": "ASG-F026",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-026"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/shared/notify.ts" }],
+      "testRefs": [{ "path": "tests/architecture/cross-op-convergence.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph bounded-surface review",
+        "observed": "The historical review explicitly excluded collaborator orchestrators and most notification rendering; this revalidation did not silently broaden those claims."
+      },
+      "rationale": "The not-covered boundaries remain traceability data, not defects.",
+      "destination": "Retain as scope-boundary evidence."
+    },
+    {
+      "id": "ASG-F027",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-027"
+      ],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "N/A", "reason": "Historical process statement, not code." }],
+      "testRefs": [{ "path": "tests/architecture/config-state-consistency.test.ts" }],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test ten assigned architecture files",
+        "exitCode": 0,
+        "observed": "The revalidation executed all ten assigned architecture tests, superseding the historical statement that no commands had been run."
+      },
+      "rationale": "The old no-execution caveat is no longer current evidence.",
+      "destination": "Close as stale process metadata."
+    },
+    {
+      "id": "ASG-F028",
+      "claimIds": [
+        ".planning/reviews/unit-test-adversarial/architecture-state-drift-gates.md#CLAIM-028"
+      ],
+      "evidenceStatus": "confirmed",
+      "route": "deferred backlog",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "tests/architecture/source-scan.ts" }],
+      "testRefs": [{ "path": "N/A", "reason": "Cross-file duplication theme is structural." }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current source comparison",
+        "observed": "Five assigned drift gates still own overlapping recursive TypeScript walkers, with some also duplicating comment stripping and root discovery."
+      },
+      "rationale": "The summary-level shared-helper consolidation remains actionable.",
+      "destination": "Defer cross-file architecture helper consolidation."
+    },
+    {
+      "id": "BAG-F001",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-agents.md#CLAIM-001"],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/agents/index.ts" }],
+      "testRefs": [
+        { "path": "tests/bridges/agents/index.test.ts" },
+        { "path": "tests/bridges/agents/types.test.ts" }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test tests/bridges/agents/stage.test.ts tests/bridges/agents/convert.test.ts",
+        "exitCode": 0,
+        "observed": "Focused agent suites passed; direct coverage for stage and convert also reported 100% lines, branches, and functions."
+      },
+      "rationale": "The pairing and overall-quality assessment remains broadly supported.",
+      "destination": "Retain as positive evidence."
+    },
+    {
+      "id": "BAG-F002",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-agents.md#CLAIM-002"],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/agents/stage.ts" }],
+      "testRefs": [{ "path": "tests/bridges/agents/stage.test.ts" }],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "isolated copy: change noop guard to converted.length === 0; node --test tests/bridges/agents/stage.test.ts",
+        "exitCode": 1,
+        "observed": "The current suite killed the historical wrong guard, positively proving the complementary previous-entry path is now covered."
+      },
+      "rationale": "The former AS-9 gap has been closed by current tests.",
+      "destination": "Close as stale with replacement proof."
+    },
+    {
+      "id": "BAG-F003",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-agents.md#CLAIM-003"],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/agents/stage.ts" }],
+      "testRefs": [{ "path": "tests/bridges/agents/stage.test.ts" }],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test tests/bridges/agents/stage.test.ts",
+        "exitCode": 0,
+        "observed": "Current test force replaces foreign previous content, inspects the replacement index, rolls back, and proves exact foreign bytes/index restoration plus staging cleanup."
+      },
+      "rationale": "The previously absent force/foreign success-and-rollback path now has direct end-to-end coverage.",
+      "destination": "Close as stale with replacement proof."
+    },
+    {
+      "id": "BAG-F004",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-agents.md#CLAIM-004"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "BA-018",
+      "sourceRefs": [{ "path": "tests/bridges/agents/stage.test.ts" }],
+      "testRefs": [{ "path": "N/A", "reason": "Fixture duplication is structural." }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current source inspection",
+        "observed": "Repeated full resolved fixture literals remain in the stage suite."
+      },
+      "rationale": "The seed-builder extraction remains live.",
+      "destination": "Use canonical finding BA-018."
+    },
+    {
+      "id": "BAG-F005",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-agents.md#CLAIM-005"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "BA-019",
+      "sourceRefs": [{ "path": "tests/bridges/agents/stage.test.ts" }],
+      "testRefs": [{ "path": "N/A", "reason": "Comment/documentation need is structural." }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current source inspection",
+        "observed": "The direct Object.defineProperty failure injection remains without an explanatory setup comment."
+      },
+      "rationale": "The non-obvious failure-injection documentation gap remains live.",
+      "destination": "Use canonical finding BA-019."
+    },
+    {
+      "id": "BAG-F006",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-agents.md#CLAIM-006"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "BA-020",
+      "sourceRefs": [{ "path": "tests/bridges/agents/convert.test.ts" }],
+      "testRefs": [{ "path": "tests/bridges/agents/convert.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current assertion inspection",
+        "observed": "The cited conversion case still checks only a match and a projected subset rather than the complete conversion result."
+      },
+      "rationale": "The whole-value assertion improvement remains live.",
+      "destination": "Use canonical finding BA-020."
+    },
+    {
+      "id": "BAG-F007",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-agents.md#CLAIM-007"],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "tests/bridges/agents/index.test.ts" },
+        { "path": "tests/bridges/agents/types.test.ts" },
+        { "path": "tests/bridges/agents/unstage.test.ts" }
+      ],
+      "testRefs": [{ "path": "tests/bridges/agents/stage.test.ts" }],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test tests/bridges/agents/stage.test.ts tests/bridges/agents/convert.test.ts",
+        "exitCode": 0,
+        "observed": "The focused executable agent surfaces passed and no only/skip marker or pairing break was found in the assigned tree."
+      },
+      "rationale": "The named clean-test assessment remains positive evidence.",
+      "destination": "Evidence-only closure."
+    },
+    {
+      "id": "BAG-F008",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-agents.md#CLAIM-008"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "BA-021",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/agents/stage.ts" }],
+      "testRefs": [{ "path": "N/A", "reason": "Dependency injection design is structural." }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph call-path inspection",
+        "observed": "prepare and replace still invoke randomUUID inline for staging and backup names."
+      },
+      "rationale": "The hidden nondeterminism boundary remains live.",
+      "destination": "Use canonical finding BA-021."
+    },
+    {
+      "id": "BAG-F009",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-agents.md#CLAIM-009"],
+      "evidenceStatus": "duplicate",
+      "route": "operator decision",
+      "duplicateOf": "BA-022",
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/agents/types.ts" },
+        { "path": "extensions/pi-claude-marketplace/bridges/agents/stage.ts" }
+      ],
+      "testRefs": [{ "path": "N/A", "reason": "Input-contract usage is structural." }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph parameter-use inspection",
+        "observed": "StageAgentsInput.resolved remains required by type and callers but omitted from prepareStagePluginAgents destructuring and behavior."
+      },
+      "rationale": "The accept-but-ignore contract still needs an explicit decision or comment.",
+      "destination": "Use canonical finding BA-022."
+    },
+    {
+      "id": "BAG-F010",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-agents.md#CLAIM-010"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "BA-023",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/agents/convert.ts" }],
+      "testRefs": [{ "path": "tests/bridges/agents/convert.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current source inspection",
+        "observed": "The empty mapped-tools and collision paths still throw bare Error with details only in messages."
+      },
+      "rationale": "Typed structured errors remain a consistency improvement.",
+      "destination": "Use canonical finding BA-023."
+    },
+    {
+      "id": "BAG-F011",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-agents.md#CLAIM-011"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "BA-024",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/agents/convert.ts" }],
+      "testRefs": [{ "path": "N/A", "reason": "Readability concern is structural." }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current source inspection",
+        "observed": "The side-effecting IIFE remains in one ternary arm of tool-token selection."
+      },
+      "rationale": "The if/else readability cleanup remains live.",
+      "destination": "Use canonical finding BA-024."
+    },
+    {
+      "id": "BAG-F012",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-agents.md#CLAIM-012"],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/agents/types.ts" },
+        { "path": "extensions/pi-claude-marketplace/bridges/agents/marker.ts" },
+        { "path": "extensions/pi-claude-marketplace/bridges/agents/unstage.ts" }
+      ],
+      "testRefs": [{ "path": "tests/bridges/agents/types.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph bounded source review",
+        "observed": "No contrary defect was established in the seven production files the corpus marked clean."
+      },
+      "rationale": "Preserve the bounded clean-production claim.",
+      "destination": "Evidence-only closure."
+    },
+    {
+      "id": "BCG-F001",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-commands.md#CLAIM-001"],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/commands/index.ts" }],
+      "testRefs": [
+        { "path": "tests/bridges/commands/index.test.ts" },
+        { "path": "tests/bridges/commands/types.test.ts" }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test tests/bridges/commands/stage.test.ts tests/bridges/commands/discover.test.ts tests/bridges/commands/unstage.test.ts",
+        "exitCode": 0,
+        "observed": "All three executable command suites passed; direct coverage reported 100% for stage, discover, and unstage."
+      },
+      "rationale": "Pairing and the broad maturity assessment remain supported.",
+      "destination": "Retain as positive evidence."
+    },
+    {
+      "id": "BCG-F002",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-commands.md#CLAIM-002"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "BC-015",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/commands/stage.ts" }],
+      "testRefs": [{ "path": "tests/bridges/commands/stage.test.ts" }],
+      "validation": {
+        "method": "surviving-mutation",
+        "command": "isolated copy: reverse the from/to identities in the command rollback-leak message; node --test tests/bridges/commands/stage.test.ts",
+        "exitCode": 0,
+        "observed": "The focused suite passed with the wrong rename pair, confirming that the prefix-only error assertion is insufficient."
+      },
+      "rationale": "The structured error/pair identity gap remains live.",
+      "destination": "Use canonical finding BC-015."
+    },
+    {
+      "id": "BCG-F003",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-commands.md#CLAIM-003"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "BC-016",
+      "sourceRefs": [{ "path": "tests/bridges/commands/stage.test.ts" }],
+      "testRefs": [{ "path": "tests/bridges/commands/stage.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current assertion inspection",
+        "observed": "The partial commit rollback case still checks only instanceof Error for the thrown value while asserting side effects separately."
+      },
+      "rationale": "A deterministic positive error identity remains unasserted.",
+      "destination": "Use canonical finding BC-016."
+    },
+    {
+      "id": "BCG-F004",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-commands.md#CLAIM-004"],
+      "evidenceStatus": "duplicate",
+      "route": "operator decision",
+      "duplicateOf": "BC-017",
+      "sourceRefs": [{ "path": "tests/bridges/commands/stage.test.ts" }],
+      "testRefs": [{ "path": "tests/bridges/commands/stage.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph current call-path inspection",
+        "observed": "Three command-stage cases still monkeypatch global String.prototype methods to force defensive branches that real parser flow cannot reach."
+      },
+      "rationale": "The code-versus-coverage decision remains live.",
+      "destination": "Use canonical finding BC-017."
+    },
+    {
+      "id": "BCG-F005",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-commands.md#CLAIM-005"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "BC-018",
+      "sourceRefs": [
+        { "path": "tests/bridges/commands/stage.test.ts" },
+        { "path": "tests/bridges/commands/discover.test.ts" }
+      ],
+      "testRefs": [{ "path": "N/A", "reason": "Fixture builder duplication is structural." }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current source comparison",
+        "observed": "resolvedFor and resolvedPlugin still construct near-identical installable command-plugin values."
+      },
+      "rationale": "The shared seed builder remains actionable.",
+      "destination": "Use canonical finding BC-018."
+    },
+    {
+      "id": "BCG-F006",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-commands.md#CLAIM-006"],
+      "evidenceStatus": "duplicate",
+      "route": "operator decision",
+      "duplicateOf": "BC-019",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/commands/discover.ts" }],
+      "testRefs": [{ "path": "tests/bridges/commands/discover.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph construction/catch path inspection",
+        "observed": "The test still overrides CommandNameError Symbol.hasInstance to force a same-module identity check false."
+      },
+      "rationale": "The defensive-branch retention decision remains live.",
+      "destination": "Use canonical finding BC-019."
+    },
+    {
+      "id": "BCG-F007",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-commands.md#CLAIM-007"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "BC-020",
+      "sourceRefs": [{ "path": "tests/bridges/commands/unstage.test.ts" }],
+      "testRefs": [{ "path": "N/A", "reason": "Import spelling is structural." }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "current source inspection",
+        "observed": "unstage.test.ts still uses a default test import while siblings use named imports."
+      },
+      "rationale": "The local consistency cleanup remains live.",
+      "destination": "Use canonical finding BC-020."
+    },
+    {
+      "id": "BCG-F008",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-commands.md#CLAIM-008"],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "tests/bridges/commands/discover.test.ts" },
+        { "path": "tests/bridges/commands/unstage.test.ts" },
+        { "path": "tests/bridges/commands/index.test.ts" },
+        { "path": "tests/bridges/commands/types.test.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/bridges/commands/discover.test.ts" },
+        { "path": "tests/bridges/commands/unstage.test.ts" }
+      ],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test tests/bridges/commands/discover.test.ts tests/bridges/commands/unstage.test.ts",
+        "exitCode": 0,
+        "observed": "The named clean executable suites passed and the bounded clean assessments remain supported outside separately routed findings."
+      },
+      "rationale": "Preserve the positive clean-file claims.",
+      "destination": "Evidence-only closure."
+    },
+    {
+      "id": "BCG-F009",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-commands.md#CLAIM-009"],
+      "evidenceStatus": "duplicate",
+      "route": "operator decision",
+      "duplicateOf": "BC-021",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/commands/stage.ts" }],
+      "testRefs": [{ "path": "tests/bridges/commands/stage.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph parser-contract path inspection",
+        "observed": "neutralizeCommandFrontmatter still repeats no-opening/no-close guards after parser failure, and tests still need prototype lies to reach them."
+      },
+      "rationale": "The retain-and-document versus delete decision remains live.",
+      "destination": "Use canonical finding BC-021."
+    },
+    {
+      "id": "BCG-F010",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-commands.md#CLAIM-010"],
+      "evidenceStatus": "duplicate",
+      "route": "Phase 3",
+      "duplicateOf": "BC-022",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/commands/stage.ts" }],
+      "testRefs": [{ "path": "N/A", "reason": "Dependency injection design is structural." }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph call-path inspection",
+        "observed": "prepareStageCommands and replacePreparedCommands still call randomUUID inline."
+      },
+      "rationale": "The hidden nondeterminism boundary remains live.",
+      "destination": "Use canonical finding BC-022."
+    },
+    {
+      "id": "BCG-F011",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-commands.md#CLAIM-011"],
+      "evidenceStatus": "duplicate",
+      "route": "operator decision",
+      "duplicateOf": "BC-023",
+      "sourceRefs": [{ "path": "extensions/pi-claude-marketplace/bridges/commands/discover.ts" }],
+      "testRefs": [{ "path": "tests/bridges/commands/discover.test.ts" }],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph same-module call-path inspection",
+        "observed": "The defensive instanceof fallback remains and its only exercised false path still depends on Symbol.hasInstance mutation."
+      },
+      "rationale": "This is the production half of the same operator-decision finding.",
+      "destination": "Use canonical finding BC-023."
+    },
+    {
+      "id": "BCG-F012",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-commands.md#CLAIM-012"],
+      "evidenceStatus": "confirmed",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "extensions/pi-claude-marketplace/bridges/commands/unstage.ts" },
+        { "path": "extensions/pi-claude-marketplace/bridges/commands/types.ts" },
+        { "path": "extensions/pi-claude-marketplace/bridges/commands/index.ts" }
+      ],
+      "testRefs": [
+        { "path": "tests/bridges/commands/unstage.test.ts" },
+        { "path": "tests/bridges/commands/types.test.ts" },
+        { "path": "tests/bridges/commands/index.test.ts" }
+      ],
+      "validation": {
+        "method": "static-proof",
+        "tool": "CodeGraph bounded source review",
+        "observed": "The three files remain small and aligned with their paired tests; no new defect was established."
+      },
+      "rationale": "Preserve the bounded clean-production claims.",
+      "destination": "Evidence-only closure."
+    },
+    {
+      "id": "BCG-F013",
+      "claimIds": [".planning/reviews/unit-test-adversarial/bridges-commands.md#CLAIM-013"],
+      "evidenceStatus": "stale",
+      "route": "evidence-only closure",
+      "duplicateOf": null,
+      "sourceRefs": [
+        { "path": "N/A", "reason": "Historical process and assignment-exclusion metadata." }
+      ],
+      "testRefs": [{ "path": "tests/bridges/commands/stage.test.ts" }],
+      "validation": {
+        "method": "behavioral-probe",
+        "command": "node --test three assigned commands suites plus direct coverage for stage/discover/unstage",
+        "exitCode": 0,
+        "observed": "Current focused execution and 100% direct coverage supersede the historical no-command caveat; the CPD exclusion remains deliberately outside finding scope."
+      },
+      "rationale": "Close the old process caveat without converting the explicitly excluded CPD note into a defect.",
+      "destination": "Evidence-only closure."
+    }
+  ],
+  "decisions": [],
+  "scopeChanges": []
+}

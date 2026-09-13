@@ -24,7 +24,7 @@ const USAGE = "Usage: /claude:plugin marketplace add <source> [--scope user|proj
 
 export function makeAddHandler(
   pi: ExtensionAPI,
-  deps: EdgeDeps,
+  deps: Pick<EdgeDeps, "completionCache" | "gitOps">,
 ): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
   return async (args, ctx): Promise<void> => {
     const opened = openMarketplaceCommand(args, ctx, {
@@ -41,6 +41,7 @@ export function makeAddHandler(
       scope: opened.scope ?? "user",
       cwd: ctx.cwd,
       rawSource: opened.source,
+      completionCache: deps.completionCache,
       gitOps: deps.gitOps,
       ...(opened.local && { local: true }),
     });

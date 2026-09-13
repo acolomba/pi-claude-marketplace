@@ -87,21 +87,18 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { test, type TestContext } from "node:test";
 
-import { mock, verify } from "strong-mock";
-
 import { makeBootstrapHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/bootstrap.ts";
 import { BOOTSTRAP_MARKETPLACE_NAME } from "../../../../extensions/pi-claude-marketplace/orchestrators/plugin/bootstrap.ts";
 import { locationsFor } from "../../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { createCompletionCache } from "../../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { createGitOpsFake } from "../../../platform/git-ops-fake.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
 
 import type { EdgeDeps } from "../../../../extensions/pi-claude-marketplace/edge/types.ts";
 import type { Scope } from "../../../../extensions/pi-claude-marketplace/shared/types.ts";
 
-// Both port shapes are derived from the handler's own dependency object, so a
-// change to either injection seam is a compile error in this suite rather than a
-// silently stale hand-copied type.
-type PluginUpdate = EdgeDeps["pluginUpdate"];
+// The Git call shape is derived from the injected fake so a seam change is a
+// compile error in this suite rather than a silently stale hand-copied type.
 type GitCloneCall = ReturnType<typeof createGitOpsFake>["state"]["calls"]["clone"][number];
 
 /** Each written out by hand; never read back off the module under test. */
@@ -151,6 +148,10 @@ interface HermeticScope {
 interface GitPort {
   readonly gitOps: EdgeDeps["gitOps"];
   readonly clones: readonly GitCloneCall[];
+}
+
+function createBootstrapDeps(gitOps: EdgeDeps["gitOps"]) {
+  return { completionCache: createCompletionCache(), gitOps };
 }
 
 /**
@@ -274,8 +275,7 @@ test("clones through the injected git port into the user scope at the accepted a
   const { cwd, sourceTree, networkCallCount } = await createHermeticScope(t, "accepted");
   const { ctx, pi, verifyBoundary } = createNotificationBoundary(2, 4, { value: cwd, reads: 1 });
   const git = createGitPort(sourceTree);
-  const pluginUpdate = mock<PluginUpdate>({ exactParams: true, name: "plugin update" });
-  const bootstrapHandler = makeBootstrapHandler(pi, { gitOps: git.gitOps, pluginUpdate });
+  const bootstrapHandler = makeBootstrapHandler(pi, createBootstrapDeps(git.gitOps));
 
   // act
   await bootstrapHandler("", ctx);
@@ -284,7 +284,6 @@ test("clones through the injected git port into the user scope at the accepted a
   assert.deepStrictEqual(describeClones(git.clones, userStagingRoot(cwd)), [BOOTSTRAP_CLONE]);
   assert.strictEqual(networkCallCount(), 0);
   verifyBoundary();
-  verify(pluginUpdate);
 });
 
 for (const { args, label, tokens } of [
@@ -296,8 +295,7 @@ for (const { args, label, tokens } of [
     const { sourceTree, networkCallCount } = await createHermeticScope(t, `positional-${label}`);
     const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
     const git = createGitPort(sourceTree);
-    const pluginUpdate = mock<PluginUpdate>({ exactParams: true, name: "plugin update" });
-    const bootstrapHandler = makeBootstrapHandler(pi, { gitOps: git.gitOps, pluginUpdate });
+    const bootstrapHandler = makeBootstrapHandler(pi, createBootstrapDeps(git.gitOps));
 
     // act
     await bootstrapHandler(args, ctx);
@@ -307,7 +305,6 @@ for (const { args, label, tokens } of [
     assert.deepStrictEqual(git.clones, []);
     assert.strictEqual(networkCallCount(), 0);
     verifyBoundary();
-    verify(pluginUpdate);
   });
 }
 
@@ -317,8 +314,7 @@ for (const scope of ["user", "project"] satisfies readonly Scope[]) {
     const { sourceTree, networkCallCount } = await createHermeticScope(t, `scope-${scope}`);
     const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
     const git = createGitPort(sourceTree);
-    const pluginUpdate = mock<PluginUpdate>({ exactParams: true, name: "plugin update" });
-    const bootstrapHandler = makeBootstrapHandler(pi, { gitOps: git.gitOps, pluginUpdate });
+    const bootstrapHandler = makeBootstrapHandler(pi, createBootstrapDeps(git.gitOps));
 
     // act
     await bootstrapHandler(`--scope ${scope}`, ctx);
@@ -330,7 +326,6 @@ for (const scope of ["user", "project"] satisfies readonly Scope[]) {
     assert.deepStrictEqual(git.clones, []);
     assert.strictEqual(networkCallCount(), 0);
     verifyBoundary();
-    verify(pluginUpdate);
   });
 }
 
@@ -347,8 +342,7 @@ for (const { args, label, subject } of [
     const { sourceTree, networkCallCount } = await createHermeticScope(t, `scope-target-${label}`);
     const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
     const git = createGitPort(sourceTree);
-    const pluginUpdate = mock<PluginUpdate>({ exactParams: true, name: "plugin update" });
-    const bootstrapHandler = makeBootstrapHandler(pi, { gitOps: git.gitOps, pluginUpdate });
+    const bootstrapHandler = makeBootstrapHandler(pi, createBootstrapDeps(git.gitOps));
 
     // act
     await bootstrapHandler(args, ctx);
@@ -358,7 +352,6 @@ for (const { args, label, subject } of [
     assert.deepStrictEqual(git.clones, []);
     assert.strictEqual(networkCallCount(), 0);
     verifyBoundary();
-    verify(pluginUpdate);
   });
 }
 
@@ -375,8 +368,7 @@ for (const { args, label, subject } of [
     const { sourceTree, networkCallCount } = await createHermeticScope(t, `invalid-scope-${label}`);
     const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
     const git = createGitPort(sourceTree);
-    const pluginUpdate = mock<PluginUpdate>({ exactParams: true, name: "plugin update" });
-    const bootstrapHandler = makeBootstrapHandler(pi, { gitOps: git.gitOps, pluginUpdate });
+    const bootstrapHandler = makeBootstrapHandler(pi, createBootstrapDeps(git.gitOps));
 
     // act
     await bootstrapHandler(args, ctx);
@@ -386,7 +378,6 @@ for (const { args, label, subject } of [
     assert.deepStrictEqual(git.clones, []);
     assert.strictEqual(networkCallCount(), 0);
     verifyBoundary();
-    verify(pluginUpdate);
   });
 }
 
@@ -398,8 +389,7 @@ test("converts a thrown bootstrap failure into one failed marketplace row carryi
     reads: 1,
   });
   const git = createGitPort(sourceTree, new Error(REFUSED_CLONE_MESSAGE));
-  const pluginUpdate = mock<PluginUpdate>({ exactParams: true, name: "plugin update" });
-  const bootstrapHandler = makeBootstrapHandler(pi, { gitOps: git.gitOps, pluginUpdate });
+  const bootstrapHandler = makeBootstrapHandler(pi, createBootstrapDeps(git.gitOps));
 
   // act
   await bootstrapHandler("", ctx);
@@ -409,5 +399,4 @@ test("converts a thrown bootstrap failure into one failed marketplace row carryi
   assert.deepStrictEqual(describeClones(git.clones, userStagingRoot(cwd)), [BOOTSTRAP_CLONE]);
   assert.strictEqual(networkCallCount(), 0);
   verifyBoundary();
-  verify(pluginUpdate);
 });

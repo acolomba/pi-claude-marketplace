@@ -9,15 +9,12 @@
 // that observes `readdir` (uninstall's clone-reclaim scan does), and a walk
 // must report the real tree even while a case has a refusal armed.
 
-import { createRequire } from "node:module";
+import { readdir } from "node:fs/promises";
 import path from "node:path";
 
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 
-const inventoryFs = createRequire(import.meta.url)(
-  "node:fs/promises",
-) as typeof import("node:fs/promises");
-const inventoryReaddir = inventoryFs.readdir.bind(inventoryFs);
+const inventoryReaddir = readdir;
 
 /**
  * Every path under `root`, relative to it and separated by `/` on every

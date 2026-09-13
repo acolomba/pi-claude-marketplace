@@ -96,6 +96,76 @@ function stateWith(marketplaces: Record<string, MarketplaceRecord> = {}): Extens
 }
 
 describe("planReconcile", () => {
+  test("resolves a declared alias to the canonical recorded plugin target", () => {
+    // arrange
+    const merged = mergedConfig(
+      { "declared-name": { source: "./local-marketplace" } },
+      { "formatter@declared-name": {} },
+    );
+    const state = stateWith({
+      "canonical-name": marketplaceRecord("canonical-name", pathSource("./local-marketplace")),
+    });
+
+    // act
+    const result = planReconcile(merged, state, "project");
+
+    // assert
+    assert.deepStrictEqual(result, {
+      scope: "project",
+      marketplacesToAdd: [],
+      marketplacesToRemove: [],
+      pluginsToInstall: [
+        {
+          scope: "project",
+          plugin: "formatter",
+          marketplace: "canonical-name",
+          configSource: "base",
+        },
+      ],
+      pluginsToUninstall: [],
+      pluginsToEnable: [],
+      pluginsToDisable: [],
+      sourceMismatches: [],
+    });
+  });
+
+  test("keeps the declared plugin target when its marketplace is new", () => {
+    // arrange
+    const merged = mergedConfig(
+      { "declared-name": { source: "./local-marketplace" } },
+      { "formatter@declared-name": {} },
+    );
+
+    // act
+    const result = planReconcile(merged, stateWith(), "project");
+
+    // assert
+    assert.deepStrictEqual(result, {
+      scope: "project",
+      marketplacesToAdd: [
+        {
+          scope: "project",
+          marketplace: "declared-name",
+          source: "./local-marketplace",
+          configSource: "base",
+        },
+      ],
+      marketplacesToRemove: [],
+      pluginsToInstall: [
+        {
+          scope: "project",
+          plugin: "formatter",
+          marketplace: "declared-name",
+          configSource: "base",
+        },
+      ],
+      pluginsToUninstall: [],
+      pluginsToEnable: [],
+      pluginsToDisable: [],
+      sourceMismatches: [],
+    });
+  });
+
   test("claims an alternate recorded name after skipping declared and different-source records", () => {
     // arrange
     const merged = mergedConfig({
@@ -124,14 +194,12 @@ describe("planReconcile", () => {
     });
   });
 
-  test("excludes a claimed record from a second declaration and adds the unclaimed alias", () => {
+  test("reports every recorded candidate when an alias source is ambiguous", () => {
     // arrange
-    const merged = mergedConfig({
-      "alias-a": { source: "acme/actual" },
-      "alias-b": { source: "acme/actual" },
-    });
+    const merged = mergedConfig({ alias: { source: "acme/actual" } }, { "formatter@alias": {} });
     const state = stateWith({
-      actual: marketplaceRecord("actual", githubSource("acme/actual")),
+      zeta: marketplaceRecord("zeta", githubSource("acme/actual")),
+      alpha: marketplaceRecord("alpha", githubSource("acme/actual")),
     });
 
     // act
@@ -140,21 +208,71 @@ describe("planReconcile", () => {
     // assert
     assert.deepStrictEqual(result, {
       scope: "project",
-      marketplacesToAdd: [
-        {
-          scope: "project",
-          marketplace: "alias-b",
-          source: "acme/actual",
-          configSource: "base",
-        },
-      ],
+      marketplacesToAdd: [],
       marketplacesToRemove: [],
       pluginsToInstall: [],
       pluginsToUninstall: [],
       pluginsToEnable: [],
       pluginsToDisable: [],
-      sourceMismatches: [],
+      sourceMismatches: [
+        {
+          scope: "project",
+          cause: "source-mismatch",
+          marketplace: "alias",
+          declaredSource: "acme/actual",
+          recordedSource: "ambiguous recorded marketplaces: alpha, zeta",
+        },
+      ],
     });
+    assert.deepStrictEqual(Object.keys(state.marketplaces), ["zeta", "alpha"]);
+  });
+
+  test("reports duplicate alias claims independently of declaration order", () => {
+    // arrange
+    const forward = mergedConfig({
+      "alias-a": { source: "acme/actual" },
+      "alias-b": { source: "acme/actual" },
+    });
+    const reverse = mergedConfig({
+      "alias-b": { source: "acme/actual" },
+      "alias-a": { source: "acme/actual" },
+    });
+    const state = stateWith({
+      actual: marketplaceRecord("actual", githubSource("acme/actual")),
+    });
+
+    // act
+    const forwardResult = planReconcile(forward, state, "project");
+    const reverseResult = planReconcile(reverse, state, "project");
+
+    // assert
+    const expected = {
+      scope: "project",
+      marketplacesToAdd: [],
+      marketplacesToRemove: [],
+      pluginsToInstall: [],
+      pluginsToUninstall: [],
+      pluginsToEnable: [],
+      pluginsToDisable: [],
+      sourceMismatches: [
+        {
+          scope: "project",
+          cause: "source-mismatch",
+          marketplace: "alias-a",
+          declaredSource: "acme/actual",
+          recordedSource: "recorded marketplace claimed by multiple declarations: actual",
+        },
+        {
+          scope: "project",
+          cause: "source-mismatch",
+          marketplace: "alias-b",
+          declaredSource: "acme/actual",
+          recordedSource: "recorded marketplace claimed by multiple declarations: actual",
+        },
+      ],
+    };
+    assert.deepStrictEqual(forwardResult, expected);
+    assert.deepStrictEqual(reverseResult, expected);
   });
 
   test("keeps matching GitHub and path marketplaces at steady state", () => {

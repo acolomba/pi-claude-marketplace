@@ -40,22 +40,29 @@
 // stray call, but the pre-guard miss returns before it is reached.
 
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import path from "node:path";
 import test from "node:test";
 
+import {
+  createHooksRouting,
+  createHooksRuntime,
+  readHooksJson,
+} from "../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { setMarketplaceAutoupdate } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/autoupdate.ts";
 import { removeMarketplace } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts";
 import { updateMarketplace } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts";
 import { getPluginInfo } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts";
-import { installPlugin } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/install.ts";
-import { reinstallPlugins } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.ts";
-import { uninstallPlugin } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
-import { updatePlugins } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/update.ts";
+import { createNodeInstallPlugin } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts";
+import { createNodeReinstallPlugins } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts";
+import { createNodeUninstallPlugin } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
+import { createPluginUpdateOperations } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts";
+import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { createGitOpsFake } from "../platform/git-ops-fake.ts";
+import { withHermeticEnvironment } from "../platform/hermetic-environment.ts";
 
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type {
+  NotificationContext,
+  ToolInventory,
+} from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
 // ---------------------------------------------------------------------------
 // Hermetic harness -- mirrors the per-op orchestrator test idiom
@@ -68,13 +75,31 @@ interface NotifyRecord {
   severity?: string;
 }
 
-function makeMockGitOps() {
+function createGitOps() {
   return createGitOpsFake({ boundary: "memory" });
 }
 
-function makeCtx(): { ctx: ExtensionContext; pi: ExtensionAPI; notifications: NotifyRecord[] } {
+function createUpdatePlugins() {
+  return createPluginUpdateOperations(
+    createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    createCompletionCache(),
+  ).updatePlugins;
+}
+
+function createReinstallPlugins() {
+  return createNodeReinstallPlugins(
+    createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    createCompletionCache(),
+  );
+}
+
+function makeCtx(): {
+  ctx: NotificationContext;
+  pi: ToolInventory;
+  notifications: NotifyRecord[];
+} {
   const notifications: NotifyRecord[] = [];
-  const pi = { getAllTools: (): unknown[] => [] } as unknown as ExtensionAPI;
+  const pi: ToolInventory = { getAllTools: () => [] };
   const ctx = {
     ui: {
       notify: (m: string, s?: string): void => {
@@ -82,27 +107,12 @@ function makeCtx(): { ctx: ExtensionContext; pi: ExtensionAPI; notifications: No
       },
     },
     pi,
-  } as unknown as ExtensionContext;
+  };
   return { ctx, pi, notifications };
 }
 
 async function withHermeticHome<T>(fn: (env: { cwd: string }) => Promise<T>): Promise<T> {
-  const originalHome = process.env.HOME;
-  const home = await mkdtemp(path.join(tmpdir(), "xop-home-"));
-  const cwd = await mkdtemp(path.join(tmpdir(), "xop-cwd-"));
-  process.env.HOME = home;
-  try {
-    return await fn({ cwd });
-  } finally {
-    if (originalHome === undefined) {
-      delete process.env.HOME;
-    } else {
-      process.env.HOME = originalHome;
-    }
-
-    await rm(home, { recursive: true, force: true });
-    await rm(cwd, { recursive: true, force: true });
-  }
+  return withHermeticEnvironment("xop-", ({ cwd }) => fn({ cwd }));
 }
 
 const NAME = "ghost-mp";
@@ -124,8 +134,8 @@ interface Emission {
  * invocation (install has no bare form).
  */
 type Invoker = (env: {
-  ctx: ExtensionContext;
-  pi: ExtensionAPI;
+  ctx: NotificationContext;
+  pi: ToolInventory;
   cwd: string;
   mode: "explicit" | "bare";
 }) => Promise<void>;
@@ -142,13 +152,19 @@ const INVOKERS: Record<string, Invoker> = {
       ...(mode === "explicit" && { scope: "project" as const }),
     });
   },
-  // install ALWAYS carries a resolved scope -> explicit only. install.test.ts M1.
+  // install ALWAYS carries a resolved scope -> explicit only. install-flow.test.ts M1.
   install: async ({ ctx, pi, cwd }) => {
-    await installPlugin({ ctx, pi, scope: "project", cwd, marketplace: NAME, plugin: "anything" });
+    await createNodeInstallPlugin(
+      createHooksRouting(createHooksRuntime(), { readHooksJson }),
+      createCompletionCache(),
+    )({ ctx, pi, scope: "project", cwd, marketplace: NAME, plugin: "anything" });
   },
   // uninstall. uninstall.test.ts ATTR-04 / D-03.
   uninstall: async ({ ctx, pi, cwd, mode }) => {
-    await uninstallPlugin({
+    await createNodeUninstallPlugin(
+      createHooksRouting(createHooksRuntime(), { readHooksJson }),
+      createCompletionCache(),
+    )({
       ctx,
       pi,
       cwd,
@@ -157,9 +173,9 @@ const INVOKERS: Record<string, Invoker> = {
       ...(mode === "explicit" && { scope: "project" as const }),
     });
   },
-  // reinstall (marketplace target). reinstall.test.ts ATTR-03.
+  // reinstall (marketplace target). reinstall-flow.test.ts ATTR-03.
   reinstall: async ({ ctx, pi, cwd, mode }) => {
-    await reinstallPlugins({
+    await createReinstallPlugins()({
       ctx,
       pi,
       cwd,
@@ -167,9 +183,9 @@ const INVOKERS: Record<string, Invoker> = {
       ...(mode === "explicit" && { scope: "project" as const }),
     });
   },
-  // plugin update (marketplace target). update.test.ts ATTR-02.
+  // plugin update (marketplace target). update-flow.test.ts ATTR-02.
   "update (plugin)": async ({ ctx, pi, cwd, mode }) => {
-    await updatePlugins({
+    await createUpdatePlugins()({
       ctx,
       pi,
       cwd,
@@ -180,6 +196,7 @@ const INVOKERS: Record<string, Invoker> = {
   // marketplace remove. remove.test.ts ATTR-06 S3/S4.
   "marketplace remove": async ({ ctx, pi, cwd, mode }) => {
     await removeMarketplace({
+      completionCache: createCompletionCache(),
       ctx,
       pi,
       name: NAME,
@@ -200,11 +217,12 @@ const INVOKERS: Record<string, Invoker> = {
   },
   // marketplace update -- converged via the cross-op gate. A mock gitOps is
   // injected so a (regression) stray network call would be recorded; the
-  // pre-guard miss short-circuits before it is reached (NFR-5). update.test.ts
+  // pre-guard miss short-circuits before it is reached (NFR-5). update-flow.test.ts
   // SC#1.
   "marketplace update": async ({ ctx, pi, cwd, mode }) => {
-    const { gitOps } = makeMockGitOps();
+    const { gitOps } = createGitOps();
     await updateMarketplace({
+      completionCache: createCompletionCache(),
       ctx,
       pi,
       name: NAME,

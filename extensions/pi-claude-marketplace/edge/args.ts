@@ -28,17 +28,18 @@ export function parseArgs(args: string): ParsedArgs {
   const positional: string[] = [];
   let scope: Scope | undefined;
 
-  let i = 0;
-  while (i < tokens.length) {
-    const token = tokens[i];
-    if (token === undefined) {
-      i++;
+  // ER-F05: `skipValue` carries the `--scope` value past the flag test below, so
+  // the value is never tested for flag-ness and never reaches `positional`.
+  let skipValue = false;
+  for (const [index, token] of tokens.entries()) {
+    if (skipValue) {
+      skipValue = false;
       continue;
     }
 
     if (token === "--scope") {
-      i++;
-      const val = tokens[i];
+      const val = tokens[index + 1];
+      skipValue = true;
       if (val === "user" || val === "project") {
         scope = val;
       } else if (val === undefined) {
@@ -49,8 +50,6 @@ export function parseArgs(args: string): ParsedArgs {
     } else {
       positional.push(token);
     }
-
-    i++;
   }
 
   if (scope !== undefined) {
