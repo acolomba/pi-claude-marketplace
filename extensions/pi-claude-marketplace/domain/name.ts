@@ -123,9 +123,9 @@ export function generatedSkillName(plugin: string, source: string): string {
  * no command name left underneath it.
  *
  * Commands only. `generatedSkillName` and `generatedAgentName` keep their
- * throw, because Pi validates a skill name and rejects both a trailing and
- * a doubled hyphen: keeping the head there would yield "acme-acme-" and
- * move the same failure to a worse message further downstream.
+ * throw: a source that is nothing but the stutter has no skill or agent
+ * name left underneath it, and keeping it verbatim would install a name
+ * ("acme:acme-") for a source that is a naming defect, not a namespace.
  */
 export function generatedCommandName(plugin: string, source: string): string {
   assertSafeName(plugin);
