@@ -102,28 +102,89 @@ async function collectSelfSkillDir(
   pluginName: string,
   skillsDir: string,
   seenByGenerated: Map<string, DiscoveredSkill>,
+  seenByDir: Map<string, DiscoveredSkill>,
   warnings: string[],
 ): Promise<boolean> {
   if (!(await isSelfSkillDir(skillsDir))) {
     return false;
   }
 
+  // MANF-03 / D-01-21: already reached through an earlier component path, so
+  // there is nothing to discover and nothing to warn about.
+  if (seenByDir.has(path.resolve(skillsDir))) {
+    return true;
+  }
+
   const sourceName = path.basename(skillsDir);
   assertSafeName(sourceName, `skill directory name in ${skillsDir}`);
 
   const generatedName = generatedSkillName(pluginName, sourceName);
+  const skill: DiscoveredSkill = { sourceName, generatedName, skillDir: skillsDir };
+  seenByDir.set(path.resolve(skillsDir), skill);
+
   const winner = seenByGenerated.get(generatedName);
   if (winner !== undefined) {
     warnings.push(duplicateWarning(sourceName, skillsDir, generatedName, winner.sourceName));
     return true;
   }
 
-  seenByGenerated.set(generatedName, {
-    sourceName,
-    generatedName,
-    skillDir: skillsDir,
-  });
+  seenByGenerated.set(generatedName, skill);
   return true;
+}
+
+/**
+ * Enumerate the skill subdirs of ONE `componentPaths.skills` element, in
+ * stable `localeCompare` order, threading each through the same two dedup
+ * maps `collectSelfSkillDir` uses.
+ */
+async function collectSkillSubdirs(
+  pluginName: string,
+  skillsDir: string,
+  seenByGenerated: Map<string, DiscoveredSkill>,
+  seenByDir: Map<string, DiscoveredSkill>,
+  warnings: string[],
+): Promise<void> {
+  const entries = await readDirEntriesTolerant(skillsDir);
+
+  const sorted = [...entries].sort((a, b) => a.name.localeCompare(b.name));
+
+  for (const entry of sorted) {
+    const full = path.join(skillsDir, entry.name);
+
+    // Refuse symlinked skill dirs.
+    // readdir's `withFileTypes` reports the link's TYPE (so a symlink to a
+    // directory shows isDirectory()=true). lstat is the only way to detect
+    // the link itself.
+    if (!(await isSkillDir(entry, skillsDir))) {
+      continue;
+    }
+
+    // Validate the source name (defense in depth -- assertSafeName throws
+    // on path separators, control chars, ".."/".").
+    assertSafeName(entry.name, `skill directory name in ${skillsDir}`);
+
+    // MANF-03 / D-01-21: this directory was already reached through an
+    // earlier component path, so it is the same skill, not a duplicate.
+    if (seenByDir.has(path.resolve(full))) {
+      continue;
+    }
+
+    const generatedName = generatedSkillName(pluginName, entry.name);
+    const skill: DiscoveredSkill = { sourceName: entry.name, generatedName, skillDir: full };
+    seenByDir.set(path.resolve(full), skill);
+
+    // D-07: first-wins dedup by GENERATED name. The second occurrence is
+    // a soft-fail with a descriptive warning. RN-6 / D-141-04: the loser
+    // may sit in this same dir -- `acme-foo/` and `foo/` in plugin `acme`
+    // both generate `acme-foo` -- and it takes the same skip.
+    const winner = seenByGenerated.get(generatedName);
+    if (winner !== undefined) {
+      warnings.push(duplicateWarning(entry.name, skillsDir, generatedName, winner.sourceName));
+      continue;
+    }
+
+    seenByGenerated.set(generatedName, skill);
+  }
 }
 
 /**
@@ -151,6 +212,17 @@ export async function discoverPluginSkills(input: {
   // per the D-07 corollary either way -- one entry or two makes no
   // difference, because the map is keyed on the generated name alone.
   const seenByGenerated = new Map<string, DiscoveredSkill>();
+  // MANF-03 / D-01-21: keyed on the RESOLVED skill directory. Two
+  // `componentPaths.skills` entries can reach one physical directory at two
+  // different depths -- `skills/help` and the implicit-by-convention `skills`
+  // above it -- and the resolver cannot collapse them, because each is a
+  // legitimately distinct relative path. One directory reached twice is one
+  // skill, not a collision, so it is skipped in silence. Two DIFFERENT
+  // directories that merely elide to the same generated name keep their
+  // D-141-04 warning. `path.resolve` is what makes the two lookups
+  // comparable: `skillsDir` is built with `path.join`, which preserves a
+  // trailing separator that the entry-level `path.join` never produces.
+  const seenByDir = new Map<string, DiscoveredSkill>();
   const warnings: string[] = [];
 
   for (const skillsRel of skillsDirs) {
@@ -158,46 +230,16 @@ export async function discoverPluginSkills(input: {
       ? skillsRel
       : path.join(input.resolved.pluginRoot, skillsRel);
 
-    if (await collectSelfSkillDir(input.pluginName, skillsDir, seenByGenerated, warnings)) {
-      continue;
-    }
+    const handledAsSelf = await collectSelfSkillDir(
+      input.pluginName,
+      skillsDir,
+      seenByGenerated,
+      seenByDir,
+      warnings,
+    );
 
-    const entries = await readDirEntriesTolerant(skillsDir);
-
-    const sorted = [...entries].sort((a, b) => a.name.localeCompare(b.name));
-
-    for (const entry of sorted) {
-      const full = path.join(skillsDir, entry.name);
-
-      // Refuse symlinked skill dirs.
-      // readdir's `withFileTypes` reports the link's TYPE (so a symlink to a
-      // directory shows isDirectory()=true). lstat is the only way to detect
-      // the link itself.
-      if (!(await isSkillDir(entry, skillsDir))) {
-        continue;
-      }
-
-      // Validate the source name (defense in depth -- assertSafeName throws
-      // on path separators, control chars, ".."/".").
-      assertSafeName(entry.name, `skill directory name in ${skillsDir}`);
-
-      const generatedName = generatedSkillName(input.pluginName, entry.name);
-
-      // D-07: first-wins dedup by GENERATED name. The second occurrence is
-      // a soft-fail with a descriptive warning. RN-6 / D-141-04: the loser
-      // may sit in this same dir -- `acme-foo/` and `foo/` in plugin `acme`
-      // both generate `acme-foo` -- and it takes the same skip.
-      const winner = seenByGenerated.get(generatedName);
-      if (winner !== undefined) {
-        warnings.push(duplicateWarning(entry.name, skillsDir, generatedName, winner.sourceName));
-        continue;
-      }
-
-      seenByGenerated.set(generatedName, {
-        sourceName: entry.name,
-        generatedName,
-        skillDir: full,
-      });
+    if (!handledAsSelf) {
+      await collectSkillSubdirs(input.pluginName, skillsDir, seenByGenerated, seenByDir, warnings);
     }
   }
 
