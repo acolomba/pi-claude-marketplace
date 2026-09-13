@@ -5,7 +5,7 @@ milestone_name: Refine Unit Tests
 current_phase: 09
 current_phase_name: Final Quality and Backlog Closure
 status: phase_complete
-stopped_at: Revalidation tooling retired; next is the PR, then complete and cleanup
+stopped_at: PR #181 open and green; four non-blocking Sonar findings handed off
 last_updated: "2026-09-12T22:50:41.260Z"
 last_activity: 2026-09-12
 last_activity_desc: milestone audit passed (tech_debt, no blockers) and the revalidation tooling retired with its couplings
@@ -1216,6 +1216,12 @@ list. The file is untracked by design.
 No operator decision is now outstanding. `IN-01`, `IN-03` and `IN-04` stay recorded in
 `09-REVIEW.md` as deliberate non-actions; `IN-03` is the one worth revisiting, because NFR-10
 containment depends on an injected collaborator honoring a contract nothing type-enforces.
+
+**Open handoff:** `.planning/HANDOFF-sonar-s107-s7737.md` — the four remaining SonarCloud
+findings on PR #181 (three `S107` too-many-parameters, one `S7737` object-literal default).
+They do NOT block: the gate reads `OK` and all nine checks pass. The handoff carries each
+finding's file, line, parameter count and call-site count, plus the reason ESLint missed them
+(no `max-params` rule is enabled in any form) and the recommendation to close that gap first.
 
 **Read beside it:** `.planning/phases/09-final-quality-and-backlog-closure/09-CLOSURE-LEDGER.md`
 (24 rows, one vocabulary, the milestone's audit trail), `09-REVIEW.md` + `09-REVIEW-FIX.md`,
