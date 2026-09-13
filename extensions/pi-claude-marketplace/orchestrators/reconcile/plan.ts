@@ -368,6 +368,15 @@ interface DeclaredPluginAccumulator {
   readonly declaredKeys: Set<string>;
 }
 
+/** The loop-invariant half of the classification, built once per diff pass. */
+interface DeclaredPluginInputs {
+  readonly scope: Scope;
+  readonly recordedKeys: ReadonlySet<string>;
+  readonly declaredMarketplaces: MergedConfig["marketplaces"];
+  readonly marketplaceDiff: MarketplaceDiff;
+  readonly state: ExtensionState;
+}
+
 /**
  * Classify a single declared plugin entry into install / enable / disable /
  * dangling buckets (or a steady-state no-op). Extracted out of `diffPlugins`
@@ -375,14 +384,11 @@ interface DeclaredPluginAccumulator {
  */
 function classifyDeclaredPlugin(
   acc: DeclaredPluginAccumulator,
-  scope: Scope,
+  inputs: DeclaredPluginInputs,
   key: string,
   declared: MergedConfig["plugins"][string],
-  recordedKeys: ReadonlySet<string>,
-  declaredMarketplaces: MergedConfig["marketplaces"],
-  marketplaceDiff: MarketplaceDiff,
-  state: ExtensionState,
 ): void {
+  const { scope, recordedKeys, declaredMarketplaces, marketplaceDiff, state } = inputs;
   const parsed = parsePluginKey(key);
   if (parsed === undefined) {
     // Malformed key (no `@`, leading `@`, or trailing `@`, e.g. the user
@@ -517,18 +523,16 @@ function diffPlugins(
     declaredKeys: new Set<string>(),
   };
   const recordedKeys = buildRecordedKeys(state);
+  const inputs: DeclaredPluginInputs = {
+    scope,
+    recordedKeys,
+    declaredMarketplaces: merged.marketplaces,
+    marketplaceDiff,
+    state,
+  };
 
   for (const [key, declared] of Object.entries(merged.plugins)) {
-    classifyDeclaredPlugin(
-      acc,
-      scope,
-      key,
-      declared,
-      recordedKeys,
-      merged.marketplaces,
-      marketplaceDiff,
-      state,
-    );
+    classifyDeclaredPlugin(acc, inputs, key, declared);
   }
 
   const uninstall = buildUninstallBucket(state, scope, marketplaceDiff, acc.declaredKeys);
