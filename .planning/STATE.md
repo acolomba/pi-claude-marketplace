@@ -1219,7 +1219,9 @@ containment depends on an injected collaborator honoring a contract nothing type
 
 **Open handoff:** `.planning/HANDOFF-sonar-s107-s7737.md` — the four remaining SonarCloud
 findings on PR #181 (three `S107` too-many-parameters, one `S7737` object-literal default).
-They do NOT block: the gate reads `OK` and all nine checks pass. The handoff carries each
+They do NOT block: the gate reads `OK` and all nine checks pass. It also records an OPEN
+item: the `S3863` exclusion committed in `eaf3e9b6` did NOT take effect -- the analysis
+re-ran and the count is unchanged at 34, so the properties-file route needs diagnosis. The handoff carries each
 finding's file, line, parameter count and call-site count, plus the reason ESLint missed them
 (no `max-params` rule is enabled in any form) and the recommendation to close that gap first.
 

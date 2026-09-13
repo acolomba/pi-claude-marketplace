@@ -7,11 +7,34 @@ nine checks pass, and `mergeStateStatus` is `CLEAN`. Reliability, security and
 maintainability all rate `A`. This is optional cleanup, not a fix-before-merge.
 
 A fifth finding class, `typescript:S3863` (34 findings, "imported multiple times"), was
-already excluded in `sonar-project.properties` via `sonar.issue.ignore.multicriteria`,
-because it is structurally incompatible with the `import type` convention that
-`import-x/order` enforces. **Do not touch that exclusion.** These four are different:
-they are genuine findings with no local equivalent, so suppressing them would hide
-something real.
+excluded in `sonar-project.properties` via `sonar.issue.ignore.multicriteria` (commit
+`eaf3e9b6`), because it is structurally incompatible with the `import type` convention
+that `import-x/order` enforces. These four are different: they are genuine findings with
+no local equivalent, so suppressing them would hide something real.
+
+> ### OPEN: the S3863 exclusion did NOT take effect
+>
+> Measured 2026-09-13 after `eaf3e9b6` was pushed. The `sonarcloud` check re-ran
+> (run `34733874521`, 3m49s, pass) and the issue count is **unchanged at 38, with
+> S3863 still 34**. The prediction that it would drop to 4 was wrong.
+>
+> What was verified before the attempt, and still holds: `sonar.autoscan.enabled` is
+> `false` on the server, no server-side `sonar.issue.ignore.*` values exist, and
+> `sonarcloud.yml` passes no `-D` overrides to `sonarqube-scan-action@v8`. So the
+> stated reason it should work is not obviously wrong, which makes this worth a real
+> diagnosis rather than a retry.
+>
+> Things to check, roughly in order of likelihood:
+> - Whether `resourceKey` should be repo-root-relative or relative to `sonar.sources`.
+>   `sonar.sources` is already `extensions/pi-claude-marketplace`, so the pattern may
+>   need to be `**/*.ts` rather than repeating the source root.
+> - Whether SonarCloud honors `sonar.issue.ignore.*` from the properties file at all,
+>   or requires it under the project's Administration > Analysis Scope in the UI.
+> - Whether the API result is a stale snapshot rather than the new analysis. Compare
+>   the analysis revision against `eaf3e9b6` before concluding.
+>
+> Until this is diagnosed, the exclusion is committed but inert. It is harmless, and
+> the gate reads `OK` regardless, so it blocks nothing.
 
 ---
 
