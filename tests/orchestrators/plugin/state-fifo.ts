@@ -12,10 +12,21 @@
 //
 // A FIFO turns the ordering into an OS-enforced happens-before. `readFile`
 // on a FIFO blocks in `open(O_RDONLY)` until a writer opens, and returns only
-// at EOF -- when the writer closes. Each open pairs exactly one reader with
-// one writer, so `payloads[0]` is delivered to the first read and
-// `payloads[1]` to the second, in that order, whatever the scheduler does.
-// Nothing here polls, sleeps, or retries.
+// at EOF -- when the last writer closes.
+//
+// EOF is a property of the pipe INODE, not of one open: the kernel keeps
+// exactly one pipe object per FIFO, so a second write-open of the same inode
+// revives the writer count and cancels the EOF the previous reader was about
+// to see, delivering it two payloads in one read. The server therefore
+// retires each inode from the namespace -- rename a fresh FIFO over the path
+// -- while it still holds that inode open for write. The paired reader keeps
+// its fd and still gets its payload; nothing can reopen the retired inode, so
+// its EOF is guaranteed and payload k reaches read k, whatever the scheduler
+// does. Nothing here polls, sleeps, or retries.
+//
+// One limitation: an orchestrator that reads MORE times than there are
+// payloads blocks in `open` until the test's own timeout, because the server
+// has already exited and nothing is left to report it.
 //
 // Two invariants the callers assert against, both of which turn a silent
 // mis-serve into a loud failure:
@@ -37,18 +48,24 @@ import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/p
 const DEFAULT_TIMEOUT_MS = 30_000;
 
 /**
- * Serve each payload to one reader, in order, then exit 0. `open(fifoPath,
- * "w")` blocks until a reader opens the FIFO, which is exactly the barrier
- * the callers need -- the loop cannot run ahead of the orchestrator, and the
- * orchestrator cannot run ahead of the loop.
+ * Serve each payload to one reader, in order, then exit 0.
+ * `open(fifoPath, O_WRONLY)` blocks until a reader opens whichever FIFO inode
+ * currently sits at the state path, which is exactly the barrier the callers
+ * need -- the loop cannot run ahead of the orchestrator, and the orchestrator
+ * cannot run ahead of the loop. The `rename` inside that window retires the
+ * paired inode so the next iteration's write-open cannot reach it.
  *
  * The `served:N` acknowledgement is awaited before the next open so the
  * parent's message log stays a faithful record of the read sequence even when
  * two reads land back to back.
  */
 const SERVER_SOURCE = `
-  import { open } from "node:fs/promises";
+  import { execFileSync } from "node:child_process";
+  import { constants } from "node:fs";
+  import { open, rename } from "node:fs/promises";
+  import path from "node:path";
 
+  const { O_WRONLY } = constants;
   const fifoPath = process.env.PI_CM_FIFO_PATH;
   const payloads = JSON.parse(process.env.PI_CM_FIFO_PAYLOADS);
   let served = 0;
@@ -67,10 +84,34 @@ const SERVER_SOURCE = `
       });
     });
 
+  // One spare FIFO per payload, pre-created as a hidden sibling of the state
+  // path so each handoff below is a single atomic rename and no fork happens
+  // while a reader is parked. rename needs the same filesystem; a sibling is
+  // one. Every spare is consumed on a clean run, so nothing is left behind.
+  const spares = payloads.map((_, index) =>
+    path.join(path.dirname(fifoPath), \`.state-fifo-spare-\${index}\`),
+  );
+
+  for (const spare of spares) {
+    execFileSync("mkfifo", [spare]);
+  }
+
   await announce("ready");
 
   for (const payload of payloads) {
-    const handle = await open(fifoPath, "w");
+    // Bare O_WRONLY, never "w": "w" carries O_CREAT, which would silently put
+    // a regular file at a missing path and dissolve the barrier, where a bare
+    // O_WRONLY makes that case a loud ENOENT.
+    const handle = await open(fifoPath, O_WRONLY);
+
+    // Retire the paired inode from the namespace while still holding it open
+    // for write, and before the payload write. The reader on the other end
+    // keeps its fd and still gets this payload, but no later open of fifoPath
+    // can reach that inode, so its EOF cannot be cancelled. Renaming after the
+    // write or after the close reopens the window at the other end: the next
+    // reader attaches to the retired inode and both sides park forever.
+    await rename(spares[served], fifoPath);
+
     await handle.writeFile(payload);
     await handle.close();
     served += 1;
