@@ -13,6 +13,7 @@
 // equality.
 
 import { generatedSkillName } from "../../domain/name.ts";
+import { escapeRegExp } from "../../shared/regexp.ts";
 import { substituteClaudeVars } from "../../shared/vars.ts";
 
 import { emitGeneratedAgentFile } from "./frontmatter.ts";
@@ -106,16 +107,6 @@ function splitCsv(value: string | undefined): string[] {
       return trimmed;
     })
     .filter((part) => part !== "");
-}
-
-/**
- * Escape regex metacharacters so a value can be interpolated into a RegExp
- * source verbatim (the MDN escape pattern). Plugin names are
- * assertSafeName-checked but may legally contain `.`; escaping neutralizes
- * the whole metacharacter class.
- */
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
 }
 
 /**

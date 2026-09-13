@@ -1570,7 +1570,7 @@ describe("applyReconcile", () => {
       hooks: [],
       mcpServers: [],
       prompts: [],
-      skills: ["hello-tool"],
+      skills: ["hello:tool"],
     });
     assert.equal(record?.enabled, true);
     assert.equal(await readFile(project.configJsonPath, "utf8"), declaration);
@@ -1582,8 +1582,8 @@ describe("applyReconcile", () => {
       "pi-claude-marketplace/data/mp/hello/",
       "pi-claude-marketplace/resources/",
       "pi-claude-marketplace/resources/skills/",
-      "pi-claude-marketplace/resources/skills/hello-tool/",
-      "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+      "pi-claude-marketplace/resources/skills/hello:tool/",
+      "pi-claude-marketplace/resources/skills/hello:tool/SKILL.md",
       "pi-claude-marketplace/skills-staging/",
       "pi-claude-marketplace/state.json",
     ]);
@@ -1751,7 +1751,7 @@ describe("applyReconcile", () => {
         message:
           "1 post-install warning surfaced from reconcile installs.\n" +
           "\n" +
-          "soft/soft-tool: Flow sequence in block collection must be sufficiently indented and end with a ] at line 1, column 20:\n" +
+          "soft/soft:tool: Flow sequence in block collection must be sufficiently indented and end with a ] at line 1, column 20:\n" +
           "\n" +
           "name: [unterminated\n" +
           "                   ^\n",
@@ -1759,7 +1759,7 @@ describe("applyReconcile", () => {
       },
     ]);
     assert.deepStrictEqual((await recordFor(project, "mp", "soft"))?.resources.skills, [
-      "soft-tool",
+      "soft:tool",
     ]);
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
@@ -2167,7 +2167,7 @@ describe("applyReconcile", () => {
     const record = await recordFor(project, "mp", "hello");
     assert.equal(record?.enabled, true);
     assert.equal(record?.version, "1.0.0");
-    assert.deepStrictEqual(record?.resources.skills, ["hello-tool"]);
+    assert.deepStrictEqual(record?.resources.skills, ["hello:tool"]);
     assert.equal(await readFile(project.configJsonPath, "utf8"), declaration);
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
@@ -2719,7 +2719,7 @@ describe("applyReconcile", () => {
       },
     ]);
     assert.deepStrictEqual((await recordFor(project, "mp", "hello"))?.resources.skills, [
-      "hello-tool",
+      "hello:tool",
     ]);
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
@@ -2881,10 +2881,10 @@ describe("applyReconcile", () => {
       "pi-claude-marketplace/resources/prompts/",
       "pi-claude-marketplace/resources/prompts/promoted:deploy.md",
       "pi-claude-marketplace/resources/skills/",
-      "pi-claude-marketplace/resources/skills/fresh-tool/",
-      "pi-claude-marketplace/resources/skills/fresh-tool/SKILL.md",
-      "pi-claude-marketplace/resources/skills/promoted-tool/",
-      "pi-claude-marketplace/resources/skills/promoted-tool/SKILL.md",
+      "pi-claude-marketplace/resources/skills/fresh:tool/",
+      "pi-claude-marketplace/resources/skills/fresh:tool/SKILL.md",
+      "pi-claude-marketplace/resources/skills/promoted:tool/",
+      "pi-claude-marketplace/resources/skills/promoted:tool/SKILL.md",
       "pi-claude-marketplace/skills-staging/",
       "pi-claude-marketplace/state.json",
     ]);

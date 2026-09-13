@@ -3,11 +3,11 @@ gsd_state_version: "1.0"
 milestone: refine-unit-tests
 milestone_name: Refine Unit Tests
 status: Awaiting next milestone
-stopped_at: "Milestone closed and archived. PR #181 is open and unmerged by operator decision."
-last_updated: "2026-09-13T16:10:00.000Z"
+stopped_at: "Milestone closed and archived. PR #181 has since merged to main; quick tasks 260913-csn (PR #180 evaluation and suite repair, branch pr-180) and 260913-skt (SKTK-01 skill-token rewrite, branch features/skill-token-rewrite) followed, then 260913-f6a and 260913-l07 hardened the CI workflows."
+last_updated: "2026-09-13T20:20:00.000Z"
 last_activity: 2026-09-13
-last_activity_desc: Quick task 260913-l07 cleared every remaining zizmor finding
-state_head: 3580c7d14af502bb966c30b9420a9c39313798e2
+last_activity_desc: Merged origin/main into features/random-refinements ahead of the CI-hardening pull request
+state_head: 6551dfbf387d166f655004ec9e0421686b86cb1d
 progress:
   total_phases: 9
   completed_phases: 9

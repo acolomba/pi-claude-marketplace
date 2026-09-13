@@ -265,7 +265,7 @@ function seededRecord(plugin: SeededPlugin): Record<string, unknown> {
     resolvedSource: "./placeholder",
     compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
     resources: {
-      skills: [`${plugin.name}-tool`],
+      skills: [`${plugin.name}:tool`],
       prompts: [],
       agents: plugin.agent === true ? [`pi-claude-marketplace-${plugin.name}-scout`] : [],
       mcpServers: [],
@@ -496,7 +496,7 @@ const ONE_STALE: InstallRecordProjection = {
   enabled: true,
   installable: true,
   unsupported: [],
-  skills: ["one-tool"],
+  skills: ["one:tool"],
   agents: ["pi-claude-marketplace-one-scout"],
 };
 
@@ -507,7 +507,7 @@ const TWO_STALE: InstallRecordProjection = {
   enabled: true,
   installable: true,
   unsupported: [],
-  skills: ["two-tool"],
+  skills: ["two:tool"],
   agents: [],
 };
 
@@ -518,7 +518,7 @@ const THREE_STALE: InstallRecordProjection = {
   enabled: true,
   installable: true,
   unsupported: [],
-  skills: ["three-tool"],
+  skills: ["three:tool"],
   agents: [],
 };
 
@@ -774,7 +774,7 @@ const DEGRADED_STALE: InstallRecordProjection = {
   enabled: true,
   installable: true,
   unsupported: [],
-  skills: ["degraded-tool"],
+  skills: ["degraded:tool"],
   agents: ["pi-claude-marketplace-degraded-scout"],
 };
 

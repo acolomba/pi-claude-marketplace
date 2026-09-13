@@ -58,14 +58,12 @@ export function assertSafeName(name: string, label?: string): void {
 /**
  * Skill name generator (RN-1 / SK-2).
  *
- * Format: `<plugin>-<skill>` -- the `<plugin>-` prefix is elided from
- * `source` (acme + acme-foo -> acme-foo, NOT acme-acme-foo). A source
- * equal to the plugin name becomes the plugin name itself (acme + acme ->
- * acme), matching Pi's `/skill:<name>` invocation surface.
- *
- * Pi validates skill names as lowercase a-z, 0-9, and hyphens only, so skills
- * cannot use the colon separator that command prompt filenames carry on
- * POSIX.
+ * Format: `<plugin><separator><skill>`, where the separator comes from
+ * `commandNamespaceSeparator()`: a colon on POSIX, matching what Claude Code
+ * registers, and a dot on Windows. The `<plugin>-` or `<plugin><separator>`
+ * prefix is elided from `source` (acme + acme-foo -> acme:foo,
+ * acme + acme:foo -> acme:foo). A source equal to the plugin name becomes
+ * the plugin name itself (acme + acme -> acme).
  */
 export function generatedSkillName(plugin: string, source: string): string {
   assertSafeName(plugin);
@@ -74,10 +72,19 @@ export function generatedSkillName(plugin: string, source: string): string {
     return plugin;
   }
 
+  const sep = commandNamespaceSeparator();
   const prefix = `${plugin}-`;
-  const elided = source.startsWith(prefix) ? source.slice(prefix.length) : source;
+  const prefixSep = `${plugin}${sep}`;
+  let elided = source;
+
+  if (elided.startsWith(prefix)) {
+    elided = elided.slice(prefix.length);
+  } else if (elided.startsWith(prefixSep)) {
+    elided = elided.slice(prefixSep.length);
+  }
+
   assertSafeName(elided);
-  const generated = `${plugin}-${elided}`;
+  const generated = `${plugin}${sep}${elided}`;
   assertSafeName(generated);
   return generated;
 }
@@ -116,9 +123,9 @@ export function generatedSkillName(plugin: string, source: string): string {
  * no command name left underneath it.
  *
  * Commands only. `generatedSkillName` and `generatedAgentName` keep their
- * throw, because Pi validates a skill name and rejects both a trailing and
- * a doubled hyphen: keeping the head there would yield "acme-acme-" and
- * move the same failure to a worse message further downstream.
+ * throw: a source that is nothing but the stutter has no skill or agent
+ * name left underneath it, and keeping it verbatim would install a name
+ * ("acme:acme-") for a source that is a naming defect, not a namespace.
  */
 export function generatedCommandName(plugin: string, source: string): string {
   assertSafeName(plugin);

@@ -452,7 +452,7 @@ async function reinstallDefault(cwd: string, ctx: NotificationContext, pi: ToolI
 
 async function readSkill(cwd: string): Promise<string> {
   const locations = locationsFor("project", cwd);
-  return readFile(path.join(locations.skillsTargetDir, "hello-tool", "SKILL.md"), "utf8");
+  return readFile(path.join(locations.skillsTargetDir, "hello:tool", "SKILL.md"), "utf8");
 }
 
 async function readCommand(cwd: string): Promise<string> {
@@ -3847,7 +3847,7 @@ test("SUB-02: user-scope reinstall keeps ${CLAUDE_PROJECT_DIR} literal in skill,
       assert.equal(errorNotifications(notifications).length, 0);
 
       const skillBody = await readFile(
-        path.join(locations.skillsTargetDir, "hello-tool", "SKILL.md"),
+        path.join(locations.skillsTargetDir, "hello:tool", "SKILL.md"),
         "utf8",
       );
       assert.ok(
@@ -4541,7 +4541,7 @@ test("DFEN-07 / D-103-10: a declaration flipped between install and reinstall do
       assert.ok(recordBefore !== undefined);
       assert.equal(recordBefore.enabled, false);
 
-      const skillDir = path.join(locations.skillsTargetDir, "hello-tool");
+      const skillDir = path.join(locations.skillsTargetDir, "hello:tool");
       await rm(skillDir, { recursive: true, force: true });
 
       await mergeManifestEntry(marketplaceRoot, "mp", "hello", "1.0.0", true);
@@ -4636,7 +4636,7 @@ test("D-141-03: a standalone reinstall surfaces a skills discovery warning after
         },
         {
           message:
-            'Plugin "hello" reinstalled; 1 declared component was skipped.\n\nskill source "hello-foo" in "skills" elides to generated name "hello-foo", already produced by skill source "foo"; ignoring duplicate.',
+            'Plugin "hello" reinstalled; 1 declared component was skipped.\n\nskill source "hello-foo" in "skills" elides to generated name "hello:foo", already produced by skill source "foo"; ignoring duplicate.',
           severity: "warning",
         },
       ]);
@@ -4681,12 +4681,12 @@ test("D-141-03: a bulk reinstall surfaces one diagnostic per plugin, singular an
         },
         {
           message:
-            'Plugin "hello" reinstalled; 1 declared component was skipped.\n\nskill source "hello-foo" in "skills" elides to generated name "hello-foo", already produced by skill source "foo"; ignoring duplicate.',
+            'Plugin "hello" reinstalled; 1 declared component was skipped.\n\nskill source "hello-foo" in "skills" elides to generated name "hello:foo", already produced by skill source "foo"; ignoring duplicate.',
           severity: "warning",
         },
         {
           message:
-            'Plugin "world" reinstalled; 2 declared components were skipped.\n\nskill source "world-bar" in "skills" elides to generated name "world-bar", already produced by skill source "bar"; ignoring duplicate.\nskill source "world-foo" in "skills" elides to generated name "world-foo", already produced by skill source "foo"; ignoring duplicate.',
+            'Plugin "world" reinstalled; 2 declared components were skipped.\n\nskill source "world-bar" in "skills" elides to generated name "world:bar", already produced by skill source "bar"; ignoring duplicate.\nskill source "world-foo" in "skills" elides to generated name "world:foo", already produced by skill source "foo"; ignoring duplicate.',
           severity: "warning",
         },
       ]);
@@ -4857,7 +4857,7 @@ test("D-141-03: an agents hygiene warning rides notes in orchestrated mode and n
         },
         {
           message:
-            'Plugin "hello" reinstalled; 1 declared component was skipped.\n\nskill source "hello-foo" in "skills" elides to generated name "hello-foo", already produced by skill source "foo"; ignoring duplicate.',
+            'Plugin "hello" reinstalled; 1 declared component was skipped.\n\nskill source "hello-foo" in "skills" elides to generated name "hello:foo", already produced by skill source "foo"; ignoring duplicate.',
           severity: "warning",
         },
       ]);
@@ -5080,7 +5080,7 @@ test("a replacement failure aborts every prepared bridge and preserves foreign c
       await mkdir(freshSkillDir, { recursive: true });
       await writeFile(path.join(freshSkillDir, "SKILL.md"), "---\nname: fresh\n---\n\nFresh.\n");
       const locations = locationsFor("project", cwd);
-      const foreignTarget = path.join(locations.skillsTargetDir, "hello-fresh");
+      const foreignTarget = path.join(locations.skillsTargetDir, "hello:fresh");
       await mkdir(foreignTarget, { recursive: true });
       await writeFile(path.join(foreignTarget, "foreign.txt"), "foreign\n");
       const stateBefore = await readFile(locations.stateJsonPath, "utf8");
@@ -5812,8 +5812,8 @@ test("retry proof: reinstall: skills prepare failure with no prepared handles co
         "pi-claude-marketplace/resources/prompts/",
         "pi-claude-marketplace/resources/prompts/hello:deploy.md",
         "pi-claude-marketplace/resources/skills/",
-        "pi-claude-marketplace/resources/skills/hello-tool/",
-        "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+        "pi-claude-marketplace/resources/skills/hello:tool/",
+        "pi-claude-marketplace/resources/skills/hello:tool/SKILL.md",
         "pi-claude-marketplace/skills-staging",
         "pi-claude-marketplace/state.json",
       ]);
@@ -5827,8 +5827,8 @@ test("retry proof: reinstall: skills prepare failure with no prepared handles co
         "pi-claude-marketplace/resources/prompts/",
         "pi-claude-marketplace/resources/prompts/hello:deploy.md",
         "pi-claude-marketplace/resources/skills/",
-        "pi-claude-marketplace/resources/skills/hello-tool/",
-        "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+        "pi-claude-marketplace/resources/skills/hello:tool/",
+        "pi-claude-marketplace/resources/skills/hello:tool/SKILL.md",
         "pi-claude-marketplace/skills-staging/",
         "pi-claude-marketplace/state.json",
       ]);
@@ -5841,7 +5841,7 @@ test("retry proof: reinstall: skills prepare failure with no prepared handles co
           hooks: [],
           mcpServers: [],
           prompts: ["hello:deploy"],
-          skills: ["hello-tool"],
+          skills: ["hello:tool"],
         },
       );
     } finally {
@@ -5947,8 +5947,8 @@ test("retry proof: reinstall: commands prepare failure aborts the one prepared h
         "pi-claude-marketplace/resources/prompts/",
         "pi-claude-marketplace/resources/prompts/hello:deploy.md",
         "pi-claude-marketplace/resources/skills/",
-        "pi-claude-marketplace/resources/skills/hello-tool/",
-        "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+        "pi-claude-marketplace/resources/skills/hello:tool/",
+        "pi-claude-marketplace/resources/skills/hello:tool/SKILL.md",
         "pi-claude-marketplace/skills-staging/",
         "pi-claude-marketplace/state.json",
       ]);
@@ -5962,8 +5962,8 @@ test("retry proof: reinstall: commands prepare failure aborts the one prepared h
         "pi-claude-marketplace/resources/prompts/",
         "pi-claude-marketplace/resources/prompts/hello:deploy.md",
         "pi-claude-marketplace/resources/skills/",
-        "pi-claude-marketplace/resources/skills/hello-tool/",
-        "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+        "pi-claude-marketplace/resources/skills/hello:tool/",
+        "pi-claude-marketplace/resources/skills/hello:tool/SKILL.md",
         "pi-claude-marketplace/skills-staging/",
         "pi-claude-marketplace/state.json",
       ]);
@@ -6056,7 +6056,7 @@ test("retry proof: reinstall: a rollback cleanup leak reports manual recovery an
       assert.match(
         firstNotifications[0]?.message ?? "",
         new RegExp(
-          `\\n {4}leaked: skills: failed to restore previous skill dir hello-tool from ${locations.skillsStagingDir}/backup-[0-9a-f-]+/hello-tool to ${locations.skillsTargetDir}/hello-tool: EACCES: permission denied, rename`,
+          `\\n {4}leaked: skills: failed to restore previous skill dir hello:tool from ${locations.skillsStagingDir}/backup-[0-9a-f-]+/hello:tool to ${locations.skillsTargetDir}/hello:tool: EACCES: permission denied, rename`,
         ),
       );
       assert.equal(second.partition, "reinstalled");
@@ -6111,8 +6111,8 @@ test("retry proof: reinstall: a rollback cleanup leak reports manual recovery an
           "pi-claude-marketplace/resources/prompts/",
           "pi-claude-marketplace/resources/prompts/hello:deploy.md",
           "pi-claude-marketplace/resources/skills/",
-          "pi-claude-marketplace/resources/skills/hello-tool/",
-          "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+          "pi-claude-marketplace/resources/skills/hello:tool/",
+          "pi-claude-marketplace/resources/skills/hello:tool/SKILL.md",
           "pi-claude-marketplace/skills-staging/",
           "pi-claude-marketplace/state.json",
         ],
@@ -6256,8 +6256,8 @@ test("retry proof: reinstall: an abort cleanup leak reports manual recovery and 
           "pi-claude-marketplace/resources/prompts/",
           "pi-claude-marketplace/resources/prompts/hello:deploy.md",
           "pi-claude-marketplace/resources/skills/",
-          "pi-claude-marketplace/resources/skills/hello-tool/",
-          "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+          "pi-claude-marketplace/resources/skills/hello:tool/",
+          "pi-claude-marketplace/resources/skills/hello:tool/SKILL.md",
           "pi-claude-marketplace/skills-staging/",
           "pi-claude-marketplace/state.json",
         ],
@@ -6279,8 +6279,8 @@ test("retry proof: reinstall: an abort cleanup leak reports manual recovery and 
           "pi-claude-marketplace/resources/prompts/",
           "pi-claude-marketplace/resources/prompts/hello:deploy.md",
           "pi-claude-marketplace/resources/skills/",
-          "pi-claude-marketplace/resources/skills/hello-tool/",
-          "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+          "pi-claude-marketplace/resources/skills/hello:tool/",
+          "pi-claude-marketplace/resources/skills/hello:tool/SKILL.md",
           "pi-claude-marketplace/skills-staging/",
           "pi-claude-marketplace/state.json",
         ],
@@ -6400,8 +6400,8 @@ test("retry proof: reinstall: MCP prepare failure aborts three prepared handles 
         "pi-claude-marketplace/resources/prompts/",
         "pi-claude-marketplace/resources/prompts/hello:deploy.md",
         "pi-claude-marketplace/resources/skills/",
-        "pi-claude-marketplace/resources/skills/hello-tool/",
-        "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+        "pi-claude-marketplace/resources/skills/hello:tool/",
+        "pi-claude-marketplace/resources/skills/hello:tool/SKILL.md",
         "pi-claude-marketplace/skills-staging/",
         "pi-claude-marketplace/state.json",
       ]);
@@ -6420,8 +6420,8 @@ test("retry proof: reinstall: MCP prepare failure aborts three prepared handles 
         "pi-claude-marketplace/resources/prompts/",
         "pi-claude-marketplace/resources/prompts/hello:deploy.md",
         "pi-claude-marketplace/resources/skills/",
-        "pi-claude-marketplace/resources/skills/hello-tool/",
-        "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+        "pi-claude-marketplace/resources/skills/hello:tool/",
+        "pi-claude-marketplace/resources/skills/hello:tool/SKILL.md",
         "pi-claude-marketplace/skills-staging/",
         "pi-claude-marketplace/state.json",
       ]);
@@ -6452,7 +6452,7 @@ test("retry proof: reinstall: skills replacement refusal leaves an empty replace
         path.join(freshSkillSource, "SKILL.md"),
         "---\nname: fresh\n---\n\nfresh skill\n",
       );
-      const foreignSkillDir = path.join(locations.skillsTargetDir, "hello-fresh");
+      const foreignSkillDir = path.join(locations.skillsTargetDir, "hello:fresh");
       await mkdir(foreignSkillDir, { recursive: true });
       await writeFile(path.join(foreignSkillDir, "foreign.md"), "foreign bytes\n");
       const stateBytes = await readFile(locations.stateJsonPath, "utf8");
@@ -6526,10 +6526,10 @@ test("retry proof: reinstall: skills replacement refusal leaves an empty replace
         "pi-claude-marketplace/resources/prompts/",
         "pi-claude-marketplace/resources/prompts/hello:deploy.md",
         "pi-claude-marketplace/resources/skills/",
-        "pi-claude-marketplace/resources/skills/hello-fresh/",
-        "pi-claude-marketplace/resources/skills/hello-fresh/foreign.md",
-        "pi-claude-marketplace/resources/skills/hello-tool/",
-        "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+        "pi-claude-marketplace/resources/skills/hello:fresh/",
+        "pi-claude-marketplace/resources/skills/hello:fresh/foreign.md",
+        "pi-claude-marketplace/resources/skills/hello:tool/",
+        "pi-claude-marketplace/resources/skills/hello:tool/SKILL.md",
         "pi-claude-marketplace/skills-staging/",
         "pi-claude-marketplace/state.json",
       ]);
@@ -6543,10 +6543,10 @@ test("retry proof: reinstall: skills replacement refusal leaves an empty replace
         "pi-claude-marketplace/resources/prompts/",
         "pi-claude-marketplace/resources/prompts/hello:deploy.md",
         "pi-claude-marketplace/resources/skills/",
-        "pi-claude-marketplace/resources/skills/hello-fresh/",
-        "pi-claude-marketplace/resources/skills/hello-fresh/SKILL.md",
-        "pi-claude-marketplace/resources/skills/hello-tool/",
-        "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+        "pi-claude-marketplace/resources/skills/hello:fresh/",
+        "pi-claude-marketplace/resources/skills/hello:fresh/SKILL.md",
+        "pi-claude-marketplace/resources/skills/hello:tool/",
+        "pi-claude-marketplace/resources/skills/hello:tool/SKILL.md",
         "pi-claude-marketplace/skills-staging/",
         "pi-claude-marketplace/state.json",
       ]);
@@ -6557,11 +6557,11 @@ test("retry proof: reinstall: skills replacement refusal leaves an empty replace
           hooks: [],
           mcpServers: [],
           prompts: ["hello:deploy"],
-          skills: ["hello-fresh", "hello-tool"],
+          skills: ["hello:fresh", "hello:tool"],
         },
       );
       assert.match(
-        await readFile(path.join(locations.skillsTargetDir, "hello-fresh", "SKILL.md"), "utf8"),
+        await readFile(path.join(locations.skillsTargetDir, "hello:fresh", "SKILL.md"), "utf8"),
         /fresh skill/,
       );
     } finally {
@@ -6695,8 +6695,8 @@ test("retry proof: reinstall: commands replacement refusal unwinds the committed
         "pi-claude-marketplace/resources/prompts/hello:deploy.md",
         "pi-claude-marketplace/resources/prompts/hello:fresh.md",
         "pi-claude-marketplace/resources/skills/",
-        "pi-claude-marketplace/resources/skills/hello-tool/",
-        "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+        "pi-claude-marketplace/resources/skills/hello:tool/",
+        "pi-claude-marketplace/resources/skills/hello:tool/SKILL.md",
         "pi-claude-marketplace/skills-staging/",
         "pi-claude-marketplace/state.json",
       ]);
@@ -6711,8 +6711,8 @@ test("retry proof: reinstall: commands replacement refusal unwinds the committed
         "pi-claude-marketplace/resources/prompts/hello:deploy.md",
         "pi-claude-marketplace/resources/prompts/hello:fresh.md",
         "pi-claude-marketplace/resources/skills/",
-        "pi-claude-marketplace/resources/skills/hello-tool/",
-        "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+        "pi-claude-marketplace/resources/skills/hello:tool/",
+        "pi-claude-marketplace/resources/skills/hello:tool/SKILL.md",
         "pi-claude-marketplace/skills-staging/",
         "pi-claude-marketplace/state.json",
       ]);
@@ -6726,7 +6726,7 @@ test("retry proof: reinstall: commands replacement refusal unwinds the committed
           hooks: [],
           mcpServers: [],
           prompts: ["hello:deploy", "hello:fresh"],
-          skills: ["hello-tool"],
+          skills: ["hello:tool"],
         },
       );
     } finally {
@@ -6823,8 +6823,8 @@ test("retry proof: reinstall: a persistence failure after hooks removal leaves t
         "pi-claude-marketplace/hooks/",
         "pi-claude-marketplace/resources/",
         "pi-claude-marketplace/resources/skills/",
-        "pi-claude-marketplace/resources/skills/hello-tool/",
-        "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+        "pi-claude-marketplace/resources/skills/hello:tool/",
+        "pi-claude-marketplace/resources/skills/hello:tool/SKILL.md",
         "pi-claude-marketplace/skills-staging/",
         "pi-claude-marketplace/state.json",
       ]);
@@ -6836,14 +6836,14 @@ test("retry proof: reinstall: a persistence failure after hooks removal leaves t
         "pi-claude-marketplace/hooks/",
         "pi-claude-marketplace/resources/",
         "pi-claude-marketplace/resources/skills/",
-        "pi-claude-marketplace/resources/skills/hello-tool/",
-        "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+        "pi-claude-marketplace/resources/skills/hello:tool/",
+        "pi-claude-marketplace/resources/skills/hello:tool/SKILL.md",
         "pi-claude-marketplace/skills-staging/",
         "pi-claude-marketplace/state.json",
       ]);
       assert.deepStrictEqual(
         (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins["hello"]?.resources,
-        { agents: [], hooks: [], mcpServers: [], prompts: [], skills: ["hello-tool"] },
+        { agents: [], hooks: [], mcpServers: [], prompts: [], skills: ["hello:tool"] },
       );
       assert.match(await readSkill(cwd), /new skill/);
     } finally {
@@ -6987,8 +6987,8 @@ test("retry proof: reinstall: a persistence failure after four committed replace
         "pi-claude-marketplace/resources/prompts/",
         "pi-claude-marketplace/resources/prompts/hello:deploy.md",
         "pi-claude-marketplace/resources/skills/",
-        "pi-claude-marketplace/resources/skills/hello-tool/",
-        "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+        "pi-claude-marketplace/resources/skills/hello:tool/",
+        "pi-claude-marketplace/resources/skills/hello:tool/SKILL.md",
         "pi-claude-marketplace/skills-staging/",
         "pi-claude-marketplace/state.json",
       ]);
@@ -7007,8 +7007,8 @@ test("retry proof: reinstall: a persistence failure after four committed replace
         "pi-claude-marketplace/resources/prompts/",
         "pi-claude-marketplace/resources/prompts/hello:deploy.md",
         "pi-claude-marketplace/resources/skills/",
-        "pi-claude-marketplace/resources/skills/hello-tool/",
-        "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+        "pi-claude-marketplace/resources/skills/hello:tool/",
+        "pi-claude-marketplace/resources/skills/hello:tool/SKILL.md",
         "pi-claude-marketplace/skills-staging/",
         "pi-claude-marketplace/state.json",
       ]);
@@ -7132,8 +7132,8 @@ test("retry proof: reinstall: a concurrently removed record unwinds before any s
         "pi-claude-marketplace/resources/prompts/",
         "pi-claude-marketplace/resources/prompts/hello:deploy.md",
         "pi-claude-marketplace/resources/skills/",
-        "pi-claude-marketplace/resources/skills/hello-tool/",
-        "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+        "pi-claude-marketplace/resources/skills/hello:tool/",
+        "pi-claude-marketplace/resources/skills/hello:tool/SKILL.md",
         "pi-claude-marketplace/skills-staging/",
         "pi-claude-marketplace/state.json",
       ]);
@@ -7147,8 +7147,8 @@ test("retry proof: reinstall: a concurrently removed record unwinds before any s
         "pi-claude-marketplace/resources/prompts/",
         "pi-claude-marketplace/resources/prompts/hello:deploy.md",
         "pi-claude-marketplace/resources/skills/",
-        "pi-claude-marketplace/resources/skills/hello-tool/",
-        "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+        "pi-claude-marketplace/resources/skills/hello:tool/",
+        "pi-claude-marketplace/resources/skills/hello:tool/SKILL.md",
         "pi-claude-marketplace/skills-staging/",
         "pi-claude-marketplace/state.json",
       ]);
@@ -7256,8 +7256,8 @@ test("retry proof: reinstall: an invalid config write-back is reported beside th
         "pi-claude-marketplace/resources/prompts/",
         "pi-claude-marketplace/resources/prompts/hello:deploy.md",
         "pi-claude-marketplace/resources/skills/",
-        "pi-claude-marketplace/resources/skills/hello-tool/",
-        "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+        "pi-claude-marketplace/resources/skills/hello:tool/",
+        "pi-claude-marketplace/resources/skills/hello:tool/SKILL.md",
         "pi-claude-marketplace/skills-staging/",
         "pi-claude-marketplace/state.json",
       ]);
@@ -7371,8 +7371,8 @@ test("retry proof: reinstall: a post-save hook-cache read failure stays silent a
         "pi-claude-marketplace/hooks/hello/hooks.json",
         "pi-claude-marketplace/resources/",
         "pi-claude-marketplace/resources/skills/",
-        "pi-claude-marketplace/resources/skills/hello-tool/",
-        "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+        "pi-claude-marketplace/resources/skills/hello:tool/",
+        "pi-claude-marketplace/resources/skills/hello:tool/SKILL.md",
         "pi-claude-marketplace/skills-staging/",
         "pi-claude-marketplace/state.json",
       ]);
@@ -7382,7 +7382,7 @@ test("retry proof: reinstall: a post-save hook-cache read failure stays silent a
       ];
       assert.equal(finalRecord?.installedAt, firstRecord.installedAt);
       assert.equal(finalRecord.version, "1.0.0");
-      assert.deepStrictEqual(finalRecord.resources.skills, ["hello-tool"]);
+      assert.deepStrictEqual(finalRecord.resources.skills, ["hello:tool"]);
       assert.match(await readSkill(cwd), /new skill/);
     } finally {
       hookReadFault.enabled = false;
@@ -7475,8 +7475,8 @@ test("retry proof: reinstall: a completion-cache maintenance failure notes the d
         "pi-claude-marketplace/data/mp/",
         "pi-claude-marketplace/resources/",
         "pi-claude-marketplace/resources/skills/",
-        "pi-claude-marketplace/resources/skills/hello-tool/",
-        "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+        "pi-claude-marketplace/resources/skills/hello:tool/",
+        "pi-claude-marketplace/resources/skills/hello:tool/SKILL.md",
         "pi-claude-marketplace/skills-staging/",
         "pi-claude-marketplace/state.json",
       ]);
@@ -7487,7 +7487,7 @@ test("retry proof: reinstall: a completion-cache maintenance failure notes the d
       assert.ok(finalRecord !== undefined);
       assert.equal(finalRecord.installedAt, firstRecord?.installedAt);
       assert.equal(finalRecord.version, "1.0.0");
-      assert.deepStrictEqual(finalRecord.resources.skills, ["hello-tool"]);
+      assert.deepStrictEqual(finalRecord.resources.skills, ["hello:tool"]);
     } finally {
       cacheFault.enabled = false;
       await rm(cwd, { force: true, recursive: true });
@@ -7568,8 +7568,8 @@ test("retry proof: reinstall: a plugin-data-dir maintenance failure keeps the di
         "pi-claude-marketplace/data/mp/hello/",
         "pi-claude-marketplace/resources/",
         "pi-claude-marketplace/resources/skills/",
-        "pi-claude-marketplace/resources/skills/hello-tool/",
-        "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+        "pi-claude-marketplace/resources/skills/hello:tool/",
+        "pi-claude-marketplace/resources/skills/hello:tool/SKILL.md",
         "pi-claude-marketplace/skills-staging/",
         "pi-claude-marketplace/state.json",
       ]);
@@ -7580,8 +7580,8 @@ test("retry proof: reinstall: a plugin-data-dir maintenance failure keeps the di
         "pi-claude-marketplace/data/mp/",
         "pi-claude-marketplace/resources/",
         "pi-claude-marketplace/resources/skills/",
-        "pi-claude-marketplace/resources/skills/hello-tool/",
-        "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+        "pi-claude-marketplace/resources/skills/hello:tool/",
+        "pi-claude-marketplace/resources/skills/hello:tool/SKILL.md",
         "pi-claude-marketplace/skills-staging/",
         "pi-claude-marketplace/state.json",
       ]);
@@ -7590,7 +7590,7 @@ test("retry proof: reinstall: a plugin-data-dir maintenance failure keeps the di
       ];
       assert.ok(finalRecord !== undefined);
       assert.equal(finalRecord.installedAt, firstRecord?.installedAt);
-      assert.deepStrictEqual(finalRecord.resources.skills, ["hello-tool"]);
+      assert.deepStrictEqual(finalRecord.resources.skills, ["hello:tool"]);
     } finally {
       dataFault.enabled = false;
       await rm(cwd, { force: true, recursive: true });
@@ -7627,7 +7627,7 @@ test("retry proof: reinstall: a bulk cascade keeps the earlier committed target 
         path.join(extraBetaSkill, "SKILL.md"),
         "---\nname: extra\n---\n\nextra beta skill\n",
       );
-      const foreignBetaTarget = path.join(locations.skillsTargetDir, "beta-extra");
+      const foreignBetaTarget = path.join(locations.skillsTargetDir, "beta:extra");
       await mkdir(foreignBetaTarget, { recursive: true });
       await writeFile(path.join(foreignBetaTarget, "foreign.md"), "foreign bytes\n");
       const betaRecordBefore = (await loadState(locations.extensionRoot)).marketplaces["mp"]
@@ -7698,12 +7698,12 @@ test("retry proof: reinstall: a bulk cascade keeps the earlier committed target 
         "pi-claude-marketplace/data/mp/beta/",
         "pi-claude-marketplace/resources/",
         "pi-claude-marketplace/resources/skills/",
-        "pi-claude-marketplace/resources/skills/alpha-tool/",
-        "pi-claude-marketplace/resources/skills/alpha-tool/SKILL.md",
-        "pi-claude-marketplace/resources/skills/beta-extra/",
-        "pi-claude-marketplace/resources/skills/beta-extra/foreign.md",
-        "pi-claude-marketplace/resources/skills/beta-tool/",
-        "pi-claude-marketplace/resources/skills/beta-tool/SKILL.md",
+        "pi-claude-marketplace/resources/skills/alpha:tool/",
+        "pi-claude-marketplace/resources/skills/alpha:tool/SKILL.md",
+        "pi-claude-marketplace/resources/skills/beta:extra/",
+        "pi-claude-marketplace/resources/skills/beta:extra/foreign.md",
+        "pi-claude-marketplace/resources/skills/beta:tool/",
+        "pi-claude-marketplace/resources/skills/beta:tool/SKILL.md",
         "pi-claude-marketplace/skills-staging/",
         "pi-claude-marketplace/state.json",
       ]);
@@ -7714,12 +7714,12 @@ test("retry proof: reinstall: a bulk cascade keeps the earlier committed target 
         "pi-claude-marketplace/data/mp/",
         "pi-claude-marketplace/resources/",
         "pi-claude-marketplace/resources/skills/",
-        "pi-claude-marketplace/resources/skills/alpha-tool/",
-        "pi-claude-marketplace/resources/skills/alpha-tool/SKILL.md",
-        "pi-claude-marketplace/resources/skills/beta-extra/",
-        "pi-claude-marketplace/resources/skills/beta-extra/SKILL.md",
-        "pi-claude-marketplace/resources/skills/beta-tool/",
-        "pi-claude-marketplace/resources/skills/beta-tool/SKILL.md",
+        "pi-claude-marketplace/resources/skills/alpha:tool/",
+        "pi-claude-marketplace/resources/skills/alpha:tool/SKILL.md",
+        "pi-claude-marketplace/resources/skills/beta:extra/",
+        "pi-claude-marketplace/resources/skills/beta:extra/SKILL.md",
+        "pi-claude-marketplace/resources/skills/beta:tool/",
+        "pi-claude-marketplace/resources/skills/beta:tool/SKILL.md",
         "pi-claude-marketplace/skills-staging/",
         "pi-claude-marketplace/state.json",
       ]);
@@ -7729,11 +7729,11 @@ test("retry proof: reinstall: a bulk cascade keeps the earlier committed target 
         "beta",
       ]);
       assert.deepStrictEqual(finalState.marketplaces["mp"]?.plugins["alpha"]?.resources.skills, [
-        "alpha-tool",
+        "alpha:tool",
       ]);
       assert.deepStrictEqual(finalState.marketplaces["mp"]?.plugins["beta"]?.resources.skills, [
-        "beta-extra",
-        "beta-tool",
+        "beta:extra",
+        "beta:tool",
       ]);
       assert.equal(
         finalState.marketplaces["mp"]?.plugins["beta"]?.installedAt,
@@ -7864,15 +7864,15 @@ test("PRL-08 / PRL-11: preserves state, tree, cleanup, and exact notification th
       assert.strictEqual(record.version, "1.0.0");
       assert.strictEqual(record.installedAt, beforeRecord.installedAt);
       assert.deepStrictEqual(record.resources, {
-        skills: ["hello-tool"],
+        skills: ["hello:tool"],
         prompts: ["hello:deploy"],
         agents: [`${GENERATED_AGENT_PREFIX}hello-bot`],
         mcpServers: ["server1"],
         hooks: [],
       });
       assert.strictEqual(
-        await readFile(path.join(locations.skillsTargetDir, "hello-tool", "SKILL.md"), "utf8"),
-        '---\nname: hello-tool\ndescription: "new skill"\n---\n\nnew skill\n',
+        await readFile(path.join(locations.skillsTargetDir, "hello:tool", "SKILL.md"), "utf8"),
+        '---\nname: hello:tool\ndescription: "new skill"\n---\n\nnew skill\n',
       );
       await assert.rejects(() => readFile(path.join(dataDir, "state.txt"), "utf8"), {
         code: "ENOENT",
