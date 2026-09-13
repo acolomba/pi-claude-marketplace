@@ -6978,3 +6978,165 @@ test("an available path plugin renders sorted dependencies after its inventory",
     ]);
   });
 });
+
+// ---------------------------------------------------------------------------
+// DEPS-01 / DEPS-02: every usable dependency element reaches the rendered
+// line, carrying whichever constraint it declared (D-01-30).
+// ---------------------------------------------------------------------------
+
+/**
+ * Seed one available path plugin in marketplace `mp` carrying `dependencies`,
+ * render its info block, and return the single notification message.
+ */
+async function renderDependencyLine(dependencies: unknown): Promise<string> {
+  return withHermeticHome(async ({ home, cwd }) => {
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [{ name: "host", source: "./host", version: "1.0.0", dependencies }],
+      },
+      installablePluginDirs: ["host"],
+    });
+    const { ctx, pi, notifications } = makeCtx();
+
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "host", scope: "user", cwd });
+
+    assert.equal(notifications.length, 1);
+    return notifications[0]!.message;
+  });
+}
+
+const DEPENDENCY_BLOCK_HEAD = "● mp [user] <no autoupdate>\n  ○ host v1.0.0 (available)\n";
+
+test("DEPS-02: a mixed array of strings and objects lists every usable element", async () => {
+  // arrange
+  const dependencies = ["zulu@mp", { name: "alfa", version: "^1.0.0" }];
+
+  // act
+  const message = await renderDependencyLine(dependencies);
+
+  // assert
+  assert.equal(message, `${DEPENDENCY_BLOCK_HEAD}    dependencies: alfa@mp (^1.0.0), zulu@mp`);
+});
+
+test("DEPS-01: an object dependency renders its own marketplace, not the declaring one", async () => {
+  // arrange
+  const dependencies = [{ name: "alfa", version: "^2.0.0", marketplace: "other-mp" }];
+
+  // act
+  const message = await renderDependencyLine(dependencies);
+
+  // assert
+  assert.equal(message, `${DEPENDENCY_BLOCK_HEAD}    dependencies: alfa@other-mp (^2.0.0)`);
+});
+
+test("D-01-02: an element declaring no marketplace takes the declaring plugin's", async () => {
+  // arrange
+  const dependencies = [{ name: "alfa", version: "^2.0.0" }];
+
+  // act
+  const message = await renderDependencyLine(dependencies);
+
+  // assert
+  assert.equal(message, `${DEPENDENCY_BLOCK_HEAD}    dependencies: alfa@mp (^2.0.0)`);
+});
+
+test("D-01-27: a bare string's trailing range renders as a constraint", async () => {
+  // arrange
+  const dependencies = ["alfa@^1.2.3"];
+
+  // act
+  const message = await renderDependencyLine(dependencies);
+
+  // assert
+  assert.equal(message, `${DEPENDENCY_BLOCK_HEAD}    dependencies: alfa@mp (^1.2.3)`);
+});
+
+test("D-01-30: a sha alone renders labelled and short-formed to seven characters", async () => {
+  // arrange
+  const dependencies = [{ name: "alfa", sha: "abc1234def5678abc1234def5678abc1234def56" }];
+
+  // act
+  const message = await renderDependencyLine(dependencies);
+
+  // assert
+  assert.equal(message, `${DEPENDENCY_BLOCK_HEAD}    dependencies: alfa@mp (sha abc1234)`);
+});
+
+test("D-01-30: a version and a sha share one parenthetical, version first", async () => {
+  // arrange
+  const dependencies = [
+    { name: "alfa", version: "^1.0.0", sha: "def5678abc1234def5678abc1234def5678abc12" },
+  ];
+
+  // act
+  const message = await renderDependencyLine(dependencies);
+
+  // assert
+  assert.equal(message, `${DEPENDENCY_BLOCK_HEAD}    dependencies: alfa@mp (^1.0.0, sha def5678)`);
+});
+
+test("D-01-30: an element declaring no constraint renders the bare address", async () => {
+  // arrange
+  const dependencies = [{ name: "alfa" }];
+
+  // act
+  const message = await renderDependencyLine(dependencies);
+
+  // assert
+  assert.equal(message, `${DEPENDENCY_BLOCK_HEAD}    dependencies: alfa@mp`);
+});
+
+test("D-01-31: two elements resolving to one address collapse, the last winning", async () => {
+  // arrange
+  const dependencies = [
+    { name: "alfa", version: "^1.0.0" },
+    { name: "alfa", version: "^2.0.0" },
+  ];
+
+  // act
+  const message = await renderDependencyLine(dependencies);
+
+  // assert
+  assert.equal(message, `${DEPENDENCY_BLOCK_HEAD}    dependencies: alfa@mp (^2.0.0)`);
+});
+
+test("D-01-04: the list orders by dependency name, not by the rendered string", async () => {
+  // arrange
+  const dependencies = [{ name: "bravo", version: "^9.0.0" }, { name: "alfa" }];
+
+  // act
+  const message = await renderDependencyLine(dependencies);
+
+  // assert
+  assert.equal(message, `${DEPENDENCY_BLOCK_HEAD}    dependencies: alfa@mp, bravo@mp (^9.0.0)`);
+});
+
+test("D-01-04: two entries sharing a name keep their declaration order", async () => {
+  // arrange
+  const dependencies = [
+    { name: "alfa", marketplace: "zulu-mp" },
+    { name: "alfa", marketplace: "bravo-mp" },
+  ];
+
+  // act
+  const message = await renderDependencyLine(dependencies);
+
+  // assert
+  assert.equal(message, `${DEPENDENCY_BLOCK_HEAD}    dependencies: alfa@zulu-mp, alfa@bravo-mp`);
+});
+
+test("D-01-05: an array whose every element is unusable omits the line", async () => {
+  // arrange
+  const dependencies = [{ version: "^1.0.0" }, 42, { name: "bad name" }, { name: "a", sha: "zz" }];
+
+  // act
+  const message = await renderDependencyLine(dependencies);
+
+  // assert
+  assert.equal(message, DEPENDENCY_BLOCK_HEAD.trimEnd());
+});
