@@ -326,6 +326,23 @@ export default tseslint.config(
     },
   },
   {
+    // The local equivalent of typescript:S107 (too many parameters).
+    // `eslint-plugin-sonarjs` ships no implementation of S107 at any
+    // severity, so the Sonar way spread above does not carry it and the
+    // finding could only ever surface on a pull request.
+    //
+    // 7 is Sonar's own maximum for S107, so the two gates agree by
+    // construction rather than by coincidence.
+    //
+    // Scoped to mirror `sonar.sources`, like the block above. SonarCloud
+    // drops tests/** via `sonar.test.exclusions`, so enforcing there would
+    // gate code Sonar never grades.
+    files: ["extensions/pi-claude-marketplace/**/*.ts"],
+    rules: {
+      "@typescript-eslint/max-params": ["error", { max: 7 }],
+    },
+  },
+  {
     // Tests deliberately do defensive checking after operations that "should"
     // have populated state, and `node:test`'s `test(...)` returns an unawaited
     // promise by design. Relax the rules that fight that style.
