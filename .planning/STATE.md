@@ -121,15 +121,14 @@ hit the same wall; convert it rather than re-disclosing it.
 
 **Stopped at:** Milestone `refine-unit-tests` closed and archived on 2026-09-13.
 
-**PR #181 is open and unmerged, by operator decision.** All nine checks pass,
-`mergeStateStatus` is `CLEAN`, the SonarCloud quality gate reads `OK`, and the pull
-request carries **zero open issues of any rule**, down from 38. The milestone closed
-with its branch unmerged; that is deliberate, not an oversight.
+PR #181 merged to main on 2026-09-13, closing the milestone's branch.
 
-Last session: 2026-09-13 — repaired this file's stale session-continuity section,
-closed the four outstanding SonarCloud findings, then closed the milestone.
+Since then, four quick tasks landed on `features/random-refinements`: 260909-h38 made
+three cross-process concurrency proofs deterministic, 260913-f6a and 260913-l07
+hardened the CI workflows and gated them, and 260913-n7w fixed a reader-pairing race
+the first of those introduced. That branch is PR #183, green and awaiting merge.
 
-**Next:** `/gsd-new-milestone`.
+**Next:** merge PR #183, then `/gsd-new-milestone`.
 
 ### Known snag for the next close
 
@@ -143,5 +142,5 @@ recur: `milestone complete` leaves the original-path deletions **unstaged**
 
 ## Operator Next Steps
 
+- Squash-merge PR #183 (all checks green; the repository allows squash merges only)
 - Start the next milestone with `/gsd-new-milestone`
-- Merge PR #181 whenever you choose — nothing in the close depends on it
