@@ -2790,6 +2790,77 @@ Code seams: `eslint.config.js` (the Sonar way block, currently scoped to
 rules), `.planning/codebase/CONVENTIONS.md` (the "Sonar way on `extensions/`
 only" bullet, which states the scope this item would change).
 
+## NEGCTL-01: the direct-coverage negative control cannot capture its child's stderr on Node 26
+
+Carried out of the `refine-unit-tests` milestone close (2026-09-13) as an open
+audit item. Recorded during Plan 06-39 repository verification.
+
+`npm run test:coverage:direct:negative` asserts that the child process writes
+`Path is outside the project` to `stderr`. Under Node 26 the spawned child exits
+non-zero with an **empty** captured `stderr`; running the identical child command
+directly in a shell does emit the expected message. So the control's subject
+behaves correctly and only the capture is broken.
+
+Why it matters more than a flaky test: this is the negative control for the
+direct-coverage gate -- the thing that proves the gate fails when it should. A
+control that cannot observe its own failure signal is the "green run that checked
+nothing" class this project has already been bitten by. It currently passes on the
+Node version CI pins (24), so nothing is red today; the exposure is that a future
+Node bump silently converts the control into a no-op.
+
+Not caused by the update-owner extraction that surfaced it: the positive
+direct-coverage gates for both new owners read 100%, and the negative-control
+source was unchanged by that plan.
+
+Candidate directions:
+
+- assert on the child's exit status plus a stdout/stderr union, rather than on
+  `stderr` alone
+- reproduce under Node 26 first and determine whether this is a Node change in
+  how a failing child's stderr is flushed, or an artifact of how the harness
+  spawns it
+- if it is a Node behavior change, check whether any OTHER subprocess-asserting
+  test in the tree makes the same assumption
+
+Code seams: `scripts/test-coverage-direct.negative.mjs:134` (the capture and the
+assertion), `package.json` (`test:coverage:direct:negative`), `.github/workflows/ci.yml`
+(pins Node 24, which is why this is latent rather than red).
+
+## E2EIMP-01: three `import` e2e tests assert a summary header the command no longer emits
+
+Carried out of the `refine-unit-tests` milestone close (2026-09-13) as an open
+audit item. Originally recorded in Phase 25, which archived with milestone v1.4.1.
+
+Three cases in `tests/e2e/import-command.test.ts` fail: `import imports enabled
+Claude settings across both scopes`, `import --scope project narrows writes to
+project scope`, and `import reports source mismatches and skips dependent
+plugins`. All three match on a `Claude plugin import summary` header. The command
+no longer renders that header -- it emits the v2 marketplace block grammar
+instead. The tests encode a retired output contract, so this is drift in the
+assertions, not a regression in `import`.
+
+Scope note, so this is not over-read: the failures are confined to the `import`
+command's output surface. The source-load runtime smoke in the same suite passes,
+including the test that matters for extension loading (`real Pi runtime package
+bin loads the extension under isolated HOME and cwd`).
+
+Why it has stayed open: `tests/e2e/**` is excluded from `npm run check`, so these
+never gate a commit. CI does run `pinned e2e tests` as its own job, which is where
+they would surface.
+
+Candidate directions:
+
+- re-derive each expected string from the current block grammar rather than
+  patching the three literals, so the next grammar change fails loudly in one place
+- check whether the assertions should target the notification vocabulary
+  (`shared/notification-grammar.ts`) instead of rendered stdout, which is what the
+  unit suites do
+
+Code seams: `tests/e2e/import-command.test.ts` (the three cases and the header
+regex), `extensions/pi-claude-marketplace/orchestrators/import/execute.messaging.ts`
+(the message builder that replaced the old header), `package.json`
+(`test:e2e`, and the `check` chain that excludes it).
+
 <!--
 Pruned 2026-06-08: both prior items shipped in v1.10 Error Attribution.
 - "Install error misattribution when marketplace is missing" -> closed by ATTR-01..10
