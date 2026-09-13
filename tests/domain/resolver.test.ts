@@ -3826,6 +3826,123 @@ test("requireInstallable classifies an update of the partial true arm", async ()
   );
 });
 
+// ──────────────────────────────────────────────────────────────────────────
+// Manifest location (MANF-01 / MANF-02 / MANF-04, D-01-06 through D-01-10).
+// `readManifest` walks MANIFEST_CANDIDATES -- wrapped first, bare second --
+// and falls through on ABSENCE ONLY. `defaultEnabled` is the observable: it
+// is the one manifest field the resolver carries onto its result, so a case
+// that reads it proves which file was opened.
+// ──────────────────────────────────────────────────────────────────────────
+
+test("MANF-01 a manifest at the bare plugin.json path is honored", async () => {
+  // arrange
+  const localRoot = pathUnderMarketplace("./bare-manifest-only");
+  const context = resolveContext(marketplaceRoot, {
+    [localRoot]: "dir",
+    [path.join(localRoot, "plugin.json")]: { contents: '{"defaultEnabled":false}' },
+  });
+
+  // act
+  const resolvedPlugin = await resolveStrict(
+    pluginEntry({ source: "./bare-manifest-only" }),
+    context,
+  );
+
+  // assert
+  assert.strictEqual(
+    resolvedPlugin.state,
+    "installable",
+    `notes if not installable: ${resolvedPlugin.notes.join(" / ")}`,
+  );
+  requireInstallable(resolvedPlugin);
+  assert.strictEqual(resolvedPlugin.defaultEnabled, false);
+});
+
+test("MANF-02 the wrapped plugin.json wins over a bare sibling", async () => {
+  // arrange
+  const localRoot = pathUnderMarketplace("./both-manifests");
+  const context = resolveContext(marketplaceRoot, {
+    [localRoot]: "dir",
+    [path.join(localRoot, ".claude-plugin", "plugin.json")]: {
+      contents: '{"defaultEnabled":false}',
+    },
+    [path.join(localRoot, "plugin.json")]: { contents: '{"defaultEnabled":true}' },
+  });
+
+  // act
+  const resolvedPlugin = await resolveStrict(pluginEntry({ source: "./both-manifests" }), context);
+
+  // assert
+  requireInstallable(resolvedPlugin);
+  assert.strictEqual(resolvedPlugin.defaultEnabled, false);
+});
+
+// D-01-10: the fall-through is absence-only, so a valid bare file cannot
+// rescue a wrapped file that is present and unparseable.
+test("D-01-10 a malformed wrapped plugin.json is not rescued by a valid bare sibling", async () => {
+  // arrange
+  const localRoot = pathUnderMarketplace("./malformed-wrapped");
+  const context = resolveContext(marketplaceRoot, {
+    [localRoot]: "dir",
+    [path.join(localRoot, ".claude-plugin", "plugin.json")]: { contents: "{ not json" },
+    [path.join(localRoot, "plugin.json")]: { contents: '{"defaultEnabled":true}' },
+  });
+
+  // act
+  const resolvedPlugin = await resolveStrict(
+    pluginEntry({ source: "./malformed-wrapped" }),
+    context,
+  );
+
+  // assert
+  assert.strictEqual(resolvedPlugin.state, "unavailable");
+  assert.ok(
+    resolvedPlugin.notes.some((n) => n.includes("malformed plugin.json")),
+    `notes: ${resolvedPlugin.notes.join(" / ")}`,
+  );
+});
+
+test("MANF-04 a malformed bare plugin.json is reported rather than skipped", async () => {
+  // arrange
+  const localRoot = pathUnderMarketplace("./malformed-bare");
+  const context = resolveContext(marketplaceRoot, {
+    [localRoot]: "dir",
+    [path.join(localRoot, "plugin.json")]: { contents: "{ not json" },
+  });
+
+  // act
+  const resolvedPlugin = await resolveStrict(pluginEntry({ source: "./malformed-bare" }), context);
+
+  // assert
+  assert.strictEqual(resolvedPlugin.state, "unavailable");
+  assert.ok(
+    resolvedPlugin.notes.some((n) => n.includes("malformed plugin.json")),
+    `notes: ${resolvedPlugin.notes.join(" / ")}`,
+  );
+});
+
+// D-01-09: a bare `"file"` map value exists for statKind but rejects for
+// readFileText -- present and unreadable. Reporting it as an absence would
+// resolve the plugin installable with a null manifest.
+test("D-01-09 an unreadable plugin.json reports malformed rather than absent", async () => {
+  // arrange
+  const localRoot = pathUnderMarketplace("./unreadable-bare");
+  const context = resolveContext(marketplaceRoot, {
+    [localRoot]: "dir",
+    [path.join(localRoot, "plugin.json")]: "file",
+  });
+
+  // act
+  const resolvedPlugin = await resolveStrict(pluginEntry({ source: "./unreadable-bare" }), context);
+
+  // assert
+  assert.strictEqual(resolvedPlugin.state, "unavailable");
+  assert.ok(
+    resolvedPlugin.notes.some((n) => n.includes("malformed plugin.json")),
+    `notes: ${resolvedPlugin.notes.join(" / ")}`,
+  );
+});
+
 declare const resolvedPluginContract: ResolvedPlugin;
 declare const installablePluginContract: ResolvedPluginInstallable;
 declare const partiallyAvailablePluginContract: ResolvedPluginPartiallyAvailable;
