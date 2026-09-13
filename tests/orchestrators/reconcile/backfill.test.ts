@@ -340,8 +340,8 @@ function fullyPromotedScopeTree(): readonly string[] {
     "pi-claude-marketplace/resources/prompts/",
     "pi-claude-marketplace/resources/prompts/hello:deploy.md",
     "pi-claude-marketplace/resources/skills/",
-    "pi-claude-marketplace/resources/skills/hello-tool/",
-    "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+    "pi-claude-marketplace/resources/skills/hello:tool/",
+    "pi-claude-marketplace/resources/skills/hello:tool/SKILL.md",
     "pi-claude-marketplace/skills-staging/",
     "pi-claude-marketplace/state.json",
   ];
@@ -835,7 +835,7 @@ describe("scanForceInstalledBackfills", () => {
               unsupported: [],
             },
             resources: {
-              skills: ["hello-tool"],
+              skills: ["hello:tool"],
               prompts: ["hello:deploy"],
               agents: [],
               mcpServers: [],
@@ -917,7 +917,7 @@ describe("scanForceInstalledBackfills", () => {
               unsupported: ["lspServers"],
             },
             resources: {
-              skills: ["hello-tool"],
+              skills: ["hello:tool"],
               prompts: [],
               agents: [],
               mcpServers: [],
@@ -935,8 +935,8 @@ describe("scanForceInstalledBackfills", () => {
       "pi-claude-marketplace/",
       "pi-claude-marketplace/resources/",
       "pi-claude-marketplace/resources/skills/",
-      "pi-claude-marketplace/resources/skills/hello-tool/",
-      "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+      "pi-claude-marketplace/resources/skills/hello:tool/",
+      "pi-claude-marketplace/resources/skills/hello:tool/SKILL.md",
       "pi-claude-marketplace/skills-staging/",
       "pi-claude-marketplace/state.json",
     ]);
@@ -1028,7 +1028,7 @@ describe("scanForceInstalledBackfills", () => {
               unsupported: [],
             },
             resources: {
-              skills: ["hello-tool"],
+              skills: ["hello:tool"],
               prompts: ["hello:deploy"],
               agents: [],
               mcpServers: [],
@@ -1053,8 +1053,8 @@ describe("scanForceInstalledBackfills", () => {
       "pi-claude-marketplace/resources/prompts/",
       "pi-claude-marketplace/resources/prompts/hello:deploy.md",
       "pi-claude-marketplace/resources/skills/",
-      "pi-claude-marketplace/resources/skills/hello-tool/",
-      "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+      "pi-claude-marketplace/resources/skills/hello:tool/",
+      "pi-claude-marketplace/resources/skills/hello:tool/SKILL.md",
       "pi-claude-marketplace/skills-staging/",
       "pi-claude-marketplace/state.json",
     ]);
@@ -1152,7 +1152,7 @@ describe("scanForceInstalledBackfills", () => {
               unsupported: [],
             },
             resources: {
-              skills: ["hello-tool"],
+              skills: ["hello:tool"],
               prompts: ["hello:deploy"],
               agents: [],
               mcpServers: [],
@@ -1542,7 +1542,7 @@ describe("scanForceInstalledBackfills", () => {
               unsupported: ["lspServers"],
             },
             resources: {
-              skills: ["hello-tool"],
+              skills: ["hello:tool"],
               prompts: ["hello:deploy"],
               agents: [],
               mcpServers: [],
@@ -1633,7 +1633,7 @@ describe("scanForceInstalledBackfills", () => {
             installable: true,
             supported: ["skills"],
             unsupported: [],
-            skills: ["hello-tool"],
+            skills: ["hello:tool"],
           }),
           hello: pluginRecord({
             pluginRoot: path.join(marketplaceRoot, "plugins", "hello"),
@@ -1907,7 +1907,7 @@ describe("scanForceInstalledBackfills", () => {
               unsupported: [],
             },
             resources: {
-              skills: ["bravo-tool"],
+              skills: ["bravo:tool"],
               prompts: ["bravo:deploy"],
               agents: [],
               mcpServers: [],
@@ -1928,8 +1928,8 @@ describe("scanForceInstalledBackfills", () => {
       "pi-claude-marketplace/resources/prompts/",
       "pi-claude-marketplace/resources/prompts/bravo:deploy.md",
       "pi-claude-marketplace/resources/skills/",
-      "pi-claude-marketplace/resources/skills/bravo-tool/",
-      "pi-claude-marketplace/resources/skills/bravo-tool/SKILL.md",
+      "pi-claude-marketplace/resources/skills/bravo:tool/",
+      "pi-claude-marketplace/resources/skills/bravo:tool/SKILL.md",
       "pi-claude-marketplace/skills-staging/",
       "pi-claude-marketplace/state.json",
     ]);

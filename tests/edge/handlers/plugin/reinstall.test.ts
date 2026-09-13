@@ -268,7 +268,7 @@ async function seedMarketplace(
         plugin,
         buildInstalledPluginRecord(
           { version: "1.0.0", resolvedSource: `./${plugin}` },
-          { skills: [`${plugin}-tool`], prompts: [], agents: [], mcpServers: [], hooks: [] },
+          { skills: [`${plugin}:tool`], prompts: [], agents: [], mcpServers: [], hooks: [] },
         ),
       ]),
     ),
@@ -398,8 +398,8 @@ test("re-materialises every installed plugin in both scopes when no positional i
   // assert
   assert.deepStrictEqual(notifications, [{ message: ALL_PLUGINS_MESSAGE }]);
   assert.deepStrictEqual(await readFootprint(workspace), {
-    projectSkills: ["alpha-tool", "beta-tool", "gamma-tool"],
-    userSkills: ["delta-tool"],
+    projectSkills: ["alpha:tool", "beta:tool", "gamma:tool"],
+    userSkills: ["delta:tool"],
     projectBase: ALL_PLUGINS_DECLARED,
     projectLocal: undefined,
     userBase: USER_PLUGIN_DECLARED,
@@ -425,7 +425,7 @@ test("re-materialises only the named marketplace when a bare marketplace referen
   // assert
   assert.deepStrictEqual(notifications, [{ message: MARKETPLACE_FORM_MESSAGE }]);
   assert.deepStrictEqual(await readFootprint(workspace), {
-    projectSkills: ["alpha-tool", "beta-tool"],
+    projectSkills: ["alpha:tool", "beta:tool"],
     userSkills: [],
     projectBase: MARKETPLACE_FORM_DECLARED,
     projectLocal: undefined,
@@ -462,7 +462,7 @@ test("re-materialises only the named plugin when a plugin reference is supplied 
   // assert
   assert.deepStrictEqual(notifications, [{ message: PLUGIN_FORM_MESSAGE }]);
   assert.deepStrictEqual(await readFootprint(workspace), {
-    projectSkills: ["alpha-tool"],
+    projectSkills: ["alpha:tool"],
     userSkills: [],
     projectBase: { schemaVersion: 1, plugins: { "alpha@mp": {} } },
     projectLocal: undefined,
@@ -492,7 +492,7 @@ for (const { expectedFootprint, expectedMessage, scopeValue } of [
     scopeValue: "project",
     expectedMessage: PROJECT_SCOPE_MESSAGE,
     expectedFootprint: {
-      projectSkills: ["alpha-tool", "beta-tool", "gamma-tool"],
+      projectSkills: ["alpha:tool", "beta:tool", "gamma:tool"],
       userSkills: [],
       projectBase: ALL_PLUGINS_DECLARED,
       projectLocal: undefined,
@@ -505,7 +505,7 @@ for (const { expectedFootprint, expectedMessage, scopeValue } of [
     expectedMessage: USER_SCOPE_MESSAGE,
     expectedFootprint: {
       projectSkills: [],
-      userSkills: ["delta-tool"],
+      userSkills: ["delta:tool"],
       projectBase: undefined,
       projectLocal: undefined,
       userBase: USER_PLUGIN_DECLARED,
@@ -558,7 +558,7 @@ for (const { args, placement } of [
     // assert
     assert.deepStrictEqual(notifications, [{ message: MARKETPLACE_FORM_MESSAGE }]);
     assert.deepStrictEqual(await readFootprint(workspace), {
-      projectSkills: ["alpha-tool", "beta-tool"],
+      projectSkills: ["alpha:tool", "beta:tool"],
       userSkills: [],
       projectBase: MARKETPLACE_FORM_DECLARED,
       projectLocal: undefined,
@@ -597,7 +597,7 @@ for (const { args, placement } of [
     // assert
     assert.deepStrictEqual(notifications, [{ message: MARKETPLACE_FORM_MESSAGE }]);
     assert.deepStrictEqual(await readFootprint(workspace), {
-      projectSkills: ["alpha-tool", "beta-tool"],
+      projectSkills: ["alpha:tool", "beta:tool"],
       userSkills: [],
       projectBase: undefined,
       projectLocal: MARKETPLACE_FORM_DECLARED,
@@ -626,7 +626,7 @@ test("honours a scope flag and the scope-target flag driven together (WB-02)", a
   assert.deepStrictEqual(notifications, [{ message: USER_SCOPE_MESSAGE }]);
   assert.deepStrictEqual(await readFootprint(workspace), {
     projectSkills: [],
-    userSkills: ["delta-tool"],
+    userSkills: ["delta:tool"],
     projectBase: undefined,
     projectLocal: undefined,
     userBase: undefined,

@@ -1761,7 +1761,7 @@ describe("replacePreparedSkills", () => {
       replacementError.message,
       "Cannot replace skill target with non-previous content at " + betaTarget,
     );
-    assert.strictEqual(path.basename(backupPath), "acme-alpha");
+    assert.strictEqual(path.basename(backupPath), "acme:alpha");
     assert.strictEqual(
       path.dirname(backupPath).startsWith(path.join(locations.skillsStagingDir, "backup-")),
       true,
@@ -1889,7 +1889,7 @@ describe("rollbackSkillsReplacement", () => {
     );
     const skillsDirectory = path.join(pluginRoot, "skills");
     const alphaDirectory = path.join(skillsDirectory, "alpha");
-    const alphaTarget = path.join(locations.skillsTargetDir, "acme-alpha");
+    const alphaTarget = path.join(locations.skillsTargetDir, "acme:alpha");
     await mkdir(alphaDirectory, { recursive: true });
     await mkdir(alphaTarget, { recursive: true });
     await writeFile(
@@ -1917,7 +1917,7 @@ describe("rollbackSkillsReplacement", () => {
       pluginRoot,
       pluginDataDir,
       resolved,
-      previousSkillNames: ["acme-alpha"],
+      previousSkillNames: ["acme:alpha"],
     });
     assert.strictEqual(prepared.kind, "staged");
     const replacement = await replacePreparedSkills(createRemovalOps(), prepared);
@@ -1931,7 +1931,7 @@ describe("rollbackSkillsReplacement", () => {
     // nothing could reach.
     assert.match(backupDirectory, /^backup-[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/);
     const backupRoot = path.join(locations.skillsStagingDir, backupDirectory);
-    const backupPath = path.join(backupRoot, "acme-alpha");
+    const backupPath = path.join(backupRoot, "acme:alpha");
     const removalError = Object.assign(new Error("replacement removal denied"), { code: "EACCES" });
     const restoreError = Object.assign(new Error("previous restoration denied"), {
       code: "EACCES",
@@ -1951,7 +1951,7 @@ describe("rollbackSkillsReplacement", () => {
     });
     const expectedLeaks = [
       "failed to remove replacement skill dir at " + alphaTarget + ": replacement removal denied",
-      "failed to restore previous skill dir acme-alpha from " +
+      "failed to restore previous skill dir acme:alpha from " +
         backupPath +
         " to " +
         alphaTarget +
@@ -1972,7 +1972,7 @@ describe("rollbackSkillsReplacement", () => {
     assert.strictEqual(Object.isFrozen(leaks), true);
     assert.strictEqual(stagingState?.isDirectory(), true);
     assert.strictEqual(backupState, undefined);
-    assert.strictEqual(targetBytes, "---\nname: acme-alpha\ndescription: New alpha\n---\n");
+    assert.strictEqual(targetBytes, "---\nname: acme:alpha\ndescription: New alpha\n---\n");
   });
 
   test("rejects a cloned replacement handle without internal identity", async (t) => {
