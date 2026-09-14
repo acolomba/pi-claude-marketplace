@@ -20,7 +20,11 @@ affects: [05-28, wave-6-reconciliation]
 # Actuals (#2632)
 actuals:
   tasks: 3
-  commits: 4
+  # Task commits only, matching the convention the sibling plans in this phase
+  # used. The metadata and correction commits that follow are listed in full
+  # under `## Task Commits`, so `git rev-list --count <plan_head_before>..HEAD`
+  # legitimately reads higher; see the note there before reporting a mismatch.
+  commits: 3
   plan_head_before: a19b8280dce1fbb86f9b2a8cc6945ccd640c5593
   # tokens: deliberately omitted. Actual token telemetry is unavailable in this
   # environment and the user decision on record forbids reporting diff
@@ -158,9 +162,18 @@ status: complete
 2. **Task 2: Wire translateSessionEnd through both dispatch modes** - `6823c071` (refactor)
 3. **Task 3: Wire translateUserPromptSubmit through both dispatch modes** - `fefd6fe9` (refactor)
 
-**Plan metadata:** `df378f75` (docs: complete plan)
+**Plan metadata:** `df378f75` (docs: complete plan), then `b0a97a94` and one further
+correction commit that settled this very count.
 
-Measured, not narrated: `git rev-list --count a19b8280dce1fbb86f9b2a8cc6945ccd640c5593..HEAD` reports **3** after the three task commits and **4** once the metadata commit lands. The `commits: 4` actual is the post-metadata figure, so it matches what a later verifier measures with the same instrument.
+Measured, not narrated. `git rev-list --count a19b8280dce1fbb86f9b2a8cc6945ccd640c5593..HEAD`
+read **3** immediately after the three task commits, and rises by one for each
+metadata commit that follows. The `actuals.commits: 3` figure is the task-commit
+count, the same convention `05-24-SUMMARY.md` used. A summary cannot record its own
+post-commit total without changing it, so the stable number is recorded and the
+remaining commits are enumerated above rather than folded into it. Every commit in
+this plan is reachable from `a19b8280..HEAD` and touches only the nine files listed
+in `key-files.modified` plus this summary, `.planning/STATE.md` and
+`.planning/ROADMAP.md`.
 
 ## Census Identity Delta
 
