@@ -2,56 +2,60 @@ import type { HookSummaryEntry } from "./concerns/hooks.ts";
 import type { Dependency } from "./concerns/soft-dep.ts";
 import type { Scope } from "./types.ts";
 
-/** Closed notification reason vocabulary in canonical render order. */
-export const REASONS = [
-  "up-to-date",
-  "not found",
-  "already installed",
-  "not installed",
-  "not in manifest",
-  "invalid manifest",
-  "no longer installable",
-  "unsupported source",
-  "unsupported component",
-  "unsupported hooks",
-  "lsp",
-  "requires pi-subagents",
-  "requires pi-mcp",
-  "rollback partial",
-  "unreadable",
-  "unparseable",
-  "unreadable manifest",
-  "source mismatch",
-  "plugins remain",
-  "concurrently uninstalled",
-  "concurrently updated",
-  "stale clone",
-  "duplicate name",
-  "lock held",
-  "already autoupdate",
-  "already no autoupdate",
-  "already enabled",
-  "already disabled",
-  "permission denied",
-  "source missing",
-  "network unreachable",
-  "marketplace not added",
-  "marketplace not added to user scope",
-  "marketplace not added to project scope",
-  "orphan rewake",
-  "authentication required",
-  "dangling reference",
-  "malformed mcp",
-  "malformed skill",
-  "malformed command",
-  "installs disabled",
-  "marketplace in user scope",
-  "marketplace in project scope",
-  "workflows",
-] as const;
-
-/** Literal union derived from the closed reason vocabulary. */
-export type Reason = (typeof REASONS)[number];
+/**
+ * Closed notification reason vocabulary in canonical render order.
+ *
+ * Declared as a bare union rather than an `as const` tuple: nothing reads the
+ * members at runtime, and a tuple that only ever feeds `(typeof X)[number]` is an
+ * unreferenced runtime value. The declaration order is the catalog's order -- a
+ * new token appends at the tail -- and `compat-01-no-expansion.test.ts` reads it
+ * here, because a union carries membership and not order.
+ */
+export type Reason =
+  | "up-to-date"
+  | "not found"
+  | "already installed"
+  | "not installed"
+  | "not in manifest"
+  | "invalid manifest"
+  | "no longer installable"
+  | "unsupported source"
+  | "unsupported component"
+  | "unsupported hooks"
+  | "lsp"
+  | "requires pi-subagents"
+  | "requires pi-mcp"
+  | "rollback partial"
+  | "unreadable"
+  | "unparseable"
+  | "unreadable manifest"
+  | "source mismatch"
+  | "plugins remain"
+  | "concurrently uninstalled"
+  | "concurrently updated"
+  | "stale clone"
+  | "duplicate name"
+  | "lock held"
+  | "already autoupdate"
+  | "already no autoupdate"
+  | "already enabled"
+  | "already disabled"
+  | "permission denied"
+  | "source missing"
+  | "network unreachable"
+  | "marketplace not added"
+  | "marketplace not added to user scope"
+  | "marketplace not added to project scope"
+  | "orphan rewake"
+  | "authentication required"
+  | "dangling reference"
+  | "malformed mcp"
+  | "malformed skill"
+  | "malformed command"
+  | "installs disabled"
+  | "marketplace in user scope"
+  | "marketplace in project scope"
+  | "workflows";
 
 /** Reasons that describe a content row rather than marketplace absence. */
 export type ContentReason = Exclude<
@@ -61,76 +65,73 @@ export type ContentReason = Exclude<
   | "marketplace not added to project scope"
 >;
 
-/** Closed notification status vocabulary in canonical render order. */
-export const STATUS_TOKENS = [
-  "installed",
-  "updated",
-  "reinstalled",
-  "uninstalled",
-  "added",
-  "removed",
-  "available",
-  "unavailable",
-  "upgradable",
-  "skipped",
-  "failed",
-  "rollback failed",
-  "manual recovery",
-  "no marketplaces",
-  "no plugins",
-  "will install",
-  "will uninstall",
-  "will enable",
-  "will disable",
-  "disabled",
-  "partially-installed",
-  "partially-upgradable",
-  "partially-available",
-  "remote",
-] as const;
+/**
+ * Closed notification status vocabulary in canonical render order.
+ * A bare union for the reason given on `Reason`.
+ */
+export type StatusToken =
+  | "installed"
+  | "updated"
+  | "reinstalled"
+  | "uninstalled"
+  | "added"
+  | "removed"
+  | "available"
+  | "unavailable"
+  | "upgradable"
+  | "skipped"
+  | "failed"
+  | "rollback failed"
+  | "manual recovery"
+  | "no marketplaces"
+  | "no plugins"
+  | "will install"
+  | "will uninstall"
+  | "will enable"
+  | "will disable"
+  | "disabled"
+  | "partially-installed"
+  | "partially-upgradable"
+  | "partially-available"
+  | "remote";
 
-/** Literal union derived from the closed notification status vocabulary. */
-export type StatusToken = (typeof STATUS_TOKENS)[number];
+/**
+ * Closed plugin status vocabulary in canonical render order.
+ * A bare union for the reason given on `Reason`.
+ */
+export type PluginStatus =
+  | "installed"
+  | "updated"
+  | "reinstalled"
+  | "uninstalled"
+  | "available"
+  | "unavailable"
+  | "upgradable"
+  | "failed"
+  | "skipped"
+  | "manual recovery"
+  | "will install"
+  | "will uninstall"
+  | "will enable"
+  | "will disable"
+  | "disabled"
+  | "partially-installed"
+  | "partially-upgradable"
+  | "partially-available"
+  | "remote";
 
-/** Closed plugin status vocabulary in canonical render order. */
-export const PLUGIN_STATUSES = [
-  "installed",
-  "updated",
-  "reinstalled",
-  "uninstalled",
-  "available",
-  "unavailable",
-  "upgradable",
-  "failed",
-  "skipped",
-  "manual recovery",
-  "will install",
-  "will uninstall",
-  "will enable",
-  "will disable",
-  "disabled",
-  "partially-installed",
-  "partially-upgradable",
-  "partially-available",
-  "remote",
-] as const;
-
-/** Closed marketplace status vocabulary in canonical render order. */
-export const MARKETPLACE_STATUSES = [
-  "added",
-  "removed",
-  "updated",
-  "failed",
-  "autoupdate enabled",
-  "autoupdate disabled",
-  "skipped",
-] as const;
-
-/** Literal union derived from the plugin status vocabulary. */
-export type PluginStatus = (typeof PLUGIN_STATUSES)[number];
-
-/** Literal union derived from the marketplace status vocabulary. */
-export type MarketplaceStatus = (typeof MARKETPLACE_STATUSES)[number];
+/**
+ * Closed marketplace status vocabulary in canonical render order.
+ * A bare union for the reason given on `Reason`.
+ */
+export type MarketplaceStatus =
+  | "added"
+  | "removed"
+  | "updated"
+  | "failed"
+  | "autoupdate enabled"
+  | "autoupdate disabled"
+  | "skipped";
 
 /** Marketplace details shown by list and info messages. */
 export interface MarketplaceDetails {

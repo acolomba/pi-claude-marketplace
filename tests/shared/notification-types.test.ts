@@ -3,18 +3,33 @@ import test from "node:test";
 
 import {
   isScopeBearingListRow,
-  MARKETPLACE_STATUSES,
-  PLUGIN_STATUSES,
-  REASONS,
-  STATUS_TOKENS,
   type ContentReason,
   type MarketplaceNotificationMessage,
+  type MarketplaceStatus,
   type NotificationMessage,
   type PluginInstalledMessage,
   type PluginNotificationMessage,
   type PluginSkippedMessage,
+  type PluginStatus,
+  type Reason,
   type Severity,
+  type StatusToken,
 } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
+
+/**
+ * The four closed vocabularies are declared privately by their owner and reach
+ * this file only as the literal unions `Reason`, `StatusToken`, `PluginStatus`
+ * and `MarketplaceStatus`. The lists below are this file's OWN hand-written
+ * copies -- independent literals, never derived from the owner -- and the
+ * `IsExact` proofs under them run BOTH directions. A one-sided
+ * `satisfies readonly Reason[]` would accept a list missing half the members,
+ * so it cannot prove no expansion and is not used here.
+ */
+type IsExact<Actual, Expected> = [Actual] extends [Expected]
+  ? [Expected] extends [Actual]
+    ? true
+    : false
+  : false;
 
 const EXPECTED_REASONS = [
   "up-to-date",
@@ -224,12 +239,60 @@ void ({
 const structuralReason: ContentReason = "marketplace not added";
 void structuralReason;
 
-test("exports the exact notification vocabulary from its named owner", () => {
-  assert.deepStrictEqual(REASONS, EXPECTED_REASONS);
-  assert.deepStrictEqual(STATUS_TOKENS, EXPECTED_STATUS_TOKENS);
-  assert.deepStrictEqual(PLUGIN_STATUSES, EXPECTED_PLUGIN_STATUSES);
-  assert.deepStrictEqual(MARKETPLACE_STATUSES, EXPECTED_MARKETPLACE_STATUSES);
-});
+// Each public union holds EXACTLY the members its list above names. Adding a
+// member to the owner's vocabulary without adding it here, or removing one,
+// collapses the corresponding proof to `false` and fails the build.
+void (true satisfies IsExact<Reason, (typeof EXPECTED_REASONS)[number]>);
+void (true satisfies IsExact<StatusToken, (typeof EXPECTED_STATUS_TOKENS)[number]>);
+void (true satisfies IsExact<PluginStatus, (typeof EXPECTED_PLUGIN_STATUSES)[number]>);
+void (true satisfies IsExact<MarketplaceStatus, (typeof EXPECTED_MARKETPLACE_STATUSES)[number]>);
+
+// Discriminating controls for the four proofs above: they assert `false`, so a
+// proof that had degenerated into something always-true would fail HERE. One
+// control per direction, on the largest set -- a member the union does not hold,
+// and a member it holds that the list drops.
+void (false satisfies IsExact<Reason, (typeof EXPECTED_REASONS)[number] | "not a reason">);
+void (false satisfies IsExact<Reason, Exclude<(typeof EXPECTED_REASONS)[number], "workflows">>);
+void (false satisfies IsExact<
+  StatusToken,
+  (typeof EXPECTED_STATUS_TOKENS)[number] | "not a token"
+>);
+void (false satisfies IsExact<
+  PluginStatus,
+  (typeof EXPECTED_PLUGIN_STATUSES)[number] | "not a status"
+>);
+void (false satisfies IsExact<
+  MarketplaceStatus,
+  (typeof EXPECTED_MARKETPLACE_STATUSES)[number] | "not a status"
+>);
+
+const VOCABULARIES: readonly {
+  readonly name: string;
+  readonly members: readonly string[];
+}[] = [
+  { name: "reason", members: EXPECTED_REASONS },
+  { name: "status token", members: EXPECTED_STATUS_TOKENS },
+  { name: "plugin status", members: EXPECTED_PLUGIN_STATUSES },
+  { name: "marketplace status", members: EXPECTED_MARKETPLACE_STATUSES },
+];
+
+for (const { name, members } of VOCABULARIES) {
+  test(`the ${name} vocabulary names every member once`, () => {
+    // arrange
+    const expectedDuplicates: readonly string[] = [];
+
+    // act
+    // A union deduplicates, so the proofs above cannot see a literal written
+    // twice. This clause is what makes "the union holds exactly these N members"
+    // a statement about N: the list is its own witness.
+    const duplicates: readonly string[] = members.filter(
+      (member, index) => members.indexOf(member) !== index,
+    );
+
+    // assert
+    assert.deepStrictEqual(duplicates, expectedDuplicates);
+  });
+}
 
 for (const { name, row, expected } of [
   {
