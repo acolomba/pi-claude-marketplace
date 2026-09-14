@@ -1,6 +1,6 @@
 ---
 created: 2026-09-02
-resolves_phase: 7
+resolves_phase: 6
 source: 116-CONTEXT discussion
 audit_acknowledged:
   milestone: v1.19
@@ -8,6 +8,9 @@ audit_acknowledged:
 ---
 
 # No gate detects an unused type member
+
+**Promoted 2026-09-14:** explicitly authorized for test-backlog Phase 6,
+MEMBER-01/02. The older exclusions below are historical, not current scope.
 
 **Disposition 2026-09-11: `deferred` to v1.19.** `CLOSE-02` names this todo
 explicitly as one that retains a deferred history without being described as

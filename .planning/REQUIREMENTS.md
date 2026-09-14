@@ -1,0 +1,55 @@
+# Requirements: test-backlog
+
+Started 2026-09-14 on `features/test-backlog`.
+
+## Constraints
+
+- Preserve the current 100% aggregate unit coverage baseline and assertion strength.
+- Do not lower thresholds, exclude production code, or create test-only production exports.
+- Unit/Sonar aggregate coverage and the existing direct-pair pin are distinct measurements.
+- Keep this branch and preserve archived milestones and unrelated local edits.
+- All items in the user handoff are in scope; prior scope exclusions are historical.
+
+## Requirements
+
+- [ ] **NEG-01**: Repair the direct-coverage CLI negative controls on Node 26 without weakening exit or diagnostic assertions.
+- [ ] **NEG-02**: Determine the child-observation cause and check analogous subprocess assertions, retaining launch-error discrimination.
+- [ ] **HIST-01**: Reconfirm E2EIMP-01 and reconcile TESTQ-01, FLOW-07, and COV-01 without duplicate implementation.
+- [ ] **SONAR-01**: Enable assertions-in-tests, no-empty-test-file, and no-trivial-assertions with deliberate type-only and helper controls.
+- [ ] **SONAR-02**: Measure and disposition the remaining SWTEST-01 rule clusters instead of enabling the preset wholesale.
+- [ ] **AGENT-01**: Test collisions through real discovery/staging and implement the approved first-wins or hard-error contract.
+- [ ] **AGENT-02**: Align AG-12, RN-6, duplicate warnings, comments, and collision tests with reachable production behavior.
+- [ ] **ARGS-01**: Reject unknown flags and surplus positionals across the live command inventory before dispatch.
+- [ ] **ARGS-02**: Resolve and enforce --local semantics for marketplace info/list/update with accurate usage.
+- [ ] **ARGS-03**: Extend the flag catalog and discriminating drift gate to marketplace verbs.
+- [ ] **EXPORT-01**: Triage all current Fallow production findings; remove ordinary test-only exports through coherent ownership and public tests.
+- [ ] **EXPORT-02**: Enable and validate Fallow production mode while retaining completed explicit-seam protections.
+- [ ] **MEMBER-01**: Add a static gate that detects unused interface/type members, including an unread optional EdgeDeps member.
+- [ ] **MEMBER-02**: Validate read-site analysis with offender and benign controls and document justified external/structural contracts.
+- [ ] **METRIC-01**: Reliably convert current unit coverage to Fallow-compatible Istanbul JSON and verify measurement fidelity.
+- [ ] **METRIC-02**: Select and validate a CRAP metric policy using real measurements and negative controls.
+- [ ] **FINAL-01**: Preserve 100% aggregate unit production coverage, assertion strength, direct-pair requirements, and all required quality checks.
+- [ ] **FINAL-02**: Account for all authorized backlog/todo items with implementation evidence or a current user-agreed disposition.
+
+## Traceability
+
+| Requirement | Phase | Status |
+| --- | --- | --- |
+| NEG-01 | 1 | Pending |
+| NEG-02 | 1 | Pending |
+| HIST-01 | 1 | Pending |
+| SONAR-01 | 2 | Pending |
+| SONAR-02 | 2 | Pending |
+| AGENT-01 | 3 | Pending |
+| AGENT-02 | 3 | Pending |
+| ARGS-01 | 4 | Pending |
+| ARGS-02 | 4 | Pending |
+| ARGS-03 | 4 | Pending |
+| EXPORT-01 | 5 | Pending |
+| EXPORT-02 | 5 | Pending |
+| MEMBER-01 | 6 | Pending |
+| MEMBER-02 | 6 | Pending |
+| METRIC-01 | 7 | Pending |
+| METRIC-02 | 7 | Pending |
+| FINAL-01 | 8 | Pending |
+| FINAL-02 | 8 | Pending |

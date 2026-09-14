@@ -10,6 +10,22 @@
 
 A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artifact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install.
 
+## Current Milestone: test-backlog (branch: features/test-backlog)
+
+**Goal:** Resolve the authorized test and quality backlog with measured controls,
+public-contract tests, and preserved 100% aggregate unit coverage.
+
+**Target features:**
+- Repair NEGCTL-01, adopt scoped Sonar test rules (SWTEST-01), and reconcile stale records.
+- Resolve agent collision semantics (AGCOL-01) and argument validation (ARGS-01).
+- Complete FLOW-09 production-only export cleanup and Fallow production mode.
+- Detect unused interface/type members with static analysis and discriminating controls.
+- Produce reliable Istanbul coverage for Fallow and settle FLOW-05 metric policy.
+
+**Execution:** Restart at Phase 1. Preserve archived milestones and local changes.
+Routine decisions are authorized; substantive product choices stay in this session.
+Historical refine-unit-tests exclusions do not limit this newly authorized work.
+
 ## Previous Milestone: refine-unit-tests -- Refine Unit Tests (branch: features/refine-unit-tests, shipped 2026-09-13, no npm release)
 
 **Goal:** Revalidate the adversarial unit-test review and related backlog against
@@ -301,6 +317,11 @@ window ledger is fully disposed at `.planning/WINDOWS.md`. PR #181 is open and u
 operator decision. Workstream `milestone` (force-install closeout) remains open.
 
 ## Requirements
+
+### Active — test-backlog
+
+See [REQUIREMENTS.md](REQUIREMENTS.md) for the current milestone requirements.
+All prior validated requirements below remain historical completed work.
 
 ### Validated
 
@@ -730,3 +751,5 @@ _Earlier updates (pre-v1.3-close): see git history. Phase 1 (2026-05-09), Phase 
 ---
 
 _Last updated: 2026-09-13 after the refine-unit-tests milestone_
+
+_Last updated: 2026-09-14 after starting test-backlog._

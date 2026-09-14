@@ -96,7 +96,7 @@ re-auditing `narrowResolverNotes`, which currently forces every resolver note in
 the unsupported family -- parse / structural notes need to reach failure-class
 tokens (the `narrowProbeError` path already does this for I/O errors).
 
-## COV-01: coverage exclusion policy, and the two out-of-bound orchestrators
+## ~~COV-01: coverage exclusion policy, and the two out-of-bound orchestrators~~ -- SUPERSEDED
 
 **Disposition 2026-09-11: `superseded`** (`RCOV-04`, `SCOPE-REQ-RCOV-04`,
 formerly Phase 8). The standalone remeasurement this item asked for is subsumed
@@ -486,6 +486,9 @@ wall. Measured at filing: that form yields 4 unused files, 192 unused exports,
 
 ## ~~FLOW-07: is the ESLint `no-restricted-paths` zone matrix now redundant?~~ -- CLOSED
 
+Reconfirmed 2026-09-14: archived GGAT-03 remains checked complete and its
+Phase 7 verification remains passed (7/7). No duplicate work is opened.
+
 Closed 2026-09-11 by the `refine-unit-tests` milestone. Disposition:
 `implemented`, carried by `GGAT-03` (Phase 7), whose clause names this item by
 ID: "`FLOW-07` varies effective config sources and broad overrides across the
@@ -496,12 +499,12 @@ names by ID, so it rests on a record rather than on inference. The three weaker
 routes say so in their own entries; the difference between a named route and a
 derived one is the point of recording it.
 
-`.planning/phases/07-gate-integrity/07-16-SUMMARY.md` carries the satisfaction
+`.planning/milestones/refine-unit-tests-phases/07-gate-integrity/07-16-SUMMARY.md` carries the satisfaction
 row: plan `07-07` resolved both boundary gates through
 `ESLint#calculateConfigForFile` and deleted the two gates it replaced, verified
 by `node --test tests/architecture/eslint-effective-config.test.ts` and by
 `npm run lint` inside `npm run check`.
-`.planning/phases/07-gate-integrity/07-VERIFICATION.md` reads `status: passed`,
+`.planning/milestones/refine-unit-tests-phases/07-gate-integrity/07-VERIFICATION.md` reads `status: passed`,
 7/7, with the `GGAT-03` row `SATISFIED`.
 
 The edge-by-edge matrix comparison this entry said removal would need was
@@ -632,9 +635,15 @@ fallow coverage on all five barrels.
 Distinct from FLOW-09: that one is about internals exported for TESTS, a
 different cause with a different fix.
 
-## ~~FLOW-09: internals exported only for tests~~ -- CLOSED
+## FLOW-09: internals exported only for tests -- EXPLICIT SEAMS CLOSED; PRODUCTION MODE OPEN
 
-Closed 2026-09-11 by the `refine-unit-tests` milestone. Disposition:
+**Promoted 2026-09-14:** test-backlog Phase 5 owns the ordinary-helper population
+and production-mode gate (EXPORT-01/02). Fallow 3.22.0 on this checkout reports
+111 production findings: 93 unused exports, 12 unused types, one unused file,
+one unused class member, and four duplicate-export groups. These are analyzer
+findings for triage, not 111 confirmed defects.
+
+The explicit-seam/reset-export portion closed 2026-09-11 by the `refine-unit-tests` milestone. Disposition:
 `implemented`, carried by `TREF-05` and `TREF-06` (Phases 5-6), with the
 standing `no-test-only-production-surface` gate under `GGAT-04` keeping the
 surface at zero.
@@ -2607,6 +2616,9 @@ precisely so the bump stays optional.
 
 ## ~~TESTQ-01: act on the two-pass unit-test review corpus~~ -- CLOSED
 
+Reconfirmed 2026-09-14: the archived completed requirements preserve this
+closure. The new milestone promotes only the separately authorized follow-ups.
+
 Closed 2026-09-11 by the `refine-unit-tests` milestone, which was cut from this
 item. Disposition: `implemented`.
 
@@ -2628,7 +2640,7 @@ the corpus usable at all: all 110 files individually inspected, every report and
 recorded finding mapped to a current disposition with live source and test
 references, and stale, struck or displaced claims moved out of active scope with
 explicit current evidence before any implementation was planned.
-`.planning/phases/01-live-evidence-revalidation/01-67-SUMMARY.md:128` records
+`.planning/milestones/refine-unit-tests-phases/01-live-evidence-revalidation/01-67-SUMMARY.md:128` records
 the routing: "`TESTQ-01`, `FLOW-09`, `REASON-01`, and `FLOW-07` retain exact
 routes through their terminal findings."
 
@@ -2636,7 +2648,7 @@ routes through their terminal findings."
 closed by these IDs"; the table above is read off this item's own workstream
 list and the requirement clause text. Where a row rests on that inference it
 rests on it, and a reader checking the route should start from
-`.planning/REQUIREMENTS.md` and the per-phase verification reports rather than
+`.planning/milestones/refine-unit-tests-REQUIREMENTS.md` and the per-phase verification reports rather than
 from this table.
 
 This item's own calibration warning survives its closure and is now repository
@@ -2826,7 +2838,13 @@ Code seams: `scripts/test-coverage-direct.negative.mjs:134` (the capture and the
 assertion), `package.json` (`test:coverage:direct:negative`), `.github/workflows/ci.yml`
 (pins Node 24, which is why this is latent rather than red).
 
-## E2EIMP-01: three `import` e2e tests assert a summary header the command no longer emits
+## ~~E2EIMP-01: three `import` e2e tests assert a summary header the command no longer emits~~ -- CLOSED AS STALE
+
+**Revalidated 2026-09-14 (test-backlog HIST-01):** the current tests already
+assert the folded marketplace grammar. `env -u PI_CODING_AGENT_DIR node
+tests/e2e/import-command.test.ts` passes all three cases (3 pass, 0 fail) on
+Node v26.8.2. No test rewrite is needed. The original report below describes
+a condition that no longer exists.
 
 Carried out of the `refine-unit-tests` milestone close (2026-09-13) as an open
 audit item. Originally recorded in Phase 25, which archived with milestone v1.4.1.
