@@ -620,10 +620,10 @@ function optionalModel(model: string | undefined): { model?: string } {
  * classification (it maps to inheritSkills, not a Pi tool), so a
  * `tools: Skill`-only agent would otherwise see one declared tool produce
  * zero mapped tools with no explanation -- the note is appended whenever
- * Skill was among the raw source tokens. The `?? "(omitted)"` label exists
- * for the compiler alone -- it cannot correlate `toolsResult.omitted ===
- * false` with `raw.tools !== undefined`; a genuinely omitted `tools:` never
- * reaches the throw (#179).
+ * Skill was among the raw source tokens. The `?? "(omitted)"` label covers a
+ * malformed `raw.tools` accessor whose value disappears between reads
+ * (pinned by the malformed-accessor test); a genuinely omitted `tools:`
+ * never reaches the throw (#179).
  */
 function assertMappedToolsNonEmpty(input: {
   toolsResult: ToolMappingResult;
