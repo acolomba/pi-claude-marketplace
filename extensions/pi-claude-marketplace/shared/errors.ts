@@ -11,8 +11,12 @@ export function errorMessage(err: unknown): string {
  *
  * One definition, shared by every errno-dispatching narrower in the codebase
  * instead of each keeping a private copy.
+ *
+ * The `& { code: string }` intersection states what the body proves.
+ * `NodeJS.ErrnoException` declares `code?: string`, so without it every
+ * consumer has to re-handle a `code` this predicate has already excluded.
  */
-export function isErrnoException(err: unknown): err is NodeJS.ErrnoException {
+export function isErrnoException(err: unknown): err is NodeJS.ErrnoException & { code: string } {
   return (
     err instanceof Error && "code" in err && typeof (err as { code?: unknown }).code === "string"
   );
