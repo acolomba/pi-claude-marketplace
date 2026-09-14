@@ -1,13 +1,111 @@
 ---
 status: all_fixed
 phase: 01
-findings_in_scope: 6
-fixed: 6
+fixed_at: 2026-09-14T15:51:05Z
+review_path: .planning/phases/01-manifest-read-fidelity/01-REVIEW.md
+findings_in_scope: 2
+fixed: 2
 skipped: 0
 iteration: 1
 ---
 
-# Review fixes
+# Phase 1: Code Review Fix Report
+
+This pass fixes CR-03 and CR-04 from review commit `e1f60099` under
+`critical_warning` scope. Both findings have separate commits. No finding
+was skipped. The earlier fix report is retained below as historical evidence;
+its counts describe the earlier tree, not the merged revision verified here.
+
+## Fixed issues
+
+### CR-03: Info reads non-file manifest candidates
+
+**Status:** fixed: requires human verification (logic-change reporting rule).
+**Commit:** `4053f227`
+**Files modified:** `extensions/pi-claude-marketplace/orchestrators/plugin/info.ts`,
+`tests/orchestrators/plugin/info.test.ts`,
+`tests/architecture/manifest-read-agreement.test.ts`.
+
+Info checks file kind before reading manifest bytes. Non-files, ENOENT and
+ENOTDIR permit fallback; other failures stop the walk. The optional
+`PluginInfoReader.isRegularFile` capability permits stat-failure injection
+while preserving existing two-method readers through the Node stat adapter.
+The three readers retain their independent I/O and error contracts.
+
+Real filesystem tests cover a device candidate through `os.devNull`, a
+directory candidate and a non-directory wrapper. Each reader selects the bare
+manifest in those cases. Direct info tests also cover EACCES, ELOOP and a
+non-errno stat failure, with a forbidden bare declaration that would change
+the public result if selected.
+
+### CR-04: Unusable-manifest cases mask wrong info fallback
+
+**Status:** fixed.
+**Commit:** `b64f0b98`
+**Files modified:** `tests/orchestrators/plugin/info.test.ts`,
+`tests/architecture/manifest-read-agreement.test.ts`.
+
+Malformed JSON and ELOOP agreement cases now give the forbidden bare sibling
+an invalid dependency declaration. Incorrect selection produces an
+`invalid manifest` notification before the resolver can mask it. The direct
+malformed and non-object manifest cases use the same discriminating setup and
+assert complete notification bytes.
+
+An executed negative control changed only `readOwnManifestDependencies` to
+continue after unusable or unparseable candidates. All four selected tests
+failed: the two architecture cases and the two direct info cases. The
+architecture failures retained resolver state `unavailable` and version
+`1.0.0`; only info changed to `invalid manifest` with unresolved components.
+The committed production file was restored with `git checkout`, verified
+byte-identical to HEAD, and all 177 focused tests passed again.
+
+## Coverage measurement prerequisite
+
+**Commit:** `b84d7061`
+**File modified:** `scripts/test-coverage-direct.pin.json`.
+
+The required hook found a stale measurement after the earlier command-file
+deduplication fix. That fix removed `duplicateFileWarning` and replaced its
+warning block with an early Set-based skip: 17 fewer source lines and one
+fewer covered branch. The measured totals changed from branches 55/56 and
+lines 412/414 to branches 54/55 and lines 395/397.
+
+The uncovered code remains exactly the existing BC-019 narrowing arm around
+`CommandNameError`, now at branch 277 and lines 278–279. The deficit remains
+one branch and two lines. This refresh changes no coverage allowance and
+preserves every other pin entry. Its exact-file hooks and filesystem secret
+scan passed before the separate prerequisite commit.
+
+## Verification
+
+All checks ran in the existing linked checkout at
+`/home/acolomba/src/pi-claude-marketplace-manifest` on `features/manifest`.
+`workflow.use_worktrees=false` was honored; no additional fixer worktree was
+created. Git-dependent hooks and the full check ran with authorized access
+after the sandbox denied a Git subprocess with EPERM.
+
+- `node --test --test-isolation=none tests/orchestrators/plugin/info.test.ts tests/architecture/manifest-read-agreement.test.ts`: 177 passed, zero failed or skipped, before and after the negative control.
+- `npm run test:coverage:direct -- extensions/pi-claude-marketplace/orchestrators/plugin/info.ts`: 396/396 branches, 79/79 functions and 2831/2831 lines. The final changed-pair hook passed too.
+- `npm run check`: exit 0; 6,124 unit tests and 32 integration tests passed, zero failed, cancelled or skipped. TypeScript, ESLint, workflow gates, Fallow, Prettier, corresponding-test gates and their negative controls passed.
+- Exact-path pre-commit checks passed for both fixes and the prerequisite. CR-03's initial coverage failure was resolved by the pin repair; its formerly failing hook then passed. CR-04's complete hook run passed.
+- `SKIP=trufflehog` was used only under the linked-checkout rule. Equivalent filesystem scans of every committed path found zero verified or unverified secrets.
+- Modified sections were reread, and `git diff --check` passed. No production mutation from the negative control remains.
+
+Execution logs: `/tmp/phase1-cr03-targeted.log`,
+`/tmp/phase1-info-coverage.log`, `/tmp/phase1-cr03-hooks.log`,
+`/tmp/phase1-cr03-coverage-hook.log`, `/tmp/phase1-pin-hooks.log`,
+`/tmp/phase1-cr04-negative.log`, `/tmp/phase1-cr04-restored.log`,
+`/tmp/phase1-cr04-hooks.log`, `/tmp/phase1-fix-check.log`, and the matching
+`/tmp/phase1-*-secrets.log` files. These temporary logs support this run;
+the commands and outcomes above remain in the report.
+
+The installed GSD commit helper has a 30-second timeout, shorter than the
+required hooks. The parent authorized exact-path Git commits after hooks
+passed. No hook was bypassed beyond the documented trufflehog substitution.
+This report is intentionally uncommitted for the orchestrator to finalize.
+Unrelated configuration, state and sibling-owned review artifacts were preserved.
+
+## Historical review fixes
 
 Scope: CR-01, CR-02, WR-02, WR-03 (length bounds; keep compound ranges),
 WR-04 and WR-05. WR-01 was implemented earlier under D-01-35 and is preserved.
