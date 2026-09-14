@@ -27,6 +27,9 @@ findings:
   info: 4
   total: 11
 status: issues_found
+fix_report: 01-REVIEW-FIX.md
+remaining_critical: 0
+remaining_warning: 0
 ---
 
 # Phase 01: Code Review Report
@@ -37,6 +40,11 @@ status: issues_found
 **Status:** issues_found
 
 ## Summary
+
+Update 2026-09-14: The fix pass resolved CR-01, CR-02 and WR-02 through WR-05.
+Quick task `260914-aer` resolved WR-01. `01-REVIEW-FIX.md` records the outcomes
+and test evidence. The original findings remain intact as historical evidence.
+The four Info findings remain outside this pass. Phase verification remains open.
 
 Reviewed the manifest-read-fidelity delta: the shared `MANIFEST_CANDIDATES` ordering
 and its three readers, the new dependency element parser, the `info` dependency
@@ -209,6 +217,12 @@ each reader. Also correct the `manifestCandidateExists` doc comment.
 ## Warnings
 
 ### WR-01: A dependency the manifest declared can vanish from the line with no signal
+
+**Resolved 2026-09-14:** D-01-35 selects upstream rejection, not silent omission.
+Quick task `260914-aer` rejects invalid own manifests, isolates invalid marketplace
+entries, and reports rejection through `info`, including recorded installations.
+The version-pattern comment now distinguishes object ranges from bare caret ranges.
+The original finding below is retained as review evidence.
 
 **File:** `extensions/pi-claude-marketplace/domain/dependencies.ts:125-141`,
 `extensions/pi-claude-marketplace/orchestrators/plugin/info.ts:402-419`

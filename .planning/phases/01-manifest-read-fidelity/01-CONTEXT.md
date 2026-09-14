@@ -1,7 +1,7 @@
 # Phase 1: Manifest read fidelity - Context
 
 **Gathered:** 2026-09-12
-**Status:** Ready for planning
+**Status:** Implementation and review fixes ready for phase verification
 
 <domain>
 ## Phase Boundary
@@ -425,6 +425,38 @@ These SUPERSEDE the spike's summary where they disagree.
   D-01-24's backlog note about the two bridges being a fallow-reported mirrored
   clone pair still stands as a duplication observation; it is no longer a reason to
   leave the defect unfixed.
+
+- **D-01-35 (SUPERSEDES the silent-drop policy in D-01-05, D-01-25,
+  D-01-29 and D-01-33):** Follow Claude Code's rejection policy for unusable
+  dependency declarations. The operator chose this on 2026-09-14 after an
+  upstream check. Any invalid element or non-array declaration rejects the
+  entire declaration; valid siblings do not rescue it. Missing and empty
+  declarations remain valid. An invalid own `plugin.json` makes the plugin
+  unavailable, without falling through to the bare manifest or entry. At the
+  marketplace boundary, keep an invalid named entry as an unsupported stub;
+  drop an invalid unnamed entry and preserve healthy siblings. `info` reports
+  the rejection, including for recorded installations, without mutating state.
+  Existing valid rendering, object-form ranges, safe-character checks and
+  manifest precedence stay unchanged. Resolution of valid constraints remains
+  Phase 3 work. Claude Code 2.1.251's validator rejected `"foo@~1.0.0"` and an
+  object missing `name`, but accepted `{ "name": "foo", "version": "~1.0.0" }`.
+  Its marketplace loader replaces invalid named entries with unsupported
+  stubs and drops unnamed entries. This closes WR-01's design question and
+  corrects the version-pattern documentation; it does not widen bare ranges.
+
+- **D-01-36 (review fixes, 2026-09-14):** Bound dependency names and marketplace
+  names to 256 characters, version text to 64, and SHA text to the existing
+  7–40 hexadecimal characters. The operator accepted length bounds under WR-03.
+  Compound ranges retain spaces and pipes under D-01-33. The same token rule
+  applies after the caller supplies a missing marketplace name. An invalid
+  supplied name rejects the declaration under D-01-35.
+
+- **D-01-37 (CR-02 clarification, 2026-09-14):** All three manifest readers
+  treat ENOENT, ENOTDIR and non-file candidates as absence. Other stat failures
+  stop the candidate walk. The resolver returns its malformed-manifest result.
+  The version reader falls to the marketplace entry, never to the bare sibling.
+  The policy lives beside MANIFEST_CANDIDATES. Filesystem tests cover malformed
+  JSON, a non-directory wrapper and a symlink loop without permission-dependent skips.
 
 ### Claude's Discretion
 

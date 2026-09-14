@@ -1,13 +1,13 @@
 {
   "version": "1.0",
-  "timestamp": "2026-09-14T02:16:00.224Z",
+  "timestamp": "2026-09-14",
   "phase": "1",
   "phase_name": "Manifest read fidelity",
   "phase_dir": ".planning/phases/01-manifest-read-fidelity",
   "plan": 4,
   "task": null,
   "total_tasks": 10,
-  "status": "paused",
+  "status": "awaiting_verification",
   "milestone": "v1.20",
   "milestone_name": "transitive-dependencies",
   "completed_tasks": [
@@ -35,19 +35,21 @@
       "status": "done",
       "commit": "f32270fd"
     },
-    { "id": 5, "name": "code review (17 files, standard depth)", "status": "done", "commit": null }
-  ],
-  "remaining_tasks": [
+    { "id": 5, "name": "code review (17 files, standard depth)", "status": "done", "commit": null },
     {
       "id": 6,
-      "name": "Apply code-review fixes: CR-01, CR-02, WR-02, WR-03, WR-04, WR-05",
-      "status": "not_started"
+      "name": "Review fixes: CR-01, CR-02, WR-02, WR-03, WR-04, WR-05",
+      "status": "done",
+      "report": ".planning/phases/01-manifest-read-fidelity/01-REVIEW-FIX.md"
     },
     {
       "id": 7,
-      "name": "WR-01 — needs a design decision first (see blockers)",
-      "status": "blocked"
-    },
+      "name": "WR-01: upstream dependency rejection (D-01-35, quick 260914-aer)",
+      "status": "done",
+      "commit": "de4a9424"
+    }
+  ],
+  "remaining_tasks": [
     { "id": 8, "name": "verify_phase_goal (gsd-verifier)", "status": "not_started" },
     {
       "id": 9,
@@ -56,28 +58,12 @@
     },
     { "id": 10, "name": "Phases 2-5 of milestone v1.20", "status": "not_started" }
   ],
-  "blockers": [
-    {
-      "description": "WR-01 unanswered: RANGE_MARKER is the literal \"@^\", so only caret ranges split off a bare string. \"foo@~1.0.0\" parses as name=foo, marketplace=~1.0.0, fails the token allowlist, and drops the whole element. When every element is unusable the line is omitted — byte-identical to a plugin declaring no dependencies. Three options were posed (add a closed-set reason token / document the limit and keep silence / widen the range marker); the operator asked a clarifying question about version handling instead and the question was never re-posed.",
-      "type": "human_action",
-      "workaround": "WR-01 part 1 (correct the VERSION_PATTERN doc comment, which claims ~1.2, >=1.0, 1.x and || are reachable via the bare-string form when only ^ is) is uncontroversial and can land without the decision. Part 2 (distinguish 'declared none' from 'declared only unusable') needs the call because it adds a catalog state."
-    }
-  ],
+  "blockers": [],
   "async_jobs": [],
   "human_actions_pending": [
     {
-      "action": "Answer WR-01 part 2 — whether info gains a closed-set reason token when every declared dependency is unusable",
-      "context": "Adds a new catalogued output state + FIXTURES entry; both catalog walks are gated so they land in one commit",
-      "blocking": true
-    },
-    {
       "action": "Decide whether ROADMAP criterion 3 can pass on fixture-shape evidence",
       "context": "01-03 marked it human_judgment:true. The gate pins ui5 and ui-theme-designer by their DECLARED SHAPES; the criterion is worded against the real plugins, which needs a network install to confirm.",
-      "blocking": false
-    },
-    {
-      "action": "Decide the fate of the stale v1.19 block in .planning/STATE.md",
-      "context": "STATE.md still reads 'Next: milestone v1.19 close-out' and points at phases/116-edge-surface/.continue-here.md — leftovers from the v1.19→v1.20 transition. Flagged three times, left alone because rewriting it is a state mutation rather than repair.",
       "blocking": false
     },
     {
@@ -88,8 +74,8 @@
   ],
   "decisions": [
     {
-      "decision": "34 decisions recorded as D-01-01..D-01-34 in 01-CONTEXT.md",
-      "rationale": "Authoritative for this phase; four carry supersede markers and MUST be read in numeric order",
+      "decision": "37 decisions recorded as D-01-01..D-01-37 in 01-CONTEXT.md",
+      "rationale": "D-01-35 rejects invalid dependencies, D-01-36 records field bounds, and D-01-37 records the common stat-error policy. Honor earlier supersede markers.",
       "phase": "1"
     },
     {
@@ -119,11 +105,16 @@
     }
   ],
   "uncommitted_files": [
-    " M .planning/STATE.md",
+    " M .planning/config.json",
+    " M .claude/settings.json",
+    " M .codex/config.toml",
+    "?? .claude/CLAUDE.md",
+    "?? .codegraph/",
+    "?? .mcp.json",
     "?? .planning/milestone.lock",
-    "?? .planning/phases/01-manifest-read-fidelity/01-REVIEW.md",
-    "?? .planning/state.json"
+    "?? .planning/state.json",
+    "?? AGENTS.md"
   ],
-  "next_action": "Dispatch gsd-code-fixer for CR-01, CR-02, WR-02, WR-03 (length bound only), WR-04, WR-05 and WR-01 part 1. Hold WR-01 part 2 until the operator answers. Then verify_phase_goal, update_roadmap, then phase 2.",
-  "context_notes": "Phase 1 execution is COMPLETE and green — 4/4 plans, 29 commits since 8ffd155b, full 9-link npm run check passing at every plan boundary, three of four plans negative-controlled their new gates. The code review then found 2 criticals that the green suite could not catch, which is the whole story of this pause: CR-02 is a three-way reader disagreement that D-01-12's gate was structurally incapable of detecting, and CR-01 is a functional regression the phase introduces in a bridge a locked decision had fenced out on a premise that turned out to be wrong. Neither fix has been applied. Do not treat 'check is green' as evidence the phase is sound."
+  "next_action": "Run $gsd-execute-phase 1 to resume the missing verification gates. Then update the roadmap and requirements after verification passes.",
+  "context_notes": "All four plans have summaries. The review-fix report records the six resolved findings and the earlier WR-01 fix. Stale workstreams are archived without content loss or waived debt. The user approved whitespace-only formatting of .mcp.json. Keep GSD configuration and unrelated files uncommitted. Phase verification and real-plugin evidence remain open."
 }

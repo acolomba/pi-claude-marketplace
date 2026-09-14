@@ -5,17 +5,17 @@ milestone_name: transitive-dependencies
 current_phase: 1
 current_phase_name: Manifest read fidelity
 status: executing
-stopped_at: Phase 1 planned, ready to execute
-last_updated: "2026-09-13T16:08:59.883Z"
-last_activity: 2026-09-13
-last_activity_desc: Phase 1 execution started
+stopped_at: Review fixes implemented, awaiting phase verification
+last_updated: "2026-09-14"
+last_activity: 2026-09-14
+last_activity_desc: Review fixes implemented and stale workstreams archived
 state_head: c8899de2c214ec9790907149f6d27a569321c21b
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 4
-  completed_plans: 0
-  percent: 0
+  completed_plans: 4
+  percent: 100
 ---
 
 # Project State
@@ -35,11 +35,15 @@ same surfaces. 25 requirements across 5 phases. v1.19 Unit Test Refactor closed
 
 ## Current Position
 
-Phase: 1 (Manifest read fidelity) — EXECUTING
-Plan: 1 of 4
-Status: Executing Phase 1
+Phase: 1 (Manifest read fidelity) — AWAITING VERIFICATION
+Plan: 4 of 4 executed
+Status: Review fixes implemented, phase verification pending
 requirements coverage 7/7, decision coverage 33/33, gap analysis 40/40.
-Last activity: 2026-09-13 — Phase 1 execution started
+Last activity: 2026-09-14. The fix pass resolved the six remaining review findings.
+Quick task `260914-aer` resolved WR-01 under D-01-35. The operator approved the
+whitespace-only `.mcp.json` formatting. GSD configuration remains uncommitted.
+The 100% progress value counts existing plans, not milestone or phase completion.
+See `01-REVIEW-FIX.md` for test evidence and the remaining verification work.
 
 **Phase numbering restarts at 1 for this milestone** (operator decision,
 2026-09-09). Phases 1-117 belong to archived milestones. A bare phase number in
@@ -435,15 +439,19 @@ session that must settle it:
 
 ### Blockers/Concerns
 
-- `gsd-tools query phase.complete` cannot write the root planning files while
-  workstream mode is active, and neither existing workstream holds v1.19 —
-  `defaults-enabled` is a finished milestone at phase 105 and `milestone` is v1.18
-  at phase 100. Phase 114's ROADMAP and STATE transition was therefore applied by
-  hand. Phases 115 through 117 and milestone close will hit the same wall until the
-  stale workstream directories are retired or v1.19 is given its own workstream.
+- Resolved 2026-09-14: The supported workstream completion command archived
+  defaults-enabled, milestone and workflows-detection under `.planning/milestones/`.
+  All 32 tracked files retain their original bytes. GSD recognizes v1.20 in flat
+  mode. The archive operation did not waive historical verification debt.
+- Phase 1 still lacks its canonical verification report. ROADMAP criterion 3
+  still requires human judgment about real-plugin evidence versus fixture evidence.
 - RESOLVED by 117-12: D-117-20 in `117-CONTEXT.md` now reads 190 complete numeric records + 7 accepted D-116-01a shortfalls + 7 type-only, matching the operator decision taken in plan 117-11 and the retained all-pair artifact. The superseded 197 + 7 wording is gone.
 
 ### Quick Tasks Completed
+
+Latest implementation: `260914-aer` — upstream dependency rejection, 2026-09-14.
+The review-fix pass includes this implementation. The formatting blocker is resolved.
+See [task summary](./quick/260914-aer-match-upstream-rejection-of-invalid-depe/260914-aer-SUMMARY.md).
 
 | #          | Description                                                                                                 | Date       | Commit   | Directory                                                                                            |
 | ---------- | ----------------------------------------------------------------------------------------------------------- | ---------- | -------- | ---------------------------------------------------------------------------------------------------- |
@@ -494,19 +502,18 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Phase 1 planned, ready to execute
+**Stopped at:** Review fixes implemented, awaiting phase verification
 
-**Resume file:** .planning/phases/01-manifest-read-fidelity/01-CONTEXT.md
+**Resume file:** .planning/phases/01-manifest-read-fidelity/01-REVIEW-FIX.md
 
-**Read beside it:** `.planning/phases/116-edge-surface/.continue-here.md` — phase 116's handoff. Its
-BLOCKING CONSTRAINTS, tooling defects and commit recipe still describe this checkout; only its
-per-plan wave list and its phase-117 forward-look are spent.
+**Read beside it:** `.planning/phases/01-manifest-read-fidelity/.continue-here.md`
 
-Last session: 2026-09-12T13:45:09.254Z
+Last session: 2026-09-14
 
-**Next: milestone v1.19 close-out.** All ten phases (108-117) are complete and all 48 requirements
-are closed. `/gsd-complete-milestone` is the next step, and it will hit the workstream wall recorded
-under Blockers.
+**Next:** `$gsd-execute-phase 1` resumes at the verification gates.
+It does not rerun plans with summaries. Milestone v1.19 already closed.
+
+### Historical v1.19 completion record
 
 Plan counts here are MEASURED, not carried: 220 total and 220 complete, counted by `find` over
 `1??-??-{PLAN,SUMMARY}.md` after this plan's SUMMARY landed. Every phase 108-117 has a SUMMARY for
@@ -553,7 +560,12 @@ reading `Open` — across phases 110, 111, 112, 113, 114, **116** and the phase-
 entirely. All 154 are closed, and MOD-07 and MOD-10 are closed in both the checklist and the
 requirement-to-phase mapping.
 
-### Standing environment debts — all still true
+### Historical environment notes from v1.19
+
+The current instructions in `CLAUDE.md` supersede the old commit recipe that follows.
+The approved `.mcp.json` formatting removed the format blocker. All required hooks
+must pass. Only `trufflehog` uses the documented filesystem-scan substitute.
+The workstream archive removed the old routing blocker.
 
 - **`npm run check` NEVER runs the tests.** `format:check` fails on the operator's pre-existing
   untracked files and short-circuits before `test`. Run `npm run typecheck`, `npm run lint`,
@@ -576,8 +588,8 @@ requirement-to-phase mapping.
 
 ## Operator Next Steps
 
-- Review `.planning/ROADMAP.md` (5 phases, 25/25 requirements mapped).
-- Then `/gsd-discuss-phase 1` — Manifest read fidelity.
+- Run `$gsd-execute-phase 1` for the missing phase verification.
+- After verification passes, update the roadmap and requirement statuses.
 - Plan v1.20 phases with the UI gate skipped. No phase in this milestone is a
   frontend phase, but the keyword gate false-positives on "component", the flag
   "surface", and the `ui5` / `ui-theme-designer` plugin names.
