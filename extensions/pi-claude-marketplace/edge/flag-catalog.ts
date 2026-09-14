@@ -10,14 +10,16 @@
 //   - the install/update long-flag gates (the `extractLocalFlag` pass-through
 //     lists and the `parsePositionalsWithFlags` recognized set, via
 //     `passThroughFlagNames`);
+//   - the uninstall long-flag gate (the `extractLocalFlag` CONSUMING list, also
+//     via `passThroughFlagNames`);
 //   - the scope-target flag name consumed by `extractLocalFlag`
 //     (`SCOPE_TARGET_FLAG`).
 //
 // Guarded BY TEST (tests/architecture/flag-catalog-drift.test.ts): the
-// uninstall/reinstall/enable/disable/fetch/pending/import/bootstrap handlers
-// hard-reject unknown long flags inline rather than consuming the catalog, so
-// the drift guard pins every verb's parse-set to the exact flags its handler
-// accepts (and reconciles catalog vs emitted completions per verb).
+// reinstall/enable/disable/fetch/pending/import/bootstrap handlers hard-reject
+// unknown long flags inline rather than consuming the catalog, so the drift
+// guard pins every verb's parse-set to the exact flags its handler accepts (and
+// reconciles catalog vs emitted completions per verb).
 //
 // SCOPE: this catalog models ONLY the per-verb EXTRA flags. `--scope` is a
 // global base flag consumed by the parseArgs tokenizer and hard-coded as the
@@ -140,7 +142,17 @@ const CATALOG: Record<CatalogVerb, readonly FlagEntry[]> = {
       complete: true,
     },
   ],
-  uninstall: [WRITE_TARGET_FLAG_ENTRY],
+  uninstall: [
+    // DATA-01 / D-02-02: `--keep-data` opts out of the default data deletion;
+    // the plugin's artifacts and installation record are removed either way.
+    {
+      name: "--keep-data",
+      description: "Preserve the plugin's persistent data directory",
+      parse: true,
+      complete: true,
+    },
+    WRITE_TARGET_FLAG_ENTRY,
+  ],
   reinstall: [WRITE_TARGET_FLAG_ENTRY],
   fetch: [],
   enable: [WRITE_TARGET_FLAG_ENTRY],

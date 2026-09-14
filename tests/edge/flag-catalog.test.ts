@@ -103,12 +103,32 @@ test("completionFlagEntries offers the scope-target flag of a verb that declares
   ];
 
   // act
+  const completionEntries = completionFlagEntries("reinstall");
+  const parseNames = parseFlagNames("reinstall");
+
+  // assert
+  assert.deepStrictEqual(completionEntries, expectedEntries);
+  assert.deepStrictEqual(parseNames, new Set([SCOPE_TARGET_FLAG]));
+});
+
+test("completionFlagEntries offers the uninstall preservation flag ahead of the scope target", () => {
+  // arrange
+  const expectedEntries = [
+    { name: "--keep-data", description: "Preserve the plugin's persistent data directory" },
+    {
+      name: SCOPE_TARGET_FLAG,
+      description:
+        "Write to claude-plugins.local.json (per-machine override), not the shared claude-plugins.json",
+    },
+  ];
+
+  // act
   const completionEntries = completionFlagEntries("uninstall");
   const parseNames = parseFlagNames("uninstall");
 
   // assert
   assert.deepStrictEqual(completionEntries, expectedEntries);
-  assert.deepStrictEqual(parseNames, new Set([SCOPE_TARGET_FLAG]));
+  assert.deepStrictEqual(parseNames, new Set(["--keep-data", SCOPE_TARGET_FLAG]));
 });
 
 test("a verb that declares no flags yields an empty result from every derivation", () => {
@@ -144,12 +164,23 @@ test("passThroughFlagNames leaves nothing for a verb whose only parse-accepted f
   const expectedPassThroughNames: string[] = [];
 
   // act
-  const passThroughNames = passThroughFlagNames("uninstall");
-  const parseNames = parseFlagNames("uninstall");
+  const passThroughNames = passThroughFlagNames("reinstall");
+  const parseNames = parseFlagNames("reinstall");
 
   // assert
   assert.deepStrictEqual(passThroughNames, expectedPassThroughNames);
   assert.deepStrictEqual(parseNames, new Set([SCOPE_TARGET_FLAG]));
+});
+
+test("passThroughFlagNames drops the scope target and keeps the uninstall preservation flag", () => {
+  // arrange
+  const expectedPassThroughNames = ["--keep-data"];
+
+  // act
+  const passThroughNames = passThroughFlagNames("uninstall");
+
+  // assert
+  assert.deepStrictEqual(passThroughNames, expectedPassThroughNames);
 });
 
 test("passThroughFlagNames keeps the remaining parse-accepted flags in catalog declaration order", () => {

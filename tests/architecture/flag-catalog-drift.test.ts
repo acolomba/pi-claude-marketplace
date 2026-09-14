@@ -20,20 +20,22 @@
 //
 //   (c) Exact per-verb parse-set pin: verbs whose handlers hard-reject unknown
 //       long flags inline instead of consuming the catalog
-//       (uninstall/reinstall/enable/disable accept only `--local`;
+//       (reinstall/enable/disable accept only `--local`;
 //       fetch/pending/import/bootstrap accept no extra flags) are pinned to
-//       the exact sets their handlers accept. install/update DO consume the
-//       catalog for their long-flag gates, but the mapModel/partial field
-//       mapping in edge/handlers/plugin/shared.ts names the flags literally --
-//       the pin makes a catalog rename or addition fail here first. Each pin
-//       row is kept in canonical sorted order; only the catalog side is sorted,
-//       so reordering a literal row also fails the equality.
+//       the exact sets their handlers accept. install/update/uninstall DO
+//       consume the catalog for their long-flag gates, but each still names its
+//       flags literally where it maps them to an option field -- mapModel /
+//       partial in edge/handlers/plugin/shared.ts, keepData in
+//       edge/handlers/plugin/uninstall.ts -- so the pin makes a catalog rename
+//       or addition fail here first. Each pin row is kept in canonical sorted
+//       order; only the catalog side is sorted, so reordering a literal row
+//       also fails the equality.
 //
 // Closed-set tripwire: adding a flag to any verb requires updating
 // edge/flag-catalog.ts, the handler wiring, and the pin table in the SAME
 // change (mirrors the deliberate-bump discipline in
 // notify-closed-set-locks.test.ts). RSTA-07 / FTCH-03 / LIST-01 /
-// LIST-02 / AG-7 are the requirements this catalog serves.
+// LIST-02 / AG-7 / DATA-01 are the requirements this catalog serves.
 
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -114,7 +116,7 @@ const HANDLER_ACCEPTED_PARSE_SETS: Record<CatalogVerb, readonly string[]> = {
   update: ["--local", "--map-model", "--partial"],
   list: ["--available", "--installed", "--partial", "--remote", "--unavailable"],
   info: ["--fetch"],
-  uninstall: ["--local"],
+  uninstall: ["--keep-data", "--local"],
   reinstall: ["--local"],
   fetch: [],
   enable: ["--local"],
