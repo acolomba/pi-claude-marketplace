@@ -4,16 +4,16 @@ milestone: test-backlog
 current_phase: 05
 current_phase_name: Production Export Ownership
 status: executing
-last_updated: "2026-09-14T23:24:18Z"
+last_updated: "2026-09-15T00:05:00Z"
 last_activity: 2026-09-14
-last_activity_desc: Wave 7 plan 05-16 enable and uninstall composition complete
-state_head: 4d48f853
+last_activity_desc: Wave 7 plan 05-26 compact translator export ownership complete
+state_head: 94b46e37
 progress:
   total_phases: 8
   completed_phases: 4
   total_plans: 54
-  completed_plans: 31
-  percent: 57
+  completed_plans: 32
+  percent: 59
 milestone_name: test-backlog
 ---
 
@@ -31,9 +31,15 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 05 (Production Export Ownership) — EXECUTING
-Plan: 21 of 28 — 05-16 complete; Wave 7 is in progress
+Plan: 22 of 28 — 05-26 complete; Wave 7 source writing is done
 Status: Executing Phase 05 Wave 7, awaiting the Wave 7 census reconciliation
-Last activity: 2026-09-14 — 05-16 added `createEnableOperation` and
+Last activity: 2026-09-15 — 05-26 gave the PreCompact and PostCompact payload
+modules their event-specific export names, `translatePreCompact` and
+`translatePostCompact`, committed in `42477b85` and `94b46e37`. The `translate`
+duplicate-export group drops from four members to two; the census total stays 14
+with zero additions.
+
+Earlier activity: 2026-09-14 — 05-16 added `createEnableOperation` and
 `createUninstallOperation` to the plugin composition owner, switched both command
 handlers and reconcile onto them, and retired `createNodeSetPluginEnabled` and
 `createNodeUninstallPlugin` with no-caller evidence. Committed in `d3d7abba`,
@@ -142,7 +148,7 @@ hit the same wall; convert it rather than re-disclosing it.
 ## Session Continuity
 
 **Current work:** test-backlog on `features/test-backlog`. Phases 1–4 are complete;
-Phase 5 has completed twenty-one of twenty-eight plans. Phase 6 and Phase 7 plans are
+Phase 5 has completed twenty-two of twenty-eight plans. Phase 6 and Phase 7 plans are
 approved; their production acceptance follows Phase 5 completion. Earlier milestone continuity is preserved in
 `inputs/test-backlog/PRE-MILESTONE-STATE.md` and archived milestone artifacts.
 
@@ -247,6 +253,32 @@ and
 `unused_exports|extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts|createUninstallPlugin`,
 with the matching `UNOWNED_EXPORT_CENSUS` keys. Zero additions. Plan 05-26
 contributes its own delta.
+
+### Wave 7 progress — plan 05-26
+
+Plan 05-26 is complete, and with it Wave 7 source writing. The PreCompact and
+PostCompact payload modules publish `translatePreCompact` and
+`translatePostCompact` -- the names both dispatch modes already supplied at
+import -- so the identity lives in the module instead of being re-supplied at each
+call site. Both `dispatch-exec.ts` and `async-rewake/registry.ts` import the names
+directly; their event-keyed translator maps are untouched, so both modes still
+reach the same event translator. All ten entries in the per-event export-name table
+in `tests/architecture/hooks-translators.test.ts` now pin an event-specific name
+except `Stop` and `StopFailure`, which plan 05-27 owns.
+
+Evidence: 6260 unit tests, 6258 pass, 2 fail -- both the parent-owned census
+equality gates. Integration 32/32, exit 0. All four changed direct owners measure
+hit == found. Typecheck, lint, prettier, fallow and the direct-coverage pair gate
+pass. Two planted offenders discriminate the updated export table, one naming an
+export the module does not publish and one renaming a published export without
+updating the table; each reports 1 pass / 1 fail, because the gate's second test
+iterates the three tool events only.
+
+Open, parent-owned: the live census total stays 14. This plan changes membership,
+not count: the single `duplicate_exports` `translate` entry loses its `pre-compact`
+and `post-compact` locations and keeps `stop-failure` and `stop`. Zero additions;
+no other identity moved. The exact before/after identity strings are in
+`05-26-SUMMARY.md`.
 
 ### Wave 6 progress
 
