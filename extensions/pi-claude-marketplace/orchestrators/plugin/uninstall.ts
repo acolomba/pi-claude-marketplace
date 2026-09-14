@@ -495,12 +495,17 @@ async function runPostUninstallCleanup({
     // D-19-01: hygienic cleanup never becomes the primary user-facing path.
   }
 
-  // NFR-10: resolve OUTSIDE the try. `pluginDataDir` is not a path join -- it
-  // runs assertSafeName on both segments and assertPathInside on the result,
-  // and a containment failure must propagate rather than be mistaken for an
-  // rm leak. D-19-01 sanctions swallowing the cleanup, not the assertion
-  // guarding it.
+  // IN-04: the preserving branch resolves no name-derived path at all, so the
+  // NFR-10 note below is a property of the DELETING branch and lives inside it.
+  // Nothing is written on the preserving branch either, which is why skipping
+  // the assertion costs nothing: the marketplace segment is still asserted by
+  // `pluginCacheFile` above.
   if (!keepData) {
+    // NFR-10: resolve OUTSIDE the try. `pluginDataDir` is not a path join -- it
+    // runs assertSafeName on both segments and assertPathInside on the result,
+    // and a containment failure must propagate rather than be mistaken for an
+    // rm leak. D-19-01 sanctions swallowing the cleanup, not the assertion
+    // guarding it.
     const dataDir = await locations.pluginDataDir(marketplace, plugin);
 
     try {
