@@ -143,17 +143,35 @@ export interface ReinstallMaintenanceInput {
   readonly removeDataDir?: RemoveDataDirFn;
 }
 
-/** Owns reinstall's prepare, replacement, compensation, and commit schedule. */
+/**
+ * Owns reinstall's prepare, replacement, compensation, and commit schedule.
+ *
+ * Each schedule step is declared as an explicit signature rather than `typeof`
+ * its implementation: the implementations are module-private, and the explicit
+ * form makes `REAL_REINSTALL_TRANSACTION`'s annotation the place a signature
+ * drift surfaces as a compile error.
+ */
 export interface ReinstallTransaction {
-  readonly finalizeReinstalledPlugin: typeof finalizeReinstalledPlugin;
+  readonly finalizeReinstalledPlugin: (
+    replacement: ReinstallReplacement,
+  ) => Promise<readonly string[]>;
   /**
    * D-05-01: the transaction owns which physical bridges the replacement
    * schedule drives, so replacement and compensation reach the same owner.
    */
   readonly replaceOperations: ReinstallReplaceOperations;
-  readonly replaceReinstalledPlugin: typeof replaceReinstalledPlugin;
-  readonly rollbackReinstalledPlugin: typeof rollbackReinstalledPlugin;
-  readonly runPostSuccessMaintenance: typeof runPostSuccessMaintenance;
+  readonly replaceReinstalledPlugin: (
+    input: ReplaceReinstalledPluginInput,
+    operations: ReinstallReplaceOperations,
+  ) => Promise<ReinstallReplacement>;
+  readonly rollbackReinstalledPlugin: (
+    replacement: ReinstallReplacement,
+  ) => Promise<readonly string[]>;
+  readonly runPostSuccessMaintenance: (
+    input: ReinstallMaintenanceInput,
+    locations: ScopedLocations,
+    completionCache: CompletionCache,
+  ) => Promise<readonly string[]>;
   readonly withLockedStateTransaction: typeof withLockedStateTransaction;
 }
 
@@ -197,7 +215,7 @@ const defaultRemoveDataDir: RemoveDataDirFn = async (dataDir) => {
 };
 
 /** Prepare every bridge, then replace them as one compensatable operation. */
-export async function replaceReinstalledPlugin(
+async function replaceReinstalledPlugin(
   input: ReplaceReinstalledPluginInput,
   operations: ReinstallReplaceOperations,
 ): Promise<ReinstallReplacement> {
@@ -230,7 +248,7 @@ export async function replaceReinstalledPlugin(
 }
 
 /** Roll back every physically replaced bridge in reverse order. */
-export async function rollbackReinstalledPlugin(
+async function rollbackReinstalledPlugin(
   replacement: ReinstallReplacement,
 ): Promise<readonly string[]> {
   return rollbackReplacements(
@@ -241,7 +259,7 @@ export async function rollbackReinstalledPlugin(
 }
 
 /** Remove bridge backups after the state transaction commits. */
-export async function finalizeReinstalledPlugin(
+async function finalizeReinstalledPlugin(
   replacement: ReinstallReplacement,
 ): Promise<readonly string[]> {
   return finalizeReplacements(
@@ -252,7 +270,7 @@ export async function finalizeReinstalledPlugin(
 }
 
 /** Run non-fatal cache and data-directory cleanup after commit. */
-export async function runPostSuccessMaintenance(
+async function runPostSuccessMaintenance(
   input: ReinstallMaintenanceInput,
   locations: ScopedLocations,
   completionCache: CompletionCache,
