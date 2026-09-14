@@ -44,7 +44,7 @@ const TOOL_EVENTS: readonly ToolEvent[] = ["PreToolUse", "PostToolUse", "PostToo
  */
 const EVENT_TO_TRANSLATOR_EXPORT: Readonly<Record<DispatchableEvent, string>> = {
   SessionStart: "translateSessionStart",
-  UserPromptSubmit: "translate",
+  UserPromptSubmit: "translateUserPromptSubmit",
   PreToolUse: "translatePreToolUse",
   PostToolUse: "translatePostToolUse",
   PostToolUseFailure: "translatePostToolUseFailure",
