@@ -411,25 +411,38 @@ function normalizeBody(body: string): string {
 }
 
 /**
+ * #179: the tool grant of a generated agent -- exactly one shape renders.
+ *
+ * `tools` present is an explicit, non-empty allowlist: pi-subagents reads
+ * an empty `tools:` as "no tools", which has no safe representation, and
+ * the non-empty tuple encodes that invariant (AG-11 -- convertAgent throws
+ * before reaching here on an empty explicit list). `tools` absent means
+ * the source agent omitted `tools:` -- the generated frontmatter omits the
+ * allowlist so pi-subagents grants its default builtin tools -- and only
+ * then can `excludeTools` (the Pi mapping of source `disallowedTools:`,
+ * also non-empty when present) narrow that default set. The `?: never`
+ * arms are what enforce "never both": a value carrying both keys matches
+ * neither arm.
+ */
+export type GeneratedToolsFields =
+  | { readonly tools: readonly [string, ...string[]]; readonly excludeTools?: never }
+  | { readonly tools?: never; readonly excludeTools?: readonly [string, ...string[]] };
+
+/**
  * Structured frontmatter fields for a generated agent. Identifiers
  * (name, model, tools, thinking, skills) are drawn from validated enums or
  * assertSafeName-checked tokens; only `description` is free text and goes
- * through emitYamlScalar.
+ * through emitYamlScalar. The tools/excludeTools pair comes from
+ * GeneratedToolsFields, whose union shape carries their mutual exclusion.
  */
-export interface GeneratedFrontmatterFields {
+export type GeneratedFrontmatterFields = {
   readonly name: string;
   readonly description: string;
   readonly model?: string;
-  /**
-   * AG-11: a generated agent always has at least one tool -- pi-subagents has
-   * no safe representation of "no tools". The non-empty tuple encodes that
-   * invariant in the type (convertAgent throws before reaching here on empty).
-   */
-  readonly tools: readonly [string, ...string[]];
   readonly thinking?: string;
   readonly skills: readonly string[];
   readonly inheritSkills: boolean;
-}
+} & GeneratedToolsFields;
 
 /**
  * AGSK-04: one skill legend entry. `token` is the `<plugin>:<skill>`
@@ -476,7 +489,9 @@ export interface GeneratedProvenanceFields {
  *   <body>
  *
  * AG-8 / D-84-04 / T-d8i-01 deterministic field order: name, description,
- * model, tools, thinking, skills, skillPath (only when skills is
+ * model, tools (only when an explicit allowlist exists), excludeTools
+ * (only when tools is absent and disallowed names mapped, #179), thinking,
+ * skills, skillPath (only when skills is
  * non-empty), systemPromptMode, inheritProjectContext, inheritSkills,
  * then the `provenance` mapping (generatedBy, sourcePlugin, sourceAgent,
  * sourcePath, originalModel [only when defined], droppedFields,
@@ -509,7 +524,14 @@ export function emitGeneratedAgentFile(input: {
     lines.push(`model: ${frontmatter.model}`);
   }
 
-  lines.push(`tools: ${frontmatter.tools.join(",")}`);
+  if (frontmatter.tools !== undefined) {
+    lines.push(`tools: ${frontmatter.tools.join(",")}`);
+  }
+
+  if (frontmatter.excludeTools !== undefined) {
+    lines.push(`excludeTools: ${frontmatter.excludeTools.join(",")}`);
+  }
+
   if (frontmatter.thinking !== undefined) {
     lines.push(`thinking: ${frontmatter.thinking}`);
   }

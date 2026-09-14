@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- An agent that does not declare `tools:` now installs without a tool allowlist, so pi-subagents grants its default tools -- matching Claude Code, which grants every tool available to subagents when `tools:` is omitted. The old `read,bash,edit` default locked converted agents out of the rest of their toolset. `disallowedTools` on such an agent now emits `excludeTools` (pi-subagents 0.62.0 or newer; older versions ignore the field, and the conversion warns about the floor), a disallowed name with no Pi mapping warns instead of vanishing, and `Skill` counts as granted unless disallowed. Thanks to @kevinkirkup (#179).
+- Dropped agent fields `allowed-tools`, `mcpServers`, `permissionMode`, and `hooks` now each warn with an explanation instead of only a bare `dropped fields:` note. Claude Code ignores all four on plugin agents, so the drop matches upstream; the `mcpServers` warning names the pi-subagents agent-overrides settings key that grants the agent MCP tools.
 - Plugins that keep agents in more than one directory now install every agent. Install, update, and reinstall previously read a single directory, so the rest were silently dropped. When two directories declare the same agent name, the first one wins and the existing collision warning covers the rest.
 - A marketplace alias that resolves ambiguously now fails without writing anything. It used to mutate marketplace and plugin state on the way to the error, which left a half-applied record behind.
 - A path that escapes its allowed root through normalization or a symlink is now rejected before any read or write, not after.

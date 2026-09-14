@@ -4,6 +4,7 @@ import { describe, test } from "node:test";
 import {
   assertNoAgentCollisions,
   convertAgent,
+  GUIDED_DROPPED_FIELDS,
   MODEL_MAP,
   THINKING_VALUES,
   TOOL_MAP,
@@ -62,6 +63,43 @@ describe("THINKING_VALUES", () => {
   });
 });
 
+describe("GUIDED_DROPPED_FIELDS", () => {
+  test("exposes the complete guided set and every member warns when dropped", () => {
+    // arrange
+    const expectedGuidedFields = ["allowed-tools", "mcpServers", "permissionMode", "hooks"];
+
+    // act
+    const guidedFields = [...GUIDED_DROPPED_FIELDS];
+
+    // assert
+    assert.deepStrictEqual(guidedFields, expectedGuidedFields);
+    for (const field of expectedGuidedFields) {
+      const agent = convertAgent({
+        pluginName: "acme",
+        pluginRoot: "/root",
+        pluginDataDir: "/data",
+        knownSkills: [],
+        discovered: {
+          sourceName: "bot",
+          generatedName: "pi-claude-marketplace-acme-bot",
+          sourcePath: "/abs/path/source.md",
+          sourceHash: "abc123",
+          raw: { description: "d", tools: "Read", [field]: "x" },
+          body: "Body content.\n",
+        },
+        sourceHash: "abc",
+        mapModel: false,
+      });
+      assert.deepStrictEqual(agent.droppedFields, [field]);
+      assert.strictEqual(
+        agent.warnings.some((warning) => warning.includes(`\`${field}\``)),
+        true,
+        `expected a targeted warning naming ${field}`,
+      );
+    }
+  });
+});
+
 describe("convertAgent", () => {
   test("converts the complete mapped agent contract into independently pinned bytes", () => {
     // arrange
@@ -93,6 +131,7 @@ provenance:
   warnings:
     - skill reference "other-plugin:foreign" is qualified with a different plugin -- dropped (only this plugin's skills can be preloaded)
     - unknown skill reference "phantom" -- dropped
+    - agent-level \`hooks\` is not converted -- dropped (Claude Code ignores it for plugin agents too; plugin-level hooks/hooks.json still installs).
 ---
 
 ## Pi coding agent skill legend
@@ -111,6 +150,7 @@ Keep \${CLAUDE_SKILL_DIR} literal.
       warnings: [
         'skill reference "other-plugin:foreign" is qualified with a different plugin -- dropped (only this plugin\'s skills can be preloaded)',
         'unknown skill reference "phantom" -- dropped',
+        "agent-level `hooks` is not converted -- dropped (Claude Code ignores it for plugin agents too; plugin-level hooks/hooks.json still installs).",
       ],
       originalModel: "sonnet",
     };
@@ -356,15 +396,18 @@ Review files.
     });
   }
 
-  test("keeps warning order across fallback, model, tool, thinking, and skill degradation", () => {
+  test("keeps warning order across fallback, model, thinking, skill, and dropped-field degradation", () => {
     // arrange
     const expectedWarnings = [
       "source description was missing or empty -- using fallback",
       'unknown model "future-model" -- omitted from generated frontmatter',
-      "source agent omitted `tools:` -- defaulted to read,bash,edit. Add `tools: read,bash,edit` (or your intended subset) to the source agent to silence this warning.",
       'unknown effort value "turbo" -- omitted from generated frontmatter',
       'skill reference "other-plugin:foreign" is qualified with a different plugin -- dropped (only this plugin\'s skills can be preloaded)',
       'unknown skill reference "phantom" -- dropped',
+      "`allowed-tools` is a slash-command field, not an agent frontmatter field -- dropped (Claude Code ignores it on agents too). Declare `tools:` in the source agent instead.",
+      "agent-level `mcpServers` is not converted -- dropped (Claude Code ignores it for plugin agents too). " +
+        'To grant this agent MCP tools, set subagents.agentOverrides["pi-claude-marketplace-acme-reviewer"].tools ' +
+        "(e.g. read,bash,mcp:<server>) in Pi settings.",
     ];
 
     // act
@@ -382,6 +425,8 @@ Review files.
           model: "future-model",
           effort: "turbo",
           skills: "other-plugin:foreign,phantom",
+          "allowed-tools": "Read, Bash",
+          mcpServers: "echo",
         },
         body: "Review files.\n",
       },
@@ -391,7 +436,7 @@ Review files.
 
     // assert
     assert.deepStrictEqual(agent.warnings, expectedWarnings);
-    assert.deepStrictEqual(agent.droppedFields, []);
+    assert.deepStrictEqual(agent.droppedFields, ["allowed-tools", "mcpServers"]);
     assert.deepStrictEqual(agent.droppedTools, []);
   });
 
@@ -466,6 +511,60 @@ Review files.
     );
   });
 
+  test("rejects an explicit tools list fully removed by disallowedTools", () => {
+    // arrange
+    const convertDisallowEmptiedTools = () =>
+      convertAgent({
+        pluginName: "acme",
+        pluginRoot: "/plugins/acme",
+        pluginDataDir: "/data/acme",
+        knownSkills: [],
+        discovered: {
+          sourceName: "reviewer",
+          generatedName: "pi-claude-marketplace-acme-reviewer",
+          sourcePath: "/plugins/acme/agents/reviewer.md",
+          sourceHash: "discovery-hash",
+          raw: { description: "Reviews files", tools: "Edit", disallowedTools: "Edit" },
+          body: "Review files.\n",
+        },
+        sourceHash: "converted-hash",
+        mapModel: false,
+      });
+
+    // act & assert
+    assert.throws(
+      convertDisallowEmptiedTools,
+      new Error(
+        'Cannot convert agent "reviewer" in plugin "acme": the mapped tool list is empty (pi-subagents has no safe representation of "no tools"). Source tools: Edit; disallowedTools: Edit.',
+      ),
+    );
+  });
+
+  test("drops inheritSkills when a declared Skill is also disallowed", () => {
+    // arrange & act
+    const agent = convertAgent({
+      pluginName: "acme",
+      pluginRoot: "/plugins/acme",
+      pluginDataDir: "/data/acme",
+      knownSkills: [],
+      discovered: {
+        sourceName: "reviewer",
+        generatedName: "pi-claude-marketplace-acme-reviewer",
+        sourcePath: "/plugins/acme/agents/reviewer.md",
+        sourceHash: "discovery-hash",
+        raw: { description: "Reviews files", tools: "Read,Skill", disallowedTools: "Skill" },
+        body: "Review files.\n",
+      },
+      sourceHash: "converted-hash",
+      mapModel: false,
+    });
+
+    // assert
+    assert.match(agent.fileContent, /^tools: read$/m);
+    assert.match(agent.fileContent, /^inheritSkills: false$/m);
+    assert.deepStrictEqual(agent.warnings, []);
+  });
+
   test("rejects a Skill-only source with the inheritSkills explanation", () => {
     // arrange
     const convertSkillOnlyAgent = () =>
@@ -495,7 +594,7 @@ Review files.
     );
   });
 
-  test("labels a malformed changing tools accessor as default when the value disappears", () => {
+  test("labels a malformed changing tools accessor as omitted when the value disappears", () => {
     // arrange
     let toolsReadCount = 0;
     const raw = {
@@ -532,7 +631,7 @@ Review files.
     assert.throws(
       convertMalformedAgent,
       new Error(
-        'Cannot convert agent "reviewer" in plugin "acme": the mapped tool list is empty (pi-subagents has no safe representation of "no tools"). Source tools: (default read,bash,edit); disallowedTools: (none).',
+        'Cannot convert agent "reviewer" in plugin "acme": the mapped tool list is empty (pi-subagents has no safe representation of "no tools"). Source tools: (omitted); disallowedTools: (none).',
       ),
     );
   });
@@ -727,7 +826,8 @@ provenance:
     - color
     - hooks
   droppedTools: []
-  warnings: []
+  warnings:
+    - agent-level \`hooks\` is not converted -- dropped (Claude Code ignores it for plugin agents too; plugin-level hooks/hooks.json still installs).
 ---
 
 Body content.
@@ -755,15 +855,14 @@ Body content.
     assert.strictEqual(agent.fileContent, expectedFileContent);
   });
 
-  test("preserves omitted-tools defaults and their warning bytes", () => {
+  test("preserves omitted-tools bytes: no allowlist and inherited skills", () => {
     // arrange
     const expectedFileContent = `---
 name: pi-claude-marketplace-acme-bot
 description: d
-tools: read,bash,edit
 systemPromptMode: replace
 inheritProjectContext: true
-inheritSkills: false
+inheritSkills: true
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -771,8 +870,7 @@ provenance:
   sourcePath: /abs/path/source.md
   droppedFields: []
   droppedTools: []
-  warnings:
-    - source agent omitted \`tools:\` -- defaulted to read,bash,edit. Add \`tools: read,bash,edit\` (or your intended subset) to the source agent to silence this warning.
+  warnings: []
 ---
 
 Body content.
@@ -790,6 +888,231 @@ Body content.
         sourcePath: "/abs/path/source.md",
         sourceHash: "abc123",
         raw: { description: "d" },
+        body: "Body content.\n",
+      },
+      sourceHash: "abc",
+      mapModel: false,
+    });
+
+    // assert
+    assert.strictEqual(agent.fileContent, expectedFileContent);
+  });
+
+  test("preserves omitted-tools disallow bytes: excludeTools narrows the default set", () => {
+    // arrange
+    const expectedFileContent = `---
+name: pi-claude-marketplace-acme-bot
+description: d
+excludeTools: edit
+systemPromptMode: replace
+inheritProjectContext: true
+inheritSkills: false
+provenance:
+  generatedBy: pi-claude-marketplace
+  sourcePlugin: acme
+  sourceAgent: bot
+  sourcePath: /abs/path/source.md
+  droppedFields: []
+  droppedTools: []
+  warnings:
+    - disallowedTools entries with no Pi tool mapping (Unknown) cannot narrow the default tool set -- ignored
+    - \`excludeTools\` requires pi-subagents >= 0.62.0 -- earlier versions ignore it and keep the default tool set
+---
+
+Body content.
+`;
+
+    // act
+    const agent = convertAgent({
+      pluginName: "acme",
+      pluginRoot: "/root",
+      pluginDataDir: "/data",
+      knownSkills: [],
+      discovered: {
+        sourceName: "bot",
+        generatedName: "pi-claude-marketplace-acme-bot",
+        sourcePath: "/abs/path/source.md",
+        sourceHash: "abc123",
+        raw: { description: "d", disallowedTools: "Edit,Skill,Unknown" },
+        body: "Body content.\n",
+      },
+      sourceHash: "abc",
+      mapModel: false,
+    });
+
+    // assert
+    assert.strictEqual(agent.fileContent, expectedFileContent);
+  });
+
+  test("preserves omitted-tools disallowed-Skill bytes: no excludeTools and no warnings", () => {
+    // arrange
+    const expectedFileContent = `---
+name: pi-claude-marketplace-acme-bot
+description: d
+systemPromptMode: replace
+inheritProjectContext: true
+inheritSkills: false
+provenance:
+  generatedBy: pi-claude-marketplace
+  sourcePlugin: acme
+  sourceAgent: bot
+  sourcePath: /abs/path/source.md
+  droppedFields: []
+  droppedTools: []
+  warnings: []
+---
+
+Body content.
+`;
+
+    // act
+    const agent = convertAgent({
+      pluginName: "acme",
+      pluginRoot: "/root",
+      pluginDataDir: "/data",
+      knownSkills: [],
+      discovered: {
+        sourceName: "bot",
+        generatedName: "pi-claude-marketplace-acme-bot",
+        sourcePath: "/abs/path/source.md",
+        sourceHash: "abc123",
+        raw: { description: "d", disallowedTools: "Skill" },
+        body: "Body content.\n",
+      },
+      sourceHash: "abc",
+      mapModel: false,
+    });
+
+    // assert
+    assert.strictEqual(agent.fileContent, expectedFileContent);
+  });
+
+  test("preserves omitted-tools unmapped-disallow bytes: warns and keeps the default set", () => {
+    // arrange
+    const expectedFileContent = `---
+name: pi-claude-marketplace-acme-bot
+description: d
+systemPromptMode: replace
+inheritProjectContext: true
+inheritSkills: true
+provenance:
+  generatedBy: pi-claude-marketplace
+  sourcePlugin: acme
+  sourceAgent: bot
+  sourcePath: /abs/path/source.md
+  droppedFields: []
+  droppedTools: []
+  warnings:
+    - disallowedTools entries with no Pi tool mapping (WebFetch) cannot narrow the default tool set -- ignored
+---
+
+Body content.
+`;
+
+    // act
+    const agent = convertAgent({
+      pluginName: "acme",
+      pluginRoot: "/root",
+      pluginDataDir: "/data",
+      knownSkills: [],
+      discovered: {
+        sourceName: "bot",
+        generatedName: "pi-claude-marketplace-acme-bot",
+        sourcePath: "/abs/path/source.md",
+        sourceHash: "abc123",
+        raw: { description: "d", disallowedTools: "WebFetch" },
+        body: "Body content.\n",
+      },
+      sourceHash: "abc",
+      mapModel: false,
+    });
+
+    // assert
+    assert.strictEqual(agent.fileContent, expectedFileContent);
+  });
+
+  test("preserves omitted-tools dedupe bytes: repeated disallow names collapse in excludeTools", () => {
+    // arrange
+    const expectedFileContent = `---
+name: pi-claude-marketplace-acme-bot
+description: d
+excludeTools: edit,write
+systemPromptMode: replace
+inheritProjectContext: true
+inheritSkills: true
+provenance:
+  generatedBy: pi-claude-marketplace
+  sourcePlugin: acme
+  sourceAgent: bot
+  sourcePath: /abs/path/source.md
+  droppedFields: []
+  droppedTools: []
+  warnings:
+    - \`excludeTools\` requires pi-subagents >= 0.62.0 -- earlier versions ignore it and keep the default tool set
+---
+
+Body content.
+`;
+
+    // act
+    const agent = convertAgent({
+      pluginName: "acme",
+      pluginRoot: "/root",
+      pluginDataDir: "/data",
+      knownSkills: [],
+      discovered: {
+        sourceName: "bot",
+        generatedName: "pi-claude-marketplace-acme-bot",
+        sourcePath: "/abs/path/source.md",
+        sourceHash: "abc123",
+        raw: { description: "d", disallowedTools: "Edit,Edit,Write" },
+        body: "Body content.\n",
+      },
+      sourceHash: "abc",
+      mapModel: false,
+    });
+
+    // assert
+    assert.strictEqual(agent.fileContent, expectedFileContent);
+  });
+
+  test("preserves dropped allowed-tools and mcpServers guidance bytes (#179)", () => {
+    // arrange
+    const expectedFileContent = `---
+name: pi-claude-marketplace-acme-bot
+description: d
+systemPromptMode: replace
+inheritProjectContext: true
+inheritSkills: true
+provenance:
+  generatedBy: pi-claude-marketplace
+  sourcePlugin: acme
+  sourceAgent: bot
+  sourcePath: /abs/path/source.md
+  droppedFields:
+    - allowed-tools
+    - mcpServers
+  droppedTools: []
+  warnings:
+    - \`allowed-tools\` is a slash-command field, not an agent frontmatter field -- dropped (Claude Code ignores it on agents too). Declare \`tools:\` in the source agent instead.
+    - agent-level \`mcpServers\` is not converted -- dropped (Claude Code ignores it for plugin agents too). To grant this agent MCP tools, set subagents.agentOverrides["pi-claude-marketplace-acme-bot"].tools (e.g. read,bash,mcp:<server>) in Pi settings.
+---
+
+Body content.
+`;
+
+    // act
+    const agent = convertAgent({
+      pluginName: "acme",
+      pluginRoot: "/root",
+      pluginDataDir: "/data",
+      knownSkills: [],
+      discovered: {
+        sourceName: "bot",
+        generatedName: "pi-claude-marketplace-acme-bot",
+        sourcePath: "/abs/path/source.md",
+        sourceHash: "abc123",
+        raw: { description: "d", "allowed-tools": "Read, Bash", mcpServers: "echo" },
         body: "Body content.\n",
       },
       sourceHash: "abc",
