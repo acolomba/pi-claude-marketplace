@@ -2802,7 +2802,16 @@ Code seams: `eslint.config.js` (the Sonar way block, currently scoped to
 rules), `.planning/codebase/CONVENTIONS.md` (the "Sonar way on `extensions/`
 only" bullet, which states the scope this item would change).
 
-## NEGCTL-01: the direct-coverage negative control cannot capture its child's stderr on Node 26
+## NEGCTL-01: the direct-coverage negative control cannot capture its child's stderr on Node 26 — CLOSED
+
+Closed 2026-09-14 in test-backlog Phase 1. The failure was isolated to the
+sandbox/process-pipe observation path on Node v26.8.2; file-backed separate
+stdout/stderr capture preserves the exact CLI diagnostic. Launch errors,
+signals, wrong status, and missing diagnostics have discriminating controls.
+The full negative suite passes inside and outside the sandbox; independent
+GSD review found no issues and verification passed 5/5. See
+[verification](phases/01-reliable-negative-controls/01-VERIFICATION.md).
+The original report below is preserved as history.
 
 Carried out of the `refine-unit-tests` milestone close (2026-09-13) as an open
 audit item. Recorded during Plan 06-39 repository verification.

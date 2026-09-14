@@ -1,19 +1,16 @@
 ---
 gsd_state_version: "1.0"
-milestone: refine-unit-tests
-milestone_name: Refine Unit Tests
-status: Awaiting next milestone
-stopped_at: "Milestone closed and archived. PR #181 has since merged to main; quick tasks 260913-csn (PR #180 evaluation and suite repair, branch pr-180) and 260913-skt (SKTK-01 skill-token rewrite, branch features/skill-token-rewrite) followed, then 260913-f6a and 260913-l07 hardened the CI workflows."
-last_updated: "2026-09-14T02:47:00.000Z"
+milestone: test-backlog
+milestone_name: test-backlog
+status: executing
+last_updated: "2026-09-14T14:20:52.953Z"
 last_activity: 2026-09-14
-last_activity_desc: Quick task 260913-uwq landed the issue-179 agent tools conversion fix
-state_head: 6551dfbf387d166f655004ec9e0421686b86cb1d
 progress:
-  total_phases: 9
-  completed_phases: 9
-  total_plans: 213
-  completed_plans: 213
-  percent: 100
+  total_phases: 8
+  completed_phases: 1
+  total_plans: 4
+  completed_plans: 3
+  percent: 12
 ---
 
 # Project State
@@ -25,29 +22,14 @@ See: `.planning/PROJECT.md` (updated 2026-09-13 after the refine-unit-tests mile
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** None. No milestone is active — define the next one with
-`/gsd-new-milestone`.
+**Current focus:** test-backlog Phase 2 review; Phase 3 agent naming and Phase 4 argument planning.
 
 ## Current Position
 
-Milestone `refine-unit-tests` closed 2026-09-13: 9 of 9 phases, 213 of 213 plans,
-412 tasks. Every phase reads `verification_status: passed`. The milestone audit
-passed with no blockers — requirements 30/30, phases 9/9, integration 6/6.
-
-The milestone's full narrative now lives in its archive rather than here. This file
-was reset at close so the next milestone starts from a readable state:
-
-- **Entry:** [`.planning/MILESTONES.md`](MILESTONES.md) — the curated summary,
-  driver, accomplishments, closeout type, and accepted gaps.
-- **Detail:** `.planning/milestones/refine-unit-tests-{ROADMAP,REQUIREMENTS,MILESTONE-AUDIT}.md`,
-  with phase directories under `refine-unit-tests-phases/` and quick tasks under
-  `refine-unit-tests-quick/`. That bucket holds the 15 tasks done inside this
-  milestone's window. The 29 older ones the close had swept in with them were
-  filed under `v1.19-quick-tasks/` instead, by date against v1.19's ship date.
-  260909-h38 was filed after the close: its only commit lived on
-  `features/random-refinements`, so the close, which ran on main, never saw it.
-- **Carried forward:** [`.planning/ROADMAP.md`](ROADMAP.md) — what the next
-  milestone inherits, with evidence for each item.
+Phase: 2 of 8 — Sonar Rules for Tests
+Plan: 02-01 — implemented, awaiting review
+Status: Executing
+Last activity: 2026-09-14 — Phase 1 verified; exact unit baseline restored
 
 ### Closeout type: `override_closeout`
 
@@ -155,3 +137,26 @@ recur: `milestone complete` leaves the original-path deletions **unstaged**
 
 - Squash-merge PR #183 (all checks green; the repository allows squash merges only)
 - Start the next milestone with `/gsd-new-milestone`
+
+## Active Session — test-backlog
+
+- Authorized: all ten handoff items; Phase numbering restarts at 1.
+- Preserve local quick task 260914-dz1 and configuration/setup edits.
+- Marketplace decision: add/document --local on info/list/update; keep merged reads and use local only for config writes.
+- Agent collision decision: preserve full source names like Claude; keep both agents and migrate owned generated names on reinstall/update.
+- Phase 1: complete, independently reviewed and verified 5/5.
+- Next: finish Phase 2 review and execute the approved Phase 3 naming contract.
+- Older continuity and operator-next-step text above is inherited history.
+
+### Live baseline correction
+
+Initial measurement: 6003/6003 tests passed, with four production lines and one
+branch uncovered in agents/convert.ts. Phase 3 Plan 1 removed a redundant
+unreachable throw by carrying the existing runtime validation in the type.
+Current measurement: 6016/6016 tests pass; production lines 63343/63343,
+functions 1851/1851, branches 9111/9111. The obsolete converter direct pin was
+removed after its owner reached 100%; the two unrelated direct pins remain.
+
+GSD phase.complete still refuses this root milestone because archived
+workstream directories exist. Phase 1 tracking was updated in the authorized
+root files and checked by diff; archived workstreams were preserved.

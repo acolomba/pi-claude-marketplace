@@ -1,58 +1,53 @@
 {
   "contract": "1.0.0",
   "flavor": "core",
-  "milestone": "refine-unit-tests — Refine Unit Tests",
+  "milestone": "test-backlog",
   "phases": [
     {
       "number": "1",
-      "name": "Live Evidence Revalidation",
+      "name": "Reliable Negative Controls",
       "status": "complete"
     },
     {
       "number": "2",
-      "name": "Containment and Input Safety",
-      "status": "complete"
+      "name": "Sonar Rules for Tests",
+      "status": "in_progress"
     },
     {
       "number": "3",
-      "name": "Production Defect Corrections",
-      "status": "complete"
+      "name": "Reachable Agent Collision Contract",
+      "status": "in_progress"
     },
     {
       "number": "4",
-      "name": "Hermetic Test Infrastructure",
-      "status": "complete"
+      "name": "Strict Command Arguments",
+      "status": "pending"
     },
     {
       "number": "5",
-      "name": "Injection and Ownership Design",
-      "status": "complete"
+      "name": "Production Export Ownership",
+      "status": "pending"
     },
     {
       "number": "6",
-      "name": "Assertion and Module Refinement",
-      "status": "complete"
+      "name": "Unused Type Member Gate",
+      "status": "pending"
     },
     {
       "number": "7",
-      "name": "Gate Integrity",
-      "status": "complete"
+      "name": "Reliable Coverage Metrics",
+      "status": "pending"
     },
     {
       "number": "8",
-      "name": "Direct Coverage",
-      "status": "complete"
-    },
-    {
-      "number": "9",
-      "name": "Final Quality and Backlog Closure",
-      "status": "complete"
+      "name": "Final Verification and Reconciliation",
+      "status": "pending"
     }
   ],
   "next": {
-    "command": "/gsd:progress",
-    "label": "Show progress",
-    "reason": "Unsure of state — showing progress"
+    "command": "/gsd:progress --next",
+    "label": "Advance to the next step",
+    "reason": "Phase 2 of 8 · 12% · executing"
   },
-  "updated_at": "2026-09-13T12:02:02.148Z"
+  "updated_at": "2026-09-14T14:43:39.913Z"
 }

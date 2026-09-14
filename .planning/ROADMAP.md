@@ -11,7 +11,7 @@ roadmap is preserved in [PRE-MILESTONE-ROADMAP.md](inputs/test-backlog/PRE-MILES
 
 ## Phases
 
-- [ ] **Phase 1: Reliable Negative Controls** — NEGCTL-01, E2EIMP-01, TESTQ-01, FLOW-07, COV-01
+- [x] **Phase 1: Reliable Negative Controls** — NEGCTL-01, E2EIMP-01, TESTQ-01, FLOW-07, COV-01
 - [ ] **Phase 2: Sonar Rules for Tests** — SWTEST-01
 - [ ] **Phase 3: Reachable Agent Collision Contract** — AGCOL-01
 - [ ] **Phase 4: Strict Command Arguments** — ARGS-01
@@ -31,7 +31,7 @@ roadmap is preserved in [PRE-MILESTONE-ROADMAP.md](inputs/test-backlog/PRE-MILES
 1. The CLI negative control observes the intended failure and rejects launch errors or missing diagnostics.
 2. The Node 26 cause is reproduced, fixed, and similar uses are checked.
 3. Stale import and completed backlog records are reconciled from current tests and archived evidence.
-**Plans:** To be planned after discussion and live investigation.
+**Plans:** 01-01 negative controls; 01-02 completed-item reconciliation. Both complete; verification passed 2026-09-14.
 
 ### Phase 2: Sonar Rules for Tests
 
@@ -108,9 +108,9 @@ roadmap is preserved in [PRE-MILESTONE-ROADMAP.md](inputs/test-backlog/PRE-MILES
 
 | Phase | Plans Complete | Status | Completed |
 | --- | --- | --- | --- |
-| 1. Reliable Negative Controls | 0/TBD | Not started | - |
-| 2. Sonar Rules for Tests | 0/TBD | Not started | - |
-| 3. Reachable Agent Collision Contract | 0/TBD | Not started | - |
+| 1. Reliable Negative Controls | 2/2 | Complete | 2026-09-14 |
+| 2. Sonar Rules for Tests | 0/1 | In progress | - |
+| 3. Reachable Agent Collision Contract | 1/TBD | In progress | - |
 | 4. Strict Command Arguments | 0/TBD | Not started | - |
 | 5. Production Export Ownership | 0/TBD | Not started | - |
 | 6. Unused Type Member Gate | 0/TBD | Not started | - |
