@@ -49,9 +49,13 @@ export const NETWORK_FREE_TARGETS = [
   // The ledger reads the cached manifest with no
   // network sync of its own; the only network touch is the cache-miss clone
   // inside the seam. Keep both targets so splitting composition from the
-  // ledger cannot weaken the original gate.
+  // ledger cannot weaken the original gate. operations.ts is the third install
+  // owner: it binds the concrete runPhases and withLockedStateTransaction
+  // wrappers around the semantic factory, so it is exactly where a direct git
+  // import would land once composition moved out of the flow.
   "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts",
   "extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts",
+  "extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts",
   // PL-3 + NFR-5: list is read-only against state + manifest; no network.
   // Every list owner is gated, not just the flow: candidate-row owns the
   // cold/warm `(remote)` vs `(available)` classification and installed-row
@@ -569,24 +573,10 @@ export const UNOWNED_EXPORT_CENSUS: Readonly<Record<string, readonly string[]>> 
   ],
   "extensions/pi-claude-marketplace/orchestrators/plugin/fetch.ts": ["createFetchPlugins"],
   "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts": ["createGetPluginInfo"],
-  "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts": ["createInstallPlugin"],
-  "extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts": [
-    "narrowResolverReasons",
-  ],
   "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts": [
     "createReinstallPlugin",
   ],
-  "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-replace.ts": [
-    "finalizeReinstalledPlugin",
-    "replaceReinstalledPlugin",
-    "rollbackReinstalledPlugin",
-    "runPostSuccessMaintenance",
-  ],
-  "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts": [
-    "outcomeToPluginMessage",
-  ],
   "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts": ["createUninstallPlugin"],
-  "extensions/pi-claude-marketplace/orchestrators/plugin-path.ts": ["collectBinDirs"],
   "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts": ["createApplyReconcile"],
   "extensions/pi-claude-marketplace/orchestrators/reconcile/backfill.ts": [
     "scanForceInstalledBackfills",
@@ -599,17 +589,6 @@ export const UNOWNED_EXPORT_CENSUS: Readonly<Record<string, readonly string[]>> 
     "buildAuthCallbacks",
     "listBranches",
     "listRemotes",
-  ],
-  "extensions/pi-claude-marketplace/shared/notification-dispatch.ts": ["emitWithSummary"],
-  "extensions/pi-claude-marketplace/shared/notification-grammar.ts": [
-    "ICON_PARTIALLY_AVAILABLE",
-    "ICON_REMOTE",
-  ],
-  "extensions/pi-claude-marketplace/shared/notification-types.ts": [
-    "MARKETPLACE_STATUSES",
-    "PLUGIN_STATUSES",
-    "REASONS",
-    "STATUS_TOKENS",
   ],
 };
 
@@ -640,44 +619,12 @@ export const PRODUCTION_FINDING_CENSUS = {
       export_name: "createGetPluginInfo",
     },
     {
-      path: "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts",
-      export_name: "createInstallPlugin",
-    },
-    {
-      path: "extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts",
-      export_name: "narrowResolverReasons",
-    },
-    {
       path: "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts",
       export_name: "createReinstallPlugin",
     },
     {
-      path: "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-replace.ts",
-      export_name: "replaceReinstalledPlugin",
-    },
-    {
-      path: "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-replace.ts",
-      export_name: "rollbackReinstalledPlugin",
-    },
-    {
-      path: "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-replace.ts",
-      export_name: "finalizeReinstalledPlugin",
-    },
-    {
-      path: "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-replace.ts",
-      export_name: "runPostSuccessMaintenance",
-    },
-    {
-      path: "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts",
-      export_name: "outcomeToPluginMessage",
-    },
-    {
       path: "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts",
       export_name: "createUninstallPlugin",
-    },
-    {
-      path: "extensions/pi-claude-marketplace/orchestrators/plugin-path.ts",
-      export_name: "collectBinDirs",
     },
     {
       path: "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts",
@@ -707,41 +654,8 @@ export const PRODUCTION_FINDING_CENSUS = {
       path: "extensions/pi-claude-marketplace/platform/git.ts",
       export_name: "buildAuthCallbacks",
     },
-    {
-      path: "extensions/pi-claude-marketplace/shared/notification-dispatch.ts",
-      export_name: "emitWithSummary",
-    },
-    {
-      path: "extensions/pi-claude-marketplace/shared/notification-grammar.ts",
-      export_name: "ICON_REMOTE",
-    },
-    {
-      path: "extensions/pi-claude-marketplace/shared/notification-grammar.ts",
-      export_name: "ICON_PARTIALLY_AVAILABLE",
-    },
-    {
-      path: "extensions/pi-claude-marketplace/shared/notification-types.ts",
-      export_name: "REASONS",
-    },
-    {
-      path: "extensions/pi-claude-marketplace/shared/notification-types.ts",
-      export_name: "STATUS_TOKENS",
-    },
-    {
-      path: "extensions/pi-claude-marketplace/shared/notification-types.ts",
-      export_name: "PLUGIN_STATUSES",
-    },
-    {
-      path: "extensions/pi-claude-marketplace/shared/notification-types.ts",
-      export_name: "MARKETPLACE_STATUSES",
-    },
   ],
-  unused_types: [
-    {
-      path: "extensions/pi-claude-marketplace/shared/notify-reasons.ts",
-      export_name: "_ReasonsCoverageProof",
-    },
-  ],
+  unused_types: [],
   unused_files: [
     {
       path: "scripts/check-phase-06-hub-ledger.mjs",
@@ -766,19 +680,10 @@ export const PRODUCTION_FINDING_CENSUS = {
           path: "extensions/pi-claude-marketplace/bridges/hooks/payloads/pre-compact.ts",
         },
         {
-          path: "extensions/pi-claude-marketplace/bridges/hooks/payloads/session-end.ts",
-        },
-        {
-          path: "extensions/pi-claude-marketplace/bridges/hooks/payloads/session-start.ts",
-        },
-        {
           path: "extensions/pi-claude-marketplace/bridges/hooks/payloads/stop-failure.ts",
         },
         {
           path: "extensions/pi-claude-marketplace/bridges/hooks/payloads/stop.ts",
-        },
-        {
-          path: "extensions/pi-claude-marketplace/bridges/hooks/payloads/user-prompt-submit.ts",
         },
       ],
     },
