@@ -1,0 +1,262 @@
+// A `state.json` served over a POSIX FIFO by a second process, shared by the
+// reinstall and uninstall concurrent-removal proofs.
+//
+// Both proofs need the SAME thing: an orchestrator that reads state.json twice
+// -- once unlocked while it resolves the scope, once under the state lock --
+// must observe a marketplace that ANOTHER process removed between those two
+// reads. The removal has to land after the first read and before the second,
+// and a test that merely races the orchestrator (watch the extension root for
+// `write-file-atomic`'s temp file, then swap state.json and hope) asserts a
+// winner it never actually synchronised. That shape passed locally and lost
+// the race on loaded CI runners.
+//
+// A FIFO turns the ordering into an OS-enforced happens-before. `readFile`
+// on a FIFO blocks in `open(O_RDONLY)` until a writer opens, and returns only
+// at EOF -- when the last writer closes.
+//
+// EOF is a property of the pipe INODE, not of one open: the kernel keeps
+// exactly one pipe object per FIFO, so a second write-open of the same inode
+// revives the writer count and cancels the EOF the previous reader was about
+// to see, delivering it two payloads in one read. The server therefore
+// retires each inode from the namespace -- rename a fresh FIFO over the path
+// -- while it still holds that inode open for write. The paired reader keeps
+// its fd and still gets its payload; nothing can reopen the retired inode, so
+// its EOF is guaranteed and payload k reaches read k, whatever the scheduler
+// does. Nothing here polls, sleeps, or retries.
+//
+// An orchestrator that reads MORE times than there are payloads does not
+// hang: the last handoff installs a regular file holding OVER_READ_SENTINEL
+// at the state path, so every later read returns that text at once and the
+// production reader turns it into a parse failure naming OVER-READ.
+//
+// Two invariants the callers assert against, both of which turn a silent
+// mis-serve into a loud failure:
+//   - the server exits 0 only after serving EVERY payload, so `served:N`
+//     message count is the orchestrator's exact read count;
+//   - the state path holds OVER_READ_SENTINEL afterwards, so any write by
+//     the orchestrator (which renames its own file over that path) is caught
+//     by comparing content.
+
+import { execFileSync, spawn } from "node:child_process";
+import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+
+import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+
+import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+
+/** Watchdog for a reader that never arrives; keeps a regression loud, not hung. */
+const DEFAULT_TIMEOUT_MS = 30_000;
+
+/**
+ * What a read past the last payload gets. Not JSON on purpose, and it leads
+ * with its own name because V8 quotes only the first ten characters of the
+ * input back in its parse error -- and those ten are exactly `OVER-READ:`.
+ * `loadState` throws on a parse failure instead of absorbing it, so the
+ * production reader a real regression hits fails with the name in its message.
+ */
+export const OVER_READ_SENTINEL =
+  "OVER-READ: the FIFO state harness had no payload left for this read\n";
+
+/**
+ * Serve each payload to one reader, in order, then exit 0.
+ * `open(fifoPath, O_WRONLY)` blocks until a reader opens whichever FIFO inode
+ * currently sits at the state path, which is exactly the barrier the callers
+ * need -- the loop cannot run ahead of the orchestrator, and the orchestrator
+ * cannot run ahead of the loop. The `rename` inside that window retires the
+ * paired inode so the next iteration's write-open cannot reach it.
+ *
+ * The `served:N` acknowledgement is awaited before the next open so the
+ * parent's message log stays a faithful record of the read sequence even when
+ * two reads land back to back.
+ */
+const SERVER_SOURCE = `
+  import { execFileSync } from "node:child_process";
+  import { constants } from "node:fs";
+  import { open, rename, writeFile } from "node:fs/promises";
+  import path from "node:path";
+
+  const { O_WRONLY } = constants;
+  const fifoPath = process.env.PI_CM_FIFO_PATH;
+  const payloads = JSON.parse(process.env.PI_CM_FIFO_PAYLOADS);
+  let served = 0;
+
+  const watchdog = setTimeout(() => {
+    process.stderr.write(
+      \`state fifo server timed out having served \${served} of \${payloads.length} payloads\\n\`,
+    );
+    process.exit(2);
+  }, Number(process.env.PI_CM_FIFO_TIMEOUT_MS));
+
+  const announce = (message) =>
+    new Promise((resolve) => {
+      process.send?.(message, () => {
+        resolve();
+      });
+    });
+
+  // One spare per payload, pre-created as a hidden sibling of the state path
+  // so each handoff below is a single atomic rename and no fork happens while
+  // a reader is parked. rename needs the same filesystem; a sibling is one.
+  // Every spare is consumed on a clean run, so nothing is left behind.
+  //
+  // The LAST spare is a regular file holding the over-read sentinel, not a
+  // FIFO. The final rename installs it at the state path at the same instant
+  // it retires the last paired inode, so from that moment an extra read gets
+  // the sentinel immediately rather than parking on a FIFO that no writer
+  // will ever open.
+  const spares = payloads.map((_, index) =>
+    path.join(path.dirname(fifoPath), \`.state-fifo-spare-\${index}\`),
+  );
+
+  for (const [index, spare] of spares.entries()) {
+    if (index === spares.length - 1) {
+      await writeFile(spare, process.env.PI_CM_FIFO_SENTINEL);
+    } else {
+      execFileSync("mkfifo", [spare]);
+    }
+  }
+
+  await announce("ready");
+
+  for (const payload of payloads) {
+    // Bare O_WRONLY, never "w": "w" carries O_CREAT, which would silently put
+    // a regular file at a missing path and dissolve the barrier, where a bare
+    // O_WRONLY makes that case a loud ENOENT.
+    const handle = await open(fifoPath, O_WRONLY);
+
+    // Retire the paired inode from the namespace while still holding it open
+    // for write, and before the payload write. The reader on the other end
+    // keeps its fd and still gets this payload, but no later open of fifoPath
+    // can reach that inode, so its EOF cannot be cancelled. Renaming after the
+    // write or after the close reopens the window at the other end: the next
+    // reader attaches to the retired inode and both sides park forever.
+    await rename(spares[served], fifoPath);
+
+    await handle.writeFile(payload);
+    await handle.close();
+    served += 1;
+    await announce(\`served:\${served}\`);
+  }
+
+  clearTimeout(watchdog);
+  process.disconnect?.();
+`;
+
+export interface FifoStateServerExit {
+  readonly code: number | null;
+  readonly signal: NodeJS.Signals | null;
+}
+
+export interface FifoStateServer {
+  /** Resolves once the server is armed; rejects if it dies before that. */
+  readonly ready: Promise<void>;
+  /** Resolves with the server's exit status. `{ code: 0 }` means every payload was served. */
+  readonly complete: Promise<FifoStateServerExit>;
+  /** `["ready", "served:1", ...]` -- one `served:N` per read the orchestrator performed. */
+  readonly messages: readonly unknown[];
+  /** Everything the server wrote to stderr; empty on a clean run. */
+  stderr(): string;
+  /** Best-effort teardown for a test that failed before the server finished. */
+  kill(): void;
+}
+
+/**
+ * `node:test` `skip` value: FIFOs are a POSIX construct and `mkfifo` has no
+ * Windows equivalent. CI runs on Linux, so this only guards a local Windows
+ * checkout.
+ */
+export const FIFO_SKIP: string | false =
+  process.platform === "win32" ? "requires a POSIX FIFO" : false;
+
+/** Replace the state.json path with a FIFO. The parent directory must exist. */
+export function createStateFifo(statePath: string): void {
+  execFileSync("mkfifo", [statePath]);
+}
+
+/**
+ * The exact bytes `saveState` would write for `state`.
+ *
+ * Routing through the production writer is what keeps a payload BOTH
+ * schema-valid and migration-stable: `loadState` persists a normalized copy
+ * whenever it had to fill a legacy field, and that write would `rename` a
+ * regular file over the FIFO and break every read after it.
+ */
+export async function serializedStateBytes(state: ExtensionState): Promise<string> {
+  const staging = await mkdtemp(path.join(tmpdir(), "state-fifo-payload-"));
+  try {
+    const extensionRoot = path.join(staging, "pi-claude-marketplace");
+    await mkdir(extensionRoot, { recursive: true });
+    await saveState(extensionRoot, state);
+    return await readFile(path.join(extensionRoot, "state.json"), "utf8");
+  } finally {
+    await rm(staging, { recursive: true, force: true });
+  }
+}
+
+/** Spawn the FIFO server. Await `ready` before invoking the orchestrator. */
+export function startFifoStateServer(opts: {
+  readonly statePath: string;
+  readonly payloads: readonly string[];
+  readonly timeoutMs?: number;
+}): FifoStateServer {
+  const server = spawn(process.execPath, ["--input-type=module", "--eval", SERVER_SOURCE], {
+    env: {
+      ...process.env,
+      PI_CM_FIFO_PATH: opts.statePath,
+      PI_CM_FIFO_PAYLOADS: JSON.stringify(opts.payloads),
+      PI_CM_FIFO_TIMEOUT_MS: String(opts.timeoutMs ?? DEFAULT_TIMEOUT_MS),
+      PI_CM_FIFO_SENTINEL: OVER_READ_SENTINEL,
+    },
+    stdio: ["ignore", "ignore", "pipe", "ipc"],
+  });
+
+  const stderrStream = server.stderr;
+  if (stderrStream === null) {
+    throw new Error("state fifo server was spawned without a stderr pipe");
+  }
+
+  let stderrText = "";
+  stderrStream.setEncoding("utf8");
+  stderrStream.on("data", (chunk: string) => {
+    stderrText += chunk;
+  });
+
+  const messages: unknown[] = [];
+  const complete = new Promise<FifoStateServerExit>((resolve, reject) => {
+    server.once("error", reject);
+    server.once("exit", (code, signal) => {
+      resolve({ code, signal });
+    });
+  });
+
+  // A `reject` after the promise settled is a no-op, so the exit handler below
+  // covers "died before readiness" without disturbing the normal path.
+  const ready = new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.on("message", (message) => {
+      messages.push(message);
+      if (message === "ready") {
+        resolve();
+      }
+    });
+    server.once("exit", (code) => {
+      reject(
+        new Error(`state fifo server exited (${String(code)}) before readiness: ${stderrText}`),
+      );
+    });
+  });
+
+  return {
+    ready,
+    complete,
+    messages,
+    stderr: (): string => stderrText,
+    kill: (): void => {
+      if (server.exitCode === null && server.signalCode === null) {
+        server.kill("SIGTERM");
+      }
+    },
+  };
+}

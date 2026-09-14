@@ -3,10 +3,10 @@ gsd_state_version: "1.0"
 milestone: refine-unit-tests
 milestone_name: Refine Unit Tests
 status: Awaiting next milestone
-stopped_at: "Milestone closed and archived. PR #181 has since merged to main; quick tasks 260913-csn (PR #180 evaluation and suite repair, branch pr-180) and 260913-skt (SKTK-01 skill-token rewrite, branch features/skill-token-rewrite) followed."
-last_updated: "2026-09-13T19:22:55.000Z"
+stopped_at: "Milestone closed and archived. PR #181 has since merged to main; quick tasks 260913-csn (PR #180 evaluation and suite repair, branch pr-180) and 260913-skt (SKTK-01 skill-token rewrite, branch features/skill-token-rewrite) followed, then 260913-f6a and 260913-l07 hardened the CI workflows."
+last_updated: "2026-09-13T22:35:00.000Z"
 last_activity: 2026-09-13
-last_activity_desc: Quick task 260913-skt shipped SKTK-01 — staged skill content retargets same-plugin skill references onto installed names
+last_activity_desc: Quick task 260913-r2h made a FIFO harness over-read fail loudly
 state_head: 6551dfbf387d166f655004ec9e0421686b86cb1d
 progress:
   total_phases: 9
@@ -41,7 +41,11 @@ was reset at close so the next milestone starts from a readable state:
   driver, accomplishments, closeout type, and accepted gaps.
 - **Detail:** `.planning/milestones/refine-unit-tests-{ROADMAP,REQUIREMENTS,MILESTONE-AUDIT}.md`,
   with phase directories under `refine-unit-tests-phases/` and quick tasks under
-  `refine-unit-tests-quick/`.
+  `refine-unit-tests-quick/`. That bucket holds the 15 tasks done inside this
+  milestone's window. The 29 older ones the close had swept in with them were
+  filed under `v1.19-quick-tasks/` instead, by date against v1.19's ship date.
+  260909-h38 was filed after the close: its only commit lived on
+  `features/random-refinements`, so the close, which ran on main, never saw it.
 - **Carried forward:** [`.planning/ROADMAP.md`](ROADMAP.md) — what the next
   milestone inherits, with evidence for each item.
 
@@ -110,20 +114,24 @@ hit the same wall; convert it rather than re-disclosing it.
 
 | # | Description | Date | Commit | Status | Directory |
 | --- | --- | --- | --- | --- | --- |
+| 260913-r2h | Make a FIFO state-harness over-read fail loudly instead of hanging to the test timeout | 2026-09-13 | c45850af | Complete | [260913-r2h-make-a-fifo-harness-over-read-fail-loudl](./quick/260913-r2h-make-a-fifo-harness-over-read-fail-loudl/) |
+| 260913-n7w | Fix the FIFO state server so each reader open receives exactly one payload | 2026-09-13 | e4f12cce | Complete | [260913-n7w-fix-the-fifo-state-server-reader-pairing](./quick/260913-n7w-fix-the-fifo-state-server-reader-pairing/) |
+| 260913-l07 | Fix every remaining zizmor finding, drop the severity floor, and simplify the gate comments | 2026-09-13 | 729348b4 | Complete | [260913-l07-fix-remaining-zizmor-findings-and-simpli](./quick/260913-l07-fix-remaining-zizmor-findings-and-simpli/) |
+| 260913-f6a | Gate the two SonarQube workflow findings, githubactions:S6505 and githubactions:S7637 | 2026-09-13 | 8a8a0396..69797ebc | Complete | [260913-f6a-gate-sonar-workflow-findings-s6505-and-s](./quick/260913-f6a-gate-sonar-workflow-findings-s6505-and-s/) |
 
 ## Session Continuity
 
 **Stopped at:** Milestone `refine-unit-tests` closed and archived on 2026-09-13.
 
-**PR #181 is open and unmerged, by operator decision.** All nine checks pass,
-`mergeStateStatus` is `CLEAN`, the SonarCloud quality gate reads `OK`, and the pull
-request carries **zero open issues of any rule**, down from 38. The milestone closed
-with its branch unmerged; that is deliberate, not an oversight.
+PR #181 merged to main on 2026-09-13, closing the milestone's branch.
 
-Last session: 2026-09-13 — repaired this file's stale session-continuity section,
-closed the four outstanding SonarCloud findings, then closed the milestone.
+Since then, four quick tasks landed on `features/random-refinements`: 260909-h38 made
+three cross-process concurrency proofs deterministic, 260913-f6a and 260913-l07
+hardened the CI workflows and gated them, and 260913-n7w fixed a reader-pairing race
+the first of those introduced. 260913-r2h then closed that harness's remaining over-read hang. That branch is
+PR #183, awaiting merge.
 
-**Next:** `/gsd-new-milestone`.
+**Next:** merge PR #183, then `/gsd-new-milestone`.
 
 ### Known snag for the next close
 
@@ -137,5 +145,5 @@ recur: `milestone complete` leaves the original-path deletions **unstaged**
 
 ## Operator Next Steps
 
+- Squash-merge PR #183 (all checks green; the repository allows squash merges only)
 - Start the next milestone with `/gsd-new-milestone`
-- Merge PR #181 whenever you choose — nothing in the close depends on it

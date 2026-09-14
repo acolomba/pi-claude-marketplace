@@ -63,6 +63,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Setup Node 24
         uses: actions/setup-node@v7
@@ -71,7 +73,7 @@ jobs:
           cache: "npm"
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Run full check pipeline
         # NFR-6: typecheck + ESLint + Prettier + node:test
@@ -84,6 +86,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Setup Node 24
         uses: actions/setup-node@v7
@@ -92,7 +96,7 @@ jobs:
           cache: "npm"
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Run integration tests
         run: npm run test:integration
@@ -104,6 +108,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Setup Node 24
         uses: actions/setup-node@v7
@@ -112,7 +118,7 @@ jobs:
           cache: "npm"
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Run pinned e2e tests
         run: npm run test:e2e
@@ -154,6 +160,7 @@ jobs:
           # is worth nothing if the base it closes on is the wrong one. The
           # fallow-audit job in lint.yml sets this for the same reason.
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Setup Node 24
         uses: actions/setup-node@v7
@@ -162,7 +169,7 @@ jobs:
           cache: "npm"
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       # Whether actions/checkout at fetch-depth 0 creates
       # refs/remotes/origin/main on a pull_request event cannot be verified
@@ -213,6 +220,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Setup Node 24
         uses: actions/setup-node@v7
@@ -221,7 +230,7 @@ jobs:
           cache: "npm"
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Validate package manifest
         run: npm pack --dry-run

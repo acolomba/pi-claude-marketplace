@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, stat, symlink, unlink, writeFile } from "node:fs/promises";
 import { createRequire, syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
@@ -42,7 +41,15 @@ import { SymlinkRefusedError } from "../../../extensions/pi-claude-marketplace/s
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
 import { retryTree } from "./scope-tree-inventory.ts";
+import {
+  createStateFifo,
+  FIFO_SKIP,
+  OVER_READ_SENTINEL,
+  serializedStateBytes,
+  startFifoStateServer,
+} from "./state-fifo.ts";
 
+import type { FifoStateServer } from "./state-fifo.ts";
 import type {
   HooksRouting,
   HooksRuntime,
@@ -1687,183 +1694,90 @@ test("WR-06 uninstall orchestrated mode -- PU-5 silent converge (record already 
   });
 });
 
-test("WR-06 uninstall orchestrated mode -- marketplace removed after resolution converges without mutation", async () => {
-  await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-concurrent-marketplace-removal-"));
-    let stateMonitor: ReturnType<typeof spawn> | undefined;
-    try {
-      // arrange
-      const locations = locationsFor("project", cwd);
-      await mkdir(locations.extensionRoot, { recursive: true });
-      await writeFile(
-        locations.stateJsonPath,
-        JSON.stringify({
-          schemaVersion: 1,
+test(
+  "WR-06 uninstall orchestrated mode -- marketplace removed after resolution converges without mutation",
+  { skip: FIFO_SKIP, timeout: 60_000 },
+  async () => {
+    await withHermeticHome(async () => {
+      const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-concurrent-marketplace-removal-"));
+      let stateServer: FifoStateServer | undefined;
+      try {
+        // arrange: state.json is a FIFO. Its FIRST read -- the unlocked
+        // cross-scope resolution -- sees the marketplace; its SECOND read --
+        // the locked re-load inside the transaction -- sees it gone, removed
+        // by the other process. The pipe pairs each read with one payload, so
+        // the removal provably lands between them.
+        const locations = locationsFor("project", cwd);
+        await mkdir(locations.extensionRoot, { recursive: true });
+        const userLocations = locationsFor("user", cwd);
+        await seedState(userLocations.extensionRoot, { schemaVersion: 2, marketplaces: {} });
+
+        const presentState = await serializedStateBytes({
+          schemaVersion: 2,
           marketplaces: {
             mp: {
               name: "mp",
               scope: "project",
               source: pathSource("./mp-src"),
               addedFromCwd: cwd,
+              manifestPath: path.join(cwd, "marketplace.json"),
+              marketplaceRoot: cwd,
               plugins: { hello: makePluginRecord() },
             },
           },
-        }),
-        "utf8",
-      );
-      const userLocations = locationsFor("user", cwd);
-      await mkdir(userLocations.extensionRoot, { recursive: true });
-      await writeFile(
-        userLocations.stateJsonPath,
-        JSON.stringify({
-          schemaVersion: 2,
-          marketplaces: {},
-          padding: "x".repeat(16 * 1024 * 1024),
-        }),
-        "utf8",
-      );
-      const removedState = JSON.stringify({ schemaVersion: 2, marketplaces: {} });
-      const removedStatePath = path.join(locations.extensionRoot, "state-removed.json");
-      const quarantinedStatePath = path.join(locations.extensionRoot, "state-migration.tmp");
-      await writeFile(removedStatePath, removedState, "utf8");
-      const monitorSource = `
-        import { existsSync, renameSync, watch } from "node:fs";
-        import path from "node:path";
-
-        const directory = process.env.UNINSTALL_RACE_DIRECTORY;
-        const statePath = process.env.UNINSTALL_RACE_STATE;
-        const removedPath = process.env.UNINSTALL_RACE_REMOVED;
-        const quarantinedPath = process.env.UNINSTALL_RACE_QUARANTINED;
-        if (!directory || !statePath || !removedPath || !quarantinedPath) {
-          throw new Error("missing uninstall race paths");
-        }
-
-        const timeout = setTimeout(() => {
-          process.exitCode = 2;
-          process.send?.("timeout", () => process.disconnect?.());
-        }, 5_000);
-        let replacementScheduled = false;
-        const watcher = watch(directory, (_event, filename) => {
-          if (
-            replacementScheduled ||
-            filename === null ||
-            !filename.startsWith("state.json.")
-          ) {
-            return;
-          }
-
-          replacementScheduled = true;
-          const temporaryPath = path.join(directory, filename);
-          const waitForCommit = setInterval(() => {
-            if (existsSync(temporaryPath)) {
-              return;
-            }
-
-            clearInterval(waitForCommit);
-            try {
-              renameSync(statePath, quarantinedPath);
-              renameSync(removedPath, statePath);
-              clearTimeout(timeout);
-              watcher.close();
-              process.send?.("replaced", () => process.disconnect?.());
-            } catch (error) {
-              clearTimeout(timeout);
-              watcher.close();
-              process.exitCode = 3;
-              process.send?.(
-                \`failure: \${error instanceof Error ? error.message : String(error)}\`,
-                () => process.disconnect?.(),
-              );
-            }
-          }, 1);
         });
-        process.send?.("ready");
-      `;
-      const monitor = spawn(process.execPath, ["--input-type=module", "--eval", monitorSource], {
-        env: {
-          ...process.env,
-          UNINSTALL_RACE_DIRECTORY: locations.extensionRoot,
-          UNINSTALL_RACE_QUARANTINED: quarantinedStatePath,
-          UNINSTALL_RACE_REMOVED: removedStatePath,
-          UNINSTALL_RACE_STATE: locations.stateJsonPath,
-        },
-        stdio: ["ignore", "ignore", "pipe", "ipc"],
-      });
-      stateMonitor = monitor;
-      const monitorStderrStream = monitor.stderr;
-      assert.ok(monitorStderrStream !== null);
-      let monitorStderr = "";
-      const monitorMessages: unknown[] = [];
-      const monitorComplete = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(
-        (resolve, reject) => {
-          monitor.once("error", reject);
-          monitor.once("exit", (code, signal) => {
-            resolve({ code, signal });
-          });
-        },
-      );
-      const ready = new Promise<void>((resolve, reject) => {
-        const readyTimeout = setTimeout(() => {
-          reject(new Error(`state monitor readiness timed out: ${monitorStderr}`));
-        }, 6_000);
-        monitor.once("error", reject);
-        monitorStderrStream.setEncoding("utf8");
-        monitorStderrStream.on("data", (chunk: string) => {
-          monitorStderr += chunk;
-        });
-        monitor.on("message", (message) => {
-          monitorMessages.push(message);
-          if (message === "ready") {
-            clearTimeout(readyTimeout);
-            resolve();
-          } else if (typeof message === "string" && message.startsWith("failure:")) {
-            clearTimeout(readyTimeout);
-            reject(new Error(message));
-          }
-        });
-        monitor.once("exit", (code) => {
-          if (!monitorMessages.includes("ready")) {
-            clearTimeout(readyTimeout);
-            reject(new Error(`state monitor exited before readiness (${code}): ${monitorStderr}`));
-          }
-        });
-      });
-      await ready;
-      const { ctx, pi, notifications } = makeCtx();
-      let cascadeCalls = 0;
+        const removedState = await serializedStateBytes({ schemaVersion: 2, marketplaces: {} });
 
-      // act
-      const outcome = await uninstallWithFreshOwner({
-        ctx,
-        pi,
-        cwd,
-        marketplace: "mp",
-        plugin: "hello",
-        cascade: (...args) => {
-          cascadeCalls += 1;
-          return cascadeUnstagePlugin(...args);
-        },
-        notifications: { mode: "orchestrated" },
-      });
-      const monitorResult = await monitorComplete;
+        createStateFifo(locations.stateJsonPath);
+        stateServer = startFifoStateServer({
+          statePath: locations.stateJsonPath,
+          payloads: [presentState, removedState],
+        });
+        await stateServer.ready;
+        const { ctx, pi, notifications } = makeCtx();
+        let cascadeCalls = 0;
 
-      // assert
-      assert.deepEqual(monitorMessages, ["ready", "replaced"]);
-      assert.deepEqual(monitorResult, { code: 0, signal: null });
-      assert.equal(monitorStderr, "");
-      assert.deepEqual(outcome, { status: "converged", name: "hello" });
-      assert.equal(cascadeCalls, 0);
-      assert.deepEqual(notifications, []);
-      assert.equal(await readFile(locations.stateJsonPath, "utf8"), removedState);
-    } finally {
-      if (stateMonitor?.exitCode === null && stateMonitor.signalCode === null) {
-        stateMonitor.kill("SIGTERM");
+        // act
+        const outcome = await uninstallWithFreshOwner({
+          ctx,
+          pi,
+          cwd,
+          marketplace: "mp",
+          plugin: "hello",
+          cascade: (...args) => {
+            cascadeCalls += 1;
+            return cascadeUnstagePlugin(...args);
+          },
+          notifications: { mode: "orchestrated" },
+        });
+        const serverResult = await stateServer.complete;
+
+        // assert
+        assert.deepEqual(
+          stateServer.messages,
+          ["ready", "served:1", "served:2"],
+          "uninstall must read state.json exactly twice: once to resolve, once under the lock",
+        );
+        assert.deepEqual(serverResult, { code: 0, signal: null });
+        assert.equal(stateServer.stderr(), "");
+        assert.deepEqual(outcome, { status: "converged", name: "hello" });
+        assert.equal(cascadeCalls, 0);
+        assert.deepEqual(notifications, []);
+        // A save renames the orchestrator's own file over the state path, so
+        // the harness sentinel surviving IS the no-mutation proof (WR-04:
+        // converge never saves).
+        assert.equal(
+          await readFile(locations.stateJsonPath, "utf8"),
+          OVER_READ_SENTINEL,
+          "PU-5 converge must leave state.json untouched",
+        );
+      } finally {
+        stateServer?.kill();
+        await rm(cwd, { recursive: true, force: true });
       }
-
-      await rm(cwd, { recursive: true, force: true });
-    }
-  });
-});
+    });
+  },
+);
 
 test("RECON-03 uninstall orchestrated mode -- missing marketplace returns { status: 'failed', reason: 'marketplace not added' } no notifications", async () => {
   await withHermeticHome(async () => {

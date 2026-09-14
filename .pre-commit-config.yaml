@@ -30,17 +30,6 @@ repos:
       - id: forbid-submodules
       - id: forbid-new-submodules
 
-  - repo: https://github.com/pre-commit/mirrors-prettier
-    rev: v4.0.0-alpha.8
-    hooks:
-      - id: prettier
-        files: '\.(js|json|ts)$'
-        # Pin prettier to match the npm devDependency (the mirror otherwise
-        # floats and CI resolved a version that reformats TS union types
-        # differently from the local check).
-        additional_dependencies:
-          - prettier@3.9.5
-
   - repo: https://github.com/sirosen/texthooks
     rev: 0.7.1
     hooks:
@@ -94,8 +83,21 @@ repos:
       - id: markdownlint-cli2
         exclude: ^(tests/fixtures/|tests/bridges/_fixtures/|\.planning/)
 
+  - repo: https://github.com/zizmorcore/zizmor-pre-commit
+    rev: v1.30.1
+    hooks:
+      - id: zizmor
+        # --no-progress is repeated here. Setting args replaces the upstream list
+        # instead of adding to it.
+        args: ["--no-progress", "--config", "zizmor.yml"]
+
   - repo: local
     hooks:
+      - id: prettier
+        name: prettier
+        entry: node_modules/.bin/prettier --write
+        language: system
+        files: '\.(js|json|ts)$|^scripts/.*\.mjs$'
       - id: npm-lint
         name: npm lint
         entry: npm run lint
@@ -120,6 +122,14 @@ repos:
         language: system
         pass_filenames: false
         files: '^(\.fallowrc\.json|tsconfig\.json|eslint\.config\.js|(extensions|tests)/.*\.(ts|mjs)|scripts/.*\.mjs|package(-lock)?\.json)$'
+      # Fails any workflow that installs npm packages without --ignore-scripts.
+      # It runs on the change itself, before the code is committed.
+      - id: workflow-install-scripts
+        name: npm lint workflows
+        entry: npm run lint:workflows
+        language: system
+        pass_filenames: false
+        files: '^\.github/workflows/.*\.ya?ml$'
       # RCOV-03. The same changed-pair gate the CI `direct-coverage` job runs,
       # at the same strictness, with a commit-scoped base instead of the
       # branch-scoped default (D-08-A07). Cost: one focused test run per pair

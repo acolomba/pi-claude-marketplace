@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
 import { chmodSync, readdirSync, watch, writeFileSync } from "node:fs";
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -75,7 +74,15 @@ import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
 import { retryTree } from "./scope-tree-inventory.ts";
+import {
+  createStateFifo,
+  FIFO_SKIP,
+  OVER_READ_SENTINEL,
+  serializedStateBytes,
+  startFifoStateServer,
+} from "./state-fifo.ts";
 
+import type { FifoStateServer } from "./state-fifo.ts";
 import type {
   GitAuthBundle,
   GitOps,
@@ -4922,169 +4929,93 @@ test("a bare marketplace reinstall preserves a non-absence scope-resolution fail
   });
 });
 
-test("a marketplace removed between scope resolution and enumeration reports not added", async (t) => {
-  await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-concurrent-marketplace-removal-"));
-    let stateMonitor: ReturnType<typeof spawn> | undefined;
-    try {
-      // arrange
-      const locations = locationsFor("project", cwd);
-      await mkdir(locations.extensionRoot, { recursive: true });
-      await writeFile(
-        locations.stateJsonPath,
-        JSON.stringify({
-          schemaVersion: 1,
+test(
+  "a marketplace removed between scope resolution and enumeration reports not added",
+  { skip: FIFO_SKIP, timeout: 60_000 },
+  async () => {
+    await withHermeticHome(async () => {
+      const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-concurrent-marketplace-removal-"));
+      let stateServer: FifoStateServer | undefined;
+      try {
+        // arrange: state.json is a FIFO. Its FIRST read -- the unlocked scope
+        // resolution -- sees the marketplace; its SECOND read -- the
+        // enumeration pass -- sees it gone, removed by the other process. The
+        // pipe pairs each read with one payload, so the removal provably lands
+        // between them.
+        //
+        // The earlier shape forced the IL-3 migration-save warning by stealing
+        // `write-file-atomic`'s temp file mid-rename. That was a race against
+        // library internals, and the warning it proved is covered directly by
+        // tests/persistence/migrate.test.ts, so it is gone from here.
+        const locations = locationsFor("project", cwd);
+        await mkdir(locations.extensionRoot, { recursive: true });
+
+        const presentState = await serializedStateBytes({
+          schemaVersion: 2,
           marketplaces: {
             mp: {
               name: "mp",
               scope: "project",
               source: pathSource("./mp-src"),
               addedFromCwd: cwd,
+              manifestPath: path.join(cwd, "marketplace.json"),
+              marketplaceRoot: cwd,
               plugins: {},
             },
           },
-        }),
-        "utf8",
-      );
-      const userLocations = locationsFor("user", cwd);
-      await mkdir(userLocations.extensionRoot, { recursive: true });
-      await writeFile(
-        userLocations.stateJsonPath,
-        JSON.stringify({
-          schemaVersion: 2,
-          marketplaces: {},
-          padding: "x".repeat(16 * 1024 * 1024),
-        }),
-        "utf8",
-      );
-      const removedStatePath = path.join(locations.extensionRoot, "state-removed.json");
-      const quarantinedStatePath = path.join(locations.extensionRoot, "state-migration.tmp");
-      await writeFile(
-        removedStatePath,
-        JSON.stringify({ schemaVersion: 2, marketplaces: {} }),
-        "utf8",
-      );
-      const monitorSource = `
-        import { renameSync, watch } from "node:fs";
-        import path from "node:path";
-
-        const directory = process.env.REINSTALL_RACE_DIRECTORY;
-        const statePath = process.env.REINSTALL_RACE_STATE;
-        const removedPath = process.env.REINSTALL_RACE_REMOVED;
-        const quarantinedPath = process.env.REINSTALL_RACE_QUARANTINED;
-        if (!directory || !statePath || !removedPath || !quarantinedPath) {
-          throw new Error("missing reinstall race paths");
-        }
-
-        const timeout = setTimeout(() => {
-          process.exitCode = 2;
-          process.send?.("timeout", () => process.disconnect?.());
-        }, 5_000);
-        const watcher = watch(directory, (_event, filename) => {
-          if (filename === null || !filename.startsWith("state.json.")) {
-            return;
-          }
-
-          try {
-            renameSync(path.join(directory, filename), quarantinedPath);
-            renameSync(removedPath, statePath);
-            clearTimeout(timeout);
-            watcher.close();
-            process.send?.("replaced", () => process.disconnect?.());
-          } catch (error) {
-            clearTimeout(timeout);
-            watcher.close();
-            process.exitCode = 3;
-            process.send?.(
-              \`failure: \${error instanceof Error ? error.message : String(error)}\`,
-              () => process.disconnect?.(),
-            );
-          }
         });
-        process.send?.("ready");
-      `;
-      const monitor = spawn(process.execPath, ["--input-type=module", "--eval", monitorSource], {
-        env: {
-          ...process.env,
-          REINSTALL_RACE_DIRECTORY: locations.extensionRoot,
-          REINSTALL_RACE_QUARANTINED: quarantinedStatePath,
-          REINSTALL_RACE_REMOVED: removedStatePath,
-          REINSTALL_RACE_STATE: locations.stateJsonPath,
-        },
-        stdio: ["ignore", "ignore", "pipe", "ipc"],
-      });
-      stateMonitor = monitor;
-      const monitorStderrStream = monitor.stderr;
-      assert.ok(monitorStderrStream !== null);
-      let monitorStderr = "";
-      const monitorMessages: unknown[] = [];
-      const monitorComplete = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(
-        (resolve, reject) => {
-          monitor.once("error", reject);
-          monitor.once("exit", (code, signal) => {
-            resolve({ code, signal });
-          });
-        },
-      );
-      const ready = new Promise<void>((resolve, reject) => {
-        const readyTimeout = setTimeout(() => {
-          reject(new Error(`state monitor readiness timed out: ${monitorStderr}`));
-        }, 6_000);
-        monitor.once("error", reject);
-        monitorStderrStream.setEncoding("utf8");
-        monitorStderrStream.on("data", (chunk: string) => {
-          monitorStderr += chunk;
-        });
-        monitor.on("message", (message) => {
-          monitorMessages.push(message);
-          if (message === "ready") {
-            clearTimeout(readyTimeout);
-            resolve();
-          } else if (typeof message === "string" && message.startsWith("failure:")) {
-            clearTimeout(readyTimeout);
-            reject(new Error(message));
-          }
-        });
-        monitor.once("exit", (code) => {
-          if (!monitorMessages.includes("ready")) {
-            clearTimeout(readyTimeout);
-            reject(new Error(`state monitor exited before readiness (${code}): ${monitorStderr}`));
-          }
-        });
-      });
-      await ready;
-      const warningMock = t.mock.method(console, "warn", () => undefined);
-      const { ctx, pi, notifications } = makeCtx();
+        const removedState = await serializedStateBytes({ schemaVersion: 2, marketplaces: {} });
 
-      // act
-      const outcomes = await reinstallPlugins({
-        ctx,
-        pi,
-        cwd,
-        target: { kind: "marketplace", marketplace: "mp" },
-      });
-      const monitorResult = await monitorComplete;
+        const userLocations = locationsFor("user", cwd);
+        await mkdir(userLocations.extensionRoot, { recursive: true });
+        await writeFile(userLocations.stateJsonPath, removedState, "utf8");
 
-      // assert
-      assert.deepEqual(monitorMessages, ["ready", "replaced"]);
-      assert.deepEqual(monitorResult, { code: 0, signal: null });
-      assert.equal(monitorStderr, "");
-      assert.equal(warningMock.mock.callCount(), 1);
-      assert.deepEqual(outcomes, []);
-      assert.equal(notifications.length, 1);
-      assert.equal(
-        notifications[0]?.message,
-        "A marketplace operation has failed.\n\n⊘ mp (failed) {marketplace not added}",
-      );
-    } finally {
-      if (stateMonitor?.exitCode === null && stateMonitor.signalCode === null) {
-        stateMonitor.kill("SIGTERM");
+        createStateFifo(locations.stateJsonPath);
+        stateServer = startFifoStateServer({
+          statePath: locations.stateJsonPath,
+          payloads: [presentState, removedState],
+        });
+        await stateServer.ready;
+        const { ctx, pi, notifications } = makeCtx();
+
+        // act
+        const outcomes = await reinstallPlugins({
+          ctx,
+          pi,
+          cwd,
+          target: { kind: "marketplace", marketplace: "mp" },
+        });
+        const serverResult = await stateServer.complete;
+
+        // assert
+        assert.deepEqual(
+          stateServer.messages,
+          ["ready", "served:1", "served:2"],
+          "reinstall must read state.json exactly twice: once to resolve, once to enumerate",
+        );
+        assert.deepEqual(serverResult, { code: 0, signal: null });
+        assert.equal(stateServer.stderr(), "");
+        assert.deepEqual(outcomes, []);
+        assert.equal(notifications.length, 1);
+        assert.equal(
+          notifications[0]?.message,
+          "A marketplace operation has failed.\n\n⊘ mp (failed) {marketplace not added}",
+        );
+        // A write renames the orchestrator's own file over the state path,
+        // so the harness sentinel surviving proves the aborted reinstall left
+        // state.json alone.
+        assert.equal(
+          await readFile(locations.stateJsonPath, "utf8"),
+          OVER_READ_SENTINEL,
+          "a marketplace-not-added abort must leave state.json untouched",
+        );
+      } finally {
+        stateServer?.kill();
+        await rm(cwd, { recursive: true, force: true });
       }
-
-      await rm(cwd, { recursive: true, force: true });
-    }
-  });
-});
+    });
+  },
+);
 
 for (const { title, failure, reasons } of [
   {

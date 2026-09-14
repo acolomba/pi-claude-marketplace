@@ -66,9 +66,6 @@ bullets with every cell preserved verbatim, and it acknowledged cleanly.
 review stay open by choice. **`IN-03` carries real risk:** NFR-10 path containment
 now rests on an injected collaborator honoring a prose-only contract that nothing
 type-enforces. `NEGCTL-01` is latent rather than red only because CI pins Node 24.
-Quick-task archival buckets all 43 remaining `.planning/quick/` directories into
-this milestone regardless of which milestone they belonged to -- there is no
-on-disk provenance, and several date to June.
 
 **Shipped unmerged:** the milestone closed with PR #181 open by operator decision.
 All nine checks pass, the SonarCloud quality gate reads `OK`, and the pull request
@@ -76,7 +73,10 @@ carries zero open issues of any rule.
 
 **Archive:** `.planning/milestones/refine-unit-tests-{ROADMAP,REQUIREMENTS,MILESTONE-AUDIT}.md`,
 with phase directories under `refine-unit-tests-phases/` and quick tasks under
-`refine-unit-tests-quick/`.
+`refine-unit-tests-quick/`. The close first swept all 43 `.planning/quick/`
+directories into that bucket, including 29 that date from June to August. Those
+29 were refiled under `v1.19-quick-tasks/`, which is where their dates put them.
+`refine-unit-tests-quick/` now holds the 14 done inside this milestone's window.
 ---
 
 ## v1.19 Unit Test Refactor (Shipped: 2026-09-04, no npm release - internal quality milestone)
