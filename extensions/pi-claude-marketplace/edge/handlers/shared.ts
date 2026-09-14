@@ -102,7 +102,19 @@ export function extractLocalFlag(
   const residualArgs = residualTokens
     .filter((token) => consuming || token !== SCOPE_TARGET_FLAG)
     .join(" ");
-  return consuming ? { local, residualArgs, consumedFlags } : { local, residualArgs };
+  // IN-03: the consuming overload promises a NON-optional `consumedFlags`, but
+  // the implementation signature types it optional and TypeScript checks an
+  // overload against its implementation only loosely -- returning the consuming
+  // branch without the field would compile and break `consumedFlags.has(...)` at
+  // the call site at runtime. The `satisfies` is what makes the omission a
+  // compile error here, where the branch is chosen.
+  return consuming
+    ? ({ local, residualArgs, consumedFlags } satisfies {
+        local: boolean;
+        residualArgs: string;
+        consumedFlags: ReadonlySet<string>;
+      })
+    : { local, residualArgs };
 }
 
 /**
