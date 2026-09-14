@@ -4,16 +4,16 @@ milestone: v1.20
 milestone_name: transitive-dependencies
 current_phase: 3
 current_phase_name: Dependency resolution
-status: planning
+status: executing
 stopped_at: Phase 3 context gathered
-last_updated: "2026-09-14T22:34:13.057Z"
+last_updated: "2026-09-14T23:27:33.214Z"
 last_activity: 2026-09-14
 last_activity_desc: Phase 02 complete, transitioned to Phase 3
-state_head: 7fff6c2337f91d5c7eb7a4d5cf27cf624aa620b2
+state_head: 9a1fdcf9e5762340480a7c1b35089114422d1f00
 progress:
   total_phases: 5
   completed_phases: 2
-  total_plans: 6
+  total_plans: 13
   completed_plans: 6
   percent: 40
 ---
@@ -34,9 +34,9 @@ is archived under `.planning/milestones/v1.19-*`.
 
 ## Current Position
 
-Phase: 3 — Dependency resolution
+Phase: 3 (Dependency resolution) — READY TO EXECUTE
 Plan: Not started
-Status: Ready to plan
+Status: Ready to execute
 Phase 2 is complete and verified. `uninstall --keep-data` preserves the data
 directory; omitting it deletes without a prompt at both the explicit command
 and the load-time reconcile path (D-02-04, reaffirmed after a code-review

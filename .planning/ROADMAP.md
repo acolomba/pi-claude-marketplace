@@ -169,13 +169,26 @@ imports it directly. 204 pairs, corresponding-test gate at zero violations.
 **Plans**: 7 plans
 
 Plans:
+**Wave 1**
 
 - [ ] 03-01-PLAN.md — Tracer: the dependency cascade end to end on the unconstrained path, plus the closure walk's cycle, diamond, already-installed and unadded-marketplace edges and the all-or-nothing rollback footprint (wave 1)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 03-02-PLAN.md — `semver` as a declared runtime dependency and the pure cross-manifest range intersection and satisfaction algebra (wave 2)
 - [ ] 03-03-PLAN.md — The NFR-5 network-policy amendment, the corrected ledger-consumer claim, and the written version-constraint grammar (wave 2)
 - [ ] 03-07-PLAN.md — The plugin-manifest-first dependency declaration read, so a dependency declared only in a bare plugin manifest is visible to the cascade (wave 2)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 03-04-PLAN.md — Remote tag listing through the single git chokepoint and the network-legal tag probe, behind a one-way decision gate (wave 3)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
 - [ ] 03-05-PLAN.md — Constraint resolution wired into the cascade, including the already-installed conflict check (wave 4)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
 - [ ] 03-06-PLAN.md — The closed reason-vocabulary amendment and per-member cascade reporting (wave 5)
 
 **Notes.** Criterion 1's reload clause is the load-bearing half. `buildUninstallBucket` (`orchestrators/reconcile/plan.ts:352`) plans an uninstall for every recorded plugin the merged declared config does not name, so a cascade install that never reaches `claude-plugins.json` is removed on the next session start and RESV-01 is not actually delivered. Settling that is open decision 2, and it belongs to this phase's discuss because it governs what the cascade writes. The transaction shape is also this phase's problem, not a later one: `withLockedStateTransaction` is not re-entrant (`proper-lockfile`, `retries: 0`), so a cascade that recursively calls the guarded `installPlugin` self-deadlocks — the guard-free ledger bodies (`runInstallLedger`, `runInstallLedgerBody`) exist for exactly this class of caller.
