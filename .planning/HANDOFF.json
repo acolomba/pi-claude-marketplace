@@ -1,120 +1,107 @@
 {
   "version": "1.0",
-  "timestamp": "2026-09-14",
-  "phase": "1",
-  "phase_name": "Manifest read fidelity",
-  "phase_dir": ".planning/phases/01-manifest-read-fidelity",
-  "plan": 4,
-  "task": null,
-  "total_tasks": 10,
-  "status": "awaiting_verification",
+  "timestamp": "2026-09-14T16:54:45.142Z",
+  "phase": "02",
+  "phase_name": "Uninstall data disposition and the uninstall option seam",
+  "phase_dir": ".planning/phases/02-uninstall-data-disposition-and-the-uninstall-option-seam",
+  "plan": 1,
+  "task": 3,
+  "total_tasks": 3,
+  "status": "paused",
   "milestone": "v1.20",
   "milestone_name": "transitive-dependencies",
   "completed_tasks": [
     {
       "id": 1,
-      "name": "01-01 manifest candidate list + both readers rewired",
+      "name": "Preserve real data through the public uninstall operation",
       "status": "done",
-      "commit": "4c261338"
+      "commit": "87aefafe"
     },
     {
       "id": 2,
-      "name": "01-02 dependency parser, info render, catalog byte form",
+      "name": "Extend the existing scanner with consumable boolean options",
       "status": "done",
-      "commit": "a456086e"
+      "commit": "a2b27536"
     },
     {
       "id": 3,
-      "name": "01-03 canonical component paths + seenByDir skill dedup",
-      "status": "done",
-      "commit": "792b3c0d"
-    },
-    {
-      "id": 4,
-      "name": "01-04 info sources deps from plugin.json, agreement gate widened",
-      "status": "done",
-      "commit": "f32270fd"
-    },
-    { "id": 5, "name": "code review (17 files, standard depth)", "status": "done", "commit": null },
-    {
-      "id": 6,
-      "name": "Review fixes: CR-01, CR-02, WR-02, WR-03, WR-04, WR-05",
-      "status": "done",
-      "report": ".planning/phases/01-manifest-read-fidelity/01-REVIEW-FIX.md"
-    },
-    {
-      "id": 7,
-      "name": "WR-01: upstream dependency rejection (D-01-35, quick 260914-aer)",
-      "status": "done",
-      "commit": "de4a9424"
+      "name": "Prove cleanup safety and reconcile promptless default",
+      "status": "in_progress",
+      "progress": "Test changes complete; 118 owner tests and all three direct coverage gates pass. Full check and exact-file pre-commit were running at pause. Task3 and SUMMARY remain uncommitted."
     }
   ],
   "remaining_tasks": [
-    { "id": 8, "name": "verify_phase_goal (gsd-verifier)", "status": "not_started" },
     {
-      "id": 9,
-      "name": "update_roadmap + tick MANF-01..05 in REQUIREMENTS.md",
+      "id": "02-01-closeout",
+      "name": "Capture running checks; commit task3; write and commit SUMMARY; run full-tree direct coverage",
+      "status": "in_progress"
+    },
+    {
+      "id": "02-02",
+      "name": "CLI flag, usage, completion, rejection coverage, documentation",
       "status": "not_started"
     },
-    { "id": 10, "name": "Phases 2-5 of milestone v1.20", "status": "not_started" }
+    {
+      "id": "02-gates",
+      "name": "Code review, validation, security, regressions, goal verification, transition",
+      "status": "not_started"
+    },
+    {
+      "id": "03-05",
+      "name": "Resume interactive autonomous lifecycle through remaining phases and milestone closure",
+      "status": "not_started"
+    }
   ],
   "blockers": [],
   "async_jobs": [],
-  "human_actions_pending": [
+  "human_actions_pending": [],
+  "background_processes": [
     {
-      "action": "Decide whether ROADMAP criterion 3 can pass on fixture-shape evidence",
-      "context": "01-03 marked it human_judgment:true. The gate pins ui5 and ui-theme-designer by their DECLARED SHAPES; the criterion is worded against the real plugins, which needs a network install to confirm.",
-      "blocking": false
+      "session_id": 1385,
+      "command": "Exact-file pre-commit for task3",
+      "log": "/tmp/gsd-02-01-task3-precommit.log",
+      "status": "running_at_pause"
     },
     {
-      "action": "Confirm the sibling worktree at /home/acolomba/src/pi-claude-marketplace-dependencies (branch features/dependencies) does not collide with this milestone",
-      "context": "This milestone is transitive-dependencies on features/manifest; the names suggest overlap.",
-      "blocking": false
+      "session_id": 37146,
+      "command": "TEST_CONCURRENCY=4 npm run check",
+      "log": "/tmp/gsd-02-01-full-check.log",
+      "exit_file": "/tmp/gsd-02-01-full-check.exit",
+      "status": "running_at_pause"
     }
   ],
   "decisions": [
     {
-      "decision": "37 decisions recorded as D-01-01..D-01-37 in 01-CONTEXT.md",
-      "rationale": "D-01-35 rejects invalid dependencies, D-01-36 records field bounds, and D-01-37 records the common stat-error policy. Honor earlier supersede markers.",
-      "phase": "1"
+      "decision": "Keep output and help text in line with existing options.",
+      "rationale": "Explicit user answer; six locked D-02 decisions are in02-CONTEXT.md.",
+      "phase": "02"
     },
     {
-      "decision": "D-01-18 SUPERSEDED by D-01-32 — info prefers the plugin's own plugin.json, entry is the fallback",
-      "rationale": "Upstream cross-checks the entry against plugin.json and warns when they disagree, treating the entry as a mirror that can go stale",
-      "phase": "1"
+      "decision": "Only guard data-specific post-commit cleanup; preserve other cleanup.",
+      "rationale": "Data preservation must not leave stale routes, completion state, or clones.",
+      "phase": "02"
     },
     {
-      "decision": "D-01-19 MOOT under D-01-32",
-      "rationale": "info and Phase 3 now read the same source, so there is no display-vs-resolution split left to record",
-      "phase": "1"
-    },
-    {
-      "decision": "D-01-24 SUPERSEDED by D-01-34 — the phase DOES widen to bridges/commands/discover.ts",
-      "rationale": "D-01-24 fenced commands out believing the defect was a cosmetic warning; the review executed it and found a double-install of one source file under two names",
-      "phase": "1"
-    },
-    {
-      "decision": "D-01-25 corrected by D-01-33 — the allowlist extends to version and sha",
-      "rationale": "D-01-25 claimed the forgery vector closed as a side effect; it covered only name and marketplace, and version/sha render verbatim into the same line-oriented row",
-      "phase": "1"
-    },
-    {
-      "decision": "WR-03's suggestion to drop the space from VERSION_PATTERN was declined",
-      "rationale": "D-01-33 admits the space deliberately so compound ranges like '>=1.0.0 <2.0.0' survive; WR-03 concedes the issue is misleading display, not injection. The length bound from WR-03 IS accepted.",
-      "phase": "1"
+      "decision": "Consuming scanner input is { consumeLongFlags: readonly string[] }; output includes consumedFlags: ReadonlySet<string>. Legacy inputs/results unchanged.",
+      "rationale": "Uninstall needs strict flag consumption without changing existing callers.",
+      "phase": "02"
     }
   ],
   "uncommitted_files": [
-    " M .planning/config.json",
     " M .claude/settings.json",
     " M .codex/config.toml",
+    " M .planning/STATE.md",
+    " M .planning/config.json",
+    " M .planning/state.json",
+    " M tests/orchestrators/plugin/uninstall.test.ts",
+    " M tests/orchestrators/reconcile/apply.test.ts",
     "?? .claude/CLAUDE.md",
     "?? .codegraph/",
     "?? .mcp.json",
     "?? .planning/milestone.lock",
-    "?? .planning/state.json",
     "?? AGENTS.md"
   ],
-  "next_action": "Run $gsd-execute-phase 1 to resume the missing verification gates. Then update the roadmap and requirements after verification passes.",
-  "context_notes": "All four plans have summaries. The review-fix report records the six resolved findings and the earlier WR-01 fix. Stale workstreams are archived without content loss or waived debt. The user approved whitespace-only formatting of .mcp.json. Keep GSD configuration and unrelated files uncommitted. Phase verification and real-plugin evidence remain open."
+  "uncommitted_files_note": "Measured before writing handoff artifacts; pause commit will include HANDOFF.json, .continue-here.md, and STATE.md only. Two task3 test files and preexisting config remain dirty.",
+  "next_action": "Read phase .continue-here.md, capture the two already-running check outcomes, then close out task3 and02-01-SUMMARY without rerunning committed tasks1/2. Run full-tree direct coverage before02-02.",
+  "context_notes": "User explicitly paused the autonomous interactive run. Do not continue automatically in this session. Phase1 is verified complete; Phase2 plans passed independent review. No outstanding user approval. All agents stopped; test subprocesses may still run. Preserve unrelated dirty files. No new worktrees; use_worktrees=false. Exact Git metadata operations require sandbox escalation."
 }
