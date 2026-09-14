@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import {
   chmod,
   mkdir,
@@ -985,6 +986,106 @@ test("PI-6: generated skill name collides with another plugin's existing skill -
   });
 });
 
+test("AGENT-01: fresh install preserves prefixed and unprefixed agent identities", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    // arrange
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-agent-identities-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      const { pluginRoot } = await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        agents: [
+          {
+            sourceName: "hello-reviewer",
+            description: "Prefixed reviewer",
+            body: "Prefixed body.\n",
+          },
+          { sourceName: "reviewer", description: "Reviewer", body: "Short body.\n" },
+        ],
+      });
+      const { ctx, pi, notifications } = makeCtx({ toolNames: ["subagent"] });
+      const expectedAgents = [
+        {
+          sourceName: "hello-reviewer",
+          generatedName: "pi-claude-marketplace-hello-hello-reviewer",
+          description: "Prefixed reviewer",
+          body: "Prefixed body.\n",
+        },
+        {
+          sourceName: "reviewer",
+          generatedName: "pi-claude-marketplace-hello-reviewer",
+          description: "Reviewer",
+          body: "Short body.\n",
+        },
+      ];
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        notifications: { mode: "orchestrated" },
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        status: "installed",
+        version: "0.0.1",
+        resourcesChanged: true,
+        declaresAgents: true,
+        declaresMcp: false,
+      });
+      assert.deepStrictEqual(notifications, []);
+      const state = await loadState(locations.extensionRoot);
+      assert.deepStrictEqual(state.marketplaces.mp?.plugins.hello?.resources, {
+        skills: [],
+        prompts: [],
+        agents: [
+          "pi-claude-marketplace-hello-hello-reviewer",
+          "pi-claude-marketplace-hello-reviewer",
+        ],
+        mcpServers: [],
+        hooks: [],
+      });
+      const expectedEntries = [];
+      for (const agent of expectedAgents) {
+        const sourcePath = path.join(pluginRoot, "agents", agent.sourceName + ".md");
+        const targetPath = path.join(locations.agentsDir, agent.generatedName + ".md");
+        const sourceBytes = `---\nname: ${agent.sourceName}\ndescription: ${agent.description}\ntools: Read,Grep\n---\n\n${agent.body}`;
+        expectedEntries.push({
+          plugin: "hello",
+          marketplace: "mp",
+          sourceAgent: agent.sourceName,
+          generatedName: agent.generatedName,
+          sourcePath,
+          targetPath,
+          sourceHash: createHash("sha256").update(sourceBytes).digest("hex"),
+          droppedFields: [],
+          droppedTools: [],
+          warnings: [],
+        });
+        assert.strictEqual(
+          await readFile(targetPath, "utf8"),
+          `---\nname: ${agent.generatedName}\ndescription: ${agent.description}\ntools: read,grep\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: hello\n  sourceAgent: ${agent.sourceName}\n  sourcePath: ${sourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\n${agent.body}`,
+        );
+      }
+
+      assert.deepStrictEqual(JSON.parse(await readFile(locations.agentsIndexPath, "utf8")), {
+        schemaVersion: 1,
+        agents: expectedEntries,
+      });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("PDEF-01: install preview detects an agent conflict from a later resolved directory", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-agent-dir-preview-"));
@@ -1066,9 +1167,9 @@ test("PDEF-01: install stages every agent directory and warns on a later duplica
       });
       const conventionalAgentsDir = path.join(pluginRoot, "agents");
       const expectedWarning =
-        `agent source "shared" in "${conventionalAgentsDir}" elides to generated name ` +
-        `"${GENERATED_AGENT_PREFIX}hello-shared" already produced by an earlier ` +
-        "componentPaths.agents entry; ignoring duplicate.";
+        `agent source "shared" at "${path.join(conventionalAgentsDir, "shared-later.md")}" duplicates generated name ` +
+        `"${GENERATED_AGENT_PREFIX}hello-shared" already produced by agent source "shared" at ` +
+        `"${path.join(conventionalAgentsDir, "..", "declared-agents", "shared-first.md")}"; keeping first discovered source.`;
       const { ctx, pi, notifications } = makeCtx({ toolNames: ["subagent"] });
 
       // act
@@ -2480,7 +2581,7 @@ test("D-102-02 / NFR-3: a disable cascade that throws reports failure and leaves
         // never reaches, so it has something to retain. The plugin declares NO
         // agents: the foreign row seeded below must survive the ledger's agents
         // phase, and a declared agent under the same generated name would
-        // replace the foreign file on the way in and defuse the fault.
+        // block the install before the cascade can exercise this fault.
         skills: [{ sourceName: "tool" }],
         commands: [{ sourceName: "deploy" }],
         mcpServers: { server1: { command: "node", args: ["server.js"] } },
@@ -3163,7 +3264,7 @@ test("AS-6: pluginDataDir mkdir failure post-state-commit -> V2 drops warning pe
 // AS-7 -- agents-bridge foreign-content rows surface via warning, state persists
 // ───────────────────────────────────────────────────────────────────────────
 
-test("AS-7: pre-existing foreign agent file under target name -> V2 drops warning per D-19-01, state record IS persisted", async () => {
+test("AS-7: retired foreign agent target is preserved while a distinct new agent installs", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-as7-"));
     try {
@@ -3173,11 +3274,11 @@ test("AS-7: pre-existing foreign agent file under target name -> V2 drops warnin
         marketplaceRoot: path.join(cwd, "mp-src"),
         marketplaceName: "mp",
         pluginName: "hello",
-        agents: [{ sourceName: "bot" }],
+        agents: [{ sourceName: "new-bot" }],
       });
 
       // Pre-seed the agents-index with a row for hello/bot pointing at a
-      // foreign file (no marker in body) at the target. The agents bridge
+      // foreign file (no marker in body) at a retired target. The agents bridge
       // SOFT-FAILS this row via `failed[]` -- the install proceeds. The
       // warning surface is DROPPED per D-19-01. The
       // underlying agents-index state still records the foreign-row
@@ -3238,6 +3339,10 @@ test("AS-7: pre-existing foreign agent file under target name -> V2 drops warnin
         (notifications[0]?.message ?? "").includes("pre-existing agent file"),
         false,
         "D-19-01: AS-7 foreign-agent warning surface is dropped in V2",
+      );
+      assert.strictEqual(
+        await readFile(foreignAgentPath, "utf8"),
+        "---\nname: foreign\n---\n\nNo marker.\n",
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -4100,7 +4205,7 @@ test("Orchestrated-agent-foreign: agentForeignFailures -> postCommitWarnings has
         marketplaceRoot: path.join(cwd, "mp-src"),
         marketplaceName: "mp",
         pluginName: "hello",
-        agents: [{ sourceName: "bot" }],
+        agents: [{ sourceName: "new-bot" }],
       });
 
       // Pre-seed a foreign agent file (no marker) at the target path and
@@ -4144,12 +4249,20 @@ test("Orchestrated-agent-foreign: agentForeignFailures -> postCommitWarnings has
         notifications: { mode: "orchestrated" },
       });
 
-      assert.equal(outcome.status, "installed");
-      const warnings = (outcome as { postCommitWarnings?: readonly string[] }).postCommitWarnings;
-      assert.ok(warnings !== undefined && warnings.length >= 1, "must have postCommitWarnings");
-      assert.ok(
-        warnings?.some((w) => w.includes("pre-existing agent file")),
-        `expected 'pre-existing agent file' in warnings; got: ${JSON.stringify(warnings)}`,
+      assert.deepStrictEqual(outcome, {
+        status: "installed",
+        version: "0.0.1",
+        resourcesChanged: true,
+        declaresAgents: true,
+        declaresMcp: false,
+        postCommitWarnings: [
+          `Plugin "hello" installed; 1 pre-existing agent file(s) preserved on disk: ${foreignAgentName}: target ${foreignAgentPath} is missing the generated marker`,
+          "[new-bot] source description was missing or empty -- using fallback",
+        ],
+      });
+      assert.strictEqual(
+        await readFile(foreignAgentPath, "utf8"),
+        "---\nname: foreign\n---\n\nNo marker.\n",
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });

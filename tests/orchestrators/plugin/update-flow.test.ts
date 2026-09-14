@@ -1243,9 +1243,9 @@ test("PDEF-01: update stages every agent directory and warns on a later duplicat
     });
     const conventionalAgentsDir = path.join(seeded.marketplaceRoot, "plugins", "hello", "agents");
     const expectedWarning =
-      `agent source "shared" in "${conventionalAgentsDir}" elides to generated name ` +
-      `"${GENERATED_AGENT_PREFIX}hello-shared" already produced by an earlier ` +
-      "componentPaths.agents entry; ignoring duplicate.";
+      `agent source "shared" at "${path.join(conventionalAgentsDir, "shared-later.md")}" duplicates generated name ` +
+      `"${GENERATED_AGENT_PREFIX}hello-shared" already produced by agent source "shared" at ` +
+      `"${path.join(conventionalAgentsDir, "..", "declared-agents", "shared-first.md")}"; keeping first discovered source.`;
     process.chdir(cwd);
 
     const outcome = await updateSinglePlugin("hello", "mp", "project");

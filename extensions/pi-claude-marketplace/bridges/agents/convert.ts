@@ -5,7 +5,7 @@
 //      body substitution per the PI-10 contract.
 //   2. generatedSkillName from ../../domain/name.ts is the single source of
 //      truth for the skill-legend names this converter resolves; agent name
-//      generation (generatedAgentName, AG-1 elision) happens in ./discover.ts,
+//      generation (generatedAgentName, complete source name) happens in ./discover.ts,
 //      not here.
 //   3. discoverPluginAgents lives in ./discover.ts so convert stays pure.
 //
@@ -99,6 +99,10 @@ interface OmittedToolMapping extends ToolMappingBase {
  * mean something there (the NFR-7 `installable` idiom).
  */
 type ToolMappingResult = ExplicitToolMapping | OmittedToolMapping;
+
+/** The AG-11 validator proves the explicit allowlist is nonempty. */
+type ValidatedToolMapping =
+  (ExplicitToolMapping & { readonly mapped: [string, ...string[]] }) | OmittedToolMapping;
 
 function splitCsv(value: string | undefined): string[] {
   if (value === undefined) {
@@ -526,7 +530,7 @@ export function convertAgent(input: {
 
   // 3. Tools mapping
   const toolsResult = mapTools(raw.tools, raw.disallowedTools);
-  assertMappedToolsNonEmpty({ toolsResult, raw, sourceName, pluginName });
+  assertMappedToolsNonEmpty(toolsResult, { raw, sourceName, pluginName });
   warnings.push(...toolsResult.warnings);
 
   // 4. Thinking / effort mapping
@@ -625,13 +629,11 @@ function optionalModel(model: string | undefined): { model?: string } {
  * (pinned by the malformed-accessor test); a genuinely omitted `tools:`
  * never reaches the throw (#179).
  */
-function assertMappedToolsNonEmpty(input: {
-  toolsResult: ToolMappingResult;
-  raw: RawAgentFrontmatter;
-  sourceName: string;
-  pluginName: string;
-}): void {
-  const { toolsResult, raw, sourceName, pluginName } = input;
+function assertMappedToolsNonEmpty(
+  toolsResult: ToolMappingResult,
+  input: { raw: RawAgentFrontmatter; sourceName: string; pluginName: string },
+): asserts toolsResult is ValidatedToolMapping {
+  const { raw, sourceName, pluginName } = input;
   if (toolsResult.omitted || toolsResult.mapped.length > 0) {
     return;
   }
@@ -652,25 +654,17 @@ function assertMappedToolsNonEmpty(input: {
  * allowlist; an omitted one emits no `tools:` at all, so pi-subagents
  * grants its default builtin tools, with disallowedTools narrowing that
  * set via excludeTools. The GeneratedToolsFields return type is what keeps
- * the two lines from ever rendering together. Destructuring keeps both
- * arms assertion-free: the explicit arm's unreachable throw restates AG-11
- * locally (assertMappedToolsNonEmpty already rejected an empty explicit
- * list with the user-facing message).
+ * the two lines from ever rendering together. The validated mapping carries
+ * the nonempty explicit list proved by assertMappedToolsNonEmpty, so the
+ * emitter does not need a second runtime check.
  */
-function toolsFields(result: ToolMappingResult): GeneratedToolsFields {
+function toolsFields(result: ValidatedToolMapping): GeneratedToolsFields {
   if (result.omitted) {
     const [first, ...rest] = result.excludeTools;
     return first === undefined ? {} : { excludeTools: [first, ...rest] };
   }
 
-  const [first, ...rest] = result.mapped;
-  if (first === undefined) {
-    throw new Error(
-      "unreachable per AG-11: assertMappedToolsNonEmpty rejects an empty explicit tools list",
-    );
-  }
-
-  return { tools: [first, ...rest] };
+  return { tools: result.mapped };
 }
 
 /**
@@ -720,36 +714,4 @@ function droppedFieldWarnings(droppedFields: readonly string[], generatedName: s
 
 function optionalThinking(thinking: string | undefined): { thinking?: string } {
   return thinking === undefined ? {} : { thinking };
-}
-
-/**
- * AG-12: detect generated-name collisions across an array of converted /
- * discovered agents. Throws Error listing the colliding generated name and
- * BOTH source names so the user can rename one. Multi-collision messages
- * are joined onto separate lines for readability.
- */
-export function assertNoAgentCollisions(
-  agents: readonly { sourceName: string; generatedName: string }[],
-): void {
-  const groups = new Map<string, string[]>();
-  for (const agent of agents) {
-    const arr = groups.get(agent.generatedName) ?? [];
-    arr.push(agent.sourceName);
-    groups.set(agent.generatedName, arr);
-  }
-
-  const collisions: string[] = [];
-  for (const [generatedName, sources] of groups) {
-    if (sources.length > 1) {
-      const quotedSources = sources.map((s) => `"${s}"`).join(", ");
-      collisions.push(`"${generatedName}" <- [${quotedSources}]`);
-    }
-  }
-
-  if (collisions.length > 0) {
-    throw new Error(
-      `Generated agent name collision detected. Rename one of the source agents:\n  ` +
-        collisions.join("\n  "),
-    );
-  }
 }

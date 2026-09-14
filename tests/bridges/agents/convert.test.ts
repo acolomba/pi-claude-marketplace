@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
-  assertNoAgentCollisions,
   convertAgent,
   GUIDED_DROPPED_FIELDS,
   MODEL_MAP,
@@ -1256,43 +1255,5 @@ Body.\r
 
     // assert
     assert.strictEqual(agent.fileContent, expectedFileContent);
-  });
-});
-
-describe("assertNoAgentCollisions", () => {
-  test("accepts distinct generated names", () => {
-    // arrange
-    const agents = [
-      { sourceName: "reviewer", generatedName: "pi-claude-marketplace-acme-reviewer" },
-      { sourceName: "writer", generatedName: "pi-claude-marketplace-acme-writer" },
-    ];
-
-    // act
-    const assertDistinctNames = () => {
-      assertNoAgentCollisions(agents);
-    };
-
-    // assert
-    assert.doesNotThrow(assertDistinctNames);
-  });
-
-  test("reports every colliding generated name with source order intact", () => {
-    // arrange
-    const assertDistinctNames = () => {
-      assertNoAgentCollisions([
-        { sourceName: "reviewer", generatedName: "pi-claude-marketplace-acme-reviewer" },
-        { sourceName: "acme-reviewer", generatedName: "pi-claude-marketplace-acme-reviewer" },
-        { sourceName: "writer", generatedName: "pi-claude-marketplace-acme-writer" },
-        { sourceName: "acme-writer", generatedName: "pi-claude-marketplace-acme-writer" },
-      ]);
-    };
-
-    // act & assert
-    assert.throws(
-      assertDistinctNames,
-      new Error(
-        'Generated agent name collision detected. Rename one of the source agents:\n  "pi-claude-marketplace-acme-reviewer" <- ["reviewer", "acme-reviewer"]\n  "pi-claude-marketplace-acme-writer" <- ["writer", "acme-writer"]',
-      ),
-    );
   });
 });

@@ -16,9 +16,9 @@
 //   3. AG-9 / RN-4 cross-owner conflict (a generated name is already owned
 //      by a DIFFERENT (mp, plugin)) throws -- AgentOwnershipConflictError
 //      carries the full conflict list.
-//   4. AG-12 collision detection within this plugin lives in convert.ts
-//      (assertNoAgentCollisions); we call it before the convert pass.
-//   5. The 10-step prepare is decomposed -- partition + ownership-guard
+//   4. AG-12 exact-name deduplication belongs to discovery; staging consumes
+//      its canonical agents and complete duplicate warnings.
+//   5. The 9-step prepare is decomposed -- partition + ownership-guard
 //      logic lives in index-mutation.ts so AG-3 / AG-9 are testable
 //      without touching disk.
 
@@ -45,7 +45,7 @@ import {
 } from "../../shared/fs-utils.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
 
-import { assertNoAgentCollisions, convertAgent, GUIDED_DROPPED_FIELDS } from "./convert.ts";
+import { convertAgent, GUIDED_DROPPED_FIELDS } from "./convert.ts";
 import { discoverPluginAgents } from "./discover.ts";
 import { findOwnershipConflicts, partitionByOwner } from "./index-mutation.ts";
 import { isOwnedAgentFile } from "./marker.ts";
@@ -77,23 +77,22 @@ const agentsReplacementInternals = new WeakMap<
 >();
 
 /**
- * 10-step prepare. NOTHING outside `<extensionRoot>/agents-staging/<uuid>/`
+ * 9-step prepare. NOTHING outside `<extensionRoot>/agents-staging/<uuid>/`
  * is touched. Safe to abort with `abortPreparedAgents`. Throws on AG-9
- * cross-owner conflict, AG-11 empty mapped tools, AG-12 within-plugin
- * collision, AG-2 file-level corruption (loadAgentsIndex), and any IO
+ * cross-owner conflict, AG-11 empty mapped tools, AG-2 file-level
+ * corruption (loadAgentsIndex), and any IO
  * failure during the staging-dir write.
  *
  * Steps:
- *   1. Discover every resolved agent directory in resolver order (or none)
- *   2. AG-12 collision detection within this plugin
- *   3. Convert (AG-7 mapping pipeline)
- *   4. Load index, partition by (marketplace, plugin)
- *   5. AG-9 cross-owner guard -- THROWS on conflict
- *   6. AS-9 noop short-circuit
- *   7. Safety-check previous targets (AG-5 foreign-content SOFT-FAIL)
- *   8. Write staged files into <extensionRoot>/agents-staging/<uuid>/
- *   9. Build new index entries
- *  10. Aggregate warnings + index corruptions
+ *   1. Discover and deduplicate exact names in resolver directory order
+ *   2. Convert (AG-7 mapping pipeline)
+ *   3. Load index, partition by (marketplace, plugin)
+ *   4. AG-9 cross-owner guard -- THROWS on conflict
+ *   5. AS-9 noop short-circuit
+ *   6. Safety-check previous targets (AG-5 foreign-content SOFT-FAIL)
+ *   7. Write staged files into <extensionRoot>/agents-staging/<uuid>/
+ *   8. Build new index entries
+ *   9. Aggregate warnings + index corruptions
  */
 export async function prepareStagePluginAgents(
   ops: RemovalOps,
@@ -124,12 +123,7 @@ export async function prepareStagePluginAgents(
   const discovered: readonly DiscoveredAgent[] = discoverResult.discovered;
   const discoverWarnings: readonly string[] = discoverResult.warnings;
 
-  // Step 2: AG-12 collision detection (within this plugin's set).
-  assertNoAgentCollisions(
-    discovered.map((d) => ({ sourceName: d.sourceName, generatedName: d.generatedName })),
-  );
-
-  // Step 3: convert (AG-7 + AG-11). AG-11 throws here if mapped tools is empty.
+  // Step 2: convert (AG-7 + AG-11). AG-11 throws here if mapped tools is empty.
   // `mapModel` defaults to false: the omit-by-default behavior is the
   // contract; only explicit `--map-model` on install/update flips it on.
   const converted: ConvertedAgent[] = discovered.map((d) =>
@@ -145,7 +139,7 @@ export async function prepareStagePluginAgents(
     }),
   );
 
-  // Step 4: load + partition (AG-3).
+  // Step 3: load + partition (AG-3).
   const loaded = await loadAgentsIndex(locations);
   const { previous: previousEntries, other: otherEntries } = partitionByOwner(
     loaded.agents,
@@ -153,7 +147,7 @@ export async function prepareStagePluginAgents(
     pluginName,
   );
 
-  // Step 5: AG-9 cross-owner guard. THROWS -- a generated name owned by a
+  // Step 4: AG-9 cross-owner guard. THROWS -- a generated name owned by a
   // different (mp, plugin) cannot be silently overwritten.
   const conflicts = findOwnershipConflicts(
     otherEntries,
@@ -178,7 +172,7 @@ export async function prepareStagePluginAgents(
     ...discoverWarnings,
   ];
 
-  // Step 6: AS-9 noop short-circuit. Nothing to write AND no previous
+  // Step 5: AS-9 noop short-circuit. Nothing to write AND no previous
   // entries to preserve/clean up -- never materialize agents/ or
   // agents-index.json.
   if (converted.length === 0 && previousEntries.length === 0) {
@@ -193,7 +187,7 @@ export async function prepareStagePluginAgents(
     };
   }
 
-  // Step 7: AG-5 foreign-content SOFT-FAIL (W-08 / B-08 / D-06 corollary).
+  // Step 6: AG-5 foreign-content SOFT-FAIL (W-08 / B-08 / D-06 corollary).
   // For each previous index entry, check its on-disk targetPath. If foreign
   // content is present, surface via failed[] (NOT throw); preserve the
   // index row so commit can keep recording it.
@@ -214,7 +208,7 @@ export async function prepareStagePluginAgents(
     }
   }
 
-  // Step 8: write staged files into <extensionRoot>/agents-staging/<uuid>/.
+  // Step 7: write staged files into <extensionRoot>/agents-staging/<uuid>/.
   const stagingDir = path.join(locations.agentsStagingDir, randomUUID());
   await mkdir(stagingDir, { recursive: true });
   await assertPathInside(locations.agentsStagingDir, stagingDir, "agents staging dir");
@@ -232,7 +226,7 @@ export async function prepareStagePluginAgents(
       await writeFile(stagedFile, c.fileContent, "utf8");
       stagedFilePaths.push({ from: stagedFile, to: targetFile });
 
-      // Step 9: build new index entry.
+      // Step 8: build new index entry.
       const entry: AgentsIndexEntry = {
         plugin: pluginName,
         marketplace: marketplaceName,
@@ -252,7 +246,7 @@ export async function prepareStagePluginAgents(
     throw appendLeakToError(err, await cleanupStaging(ops, stagingDir, "agents staging directory"));
   }
 
-  // Step 10: assemble the result. recorded[] is the W-05 record the
+  // Step 9: assemble the result. recorded[] is the W-05 record the
   // orchestrator reads to populate state.json.installs.
   const recorded: StagedAgentRecord[] = newEntries.map((e) => ({
     generatedName: e.generatedName,
@@ -309,13 +303,13 @@ function formatAgentWarnings(converted: ConvertedAgent): string[] {
 }
 
 /**
- * Phase 2: remove old target files (only safe-to-overwrite ones), rename
- * staged files into <scopeRoot>/agents/, persist the new index, clean up.
+ * Phase 2: reject occupied new targets before removing old owned files,
+ * rename staged files into <scopeRoot>/agents/, persist the index, clean up.
  *
- * If steps 1-2 fail partway, the on-disk agent files may be removed (or
- * partially removed) while the index file still describes the OLD entries
- * (saveAgentsIndex was never reached). The next unstage's ENOENT tolerance
- * plus the index pointing at the OLD targetPaths self-heals on retry.
+ * If deletion, rename or index persistence fails, the index still describes
+ * the OLD entries. Newly renamed files are moved back to staging and cleaned
+ * up so their unrecorded new names cannot block retry. Previous owned files
+ * may be missing; prepare and commit tolerate that state and regenerate them.
  *
  * Returns the staging-cleanup leak (if any) so the caller can surface it
  * via warnings[] rather than dropping it.
@@ -342,6 +336,15 @@ export async function commitPreparedAgents(
   // excluded -- those targets stay untouched on disk and their rows stay
   // in the index.
   try {
+    const previousTargets = new Set(prepared._previousEntries.map((entry) => entry.targetPath));
+    for (const entry of prepared._newEntries) {
+      if (!previousTargets.has(entry.targetPath) && (await pathExists(entry.targetPath))) {
+        throw new Error(
+          `Cannot replace agent target with non-previous content at ${entry.targetPath}`,
+        );
+      }
+    }
+
     await Promise.all(
       prepared._previousEntries.map(async (entry) => {
         try {
@@ -373,6 +376,18 @@ export async function commitPreparedAgents(
       await rename(pair.from, pair.to);
       completedRenames.push(pair);
     }
+
+    // Step 3: publish ownership only after all files land. Persistence belongs
+    // inside the rename rollback boundary so an index failure cannot leave
+    // newly claimed names on disk without their ownership records.
+    await saveAgentsIndex(prepared.locations, {
+      schemaVersion: 1,
+      agents: [
+        ...prepared._otherEntries,
+        ...prepared._newEntries,
+        ...prepared._foreignPreservedEntries,
+      ],
+    });
   } catch (err) {
     // Reverse-walk completed renames -- restore each back to staging. The
     // rollback loop NEVER throws; rollback failures accumulate into
@@ -397,19 +412,6 @@ export async function commitPreparedAgents(
       await cleanupStaging(ops, prepared.stagingDir, "agents staging directory"),
     ]);
   }
-
-  // Step 3: persist new index (LAST step before cleanup -- the self-heal
-  // property). Index = otherEntries (mp/plugin not ours) +
-  // newEntries (just staged) + foreignPreservedEntries (W-08 fix: keep
-  // these so future runs surface them again).
-  await saveAgentsIndex(prepared.locations, {
-    schemaVersion: 1,
-    agents: [
-      ...prepared._otherEntries,
-      ...prepared._newEntries,
-      ...prepared._foreignPreservedEntries,
-    ],
-  });
 
   // Step 4: best-effort cleanup. Returns leak message (if any) for caller
   // to surface in warnings[]; never throws.

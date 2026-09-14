@@ -34,7 +34,7 @@ export interface RawAgentFrontmatter {
 export interface DiscoveredAgent {
   /** Source agent name (frontmatter `name:` if set, else filename stem). */
   readonly sourceName: string;
-  /** Generated pi-subagent name -- `pi-claude-marketplace-<plugin>-<agent>` with AG-1 elision. */
+  /** Generated pi-subagent name -- `pi-claude-marketplace-<plugin>-<agent>` with the complete source name. */
   readonly generatedName: string;
   /** Absolute path to the source .md file. */
   readonly sourcePath: string;

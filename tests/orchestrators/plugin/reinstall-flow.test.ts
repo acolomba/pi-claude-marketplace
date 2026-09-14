@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { chmodSync, readdirSync, watch, writeFileSync } from "node:fs";
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -99,6 +100,7 @@ import type {
   ReinstallTransaction,
   RemoveDataDirFn,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-replace.ts";
+import type { AgentsIndex } from "../../../extensions/pi-claude-marketplace/persistence/agents-index-schema.ts";
 import type {
   NotificationContext,
   ToolInventory,
@@ -494,6 +496,272 @@ test("PRL-06: absent installed record returns skipped and does not mutate state 
   });
 });
 
+async function seedLegacyReinstall(cwd: string, coexist: boolean) {
+  const locations = locationsFor("project", cwd);
+  const seeded = await seedMarketplace({
+    cwd,
+    marketplaceRoot: path.join(cwd, "mp-src"),
+    resources: {
+      agents: [{ sourceName: "reviewer", description: "Reviewer", body: "Legacy body.\n" }],
+    },
+    install: true,
+  });
+  const sourcePath = path.join(seeded.pluginRoot, "agents", "hello-reviewer.md");
+  await rm(path.join(seeded.pluginRoot, "agents", "reviewer.md"));
+  await writePluginTree(seeded.pluginRoot, "hello", {
+    agents: [
+      { sourceName: "hello-reviewer", description: "Prefixed reviewer", body: "Prefixed body.\n" },
+      ...(coexist
+        ? [{ sourceName: "reviewer", description: "Reviewer", body: "Short body.\n" }]
+        : []),
+    ],
+  });
+  const oldTarget = path.join(locations.agentsDir, "pi-claude-marketplace-hello-reviewer.md");
+  const newTarget = path.join(locations.agentsDir, "pi-claude-marketplace-hello-hello-reviewer.md");
+  const oldBytes = `---\nname: pi-claude-marketplace-hello-reviewer\ndescription: Reviewer\ntools: read,grep\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: hello\n  sourceAgent: hello-reviewer\n  sourcePath: ${sourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\nLegacy body.\n`;
+  await writeFile(oldTarget, oldBytes);
+  const oldIndex: AgentsIndex = {
+    schemaVersion: 1,
+    agents: [
+      {
+        plugin: "hello",
+        marketplace: "mp",
+        sourceAgent: "hello-reviewer",
+        generatedName: "pi-claude-marketplace-hello-reviewer",
+        sourcePath,
+        targetPath: oldTarget,
+        sourceHash: "a".repeat(64),
+        droppedFields: [],
+        droppedTools: [],
+        warnings: [],
+      },
+    ],
+  };
+  const oldIndexBytes = JSON.stringify(oldIndex);
+  await writeFile(locations.agentsIndexPath, oldIndexBytes);
+  return {
+    locations,
+    pluginRoot: seeded.pluginRoot,
+    sourcePath,
+    oldTarget,
+    newTarget,
+    oldBytes,
+    oldIndex,
+    oldIndexBytes,
+  };
+}
+
+for (const coexist of [false, true]) {
+  test(`AGENT-01: same-version reinstall migrates and repeats with coexistence ${String(coexist)}`, async (t) => {
+    await withHermeticHome(async () => {
+      // arrange
+      t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-01-02T00:00:00.000Z") });
+      const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-agent-migrate-"));
+      t.after(() => rm(cwd, { recursive: true, force: true }));
+      const { locations, pluginRoot, oldTarget, newTarget } = await seedLegacyReinstall(
+        cwd,
+        coexist,
+      );
+      const beforeState = await loadState(locations.extensionRoot);
+      const oldRecord = beforeState.marketplaces.mp?.plugins.hello;
+      assert.ok(oldRecord);
+      const expectedNames = coexist
+        ? ["pi-claude-marketplace-hello-hello-reviewer", "pi-claude-marketplace-hello-reviewer"]
+        : ["pi-claude-marketplace-hello-hello-reviewer"];
+      const expectedAgents = [
+        {
+          sourceName: "hello-reviewer",
+          generatedName: "pi-claude-marketplace-hello-hello-reviewer",
+          description: "Prefixed reviewer",
+          body: "Prefixed body.\n",
+        },
+        ...(coexist
+          ? [
+              {
+                sourceName: "reviewer",
+                generatedName: "pi-claude-marketplace-hello-reviewer",
+                description: "Reviewer",
+                body: "Short body.\n",
+              },
+            ]
+          : []),
+      ];
+      const { ctx, pi, notifications } = makeCtx({ toolNames: ["subagent"] });
+      const options = {
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        render: "none",
+      } as const;
+
+      // act
+      const outcome = await reinstallPlugin(options);
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        partition: "reinstalled",
+        name: "hello",
+        marketplace: "mp",
+        scope: "project",
+        version: "1.0.0",
+        stagedAgentNames: expectedNames,
+        stagedMcpServerNames: [],
+        declaresAgents: true,
+        declaresMcp: false,
+        resourcesChanged: true,
+      });
+      assert.deepStrictEqual(notifications, []);
+      const expectedEntries = [];
+      for (const agent of expectedAgents) {
+        const sourcePath = path.join(pluginRoot, "agents", agent.sourceName + ".md");
+        const targetPath = path.join(locations.agentsDir, agent.generatedName + ".md");
+        const sourceBytes = `---\nname: ${agent.sourceName}\ndescription: ${agent.description}\ntools: Read,Grep\n---\n\n${agent.body}`;
+        expectedEntries.push({
+          plugin: "hello",
+          marketplace: "mp",
+          sourceAgent: agent.sourceName,
+          generatedName: agent.generatedName,
+          sourcePath,
+          targetPath,
+          sourceHash: createHash("sha256").update(sourceBytes).digest("hex"),
+          droppedFields: [],
+          droppedTools: [],
+          warnings: [],
+        });
+        assert.strictEqual(
+          await readFile(targetPath, "utf8"),
+          `---\nname: ${agent.generatedName}\ndescription: ${agent.description}\ntools: read,grep\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: hello\n  sourceAgent: ${agent.sourceName}\n  sourcePath: ${sourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\n${agent.body}`,
+        );
+      }
+
+      const expectedIndex = { schemaVersion: 1, agents: expectedEntries };
+      assert.deepStrictEqual(
+        JSON.parse(await readFile(locations.agentsIndexPath, "utf8")),
+        expectedIndex,
+      );
+      const afterState = await loadState(locations.extensionRoot);
+      assert.deepStrictEqual(afterState, {
+        ...beforeState,
+        marketplaces: {
+          ...beforeState.marketplaces,
+          mp: {
+            ...beforeState.marketplaces.mp,
+            plugins: {
+              hello: { ...oldRecord, resources: { ...oldRecord.resources, agents: expectedNames } },
+            },
+          },
+        },
+      });
+      if (!coexist) {
+        await assert.rejects(readFile(oldTarget), { code: "ENOENT" });
+      }
+
+      const firstBytes = await readFile(newTarget, "utf8");
+
+      // act
+      const repeated = await reinstallPlugin(options);
+
+      // assert
+      assert.deepStrictEqual(repeated, outcome);
+      assert.strictEqual(await readFile(newTarget, "utf8"), firstBytes);
+      assert.deepStrictEqual(
+        JSON.parse(await readFile(locations.agentsIndexPath, "utf8")),
+        expectedIndex,
+      );
+      assert.deepStrictEqual(await loadState(locations.extensionRoot), afterState);
+    });
+  });
+}
+
+for (const obstacle of ["foreign", "other owner", "save failure"] as const) {
+  test(`AGENT-01: reinstall preserves legacy bytes and state on ${obstacle}`, async (t) => {
+    await withHermeticHome(async () => {
+      // arrange
+      const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-agent-protection-"));
+      t.after(() => rm(cwd, { recursive: true, force: true }));
+      const { locations, sourcePath, oldTarget, newTarget, oldBytes, oldIndex } =
+        await seedLegacyReinstall(cwd, false);
+      if (obstacle !== "save failure") {
+        await writeFile(newTarget, "Other owner's bytes.\n");
+      }
+
+      if (obstacle === "other owner") {
+        const otherEntry = {
+          plugin: "world",
+          marketplace: "other",
+          sourceAgent: "reviewer",
+          generatedName: "pi-claude-marketplace-hello-hello-reviewer",
+          sourcePath,
+          targetPath: newTarget,
+          sourceHash: "b".repeat(64),
+          droppedFields: [],
+          droppedTools: [],
+          warnings: [],
+        };
+        await writeFile(
+          locations.agentsIndexPath,
+          JSON.stringify({ schemaVersion: 1, agents: [...oldIndex.agents, otherEntry] }),
+        );
+      }
+
+      const indexBefore = await readFile(locations.agentsIndexPath, "utf8");
+      const stateBefore = await readFile(locations.stateJsonPath, "utf8");
+      const { ctx, pi, notifications } = makeCtx({ toolNames: ["subagent"] });
+
+      // act
+      const outcome = await reinstallPlugin({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        render: "none",
+        ...(obstacle === "save failure"
+          ? {
+              stateTransaction: {
+                saveState: () => Promise.reject(new Error("save failure after migration")),
+              },
+            }
+          : {}),
+      });
+
+      // assert
+      assert.strictEqual(outcome.partition, "failed");
+      assert.deepStrictEqual(notifications, []);
+      assert.strictEqual(await readFile(oldTarget, "utf8"), oldBytes);
+      assert.strictEqual(await readFile(locations.agentsIndexPath, "utf8"), indexBefore);
+      assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
+      if (obstacle === "save failure") {
+        assert.deepStrictEqual(outcome, {
+          partition: "failed",
+          name: "hello",
+          marketplace: "mp",
+          scope: "project",
+          notes: ["save failure after migration\n\ncause: save failure after migration"],
+        });
+        await assert.rejects(readFile(newTarget), { code: "ENOENT" });
+      } else {
+        const message =
+          obstacle === "foreign"
+            ? `Cannot replace agent target with non-previous content at ${newTarget}`
+            : 'Refusing to stage agents for mp/hello: "pi-claude-marketplace-hello-hello-reviewer" already owned by other/world.';
+        assert.deepStrictEqual(outcome, {
+          partition: "failed",
+          name: "hello",
+          marketplace: "mp",
+          scope: "project",
+          notes: [`${message}\n\ncause: ${message}`],
+        });
+        assert.strictEqual(await readFile(newTarget, "utf8"), "Other owner's bytes.\n");
+      }
+    });
+  });
+}
+
 test("PDEF-01: reinstall preview detects an agent conflict from a later resolved directory", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-agent-dir-preview-"));
@@ -583,9 +851,9 @@ test("PDEF-01: reinstall stages every agent directory and warns on a later dupli
       });
       const conventionalAgentsDir = path.join(seeded.pluginRoot, "agents");
       const expectedWarning =
-        `agent source "shared" in "${conventionalAgentsDir}" elides to generated name ` +
-        `"${GENERATED_AGENT_PREFIX}hello-shared" already produced by an earlier ` +
-        "componentPaths.agents entry; ignoring duplicate.";
+        `agent source "shared" at "${path.join(conventionalAgentsDir, "shared-later.md")}" duplicates generated name ` +
+        `"${GENERATED_AGENT_PREFIX}hello-shared" already produced by agent source "shared" at ` +
+        `"${path.join(conventionalAgentsDir, "..", "declared-agents", "shared-first.md")}"; keeping first discovered source.`;
       const { ctx, pi } = makeCtx({ toolNames: ["subagent"] });
 
       const outcome = await reinstallPlugin({
