@@ -4,6 +4,7 @@ import { describe, test } from "node:test";
 import {
   firstBodyParagraph,
   foldWhenToUse,
+  repairSingleLineScalars,
   setDescriptionScalar,
   synthesizeUnparseableSkill,
   truncate1536,
@@ -417,4 +418,113 @@ describe("setDescriptionScalar", () => {
     // assert
     assert.strictEqual(skillContent, expectedContent);
   });
+});
+
+describe("repairSingleLineScalars", () => {
+  for (const { description, sourceContent } of [
+    {
+      description: "a document with no opening fence",
+      sourceContent: "name: helper\ndescription: Use this: when reviewing\n---\n",
+    },
+    {
+      description: "an opening fence with no closing fence",
+      sourceContent: "---\ndescription: Use this: when reviewing\n",
+    },
+    {
+      description: "empty content",
+      sourceContent: "",
+    },
+    {
+      description: "an already double-quoted value",
+      sourceContent: '---\ndescription: "Use this: when reviewing"\n---\n',
+    },
+    {
+      description: "an already single-quoted value",
+      sourceContent: "---\ndescription: 'Use this: when reviewing'\n---\n",
+    },
+    {
+      description: "a flow sequence",
+      sourceContent: "---\ntags: [alpha: 1, beta]\n---\n",
+    },
+    {
+      description: "a flow mapping",
+      sourceContent: "---\nmeta: {alpha: 1}\n---\n",
+    },
+    {
+      description: "a folded block scalar",
+      sourceContent: "---\ndescription: >-\n  Use this: when reviewing\n---\n",
+    },
+    {
+      description: "a literal block scalar",
+      sourceContent: "---\ndescription: |\n  Use this: when reviewing\n---\n",
+    },
+    {
+      description: "a multi-line plain scalar",
+      sourceContent: "---\ndescription: Use this: when reviewing\n  pull requests\n---\n",
+    },
+    {
+      description: "a colon-free single-line value",
+      sourceContent: "---\nname: helper\ndescription: Reviews pull requests\n---\n",
+    },
+    {
+      description: "a comment line",
+      sourceContent: "---\n# note: an author comment\nname: helper\n---\n",
+    },
+    {
+      description: "an indented line under a nested key",
+      sourceContent: "---\nmeta:\n  note: Use this: when reviewing\n---\n",
+    },
+    {
+      description: "an empty value",
+      sourceContent: "---\ndescription: \nname: helper\n---\n",
+    },
+  ]) {
+    test(`SKFM-01 returns ${description} byte-for-byte`, () => {
+      // arrange
+      const expectedContent = sourceContent;
+
+      // act
+      const skillContent = repairSingleLineScalars(sourceContent);
+
+      // assert
+      assert.strictEqual(skillContent, expectedContent);
+    });
+  }
+
+  for (const { description, sourceContent, expectedContent } of [
+    {
+      description: "quotes a single-line value carrying an unquoted colon",
+      sourceContent:
+        "---\nname: helper\ndescription: Use this: when reviewing\n---\n\nBody prose.\n",
+      expectedContent:
+        '---\nname: helper\ndescription: "Use this: when reviewing"\n---\n\nBody prose.\n',
+    },
+    {
+      description: "escapes a backslash and a quote inside a repaired value",
+      sourceContent: '---\ndescription: at C:\\skills the "main": entry\n---\n',
+      expectedContent: '---\ndescription: "at C:\\\\skills the \\"main\\": entry"\n---\n',
+    },
+    {
+      description: "repairs one line and leaves a sibling flow sequence untouched",
+      sourceContent: "---\ntags: [alpha: 1, beta]\ndescription: Use this: when reviewing\n---\n",
+      expectedContent:
+        '---\ntags: [alpha: 1, beta]\ndescription: "Use this: when reviewing"\n---\n',
+    },
+    {
+      description: "drops the trailing carriage return of a repaired CRLF line",
+      sourceContent: "---\r\ndescription: Use this: when reviewing\r\n---\r\n",
+      expectedContent: '---\r\ndescription: "Use this: when reviewing"\n---\r\n',
+    },
+  ]) {
+    test(`SKFM-01 ${description}`, () => {
+      // arrange
+      const expectedSkillContent = expectedContent;
+
+      // act
+      const skillContent = repairSingleLineScalars(sourceContent);
+
+      // assert
+      assert.strictEqual(skillContent, expectedSkillContent);
+    });
+  }
 });

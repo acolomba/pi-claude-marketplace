@@ -308,7 +308,7 @@ function namedVerdict(
 ): NamedWorkflow | RefusedWorkflow {
   const generated = generateOrRefuse(pluginName, fileName, metaName);
 
-  if (typeof generated !== "string") {
+  if (!("generatedName" in generated)) {
     return generated;
   }
 
@@ -316,7 +316,7 @@ function namedVerdict(
     outcome: "named",
     fileName,
     metaName,
-    generatedName: generated,
+    generatedName: generated.generatedName,
     ...(description === undefined ? {} : { description }),
     ...(gate === undefined ? {} : { gate }),
   };
@@ -351,14 +351,14 @@ function stemFallbackVerdict(
 ): StemFallbackWorkflow | RefusedWorkflow {
   const generated = generateOrRefuse(pluginName, fileName, fileStem(fileName));
 
-  if (typeof generated !== "string") {
+  if (!("generatedName" in generated)) {
     return generated;
   }
 
   return {
     outcome: "stem-fallback",
     fileName,
-    generatedName: generated,
+    generatedName: generated.generatedName,
     ...(description === undefined ? {} : { description }),
     ...(gate === undefined ? {} : { gate }),
   };
@@ -420,9 +420,9 @@ function generateOrRefuse(
   pluginName: string,
   fileName: string,
   declaredName: string,
-): string | RefusedWorkflow {
+): { readonly generatedName: string } | RefusedWorkflow {
   try {
-    return generatedWorkflowName(pluginName, declaredName);
+    return { generatedName: generatedWorkflowName(pluginName, declaredName) };
   } catch (err) {
     return {
       outcome: "refused",

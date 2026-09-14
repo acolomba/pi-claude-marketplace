@@ -30,7 +30,7 @@
 // IL-2 EXEMPTION (T-62-09): the single sanctioned runtime notify call
 // in the entire `bridges/hooks/async-rewake/` subtree is the
 // `rewakeSummary` surface inside `onChildExit`, routed through
-// `notifyAsyncRewakeSummary` in `shared/notify.ts` so the eslint
+// `notifyAsyncRewakeSummary` in `shared/notification-dispatch.ts` so the eslint
 // `no-restricted-syntax` ctx.ui.notify gate stays GREEN here.
 // Runtime notify is otherwise forbidden in bridge code; the exemption
 // exists because `rewakeSummary` is the upstream-mandated UI status
@@ -41,10 +41,9 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
-import { isDispatchableEvent } from "../../../domain/components/hook-events.ts";
 import { hookDebugLog } from "../../../shared/debug-log.ts";
 import { errorMessage } from "../../../shared/errors.ts";
-import { notifyAsyncRewakeSummary } from "../../../shared/notify.ts";
+import { notifyAsyncRewakeSummary } from "../../../shared/notification-dispatch.ts";
 import { installTimerLadder, type TimerLadder } from "../exec-timer.ts";
 import { prepareHookEnv } from "../hook-env.ts";
 import { translate as translatePostCompact } from "../payloads/post-compact.ts";
@@ -57,7 +56,6 @@ import { translate as translateSessionStart } from "../payloads/session-start.ts
 import { translate as translateStopFailure } from "../payloads/stop-failure.ts";
 import { translate as translateStop } from "../payloads/stop.ts";
 import { translate as translateUserPromptSubmit } from "../payloads/user-prompt-submit.ts";
-import { currentEpoch, type RoutingEntry } from "../routing-state.ts";
 import { planSpawn, serializeWithTruncation } from "../spawn-helpers.ts";
 import { resolveTimeoutSeconds } from "../timeout.ts";
 import { buildTranslationContext, type TranslationContext } from "../translation-context.ts";
@@ -74,6 +72,8 @@ import { RingBuffer, STDERR_CAP_BYTES, STDOUT_CAP_BYTES } from "./ring-buffer.ts
 import type { BucketAEvent, DispatchableEvent } from "../../../domain/components/hook-events.ts";
 import type { ScopedLocations } from "../../../persistence/locations.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../../platform/pi-api.ts";
+import type { RoutingEntry } from "../routing-state.ts";
+import type { HooksRuntime } from "../runtime.ts";
 
 // ──────────────────────────────────────────────────────────────────────────
 // Constants
@@ -139,22 +139,13 @@ export interface AsyncRewakeEntry {
   readonly ladder: TimerLadder;
   readonly stdoutBuffer: RingBuffer;
   readonly stderrBuffer: RingBuffer;
-  readonly capturedEpoch: number;
+  readonly capturedGeneration: number;
   readonly loc: ScopedLocations;
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-// Module state
-//
-// The registry Map, per-table persistence chains, and default orphan probes are
-// the only module-level cells left here. The `spawn` implementation and dispatchId
-// generator are parameters (`SpawnDeps` below) rather than test-only module-global
-// setters, so `dispatchHookExec` in `dispatch-exec.ts` threads them through from
-// its own `deps` argument.
+// Production dependency contracts
 // ──────────────────────────────────────────────────────────────────────────
-
-const asyncRewakeRegistry = new Map<string, AsyncRewakeEntry>();
-const pidTableOperations = new Map<string, Promise<void>>();
 
 /**
  * The two process probes the orphan reap needs: a liveness/kill signal and a
@@ -210,6 +201,7 @@ export interface SpawnDeps {
  * (the IL-2-exempt notify seam) and `ctx.isIdle()` available on `ctx`.
  */
 export async function spawnAndRegister(
+  runtime: HooksRuntime,
   entry: RoutingEntry,
   event: unknown,
   ctx: ExtensionContext,
@@ -220,21 +212,10 @@ export async function spawnAndRegister(
   const spawnImpl = deps.spawnImpl ?? spawn;
   const makeDispatchId = deps.dispatchId ?? (() => randomUUID());
   const pidTableWriter = deps.pidTableWriter ?? writePidTable;
-  // D-87-04: narrow the admitted event to the dispatchable subset before
-  // indexing the translator table. `Stop` / `StopFailure` never reach this
-  // path -- no Pi event routes them to an async-rewake spawn (their entries in
-  // `TRANSLATORS` above are inert) -- so this arm is a defensive belt
-  // (debug-log + return), not live behavior.
-  if (!isDispatchableEvent(entry.claudeEvent)) {
-    hookDebugLog(
-      `async-rewake: ${entry.claudeEvent} is admitted but not dispatchable (${entry.pluginId}); skipping spawn`,
-    );
-    return;
-  }
 
   try {
     const dispatchId = makeDispatchId();
-    const capturedEpoch = currentEpoch();
+    const capturedGeneration = runtime.currentGeneration();
     const transCtx = buildTranslationContext(ctx);
     const stdinPayload = TRANSLATORS[entry.claudeEvent](event as never, transCtx);
     const stdinJson = serializeWithTruncation(stdinPayload);
@@ -323,11 +304,11 @@ export async function spawnAndRegister(
       ladder,
       stdoutBuffer,
       stderrBuffer,
-      capturedEpoch,
+      capturedGeneration,
       loc,
     };
 
-    asyncRewakeRegistry.set(dispatchId, asyncEntry);
+    runtime.registerChild(asyncEntry);
 
     let exitOutcome:
       { readonly code: number | null; readonly signal: NodeJS.Signals | null } | undefined;
@@ -343,7 +324,7 @@ export async function spawnAndRegister(
       }
 
       finalized = true;
-      finalizeChild(dispatchId, outcome, ctx, pi, pidTableWriter);
+      finalizeChild(runtime, dispatchId, outcome, ctx, pi, pidTableWriter);
     };
 
     const finalizeAfterOwnedStreams = (): void => {
@@ -389,7 +370,7 @@ export async function spawnAndRegister(
     // a recoverable record. Fire-and-forget at the body's tail -- the
     // sync spawn + register has already completed; awaiting here only
     // bounds the resolve latency on the I/O.
-    await persistPidTableForLoc(loc, pidTableWriter);
+    await persistPidTableForLoc(runtime, loc, pidTableWriter);
   } catch (err) {
     hookDebugLog(
       `async-rewake: spawnAndRegister threw (${entry.pluginId}/${entry.claudeEvent}): ${errorMessage(err)}`,
@@ -402,21 +383,21 @@ export async function spawnAndRegister(
 // ──────────────────────────────────────────────────────────────────────────
 
 function finalizeChild(
+  runtime: HooksRuntime,
   dispatchId: string,
   outcome: { readonly code: number | null; readonly signal: NodeJS.Signals | null } | undefined,
   ctx: ExtensionContext,
   pi: ExtensionAPI,
   pidTableWriter: typeof writePidTable,
 ): void {
-  const entry = asyncRewakeRegistry.get(dispatchId);
+  const entry = runtime.takeChild(dispatchId);
   if (entry === undefined) {
     // Defensive guard for cleanup paths that removed the entry before a
     // terminal child event reached this closure.
     return;
   }
 
-  asyncRewakeRegistry.delete(dispatchId);
-  void persistPidTableForLoc(entry.loc, pidTableWriter).catch((err: unknown) => {
+  void persistPidTableForLoc(runtime, entry.loc, pidTableWriter).catch((err: unknown) => {
     hookDebugLog(
       `async-rewake: terminal pid-table persistence failed dispatchId=${dispatchId}: ${errorMessage(err)}`,
     );
@@ -428,20 +409,21 @@ function finalizeChild(
 
   const { code, signal } = outcome;
 
-  // D-62-03 / D-59-03 captured-epoch zombie defense. A slow child from
+  // D-62-03 / D-59-03 captured-generation zombie defense. A slow child from
   // a prior `/reload` cycle must not inject into the freshly-hydrated
   // session.
-  if (entry.capturedEpoch !== currentEpoch()) {
+  if (entry.capturedGeneration !== runtime.currentGeneration()) {
     hookDebugLog(
       `async-rewake: stale exit from prior load -- dispatchId=${dispatchId} ` +
-        `capturedEpoch=${entry.capturedEpoch} currentEpoch=${currentEpoch()}`,
+        `capturedGeneration=${entry.capturedGeneration} ` +
+        `currentGeneration=${runtime.currentGeneration()}`,
     );
     return;
   }
 
   // IL-2 EXEMPTION (T-62-09): `rewakeSummary` is the single sanctioned
   // runtime notify call originating from `bridges/hooks/async-rewake/`,
-  // routed through the canonical `shared/notify.ts` seam. Fires
+  // routed through the canonical `shared/notification-dispatch.ts` seam. Fires
   // independently of exit code -- it is the upstream-mandated UI
   // status surface, not a success-only signal.
   if (entry.rewakeSummary !== undefined) {
@@ -520,17 +502,8 @@ function buildInjectionContent(
  * no-ops. The persisted PID table is NOT touched here -- the orphan
  * reap path is responsible for draining that surface.
  */
-export function shutdownInMemoryChildren(): void {
-  for (const entry of asyncRewakeRegistry.values()) {
-    entry.ladder.cancel();
-    try {
-      entry.child.kill("SIGKILL");
-    } catch {
-      // best-effort: a child already dead, or a recycled pid, is fine
-    }
-  }
-
-  asyncRewakeRegistry.clear();
+export function shutdownInMemoryChildren(runtime: HooksRuntime): void {
+  runtime.shutdownChildren();
 }
 
 /**
@@ -548,10 +521,11 @@ export function shutdownInMemoryChildren(): void {
  * kill / marker-match / soft-skip arms are observable without a real child.
  */
 export async function reapOrphans(
+  runtime: HooksRuntime,
   loc: ScopedLocations,
   probes: OrphanProbes = DEFAULT_ORPHAN_PROBES,
 ): Promise<void> {
-  await enqueuePidTableOperation(loc, async () => {
+  await runtime.runPidTableOperation(pidTablePath(loc), async () => {
     const entries = await readPidTable(loc);
     for (const tableEntry of entries) {
       if (!isPidAlive(tableEntry.pid, probes)) {
@@ -631,44 +605,13 @@ async function prepareAsyncEnv(
  * directory does not yet exist is handled without an explicit
  * `ensureSharedDataDir` call here.
  */
-function enqueuePidTableOperation(
-  loc: ScopedLocations,
-  operation: () => Promise<void>,
-): Promise<void> {
-  const key = pidTablePath(loc);
-  const previous = pidTableOperations.get(key) ?? Promise.resolve();
-  const operationPromise = previous.then(operation, operation);
-  const queueTail = operationPromise
-    .catch(() => undefined)
-    .finally(() => {
-      if (pidTableOperations.get(key) === queueTail) {
-        pidTableOperations.delete(key);
-      }
-    });
-
-  pidTableOperations.set(key, queueTail);
-  return operationPromise;
-}
-
 async function persistPidTableForLoc(
+  runtime: HooksRuntime,
   loc: ScopedLocations,
   pidTableWriter: typeof writePidTable = writePidTable,
 ): Promise<void> {
-  await enqueuePidTableOperation(loc, async () => {
-    const snapshot: PidTableEntry[] = [];
-    for (const entry of asyncRewakeRegistry.values()) {
-      if (entry.loc === loc || entry.loc.extensionRoot === loc.extensionRoot) {
-        snapshot.push({
-          pid: entry.pid,
-          dispatchId: entry.dispatchId,
-          scope: entry.scope,
-          marketplace: entry.marketplace,
-          plugin: entry.pluginId,
-          spawnedAt: entry.spawnedAt,
-        });
-      }
-    }
-
+  await runtime.runPidTableOperation(pidTablePath(loc), async () => {
+    const snapshot: PidTableEntry[] = runtime.pidTableEntries(loc).map((entry) => ({ ...entry }));
     await pidTableWriter(loc, snapshot);
   });
 }

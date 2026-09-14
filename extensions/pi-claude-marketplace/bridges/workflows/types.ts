@@ -13,7 +13,7 @@
 // re-exported from the barrel (`bridges/workflows/index.ts`) so external
 // consumers cannot read or mutate them.
 
-import type { MaterializablePlugin } from "../../domain/resolver.ts";
+import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
 import type { WorkflowVerdict } from "../../domain/workflow-script.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 

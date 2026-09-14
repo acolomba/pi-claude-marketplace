@@ -54,7 +54,7 @@
 // records, both scopes' base and override config layers, and the generated
 // agent files -- compared as ONE whole value. The delegating cases deliberately
 // do NOT assert the notification body: that value belongs to
-// tests/orchestrators/plugin/update.test.ts, and re-deriving it here would
+// tests/orchestrators/plugin/update-flow.test.ts, and re-deriving it here would
 // restate a fact another pair owns.
 //
 // The negative half of D-116-06 is proven in full. Every rejecting case sizes
@@ -109,10 +109,17 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { test, type TestContext } from "node:test";
 
+import {
+  createHooksRouting,
+  createHooksRuntime,
+  readHooksJson,
+} from "../../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { SCOPE_TARGET_FLAG } from "../../../../extensions/pi-claude-marketplace/edge/flag-catalog.ts";
 import { makeUpdateHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/update.ts";
+import { createPluginUpdateOperations } from "../../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts";
 import { loadConfig } from "../../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { loadState } from "../../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { createCompletionCache } from "../../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
 import { mergeMarketplaceIntoState } from "../marketplace-seed.ts";
 
@@ -142,6 +149,13 @@ const USAGE =
   "[--scope user|project] [--map-model] [--partial] [--local]";
 
 const SKILL_SOURCE = "---\nname: tool\ndescription: A tool skill.\n---\n\nBody.\n";
+
+/** Give each handler case its own production update owner. */
+function createUpdateHandler(pi: Parameters<typeof makeUpdateHandler>[0]) {
+  const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
+  const { updatePlugins } = createPluginUpdateOperations(hooksRouting, createCompletionCache());
+  return makeUpdateHandler(pi, updatePlugins);
+}
 
 /**
  * One agent per agent-bearing plugin, declaring a source model the AG-7 table
@@ -251,7 +265,7 @@ function seededRecord(plugin: SeededPlugin): Record<string, unknown> {
     resolvedSource: "./placeholder",
     compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
     resources: {
-      skills: [`${plugin.name}-tool`],
+      skills: [`${plugin.name}:tool`],
       prompts: [],
       agents: plugin.agent === true ? [`pi-claude-marketplace-${plugin.name}-scout`] : [],
       mcpServers: [],
@@ -483,7 +497,7 @@ const ONE_STALE: InstallRecordProjection = {
   enabled: true,
   installable: true,
   unsupported: [],
-  skills: ["one-tool"],
+  skills: ["one:tool"],
   agents: ["pi-claude-marketplace-one-scout"],
 };
 
@@ -494,7 +508,7 @@ const TWO_STALE: InstallRecordProjection = {
   enabled: true,
   installable: true,
   unsupported: [],
-  skills: ["two-tool"],
+  skills: ["two:tool"],
   agents: [],
 };
 
@@ -505,7 +519,7 @@ const THREE_STALE: InstallRecordProjection = {
   enabled: true,
   installable: true,
   unsupported: [],
-  skills: ["three-tool"],
+  skills: ["three:tool"],
   agents: [],
 };
 
@@ -600,6 +614,36 @@ const PROJECT_ONE_UPDATED: ScopeFootprint = {
   agents: [{ file: ONE_AGENT_FILE }],
 };
 
+test("forwards the exact direct update request through the required update operation", async (t) => {
+  const workspace = await createHermeticWorkspace(t, "forward-operation");
+  const { ctx, pi } = createNotificationBoundary(1, 4, {
+    value: workspace.cwd,
+    reads: 1,
+  });
+  const calls: unknown[] = [];
+  const updateOperation = (options: unknown): Promise<void> => {
+    calls.push(options);
+    return Promise.resolve();
+  };
+
+  const updateHandler = makeUpdateHandler(pi, updateOperation);
+
+  await updateHandler("one@alpha --scope project --map-model --partial --local", ctx);
+
+  assert.deepStrictEqual(calls, [
+    {
+      ctx,
+      pi,
+      cwd: workspace.cwd,
+      target: { kind: "plugin", plugin: "one", marketplace: "alpha" },
+      scope: "project",
+      mapModel: true,
+      partial: true,
+      local: true,
+    },
+  ]);
+});
+
 // ---------------------------------------------------------------------------
 // The three target forms. Each excludes something the other two include, so a
 // form that collapsed into another is visible rather than merely unproven. The
@@ -652,7 +696,7 @@ for (const { args, expectedFootprint, label, summary } of [
       value: workspace.cwd,
       reads: 1,
     });
-    const updateHandler = makeUpdateHandler(pi);
+    const updateHandler = createUpdateHandler(pi);
 
     // act
     await updateHandler(args, ctx);
@@ -704,7 +748,7 @@ for (const { args, expectedFootprint, label, summary } of [
       value: workspace.cwd,
       reads: 1,
     });
-    const updateHandler = makeUpdateHandler(pi);
+    const updateHandler = createUpdateHandler(pi);
 
     // act
     await updateHandler(args, ctx);
@@ -731,7 +775,7 @@ const DEGRADED_STALE: InstallRecordProjection = {
   enabled: true,
   installable: true,
   unsupported: [],
-  skills: ["degraded-tool"],
+  skills: ["degraded:tool"],
   agents: ["pi-claude-marketplace-degraded-scout"],
 };
 
@@ -799,7 +843,7 @@ for (const { args, expectedFootprint, label, summary } of [
       value: workspace.cwd,
       reads: 1,
     });
-    const updateHandler = makeUpdateHandler(pi);
+    const updateHandler = createUpdateHandler(pi);
 
     // act
     await updateHandler(args, ctx);
@@ -852,7 +896,7 @@ for (const { args, expectedAgents, label, position } of [
       value: workspace.cwd,
       reads: 1,
     });
-    const updateHandler = makeUpdateHandler(pi);
+    const updateHandler = createUpdateHandler(pi);
 
     // act
     await updateHandler(args, ctx);
@@ -880,7 +924,7 @@ test("honors a scope flag and the scope-target flag supplied together, narrowing
     value: workspace.cwd,
     reads: 1,
   });
-  const updateHandler = makeUpdateHandler(pi);
+  const updateHandler = createUpdateHandler(pi);
 
   // act
   await updateHandler(`--scope user one@alpha ${SCOPE_TARGET_FLAG}`, ctx);
@@ -917,7 +961,7 @@ for (const { args, label, summary } of [
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
     const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-    const updateHandler = makeUpdateHandler(pi);
+    const updateHandler = createUpdateHandler(pi);
 
     // act
     await updateHandler(args, ctx);
@@ -956,7 +1000,7 @@ for (const { args, expectedMessage, label, summary } of [
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
     const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-    const updateHandler = makeUpdateHandler(pi);
+    const updateHandler = createUpdateHandler(pi);
 
     // act
     await updateHandler(args, ctx);
@@ -985,7 +1029,7 @@ for (const { args, label, summary } of [
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
     const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-    const updateHandler = makeUpdateHandler(pi);
+    const updateHandler = createUpdateHandler(pi);
 
     // act
     await updateHandler(args, ctx);
@@ -1018,7 +1062,7 @@ for (const { args, label, offending, summary } of [
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
     const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-    const updateHandler = makeUpdateHandler(pi);
+    const updateHandler = createUpdateHandler(pi);
 
     // act
     await updateHandler(args, ctx);

@@ -51,7 +51,7 @@ import path from "node:path";
 import { assertNoWorkflowNameCollisions } from "../../domain/workflow-script.ts";
 import { WorkflowTargetOccupiedError } from "../../shared/errors-bridges.ts";
 import { appendLeakToError, appendLeaks, errorMessage } from "../../shared/errors.ts";
-import { cleanupStaging, pathExists } from "../../shared/fs-utils.ts";
+import { cleanupStaging, createRemovalOps, pathExists } from "../../shared/fs-utils.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
 
 import { discoverPluginWorkflows } from "./discover.ts";
@@ -237,7 +237,10 @@ export async function prepareStageWorkflows(
 
     unownedNames = await foreignOccupiedTargets(renamePairs, previousNames);
   } catch (err) {
-    throw appendLeakToError(err, await cleanupStaging(stagingRoot, STAGING_LABEL));
+    throw appendLeakToError(
+      err,
+      await cleanupStaging(createRemovalOps(), stagingRoot, STAGING_LABEL),
+    );
   }
 
   return {
@@ -462,7 +465,7 @@ export async function commitPreparedWorkflows(
       unrestored.length > 0
         ? `left ${STAGING_LABEL} at ${prepared.stagingRoot} in place: it still holds ` +
           `${unrestored.length} unrestored previous workflow envelope(s)`
-        : await cleanupStaging(prepared.stagingRoot, STAGING_LABEL);
+        : await cleanupStaging(createRemovalOps(), prepared.stagingRoot, STAGING_LABEL);
 
     // CR-02: a target the restore loop reclaimed no longer holds this commit's
     // envelope, whatever the reversal reported. `rename(2)` replaces an
@@ -479,7 +482,9 @@ export async function commitPreparedWorkflows(
     //
     // Reversed back into discovery order: `completedRenames` was walked
     // backwards to unwind it.
-    const stranded = stillPlaced.reverse().filter((pair) => !restoredTargets.has(pair.to));
+    const discoveryOrder = [...stillPlaced];
+    discoveryOrder.reverse();
+    const stranded = discoveryOrder.filter((pair) => !restoredTargets.has(pair.to));
     const rollbackLeaks = stranded.map(
       (pair) => `failed to roll back workflow rename ${pair.to} -> ${pair.from}: ${pair.reason}`,
     );
@@ -489,7 +494,7 @@ export async function commitPreparedWorkflows(
   }
 
   reportPlaced(prepared._renamePairs.map((pair) => pair.name));
-  return cleanupStaging(prepared.stagingRoot, STAGING_LABEL);
+  return cleanupStaging(createRemovalOps(), prepared.stagingRoot, STAGING_LABEL);
 }
 
 /**
@@ -503,5 +508,5 @@ export async function abortPreparedWorkflows(
     return undefined;
   }
 
-  return cleanupStaging(prepared.stagingRoot, STAGING_LABEL);
+  return cleanupStaging(createRemovalOps(), prepared.stagingRoot, STAGING_LABEL);
 }

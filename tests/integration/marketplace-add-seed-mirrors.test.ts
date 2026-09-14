@@ -21,6 +21,7 @@ import {
 } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/git-source-probe.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { loadState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { pathExists } from "../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { createCredentialOpsFake } from "../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../platform/git-ops-fake.ts";
@@ -170,6 +171,7 @@ test("seeds a same-repository URL plugin mirror with one marketplace clone", asy
       pi: boundary.pi,
       scope: "project",
       cwd,
+      completionCache: createCompletionCache(),
       rawSource: REPO_URL,
       gitOps: gitBoundary.gitOps,
       credentialOps: credentials.credentialOps,
@@ -209,6 +211,7 @@ test("seeds a matching path marketplace without network operations", async () =>
       pi: boundary.pi,
       scope: "project",
       cwd,
+      completionCache: createCompletionCache(),
       rawSource: checkout,
       gitOps: gitBoundary.gitOps,
       credentialOps: credentials.credentialOps,
@@ -252,6 +255,7 @@ test("leaves a different-repository plugin remote and unseeded", async () => {
       pi: boundary.pi,
       scope: "project",
       cwd,
+      completionCache: createCompletionCache(),
       rawSource: REPO_URL,
       gitOps: gitBoundary.gitOps,
       credentialOps: credentials.credentialOps,
@@ -299,6 +303,7 @@ test("seeds a reachable pin and leaves an unreachable pin unseeded", async () =>
           pi: boundary.pi,
           scope: "project",
           cwd,
+          completionCache: createCompletionCache(),
           rawSource: REPO_URL,
           gitOps: gitBoundary.gitOps,
           credentialOps: credentials.credentialOps,
@@ -348,6 +353,7 @@ test("preserves the real remote URL on the seeded mirror", async () => {
       pi: boundary.pi,
       scope: "project",
       cwd,
+      completionCache: createCompletionCache(),
       rawSource: REPO_URL,
       gitOps: gitBoundary.gitOps,
       credentialOps: credentials.credentialOps,
@@ -385,6 +391,7 @@ test("lets normal clone garbage collection sweep an unreferenced seeded mirror",
       pi: boundary.pi,
       scope: "project",
       cwd,
+      completionCache: createCompletionCache(),
       rawSource: REPO_URL,
       gitOps: gitBoundary.gitOps,
       credentialOps: credentials.credentialOps,

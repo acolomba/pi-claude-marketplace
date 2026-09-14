@@ -10,7 +10,7 @@
 // W-05: StageSkillsCommitResult exposes `recorded: StagedSkillRecord[]`
 // so orchestrators can populate state.json without re-discovering skills.
 
-import type { MaterializablePlugin } from "../../domain/resolver.ts";
+import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 
 /** A skill enumerated by `discoverPluginSkills` (one entry per source skill dir). */

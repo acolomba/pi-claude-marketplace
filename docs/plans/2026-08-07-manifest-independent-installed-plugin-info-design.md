@@ -40,7 +40,7 @@ Additional invariants:
 
 ### 1. Installed inventory is the union of manifest and state
 
-`orchestrators/plugin/list.ts` will build a marketplace inventory from:
+`orchestrators/plugin/list-flow.ts` builds a marketplace inventory from:
 
 1. entries in a successfully loaded marketplace manifest; and
 2. plugin names in `mpRecord.plugins` that are absent from that manifest.

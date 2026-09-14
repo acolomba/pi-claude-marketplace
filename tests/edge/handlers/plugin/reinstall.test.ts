@@ -90,7 +90,7 @@
 // diagnostics owned by tests/edge/args.test.ts, none restates the retired
 // vocabulary guard owned by tests/architecture/partial-vocabulary-guard.test.ts,
 // and none re-derives the reinstall workflow's own row grammar, which
-// tests/orchestrators/plugin/reinstall.test.ts owns.
+// tests/orchestrators/plugin/reinstall-flow.test.ts owns.
 
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
@@ -99,7 +99,14 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { test, type TestContext } from "node:test";
 
-import { makeReinstallHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/reinstall.ts";
+import {
+  createHooksRouting,
+  createHooksRuntime,
+  readHooksJson,
+} from "../../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
+import { makeReinstallHandler as makeReinstallHandlerWithOperation } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/reinstall.ts";
+import { createNodeReinstallPlugins } from "../../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts";
+import { createCompletionCache } from "../../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
 import {
   buildInstalledPluginRecord,
@@ -107,7 +114,24 @@ import {
   mergeMarketplaceIntoState,
 } from "../marketplace-seed.ts";
 
+import type {
+  ReinstallPluginsFn,
+  ReinstallPluginsOptions,
+} from "../../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts";
+import type { ExtensionAPI } from "../../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { Scope } from "../../../../extensions/pi-claude-marketplace/shared/types.ts";
+
+function makeReinstallHandler(
+  pi: ExtensionAPI,
+): ReturnType<typeof makeReinstallHandlerWithOperation> {
+  return makeReinstallHandlerWithOperation(
+    pi,
+    createNodeReinstallPlugins(
+      createHooksRouting(createHooksRuntime(), { readHooksJson }),
+      createCompletionCache(),
+    ),
+  );
+}
 
 /** The usage block this shim appends after a blank line to every rejection. */
 const REINSTALL_USAGE =
@@ -245,7 +269,7 @@ async function seedMarketplace(
         buildInstalledPluginRecord(
           { version: "1.0.0", resolvedSource: `./${plugin}` },
           {
-            skills: [`${plugin}-tool`],
+            skills: [`${plugin}:tool`],
             prompts: [],
             agents: [],
             mcpServers: [],
@@ -381,8 +405,8 @@ test("re-materialises every installed plugin in both scopes when no positional i
   // assert
   assert.deepStrictEqual(notifications, [{ message: ALL_PLUGINS_MESSAGE }]);
   assert.deepStrictEqual(await readFootprint(workspace), {
-    projectSkills: ["alpha-tool", "beta-tool", "gamma-tool"],
-    userSkills: ["delta-tool"],
+    projectSkills: ["alpha:tool", "beta:tool", "gamma:tool"],
+    userSkills: ["delta:tool"],
     projectBase: ALL_PLUGINS_DECLARED,
     projectLocal: undefined,
     userBase: USER_PLUGIN_DECLARED,
@@ -408,7 +432,7 @@ test("re-materialises only the named marketplace when a bare marketplace referen
   // assert
   assert.deepStrictEqual(notifications, [{ message: MARKETPLACE_FORM_MESSAGE }]);
   assert.deepStrictEqual(await readFootprint(workspace), {
-    projectSkills: ["alpha-tool", "beta-tool"],
+    projectSkills: ["alpha:tool", "beta:tool"],
     userSkills: [],
     projectBase: MARKETPLACE_FORM_DECLARED,
     projectLocal: undefined,
@@ -427,7 +451,17 @@ test("re-materialises only the named plugin when a plugin reference is supplied 
     value: workspace.cwd,
     reads: 1,
   });
-  const reinstallHandler = makeReinstallHandler(pi);
+  const calls: ReinstallPluginsOptions[] = [];
+  const reinstallPlugins = createNodeReinstallPlugins(
+    createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    createCompletionCache(),
+  );
+  const reinstallPluginsSpy: ReinstallPluginsFn = async (opts) => {
+    calls.push(opts);
+    return reinstallPlugins(opts);
+  };
+
+  const reinstallHandler = makeReinstallHandlerWithOperation(pi, reinstallPluginsSpy);
 
   // act
   await reinstallHandler("alpha@mp", ctx);
@@ -435,13 +469,22 @@ test("re-materialises only the named plugin when a plugin reference is supplied 
   // assert
   assert.deepStrictEqual(notifications, [{ message: PLUGIN_FORM_MESSAGE }]);
   assert.deepStrictEqual(await readFootprint(workspace), {
-    projectSkills: ["alpha-tool"],
+    projectSkills: ["alpha:tool"],
     userSkills: [],
     projectBase: { schemaVersion: 1, plugins: { "alpha@mp": {} } },
     projectLocal: undefined,
     userBase: undefined,
     userLocal: undefined,
   });
+
+  assert.deepStrictEqual(calls, [
+    {
+      ctx,
+      pi,
+      cwd: workspace.cwd,
+      target: { kind: "plugin", plugin: "alpha", marketplace: "mp" },
+    },
+  ]);
   assert.strictEqual(workspace.transportCalls(), 0);
   verifyBoundary();
 });
@@ -456,7 +499,7 @@ for (const { expectedFootprint, expectedMessage, scopeValue } of [
     scopeValue: "project",
     expectedMessage: PROJECT_SCOPE_MESSAGE,
     expectedFootprint: {
-      projectSkills: ["alpha-tool", "beta-tool", "gamma-tool"],
+      projectSkills: ["alpha:tool", "beta:tool", "gamma:tool"],
       userSkills: [],
       projectBase: ALL_PLUGINS_DECLARED,
       projectLocal: undefined,
@@ -469,7 +512,7 @@ for (const { expectedFootprint, expectedMessage, scopeValue } of [
     expectedMessage: USER_SCOPE_MESSAGE,
     expectedFootprint: {
       projectSkills: [],
-      userSkills: ["delta-tool"],
+      userSkills: ["delta:tool"],
       projectBase: undefined,
       projectLocal: undefined,
       userBase: USER_PLUGIN_DECLARED,
@@ -522,7 +565,7 @@ for (const { args, placement } of [
     // assert
     assert.deepStrictEqual(notifications, [{ message: MARKETPLACE_FORM_MESSAGE }]);
     assert.deepStrictEqual(await readFootprint(workspace), {
-      projectSkills: ["alpha-tool", "beta-tool"],
+      projectSkills: ["alpha:tool", "beta:tool"],
       userSkills: [],
       projectBase: MARKETPLACE_FORM_DECLARED,
       projectLocal: undefined,
@@ -561,7 +604,7 @@ for (const { args, placement } of [
     // assert
     assert.deepStrictEqual(notifications, [{ message: MARKETPLACE_FORM_MESSAGE }]);
     assert.deepStrictEqual(await readFootprint(workspace), {
-      projectSkills: ["alpha-tool", "beta-tool"],
+      projectSkills: ["alpha:tool", "beta:tool"],
       userSkills: [],
       projectBase: undefined,
       projectLocal: MARKETPLACE_FORM_DECLARED,
@@ -590,7 +633,7 @@ test("honours a scope flag and the scope-target flag driven together (WB-02)", a
   assert.deepStrictEqual(notifications, [{ message: USER_SCOPE_MESSAGE }]);
   assert.deepStrictEqual(await readFootprint(workspace), {
     projectSkills: [],
-    userSkills: ["delta-tool"],
+    userSkills: ["delta:tool"],
     projectBase: undefined,
     projectLocal: undefined,
     userBase: undefined,

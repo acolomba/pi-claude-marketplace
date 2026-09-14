@@ -17,8 +17,8 @@
  *   - D-79-04: endpoints/clientId/scope/credentialFrom are read from a
  *     GitAuthProvider descriptor; `provider` defaults to GITHUB_PROVIDER so
  *     the github.com path is byte-identical.
- *   - D-32-04: notifyFn callback (no `ctx` import; preserves shared/notify.ts
- *     chokepoint at the boundary).
+ *   - D-32-04: notifyFn callback (no `ctx` import; preserves the
+ *     shared/notification-dispatch.ts chokepoint at the boundary).
  *   - D-32-05: every DeviceFlowResult -- success OR failure -- carries
  *     `authAttempted: true` as a reference-only / future-proofing marker.
  *     `onAuthFailure(url, cred)` never receives a DeviceFlowResult (only the
@@ -108,8 +108,8 @@ export interface DeviceFlowHttp {
 }
 
 /**
- * Pre-bound notify callback (D-32-04). Bound at the orchestrator call site
- * (e.g. `ctx.ui.notify.bind(ctx)` or via shared/notify.ts). Returns `void`
+ * Pre-bound notify callback (D-32-04). Built at the orchestrator call site
+ * with `makeRawNotifyFn` from shared/notification-dispatch.ts. Returns `void`
  * -- fire-and-forget per P32-5; do NOT await.
  */
 export type NotifyFn = (message: string, severity?: "info" | "warning" | "error") => void;

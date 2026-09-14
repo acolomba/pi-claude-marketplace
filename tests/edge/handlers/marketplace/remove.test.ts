@@ -2,9 +2,10 @@
 //
 // The module is one factory that opens the command through the shared
 // marketplace opener and forwards four members to the remove workflow: the
-// parsed name, the working directory, the optional scope, and the optional
-// scope-target flag. Its whole promise is therefore the usage block it supplies
-// plus those four forwards. The opener's own parse, the collapse of the
+// parsed name, the working directory, the optional scope, the optional
+// scope-target flag, and the required lifecycle completion cache. Its whole
+// promise is therefore the usage block it supplies plus those five forwards.
+// The opener's own parse, the collapse of the
 // duplicated usage block, and the scope-target scan belong to
 // `tests/edge/handlers/marketplace/shared.test.ts` and
 // `tests/edge/handlers/shared.test.ts`, which drive them in isolation
@@ -62,6 +63,7 @@ import { test, type TestContext } from "node:test";
 import { pathSource } from "../../../../extensions/pi-claude-marketplace/domain/source.ts";
 import { makeRemoveHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/marketplace/remove.ts";
 import { locationsFor } from "../../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { createCompletionCache } from "../../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
 import { mergeMarketplaceIntoState } from "../marketplace-seed.ts";
 
@@ -247,7 +249,7 @@ for (const { args, expectedFootprint, expectedMessage, selection } of [
       reads: 1,
       value: workspace.cwd,
     });
-    const removeHandler = makeRemoveHandler(pi);
+    const removeHandler = makeRemoveHandler(pi, { completionCache: createCompletionCache() });
 
     // act
     await removeHandler(args, ctx);
@@ -264,7 +266,7 @@ test("supplies the remove usage block, shown when the name positional is missing
   const workspace = await createHermeticWorkspace(t, "missing-name");
   await seedBothScopes(workspace);
   const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-  const removeHandler = makeRemoveHandler(pi);
+  const removeHandler = makeRemoveHandler(pi, { completionCache: createCompletionCache() });
 
   // act
   await removeHandler("", ctx);
@@ -285,7 +287,7 @@ test("removes the first positional alone, so a surplus token drops rather than r
     reads: 1,
     value: workspace.cwd,
   });
-  const removeHandler = makeRemoveHandler(pi);
+  const removeHandler = makeRemoveHandler(pi, { completionCache: createCompletionCache() });
 
   // act
   await removeHandler("alpha beta", ctx);
@@ -325,7 +327,7 @@ for (const { args, expectedFootprint, expectedNotification, placement } of [
       reads: 1,
       value: workspace.cwd,
     });
-    const removeHandler = makeRemoveHandler(pi);
+    const removeHandler = makeRemoveHandler(pi, { completionCache: createCompletionCache() });
 
     // act
     await removeHandler(args, ctx);
@@ -345,7 +347,7 @@ test("accepts a scope flag beside the scope-target flag and honors the scope it 
     reads: 1,
     value: workspace.cwd,
   });
-  const removeHandler = makeRemoveHandler(pi);
+  const removeHandler = makeRemoveHandler(pi, { completionCache: createCompletionCache() });
 
   // act
   await removeHandler("alpha --scope user --local", ctx);
@@ -361,7 +363,7 @@ test("supplies the remove usage block beside the unknown-flag sentence and remov
   const workspace = await createHermeticWorkspace(t, "unknown-flag");
   await seedBothScopes(workspace);
   const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-  const removeHandler = makeRemoveHandler(pi);
+  const removeHandler = makeRemoveHandler(pi, { completionCache: createCompletionCache() });
 
   // act
   await removeHandler("alpha --frobnicate", ctx);
@@ -379,7 +381,7 @@ test("supplies the remove usage block beside a verbatim parse diagnostic and rem
   const workspace = await createHermeticWorkspace(t, "invalid-scope");
   await seedBothScopes(workspace);
   const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
-  const removeHandler = makeRemoveHandler(pi);
+  const removeHandler = makeRemoveHandler(pi, { completionCache: createCompletionCache() });
 
   // act
   await removeHandler("alpha --scope bogus", ctx);

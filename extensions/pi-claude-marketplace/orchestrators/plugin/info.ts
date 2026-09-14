@@ -39,37 +39,38 @@ import {
 } from "../../domain/components/hooks.ts";
 import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest, type MarketplaceManifest } from "../../domain/manifest.ts";
-import {
-  resolveStrict,
-  rowClaimsInstallDisabled,
-  type GitPluginRootResult,
-  type ResolveContext,
-  type ResolvedPluginUnavailable,
-  type ResolvedPluginPartiallyAvailable,
-} from "../../domain/resolver.ts";
+import { resolveStrict } from "../../domain/plugin-resolver.ts";
 import {
   parsePluginSource,
   type GitBackedSource,
   type ParsedSource,
   type PathSource,
 } from "../../domain/source.ts";
+import { rowClaimsInstallDisabled } from "../../domain/unsupported-components.ts";
 import { locationsFor, type ScopedLocations } from "../../persistence/locations.ts";
 import { isRecordedButDisabled, type ExtensionState } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage, isErrnoException } from "../../shared/errors.ts";
 import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
+import { notify } from "../../shared/notification-dispatch.ts";
+import { type ContentReason } from "../../shared/notification-types.ts";
+import {
+  type NotificationMessage,
+  type PluginInfoMessage,
+  type PluginInfoRow,
+} from "../../shared/notification-types.ts";
 import {
   notifyWithContext,
   type MarketplaceRows,
   type Plural,
 } from "../../shared/notify-context.ts";
-import { notify, redactAbsolutePaths } from "../../shared/notify.ts";
 import { PathContainmentError, assertPathInside } from "../../shared/path-safety.ts";
 import {
   narrowProbeError,
   narrowResolverNotes,
   narrowUnsupportedKinds,
 } from "../../shared/probe-classifiers.ts";
+import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import { DEFAULT_CREDENTIAL_OPS, buildCloneAuth } from "../auth-host.ts";
 import { crossScopeFlag } from "../marketplace/shared.ts";
 import { collectMarketplaceRecordsByScope } from "../scope-fanout.ts";
@@ -84,16 +85,17 @@ import {
 import { makePresenceProbe } from "./git-source-probe.ts";
 import { PLUGIN_INFO_CONTEXT, type PluginInfoCascadeMsg } from "./info.messaging.ts";
 
-import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
-import type { HookSummaryEntry } from "../../shared/concerns/hooks.ts";
 import type {
-  ContentReason,
-  NotificationMessage,
-  PluginInfoMessage,
-  PluginInfoRow,
-} from "../../shared/notify.ts";
+  GitPluginRootResult,
+  ResolveContext,
+  ResolvedPluginUnavailable,
+  ResolvedPluginPartiallyAvailable,
+} from "../../domain/resolver-types.ts";
+import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
+import type { HookSummaryEntry } from "../../shared/concerns/hooks.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
+import type { Dirent } from "node:fs";
 
 // INFO-05: BUCKET_A_EVENTS is a string[] tuple; rewrap as a Set for O(1)
 // membership tests in `readLenientHookSummary`'s per-event supported flag.
@@ -101,13 +103,13 @@ import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-h
 const BUCKET_A_EVENTS_SET: ReadonlySet<string> = new Set<string>(BUCKET_A_EVENTS);
 
 export interface GetPluginInfoOptions {
-  readonly ctx: ExtensionContext;
+  readonly ctx: NotificationContext;
   /**
    * Required by `notify(ctx, pi, message)` for the soft-dep probe (info
    * surfaces do not emit soft-dep markers, but the probe argument is
    * threaded for signature parity with the cascade arm).
    */
-  readonly pi: ExtensionAPI;
+  readonly pi: ToolInventory;
   readonly marketplace: string;
   readonly plugin: string;
   /** When omitted, fan-out across BOTH scopes (project-first per INFO-03). */
@@ -139,11 +141,21 @@ export interface GetPluginInfoOptions {
 }
 
 /**
+ * The complete filesystem authority required by the plugin-info surface.
+ * Text reads are always UTF-8 and directory listings always return Node
+ * directory entries so file-kind classification remains in this module.
+ */
+export interface PluginInfoReader {
+  readonly readTextFile: (filePath: string) => Promise<string>;
+  readonly listDirectory: (directoryPath: string) => Promise<readonly Dirent[]>;
+}
+
+/**
  * FTCH-04 / NFR-5: injected clone-cache seam for the `info --fetch` hook. info.ts
  * is a FORBIDDEN_TARGET for the git surface (no-orchestrator-network gate), so
  * the fetch-materialize flows through the sibling `clone-cache.ts` seam by name
  * -- info NEVER references the git ops directly. Mirrors
- * `install.ts::InstallCloneCacheSeam`. Production leaves it undefined and info
+ * `install-clone-probe.ts::InstallCloneCacheSeam`. Production leaves it undefined and info
  * uses the real imports (which default to the real git backend internally).
  */
 export interface InfoCloneCacheSeam {
@@ -285,10 +297,11 @@ function nameFromEntry(
  * than silently rendering as "no components declared".
  */
 async function readEntriesOrEmpty(
+  reader: PluginInfoReader,
   abs: string,
 ): Promise<readonly { name: string; isDirectory(): boolean; isFile(): boolean }[]> {
   try {
-    return await readdir(abs, { withFileTypes: true });
+    return await reader.listDirectory(abs);
   } catch (err) {
     if (err instanceof Error) {
       const code = (err as NodeJS.ErrnoException).code;
@@ -302,6 +315,7 @@ async function readEntriesOrEmpty(
 }
 
 async function discoverComponentNames(
+  reader: PluginInfoReader,
   pluginRoot: string,
   componentDirs: readonly string[],
   kind: "skills" | "commands" | "agents",
@@ -309,7 +323,7 @@ async function discoverComponentNames(
   const names = new Set<string>();
   for (const rel of componentDirs) {
     const abs = path.isAbsolute(rel) ? rel : path.join(pluginRoot, rel);
-    const entries = await readEntriesOrEmpty(abs);
+    const entries = await readEntriesOrEmpty(reader, abs);
     for (const entry of entries) {
       const name = nameFromEntry(entry, kind);
       if (name !== undefined) {
@@ -425,10 +439,11 @@ function parseHooksForInfo(raw: string, cwd: string): HookConfigParseResult<null
  * the other component-kind probes emit.
  */
 async function readHookSummaryEntries(
+  reader: PluginInfoReader,
   pluginRoot: string,
   hooksConfigPath: string,
 ): Promise<readonly HookSummaryEntry[] | undefined> {
-  const raw = await readFile(path.join(pluginRoot, hooksConfigPath), "utf8");
+  const raw = await reader.readTextFile(path.join(pluginRoot, hooksConfigPath));
   // The manifest-backed call chain that reaches this reader does not thread the
   // command's `cwd` (only `ScopedLocations`, which does not carry one), so the
   // process cwd stands in. Inert today -- `parseHooksForInfo` never reads the
@@ -475,6 +490,7 @@ type StateOnlyHookRead =
   | { readonly kind: "degraded"; readonly reason: ContentReason };
 
 async function readStateOnlyHookEntries(
+  reader: PluginInfoReader,
   slugs: readonly string[],
   locations: ScopedLocations,
   cwd: string,
@@ -496,7 +512,7 @@ async function readStateOnlyHookEntries(
       // by the `assertPathInside` chokepoint below, not by the composer.
       const hooksJsonPath = path.join(locations.hooksDir, slug, "hooks.json");
       await assertPathInside(locations.hooksDir, hooksJsonPath, "hooks.json info read");
-      const raw = await readFile(hooksJsonPath, "utf8");
+      const raw = await reader.readTextFile(hooksJsonPath);
       const parsed = parseHooksForInfo(raw, cwd);
       if (!parsed.ok) {
         return { kind: "degraded", reason: "unparseable" };
@@ -558,10 +574,11 @@ async function readStateOnlyHookEntries(
  * `<pluginRoot>/hooks/hooks.json` only, no network.
  */
 async function readLenientHookSummary(
+  reader: PluginInfoReader,
   pluginRoot: string,
 ): Promise<readonly HookSummaryEntry[] | undefined> {
   const p = path.join(pluginRoot, "hooks", "hooks.json");
-  const raw = await readLenientHooksFile(p);
+  const raw = await readLenientHooksFile(reader, p);
   if (raw === undefined) {
     return undefined;
   }
@@ -607,9 +624,12 @@ async function readLenientHookSummary(
  * legitimate "no hooks declared" state). Every other failure
  * (EACCES / EPERM / EIO / programmer-bug) PROPAGATES.
  */
-async function readLenientHooksFile(absPath: string): Promise<string | undefined> {
+async function readLenientHooksFile(
+  reader: PluginInfoReader,
+  absPath: string,
+): Promise<string | undefined> {
   try {
-    return await readFile(absPath, "utf8");
+    return await reader.readTextFile(absPath);
   } catch (err) {
     if (isErrnoException(err) && (err.code === "ENOENT" || err.code === "ENOTDIR")) {
       return undefined;
@@ -658,6 +678,7 @@ function parseLenientHooksJson(raw: string): unknown {
  * Source placement matches the alphabetical order for readability.
  */
 async function composeResolvedComponents(
+  reader: PluginInfoReader,
   pluginRoot: string,
   resolved: {
     readonly componentPaths: {
@@ -686,13 +707,24 @@ async function composeResolvedComponents(
   };
   readonly notes: readonly string[];
 }> {
-  const agents = await discoverComponentNames(pluginRoot, resolved.componentPaths.agents, "agents");
+  const agents = await discoverComponentNames(
+    reader,
+    pluginRoot,
+    resolved.componentPaths.agents,
+    "agents",
+  );
   const commands = await discoverComponentNames(
+    reader,
     pluginRoot,
     resolved.componentPaths.commands,
     "commands",
   );
-  const skills = await discoverComponentNames(pluginRoot, resolved.componentPaths.skills, "skills");
+  const skills = await discoverComponentNames(
+    reader,
+    pluginRoot,
+    resolved.componentPaths.skills,
+    "skills",
+  );
   const mcp = Object.keys(resolved.mcpServers).sort((a, b) =>
     a.localeCompare(b, undefined, { sensitivity: "base" }),
   );
@@ -711,8 +743,8 @@ async function composeResolvedComponents(
   // events as `(unsupported)`.
   const hooks =
     resolved.hooksConfigPath === undefined
-      ? await readLenientHookSummary(pluginRoot)
-      : await readHookSummaryEntries(pluginRoot, resolved.hooksConfigPath);
+      ? await readLenientHookSummary(reader, pluginRoot)
+      : await readHookSummaryEntries(reader, pluginRoot, resolved.hooksConfigPath);
 
   const workflows = await previewWorkflows(pluginRoot, resolved.componentPaths.workflows, {
     pluginName,
@@ -838,6 +870,7 @@ interface InfoBlock {
  *       `(unavailable)` row with closed-set reasons.
  */
 async function buildBlock(args: {
+  reader: PluginInfoReader;
   marketplace: string;
   pluginName: string;
   scope: Scope;
@@ -853,8 +886,17 @@ async function buildBlock(args: {
   cwd: string;
   fetchCtx?: InfoFetchContext;
 }): Promise<InfoBlock> {
-  const { marketplace, pluginName, scope, mpRecord, autoupdate, declaredEnabled, cwd, fetchCtx } =
-    args;
+  const {
+    reader,
+    marketplace,
+    pluginName,
+    scope,
+    mpRecord,
+    autoupdate,
+    declaredEnabled,
+    cwd,
+    fetchCtx,
+  } = args;
   const marketplaceDetails = { autoupdate };
 
   // RSTA-06 / NFR-5: the per-scope locations feed `makePresenceProbe`'s
@@ -903,7 +945,13 @@ async function buildBlock(args: {
   const lookup = lookupDeclaredPlugin(manifest, pluginName);
   if (lookup.kind === "absent") {
     if (installed !== undefined) {
-      const stateOnlyRow = await buildStateOnlyInstalledRow(pluginName, installed, locations, cwd);
+      const stateOnlyRow = await buildStateOnlyInstalledRow(
+        reader,
+        pluginName,
+        installed,
+        locations,
+        cwd,
+      );
       return wrapBlock(
         marketplace,
         scope,
@@ -945,6 +993,7 @@ async function buildBlock(args: {
     // needs no gate -- `buildStateOnlyInstalledRow` cannot express a fetch.
     const blockFetchCtx = isRecordedButDisabled(installed) ? undefined : fetchCtx;
     const row = await buildInstalledRow({
+      reader,
       pluginName,
       version: installed.version,
       description,
@@ -968,6 +1017,7 @@ async function buildBlock(args: {
   // (d) / (e) Not installed -> resolve to classify remote / available /
   // partially-available / unavailable.
   const row = await buildNotInstalledRow({
+    reader,
     pluginName,
     version: manifestVersion,
     description,
@@ -1059,7 +1109,7 @@ const DISABLED_ROW_REASONS: ReadonlySet<ContentReason> = new Set<ContentReason>(
  * hidden until the plugin is re-enabled, at which point the enabled row reports
  * them again.
  *
- * Parity with `list.ts::disabledReasonsField` holds for every input the list
+ * Parity with `list-installed-row.ts::composeInstalledListRow` holds for every input the list
  * surface can express: that builder reads the record alone and runs no probe,
  * so manifest absence is the only reason it ever HAS. This surface additionally
  * reads disk, so it can name a read failure the list surface never learns
@@ -1217,12 +1267,13 @@ function skipReasonFor(
  * not a reading of the control flow.
  */
 async function buildStateOnlyInstalledRow(
+  reader: PluginInfoReader,
   pluginName: string,
   record: MarketplaceRecord["plugins"][string],
   locations: ScopedLocations,
   cwd: string,
 ): Promise<PluginInfoRow> {
-  const { components, degraded } = await composeStateOnlyComponents(record, locations, cwd);
+  const { components, degraded } = await composeStateOnlyComponents(reader, record, locations, cwd);
   return {
     status: derivePersistedInstalledStatus(record),
     name: pluginName,
@@ -1231,7 +1282,7 @@ async function buildStateOnlyInstalledRow(
     // read marker LAST. `composeReasons` joins in array order, and
     // `narrowUnsupportedKinds` stays the sole producer of the kind tokens --
     // this wraps its output rather than replacing it (the same ordering rule
-    // `list.ts::partiallyInstalledReasons` implements).
+    // `list-installed-row.ts::composeInstalledListRow` implements).
     reasons: [
       "not in manifest",
       ...narrowUnsupportedKinds(record.compatibility.unsupported),
@@ -1284,6 +1335,7 @@ function derivePersistedInstalledStatus(
  * as empty" and "container unlistable" cannot be conflated here.
  */
 async function composeStateOnlyComponents(
+  reader: PluginInfoReader,
   record: MarketplaceRecord["plugins"][string],
   locations: ScopedLocations,
   cwd: string,
@@ -1308,7 +1360,7 @@ async function composeStateOnlyComponents(
   // unchanged and still runs before every read.
   const hooksRead: StateOnlyHookRead =
     record.hookEntries === undefined
-      ? await readStateOnlyHookEntries(record.resources.hooks, locations, cwd)
+      ? await readStateOnlyHookEntries(reader, record.resources.hooks, locations, cwd)
       : { kind: "listed", entries: hookSummaryEntriesFromPersisted(record.hookEntries) };
 
   return {
@@ -1355,8 +1407,9 @@ function sortComponentNames(names: readonly string[]): readonly string[] {
  *     source with unsupported manifest fields / unsupported hooks).
  */
 async function buildNotInstallablePathRowFields(
+  reader: PluginInfoReader,
   pluginName: string,
-  resolved: Parameters<typeof composeResolvedComponents>[1],
+  resolved: Parameters<typeof composeResolvedComponents>[2],
   resolverReasons: readonly ContentReason[],
   marketplaceRoot: string,
   parsedSource: PathSource,
@@ -1381,7 +1434,12 @@ async function buildNotInstallablePathRowFields(
   // unmasked to the caller; classifying them as IO probe failures
   // would mis-route a path-escape as a transient disk error.
   try {
-    const resolvedComponents = await composeResolvedComponents(pluginRoot, resolved, pluginName);
+    const resolvedComponents = await composeResolvedComponents(
+      reader,
+      pluginRoot,
+      resolved,
+      pluginName,
+    );
     return {
       ...(resolverReasons.length > 0 && { reasons: resolverReasons }),
       ...advisoryFields(resolvedComponents.notes),
@@ -1455,6 +1513,7 @@ function asDeclaredList(raw: unknown): readonly unknown[] {
  * path via `narrowResolverNotes`.
  */
 function buildNonInstallableRowFields(
+  reader: PluginInfoReader,
   pluginName: string,
   resolved: ResolvedPluginPartiallyAvailable | ResolvedPluginUnavailable,
   entry: MarketplaceManifest["plugins"][number],
@@ -1466,6 +1525,7 @@ function buildNonInstallableRowFields(
   switch (resolved.state) {
     case "partially-available":
       return buildNotInstallablePathRowFields(
+        reader,
         pluginName,
         resolved,
         narrowUnsupportedKinds(resolved.unsupported),
@@ -1474,6 +1534,7 @@ function buildNonInstallableRowFields(
       );
     case "unavailable":
       return buildNotInstallablePathRowFields(
+        reader,
         pluginName,
         {
           componentPaths: deriveLenientComponentPaths(entry),
@@ -1526,7 +1587,7 @@ function buildNonPathInstalledRow(
  * re-exports (no-orchestrator-network gate, NFR-5).
  */
 interface InfoFetchContext {
-  readonly ctx: ExtensionContext;
+  readonly ctx: NotificationContext;
   readonly seam: InfoCloneCacheSeam;
   readonly credentialOps: CredentialOps;
   readonly deviceFlowHttp?: DeviceFlowHttp;
@@ -1549,7 +1610,7 @@ type GitProbe = (source: GitBackedSource) => Promise<GitPluginRootResult>;
  * the mirror refresh IS the consented fetch, so it hits the network on every
  * run). A materialize throw PROPAGATES so the row builder's existing
  * try/catch degrades to `components: not resolved` (D-81-04). Mirrors
- * `install.ts::makeInstallCloneProbe`; the pinned/unpinned fork lives inside the
+ * `install-clone-probe.ts::probeInstallClone`; the pinned/unpinned fork lives inside the
  * callback so info still names no git surface (it reaches the seam only by name).
  */
 function makeFetchProbe(locations: ScopedLocations, fetchCtx: InfoFetchContext): GitProbe {
@@ -1613,6 +1674,7 @@ function foldFetchOrProbeError(err: unknown): ContentReason {
  * (that derives only on the not-installed path) nor `(unavailable)`. No network.
  */
 async function buildInstalledGitRow(opts: {
+  reader: PluginInfoReader;
   pluginName: string;
   version: string | undefined;
   description: string | undefined;
@@ -1625,6 +1687,7 @@ async function buildInstalledGitRow(opts: {
   fetchCtx?: InfoFetchContext;
 }): Promise<PluginInfoRow> {
   const {
+    reader,
     pluginName,
     version,
     description,
@@ -1650,7 +1713,12 @@ async function buildInstalledGitRow(opts: {
         resolveGitPluginRoot: probe,
       });
       if (resolved.state === "installable") {
-        const composed = await composeResolvedComponents(presence.pluginRoot, resolved, pluginName);
+        const composed = await composeResolvedComponents(
+          reader,
+          presence.pluginRoot,
+          resolved,
+          pluginName,
+        );
         return {
           status: "installed",
           name: pluginName,
@@ -1694,6 +1762,7 @@ async function buildInstalledGitRow(opts: {
  * component lines instead of `not resolved`.
  */
 async function buildInstalledRow(opts: {
+  reader: PluginInfoReader;
   pluginName: string;
   version: string | undefined;
   description: string | undefined;
@@ -1706,6 +1775,7 @@ async function buildInstalledRow(opts: {
   fetchCtx?: InfoFetchContext;
 }): Promise<PluginInfoRow> {
   const {
+    reader,
     pluginName,
     version,
     description,
@@ -1725,6 +1795,7 @@ async function buildInstalledRow(opts: {
     // path) nor to `(unavailable)`.
     if (isGitSource(parsedSource)) {
       return buildInstalledGitRow({
+        reader,
         pluginName,
         version,
         description,
@@ -1744,7 +1815,12 @@ async function buildInstalledRow(opts: {
   try {
     const resolved = await resolveStrict(entry, { marketplaceRoot: mpRecord.marketplaceRoot });
     if (resolved.state === "installable") {
-      const composed = await composeResolvedComponents(resolved.pluginRoot, resolved, pluginName);
+      const composed = await composeResolvedComponents(
+        reader,
+        resolved.pluginRoot,
+        resolved,
+        pluginName,
+      );
       return {
         status: "installed",
         name: pluginName,
@@ -1770,6 +1846,7 @@ async function buildInstalledRow(opts: {
     // `partially-available` reads its component payload directly; `unavailable`
     // re-derives independently (D-64-05).
     const fields = await buildNonInstallableRowFields(
+      reader,
       pluginName,
       resolved,
       entry,
@@ -1820,6 +1897,7 @@ async function buildInstalledRow(opts: {
  * instead of throwing uncaught out of `getPluginInfo`.
  */
 async function buildNotInstalledPathRow(
+  reader: PluginInfoReader,
   resolved: ResolvedPluginPartiallyAvailable | ResolvedPluginUnavailable,
   opts: {
     pluginName: string;
@@ -1833,6 +1911,7 @@ async function buildNotInstalledPathRow(
   const { pluginName, version, description, entry, mpRecord, parsedSource } = opts;
   try {
     const fields = await buildNonInstallableRowFields(
+      reader,
       pluginName,
       resolved,
       entry,
@@ -1900,6 +1979,7 @@ function buildRemoteNotInstalledRow(
  * `componentsResolved: false` + `narrowProbeError` (never a throw). No network.
  */
 async function buildGitNotInstalledRow(opts: {
+  reader: PluginInfoReader;
   pluginName: string;
   version: string | undefined;
   description: string | undefined;
@@ -1910,8 +1990,17 @@ async function buildGitNotInstalledRow(opts: {
   locations: ScopedLocations;
   fetchCtx?: InfoFetchContext;
 }): Promise<PluginInfoRow> {
-  const { pluginName, version, description, dependencies, entry, mpRecord, gitSource, locations } =
-    opts;
+  const {
+    reader,
+    pluginName,
+    version,
+    description,
+    dependencies,
+    entry,
+    mpRecord,
+    gitSource,
+    locations,
+  } = opts;
   const fetchCtx = opts.fetchCtx;
   // FTCH-03: `info --fetch` materializes the clone/mirror (network on cache
   // miss when pinned, on the mirror refresh when unpinned -- D-81-05, MIRR-02)
@@ -1952,6 +2041,7 @@ async function buildGitNotInstalledRow(opts: {
       // `return await` so a `composeResolvedComponents` throw inside the helper
       // is caught by THIS try/catch and folds to the unreadable arm below.
       return await buildWarmGitNonInstallableRow(resolved, {
+        reader,
         pluginName,
         version,
         description,
@@ -1960,6 +2050,7 @@ async function buildGitNotInstalledRow(opts: {
     }
 
     return await buildAvailableRow({
+      reader,
       pluginName,
       version,
       description,
@@ -1992,13 +2083,14 @@ async function buildGitNotInstalledRow(opts: {
 async function buildWarmGitNonInstallableRow(
   resolved: ResolvedPluginPartiallyAvailable | ResolvedPluginUnavailable,
   opts: {
+    reader: PluginInfoReader;
     pluginName: string;
     version: string | undefined;
     description: string | undefined;
     pluginRoot: string;
   },
 ): Promise<PluginInfoRow> {
-  const { pluginName, version, description, pluginRoot } = opts;
+  const { reader, pluginName, version, description, pluginRoot } = opts;
   const status = resolved.state === "partially-available" ? "partially-available" : "unavailable";
   const resolverReasons =
     resolved.state === "partially-available"
@@ -2021,7 +2113,7 @@ async function buildWarmGitNonInstallableRow(
           mcpServers: {},
         };
   try {
-    const composed = await composeResolvedComponents(pluginRoot, forComponents, pluginName);
+    const composed = await composeResolvedComponents(reader, pluginRoot, forComponents, pluginName);
     return {
       status,
       name: pluginName,
@@ -2051,6 +2143,7 @@ async function buildWarmGitNonInstallableRow(
  * INFO-05 source-kind gate as the installed row.
  */
 async function buildNotInstalledRow(opts: {
+  reader: PluginInfoReader;
   pluginName: string;
   version: string | undefined;
   description: string | undefined;
@@ -2061,7 +2154,8 @@ async function buildNotInstalledRow(opts: {
   locations: ScopedLocations;
   fetchCtx?: InfoFetchContext;
 }): Promise<PluginInfoRow> {
-  const { pluginName, version, description, dependencies, entry, mpRecord, parsedSource } = opts;
+  const { reader, pluginName, version, description, dependencies, entry, mpRecord, parsedSource } =
+    opts;
   const { locations, fetchCtx } = opts;
   // RSTA-01 / RSTA-05 / D-80-04: a NOT-installed git-source entry (url /
   // git-subdir / github) is classified from its clone/mirror presence. Bare info
@@ -2074,6 +2168,7 @@ async function buildNotInstalledRow(opts: {
   // the absent clone to `unavailable{not installed}`).
   if (isGitSource(parsedSource)) {
     return buildGitNotInstalledRow({
+      reader,
       pluginName,
       version,
       description,
@@ -2108,6 +2203,7 @@ async function buildNotInstalledRow(opts: {
 
   if (resolved.state !== "installable") {
     return buildNotInstalledNonInstallableRow(resolved, {
+      reader,
       pluginName,
       version,
       description,
@@ -2123,6 +2219,7 @@ async function buildNotInstalledRow(opts: {
   // `composeResolvedComponents` is safe to call without an external-
   // source short-circuit.
   return buildAvailableRow({
+    reader,
     pluginName,
     version,
     description,
@@ -2142,6 +2239,7 @@ async function buildNotInstalledRow(opts: {
 function buildNotInstalledNonInstallableRow(
   resolved: ResolvedPluginPartiallyAvailable | ResolvedPluginUnavailable,
   opts: {
+    reader: PluginInfoReader;
     pluginName: string;
     version: string | undefined;
     description: string | undefined;
@@ -2150,7 +2248,7 @@ function buildNotInstalledNonInstallableRow(
     parsedSource: ParsedSource;
   },
 ): Promise<PluginInfoRow> | PluginInfoRow {
-  const { pluginName, version, description, entry, mpRecord, parsedSource } = opts;
+  const { reader, pluginName, version, description, entry, mpRecord, parsedSource } = opts;
   const reasons =
     resolved.state === "unavailable"
       ? narrowResolverNotes(resolved.notes)
@@ -2170,7 +2268,7 @@ function buildNotInstalledNonInstallableRow(
   // Path-source `unavailable` re-derives its component payload independently
   // (D-64-05); the partially-available arm carries its component payload into
   // the same builder.
-  return buildNotInstalledPathRow(resolved, {
+  return buildNotInstalledPathRow(reader, resolved, {
     pluginName,
     version,
     description,
@@ -2189,17 +2287,19 @@ function buildNotInstalledNonInstallableRow(
  * "no components".
  */
 async function buildAvailableRow(opts: {
+  readonly reader: PluginInfoReader;
   readonly pluginName: string;
   readonly version: string | undefined;
   readonly description: string | undefined;
   readonly dependencies: readonly string[] | undefined;
   readonly pluginRoot: string;
-  readonly resolvedForComponents: Parameters<typeof composeResolvedComponents>[1];
+  readonly resolvedForComponents: Parameters<typeof composeResolvedComponents>[2];
 }): Promise<PluginInfoRow> {
-  const { pluginName, version, description, dependencies } = opts;
+  const { reader, pluginName, version, description, dependencies } = opts;
 
   try {
     const composed = await composeResolvedComponents(
+      reader,
       opts.pluginRoot,
       opts.resolvedForComponents,
       pluginName,
@@ -2358,10 +2458,13 @@ function emitFetchSkip(
   }
 
   const rows: Plural<MarketplaceRows<PluginInfoCascadeMsg>> = [first, ...remaining];
-  notifyWithContext(opts.ctx, opts.pi, PLUGIN_INFO_CONTEXT, rows);
+  notifyWithContext(opts.ctx, opts.pi, PLUGIN_INFO_CONTEXT, rows, undefined, "single");
 }
 
-export async function getPluginInfo(opts: GetPluginInfoOptions): Promise<void> {
+async function getPluginInfoWithReader(
+  reader: PluginInfoReader,
+  opts: GetPluginInfoOptions,
+): Promise<void> {
   // INFO-03 iteration order: project-first per MSG-GR-3 when both
   // scopes are searched; otherwise the explicit scope only.
   const scopes: readonly Scope[] = opts.scope === undefined ? ["project", "user"] : [opts.scope];
@@ -2425,6 +2528,7 @@ export async function getPluginInfo(opts: GetPluginInfoOptions): Promise<void> {
   const [sole, ...rest] = found;
   if (sole !== undefined && rest.length === 0) {
     const built = await buildBlock({
+      reader,
       marketplace: opts.marketplace,
       pluginName: opts.plugin,
       scope: sole.scope,
@@ -2457,6 +2561,7 @@ export async function getPluginInfo(opts: GetPluginInfoOptions): Promise<void> {
   const built = await Promise.all(
     found.map((f) =>
       buildBlock({
+        reader,
         marketplace: opts.marketplace,
         pluginName: opts.plugin,
         scope: f.scope,
@@ -2498,6 +2603,17 @@ export async function getPluginInfo(opts: GetPluginInfoOptions): Promise<void> {
   }
 }
 
-// Test-only re-export of the shared classifier so callers exercising
-// this orchestrator's behavior can verify the closed-set ladder without
-// reaching into `shared/probe-classifiers.ts` directly.
+/** Creates the plugin-info command with an explicit read-only filesystem capability. */
+export function createGetPluginInfo(
+  reader: PluginInfoReader,
+): (opts: GetPluginInfoOptions) => Promise<void> {
+  return (opts) => getPluginInfoWithReader(reader, opts);
+}
+
+const NODE_PLUGIN_INFO_READER: PluginInfoReader = {
+  readTextFile: (filePath) => readFile(filePath, "utf8"),
+  listDirectory: (directoryPath) => readdir(directoryPath, { withFileTypes: true }),
+};
+
+/** Reads plugin information through the Node-backed reader capability. */
+export const getPluginInfo = createGetPluginInfo(NODE_PLUGIN_INFO_READER);

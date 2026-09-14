@@ -5,7 +5,7 @@
 // Note: `notify` is delivered as a callback parameter (`onError`),
 // NOT imported. The caller (handler) passes a closure that wraps the
 // canonical `notify(ctx, pi, NotificationMessage)` /
-// `notifyUsageError(ctx, UsageErrorMessage)` from `shared/notify.ts`.
+// `notifyUsageError(ctx, UsageErrorMessage)` from `shared/notification-dispatch.ts`.
 // This keeps this module independent of `ExtensionContext` and lets
 // tests inject a spy.
 

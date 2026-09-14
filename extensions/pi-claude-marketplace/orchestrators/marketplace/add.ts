@@ -56,7 +56,6 @@ import { loadConfig } from "../../persistence/config-io.ts";
 import { writeMarketplaceConfigEntry } from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { DEFAULT_CREDENTIAL_OPS } from "../../platform/git-credential.ts";
-import { dropMarketplaceCache, invalidateMarketplaceNames } from "../../shared/completion-cache.ts";
 import {
   InvalidMarketplaceManifestError,
   MarketplaceDuplicateNameError,
@@ -65,8 +64,15 @@ import {
   appendLeakToError,
   errorMessage,
 } from "../../shared/errors.ts";
-import { cleanupStaging, pathExists } from "../../shared/fs-utils.ts";
+import {
+  cleanupStaging,
+  createRemovalOps,
+  pathExists,
+  type RemovalOps,
+} from "../../shared/fs-utils.ts";
 import { classifyGitSourceAccessFailure } from "../../shared/git-failure-classifiers.ts";
+import { type ContentReason } from "../../shared/notification-types.ts";
+import { type Reason } from "../../shared/notification-types.ts";
 import {
   notifyWithContext,
   type MarketplaceRows,
@@ -85,8 +91,8 @@ import type { ScopeConfig } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { CredentialOps } from "../../platform/git-credential.ts";
-import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
-import type { ContentReason, Reason } from "../../shared/notify.ts";
+import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
+import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { Scope } from "../../shared/types.ts";
 
 /**
@@ -143,17 +149,19 @@ export type AddMarketplaceOutcome =
     };
 
 export interface AddMarketplaceOptions {
-  readonly ctx: ExtensionContext;
+  readonly ctx: NotificationContext;
   /**
    * Required by `notify(ctx, pi, message)` for soft-dep probing.
    */
-  readonly pi: ExtensionAPI;
+  readonly pi: ToolInventory;
   /** SC-5: the edge layer defaults this to "user"; orchestrator receives a fully resolved Scope. */
   readonly scope: Scope;
   /** Used to compute project-scope locations (`<cwd>/.pi`). Ignored when scope === "user". */
   readonly cwd: string;
   /** The user-supplied source string (`owner/repo`, `https://...`, `~/path`, `./path`, etc.). */
   readonly rawSource: string;
+  /** Lifecycle-owned completion cache shared with the registered read path. */
+  readonly completionCache: CompletionCache;
   /** D-12 injection seam. Defaults to DEFAULT_GIT_OPS (which wraps platform/git.ts). */
   readonly gitOps?: GitOps;
   /**
@@ -315,13 +323,14 @@ class ConfigInvalidError extends InvalidMarketplaceManifestError {
  */
 async function runAddInGuard(args: {
   opts: AddMarketplaceOptions;
+  removalOps: RemovalOps;
   locations: ScopedLocations;
   source: ReturnType<typeof parsePluginSource>;
   gitOps: GitOps;
   credentialOps: CredentialOps;
   orchestrated: boolean;
 }): Promise<string> {
-  const { opts, locations, source, gitOps, credentialOps, orchestrated } = args;
+  const { opts, locations, source, gitOps, credentialOps, orchestrated, removalOps } = args;
 
   // S5a (MA-10): parser produced an unknown kind with a reason -- surface
   // verbatim on the cause, classified as `unsupported source` (D-48-C A3).
@@ -364,6 +373,7 @@ async function runAddInGuard(args: {
         source,
         gitOps,
         credentialOps,
+        removalOps,
         ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
         cwd: opts.cwd,
       });
@@ -378,6 +388,7 @@ async function runAddInGuard(args: {
         source,
         gitOps,
         credentialOps,
+        removalOps,
         ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
         cwd: opts.cwd,
       });
@@ -426,7 +437,11 @@ async function runAddInGuard(args: {
       // trips MA-6 {stale clone}. path sources have no clone dir.
       if (source.kind === "github" || source.kind === "url") {
         const finalDir = await locations.sourceCloneDir(recordedName);
-        const leak = await cleanupStaging(finalDir, `marketplace final clone ${finalDir}`);
+        const leak = await cleanupStaging(
+          removalOps,
+          finalDir,
+          `marketplace final clone ${finalDir}`,
+        );
         wrapped = appendLeakToError(wrapped, leak);
       }
 
@@ -489,7 +504,7 @@ function handleAddFailure(
         plugins: [],
       },
     ];
-    notifyWithContext(opts.ctx, opts.pi, ADD_CONTEXT, failedRows);
+    notifyWithContext(opts.ctx, opts.pi, ADD_CONTEXT, failedRows, undefined, "single");
   }
 
   return { status: "failed", reason, error: wrapped, cause: errorMessage(err) };
@@ -549,6 +564,11 @@ async function runAddOutcome(
 ): Promise<AddMarketplaceOutcome> {
   const gitOps = opts.gitOps ?? DEFAULT_GIT_OPS;
   const credentialOps = opts.credentialOps ?? DEFAULT_CREDENTIAL_OPS;
+  // D-08-12: this verb owns a staging lifecycle, so it is the composition root
+  // that constructs the removal operations its in-guard helpers perform their
+  // cleanup through. The port is required with no default, so there is nothing
+  // to fall back to and no way for a new cleanup site to go uninjected.
+  const removalOps = createRemovalOps();
   const locations = locationsFor(opts.scope, opts.cwd);
   const source = parsePluginSource(opts.rawSource);
 
@@ -567,6 +587,7 @@ async function runAddOutcome(
       source,
       gitOps,
       credentialOps,
+      removalOps,
       orchestrated,
     });
   } catch (err) {
@@ -589,8 +610,11 @@ async function runAddOutcome(
   // runs after the state commit so a cache hiccup never rolls back the user's
   // primary success.
   try {
-    await invalidateMarketplaceNames(locations.marketplaceNamesCacheFile, opts.scope);
-    await dropMarketplaceCache(
+    await opts.completionCache.invalidateMarketplaceNames(
+      locations.marketplaceNamesCacheFile,
+      opts.scope,
+    );
+    await opts.completionCache.dropMarketplaceCache(
       await locations.pluginCacheFile(recordedName),
       opts.scope,
       recordedName,
@@ -628,7 +652,7 @@ async function runAddOutcome(
         plugins: [],
       },
     ];
-    notifyWithContext(opts.ctx, opts.pi, ADD_CONTEXT, addedRows);
+    notifyWithContext(opts.ctx, opts.pi, ADD_CONTEXT, addedRows, undefined, "single");
   }
 
   return { status: "added", name: recordedName };
@@ -647,6 +671,7 @@ async function runAddOutcome(
  */
 async function addGitClonedInGuard(args: {
   state: ExtensionState;
+  removalOps: RemovalOps;
   locations: ScopedLocations;
   source: GitHubSource | UrlSource;
   gitOps: GitOps;
@@ -654,7 +679,7 @@ async function addGitClonedInGuard(args: {
   auth?: GitAuthBundle;
   cwd: string;
 }): Promise<string> {
-  const { state, locations, source, gitOps, cloneUrl, auth, cwd } = args;
+  const { state, locations, source, gitOps, cloneUrl, auth, cwd, removalOps } = args;
   const stagingDir = await locations.sourcesStagingDir(randomUUID());
 
   // 1. Clone into staging (NFR-5: only git-cloned kinds reach gitOps.clone).
@@ -668,7 +693,7 @@ async function addGitClonedInGuard(args: {
   } catch (err) {
     // Clone itself failed -- there is no staging dir to clean up beyond a
     // potentially partial mkdir. cleanupStaging is ENOENT-tolerant.
-    const leak = await cleanupStaging(stagingDir, "marketplace clone staging");
+    const leak = await cleanupStaging(removalOps, stagingDir, "marketplace clone staging");
     throw appendLeakToError(err, leak);
   }
 
@@ -717,10 +742,14 @@ async function addGitClonedInGuard(args: {
     // MA-9: append leaks rather than mask original error.
     let wrapped: unknown = err;
     if (!stagedAtFinal) {
-      const leak = await cleanupStaging(stagingDir, "marketplace clone staging");
+      const leak = await cleanupStaging(removalOps, stagingDir, "marketplace clone staging");
       wrapped = appendLeakToError(wrapped, leak);
     } else if (finalDir !== undefined) {
-      const leak = await cleanupStaging(finalDir, `marketplace final clone ${finalDir}`);
+      const leak = await cleanupStaging(
+        removalOps,
+        finalDir,
+        `marketplace final clone ${finalDir}`,
+      );
       wrapped = appendLeakToError(wrapped, leak);
     }
 
@@ -729,16 +758,18 @@ async function addGitClonedInGuard(args: {
 }
 
 async function addGithubInGuard(args: {
-  ctx: ExtensionContext;
+  ctx: NotificationContext;
   state: ExtensionState;
   locations: ScopedLocations;
   source: GitHubSource;
+  removalOps: RemovalOps;
   gitOps: GitOps;
   credentialOps: CredentialOps;
   deviceFlowHttp?: DeviceFlowHttp;
   cwd: string;
 }): Promise<string> {
-  const { ctx, state, locations, source, gitOps, credentialOps, deviceFlowHttp, cwd } = args;
+  const { ctx, state, locations, source, gitOps, credentialOps, deviceFlowHttp, cwd, removalOps } =
+    args;
   const cloneUrl = `https://github.com/${source.owner}/${source.repo}.git`;
 
   // AUTH-01 / D-79-05: buildAuthForHost binds the GitHub provider's Device
@@ -761,6 +792,7 @@ async function addGithubInGuard(args: {
     locations,
     source,
     gitOps,
+    removalOps,
     cloneUrl,
     ...(auth !== undefined && { auth }),
     cwd,
@@ -780,16 +812,18 @@ async function addGithubInGuard(args: {
  * for an unregistered host would key another provider's credential onto it.
  */
 async function addUrlInGuard(args: {
-  ctx: ExtensionContext;
+  ctx: NotificationContext;
   state: ExtensionState;
   locations: ScopedLocations;
   source: UrlSource;
+  removalOps: RemovalOps;
   gitOps: GitOps;
   credentialOps: CredentialOps;
   deviceFlowHttp?: DeviceFlowHttp;
   cwd: string;
 }): Promise<string> {
-  const { ctx, state, locations, source, gitOps, credentialOps, deviceFlowHttp, cwd } = args;
+  const { ctx, state, locations, source, gitOps, credentialOps, deviceFlowHttp, cwd, removalOps } =
+    args;
   const host = hostFromCloneUrl(source.url, "url");
   const auth = buildAuthForHost({
     host,
@@ -803,6 +837,7 @@ async function addUrlInGuard(args: {
     locations,
     source,
     gitOps,
+    removalOps,
     cloneUrl: source.url,
     ...(auth !== undefined && { auth }),
     cwd,

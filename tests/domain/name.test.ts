@@ -9,6 +9,7 @@ import {
   generatedWorkflowName,
 } from "../../extensions/pi-claude-marketplace/domain/name.ts";
 import { UnsafeGeneratedNameError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
+import { setCasePlatform } from "../platform/case-platform.ts";
 
 describe("assertSafeName", () => {
   for (const name of ["a", "Foo.Bar_Baz-123", "acme:foo", "pi-claude-marketplace-acme-bot"]) {
@@ -173,23 +174,43 @@ describe("assertSafeName", () => {
 
 describe("generatedSkillName", () => {
   for (const { plugin, source, expectedSkillName } of [
-    { plugin: "acme", source: "foo", expectedSkillName: "acme-foo" },
-    { plugin: "acme", source: "acme-foo", expectedSkillName: "acme-foo" },
-    { plugin: "ab", source: "abc", expectedSkillName: "ab-abc" },
+    { plugin: "acme", source: "foo", expectedSkillName: "acme:foo" },
+    { plugin: "acme", source: "acme-foo", expectedSkillName: "acme:foo" },
+    { plugin: "acme", source: "acme:foo", expectedSkillName: "acme:foo" },
+    { plugin: "ab", source: "abc", expectedSkillName: "ab:abc" },
     {
       plugin: "acme",
       source: "acme-acme-foo",
-      expectedSkillName: "acme-acme-foo",
+      expectedSkillName: "acme:acme-foo",
     },
     {
       plugin: "Ac.Me",
       source: "Ac.Me-Task_Name",
-      expectedSkillName: "Ac.Me-Task_Name",
+      expectedSkillName: "Ac.Me:Task_Name",
     },
     { plugin: "foo", source: "foo", expectedSkillName: "foo" },
   ]) {
     test(`generates ${JSON.stringify(expectedSkillName)} from ${JSON.stringify(source)}`, () => {
       // arrange
+      const pluginName = plugin;
+      const sourceName = source;
+
+      // act
+      const skillName = generatedSkillName(pluginName, sourceName);
+
+      // assert
+      assert.strictEqual(skillName, expectedSkillName);
+    });
+  }
+
+  for (const { plugin, source, expectedSkillName } of [
+    { plugin: "acme", source: "foo", expectedSkillName: "acme.foo" },
+    { plugin: "acme", source: "acme-foo", expectedSkillName: "acme.foo" },
+    { plugin: "acme", source: "acme.foo", expectedSkillName: "acme.foo" },
+  ]) {
+    test(`generates ${JSON.stringify(expectedSkillName)} from ${JSON.stringify(source)} on win32`, (t) => {
+      // arrange
+      setCasePlatform(t, "win32");
       const pluginName = plugin;
       const sourceName = source;
 
@@ -290,6 +311,39 @@ describe("generatedCommandName", () => {
   ]) {
     test(`generates ${JSON.stringify(expectedCommandName)} from ${JSON.stringify(source)}`, () => {
       // arrange
+      const pluginName = plugin;
+      const sourceName = source;
+
+      // act
+      const commandName = generatedCommandName(pluginName, sourceName);
+
+      // assert
+      assert.strictEqual(commandName, expectedCommandName);
+    });
+  }
+
+  for (const { plugin, source, expectedCommandName } of [
+    { plugin: "acme", source: "foo", expectedCommandName: "acme.foo" },
+    { plugin: "acme", source: "acme-foo", expectedCommandName: "acme.foo" },
+    {
+      plugin: "acme",
+      source: "build/web",
+      expectedCommandName: "acme.build.web",
+    },
+    {
+      plugin: "acme",
+      source: "acme-tools/lint",
+      expectedCommandName: "acme.tools.lint",
+    },
+    {
+      plugin: "acme",
+      source: "acme-",
+      expectedCommandName: "acme.acme-",
+    },
+  ]) {
+    test(`generates ${JSON.stringify(expectedCommandName)} from ${JSON.stringify(source)} on win32`, (t) => {
+      // arrange
+      setCasePlatform(t, "win32");
       const pluginName = plugin;
       const sourceName = source;
 

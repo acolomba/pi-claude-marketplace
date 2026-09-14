@@ -1,6 +1,6 @@
 ---
 created: 2026-09-02
-resolves_phase: 117
+resolves_phase: 7
 source: 116-CONTEXT discussion
 audit_acknowledged:
   milestone: v1.19
@@ -8,6 +8,20 @@ audit_acknowledged:
 ---
 
 # No gate detects an unused type member
+
+**Disposition 2026-09-11: `deferred` to v1.19.** `CLOSE-02` names this todo
+explicitly as one that retains a deferred history without being described as
+implemented. Its substance stands unchanged: no gate reports a type member that
+nothing reads, measured on 2026-09-02 with `npm run typecheck`, `npm run lint`
+and `npm run fallow` all passing on a planted
+`readonly neverReadAnywhere?: string` member.
+
+It creates no implementation work in this milestone. It was reviewed against
+phase 9 of `refine-unit-tests` and deliberately not folded: it has no dedicated
+terminal finding inside the unit-test-quality boundary, so `D-22` bars it from
+creating active milestone work without new terminal evidence. The candidate
+approach below is retained as a starting point, not as an authorization, and
+the closing note that phase 7 would own the gate no longer applies.
 
 Nothing in the gate stack reports a member of an exported interface that no
 call site ever reads. Measured on 2026-09-02 by planting
@@ -71,9 +85,10 @@ The only existing instrument that answers "is this member read anywhere" is a
 call-graph query such as `codegraph explore`, which is a manual tool rather than
 a gate.
 
-## Why deferred
+## Why bundled into refine-unit-tests
 
-Phase 116 is the edge command surface; this is a repository-wide gate. Phase 117
-owns repository-wide gates and already inherits seven correspondence-gate
-violations, so the work belongs there. An unused optional member is dead weight
-rather than a correctness defect, so it does not block any phase.
+Phase 117 closed without implementing this repository-wide gate. Phase 1 of
+`refine-unit-tests` must revalidate the premise against the post-refactor tree.
+If it remains live, Phase 7 owns the gate and its required offender and benign
+controls. An unused optional member is dead weight rather than a correctness
+defect, so it does not bypass that evidence gate.

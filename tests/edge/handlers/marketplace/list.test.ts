@@ -55,7 +55,7 @@ const USAGE = "Usage: /claude:plugin marketplace <list|ls> [--scope user|project
 
 const PROJECT_ROW = "● alpha [project]";
 const USER_ROW = "● beta [user]";
-const BOTH_SCOPE_ROWS = `${PROJECT_ROW}\n\n${USER_ROW}`;
+const BOTH_SCOPE_ROWS = `${PROJECT_ROW}\n\n${USER_ROW}\n\nMarketplace list: 2 successes`;
 
 interface HermeticScope {
   readonly cwd: string;
@@ -194,7 +194,7 @@ for (const { row, scope } of [
     await marketplaceListHandler(`--scope ${scope}`, ctx);
 
     // assert
-    assert.deepStrictEqual(notifications, [{ message: row }]);
+    assert.deepStrictEqual(notifications, [{ message: `${row}\n\nMarketplace list: 1 success` }]);
     verifyBoundary();
   });
 }
@@ -213,7 +213,9 @@ test("drops the scope-target flag as a surplus positional and honors the scope b
   await marketplaceListHandler("--scope user --local", ctx);
 
   // assert
-  assert.deepStrictEqual(notifications, [{ message: USER_ROW }]);
+  assert.deepStrictEqual(notifications, [
+    { message: `${USER_ROW}\n\nMarketplace list: 1 success` },
+  ]);
   verifyBoundary();
 });
 

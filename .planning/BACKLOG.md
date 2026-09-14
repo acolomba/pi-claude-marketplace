@@ -22,7 +22,57 @@ Candidate directions for later brainstorming:
 
 Workaround today: run `/claude:plugin pending` before reloading, or `list` after.
 
-## REASON-01: unify malformed-input failures under a "malformed X" reason family
+## ~~REASON-01: unify malformed-input failures under a "malformed X" reason family~~ -- CLOSED
+
+Closed 2026-09-11 by the `refine-unit-tests` milestone. Disposition:
+`implemented` for the terminal route the milestone carried -- `PDEF-03` ("The
+terminal malformed-MCP input case returns its typed stable failure without an
+unexpected throw or configuration write") and `PDEF-05` ("Terminal
+lock-contention, sibling-sweep, and malformed-input reasons use explicit typed
+classifications instead of message-substring flow"). The `{malformed <feature>}`
+family this item asked for does exist and is closed-set.
+
+The scope was measured before this disposition was written, not after. Verbatim
+output of `grep -n 'malformed'
+extensions/pi-claude-marketplace/shared/notification-types.ts` on 2026-09-11:
+
+```
+44:  "malformed mcp",
+45:  "malformed skill",
+46:  "malformed command",
+```
+
+Three members, inside the `REASONS` closed set, each reached by a typed
+classification rather than by a message-substring test.
+
+NOT closed by the same change: **both** of the two mislabeled cases this item
+named by hand. Each was re-read the same day in
+`extensions/pi-claude-marketplace/shared/probe-classifiers.ts::classifyResolverNote`,
+and each still reaches the token the item complained about.
+
+- Inline malformed `mcpServers` still reaches `{unsupported source}`. The note
+  is emitted as `malformed mcpServers[: detail]`
+  (`domain/mcp-resolution.ts:34,36`), and `classifyResolverNote` matches the
+  FULL `malformed mcp reference` prefix deliberately, so that the inline note
+  does NOT match -- its own comment states that a bare `malformed mcp` match
+  "would also match the inline `malformed mcpServers` note and silently reroute
+  it away from `unsupported source`". The note therefore falls through to the
+  permissive catch-all arm, exactly as this item reported.
+- Malformed `hooks.json` still reaches `{unsupported hooks}`. The note is
+  emitted as `malformed hooks.json: <reason>`
+  (`domain/hooks-resolution.ts:42`), and `classifyResolverNote`'s `isHooksNote`
+  arm matches `startsWith("malformed hooks.json:")`. There is no
+  `malformed hooks` member in `REASONS` for it to reach -- see the grep above.
+
+So the family exists and the terminal malformed-input cases route into it, but
+the re-audit of `narrowResolverNotes` this item asked for -- rerouting the two
+named supported-feature parse failures out of the unsupported family -- was not
+done. That residual is a product change with no terminal finding inside the
+unit-test-quality boundary, and `D-22` bars it from creating milestone work
+here.
+
+Original report follows.
+
 
 Surfaced during v1.14 Phase 85 discuss (2026-07-22). The `UNSUPPORTED_REASONS`
 tokens (`unsupported hooks`, `lsp`, `unsupported source`) semantically mean a
@@ -47,6 +97,23 @@ the unsupported family -- parse / structural notes need to reach failure-class
 tokens (the `narrowProbeError` path already does this for I/O errors).
 
 ## COV-01: coverage exclusion policy, and the two out-of-bound orchestrators
+
+**Disposition 2026-09-11: `superseded`** (`RCOV-04`, `SCOPE-REQ-RCOV-04`,
+formerly Phase 8). The standalone remeasurement this item asked for is subsumed
+by `RCOV-01`'s complete all-pair coverage baseline, regenerated from the
+`refine-unit-tests` branch across every current source-test pair -- 230 of them,
+reported in the run's own `All-pair report written:` row count. The two
+orchestrators named below, `orchestrators/import/execute.ts` and
+`orchestrators/marketplace/update.ts`, are both inside that baseline, and
+neither is a current terminal shortfall: neither appears in the committed pin
+`scripts/test-coverage-direct.pin.json`, which records one reason per uncovered
+site and is not an allowlist.
+
+This is not a flattering exclusion and it is not an implementation claim. No
+`sonar.coverage.exclusions` entry was added for either module, and the
+exclusion-policy reasoning in part 1 below is retained unchanged as the standing
+answer for the next low-coverage wiring module that raises the same question.
+The same wording carries in `.planning/REQUIREMENTS.md` §"Evidence and History".
 
 Promoted from the 2026-08-10 todo at the v1.18 close (2026-08-12). Both parts sit
 outside the D-99-05b bound (update / reinstall / install only), which is why the
@@ -417,7 +484,35 @@ can recover real unused-code detection without reintroducing the false-positive
 wall. Measured at filing: that form yields 4 unused files, 192 unused exports,
 93 unused types and 4 duplicate pairs, so it is not a small triage.
 
-## FLOW-07: is the ESLint `no-restricted-paths` zone matrix now redundant?
+## ~~FLOW-07: is the ESLint `no-restricted-paths` zone matrix now redundant?~~ -- CLOSED
+
+Closed 2026-09-11 by the `refine-unit-tests` milestone. Disposition:
+`implemented`, carried by `GGAT-03` (Phase 7), whose clause names this item by
+ID: "`FLOW-07` varies effective config sources and broad overrides across the
+terminal ESLint/Fallow boundary gaps and proves target visitation."
+
+This is the one route of the four items closed here that a requirement clause
+names by ID, so it rests on a record rather than on inference. The three weaker
+routes say so in their own entries; the difference between a named route and a
+derived one is the point of recording it.
+
+`.planning/phases/07-gate-integrity/07-16-SUMMARY.md` carries the satisfaction
+row: plan `07-07` resolved both boundary gates through
+`ESLint#calculateConfigForFile` and deleted the two gates it replaced, verified
+by `node --test tests/architecture/eslint-effective-config.test.ts` and by
+`npm run lint` inside `npm run check`.
+`.planning/phases/07-gate-integrity/07-VERIFICATION.md` reads `status: passed`,
+7/7, with the `GGAT-03` row `SATISFIED`.
+
+The edge-by-edge matrix comparison this entry said removal would need was
+therefore never what settled it, and the removal question was not the thing that
+got answered. What got answered is the question underneath it: the ESLint gate
+now proves its own effective config and its target visitation, which is what
+makes two boundary gates independently trustworthy rather than nominally
+redundant.
+
+Original report follows.
+
 
 Filed 2026-08-16 alongside the FLOW-04 closure (quick task 260816-qov).
 
@@ -537,7 +632,42 @@ fallow coverage on all five barrels.
 Distinct from FLOW-09: that one is about internals exported for TESTS, a
 different cause with a different fix.
 
-## FLOW-09: internals exported only for tests
+## ~~FLOW-09: internals exported only for tests~~ -- CLOSED
+
+Closed 2026-09-11 by the `refine-unit-tests` milestone. Disposition:
+`implemented`, carried by `TREF-05` and `TREF-06` (Phases 5-6), with the
+standing `no-test-only-production-surface` gate under `GGAT-04` keeping the
+surface at zero.
+
+The clause fragments that make the match, quoted from `.planning/REQUIREMENTS.md`:
+
+- `TREF-05`: "Terminal mutable module state moves to legitimate lifecycle or
+  factory ownership without reset exports created only for tests." That is this
+  item's `_*ForTest` state-accessor half, in its own terms.
+- `TREF-06`: "Tests exercise public contracts, and terminal test-only exports,
+  reset hooks, and test-shaped branches follow the trace-preserving removal
+  disposition." That is the `__test_*` re-export half.
+- `GGAT-04`: "Terminal closed-set and delegated-contract gates cover their real
+  production consumers and any public seams created by approved splits, with
+  visitation, offender, and benign controls."
+  `tests/architecture/no-test-only-production-surface.test.ts` is the standing
+  gate that stops the count returning above zero.
+
+**This route is derived from clause text, not from a record that names
+`FLOW-09` against a requirement ID.** No artifact states the mapping in one
+place; it is read off the clauses above, whose wording matches this item's two
+halves almost verbatim. An honest "derived from clause text" is a record; an
+unqualified assertion would be a hope.
+
+NOT closed by the same change: this item's OTHER population, which its own
+status note below already separates out -- the roughly 94 ordinary internal
+helpers exported so a test can reach them, which is what still stands between
+this repository and `production: true` under fallow. The 27 seams this item
+tracked are at zero; the `production: true` payoff it was named for is not
+unlocked, and nothing in this milestone claims otherwise.
+
+Original report follows.
+
 
 **Status 2026-08-18: the seams are at ZERO. The item is NOT closed -- see the
 `production: true` measurement below, which is what it was actually named
@@ -899,6 +1029,7 @@ and the bridge itself under workflows-replay, which re-landed it on this branch.
   and the published contract docs/workflows-compatibility.md).
 -->
 
+
 ## PSRC-01: two real Claude Code plugin-source kinds unresolved (`npm`, `archive`)
 
 Surfaced 2026-08-13 auditing Claude Code's official plugin-marketplace docs
@@ -971,7 +1102,39 @@ Code seams: `transaction/phase-ledger.ts` (the 5-phase ledger pattern),
 `shared/notify.ts` (a new closed-set reason for a skipped/failed dependency
 install).
 
-## DFEN-01: `defaultEnabled` manifest field unsupported
+## ~~DFEN-01: `defaultEnabled` manifest field unsupported~~ -- CLOSED
+
+**CLOSED 2026-08-19** by `8992d850` ("feat: honor defaultEnabled so a plugin
+can install disabled", #130). Found stale on 2026-09-07 during the same backlog
+triage sweep that closed [WFLW-01], and missed by the same later edit
+(`9abdf9e4`, #160, 2026-09-01).
+
+`defaultEnabled` now threads through ten files: `domain/components/plugin.ts`,
+`domain/resolver.ts`, `orchestrators/plugin/install.ts`,
+`orchestrators/plugin/install.messaging.ts`, `orchestrators/types.ts`,
+`orchestrators/reconcile/apply.ts`,
+`orchestrators/reconcile/apply-outcomes.ts`,
+`edge/handlers/plugin/install.ts`, `shared/notify.ts` and
+`shared/notify-reasons.ts`.
+
+Two details are worth recording, because both go past what this entry asked
+for:
+
+- **The precedence rule shipped whole.** `resolveDefaultEnabled(entry,
+  manifest)` (`domain/resolver.ts:751`) lets the marketplace entry win when it
+  carries a boolean and falls back to the manifest otherwise, which is the rule
+  this entry named. Above both, an explicit user `enabled` declaration wins in
+  either direction and is never overwritten
+  (`install.ts::readDeclaredEnabled`) -- the equivalent of Claude Code's
+  `enabledPlugins` override.
+- **The resolved value is non-optional** on the materializable arms
+  (`domain/resolver.ts:201`, DFEN-02 / DFEN-03), so no consumer re-derives the
+  rule behind a `?? true` fallback. `list` and `info` also predict the outcome
+  through one shared `rowClaimsInstallDisabled` (DFEN-04 / DFEN-05, OUT-02 /
+  OUT-03), so the two surfaces cannot answer it differently. This entry asked
+  for neither.
+
+Original report follows.
 
 Surfaced 2026-08-13 auditing Claude Code's plugins-reference docs. A
 `plugin.json` (or marketplace entry, which takes precedence) can set
@@ -1273,71 +1436,6 @@ existing cross-scope-presence pattern to reuse), `orchestrators/reconcile/apply.
 `edge/handlers/plugin/uninstall.ts` (new `--keep-data` flag parsing),
 `edge/args.ts` / `edge/flag-catalog.ts` (flag registration, drift-gated).
 
-## SKFM-01: repair single-line frontmatter scalars instead of degrading the whole skill
-
-Surfaced 2026-08-13 from a competitive-analysis gap review
-(`docs/competitive-analysis/asermax-pi-cc-plugins.md`, README.md
-consolidated recommendation #4: "their headline feature without their
-defect"). Scoped deliberately narrower than the source report's own
-implementation, per its own caution.
-
-**The problem:** Claude Code's `SKILL.md` frontmatter parser is lenient;
-Pi's is strict. A `description:` line containing an unquoted colon --
-`description: Use this: when reviewing pull requests` -- parses fine under
-Claude Code and is fatal under Pi's parser.
-
-**Our behavior today:** `bridges/skills/stage.ts`'s `PARSE-01` block
-(~line 280) tries `parseFrontmatter(content)`; on throw it calls
-`synthesizeUnparseableSkill()` (`bridges/skills/frontmatter-degrade.ts:46`),
-which replaces the ENTIRE frontmatter block with a generated name, the
-fixed placeholder string `"Source frontmatter could not be parsed."`, and
-`disable-model-invocation: true`. The skill still installs, but the model
-never sees its real description -- confirmed by direct read of the
-`PARSE-01` catch arm, not inferred.
-
-**What `@asermax/pi-cc-plugins` got right, and where their build breaks:**
-they're the only one of the four competitors that tries to repair loose
-frontmatter rather than degrade or route around it -- a real, useful
-instinct. Their `sanitizeFrontmatterLines` walks the block line by line and
-JSON-stringify-quotes any value that isn't already boolean/null/number.
-Verified by executing their own exported `sanitizeSkillMarkdown`:
-`description: Use this: when reviewing` correctly becomes
-`description: "Use this: when reviewing"`, but `tags: [a, b]` becomes the
-literal string `tags: "[a, b]"` (a sequence corrupted into a string), and a
-`description:` spanning two lines gets its first line quoted while the
-indented continuation line is left orphaned, so a document that Pi
-originally accepted no longer parses at all. Their line-by-line rule
-cannot tell a single-line scalar from the start of a multi-line one.
-
-Direction for later: repair ONLY single-line inline scalars -- the exact
-case that fails today and the only case verified safe to rewrite. Two
-existing pieces of machinery in `bridges/skills/frontmatter-degrade.ts`
-already do most of the work, just for a different call site: the private
-`emitSafeDoubleQuotedScalar()` helper (line 146) already implements the
-correct escaping (newlines collapse to spaces, `\` escaped before `"`) and
-is already proven via `setDescriptionScalar()`'s SKILL-03 full-node-span
-replacement; `descriptionValueEnd()` already distinguishes a single-line
-value from a multi-line one by checking whether the following line is
-indented. The new work is a pre-parse repair step inserted into
-`stage.ts`'s `PARSE-01` catch arm (before falling through to
-`synthesizeUnparseableSkill`): detect a single top-level `key: value` line
-whose value is unquoted and contains a YAML-significant character, re-emit
-it through the same safe-quoting logic, and retry `parseFrontmatter`. Any
-line that is a sequence (`[...]`), a mapping (`{...}`), or has an indented
-continuation line MUST fall straight through to the existing
-`synthesizeUnparseableSkill` degrade unchanged -- reproducing either of
-those is exactly the asermax defect this item exists to avoid. A repair
-that still fails to parse must never replace the working degrade path; a
-synthesized block that parses beats a repair attempt that does not.
-
-Code seams: `bridges/skills/stage.ts` (`PARSE-01` catch arm, ~line 280 --
-the insertion point), `bridges/skills/frontmatter-degrade.ts`
-(`emitSafeDoubleQuotedScalar` to reuse/export, `descriptionValueEnd`'s
-single-vs-multi-line detection pattern to reuse, `synthesizeUnparseableSkill`
-as the required fallback), `bridges/skills/rewrite-frontmatter.ts` (the
-sibling single-node-rewrite pattern this follows -- rewrite exactly one
-node span, leave every other key byte-identical).
-
 ## MCPSRC-01: MCP collision slot list has drifted behind pi-mcp-adapter
 
 Surfaced 2026-08-13 from the upstream release review covering
@@ -1623,6 +1721,27 @@ bridge/orchestrator/NFR-10/NFR-5 impact (confirmed by spike 008).
 
 ## GAUTH-01: git host auth-failure hint coverage
 
+**Disposition 2026-09-11: `deferred` -- and it is the named prescription that is
+deferred, not the whole family.** What exists today, measured: the host-named
+diagnostic `NO_PROVIDER_CAUSE(host)` (`orchestrators/auth-host.ts`) is
+host-generic and is wired into exactly ONE of five auth-relevant call sites --
+`marketplace update`'s url-source refresh path
+(`orchestrators/marketplace/update.ts:394`). What the prescription asks for and
+did not get: the same cause line at the other four call sites -- `plugin
+install`, `plugin reinstall`, `plugin fetch`, and `marketplace add` -- each of
+which still surfaces only the bare, host-less `authentication required` token on
+a no-provider host.
+
+It is not implemented, and it is not an open defect inside this milestone's
+boundary either. It is a product change with no terminal finding inside the
+unit-test-quality boundary, which is why `D-22` bars it from creating milestone
+work here; `AUTH-01` retains only the independently terminal authentication
+findings. It is routed forward rather than closed.
+
+Do not read the family as an open pair: its sibling `GAUTH-02`, the GitLab
+Device Flow provider from the same spike, shipped separately via quick task
+`260814-a7m`. One shipped item, one deferred prescription.
+
 Surfaced by the same GitLab-parity spike (2026-08-14,
 `.planning/spikes/009-git-host-auth-hint-coverage`), prompted by the same
 upstream changelog line ("...and clone auth-failure hints name your actual
@@ -1758,6 +1877,19 @@ Code seams: `bridges/hooks/dispatch.ts` (`reduceBucket`,
 `bridges/hooks/event-router.ts` (the `session_shutdown` registration).
 
 ## AGCOL-01: the agents collision gate is dead by the same argument that retired the skills one
+
+**Disposition 2026-09-11: `evidence-only`** (`GGAT-02`, `SCOPE-REQ-GGAT-02`,
+formerly Phase 7). This item asserts that the agents-collision gate is dead by
+the same argument that retired the skills one. Exhaustive canonical mapping of
+the `refine-unit-tests` review corpus found no dedicated terminal finding behind
+that premise, so the premise was never revalidated against the post-refactor
+tree. Revalidation is required before it can return to active scope.
+
+It is not implemented. `assertNoAgentCollisions` and its call site are still in
+place, `bridges/agents/discover.ts`'s comment and PRD AG-12 still promise the
+throw, and nothing in this milestone touched any of them. The report below is
+retained for traceability and authorizes no implementation on its own. The same
+wording carries in `.planning/REQUIREMENTS.md` §"Evidence and History".
 
 Surfaced by review while landing PR #141 (2026-08-23), directly beside the
 retirement of `assertNoSkillCollisions` (D-141-04).
@@ -2099,7 +2231,74 @@ Code seams: `domain/components/hook-events.ts` (`BUCKET_A_EVENTS`,
 (observation narrowing), `bridges/hooks/timeout.ts`, and one
 `pi.on("model_select", ...)` registration in `bridges/hooks/event-router.ts`.
 
-## FMBOM-01: a UTF-8 BOM silently discards skill and agent frontmatter -- IMPORTANT
+## ~~FMBOM-01: a UTF-8 BOM silently discards skill and agent frontmatter~~ -- CLOSED
+
+**CLOSED 2026-09-07** by `8058d530` (agents), `b256b719` (skills) and
+`fb54c5d7` (commands) on `features/fmbom-01`. The fix is the one this entry
+specified -- strip a single leading BOM at the read sites -- delivered as a
+shared `stripBom` helper (`shared/bom.ts`) called from three sites.
+
+`shared/` is the helper's only legal home: fallow's zone boundaries forbid
+`bridges-agents`, `bridges-skills` and `bridges-commands` from importing one
+another, and all three need it.
+
+**Two corrections to the report below, both established by reading the code and
+running the installed peer, not from the changelog.**
+
+1. **A third bridge was exposed and this entry never named it: commands.**
+   `bridges/commands/stage.ts` has the identical read-parse-writeback shape.
+   A BOM makes the PARSE-01 gate RETURN rather than throw, so no CMD-01
+   degrade fires, and the marker reaches the staged artifact -- where a peer
+   at the `>=0.80.5` floor drops the frontmatter at load time. Same defect
+   class, same one-line fix, fixed here alongside the two this entry names.
+
+2. **The skills half is not caused by Pi's parser, and does not depend on the
+   peer version at all.** This entry attributes it to
+   `normalized.startsWith("---")` inside Pi's parser. The actual cause is OUR
+   OWN `content.startsWith("---")` in `rewriteFrontmatterName`
+   (`bridges/skills/rewrite-frontmatter.ts:67`): a marker makes that false, so
+   the rewrite takes the `freshBlock()` path and buries the source block in
+   the body. The SKILL-03 backstop then parses that RESULT, finds the
+   generated `name`, and passes. Reproducible on the current peer, which is
+   **0.84.4** -- upstream has since fixed their own parser, so this entry's
+   0.84.2 transcript no longer reproduces. The item stood anyway: the declared
+   floor is `>=0.80.5`, so every peer in `0.80.5..0.84.2` still has it broken.
+
+That second correction has a testing consequence worth carrying forward: on the
+installed peer, a test that stages a BOM'd source and asserts on a PARSE of the
+result passes with the fix reverted and proves nothing. The skills and commands
+cases therefore read the committed file back and assert on whole bytes. Every
+new case was confirmed red with its production strip reverted.
+
+**Deliberately NOT done.**
+
+- **No peer floor bump.** This entry already argued it buys half a fix; the
+  read-site strip makes it unnecessary outright. See [FLOOR-01], which does not
+  count this item toward its justification.
+- **No wrapper at `platform/pi-api.ts:38`.** PARSE-01 exists so our staging
+  gates mirror Pi's loaders byte-for-byte. A stripping wrapper would make the
+  gate accept bytes an in-floor Pi loader still rejects -- the mirror would stop
+  mirroring. It also cannot fix the corruption, since skills and commands write
+  `content` back out and the STAGED bytes are what Pi loads.
+- **No hashing change.** `sourceHash` (raw bytes) and
+  `domain/version.ts::normalizeBytes` both already normalize the marker away,
+  so nothing in the version layer notices that an existing install needs
+  re-staging. **Operator-facing consequence:** after this fix, an
+  already-installed BOM'd plugin lands in `update`'s `unchanged` partition and
+  renders `(skipped) {up-to-date}`. Repairing it requires
+  `/claude:plugin reinstall`. Changing hashing semantics is a separate decision
+  with its own blast radius; operator decided 2026-09-07 to record the
+  consequence rather than file it.
+- **Exactly ONE marker is stripped** -- never a loop, never a global regex.
+  Stripping repeatedly would let a doubled marker smuggle a fence past a
+  `startsWith` guard; a doubled marker still fails closed to the
+  no-frontmatter path, pinned by its own test case.
+
+Adjacent, untouched: a BOM on `plugin.json` / `marketplace.json` would make
+`JSON.parse` throw. Different defect -- loud, not silent.
+
+Original report follows.
+
 
 Surfaced by the upstream release review covering 2026-08-18..2026-08-25 and
 re-verified against the installed peer on 2026-09-01. Marked IMPORTANT: this
@@ -2354,7 +2553,47 @@ second justification that makes the move cheap to argue. [FMBOM-01]
 deliberately does NOT count toward it -- its recommended fix avoids the floor
 precisely so the bump stays optional.
 
-## TESTQ-01: act on the two-pass unit-test review corpus -- IMPORTANT
+## ~~TESTQ-01: act on the two-pass unit-test review corpus~~ -- CLOSED
+
+Closed 2026-09-11 by the `refine-unit-tests` milestone, which was cut from this
+item. Disposition: `implemented`.
+
+This is an umbrella item, so "the whole milestone carried it" is not a claim a
+reader can check. The mapping from this item's own five numbered workstreams
+onto the requirement IDs that carried each one, so the route can be walked
+rather than trusted:
+
+| this item's workstream | requirement IDs that carried it |
+| --- | --- |
+| 1. Production bugs -- 14 confirmed | `PDEF-01` through `PDEF-08` (Phases 2-3), plus `AUTH-01` for the authentication cluster |
+| 2. The 9 operator decisions in `META-FINDINGS.md` | `RVAL-03` (Phase 1), which resolves them only after their current premises are revalidated |
+| 3. The 13 ranked leverage items | `TREF-01` through `TREF-09` (Phases 4-6): hermeticity is `TREF-01`, the `git-ops-fake.ts` auth strip is `TREF-02`, the cast clusters are `TREF-03`, the injection seams are `TREF-04`, the fragment-assertion sweep is `TREF-07`, the approved splits are `TREF-09` |
+| 4. Re-arm the inert gates (36 rows) | the `GGAT` family -- `GGAT-01`, `GGAT-03`, `GGAT-04` (Phase 7) |
+| 5. Wire `test:coverage:direct` into the check chain | `RCOV-03` (Phase 8), with `RCOV-01` and `RCOV-02` supplying the honest baseline it gates against |
+
+The framing requirements `RVAL-01` through `RVAL-04` (Phase 1) are what made
+the corpus usable at all: all 110 files individually inspected, every report and
+recorded finding mapped to a current disposition with live source and test
+references, and stale, struck or displaced claims moved out of active scope with
+explicit current evidence before any implementation was planned.
+`.planning/phases/01-live-evidence-revalidation/01-67-SUMMARY.md:128` records
+the routing: "`TESTQ-01`, `FLOW-09`, `REASON-01`, and `FLOW-07` retain exact
+routes through their terminal findings."
+
+**This route is assembled, not stated.** No single artifact says "TESTQ-01 is
+closed by these IDs"; the table above is read off this item's own workstream
+list and the requirement clause text. Where a row rests on that inference it
+rests on it, and a reader checking the route should start from
+`.planning/REQUIREMENTS.md` and the per-phase verification reports rather than
+from this table.
+
+This item's own calibration warning survives its closure and is now repository
+policy rather than a caveat: per-pair coverage is not evidence of assertion
+strength. `CONTRIBUTING.md` and `RCOV-03` both hold coverage to reachability
+evidence only.
+
+Original report follows.
+
 
 Filed 2026-09-04 at the close of the unit-test-refactor review sweep. Deferred
 by operator decision until the branch merges to main. This is ONE umbrella item
@@ -2504,6 +2743,155 @@ exceeds the engine.
 path basenames, and `assertSafeName` has no surrogate screen, so agents and
 commands keep this exposure. Whether it is worth a shared screen is the part of
 this entry that remains a decision.
+
+<!--
+Pruned 2026-09-07: HKPS-01 shipped as quick task 260907-qqo (commits
+e901432b, ed0bf623, ae06d27f). `PowerShell(...)` if-field rules now compile
+to a sixth `powershell` predicate arm: case-insensitive matching, upstream's
+alias canonicalization (table mirrored verbatim from Claude Code v2.1.251),
+compound split on `;` `|` `&&` `||` and newline, backtick-as-escape, `$(...)`
+recursion, no wrapper stripping. Both command arms now guard on
+`event.toolName` so `Bash(...)` rules no longer fire on powershell events.
+-->
+
+## SWTEST-01: the Sonar way ruleset stops at `extensions/`; `tests/` is unmeasured by it
+
+Filed 2026-09-07 alongside the change that adopted the ruleset (`fe1313c6`,
+quick task 260907-qsx). Deferred deliberately, with the cost measured rather
+than guessed, so the decision is a scoping call and not a discovery exercise.
+
+`eslint.config.js` runs `sonarjs.configs.recommended.rules` over
+`extensions/pi-claude-marketplace/**/*.ts` only. That scope mirrors
+`sonar.sources`. The test tree is outside it for two independent reasons:
+`sonar.test.exclusions=tests/**` means SonarCloud never reads it, so there is
+no upstream parity pressure; and the same ruleset reports 1021 problems there
+today.
+
+**There is no blanket exemption to lean on.** The `tests/**/*.ts` block turns
+off five sonarjs rules and a handful of typescript-eslint ones, nothing more.
+Every other active rule already runs on the test tree and passes. So this is
+an opt-in decision about 1021 specific findings, not a wall.
+
+**The measured breakdown**, from the full ruleset against `tests/`:
+
+| Count | Rule | Reading |
+|---|---|---|
+| 797 | `void-use` | The house `void (x satisfies T)` compile-time assertion idiom, plus `void symbol;` to mark an intentional reference. Not a defect. |
+| 48 | `no-alphabetical-sort` | Probably real. `.sort()` with no comparator. |
+| 46 | `publicly-writable-directories` | Fixture temp paths. |
+| 34 | `no-hardcoded-passwords` | Fixture credentials. |
+| 14 | `no-unused-vars` | Overlaps the typescript-eslint rule already configured with a `^_` ignore pattern. |
+| 13 | `super-linear-regex` | Probably real; worth reading. |
+| 12 | `assertions-in-tests` | See below. |
+| 10 | `different-types-comparison` | Probably real. |
+| 8 | `no-nested-conditional` | Currently `off` for tests by choice. |
+| 7 | `no-empty-test-file` | See below. |
+| 6 each | `regex-complexity`, `no-identical-functions`, `no-clear-text-protocols` | |
+| 4 | `no-misleading-array-reverse` | |
+| 2 each | `no-trivial-assertions`, `no-os-command-from-path`, `no-invariant-returns` | |
+| 1 each | `no-extra-arguments`, `use-type-alias`, `no-nested-template-literals`, `no-selector-parameter` | |
+
+Drop `void-use` and roughly 224 remain, most of them fixture artifacts.
+
+**The reason to pick this up is narrower than the total, and it is the
+interesting part.** Three of these rules measure assertion strength directly:
+`assertions-in-tests` (S2699, a test with no assertion at all, 12 hits),
+`no-empty-test-file` (S2187, 7 hits) and `no-trivial-assertions` (S5914, an
+assertion that cannot fail, 2 hits). That is 21 findings against exactly the
+gap [TESTQ-01] names in its own calibration warning -- "93% pair completeness
+coexists with ~231 surviving-mutation BLOCKERs; per-pair coverage is not
+evidence of assertion strength". These three rules are a cheap, automated
+probe for that class, and nothing in the repo currently runs them.
+
+Direction for later: do NOT enable the ruleset wholesale on `tests/`. Enable
+the three assertion-strength rules first and read their 21 findings, since
+they carry the value and are separable from the noise. Then decide the rest
+per cluster: `void-use` should almost certainly stay off for the test tree
+(the idiom is deliberate and documented), the fixture clusters
+(`publicly-writable-directories`, `no-hardcoded-passwords`) want a
+`tests/fixtures/**` carve-out rather than a rule-level disable, and
+`no-unused-vars` should be left to the typescript-eslint rule already
+configured for it rather than run twice under two ignore patterns.
+
+Sequence it against [TESTQ-01] rather than beside it. That item already owns a
+large test-quality corpus with 9 operator decisions pending, and its
+`test:coverage:direct` work would collide with a broad test-tree lint change.
+
+Code seams: `eslint.config.js` (the Sonar way block, currently scoped to
+`extensions/`; and the `tests/**/*.ts` block that disables five sonarjs
+rules), `.planning/codebase/CONVENTIONS.md` (the "Sonar way on `extensions/`
+only" bullet, which states the scope this item would change).
+
+## NEGCTL-01: the direct-coverage negative control cannot capture its child's stderr on Node 26
+
+Carried out of the `refine-unit-tests` milestone close (2026-09-13) as an open
+audit item. Recorded during Plan 06-39 repository verification.
+
+`npm run test:coverage:direct:negative` asserts that the child process writes
+`Path is outside the project` to `stderr`. Under Node 26 the spawned child exits
+non-zero with an **empty** captured `stderr`; running the identical child command
+directly in a shell does emit the expected message. So the control's subject
+behaves correctly and only the capture is broken.
+
+Why it matters more than a flaky test: this is the negative control for the
+direct-coverage gate -- the thing that proves the gate fails when it should. A
+control that cannot observe its own failure signal is the "green run that checked
+nothing" class this project has already been bitten by. It currently passes on the
+Node version CI pins (24), so nothing is red today; the exposure is that a future
+Node bump silently converts the control into a no-op.
+
+Not caused by the update-owner extraction that surfaced it: the positive
+direct-coverage gates for both new owners read 100%, and the negative-control
+source was unchanged by that plan.
+
+Candidate directions:
+
+- assert on the child's exit status plus a stdout/stderr union, rather than on
+  `stderr` alone
+- reproduce under Node 26 first and determine whether this is a Node change in
+  how a failing child's stderr is flushed, or an artifact of how the harness
+  spawns it
+- if it is a Node behavior change, check whether any OTHER subprocess-asserting
+  test in the tree makes the same assumption
+
+Code seams: `scripts/test-coverage-direct.negative.mjs:134` (the capture and the
+assertion), `package.json` (`test:coverage:direct:negative`), `.github/workflows/ci.yml`
+(pins Node 24, which is why this is latent rather than red).
+
+## E2EIMP-01: three `import` e2e tests assert a summary header the command no longer emits
+
+Carried out of the `refine-unit-tests` milestone close (2026-09-13) as an open
+audit item. Originally recorded in Phase 25, which archived with milestone v1.4.1.
+
+Three cases in `tests/e2e/import-command.test.ts` fail: `import imports enabled
+Claude settings across both scopes`, `import --scope project narrows writes to
+project scope`, and `import reports source mismatches and skips dependent
+plugins`. All three match on a `Claude plugin import summary` header. The command
+no longer renders that header -- it emits the v2 marketplace block grammar
+instead. The tests encode a retired output contract, so this is drift in the
+assertions, not a regression in `import`.
+
+Scope note, so this is not over-read: the failures are confined to the `import`
+command's output surface. The source-load runtime smoke in the same suite passes,
+including the test that matters for extension loading (`real Pi runtime package
+bin loads the extension under isolated HOME and cwd`).
+
+Why it has stayed open: `tests/e2e/**` is excluded from `npm run check`, so these
+never gate a commit. CI does run `pinned e2e tests` as its own job, which is where
+they would surface.
+
+Candidate directions:
+
+- re-derive each expected string from the current block grammar rather than
+  patching the three literals, so the next grammar change fails loudly in one place
+- check whether the assertions should target the notification vocabulary
+  (`shared/notification-grammar.ts`) instead of rendered stdout, which is what the
+  unit suites do
+
+Code seams: `tests/e2e/import-command.test.ts` (the three cases and the header
+regex), `extensions/pi-claude-marketplace/orchestrators/import/execute.messaging.ts`
+(the message builder that replaced the old header), `package.json`
+(`test:e2e`, and the `check` chain that excludes it).
 
 <!--
 Pruned 2026-06-08: both prior items shipped in v1.10 Error Attribution.

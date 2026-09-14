@@ -2,10 +2,11 @@ import assert from "node:assert/strict";
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
 
-const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-const EXTENSION_ROOT = path.join(REPO_ROOT, "extensions/pi-claude-marketplace");
+import { EXTENSION_ROOT_REL } from "./gate-targets.ts";
+import { REPO_ROOT } from "./source-scan.ts";
+
+const EXTENSION_ROOT = path.join(REPO_ROOT, EXTENSION_ROOT_REL);
 const ALLOWED_RELATIVE_PATH = "domain/manifest.ts";
 
 async function collectTypeScriptFiles(dir: string): Promise<readonly string[]> {
@@ -37,6 +38,11 @@ test("NFR-8 manifest read seam: only domain/manifest.ts reads marketplace.json",
   const offenders: string[] = [];
   const files = await collectTypeScriptFiles(EXTENSION_ROOT);
 
+  assert.ok(
+    files.length > 0,
+    `D-07-03: the walk of ${EXTENSION_ROOT_REL} enumerated no file, so this gate inspected nothing and would report success over zero modules.`,
+  );
+
   for (const filePath of files) {
     const rel = path.relative(EXTENSION_ROOT, filePath).split(path.sep).join("/");
     if (rel === ALLOWED_RELATIVE_PATH) {
@@ -45,7 +51,7 @@ test("NFR-8 manifest read seam: only domain/manifest.ts reads marketplace.json",
 
     const stripped = stripComments(await readFile(filePath, "utf8"));
     if (hasMarketplaceManifestRead(stripped)) {
-      offenders.push(`extensions/pi-claude-marketplace/${rel}`);
+      offenders.push(`${EXTENSION_ROOT_REL}/${rel}`);
     }
   }
 

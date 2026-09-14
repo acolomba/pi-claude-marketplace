@@ -10,15 +10,21 @@
 // dispatch-exec layer is bridge-internal and intentionally absent here -- it
 // is reached through the injected `HookExecutor` parameter, not this barrel.
 
-export {
-  hydrateProjectScopeForCwd,
-  readAndCachePluginHooks,
-  registerHooksBridge,
-  rebuildRoutingTables,
-  removePluginConfigFromCache,
-} from "./event-router.ts";
+export { createHooksHydration, createHooksRouting } from "./event-router.ts";
 
-// LIFE-03 / D-63-02: hooks bridge write/remove primitives. Private helpers
-// (`assertNoSymlinkEscapeInHooksSubtree`, `hookConfigPathFor`) are NOT
-// re-exported -- callers use only the two verbs below.
-export { writeHookConfig, removeHookConfig } from "./stage.ts";
+export type {
+  HooksFileReader,
+  HooksHydration,
+  HooksHydrationDeps,
+  HooksRouting,
+  ReadAndCachePluginHooksOptions,
+} from "./event-router.ts";
+export { createHooksRuntime } from "./runtime.ts";
+export type { HooksRuntime } from "./runtime.ts";
+
+// LIFE-03 / D-63-02: hooks bridge read/write/remove primitives. Private
+// helpers (`assertNoSymlinkEscapeInHooksSubtree`, `hookConfigPathFor`) are NOT
+// re-exported -- callers use only the three verbs below. D-09-05:
+// `readHooksJson` is the real `HooksFileReader`, reached by the composition
+// root through this barrel.
+export { readHooksJson, writeHookConfig, removeHookConfig } from "./stage.ts";

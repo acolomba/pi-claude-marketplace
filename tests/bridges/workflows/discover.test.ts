@@ -12,7 +12,7 @@ import type {
   DiscoverPluginWorkflowsResult,
   WorkflowDiscoveryTarget,
 } from "../../../extensions/pi-claude-marketplace/bridges/workflows/types.ts";
-import type { ResolvedPluginInstallable } from "../../../extensions/pi-claude-marketplace/domain/resolver.ts";
+import type { ResolvedPluginInstallable } from "../../../extensions/pi-claude-marketplace/domain/resolver-types.ts";
 
 const NAMED_GREET = 'export const meta = { name: "greet", description: "greets" };\n';
 const NAMED_SHOUT = 'export const meta = { name: "shout", description: "shouts" };\n';

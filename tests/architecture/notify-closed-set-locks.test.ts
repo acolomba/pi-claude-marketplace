@@ -24,7 +24,7 @@ import {
   PLUGIN_STATUSES,
   REASONS,
   STATUS_TOKENS,
-} from "../../extensions/pi-claude-marketplace/shared/notify.ts";
+} from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
 test("OUT-08: REASONS is the closed 46-entry reason set", () => {
   // The set is append-only and its declared order is catalog-stable, so this

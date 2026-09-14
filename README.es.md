@@ -108,6 +108,14 @@ Los nombres de comandos y habilidades usan el formato con dos puntos de Pi:
 | `foo`                  | `foo-bar`                      | `/foo:bar`   |
 | `foo`                  | `foo`                          | `/foo:foo`   |
 
+En Windows, los comandos se prefijan con un punto (`.`) en lugar de dos puntos (`:`). Los nombres de habilidades no cambian:
+
+| Nombre del complemento | Nombre del comando | Nombre en Pi (Windows) |
+| ---------------------- | ------------------ | ---------------------- |
+| `foo`                  | `bar`              | `/foo.bar`             |
+| `foo`                  | `foo-bar`          | `/foo.bar`             |
+| `foo`                  | `foo`              | `/foo.foo`             |
+
 Esta extensión también registra las habilidades con nombres separados por guiones después del prefijo `/skill:`:
 
 | Nombre del complemento | Nombre de la habilidad | Nombre en Pi     |
@@ -123,6 +131,31 @@ Los nombres de los servidores MCP no cambian. Si otra configuración de MCP ya u
 | `foo`                  | `api`                 | `api`                          |
 | `foo`                  | `foo-api`             | `foo-api`                      |
 | `bar`                  | `api`                 | _conflicto si `api` ya existe_ |
+
+### Personalización de los agentes generados
+
+Esta extensión convierte cada agente de complemento en un archivo de agente de pi-subagents llamado `pi-claude-marketplace-<plugin>-<agent>`. No edites estos archivos: install, update y reinstall los regeneran.
+
+Dos reglas de conversión que conviene conocer:
+
+- Si el agente de origen no declara `tools:`, el agente generado no tiene lista de herramientas permitidas. pi-subagents entonces otorga sus herramientas integradas predeterminadas, igual que Claude Code otorga todas las herramientas disponibles para subagentes. Los procesos hijos en segundo plano también reciben herramientas de extensiones del entorno, como las herramientas MCP de pi-mcp-adapter. Si el agente de origen define `disallowedTools`, esos nombres se convierten en `excludeTools`, que necesita pi-subagents 0.62.0 o posterior. Las versiones anteriores ignoran ese campo.
+- Los campos de agente `allowed-tools`, `mcpServers`, `permissionMode` y `hooks` se descartan, con una advertencia que explica el motivo. Claude Code ignora los cuatro en agentes de complementos (`allowed-tools` es un campo de comandos de barra). Los servidores MCP propios del complemento y su hooks.json sí se instalan.
+
+Para cambiar la configuración de un agente generado de forma que el cambio sobreviva a las actualizaciones del complemento, usa las anulaciones de agentes de pi-subagents en tu archivo de configuración de Pi (`~/.pi/agent/settings.json` para el ámbito de usuario, `<project>/.pi/settings.json` para el ámbito del proyecto):
+
+```json
+{
+  "subagents": {
+    "agentOverrides": {
+      "pi-claude-marketplace-foo-reviewer": {
+        "tools": "read,bash,mcp:github"
+      }
+    }
+  }
+}
+```
+
+Una anulación reemplaza el mismo campo en el frontmatter generado. Las entradas `mcp:<server>` otorgan herramientas MCP directas cuando pi-mcp-adapter está instalado. pi-subagents carga herramientas MCP solo para procesos hijos en segundo plano (`async: true`).
 
 ### Ámbito (Scoping)
 

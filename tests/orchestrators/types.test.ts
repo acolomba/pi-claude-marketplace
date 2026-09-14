@@ -110,7 +110,7 @@ const UPDATE_PHASE_FAILURE = {
  * directory is shared with the user's own workflows and with every other
  * plugin, so a target still occupied after displacement is foreign and the
  * commit declines it rather than renaming over it. The behavior behind this
- * shape is driven end to end in `tests/orchestrators/plugin/update.test.ts`.
+ * shape is driven end to end in `tests/orchestrators/plugin/update-flow.test.ts`.
  */
 const UPDATE_PHASE_FAILURE_WORKFLOWS = {
   msg: "cannot replace workflow target with non-previous content",

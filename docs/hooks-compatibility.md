@@ -96,6 +96,7 @@ The `matcher` field on tool events (`PreToolUse`, `PostToolUse`, `PostToolUseFai
 | Pi tool name | Claude tool name |
 | ------------ | ---------------- |
 | `bash`       | `Bash`           |
+| `powershell` | `PowerShell`     |
 | `read`       | `Read`           |
 | `edit`       | `Edit`           |
 | `write`      | `Write`          |
@@ -107,28 +108,32 @@ Unmapped Claude tools: `MultiEdit`, `NotebookEdit`, `WebFetch`, `WebSearch`, `Ta
 
 ## `if` field
 
-| Prefix                                                                                 | Claude Code | Pi  | Notes                                                               |
-| -------------------------------------------------------------------------------------- | ----------- | --- | ------------------------------------------------------------------- |
-| `Bash(<command-glob>)`                                                                 | ✓           | ✓   | compound-split, wrapper-strip, `:*` suffix, word-boundary           |
-| `Read(<path-glob>)`                                                                    | ✓           | ✓   | cross-tool: covers Pi `read`, `grep`, `find`, `ls`                  |
-| `Edit(<path-glob>)`                                                                    | ✓           | ✓   | cross-tool: covers Pi `edit`, `write`                               |
-| `Write(<path-glob>)`                                                                   | ✓           | ✓   |                                                                     |
-| `mcp__<server>__<tool>` literal                                                        | ✓           | ✓   |                                                                     |
-| `mcp__<server>` / `mcp__<server>__*` prefix                                            | ✓           | ✓   |                                                                     |
-| Bare tool names without parens (`Bash`, `Read`)                                        | ✓           | ⚠   | falls open (matches Claude Code's match-everything semantic)        |
-| `Grep(...)`, `Glob(...)`, `LS(...)`                                                    | ✓           | ✗   | falls open; rewrite as `Read(...)`                                  |
-| `MultiEdit(...)`, `NotebookEdit(...)`                                                  | ✓           | ✗   | falls open; rewrite as `Edit(...)`                                  |
-| `PowerShell(...)`, `Cd(...)`                                                           | ✓           | ✗   | falls open (out-of-scope tools on Pi)                               |
-| `WebFetch(domain:host)`, `Agent(<name>)`                                               | ✓           | ✗   | falls open (no `if`-field support for these tools)                  |
-| Parameter matching: `Agent(model:opus)`, `Bash(run_in_background:true)`                | ✓           | ✗   | falls open; the bridge does not inspect tool input parameters       |
-| Tool-name wildcards (`*`, `mcp__*`, `mcp__github__get_*`)                              | ✓           | ✗   | falls open                                                          |
-| Glob `*` within-segment, `**` cross-segment                                            | ✓           | ✓   |                                                                     |
-| Path anchors `//abs`, `~/home`, `/project-root`, `./cwd`, bare-relative, bare-filename | ✓           | ✓   | `projectRoot` falls back to `cwd` until Pi exposes a richer surface |
-| Bash compound split (`&&`, `\|\|`, `;`, `\|`, `\|&`, `&`, newlines)                    | ✓           | ✓   |                                                                     |
-| Bash wrapper-strip (`timeout`, `time`, `nice`, `nohup`, `stdbuf`, `xargs`)             | ✓           | ✓   |                                                                     |
-| `$(...)`, backticks, `$VAR` -> fail-open fire                                          | ✓           | ✓   | command treated as uncertain                                        |
-| `if` on a non-tool event                                                               | ✓           | ⚠   | compiles to match-all (effectively ignored)                         |
-| Malformed permission-rule syntax (`Bash(`, broken globs)                               | ✓           | ⚠   | falls open with a debug-log warning                                 |
+| Prefix                                                                                 | Claude Code | Pi  | Notes                                                                                                                                                   |
+| -------------------------------------------------------------------------------------- | ----------- | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Bash(<command-glob>)`                                                                 | ✓           | ✓   | compound-split, wrapper-strip, `:*` suffix, word-boundary                                                                                               |
+| `PowerShell(<command-glob>)`                                                           | ✓           | ✓   | compound-split on `;` `\|` `&&` `\|\|`, `:*` suffix, word-boundary, case-insensitive matching, alias canonicalization; no process wrappers are stripped |
+| `Read(<path-glob>)`                                                                    | ✓           | ✓   | cross-tool: covers Pi `read`, `grep`, `find`, `ls`                                                                                                      |
+| `Edit(<path-glob>)`                                                                    | ✓           | ✓   | cross-tool: covers Pi `edit`, `write`                                                                                                                   |
+| `Write(<path-glob>)`                                                                   | ✓           | ✓   |                                                                                                                                                         |
+| `mcp__<server>__<tool>` literal                                                        | ✓           | ✓   |                                                                                                                                                         |
+| `mcp__<server>` / `mcp__<server>__*` prefix                                            | ✓           | ✓   |                                                                                                                                                         |
+| Bare tool names without parens (`Bash`, `Read`)                                        | ✓           | ⚠   | falls open (matches Claude Code's match-everything semantic)                                                                                            |
+| `Grep(...)`, `Glob(...)`, `LS(...)`                                                    | ✓           | ✗   | falls open; rewrite as `Read(...)`                                                                                                                      |
+| `MultiEdit(...)`, `NotebookEdit(...)`                                                  | ✓           | ✗   | falls open; rewrite as `Edit(...)`                                                                                                                      |
+| `Cd(...)`                                                                              | ✓           | ✗   | falls open (out-of-scope tool on Pi)                                                                                                                    |
+| `WebFetch(domain:host)`, `Agent(<name>)`                                               | ✓           | ✗   | falls open (no `if`-field support for these tools)                                                                                                      |
+| Parameter matching: `Agent(model:opus)`, `Bash(run_in_background:true)`                | ✓           | ✗   | falls open; the bridge does not inspect tool input parameters                                                                                           |
+| Tool-name wildcards (`*`, `mcp__*`, `mcp__github__get_*`)                              | ✓           | ✗   | falls open                                                                                                                                              |
+| Glob `*` within-segment, `**` cross-segment                                            | ✓           | ✓   |                                                                                                                                                         |
+| Path anchors `//abs`, `~/home`, `/project-root`, `./cwd`, bare-relative, bare-filename | ✓           | ✓   | `projectRoot` falls back to `cwd` until Pi exposes a richer surface                                                                                     |
+| Bash compound split (`&&`, `\|\|`, `;`, `\|`, `\|&`, `&`, newlines)                    | ✓           | ✓   |                                                                                                                                                         |
+| Bash wrapper-strip (`timeout`, `time`, `nice`, `nohup`, `stdbuf`, `xargs`)             | ✓           | ✓   |                                                                                                                                                         |
+| PowerShell compound split (`&&`, `\|\|`, `;`, `\|`, newlines)                          | ✓           | ✓   | a bare `&` is not a separator; a backtick escapes the next character instead of substituting a command                                                  |
+| PowerShell alias canonicalization and case-insensitive matching                        | ✓           | ✓   | a rule written for a cmdlet also matches its aliases, and a rule written with an alias matches the cmdlet                                               |
+| Bash `$(...)`, backticks, `$VAR` -> fail-open fire                                     | ✓           | ✓   | command treated as uncertain                                                                                                                            |
+| PowerShell `$(...)`, `$VAR`, `${VAR}` -> fail-open fire                                | ✓           | ✓   | command treated as uncertain; a backtick is an escape there, not substitution, so it does not count                                                     |
+| `if` on a non-tool event                                                               | ✓           | ⚠   | compiles to match-all (effectively ignored)                                                                                                             |
+| Malformed permission-rule syntax (`Bash(`, broken globs)                               | ✓           | ⚠   | falls open with a debug-log warning                                                                                                                     |
 
 ## Handler types
 
@@ -238,10 +243,11 @@ The bridge picks one of four responses when a plugin declares a feature outside 
 
 **Silent fall-open** -- the hook fires on every matcher hit and a `hookDebugLog` warning records the cause. This matches Claude Code's documented best-effort contract for the `if` field. Applies to:
 
-- every `if`-field shape outside the supported prefix set (`Grep(...)`, `LS(...)`, parameter matching, tool-name wildcards, unknown prefixes)
+- every `if`-field shape outside the supported prefix set (`Grep(...)`, `LS(...)`, `Cd(...)`, parameter matching, tool-name wildcards, unknown prefixes)
 - malformed `if` syntax (`Bash(` with no close, broken globs)
 - `if` on non-tool events
 - runtime Bash commands containing `$(...)`, backticks, or `$VAR`
+- runtime PowerShell commands containing `$(...)`, `$VAR`, or `${VAR}` -- a PowerShell backtick is an escape rather than command substitution, so it does not make a command uncertain
 
 **Silent drop** -- the bridge accepts the field at parse time but never acts on it. Applies to:
 

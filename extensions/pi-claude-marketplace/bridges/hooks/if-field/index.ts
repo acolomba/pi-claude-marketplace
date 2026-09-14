@@ -2,10 +2,10 @@
 //
 // MATCH-03 public surface for the `if`-field permission-rule matcher.
 // Exports the `IfPredicate` discriminated union, the `MATCH_ALL_IF`
-// fall-open sentinel, and re-exports the glob + Bash-parser compile-time
-// primitives from `./glob.ts` and `./bash.ts`. Dispatch-time consult
-// (`ifFires`) and parse-time compile (`compileIfPredicate`) land in
-// follow-up plans against this surface.
+// fall-open sentinel, the parse-time compile (`compileIfPredicate`) and
+// the dispatch-time consult (`ifFires`), and re-exports the glob +
+// command-parser compile-time primitives from `./glob.ts`, `./bash.ts`,
+// and `./powershell.ts`.
 //
 // D-61-02: every `if`-layer failure mode falls open to `MATCH_ALL_IF`
 // (`{ kind: "match-all" }`). The sentinel exists so the dispatch path
@@ -15,15 +15,15 @@
 // switch total and lets `assertNever` enforce NFR-7 exhaustiveness
 // without an `undefined` arm.
 //
-// NFR-7: the `IfPredicate` union has five arms; any switch over
+// NFR-7: the `IfPredicate` union has six arms; any switch over
 // `predicate.kind` must either cover every arm or terminate with
-// `assertNever(predicate)`. Adding a sixth arm without updating the
+// `assertNever(predicate)`. Adding a seventh arm without updating the
 // dispatch switch red-fails `npm run typecheck`.
 //
 // Fail-open contract recap (D-61-02):
-//   - Unknown rule prefix (`PowerShell(...)`, typos)        -> MATCH_ALL_IF
+//   - Unknown rule prefix (`Cd(...)`, typos)                -> MATCH_ALL_IF
 //   - Malformed permission-rule syntax (`Bash(`)            -> MATCH_ALL_IF
-//   - Runtime Bash command unparseable                      -> dispatch fires
+//   - Runtime shell command unparseable                     -> dispatch fires
 //   - Missing path target on optional-path Pi tools         -> substitute cwd
 //
 // Plugins that work in upstream Claude Code install in Pi-Claude
@@ -52,22 +52,33 @@ import { assertNever } from "../exec-result.ts";
 
 import { bashSubcommandFires, parseBashSubcommands } from "./bash.ts";
 import { compileBashGlob, compilePathGlob } from "./glob.ts";
+import {
+  compilePowerShellRule,
+  parsePowerShellSubcommands,
+  powerShellSubcommandFires,
+} from "./powershell.ts";
 
-import type { CompiledBashGlob, CompiledPathGlob } from "./glob.ts";
+import type { ParseResult } from "./bash.ts";
+import type { CompiledBashGlob, CompiledPathGlob, CompiledPowerShellGlob } from "./glob.ts";
 import type { PiToolName } from "../../../domain/components/hook-tool-names.ts";
 import type { ExtensionContext } from "../../../platform/pi-api.ts";
 
-export type { CompiledBashGlob, CompiledPathGlob } from "./glob.ts";
-export { compileBashGlob, compilePathGlob } from "./glob.ts";
+export type { CompiledBashGlob, CompiledPathGlob, CompiledPowerShellGlob } from "./glob.ts";
+export { compileBashGlob, compilePathGlob, compilePowerShellGlob } from "./glob.ts";
 
 export { parseBashSubcommands, bashSubcommandFires } from "./bash.ts";
+export {
+  compilePowerShellRule,
+  parsePowerShellSubcommands,
+  powerShellSubcommandFires,
+} from "./powershell.ts";
 
 // ──────────────────────────────────────────────────────────────────────────
 // IfPredicate discriminated union
 // ──────────────────────────────────────────────────────────────────────────
 
 /**
- * Five-arm discriminated union representing a parsed `if` field. Stored
+ * Six-arm discriminated union representing a parsed `if` field. Stored
  * on the `RoutingEntry` (always present after compile; fall-open sentinel
  * for absent or malformed `if` strings). The dispatch consult switches
  * on `predicate.kind`:
@@ -75,9 +86,16 @@ export { parseBashSubcommands, bashSubcommandFires } from "./bash.ts";
  *   - `match-all`         -- fire unconditionally. The `reason` field
  *                            captures fall-open context for
  *                            `hookDebugLog`.
- *   - `bash`              -- consult `bashGlob.test(subcmd)` against
- *                            every parsed subcommand of the runtime
- *                            `event.input.command`.
+ *   - `bash`              -- check whether `event.toolName` is in the
+ *                            `piEvents` set, then consult
+ *                            `bashGlob.test(subcmd)` against every parsed
+ *                            subcommand of `event.input.command`.
+ *   - `powershell`        -- the same two steps against `psGlob` and the
+ *                            PowerShell subcommand parser (HKPS-01). The
+ *                            `piEvents` guard on both command-bearing arms
+ *                            is what keeps a `Bash(...)` rule from firing
+ *                            on a `powershell` event and vice versa, since
+ *                            both read `input.command`.
  *   - `path-tool`         -- check whether `event.toolName` is in the
  *                            cross-tool `piEvents` set, then consult
  *                            `pathGlob.testAbsolute(event.input.path
@@ -89,7 +107,16 @@ export { parseBashSubcommands, bashSubcommandFires } from "./bash.ts";
  */
 export type IfPredicate =
   | { readonly kind: "match-all"; readonly reason?: string }
-  | { readonly kind: "bash"; readonly bashGlob: CompiledBashGlob }
+  | {
+      readonly kind: "bash";
+      readonly piEvents: ReadonlySet<PiToolName>;
+      readonly bashGlob: CompiledBashGlob;
+    }
+  | {
+      readonly kind: "powershell";
+      readonly piEvents: ReadonlySet<PiToolName>;
+      readonly psGlob: CompiledPowerShellGlob;
+    }
   | {
       readonly kind: "path-tool";
       readonly piEvents: ReadonlySet<PiToolName>;
@@ -209,21 +236,22 @@ const TOOL_EVENT_MEMBERS_FOR_IF = new Set<string>(TOOL_EVENTS);
  * collapses to MATCH_ALL_IF and emits a `hookDebugLog` warning. The
  * function NEVER throws past its return type.
  *
- * Five compile paths, each guarded so a downstream compile throw
- * (broken glob, malformed Bash syntax) still falls open:
+ * Six compile paths, each guarded so a downstream compile throw
+ * (broken glob, malformed command syntax) still falls open:
  *
  *   - empty after trim                       -> MATCH_ALL_IF
  *   - non-tool event (A5 disposition)        -> MATCH_ALL_IF
  *   - `mcp__<server>__<tool>` literal         -> mcp-literal predicate
  *   - `mcp__<server>` or `mcp__<server>__*`   -> mcp-server-prefix
- *   - `<Prefix>(<inner>)` with known Prefix  -> bash / path-tool
+ *   - `<Prefix>(<inner>)` with known Prefix  -> bash / powershell /
+ *                                               path-tool
  *   - any miss (unknown prefix, malformed)   -> MATCH_ALL_IF
  *
- * The closed prefix set is exactly `Bash` / `Read` / `Edit` / `Write`
- * (D-61-03); `Grep` / `Glob` / `LS` / `MultiEdit` / `NotebookEdit` /
- * `PowerShell` / `WebFetch` / `Agent` / `Cd` / typos all fall open per
- * D-61-02. Upstream's cross-tool semantic ("Read covers all built-in
- * readers; Edit covers all built-in editors") is encoded in
+ * The closed prefix set is exactly `Bash` / `PowerShell` / `Read` /
+ * `Edit` / `Write` (D-61-03, HKPS-01); `Grep` / `Glob` / `LS` /
+ * `MultiEdit` / `NotebookEdit` / `WebFetch` / `Agent` / `Cd` / typos all
+ * fall open per D-61-02. Upstream's cross-tool semantic ("Read covers all
+ * built-in readers; Edit covers all built-in editors") is encoded in
  * `IF_PREFIX_TARGETS`, so a `Read(src/**)` rule fires on Pi `read`,
  * `grep`, `find`, `ls` at dispatch time.
  */
@@ -266,8 +294,8 @@ export function compileIfPredicate(
 /**
  * Per-prefix compile dispatch. Each arm wraps the underlying glob
  * compile so a malformed inner still collapses to MATCH_ALL_IF
- * (D-61-02). Unknown prefixes (`Grep`, `Glob`, `LS`, `PowerShell`, ...)
- * fall open silently.
+ * (D-61-02). Unknown prefixes (`Grep`, `Glob`, `LS`, `Cd`, ...) fall open
+ * silently.
  */
 function compileIfPrefixForm(
   raw: string,
@@ -278,10 +306,22 @@ function compileIfPrefixForm(
   if (prefix === "Bash") {
     try {
       const bashGlob = compileBashGlob(inner);
-      return { kind: "bash", bashGlob };
+      return { kind: "bash", piEvents: IF_PREFIX_TARGETS.Bash.piEvents, bashGlob };
     } catch (err) {
       hookDebugLog(
         `compileIfPredicate: Bash glob compile failed for "${raw}": ${errorMessage(err)}; falling open`,
+      );
+      return MATCH_ALL_IF;
+    }
+  }
+
+  if (prefix === "PowerShell") {
+    try {
+      const psGlob = compilePowerShellRule(inner);
+      return { kind: "powershell", piEvents: IF_PREFIX_TARGETS.PowerShell.piEvents, psGlob };
+    } catch (err) {
+      hookDebugLog(
+        `compileIfPredicate: PowerShell glob compile failed for "${raw}": ${errorMessage(err)}; falling open`,
       );
       return MATCH_ALL_IF;
     }
@@ -322,7 +362,7 @@ function compileIfPrefixForm(
  * say undefined otherwise".
  */
 
-function extractBashCommand(event: unknown): string | undefined {
+function extractCommand(event: unknown): string | undefined {
   const cmd = (event as { input?: { command?: unknown } }).input?.command;
   return typeof cmd === "string" ? cmd : undefined;
 }
@@ -331,11 +371,12 @@ function extractBashCommand(event: unknown): string | undefined {
  * Returns `event.toolName` when it is a string, `""` otherwise.
  *
  * The empty-string coercion is fail-CLOSED by design: every downstream
- * check (`piEvents` membership for the `path-tool` arm, literal
- * equality for the `mcp-literal` arm, `startsWith` for the
- * `mcp-server-prefix` arm) rejects the empty string. A malformed event
- * payload missing `toolName` therefore matches no MCP-shaped predicate
- * arm, which is the desired safe default.
+ * check (`piEvents` membership for the `bash`, `powershell`, and
+ * `path-tool` arms, literal equality for the `mcp-literal` arm,
+ * `startsWith` for the `mcp-server-prefix` arm) rejects the empty string.
+ * A malformed event payload missing `toolName` therefore matches no
+ * predicate arm that reads a tool name, which is the desired safe
+ * default.
  */
 function extractToolName(event: unknown): string {
   const name = (event as { toolName?: unknown }).toolName;
@@ -345,6 +386,49 @@ function extractToolName(event: unknown): string {
 function extractPath(event: unknown): string | undefined {
   const p = (event as { input?: { path?: unknown } }).input?.path;
   return typeof p === "string" ? p : undefined;
+}
+
+/**
+ * The per-shell collaborators the shared command-arm body needs: the
+ * predicate's own `piEvents` set, the shell name used in the fall-open
+ * debug line, the subcommand parser, and the compiled-glob matcher with
+ * its glob already bound.
+ */
+interface CommandArm {
+  readonly piEvents: ReadonlySet<PiToolName>;
+  readonly shell: string;
+  parse(command: string): ParseResult;
+  fires(subcommand: string, hasInterpolation: boolean): boolean;
+}
+
+/**
+ * Shared dispatch body for the two command-bearing predicate arms.
+ *
+ * Guards `event.toolName` against the predicate's own `piEvents` set
+ * BEFORE reading `input.command`: `Bash(...)` and `PowerShell(...)` both
+ * read that one field, so without the guard a rule written for one shell
+ * would fire on the other's events. Then extracts the command (absent ->
+ * no match), parses it (unparseable -> `hookDebugLog` + fire, the
+ * D-61-04 fail-open), and returns true on the first subcommand that
+ * fires.
+ */
+function commandArmFires(arm: CommandArm, event: unknown): boolean {
+  if (!arm.piEvents.has(extractToolName(event) as PiToolName)) {
+    return false;
+  }
+
+  const command = extractCommand(event);
+  if (command === undefined) {
+    return false;
+  }
+
+  const parsed = arm.parse(command);
+  if (!parsed.ok) {
+    hookDebugLog(`ifFires: ${arm.shell} unparseable: ${parsed.reason}; firing`);
+    return true;
+  }
+
+  return parsed.subcommands.some((subcommand) => arm.fires(subcommand, parsed.hasInterpolation));
 }
 
 /**
@@ -370,12 +454,18 @@ function resolveTarget(p: string, ctx: ExtensionContext): string {
  * Per-arm contract:
  *
  *   - `match-all` -- always fires (fall-open sentinel).
- *   - `bash` -- extract `event.input.command`; if absent return false
- *     (no command to match); parse subcommands; on parse failure
- *     `hookDebugLog` + return true (D-61-04 fail-open); on parse success
- *     match every subcommand against `bashGlob` and return true on the
- *     first hit (with `bashSubcommandFires` applying the
+ *   - `bash` -- guard `event.toolName` against the predicate's `piEvents`
+ *     set and return false on a miss; extract `event.input.command`; if
+ *     absent return false (no command to match); parse subcommands; on
+ *     parse failure `hookDebugLog` + return true (D-61-04 fail-open); on
+ *     parse success match every subcommand against `bashGlob` and return
+ *     true on the first hit (with `bashSubcommandFires` applying the
  *     specificity-override branch on `$()`/backticks/`$VAR`).
+ *   - `powershell` -- the same sequence against `psGlob`, the PowerShell
+ *     subcommand parser, and `powerShellSubcommandFires` (HKPS-01). Both
+ *     command-bearing arms guard `toolName` first because both read
+ *     `input.command`; without the guard a `Bash(...)` rule would fire on
+ *     a `powershell` event.
  *   - `path-tool` -- guard `event.toolName` against the predicate's
  *     `piEvents` set (defensive; the matcher gate already filters by
  *     event kind, but the closed-set membership check keeps the path
@@ -402,26 +492,29 @@ export function ifFires(
     case "match-all":
       return true;
 
-    case "bash": {
-      const command = extractBashCommand(event);
-      if (command === undefined) {
-        return false;
-      }
+    case "bash":
+      return commandArmFires(
+        {
+          piEvents: predicate.piEvents,
+          shell: "Bash",
+          parse: parseBashSubcommands,
+          fires: (subcommand, hasInterpolation) =>
+            bashSubcommandFires(predicate.bashGlob, subcommand, hasInterpolation),
+        },
+        event,
+      );
 
-      const parsed = parseBashSubcommands(command);
-      if (!parsed.ok) {
-        hookDebugLog(`ifFires: Bash unparseable: ${parsed.reason}; firing`);
-        return true;
-      }
-
-      for (const subcmd of parsed.subcommands) {
-        if (bashSubcommandFires(predicate.bashGlob, subcmd, parsed.hasInterpolation)) {
-          return true;
-        }
-      }
-
-      return false;
-    }
+    case "powershell":
+      return commandArmFires(
+        {
+          piEvents: predicate.piEvents,
+          shell: "PowerShell",
+          parse: parsePowerShellSubcommands,
+          fires: (subcommand, hasInterpolation) =>
+            powerShellSubcommandFires(predicate.psGlob, subcommand, hasInterpolation),
+        },
+        event,
+      );
 
     case "path-tool": {
       const toolName = extractToolName(event);

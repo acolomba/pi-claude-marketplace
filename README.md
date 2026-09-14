@@ -108,6 +108,14 @@ Commands and skill names use Pi's colon form:
 | `foo`       | `foo-bar`             | `/foo:bar` |
 | `foo`       | `foo`                 | `/foo:foo` |
 
+On Windows, commands are prefixed with a dot (`.`) instead of a colon (`:`). Skill names do not change:
+
+| Plugin name | Command name | Pi name (Windows) |
+| ----------- | ------------ | ----------------- |
+| `foo`       | `bar`        | `/foo.bar`        |
+| `foo`       | `foo-bar`    | `/foo.bar`        |
+| `foo`       | `foo`        | `/foo.foo`        |
+
 This extension also registers skills with hyphenated names after the `/skill:` prefix:
 
 | Plugin name | Skill name | Pi name          |
@@ -123,6 +131,31 @@ MCP server names do not change. If another MCP configuration already uses that n
 | `foo`       | `api`            | `api`                              |
 | `foo`       | `foo-api`        | `foo-api`                          |
 | `bar`       | `api`            | _conflict if `api` already exists_ |
+
+### Customizing generated agents
+
+This extension converts each plugin agent into a pi-subagents agent file named `pi-claude-marketplace-<plugin>-<agent>`. Do not edit these files: install, update, and reinstall regenerate them.
+
+Two conversion rules to know:
+
+- If the source agent does not declare `tools:`, the generated agent has no tool allowlist. pi-subagents then grants its default builtin tools, like Claude Code grants every tool available to subagents. Background children also receive ambient extension tools, such as MCP tools from pi-mcp-adapter. If the source agent sets `disallowedTools`, those names become `excludeTools`, which needs pi-subagents 0.62.0 or newer. Older versions ignore the field.
+- Agent-level `allowed-tools`, `mcpServers`, `permissionMode`, and `hooks` fields are dropped, with a warning that explains why. Claude Code ignores all four on plugin agents (`allowed-tools` is a slash-command field). The plugin's own MCP servers and its hooks.json still install.
+
+To change a generated agent's settings so the change survives plugin updates, use pi-subagents agent overrides in your Pi settings file (`~/.pi/agent/settings.json` for the user scope, `<project>/.pi/settings.json` for the project scope):
+
+```json
+{
+  "subagents": {
+    "agentOverrides": {
+      "pi-claude-marketplace-foo-reviewer": {
+        "tools": "read,bash,mcp:github"
+      }
+    }
+  }
+}
+```
+
+An override replaces the same field in the generated frontmatter. `mcp:<server>` entries grant direct MCP tools when pi-mcp-adapter is installed. pi-subagents loads MCP tools only for background (`async: true`) children.
 
 ### Scoping
 

@@ -2,9 +2,10 @@
 //
 // MATCH-03 hand-authored glob engine for the `if` field permission-rule
 // matcher. Pure data, no I/O. Compiles upstream Claude permission-rule
-// glob patterns into a discriminated `CompiledBashGlob` / `CompiledPathGlob`
-// shape; the runtime `test()` / `testAbsolute()` methods perform a linear
-// recursive-descent match with no regex compilation of user input.
+// glob patterns into a discriminated `CompiledBashGlob` /
+// `CompiledPowerShellGlob` / `CompiledPathGlob` shape; the runtime
+// `test()` / `testAbsolute()` methods perform a linear recursive-descent
+// match with no regex compilation of user input.
 //
 // D-61-01: zero new runtime deps. The surface required by Claude's
 // permission-rule grammar is small -- three metacharacters (`*` segment-
@@ -117,6 +118,22 @@ export interface CompiledBashGlob {
 }
 
 /**
+ * PowerShell-command glob (HKPS-01). Carries the same members as
+ * `CompiledBashGlob`; only the compile-time folding differs. Upstream
+ * documents PowerShell rule matching as case-insensitive, so
+ * `compilePowerShellGlob` lower-cases both the pattern it tokenizes and
+ * the subcommand `test()` receives, while `raw` keeps the caller's
+ * unfolded string.
+ */
+export interface CompiledPowerShellGlob {
+  readonly raw: string;
+  readonly tokens: ReadonlyArray<GlobToken>;
+  readonly trailingWordBoundary: boolean;
+  readonly isCommandNameOnly: boolean;
+  test(subcommand: string): boolean;
+}
+
+/**
  * Path-tool glob: anchored to a normalized absolute base resolved at
  * parse time. `testAbsolute` checks an absolute event path against the
  * resolved anchor + the token list.
@@ -199,8 +216,8 @@ function tokenize(pattern: string): GlobToken[] {
  * Returns true iff the entire token list matches a prefix of `text` AND
  * the consumed prefix equals `text` (i.e. no unmatched trailing
  * characters). Caller-controlled trailing-anchor semantics live on the
- * caller (see `matchBashGlob` / `matchPathGlob` for the Bash word-boundary
- * and path-tail-globstar conventions).
+ * caller (see `matchCommandGlob` / `matchPathGlob` for the command
+ * word-boundary and path-tail-globstar conventions).
  */
 function matchStar(
   tokens: ReadonlyArray<GlobToken>,
@@ -275,33 +292,60 @@ function matchTokens(
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-// Bash glob compile + match
+// Command-glob compile + match (shared by the Bash and PowerShell rules)
 // ──────────────────────────────────────────────────────────────────────────
 
 const BASH_COMMAND_NAME_ONLY = /^[A-Za-z0-9_./-]+(\s+\*)?$/;
 
-function matchBashGlob(
+/**
+ * PowerShell command-name-only regex (HKPS-01). Admits everything the Bash
+ * sibling does plus `%` and `?`, the two single-character aliases in
+ * upstream's canonicalization table (`% -> ForEach-Object`,
+ * `? -> Where-Object`), so `PowerShell(% *)` is classified as
+ * command-name-only the way `PowerShell(ForEach-Object *)` is.
+ */
+const POWERSHELL_COMMAND_NAME_ONLY = /^[A-Za-z0-9_./%?-]+(\s+\*)?$/;
+
+/**
+ * Apply the `:*` colon-sugar normalization rule ONLY when the pattern
+ * trails with `:*` (mid-pattern `:` is a literal per D-61-04) and report
+ * whether the normalized pattern ends in the trailing-space word boundary.
+ */
+function normalizeCommandPattern(raw: string): {
+  readonly normalized: string;
+  readonly trailingWordBoundary: boolean;
+} {
+  const normalized = raw.endsWith(":*") ? raw.slice(0, -2) + " *" : raw;
+  return { normalized, trailingWordBoundary: normalized.endsWith(" *") };
+}
+
+/**
+ * Match a compiled command glob against one subcommand. Callers fold case
+ * before calling; this helper is language-agnostic.
+ *
+ * The glob anchors at the start of the subcommand, which is treated as a
+ * single "segment" (no `/` boundary semantics) so the `star` token can
+ * consume the entire tail -- CR-01: pass `crossSegment=true` so
+ * path-bearing arguments like `rm /tmp/foo` are consumed by `Bash(rm *)`.
+ *
+ * Trailing-space word-boundary semantic (D-61-04): `Bash(<cmd> *)` matches
+ * both `<cmd>` standalone AND `<cmd> <args>`. The literal-space token would
+ * otherwise force a trailing space in the subcommand; the no-arg case is
+ * recovered by matching `subcommand + " "` against the tokens. This
+ * preserves the upstream invariant that `Bash(ls *)` excludes `lsof`
+ * (because `lsof` does not start with `ls ` and never gets a
+ * trailing-space appended that would change that) while admitting bare
+ * `ls` and `timeout`-stripped `npm test`.
+ */
+function matchCommandGlob(
   tokens: ReadonlyArray<GlobToken>,
   subcommand: string,
   trailingWordBoundary: boolean,
 ): boolean {
-  // The Bash glob anchors at the start of the subcommand. The subcommand
-  // is treated as a single "segment" (no `/` boundary semantics) so the
-  // `star` token can consume the entire tail -- CR-01: pass
-  // `crossSegment=true` so path-bearing arguments like `rm /tmp/foo` are
-  // consumed by `Bash(rm *)`.
   if (matchTokens(tokens, subcommand, 0, 0, true)) {
     return true;
   }
 
-  // Trailing-space word-boundary semantic (D-61-04): `Bash(<cmd> *)`
-  // matches both `<cmd>` standalone AND `<cmd> <args>`. The literal-space
-  // token would otherwise force a trailing space in the subcommand; we
-  // recover the no-arg case by matching `subcommand + " "` against the
-  // tokens. This preserves the upstream invariant that `Bash(ls *)`
-  // excludes `lsof` (because `lsof` does not start with `ls ` and never
-  // gets a trailing-space appended that would change that) while
-  // admitting bare `ls` and `timeout`-stripped `npm test`.
   if (trailingWordBoundary && matchTokens(tokens, subcommand + " ", 0, 0, true)) {
     return true;
   }
@@ -310,15 +354,13 @@ function matchBashGlob(
 }
 
 /**
- * Compile a Bash-rule glob pattern. Pure-and-total: never throws. Applies
- * the `:*` colon-sugar normalization rule ONLY when the pattern trails
- * with `:*` (mid-pattern `:` is a literal per D-61-04), detects the
- * trailing-space word-boundary and command-name-only flags, then
- * tokenizes via the standard linear-scan algorithm.
+ * Compile a Bash-rule glob pattern. Pure-and-total: never throws. Detects
+ * the trailing-space word-boundary and command-name-only flags on the
+ * normalized pattern, then tokenizes via the standard linear-scan
+ * algorithm.
  */
 export function compileBashGlob(raw: string): CompiledBashGlob {
-  const normalized = raw.endsWith(":*") ? raw.slice(0, -2) + " *" : raw;
-  const trailingWordBoundary = normalized.endsWith(" *");
+  const { normalized, trailingWordBoundary } = normalizeCommandPattern(raw);
   const isCommandNameOnly = BASH_COMMAND_NAME_ONLY.test(normalized);
   const tokens = tokenize(normalized);
   return {
@@ -327,7 +369,36 @@ export function compileBashGlob(raw: string): CompiledBashGlob {
     trailingWordBoundary,
     isCommandNameOnly,
     test(subcommand: string): boolean {
-      return matchBashGlob(tokens, subcommand, trailingWordBoundary);
+      return matchCommandGlob(tokens, subcommand, trailingWordBoundary);
+    },
+  };
+}
+
+/**
+ * Compile a PowerShell-rule glob pattern (HKPS-01). Pure-and-total: never
+ * throws. Shares the Bash normalization and matching rules and adds the
+ * case fold upstream documents -- "Matching is case-insensitive"
+ * (`code.claude.com/docs/en/permissions`): the normalized pattern is
+ * lower-cased before tokenizing and `test()` lower-cases the subcommand,
+ * so the two sides meet in one case regardless of how either was written.
+ * `raw` keeps the caller's unfolded string.
+ *
+ * The head-token alias canonicalization upstream applies is NOT done here
+ * -- `compilePowerShellRule` in `./powershell.ts` owns the alias table and
+ * canonicalizes the pattern head before calling this compiler, so this
+ * file stays a language-agnostic matching engine.
+ */
+export function compilePowerShellGlob(raw: string): CompiledPowerShellGlob {
+  const { normalized, trailingWordBoundary } = normalizeCommandPattern(raw);
+  const isCommandNameOnly = POWERSHELL_COMMAND_NAME_ONLY.test(normalized);
+  const tokens = tokenize(normalized.toLowerCase());
+  return {
+    raw,
+    tokens,
+    trailingWordBoundary,
+    isCommandNameOnly,
+    test(subcommand: string): boolean {
+      return matchCommandGlob(tokens, subcommand.toLowerCase(), trailingWordBoundary);
     },
   };
 }

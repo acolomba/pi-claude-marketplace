@@ -22,7 +22,9 @@ import { cp, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promis
 import path from "node:path";
 
 import { assertSafeName } from "../../domain/name.ts";
+import { rewriteSkillTokens } from "../../domain/skill-tokens.ts";
 import { parseFrontmatter } from "../../platform/pi-api.ts";
+import { stripBom } from "../../shared/bom.ts";
 import { appendLeakToError, errorMessage, ManualRecoveryError } from "../../shared/errors.ts";
 import {
   cleanupStaging,
@@ -37,6 +39,7 @@ import { discoverPluginSkills } from "./discover.ts";
 import {
   firstBodyParagraph,
   foldWhenToUse,
+  repairSingleLineScalars,
   setDescriptionScalar,
   synthesizeUnparseableSkill,
   truncate1536,
@@ -50,6 +53,7 @@ import type {
   StagedSkillRecord,
   StageSkillsInput,
 } from "./types.ts";
+import type { RemovalOps } from "../../shared/fs-utils.ts";
 import type { ClaudePluginVars } from "../../shared/vars.ts";
 
 type SkillsReplacementInternals = Readonly<{
@@ -80,6 +84,32 @@ function extractBodyAfterFrontmatter(content: string): string {
   const normalized = content.replaceAll("\r\n", "\n").replaceAll("\r", "\n");
   const closeIndex = normalized.indexOf("\n---", 3);
   return normalized.slice(closeIndex + 4).trim();
+}
+
+/** The frontmatter and body Pi's own `parseFrontmatter` yields for a skill source. */
+type ParsedSkillFrontmatter = ReturnType<typeof parseFrontmatter>;
+
+/**
+ * SKFM-01: attempt the single-line colon repair on a source whose frontmatter
+ * failed the PARSE-01 parse, returning the repaired bytes alongside their parsed
+ * values. Returns `undefined` when the repair changed nothing (no eligible line)
+ * or when the repaired bytes still fail to parse, which routes the caller to the
+ * SKILL-01 / D-86-02 degrade carrying the ORIGINAL source error.
+ */
+function repairUnparseableFrontmatter(
+  content: string,
+): { repaired: string; parsed: ParsedSkillFrontmatter } | undefined {
+  const repaired = repairSingleLineScalars(content);
+  if (repaired === content) {
+    return undefined;
+  }
+
+  try {
+    return { repaired, parsed: parseFrontmatter(repaired) };
+  } catch {
+    // The colon was not the only defect; the caller degrades on the source error.
+    return undefined;
+  }
 }
 
 /**
@@ -159,7 +189,10 @@ function augmentSkillDescription(
  * thrown error via `appendLeakToError` so the caller sees both the original
  * cause and a manual-cleanup hint in one notification.
  */
-export async function prepareStageSkills(input: StageSkillsInput): Promise<PreparedSkillsStaging> {
+export async function prepareStageSkills(
+  ops: RemovalOps,
+  input: StageSkillsInput,
+): Promise<PreparedSkillsStaging> {
   const { locations, pluginName, pluginRoot, pluginDataDir, resolved, cwd } = input;
   const previousNames = input.previousSkillNames ?? [];
 
@@ -197,6 +230,8 @@ export async function prepareStageSkills(input: StageSkillsInput): Promise<Prepa
   const stagedNames: string[] = [];
   const recorded: StagedSkillRecord[] = [];
   const degraded: SkillDegradeRecord[] = [];
+  // SKTK-01: the same-plugin reference targets this install materializes.
+  const generatedNames = discovered.map((s) => s.generatedName);
 
   try {
     for (const skill of discovered) {
@@ -232,7 +267,14 @@ export async function prepareStageSkills(input: StageSkillsInput): Promise<Prepa
       });
 
       const skillMdPath = path.join(stagedDir, "SKILL.md");
-      let content = await readFile(skillMdPath, "utf8");
+      // FMBOM-01: strip a leading U+FEFF before anything reads these bytes. It
+      // has to precede the PARSE-01 gate-1 parse AND the SK-3 name rewrite,
+      // because `rewriteFrontmatterName` anchors on `startsWith("---")` and a
+      // marker sends it down the freshBlock path, which buries the source
+      // block in the body and drops its `description`. This same `content` is
+      // what `writeFile` emits below, so one strip keeps the parse, the
+      // rewrite, the augment and the staged bytes in agreement.
+      let content = stripBom(await readFile(skillMdPath, "utf8"));
 
       // PARSE-01: parse the SOURCE frontmatter BEFORE any rewrite/substitution
       // to establish attribution ground truth and the degrade trigger. A THROW
@@ -243,19 +285,28 @@ export async function prepareStageSkills(input: StageSkillsInput): Promise<Prepa
       try {
         parsed = parseFrontmatter(content);
       } catch (parseErr) {
-        // SKILL-01 / D-86-02: unparseable source -> synthesize a known-good
-        // `disable-model-invocation` block (body preserved verbatim) so the
-        // skill still installs (no hard-fail), stays invocable by `/name`, and
-        // is never auto-invoked. The actionable detail (plugin, component,
-        // parse error) rides the install-time warning channel instead.
-        content = synthesizeUnparseableSkill(
-          extractBodyAfterFrontmatter(content),
-          skill.generatedName,
-        );
-        degraded.push({
-          generatedName: skill.generatedName,
-          parseError: errorMessage(parseErr),
-        });
+        // SKFM-01: an unquoted colon in a single-line scalar is the one defect
+        // class safe to rewrite. A successful repair leaves `parsed` DEFINED, so
+        // the happy arm below runs and nothing is degraded.
+        const repair = repairUnparseableFrontmatter(content);
+        if (repair === undefined) {
+          // SKILL-01 / D-86-02: unparseable source -> synthesize a known-good
+          // `disable-model-invocation` block (body preserved verbatim) so the
+          // skill still installs (no hard-fail), stays invocable by `/name`, and
+          // is never auto-invoked. The actionable detail (plugin, component,
+          // parse error) rides the install-time warning channel instead.
+          content = synthesizeUnparseableSkill(
+            extractBodyAfterFrontmatter(content),
+            skill.generatedName,
+          );
+          degraded.push({
+            generatedName: skill.generatedName,
+            parseError: errorMessage(parseErr),
+          });
+        } else {
+          content = repair.repaired;
+          parsed = repair.parsed;
+        }
       }
 
       // The parseable (gate-1 RETURN) arm keeps today's SK-3 name rewrite, then
@@ -267,6 +318,10 @@ export async function prepareStageSkills(input: StageSkillsInput): Promise<Prepa
         content = augmentSkillDescription(content, parsed.frontmatter, parsed.body, skillVars);
       }
 
+      // SKTK-01: retarget same-plugin `<plugin>:<skill>` references (both
+      // arms -- a degraded skill's body is prose too). Runs before SK-4
+      // substitution so the PARSE-02 backstop validates the final bytes.
+      content = rewriteSkillTokens(content, pluginName, generatedNames);
       content = substituteClaudeVars(content, skillVars);
       await writeFile(skillMdPath, content, "utf8");
 
@@ -285,7 +340,10 @@ export async function prepareStageSkills(input: StageSkillsInput): Promise<Prepa
       });
     }
   } catch (err) {
-    throw appendLeakToError(err, await cleanupStaging(stagingRoot, "skills staging directory"));
+    throw appendLeakToError(
+      err,
+      await cleanupStaging(ops, stagingRoot, "skills staging directory"),
+    );
   }
 
   return {
@@ -315,6 +373,7 @@ export async function prepareStageSkills(input: StageSkillsInput): Promise<Prepa
  * For the noop variant: no-op; returns undefined.
  */
 export async function commitPreparedSkills(
+  ops: RemovalOps,
   prepared: PreparedSkillsStaging,
 ): Promise<string | undefined> {
   if (prepared.kind === "noop") {
@@ -365,7 +424,7 @@ export async function commitPreparedSkills(
   }
 
   // Step 4: best-effort cleanup of the staging UUID dir.
-  return cleanupStaging(prepared.stagingRoot, "skills staging directory");
+  return cleanupStaging(ops, prepared.stagingRoot, "skills staging directory");
 }
 
 /**
@@ -375,13 +434,14 @@ export async function commitPreparedSkills(
  * abort is a no-op because the staging dir is already cleaned.
  */
 export async function abortPreparedSkills(
+  ops: RemovalOps,
   prepared: PreparedSkillsStaging,
 ): Promise<string | undefined> {
   if (prepared.kind === "noop") {
     return undefined;
   }
 
-  return cleanupStaging(prepared.stagingRoot, "skills staging directory");
+  return cleanupStaging(ops, prepared.stagingRoot, "skills staging directory");
 }
 
 /**
@@ -390,6 +450,7 @@ export async function abortPreparedSkills(
  * a later orchestrator failure can restore the old install.
  */
 export async function replacePreparedSkills(
+  ops: RemovalOps,
   prepared: PreparedSkillsStaging,
 ): Promise<SkillsReplacement> {
   if (prepared.kind === "noop") {
@@ -439,7 +500,13 @@ export async function replacePreparedSkills(
       renamed.push(pair);
     }
   } catch (err) {
-    const leaks = await rollbackSkillsReplacementInternal(prepared, renamed, backups, backupRoot);
+    const leaks = await rollbackSkillsReplacementInternal(
+      ops,
+      prepared,
+      renamed,
+      backups,
+      backupRoot,
+    );
     if (leaks.length > 0) {
       throw new ManualRecoveryError(errorMessage(err), leaks, { cause: err });
     }
@@ -460,6 +527,7 @@ export async function replacePreparedSkills(
 }
 
 export async function rollbackSkillsReplacement(
+  ops: RemovalOps,
   replacement: SkillsReplacement,
 ): Promise<readonly string[]> {
   if (replacement.kind === "noop") {
@@ -468,6 +536,7 @@ export async function rollbackSkillsReplacement(
 
   const internals = requireSkillsReplacementInternals(replacement);
   return rollbackSkillsReplacementInternal(
+    ops,
     replacement.prepared,
     internals.renamed,
     internals.backups,
@@ -476,6 +545,7 @@ export async function rollbackSkillsReplacement(
 }
 
 export async function finalizeSkillsReplacement(
+  ops: RemovalOps,
   replacement: SkillsReplacement,
 ): Promise<readonly string[]> {
   if (replacement.kind === "noop") {
@@ -484,8 +554,8 @@ export async function finalizeSkillsReplacement(
 
   const internals = requireSkillsReplacementInternals(replacement);
   const leaks = [
-    await cleanupStaging(internals.backupRoot, "skills replacement backup directory"),
-    await cleanupStaging(replacement.prepared.stagingRoot, "skills staging directory"),
+    await cleanupStaging(ops, internals.backupRoot, "skills replacement backup directory"),
+    await cleanupStaging(ops, replacement.prepared.stagingRoot, "skills staging directory"),
   ].filter((leak): leak is string => leak !== undefined);
   return Object.freeze(leaks);
 }
@@ -502,12 +572,14 @@ function requireSkillsReplacementInternals(
 }
 
 async function rollbackSkillsReplacementInternal(
+  ops: RemovalOps,
   prepared: Extract<PreparedSkillsStaging, { kind: "staged" }>,
   renamed: readonly { from: string; to: string }[],
   backups: readonly { name: string; from: string; to: string }[],
   backupRoot: string,
 ): Promise<readonly string[]> {
   return rollbackReplacementCommon({
+    ops,
     renamed,
     backups,
     stagingRoot: prepared.stagingRoot,

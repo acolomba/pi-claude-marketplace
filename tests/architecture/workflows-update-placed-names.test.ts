@@ -39,7 +39,7 @@ import { REPO_ROOT, assertNoForbiddenSurface, stripComments } from "./source-sca
  *   with no commit-time contribution at all -- no forbidden shape appears, and
  *   the gate greens over a regression. The presence assertions are what make
  *   removal red, and they are the half the behavioral case in
- *   `tests/orchestrators/plugin/update.test.ts` cannot cover for a code path it
+ *   `tests/orchestrators/plugin/update-flow.test.ts` cannot cover for a code path it
  *   does not exercise.
  *
  * Both sides are asserted NON-EMPTY before anything is compared. An unreadable
@@ -52,7 +52,7 @@ import { REPO_ROOT, assertNoForbiddenSurface, stripComments } from "./source-sca
  *   in prose. Matching an unstripped file would judge the documentation rather
  *   than the code.
  */
-const UPDATE_ORCHESTRATOR = "extensions/pi-claude-marketplace/orchestrators/plugin/update.ts";
+const UPDATE_ORCHESTRATOR = "extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts";
 
 /**
  * The shapes that would source a placed-name answer from the prepare-time

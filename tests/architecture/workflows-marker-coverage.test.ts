@@ -45,17 +45,23 @@ import test from "node:test";
 
 import { Type } from "typebox";
 
+import {
+  createHooksRouting,
+  createHooksRuntime,
+  readHooksJson,
+} from "../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { pathSource } from "../../extensions/pi-claude-marketplace/domain/source.ts";
 import { importClaudeSettings } from "../../extensions/pi-claude-marketplace/orchestrators/import/execute.ts";
-import { installPlugin } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/install.ts";
-import { listPlugins } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/list.ts";
+import { createNodeInstallPlugin } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts";
+import { listPlugins } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/list-flow.ts";
 import { reinstalledRowFromOutcome } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts";
 import { enableRowDependencies } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts";
 import { updatedRowFromOutcome } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/update-row.ts";
 import { dependenciesFromInstall } from "../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import { notify } from "../../extensions/pi-claude-marketplace/shared/notify.ts";
+import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import { notify } from "../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
 import { createGitOpsFake } from "../platform/git-ops-fake.ts";
 
 import { filesMatching } from "./source-scan.ts";
@@ -65,8 +71,13 @@ import type {
   ExtensionAPI,
   ExtensionContext,
 } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
-import type { NotificationMessage } from "../../extensions/pi-claude-marketplace/shared/notify.ts";
+import type { NotificationMessage } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 import type { ToolInfo } from "@earendil-works/pi-coding-agent";
+
+const installPlugin = createNodeInstallPlugin(
+  createHooksRouting(createHooksRuntime(), { readHooksJson }),
+  createCompletionCache(),
+);
 
 /** The closed-set marker every case looks for. */
 const HOST_ENGINE_MARKER = "requires pi-dynamic-workflows";
@@ -253,7 +264,7 @@ const SITE_CASES = [
   {
     // Tier C: `composeInstalledRow` is module-private; a full install is the
     // only public surface that reaches it.
-    site: "extensions/pi-claude-marketplace/orchestrators/plugin/install.ts",
+    site: "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts",
     drive: async (engineLoaded) =>
       withHermeticHome(async (cwd) => {
         // arrange
@@ -272,7 +283,7 @@ const SITE_CASES = [
   {
     // Tier C: `dependenciesFromDeclares` is module-private and reads the
     // PERSISTED record, so the install above is what puts a workflow name in it.
-    site: "extensions/pi-claude-marketplace/orchestrators/plugin/list.ts",
+    site: "extensions/pi-claude-marketplace/orchestrators/plugin/list-installed-row.ts",
     drive: async (engineLoaded) =>
       withHermeticHome(async (cwd) => {
         // arrange
@@ -407,6 +418,8 @@ const SITE_CASES = [
           gitOps: createGitOpsFake({ allowedRemoteUrls: [], boundary: "memory" }).gitOps,
           pi,
           selectedScopes: ["project"],
+          hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+          completionCache: createCompletionCache(),
         });
 
         // assert

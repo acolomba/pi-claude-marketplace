@@ -6,15 +6,15 @@ current_phase: 117
 current_phase_name: Measured `agent()` failure evidence
 current_plan: 3 of 3 executed
 status: paused for discussion; archive ready when the open questions are settled
-stopped_at: Four of five debt items cleared; twelve open questions recorded for discussion before the archive
-last_updated: "2026-09-10T05:30:00.000Z"
-state_head: 2b7ffdc4cd56f08bb3a4107d05f6a27f4671c922
+stopped_at: context exhaustion at 75% (2026-09-14)
+last_updated: "2026-09-14T19:41:39.178Z"
+state_head: aca97bad32fe1cf75ad2234025e8f39f31baebe7
 progress:
   total_phases: 9
-  completed_phases: 9
+  completed_phases: 5
   total_plans: 39
   completed_plans: 39
-  percent: 100
+  percent: 56
 last_activity: 2026-09-09
 last_activity_desc: Debt items 3-5 cleared and the remaining twelve ledger entries written up as open questions
 ---
@@ -323,9 +323,9 @@ implementation.
 
 ## Session Continuity
 
-**Last session:** 2026-09-09T16:22:00Z
+**Last session:** 2026-09-14T19:41:38.090Z
 
-**Stopped At:** All nine phases complete, verified and marked. Phase 117's
+**Stopped At:** context exhaustion at 75% (2026-09-14)
 three plans landed the live canary, the measured rewrite of the compatibility
 doc, and the correction of an archived record that claimed a canary had run when
 it had not. Every tail gate closed: nyquist 0 gaps, security SECURED 19/19 with

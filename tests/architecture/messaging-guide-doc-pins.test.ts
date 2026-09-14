@@ -3,8 +3,8 @@
  * checkable half of `docs/messaging-style-guide.md`'s type-model claims.
  *
  * The guide is a present-tense normative document: it states what the notify
- * type model in `extensions/pi-claude-marketplace/shared/notify.ts` IS, not
- * what it once was. Most of the guide is prose no gate can judge -- whether a
+ * type model in `extensions/pi-claude-marketplace/shared/notification-types.ts`
+ * IS, not what it once was. Most of the guide is prose no gate can judge -- whether a
  * rationale is sound, whether an example is well chosen, whether a carve-out is
  * fairly described. Reviewer-read stays the ceiling for all of that.
  *
@@ -43,7 +43,7 @@
  * accurate, that its rendered examples are byte-correct, or that any closed set
  * it describes is the right size. Rendered output bytes belong to
  * `docs/output-catalog.md` and are gated by
- * `tests/architecture/catalog-uat.test.ts`; closed-set lengths are tripwired by
+ * `tests/architecture/catalog-uat/catalog-contract.test.ts`; closed-set lengths are tripwired by
  * `tests/architecture/notify-closed-set-locks.test.ts`.
  */
 
@@ -52,17 +52,17 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 
-import { PLUGIN_STATUSES } from "../../extensions/pi-claude-marketplace/shared/notify.ts";
+import { PLUGIN_STATUSES } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
 import { REPO_ROOT, stripComments } from "./source-scan.ts";
 
 import type {
   PluginNotificationMessage,
   PluginStatus,
-} from "../../extensions/pi-claude-marketplace/shared/notify.ts";
+} from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
 const GUIDE = "docs/messaging-style-guide.md";
-const NOTIFY = "extensions/pi-claude-marketplace/shared/notify.ts";
+const NOTIFY = "extensions/pi-claude-marketplace/shared/notification-types.ts";
 
 /**
  * An exported message type as `notify.ts` declares it.

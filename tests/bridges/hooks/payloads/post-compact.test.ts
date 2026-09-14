@@ -8,9 +8,8 @@ import { translate } from "../../../../extensions/pi-claude-marketplace/bridges/
 import type { TranslationContext } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/translation-context.ts";
 import type { SessionCompactEvent } from "../../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
-test("emits the complete PostCompact envelope with an automatic trigger", () => {
-  // arrange
-  const event = {
+function postCompactEvent(reason: SessionCompactEvent["reason"]): SessionCompactEvent {
+  return {
     type: "session_compact",
     compactionEntry: {
       type: "compaction",
@@ -22,33 +21,51 @@ test("emits the complete PostCompact envelope with an automatic trigger", () => 
       tokensBefore: 4_096,
     },
     fromExtension: false,
-    reason: "threshold",
+    reason,
     willRetry: false,
-  } satisfies SessionCompactEvent;
-  const context = {
-    sessionId: "session-1",
-    transcriptPath: "/sessions/session-1.jsonl",
-    cwd: "/workspace/project",
-  } satisfies TranslationContext;
-  const expectedPayload = {
-    session_id: "session-1",
-    transcript_path: "/sessions/session-1.jsonl",
-    cwd: "/workspace/project",
-    hook_event_name: "PostCompact",
-    trigger: "auto",
   };
+}
 
-  // act
-  const payload = translate(event, context);
+const compactTriggerCases = [
+  { reason: "manual", trigger: "manual" },
+  { reason: "threshold", trigger: "auto" },
+  { reason: "overflow", trigger: "auto" },
+] as const satisfies readonly {
+  reason: SessionCompactEvent["reason"];
+  trigger: "manual" | "auto";
+}[];
 
-  // assert
-  assert.deepStrictEqual(payload, expectedPayload);
-});
+for (const { reason, trigger } of compactTriggerCases) {
+  test(`maps the ${reason} reason to the ${trigger} PostCompact trigger`, () => {
+    // arrange
+    const event = postCompactEvent(reason);
+    const context = {
+      sessionId: "session-1",
+      transcriptPath: "/sessions/session-1.jsonl",
+      cwd: "/workspace/project",
+    } satisfies TranslationContext;
+    const expectedPayload = {
+      session_id: "session-1",
+      transcript_path: "/sessions/session-1.jsonl",
+      cwd: "/workspace/project",
+      hook_event_name: "PostCompact",
+      trigger,
+    };
+
+    // act
+    const firstPayload = translate(event, context);
+    const repeatedPayload = translate(event, context);
+
+    // assert
+    assert.deepStrictEqual(firstPayload, expectedPayload);
+    assert.deepStrictEqual(repeatedPayload, expectedPayload);
+  });
+}
 
 test("preserves empty context strings in the complete PostCompact envelope", () => {
   // arrange
   const event = {
-    type: "session_compact",
+    ...postCompactEvent("manual"),
     compactionEntry: {
       type: "compaction",
       id: "compact-empty-context",
@@ -59,7 +76,6 @@ test("preserves empty context strings in the complete PostCompact envelope", () 
       tokensBefore: 0,
     },
     fromExtension: true,
-    reason: "manual",
     willRetry: true,
   } satisfies SessionCompactEvent;
   const context = {
@@ -72,7 +88,7 @@ test("preserves empty context strings in the complete PostCompact envelope", () 
     transcript_path: "",
     cwd: "",
     hook_event_name: "PostCompact",
-    trigger: "auto",
+    trigger: "manual",
   };
 
   // act

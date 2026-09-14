@@ -93,7 +93,7 @@ The harness reads the engine version out of the engine's own manifest and prints
 
 - **No engine.** `PI_WORKFLOW_ENGINE_ROOT` unset, or the engine's manifest unreadable beneath it. Prints `LIVE ENGINE REQUIRED` with the scratch-install route.
 - **A non-sandbox agent directory.** Refused before anything is created and before the engine is imported. The check resolves the supplied path and requires it to be `tmp/pi-uat` itself or a child of it, so a traversal segment is refused rather than followed.
-- **A call whose failure was not observed.** Prints `NOTHING WAS MEASURED`, which is what the missing marker actually supports: no log line named it. The message then branches on the logs, because they discriminate. No logs at all is the shape a *successful* call produces, so the sandbox most likely reached a provider. Logs that name something else say the engine ran and used different words -- check its error vocabulary before concluding anything about the machine. Either way no verdict about the engine can be read from that run, and neither reading is an engine regression.
+- **A call whose failure was not observed.** Prints `NOTHING WAS MEASURED`, which is what the missing marker actually supports: no log line named it. The message then branches on the logs, because they discriminate. No logs at all is the shape a _successful_ call produces, so the sandbox most likely reached a provider. Logs that name something else say the engine ran and used different words -- check its error vocabulary before concluding anything about the machine. Either way no verdict about the engine can be read from that run, and neither reading is an engine regression.
 
 ### The negative control
 

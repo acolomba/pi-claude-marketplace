@@ -13,12 +13,13 @@
 // equality.
 
 import { generatedSkillName } from "../../domain/name.ts";
+import { escapeRegExp } from "../../shared/regexp.ts";
 import { substituteClaudeVars } from "../../shared/vars.ts";
 
 import { emitGeneratedAgentFile } from "./frontmatter.ts";
 
-import type { SkillLegendEntry } from "./frontmatter.ts";
-import type { ConvertedAgent, DiscoveredAgent } from "./types.ts";
+import type { GeneratedToolsFields, SkillLegendEntry } from "./frontmatter.ts";
+import type { ConvertedAgent, DiscoveredAgent, RawAgentFrontmatter } from "./types.ts";
 
 /**
  * Source frontmatter fields the converter actively consumes. Anything else
@@ -69,13 +70,35 @@ export const THINKING_VALUES: ReadonlySet<string> = new Set([
   "xhigh",
 ]);
 
-interface ToolMappingResult {
-  readonly mapped: string[];
+interface ToolMappingBase {
   readonly dropped: string[];
   readonly warnings: string[];
+}
+
+interface ExplicitToolMapping extends ToolMappingBase {
+  readonly omitted: false;
+  /** Deduped, disallow-filtered Pi allowlist. AG-11 gates it non-empty. */
+  readonly mapped: string[];
   /** AGSK-05 / D-83-01: Skill declared in tools: AND not disallowed. */
   readonly inheritSkills: boolean;
 }
+
+interface OmittedToolMapping extends ToolMappingBase {
+  readonly omitted: true;
+  /** Pi names for `excludeTools:` -- source disallowedTools via TOOL_MAP. */
+  readonly excludeTools: string[];
+  /**
+   * An omitted tools: implicitly declares every subagent tool (Skill
+   * included), so the flag follows the disallow check alone (#179).
+   */
+  readonly inheritSkills: boolean;
+}
+
+/**
+ * Discriminated on `omitted`, so each arm carries only the fields that
+ * mean something there (the NFR-7 `installable` idiom).
+ */
+type ToolMappingResult = ExplicitToolMapping | OmittedToolMapping;
 
 function splitCsv(value: string | undefined): string[] {
   if (value === undefined) {
@@ -106,16 +129,6 @@ function splitCsv(value: string | undefined): string[] {
       return trimmed;
     })
     .filter((part) => part !== "");
-}
-
-/**
- * Escape regex metacharacters so a value can be interpolated into a RegExp
- * source verbatim (the MDN escape pattern). Plugin names are
- * assertSafeName-checked but may legally contain `.`; escaping neutralizes
- * the whole metacharacter class.
- */
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
 }
 
 /**
@@ -247,60 +260,84 @@ function mapTools(
   rawTools: string | undefined,
   rawDisallowed: string | undefined,
 ): ToolMappingResult {
-  // When source omits `tools:` entirely, Claude's documented behavior is to
-  // grant the agent all tools; we mirror that with a Read/Bash/Edit default
-  // for parity with pi-subagents. Warn so the user sees this implicit
-  // default at install time and can pin tools: explicitly if a typo on the
-  // key was the actual cause.
-  const warnings: string[] = [];
-  const tokens =
-    rawTools === undefined
-      ? ((): string[] => {
-          warnings.push(
-            "source agent omitted `tools:` -- defaulted to read,bash,edit. Add `tools: read,bash,edit` (or your intended subset) to the source agent to silence this warning.",
-          );
-          return ["Read", "Bash", "Edit"];
-        })()
-      : splitCsv(rawTools);
+  // Disallowed values are Claude-side names; map them to Pi names. An
+  // unmapped name has no Pi spelling -- nothing to filter from an explicit
+  // allowlist, and nothing to emit into `excludeTools`.
+  const disallowedTokens = splitCsv(rawDisallowed);
+  const disallowedPi: string[] = [];
+  for (const token of disallowedTokens) {
+    const piName = TOOL_MAP[token];
+    if (piName !== undefined) {
+      disallowedPi.push(piName);
+    }
+  }
+
+  if (rawTools === undefined) {
+    return omittedToolMapping(disallowedTokens, disallowedPi);
+  }
+
+  const tokens = splitCsv(rawTools);
 
   // AGSK-05 / D-83-01: the inherit flag is computed ONCE from RAW
   // Claude-side tokens -- exact match, case-sensitive "Skill", like
   // TOOL_MAP lookups. The disallow check must read raw tokens because
   // Skill has no TOOL_MAP entry, so the Pi-name filter below can never
-  // see it. The omitted-tools default (Read/Bash/Edit) contains no Skill,
-  // so it never flips the flag.
-  const disallowedTokens = splitCsv(rawDisallowed);
-  const skillDeclared = tokens.includes("Skill");
-  const inheritSkills = skillDeclared && !disallowedTokens.includes("Skill");
+  // see it.
+  const inheritSkills = tokens.includes("Skill") && !disallowedTokens.includes("Skill");
 
+  // Apply disallowedTools after mapping.
   const { mapped, dropped } = mapToolTokens(tokens);
+  const disallowedSet = new Set(disallowedPi);
 
-  // Apply disallowedTools after mapping. Disallowed values are Claude-side
-  // names; map them to Pi names then filter the mapped list.
-  if (disallowedTokens.length > 0) {
-    const disallowedPi = new Set<string>();
-    for (const token of disallowedTokens) {
-      const piName = TOOL_MAP[token];
-      if (piName !== undefined) {
-        disallowedPi.add(piName);
-      }
-    }
+  return {
+    omitted: false,
+    mapped: dedupePreservingOrder(mapped.filter((name) => !disallowedSet.has(name))),
+    dropped,
+    warnings: [],
+    inheritSkills,
+  };
+}
 
-    if (disallowedPi.size > 0) {
-      return {
-        mapped: dedupePreservingOrder(mapped.filter((name) => !disallowedPi.has(name))),
-        dropped,
-        warnings,
-        inheritSkills,
-      };
-    }
+/**
+ * #179: when source omits `tools:` entirely, Claude grants the agent every
+ * tool available to subagents. The faithful pi-subagents equivalent is
+ * omitting the allowlist -- the child then gets Pi's normal builtin tools
+ * (and, for background children, ambient extension tools such as
+ * pi-mcp-adapter's MCP tools). disallowedTools narrows that default set via
+ * excludeTools (pi-subagents 0.62.0; earlier versions store-and-ignore the
+ * key). Both degradations on that path warn: a disallow token with no
+ * TOOL_MAP entry cannot narrow anything, and an emitted excludeTools is
+ * inert below the version floor -- each is an author-written restriction
+ * that must not weaken without a trace.
+ */
+function omittedToolMapping(
+  disallowedTokens: readonly string[],
+  disallowedPi: readonly string[],
+): OmittedToolMapping {
+  const warnings: string[] = [];
+  // Skill is excluded: it maps to inheritSkills below, not to a Pi tool.
+  const unmapped = dedupePreservingOrder(
+    disallowedTokens.filter((token) => token !== "Skill" && TOOL_MAP[token] === undefined),
+  );
+  if (unmapped.length > 0) {
+    warnings.push(
+      `disallowedTools entries with no Pi tool mapping (${unmapped.join(", ")}) cannot narrow the default tool set -- ignored`,
+    );
+  }
+
+  const excludeTools = dedupePreservingOrder(disallowedPi);
+  if (excludeTools.length > 0) {
+    warnings.push(
+      "`excludeTools` requires pi-subagents >= 0.62.0 -- earlier versions ignore it and keep the default tool set",
+    );
   }
 
   return {
-    mapped: dedupePreservingOrder(mapped),
-    dropped,
+    omitted: true,
+    excludeTools,
+    dropped: [],
     warnings,
-    inheritSkills,
+    inheritSkills: !disallowedTokens.includes("Skill"),
   };
 }
 
@@ -425,9 +462,12 @@ function mapSkills(
  * body via shared/vars.ts, and assembles the file content via the
  * frontmatter emitter.
  *
- * AG-11: throws Error when mapped tool list is empty (pi-subagents has no
- * safe representation of "no tools"). Error message lists source tools and
- * disallowedTools so the user can correct upstream.
+ * AG-11: throws Error when an explicit `tools:` declaration maps to an empty
+ * list (pi-subagents reads an empty allowlist as "no tools", which has no
+ * safe representation). An omitted `tools:` is NOT an error -- the generated
+ * frontmatter omits the allowlist so pi-subagents grants its default
+ * builtins (#179). Error message lists source tools and disallowedTools so
+ * the user can correct upstream.
  */
 export function convertAgent(input: {
   pluginName: string;
@@ -486,30 +526,8 @@ export function convertAgent(input: {
 
   // 3. Tools mapping
   const toolsResult = mapTools(raw.tools, raw.disallowedTools);
+  assertMappedToolsNonEmpty({ toolsResult, raw, sourceName, pluginName });
   warnings.push(...toolsResult.warnings);
-  if (toolsResult.mapped.length === 0) {
-    // AG-11: empty mapped tool list. Include source values so the user can
-    // correct upstream. AGSK-03 / D-83.1-02 (#86): Skill is silently
-    // excluded from classification (it maps to inheritSkills, not a Pi
-    // tool), so a `tools: Skill`-only agent would otherwise see one
-    // declared tool produce zero mapped tools with no explanation --
-    // append the note whenever Skill was among the raw source tokens.
-    const skillNote = splitCsv(raw.tools).includes("Skill")
-      ? " Note: the Skill tool maps to inheritSkills, not to a Pi tool, so it does not count toward the tool list."
-      : "";
-    throw new Error(
-      `Cannot convert agent "${sourceName}" in plugin "${pluginName}": ` +
-        `the mapped tool list is empty (pi-subagents has no safe representation of "no tools"). ` +
-        `Source tools: ${raw.tools ?? "(default read,bash,edit)"}; ` +
-        `disallowedTools: ${raw.disallowedTools ?? "(none)"}.${skillNote}`,
-    );
-  }
-
-  // AG-11: the preceding throw guarantees the mapped list is non-empty. The
-  // compiler cannot prove that from the length check, so assert the non-empty
-  // tuple the frontmatter emitter requires (through `unknown` because a
-  // string[] does not structurally overlap the tuple).
-  const tools = toolsResult.mapped as unknown as readonly [string, ...string[]];
 
   // 4. Thinking / effort mapping
   const thinkingResult = mapThinking(raw.thinking, raw.effort);
@@ -528,6 +546,8 @@ export function convertAgent(input: {
       droppedFields.push(key);
     }
   }
+
+  warnings.push(...droppedFieldWarnings(droppedFields, generatedName));
 
   // 7. Substitute plugin variables in the body (PI-10).
   // D-08 corollary: the shared primitive sides with PI-10 -- agents DO get
@@ -555,7 +575,7 @@ export function convertAgent(input: {
       name: generatedName,
       description,
       ...optionalModel(modelResult.emit),
-      tools,
+      ...toolsFields(toolsResult),
       ...optionalThinking(thinkingResult.emit),
       skills: skillsResult.emit,
       inheritSkills: toolsResult.inheritSkills,
@@ -590,6 +610,112 @@ export function convertAgent(input: {
 
 function optionalModel(model: string | undefined): { model?: string } {
   return model === undefined ? {} : { model };
+}
+
+/**
+ * AG-11: reject an explicit `tools:` declaration whose mapped list is empty
+ * -- pi-subagents reads an empty allowlist as "no tools", which has no safe
+ * representation. The message includes source values so the user can correct
+ * upstream. AGSK-03 / D-83.1-02 (#86): Skill is silently excluded from
+ * classification (it maps to inheritSkills, not a Pi tool), so a
+ * `tools: Skill`-only agent would otherwise see one declared tool produce
+ * zero mapped tools with no explanation -- the note is appended whenever
+ * Skill was among the raw source tokens. The `?? "(omitted)"` label covers a
+ * malformed `raw.tools` accessor whose value disappears between reads
+ * (pinned by the malformed-accessor test); a genuinely omitted `tools:`
+ * never reaches the throw (#179).
+ */
+function assertMappedToolsNonEmpty(input: {
+  toolsResult: ToolMappingResult;
+  raw: RawAgentFrontmatter;
+  sourceName: string;
+  pluginName: string;
+}): void {
+  const { toolsResult, raw, sourceName, pluginName } = input;
+  if (toolsResult.omitted || toolsResult.mapped.length > 0) {
+    return;
+  }
+
+  const skillNote = splitCsv(raw.tools).includes("Skill")
+    ? " Note: the Skill tool maps to inheritSkills, not to a Pi tool, so it does not count toward the tool list."
+    : "";
+  throw new Error(
+    `Cannot convert agent "${sourceName}" in plugin "${pluginName}": ` +
+      `the mapped tool list is empty (pi-subagents has no safe representation of "no tools"). ` +
+      `Source tools: ${raw.tools ?? "(omitted)"}; ` +
+      `disallowedTools: ${raw.disallowedTools ?? "(none)"}.${skillNote}`,
+  );
+}
+
+/**
+ * AG-11 / #179: an explicit source `tools:` declaration emits a non-empty
+ * allowlist; an omitted one emits no `tools:` at all, so pi-subagents
+ * grants its default builtin tools, with disallowedTools narrowing that
+ * set via excludeTools. The GeneratedToolsFields return type is what keeps
+ * the two lines from ever rendering together. Destructuring keeps both
+ * arms assertion-free: the explicit arm's unreachable throw restates AG-11
+ * locally (assertMappedToolsNonEmpty already rejected an empty explicit
+ * list with the user-facing message).
+ */
+function toolsFields(result: ToolMappingResult): GeneratedToolsFields {
+  if (result.omitted) {
+    const [first, ...rest] = result.excludeTools;
+    return first === undefined ? {} : { excludeTools: [first, ...rest] };
+  }
+
+  const [first, ...rest] = result.mapped;
+  if (first === undefined) {
+    throw new Error(
+      "unreachable per AG-11: assertMappedToolsNonEmpty rejects an empty explicit tools list",
+    );
+  }
+
+  return { tools: [first, ...rest] };
+}
+
+/**
+ * #179: targeted guidance for dropped fields that read like conversion gaps
+ * but are upstream-parity drops. Claude Code's sub-agents documentation
+ * states plugin subagents do not support `hooks`, `mcpServers`, or
+ * `permissionMode` (the fields are ignored when agents load from a plugin),
+ * and `allowed-tools` is a slash-command field absent from the agent
+ * frontmatter schema. Dropping them here matches upstream, so each warning
+ * points at the mechanism that does work instead. GUIDED_DROPPED_FIELDS is
+ * derived from this table, which keeps the stage layer's generic
+ * `dropped fields:` summary and these warnings in lockstep.
+ */
+const GUIDED_DROPPED_FIELD_WARNINGS: Readonly<Record<string, (generatedName: string) => string>> =
+  Object.freeze({
+    "allowed-tools": (): string =>
+      "`allowed-tools` is a slash-command field, not an agent frontmatter field -- dropped (Claude Code ignores it on agents too). Declare `tools:` in the source agent instead.",
+    mcpServers: (generatedName: string): string =>
+      "agent-level `mcpServers` is not converted -- dropped (Claude Code ignores it for plugin agents too). " +
+      `To grant this agent MCP tools, set subagents.agentOverrides["${generatedName}"].tools ` +
+      "(e.g. read,bash,mcp:<server>) in Pi settings.",
+    permissionMode: (): string =>
+      "agent-level `permissionMode` is not converted -- dropped (Claude Code ignores it for plugin agents too).",
+    hooks: (): string =>
+      "agent-level `hooks` is not converted -- dropped (Claude Code ignores it for plugin agents too; plugin-level hooks/hooks.json still installs).",
+  });
+
+/**
+ * #179: dropped fields that carry a targeted warning from the table above.
+ * The stage layer's generic `dropped fields:` summary line skips these so
+ * the user is not told about the same field twice.
+ */
+export const GUIDED_DROPPED_FIELDS: ReadonlySet<string> = new Set(
+  Object.keys(GUIDED_DROPPED_FIELD_WARNINGS),
+);
+
+function droppedFieldWarnings(droppedFields: readonly string[], generatedName: string): string[] {
+  const warnings: string[] = [];
+  for (const [field, warningFor] of Object.entries(GUIDED_DROPPED_FIELD_WARNINGS)) {
+    if (droppedFields.includes(field)) {
+      warnings.push(warningFor(generatedName));
+    }
+  }
+
+  return warnings;
 }
 
 function optionalThinking(thinking: string | undefined): { thinking?: string } {

@@ -47,10 +47,6 @@
 // `claude-plugins.json` to `claude-plugins.local.json` -- which is what makes
 // "present only when supplied" provable rather than asserted.
 //
-// The `pluginUpdate` port is a strict mock with NO expectation stated, so a green
-// case is the proof that this handler never touches it. An expectation of zero
-// calls would not be, because strong-mock treats that count as no limit.
-//
 // Arity: the schema declares ONE REQUIRED positional. Zero positionals is
 // rejected with the collapsed missing-argument sentence. `parseCommandArgs`
 // iterates `schema.positional.entries()` -- the SCHEMA, not the input -- so a
@@ -81,20 +77,17 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { test, type TestContext } from "node:test";
 
-import { mock, verify } from "strong-mock";
-
 import { makeAddHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/marketplace/add.ts";
 import { locationsFor } from "../../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { createCompletionCache } from "../../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { createGitOpsFake } from "../../../platform/git-ops-fake.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
 
-import type { EdgeDeps } from "../../../../extensions/pi-claude-marketplace/edge/types.ts";
+import type { GitOps } from "../../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { Scope } from "../../../../extensions/pi-claude-marketplace/shared/types.ts";
 
-// Both port shapes are derived from the handler's own dependency object, so a
-// change to either injection seam is a compile error in this suite rather than a
-// silently stale hand-copied type.
-type PluginUpdate = EdgeDeps["pluginUpdate"];
+// The Git call shape is derived from the injected fake so a seam change is a
+// compile error in this suite rather than a silently stale hand-copied type.
 type GitCloneCall = ReturnType<typeof createGitOpsFake>["state"]["calls"]["clone"][number];
 
 /** Written out by hand; never read back off the module under test. */
@@ -278,6 +271,10 @@ function createGitPort(sourceTree: string): ReturnType<typeof createGitOpsFake> 
   });
 }
 
+function createAddDeps(gitOps: GitOps) {
+  return { completionCache: createCompletionCache(), gitOps };
+}
+
 for (const { args, arity } of [
   { args: URL_SOURCE, arity: "at the accepted arity" },
   { args: `${URL_SOURCE} extra`, arity: "with a surplus positional token dropped" },
@@ -290,8 +287,7 @@ for (const { args, arity } of [
       reads: 1,
     });
     const git = createGitPort(sourceTree);
-    const pluginUpdate = mock<PluginUpdate>({ exactParams: true, name: "plugin update" });
-    const addHandler = makeAddHandler(pi, { gitOps: git.gitOps, pluginUpdate });
+    const addHandler = makeAddHandler(pi, createAddDeps(git.gitOps));
 
     // act
     await addHandler(args, ctx);
@@ -305,7 +301,6 @@ for (const { args, arity } of [
     );
     assert.strictEqual(networkCallCount(), 0);
     verifyBoundary();
-    verify(pluginUpdate);
   });
 }
 
@@ -336,8 +331,7 @@ for (const { footprint, row, scope } of [
       reads: 1,
     });
     const git = createGitPort(sourceTree);
-    const pluginUpdate = mock<PluginUpdate>({ exactParams: true, name: "plugin update" });
-    const addHandler = makeAddHandler(pi, { gitOps: git.gitOps, pluginUpdate });
+    const addHandler = makeAddHandler(pi, createAddDeps(git.gitOps));
 
     // act
     await addHandler(`${URL_SOURCE} --scope ${scope}`, ctx);
@@ -351,7 +345,6 @@ for (const { footprint, row, scope } of [
     );
     assert.strictEqual(networkCallCount(), 0);
     verifyBoundary();
-    verify(pluginUpdate);
   });
 }
 
@@ -367,8 +360,7 @@ for (const { args, position } of [
       reads: 1,
     });
     const git = createGitPort(sourceTree);
-    const pluginUpdate = mock<PluginUpdate>({ exactParams: true, name: "plugin update" });
-    const addHandler = makeAddHandler(pi, { gitOps: git.gitOps, pluginUpdate });
+    const addHandler = makeAddHandler(pi, createAddDeps(git.gitOps));
 
     // act
     await addHandler(args, ctx);
@@ -382,7 +374,6 @@ for (const { args, position } of [
     );
     assert.strictEqual(networkCallCount(), 0);
     verifyBoundary();
-    verify(pluginUpdate);
   });
 }
 
@@ -394,8 +385,7 @@ test("carries a scope flag and the scope-target flag through together rather tha
     reads: 1,
   });
   const git = createGitPort(sourceTree);
-  const pluginUpdate = mock<PluginUpdate>({ exactParams: true, name: "plugin update" });
-  const addHandler = makeAddHandler(pi, { gitOps: git.gitOps, pluginUpdate });
+  const addHandler = makeAddHandler(pi, createAddDeps(git.gitOps));
 
   // act
   await addHandler(`${URL_SOURCE} --scope project --local`, ctx);
@@ -412,7 +402,6 @@ test("carries a scope flag and the scope-target flag through together rather tha
   );
   assert.strictEqual(networkCallCount(), 0);
   verifyBoundary();
-  verify(pluginUpdate);
 });
 
 test("adds a path source without ever reaching the git port it was handed (NFR-5)", async (t) => {
@@ -423,8 +412,7 @@ test("adds a path source without ever reaching the git port it was handed (NFR-5
     reads: 1,
   });
   const git = createGitPort(sourceTree);
-  const pluginUpdate = mock<PluginUpdate>({ exactParams: true, name: "plugin update" });
-  const addHandler = makeAddHandler(pi, { gitOps: git.gitOps, pluginUpdate });
+  const addHandler = makeAddHandler(pi, createAddDeps(git.gitOps));
 
   // act
   await addHandler(sourceTree, ctx);
@@ -435,7 +423,6 @@ test("adds a path source without ever reaching the git port it was handed (NFR-5
   assert.deepStrictEqual(git.state.calls.clone, []);
   assert.strictEqual(networkCallCount(), 0);
   verifyBoundary();
-  verify(pluginUpdate);
 });
 
 test("collapses the duplicated usage block to one sentence when no source is supplied and adds nothing", async (t) => {
@@ -443,8 +430,7 @@ test("collapses the duplicated usage block to one sentence when no source is sup
   const { cwd, sourceTree, networkCallCount } = await createHermeticScope(t, "no-source");
   const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
   const git = createGitPort(sourceTree);
-  const pluginUpdate = mock<PluginUpdate>({ exactParams: true, name: "plugin update" });
-  const addHandler = makeAddHandler(pi, { gitOps: git.gitOps, pluginUpdate });
+  const addHandler = makeAddHandler(pi, createAddDeps(git.gitOps));
 
   // act
   await addHandler("", ctx);
@@ -457,7 +443,6 @@ test("collapses the duplicated usage block to one sentence when no source is sup
   assert.deepStrictEqual(git.state.calls.clone, []);
   assert.strictEqual(networkCallCount(), 0);
   verifyBoundary();
-  verify(pluginUpdate);
 });
 
 test("reports an unknown long flag against the add usage block and adds nothing", async (t) => {
@@ -465,8 +450,7 @@ test("reports an unknown long flag against the add usage block and adds nothing"
   const { cwd, sourceTree, networkCallCount } = await createHermeticScope(t, "unknown-flag");
   const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
   const git = createGitPort(sourceTree);
-  const pluginUpdate = mock<PluginUpdate>({ exactParams: true, name: "plugin update" });
-  const addHandler = makeAddHandler(pi, { gitOps: git.gitOps, pluginUpdate });
+  const addHandler = makeAddHandler(pi, createAddDeps(git.gitOps));
 
   // act
   await addHandler(`${URL_SOURCE} --frobnicate`, ctx);
@@ -479,7 +463,6 @@ test("reports an unknown long flag against the add usage block and adds nothing"
   assert.deepStrictEqual(git.state.calls.clone, []);
   assert.strictEqual(networkCallCount(), 0);
   verifyBoundary();
-  verify(pluginUpdate);
 });
 
 test("shows an unrecognised scope value verbatim against the add usage block and adds nothing", async (t) => {
@@ -487,8 +470,7 @@ test("shows an unrecognised scope value verbatim against the add usage block and
   const { cwd, sourceTree, networkCallCount } = await createHermeticScope(t, "invalid-scope");
   const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
   const git = createGitPort(sourceTree);
-  const pluginUpdate = mock<PluginUpdate>({ exactParams: true, name: "plugin update" });
-  const addHandler = makeAddHandler(pi, { gitOps: git.gitOps, pluginUpdate });
+  const addHandler = makeAddHandler(pi, createAddDeps(git.gitOps));
 
   // act
   await addHandler(`${URL_SOURCE} --scope bogus`, ctx);
@@ -504,5 +486,4 @@ test("shows an unrecognised scope value verbatim against the add usage block and
   assert.deepStrictEqual(git.state.calls.clone, []);
   assert.strictEqual(networkCallCount(), 0);
   verifyBoundary();
-  verify(pluginUpdate);
 });

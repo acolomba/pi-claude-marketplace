@@ -31,7 +31,7 @@ import type {
   PreparedWorkflowsStaged,
   PreparedWorkflowsStaging,
 } from "../../../extensions/pi-claude-marketplace/bridges/workflows/types.ts";
-import type { ResolvedPluginInstallable } from "../../../extensions/pi-claude-marketplace/domain/resolver.ts";
+import type { ResolvedPluginInstallable } from "../../../extensions/pi-claude-marketplace/domain/resolver-types.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 
 const PLUGIN_NAME = "acme";

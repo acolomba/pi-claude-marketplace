@@ -6,23 +6,23 @@
 // `"Read(src/**)"` into "fire on Pi events {read, grep, find, ls} when the
 // event's `input.path` matches the path glob `src/**`".
 //
-// D-61-03: the four-entry closed set (Bash | Read | Edit | Write) is the
-// upstream-faithful permission-rule prefix list. `Grep` / `Glob` / `LS` /
-// `MultiEdit` / `NotebookEdit` are NOT upstream prefixes -- they are
-// covered by `Read` (readers) and `Edit` (editors) via upstream's cross-
-// tool semantic ("Read rules apply to all built-in tools that read files
-// like Grep and Glob" -- `code.claude.com/docs/en/permissions`). The
+// D-61-03: the five-entry closed set (Bash | PowerShell | Read | Edit |
+// Write) is the upstream-faithful permission-rule prefix list. `Grep` /
+// `Glob` / `LS` / `MultiEdit` / `NotebookEdit` are NOT upstream prefixes --
+// they are covered by `Read` (readers) and `Edit` (editors) via upstream's
+// cross-tool semantic ("Read rules apply to all built-in tools that read
+// files like Grep and Glob" -- `code.claude.com/docs/en/permissions`). The
 // `mcp__` family (literal / server-prefix) is handled separately at the
 // `IfPredicate` discriminated-union layer because the matching semantic
 // (`event.toolName`-based) differs from the path-and-command shape covered
 // here.
 //
 // LOAD-BEARING GATE: the `as const satisfies Record<string, IfPrefixTarget>`
-// clause is the compile-time exhaustiveness gate. Removing any of the four
+// clause is the compile-time exhaustiveness gate. Removing any of the five
 // entries red-fails `npm run typecheck` because every entry in the
 // constant must satisfy the `IfPrefixTarget` shape. Architecture-test
 // introspection pins `Object.keys(IF_PREFIX_TARGETS)` to the exact tuple
-// in locked order; adding a fifth entry without amending the test fails CI.
+// in locked order; adding a sixth entry without amending the test fails CI.
 //
 // Sibling to `hook-tool-names.ts` (TOOL-01) -- both files are pure-data
 // closed-set lookup tables in the domain tier. Kept separate because the
@@ -41,7 +41,8 @@ import type { PiToolName } from "./hook-tool-names.ts";
  * event names this rule-prefix covers (Pi-form lowercase); `extractTarget`
  * indicates which field on the runtime event the predicate consults.
  *
- *   - `"command"` -- read `BashToolCallEvent.input.command` (Bash only).
+ *   - `"command"` -- read `input.command` off the Pi shell tool-call event
+ *                    (`bash` for `Bash`, `powershell` for `PowerShell`).
  *   - `"path"`    -- read `<reader|writer>ToolCallEvent.input.path`,
  *                    substituting `ctx.cwd` when the field is absent on
  *                    Pi's optional-path tools (grep/find/ls).
@@ -60,23 +61,35 @@ interface IfPrefixTarget {
 // ──────────────────────────────────────────────────────────────────────────
 
 /**
- * D-61-03 upstream-faithful prefix -> Pi-event-set mapping. The four keys
+ * D-61-03 upstream-faithful prefix -> Pi-event-set mapping. The five keys
  * are the exact upstream permission-rule prefix tokens documented at
- * `code.claude.com/docs/en/permissions` § "Bash" / § "Read and Edit". The
- * key order is locked (matches the architecture-test introspection); the
- * `piEvents` sets capture upstream's cross-tool semantic:
+ * `code.claude.com/docs/en/permissions` § "Bash" / § "PowerShell" /
+ * § "Read and Edit". The key order is locked (matches the architecture-test
+ * introspection); the `piEvents` sets capture upstream's cross-tool
+ * semantic:
  *
- *   - `Bash`  fires on Pi `bash`.
- *   - `Read`  fires on Pi `read`, `grep`, `find`, `ls` (upstream "Read
- *             rules apply to all built-in tools that read files").
- *   - `Edit`  fires on Pi `edit`, `write` (upstream "Edit rules apply to
- *             all built-in tools that edit files").
- *   - `Write` fires on Pi `write` only (upstream Write is narrower than
- *             Edit and does not cover edits).
+ *   - `Bash`       fires on Pi `bash`.
+ *   - `PowerShell` fires on Pi `powershell` (HKPS-01; upstream documents
+ *                  `PowerShell(...)` rules as sharing the `Bash(...)` shape
+ *                  over PowerShell command text).
+ *   - `Read`       fires on Pi `read`, `grep`, `find`, `ls` (upstream "Read
+ *                  rules apply to all built-in tools that read files").
+ *   - `Edit`       fires on Pi `edit`, `write` (upstream "Edit rules apply
+ *                  to all built-in tools that edit files").
+ *   - `Write`      fires on Pi `write` only (upstream Write is narrower
+ *                  than Edit and does not cover edits).
+ *
+ * `Bash` and `PowerShell` are the two command-bearing prefixes and both
+ * read `input.command`, so each predicate carries its own `piEvents` set
+ * and the dispatch consult checks membership before reading the field.
  */
 export const IF_PREFIX_TARGETS = {
   Bash: {
     piEvents: new Set<PiToolName>(["bash"]),
+    extractTarget: "command",
+  },
+  PowerShell: {
+    piEvents: new Set<PiToolName>(["powershell"]),
     extractTarget: "command",
   },
   Read: {

@@ -7,7 +7,7 @@ import ts from "typescript";
 const defaultProjectRoot = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const productionRoot = "extensions/pi-claude-marketplace";
 const testRoot = "tests";
-const nonCorrespondingRoots = new Set(["architecture", "e2e", "integration"]);
+const nonCorrespondingRoots = new Set(["architecture", "e2e", "integration", "scripts"]);
 
 function toProjectPath(projectRoot, absolutePath) {
   return path.relative(projectRoot, absolutePath).split(path.sep).join("/");

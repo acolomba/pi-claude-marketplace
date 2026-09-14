@@ -4,14 +4,25 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
+import {
+  createHooksRouting,
+  createHooksRuntime,
+  readHooksJson,
+} from "../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { pathSource } from "../../extensions/pi-claude-marketplace/domain/source.ts";
-import { installPlugin } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/install.ts";
+import { createNodeInstallPlugin } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts";
 import { applyReconcile } from "../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { loadState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { EXTENSION_VERSION } from "../../extensions/pi-claude-marketplace/shared/extension-version.ts";
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+
+const installPlugin = createNodeInstallPlugin(
+  createHooksRouting(createHooksRuntime(), { readHooksJson }),
+  createCompletionCache(),
+);
 
 // WINV-02 install-level proof: a plugin carrying a `workflows/` directory
 // installs on a plain `install`, with no partial opt-in, and renders the clean
@@ -281,12 +292,26 @@ test("RECON-05: two consecutive reconciles leave a workflow envelope untouched",
       // act -- the FIRST load also closes the backfill's version gate, which is
       // a state.json write by design, so only the envelope is claimed here.
       const first = makeCtx();
-      await applyReconcile({ ctx: first.ctx, pi: first.pi, cwd, scope: "project" });
+      await applyReconcile({
+        ctx: first.ctx,
+        pi: first.pi,
+        cwd,
+        scope: "project",
+        hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+        completionCache: createCompletionCache(),
+      });
       const envelopeAfterFirst = await mtimeMsOf(envelopePath);
       const stateAfterFirst = await mtimeMsOf(locations.stateJsonPath);
 
       const second = makeCtx();
-      await applyReconcile({ ctx: second.ctx, pi: second.pi, cwd, scope: "project" });
+      await applyReconcile({
+        ctx: second.ctx,
+        pi: second.pi,
+        cwd,
+        scope: "project",
+        hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+        completionCache: createCompletionCache(),
+      });
 
       // assert -- the envelope is untouched by BOTH loads, and the second load
       // touches nothing at all: the plugin is declared, enabled and recorded,
@@ -364,7 +389,14 @@ test("RECON-05 negative control: a forced-open gate over a grown set DOES rewrit
 
       // act
       const reconciled = makeCtx();
-      await applyReconcile({ ctx: reconciled.ctx, pi: reconciled.pi, cwd, scope: "project" });
+      await applyReconcile({
+        ctx: reconciled.ctx,
+        pi: reconciled.pi,
+        cwd,
+        scope: "project",
+        hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+        completionCache: createCompletionCache(),
+      });
 
       // assert -- the SAME backdated-mtime harness the idempotence case uses
       // observes the rewrite, so that case's "unchanged" assertions are
@@ -427,7 +459,14 @@ test("WCONV-01 / WCONV-02: one load converges a record whose kind was invisible,
 
       // act -- the load the user did not initiate
       const first = makeCtx();
-      await applyReconcile({ ctx: first.ctx, pi: first.pi, cwd, scope: "project" });
+      await applyReconcile({
+        ctx: first.ctx,
+        pi: first.pi,
+        cwd,
+        scope: "project",
+        hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+        completionCache: createCompletionCache(),
+      });
 
       // assert -- the FIRST load converged. Without this half the equality
       // below would also be satisfied by a scan that never ran at all.
@@ -451,9 +490,12 @@ test("WCONV-01 / WCONV-02: one load converges a record whose kind was invisible,
       // exercised; the unit and catalog cases both hand-build their input. An
       // "emitted something" assertion would stay green through a regression that
       // stopped producing the outcome, or produced it under another kind.
+      // The converged record now declares a `workflows` dependency, and this
+      // test's `pi` never loads the host workflow engine, so the soft-dep
+      // marker joins the convergence reason in the same brace (WDEP-01).
       assert.match(
         first.notifications.map((n) => n.message).join("\n"),
-        /\(installed\) \{components now supported\}/,
+        /\(installed\) \{components now supported, requires pi-dynamic-workflows\}/,
       );
 
       // arrange -- the snapshot that matters is taken AFTER the first load: the
@@ -467,7 +509,14 @@ test("WCONV-01 / WCONV-02: one load converges a record whose kind was invisible,
 
       // act -- the next load over the converged scope
       const second = makeCtx();
-      await applyReconcile({ ctx: second.ctx, pi: second.pi, cwd, scope: "project" });
+      await applyReconcile({
+        ctx: second.ctx,
+        pi: second.pi,
+        cwd,
+        scope: "project",
+        hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+        completionCache: createCompletionCache(),
+      });
 
       // assert -- self-heal is one-time. An atomic rewrite of identical content
       // is still a write, so bytes alone would not carry this claim.

@@ -8,8 +8,8 @@
 // `hasLoadedPiMcpAdapter` / `hasLoadedWorkflowEngine` / `softDepStatus`) live
 // here because they inspect `pi.getAllTools()`, which belongs to the external
 // Pi API surface. `softDepStatus(pi)` returns a `SoftDepStatus` snapshot that
-// `shared/notify.ts` reads once per render to decide whether to append the
-// `requires pi-subagents` / `requires pi-mcp` /
+// `shared/notification-dispatch.ts` reads once per render to decide whether to
+// append the `requires pi-subagents` / `requires pi-mcp` /
 // `requires pi-dynamic-workflows` markers to a plugin row whose
 // `dependencies` declare the kind.
 
@@ -100,7 +100,7 @@ export interface ResourcesDiscoverResult {
   themePaths?: string[];
 }
 
-import type { AgentEndEvent, ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { AgentEndEvent } from "@earendil-works/pi-coding-agent";
 
 /**
  * The Pi agent-message union and its assistant-message narrowing, surfaced
@@ -124,11 +124,32 @@ export interface SoftDepStatus {
   workflowEngineLoaded: boolean;
 }
 
+/** The only Pi UI capability used by the notification boundary. */
+export interface NotificationUi {
+  notify(message: string, severity?: "info" | "warning" | "error"): void;
+}
+
+/** Consumer-owned view of a Pi context used only to emit notifications. */
+export interface NotificationContext {
+  readonly ui: NotificationUi;
+}
+
+/** The tool metadata inspected by the optional-dependency probes. */
+export interface ToolInventoryItem {
+  readonly name?: unknown;
+  readonly sourceInfo?: { readonly source?: unknown };
+}
+
+/** Consumer-owned view of the Pi API used only to inspect registered tools. */
+export interface ToolInventory {
+  getAllTools(): readonly ToolInventoryItem[];
+}
+
 /**
  * RH-3: pi-subagents loaded iff `pi.getAllTools()` contains a tool named
  * "subagent". Probe failures degrade to unloaded.
  */
-export function hasLoadedPiSubagents(pi: ExtensionAPI): boolean {
+export function hasLoadedPiSubagents(pi: ToolInventory): boolean {
   try {
     return pi.getAllTools().some((tool) => tool.name === "subagent");
   } catch {
@@ -143,7 +164,7 @@ export function hasLoadedPiSubagents(pi: ExtensionAPI): boolean {
  * registers only `workflow`, so probing the bare name would report a different
  * engine as the host. Probe failures degrade to unloaded.
  */
-export function hasLoadedWorkflowEngine(pi: ExtensionAPI): boolean {
+export function hasLoadedWorkflowEngine(pi: ToolInventory): boolean {
   try {
     return pi.getAllTools().some((tool) => tool.name === "workflow_control");
   } catch {
@@ -156,15 +177,14 @@ export function hasLoadedWorkflowEngine(pi: ExtensionAPI): boolean {
  * `sourceInfo.source` substring-matches "pi-mcp-adapter". Probe failures
  * degrade to unloaded.
  */
-export function hasLoadedPiMcpAdapter(pi: ExtensionAPI): boolean {
+export function hasLoadedPiMcpAdapter(pi: ToolInventory): boolean {
   try {
     return pi.getAllTools().some((tool) => {
-      const candidate = tool as { name?: unknown; sourceInfo?: { source?: unknown } };
-      if (candidate.name === "mcp") {
+      if (tool.name === "mcp") {
         return true;
       }
 
-      const src = candidate.sourceInfo?.source;
+      const src = tool.sourceInfo?.source;
       return typeof src === "string" && src.includes("pi-mcp-adapter");
     });
   } catch {
@@ -172,7 +192,7 @@ export function hasLoadedPiMcpAdapter(pi: ExtensionAPI): boolean {
   }
 }
 
-export function softDepStatus(pi: ExtensionAPI): SoftDepStatus {
+export function softDepStatus(pi: ToolInventory): SoftDepStatus {
   return {
     piSubagentsLoaded: hasLoadedPiSubagents(pi),
     piMcpAdapterLoaded: hasLoadedPiMcpAdapter(pi),

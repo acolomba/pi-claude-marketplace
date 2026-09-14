@@ -5,12 +5,24 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { assertCompleteCoverage, assertReportComplete } from "./test-coverage-direct.mjs";
+import {
+  assertCompleteCoverage,
+  assertReportComplete,
+  changedPaths,
+  enforcePairs,
+  pairForPath,
+  pairsForChangedPaths,
+  selectBase,
+} from "./test-coverage-direct.mjs";
+import { assertPinnedReadings, loadCoveragePin } from "./test-coverage-direct.pin.mjs";
 import { verdictFor } from "./test-coverage-direct.report.mjs";
 
 const fixtureRoot = await mkdtemp(path.join(tmpdir(), "direct-coverage-gate-"));
 const sourceDirectory = path.join(fixtureRoot, "extensions/pi-claude-marketplace/domain");
 const sourcePath = "extensions/pi-claude-marketplace/domain/types.ts";
+// The git fixtures live under the same temporary root as every other fixture here, so the top-level
+// `finally` disposes them with the single `rm` it already performs on the `mkdtemp` return value.
+const gitFixtureRoot = path.join(fixtureRoot, "git");
 
 const projectRoot = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const gatePath = fileURLToPath(new URL("./test-coverage-direct.mjs", import.meta.url));
@@ -43,6 +55,71 @@ function lcovRecord(recordSourcePath, counts) {
   ];
 
   return `${lines.join("\n")}\n`;
+}
+
+// Every fixture git call is checked, because a fixture that failed to build would otherwise plant a
+// state nobody asked for and the assertion below it would pass or fail for the wrong reason.
+function fixtureGit(cwd, args) {
+  const run = spawnSync("git", args, { cwd, encoding: "utf8" });
+
+  // A launch failure leaves `status`, `stdout` and `stderr` all null, so reading stderr first would
+  // report a TypeError from this helper instead of the reason git never ran.
+  if (run.error !== undefined) {
+    throw new Error(`Fixture git ${args.join(" ")} could not run in ${cwd}: ${run.error.message}`);
+  }
+
+  if (run.status !== 0) {
+    const stderr = typeof run.stderr === "string" ? run.stderr.trim() : "";
+    throw new Error(`Fixture git ${args.join(" ")} exited ${run.status} in ${cwd}: ${stderr}`);
+  }
+
+  return run.stdout.trim();
+}
+
+/**
+ * A git repository under the harness's temporary root, carrying one commit per requested change set.
+ *
+ * Identity is configured on the repository itself rather than inherited, so no fixture reads or
+ * writes the developer's global git configuration, and signing is turned off so a globally-signed
+ * setup does not turn a fixture build into an unrelated failure.
+ */
+async function buildFixtureRepository(name, branch, commits) {
+  const root = path.join(gitFixtureRoot, name);
+
+  await mkdir(root, { recursive: true });
+  fixtureGit(root, ["init", "-q", "-b", branch]);
+  fixtureGit(root, ["config", "user.email", "fixture@example.invalid"]);
+  fixtureGit(root, ["config", "user.name", "Direct coverage fixture"]);
+  fixtureGit(root, ["config", "commit.gpgsign", "false"]);
+
+  for (const commit of commits) {
+    for (const [filePath, contents] of Object.entries(commit.files)) {
+      await mkdir(path.dirname(path.join(root, filePath)), { recursive: true });
+      await writeFile(path.join(root, filePath), contents);
+    }
+
+    fixtureGit(root, ["add", "--all"]);
+    fixtureGit(root, ["commit", "-q", "-m", commit.message]);
+  }
+
+  return root;
+}
+
+/** A depth-1 clone of a fixture repository, reached over `file://` so the clone is really shallow. */
+function cloneShallow(sourceRepository, name) {
+  const root = path.join(gitFixtureRoot, name);
+
+  fixtureGit(gitFixtureRoot, [
+    "clone",
+    "-q",
+    "--depth",
+    "1",
+    "--no-local",
+    `file://${sourceRepository}`,
+    root,
+  ]);
+
+  return root;
 }
 
 const completeCounts = {
@@ -286,7 +363,428 @@ try {
     { message: `Focused test failed: ${unmappablePath}` },
   );
 
+  // The report's pair enumeration, planted against the exported lookup the enumeration loop calls.
+  // `pairForPath` takes the repository root to resolve against as a second parameter, so reaching it
+  // through an array-iteration callback as a bare reference hands the element index to that
+  // parameter and resolves every path against a number. Nothing else in `npm run check` refuses this
+  // state, because nothing in the check chain invokes the report at all.
+  //
+  // The control comes first and is not decoration: without it the refusal below could be firing on a
+  // path that cannot be paired at all rather than on the second argument.
+  assert.doesNotThrow(() => pairForPath(realSourcePath));
+
+  // Matched as a pattern rather than as a whole string, because the text is Node's own
+  // `path.resolve` refusal and not this repository's vocabulary.
+  assert.throws(
+    () => pairForPath(realSourcePath, 0),
+    /The "paths\[0\]" argument must be of type string\. Received type number/,
+  );
+
   process.stdout.write("Direct-coverage negative controls passed.\n");
+
+  // The base-selection states, planted against real git repositories built under this harness's own
+  // temporary root. Every one calls the exported selector directly rather than spawning the gate, so
+  // the selected candidate is a return value to assert on rather than stdout to scrape.
+  await mkdir(gitFixtureRoot, { recursive: true });
+
+  // The head of the chain, and the passing state of this group. It comes first and is not
+  // decoration: without it the refusals below could all be firing on a fixture git never built
+  // rather than on the property each one claims.
+  const noRemoteRepository = await buildFixtureRepository("no-remote", "main", [
+    { files: { "README.md": "base\n" }, message: "base" },
+    { files: { "README.md": "second\n" }, message: "second" },
+  ]);
+  const noRemoteBase = selectBase(noRemoteRepository);
+
+  assert.equal(noRemoteBase.ok, true);
+  assert.equal(noRemoteBase.candidate, "main");
+  assert.deepEqual(
+    noRemoteBase.attempted.map((entry) => entry.candidate),
+    ["origin/main"],
+  );
+  assert.match(noRemoteBase.attempted[0].reason, /origin\/main/);
+
+  // A repository with no `origin/main` still selects a base rather than falling through to an empty
+  // change set, and the chain records that `origin/main` was tried before `main` was taken.
+  const noRemoteChangedPaths = changedPaths(noRemoteRepository);
+
+  assert.equal(noRemoteChangedPaths.ok, true);
+  assert.equal(noRemoteChangedPaths.base, "main");
+
+  // The tail of the chain. A depth-1 clone still resolves `origin/main` and still merge-bases
+  // against it, so the candidate a shallow checkout actually breaks is the last one, `HEAD~1`. One
+  // fixture asked to prove both ends would prove neither, which is why the head is planted above in
+  // a repository that has no remote at all.
+  const shallowRepository = cloneShallow(noRemoteRepository, "shallow");
+  const shallowBase = selectBase(shallowRepository);
+
+  assert.equal(shallowBase.ok, true);
+  assert.equal(shallowBase.candidate, "origin/main");
+  assert.notEqual(
+    spawnSync("git", ["rev-parse", "--verify", "HEAD~1"], {
+      cwd: shallowRepository,
+      encoding: "utf8",
+    }).status,
+    0,
+  );
+
+  // With `origin/main`, `main`, and an upstream ref all absent, the chain falls through to its last
+  // candidate instead of giving up.
+  const fallthroughRepository = await buildFixtureRepository("fallthrough", "work", [
+    { files: { "README.md": "base\n" }, message: "base" },
+    { files: { "README.md": "second\n" }, message: "second" },
+  ]);
+  const fallthroughBase = selectBase(fallthroughRepository);
+
+  assert.equal(fallthroughBase.ok, true);
+  assert.equal(fallthroughBase.candidate, "HEAD~1");
+
+  // Every candidate failing is the only state that may refuse. Dropping the remote from a shallow
+  // clone of the fall-through repository is what removes the upstream candidate as well, leaving the
+  // shallow `HEAD~1` as the last to fail.
+  const exhaustedRepository = cloneShallow(fallthroughRepository, "exhausted");
+
+  fixtureGit(exhaustedRepository, ["remote", "remove", "origin"]);
+
+  const exhaustedBase = selectBase(exhaustedRepository);
+
+  assert.equal(exhaustedBase.ok, false);
+  assert.deepEqual(
+    exhaustedBase.attempted.map((entry) => entry.candidate),
+    ["origin/main", "main", "@{upstream}", "HEAD~1"],
+  );
+
+  for (const entry of exhaustedBase.attempted) {
+    assert.notEqual(entry.reason, undefined);
+    assert.notEqual(entry.reason, "");
+  }
+
+  // A change set that resolved and simply held nothing pairable is a pass that still says what it
+  // looked at. Committing the docs file on a branch off `main` is what leaves `main` selectable as
+  // the base while the only change against it is unpairable.
+  const docsOnlyRepository = await buildFixtureRepository("docs-only", "main", [
+    { files: { "README.md": "base\n" }, message: "base" },
+  ]);
+
+  fixtureGit(docsOnlyRepository, ["checkout", "-q", "-b", "feature"]);
+  await mkdir(path.join(docsOnlyRepository, "docs"), { recursive: true });
+  await writeFile(path.join(docsOnlyRepository, "docs/guide.md"), "guidance\n");
+  fixtureGit(docsOnlyRepository, ["add", "--all"]);
+  fixtureGit(docsOnlyRepository, ["commit", "-q", "-m", "document the thing"]);
+
+  const docsOnlyChangedPaths = changedPaths(docsOnlyRepository);
+
+  assert.equal(docsOnlyChangedPaths.ok, true);
+  assert.equal(docsOnlyChangedPaths.base, "main");
+  assert.deepEqual(docsOnlyChangedPaths.paths, ["docs/guide.md"]);
+  assert.deepEqual(docsOnlyChangedPaths.skipped, [
+    { path: "docs/guide.md", reason: "outside both the production root and the test root" },
+  ]);
+
+  const docsOnlyPairs = pairsForChangedPaths(docsOnlyRepository);
+
+  assert.equal(docsOnlyPairs.ok, true);
+  assert.deepEqual(docsOnlyPairs.pairs, []);
+  assert.deepEqual(docsOnlyPairs.skipped, docsOnlyChangedPaths.skipped);
+
+  // The pairing state, and the one that decides whether the injected root reached BOTH halves of the
+  // answer. The fixture carries a real source-test pair and a real structural supplement, so a root
+  // threaded only as far as the change-set query would check the repository this harness runs in for
+  // both of them: the pair member would come back missing though it exists here, and the supplement
+  // would be classified as a pair member and abort the run on a module nobody wrote.
+  const pairedSource = "extensions/pi-claude-marketplace/domain/probe.ts";
+  const pairedTest = "tests/domain/probe.test.ts";
+  const supplementSuite = "tests/domain/probe-fake.test.ts";
+  const pairedRepository = await buildFixtureRepository("paired", "main", [
+    {
+      files: {
+        "README.md": "base\n",
+        [pairedSource]: "export const probe = 1;\n",
+        [pairedTest]: "export const probeTest = 1;\n",
+        "tests/domain/probe-fake.ts": "export const probeFake = 1;\n",
+        "tests/domain/probe-contract.ts": "export const probeContract = 1;\n",
+        [supplementSuite]: "export const probeFakeTest = 1;\n",
+      },
+      message: "base",
+    },
+  ]);
+
+  fixtureGit(pairedRepository, ["checkout", "-q", "-b", "feature"]);
+  await writeFile(path.join(pairedRepository, pairedSource), "export const probe = 2;\n");
+  await writeFile(
+    path.join(pairedRepository, supplementSuite),
+    "export const probeFakeTest = 2;\n",
+  );
+  fixtureGit(pairedRepository, ["add", "--all"]);
+  fixtureGit(pairedRepository, ["commit", "-q", "-m", "change the pair and the supplement"]);
+
+  const pairedPairs = pairsForChangedPaths(pairedRepository);
+
+  assert.equal(pairedPairs.ok, true);
+  assert.equal(pairedPairs.base, "main");
+  assert.deepEqual(pairedPairs.pairs, [{ sourcePath: pairedSource, testPath: pairedTest }]);
+  assert.deepEqual(pairedPairs.skipped, [
+    { path: supplementSuite, reason: "a structural supplement suite" },
+  ]);
+
+  // A git invocation that failed is a refusal, not an empty change set. This is the state that a
+  // selector swallowing git's exit status cannot tell apart from the docs-only pass above.
+  const notARepository = path.join(gitFixtureRoot, "not-a-repository");
+
+  await mkdir(notARepository, { recursive: true });
+
+  const notARepositoryChangedPaths = changedPaths(notARepository);
+
+  assert.equal(notARepositoryChangedPaths.ok, false);
+  assert.match(notARepositoryChangedPaths.reason, /rev-parse/);
+  assert.match(notARepositoryChangedPaths.reason, /not a git repository/);
+  assert.equal(pairsForChangedPaths(notARepository).ok, false);
+
+  // A named base is resolved exactly and the chain is not consulted at all. The contrast is what
+  // makes that assertable: the same repository selects `main` through the chain only after passing
+  // over `origin/main`, so an empty `attempted` here is evidence no candidate was tried.
+  const explicitMain = selectBase(noRemoteRepository, "main");
+
+  assert.equal(explicitMain.ok, true);
+  assert.equal(explicitMain.candidate, "main");
+  assert.deepEqual(explicitMain.attempted, []);
+
+  // A named base that does not resolve is a refusal carrying no candidate. Falling through to the
+  // chain here would answer a change set against some other ref, which reads as a pass over work
+  // nobody asked about.
+  const explicitMissing = selectBase(noRemoteRepository, "refs/heads/absent");
+
+  assert.equal(explicitMissing.ok, false);
+  assert.equal(explicitMissing.candidate, undefined);
+  assert.match(explicitMissing.reason, /refs\/heads\/absent/);
+  assert.match(explicitMissing.reason, /never replaced by a fallback/);
+
+  // A value that is not a plain ref name is refused before git is invoked on it, which is why the
+  // reason names the pattern rather than a git exit status.
+  const explicitUnsafe = selectBase(noRemoteRepository, "a ref with spaces");
+
+  assert.equal(explicitUnsafe.ok, false);
+  assert.equal(explicitUnsafe.candidate, undefined);
+  assert.match(explicitUnsafe.reason, /a ref with spaces/);
+  assert.match(explicitUnsafe.reason, /not a plain ref name/);
+
+  // The coverage pin's comparison. These are string-and-array values only -- the comparator reads no
+  // disk -- so the fixture modules deliberately do not exist in the tree, and no fixture repository,
+  // temporary root or LCOV text is built for any of the six states below.
+  const pinnedRow = {
+    sourcePath: "extensions/pi-claude-marketplace/domain/alpha.ts",
+    reading: "branches 1/2",
+    findingIds: ["AAA-001"],
+    reasons: ["the narrowing arm is compiler-forced and cannot be reached at runtime"],
+  };
+  const unpinnedModule = "extensions/pi-claude-marketplace/domain/beta.ts";
+  const pinEnumeratedModules = [pinnedRow.sourcePath, unpinnedModule];
+  const matchingObservation = [{ sourcePath: pinnedRow.sourcePath, reading: pinnedRow.reading }];
+  // Typed out here rather than imported, so a change to the refusal's trailer has to be made in this
+  // file too and cannot pass by being recomputed from the code under test.
+  const pinUpdateInstruction = [
+    "  Update scripts/test-coverage-direct.pin.json in this same change and record why the tree's",
+    "  coverage surface moved. The record is a measurement, not an allow-list:",
+    "  it forgives nothing, in either direction.",
+  ].join("\n");
+
+  // The passing state comes first and is not decoration: without it the five refusals below could
+  // all be firing on a malformed literal rather than on the property each one claims.
+  assert.doesNotThrow(() =>
+    assertPinnedReadings(matchingObservation, [pinnedRow], pinEnumeratedModules),
+  );
+
+  // A module that fell short and is not pinned. The pinned module still reads exactly as pinned, so
+  // only the addition direction can refuse this.
+  assert.throws(
+    () =>
+      assertPinnedReadings(
+        [...matchingObservation, { sourcePath: unpinnedModule, reading: "branches 3/4" }],
+        [pinnedRow],
+        pinEnumeratedModules,
+      ),
+    {
+      message: [
+        "D-08-05: the measured direct-coverage shortfalls no longer match scripts/test-coverage-direct.pin.json",
+        `  fell short but is not pinned (1): ${unpinnedModule}`,
+        "  pinned but no longer falls short (0): none",
+        pinUpdateInstruction,
+      ].join("\n"),
+    },
+  );
+
+  // A pinned reading that moved. Membership is unchanged, so nothing but the whole-string reading
+  // comparison can refuse it -- and it refuses a reading that IMPROVED, which is the direction an
+  // allow-list would absorb silently.
+  assert.throws(
+    () =>
+      assertPinnedReadings(
+        [{ sourcePath: pinnedRow.sourcePath, reading: "branches 2/2, lines 9/9" }],
+        [pinnedRow],
+        pinEnumeratedModules,
+      ),
+    {
+      message: [
+        `Pinned direct-coverage reading moved for ${pinnedRow.sourcePath}`,
+        "  pinned: branches 1/2",
+        "  measured: branches 2/2, lines 9/9",
+        pinUpdateInstruction,
+      ].join("\n"),
+    },
+  );
+
+  // A stale row: the pinned module produced no shortfall at all. This is the opposite direction from
+  // the addition above, and the only one that catches a pin nobody updated after the tree improved.
+  assert.throws(() => assertPinnedReadings([], [pinnedRow], pinEnumeratedModules), {
+    message: [
+      "D-08-05: the measured direct-coverage shortfalls no longer match scripts/test-coverage-direct.pin.json",
+      "  fell short but is not pinned (0): none",
+      `  pinned but no longer falls short (1): ${pinnedRow.sourcePath}`,
+      pinUpdateInstruction,
+    ].join("\n"),
+  });
+
+  // An emptied pin with a shortfall present. This is the SAME refusal as the addition above, not a
+  // fifth direction: with no rows left, every reading is an addition and the membership message
+  // names it as one. The state is planted anyway because zero rows is the input a comparison is
+  // likeliest to short-circuit on, and this asserts it does not.
+  assert.throws(() => assertPinnedReadings(matchingObservation, [], pinEnumeratedModules), {
+    message: [
+      "D-08-05: the measured direct-coverage shortfalls no longer match scripts/test-coverage-direct.pin.json",
+      `  fell short but is not pinned (1): ${pinnedRow.sourcePath}`,
+      "  pinned but no longer falls short (0): none",
+      pinUpdateInstruction,
+    ].join("\n"),
+  });
+
+  // A row naming a module the enumeration no longer holds. This is the one refusal that needs no
+  // test run at all: without it a deleted module would leave a row nothing could ever contradict,
+  // because nothing would ever measure it again.
+  assert.throws(
+    () =>
+      assertPinnedReadings(
+        matchingObservation,
+        [
+          pinnedRow,
+          { ...pinnedRow, sourcePath: "extensions/pi-claude-marketplace/domain/gone.ts" },
+        ],
+        pinEnumeratedModules,
+      ),
+    {
+      message: [
+        "Coverage pin rows name 1 module(s) the tree no longer enumerates:",
+        "  extensions/pi-claude-marketplace/domain/gone.ts",
+        pinUpdateInstruction,
+      ].join("\n"),
+    },
+  );
+
+  // The gate ARM, not the comparator. Every state above drives `assertPinnedReadings` directly, so
+  // all six of them keep passing if an arm stops calling it -- and an arm that stops calling it
+  // enforces nothing, because `measurePair` records a shortfall and lets the loop continue. The
+  // three states below drive the real `enforcePairs` both arms run, with a stub runner standing in
+  // for `runPair` so a reading can be planted without spawning a focused test.
+  //
+  // The stub answers the gate's own refusal message, because that string is what `measurePair`
+  // parses; a stub that threw some other shape would prove the arm refuses errors in general rather
+  // than that it records coverage readings and compares them.
+  const completeRecordFor = (pair) => ({
+    ...pair,
+    coverage: "branches 4/4, lines 9/9",
+    typeOnly: false,
+    runtime: process.version,
+    elapsedMs: 0,
+  });
+  const pinnedPair = { sourcePath: pinnedRow.sourcePath, testPath: "tests/domain/alpha.test.ts" };
+  const unpinnedPair = { sourcePath: unpinnedModule, testPath: "tests/domain/beta.test.ts" };
+  const stubRunner = (shortfalls) => (pair) => {
+    const reading = shortfalls[pair.sourcePath];
+
+    if (reading !== undefined) {
+      throw new Error(`Incomplete direct coverage for ${pair.sourcePath}: ${reading}`);
+    }
+
+    return completeRecordFor(pair);
+  };
+
+  // The control. The pinned module falls short with exactly its pinned reading and the other
+  // measures complete, which is the state every green run of either arm is in. It comes first for
+  // the same reason the comparator's control does, and it carries a second obligation the comparator
+  // cannot: it fails if the arm stops RECORDING a shortfall, because an unrecorded pinned reading
+  // reads as a stale row.
+  const measured = await enforcePairs(
+    [pinnedPair, unpinnedPair],
+    [pinnedRow],
+    pinEnumeratedModules,
+    stubRunner({ [pinnedRow.sourcePath]: pinnedRow.reading }),
+  );
+
+  assert.deepEqual(
+    measured.map((record) => [record.sourcePath, record.coverage]),
+    [
+      [pinnedRow.sourcePath, pinnedRow.reading],
+      [unpinnedModule, "branches 4/4, lines 9/9"],
+    ],
+  );
+
+  // The plant. One unpinned module falls short and the arm has to refuse it. Nothing in the loop
+  // can: `measurePair` returns a normal record for a shortfall. Delete the comparison from
+  // `enforcePairs` and this is the assertion that goes red.
+  await assert.rejects(
+    () =>
+      enforcePairs(
+        [pinnedPair, unpinnedPair],
+        [pinnedRow],
+        pinEnumeratedModules,
+        stubRunner({
+          [pinnedRow.sourcePath]: pinnedRow.reading,
+          [unpinnedModule]: "branches 3/4",
+        }),
+      ),
+    {
+      message: [
+        "D-08-05: the measured direct-coverage shortfalls no longer match scripts/test-coverage-direct.pin.json",
+        `  fell short but is not pinned (1): ${unpinnedModule}`,
+        "  pinned but no longer falls short (0): none",
+        pinUpdateInstruction,
+      ].join("\n"),
+    },
+  );
+
+  // A failure that is not a coverage verdict ends the arm where it happened. Swallowing it would
+  // compare a measurement that never completed against the pin and report the difference as drift.
+  await assert.rejects(
+    () =>
+      enforcePairs([pinnedPair], [pinnedRow], pinEnumeratedModules, () => {
+        throw new Error(`Focused test failed: ${pinnedPair.testPath}`);
+      }),
+    { message: `Focused test failed: ${pinnedPair.testPath}` },
+  );
+
+  // The loader's half, planted against the injected root. This is what proves the root is genuinely
+  // injectable -- which is the whole reason the loader takes one, and the reason the pin is read and
+  // parsed rather than imported as a hoisted, module-cached JSON module.
+  const fixturePinPath = path.join(fixtureRoot, "scripts/test-coverage-direct.pin.json");
+
+  await mkdir(path.dirname(fixturePinPath), { recursive: true });
+  await writeFile(fixturePinPath, JSON.stringify({ version: 1, rows: [pinnedRow] }, null, 2));
+
+  assert.deepEqual(loadCoveragePin(fixtureRoot), [pinnedRow]);
+
+  // A malformed row is refused rather than coerced, and the refusal names the file to go and fix.
+  await writeFile(
+    fixturePinPath,
+    JSON.stringify({ version: 1, rows: [{ ...pinnedRow, reasons: undefined }] }, null, 2),
+  );
+
+  assert.throws(
+    () => loadCoveragePin(fixtureRoot),
+    /Coverage pin .*test-coverage-direct\.pin\.json is malformed: row extensions\/.+alpha\.ts has no reasons array/,
+  );
+
+  process.stdout.write(
+    "Base-selection, pair-enumeration and coverage-pin negative controls passed: chain head with no origin/main, chain tail in a shallow clone, resolved-but-empty docs-only change set, a fixture pair and supplement resolved under the injected root, failed selection outside a repository, a report pair-enumeration callback handing an array index to the selected root, an explicitly named base resolved exactly and refused without a fallback when it does not resolve or is not a plain ref name, an unpinned shortfall, a moved pinned reading, a stale pin row, an emptied pin reporting its readings as additions, a pin row naming a module the tree no longer enumerates, the gate arm both commands run refusing an unpinned shortfall under a stub runner and passing on a pinned one, the same arm propagating a non-coverage failure, and a malformed pin refused under an injected root.\n",
+  );
 } finally {
   await rm(fixtureRoot, { force: true, recursive: true });
 }

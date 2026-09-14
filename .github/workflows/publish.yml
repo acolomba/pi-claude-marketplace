@@ -23,7 +23,7 @@ jobs:
   # commit before publishing. No path filter -- a release tag must always
   # run the gate, whatever files the tagged commit happens to touch.
   ci:
-    uses: ./.github/workflows/ci.yml
+    uses: $/.github/workflows/ci.yml
 
   publish:
     needs: [ci]
@@ -38,6 +38,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Setup Node 24
         uses: actions/setup-node@v7

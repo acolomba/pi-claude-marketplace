@@ -41,12 +41,23 @@
 import { createHash } from "node:crypto";
 import path from "node:path";
 
+function trimDashes(value: string): string {
+  let start = 0;
+  let end = value.length;
+
+  while (start < end && value[start] === "-") {
+    start += 1;
+  }
+
+  while (end > start && value[end - 1] === "-") {
+    end -= 1;
+  }
+
+  return value.slice(start, end);
+}
+
 function sanitizePathSegment(value: string): string {
-  const sanitized = value
-    .toLowerCase()
-    .replaceAll(/[^a-z0-9._-]+/g, "-")
-    .replaceAll(/^-+|-+$/g, "")
-    .slice(0, 48);
+  const sanitized = trimDashes(value.toLowerCase().replaceAll(/[^a-z0-9._-]+/g, "-")).slice(0, 48);
 
   return sanitized || "project";
 }

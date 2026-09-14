@@ -81,6 +81,3 @@ pnpm-debug.log*
 
 # tmp
 /tmp/
-
-# worktrees
-/.worktrees/

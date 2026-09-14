@@ -37,16 +37,15 @@ import { loadMergedScopeConfig, mergeScopeConfigs } from "../../persistence/conf
 import { locationsFor } from "../../persistence/locations.ts";
 import { buildConfigFromState } from "../../persistence/migrate-config.ts";
 import { loadState } from "../../persistence/state-io.ts";
+import { compareByNameThenScope } from "../../shared/compare-name-scope.ts";
+import { notify } from "../../shared/notification-dispatch.ts";
+import { composeRetainedWorkflowsAdvisories } from "../../shared/notification-summary.ts";
+import { type ContentReason } from "../../shared/notification-types.ts";
 import {
   notifyWithContext,
   type MarketplaceRows,
   type Plural,
 } from "../../shared/notify-context.ts";
-import {
-  compareByNameThenScope,
-  composeRetainedWorkflowsAdvisories,
-  notify,
-} from "../../shared/notify.ts";
 import { narrowProbeError } from "../../shared/probe-classifiers.ts";
 import { scanRetainedWorkflowsStaging } from "../plugin/workflows-staging-gc.ts";
 
@@ -62,13 +61,13 @@ import { PENDING_CONTEXT, type PendingMsg } from "./reconcile.messaging.ts";
 import type { PlannedPluginInstall, ReconcilePlan } from "./types.ts";
 import type { MergedConfig, ScopeLoadOutcome } from "../../persistence/config-merge.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
-import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
-import type { ContentReason, ReconcilePendingEmptyMessage } from "../../shared/notify.ts";
+import type { NotificationContext, ToolInventory } from "../../platform/pi-api.ts";
+import type { ReconcilePendingEmptyMessage } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 
 export interface PendingReconcileOptions {
-  readonly ctx: ExtensionContext;
-  readonly pi: ExtensionAPI;
+  readonly ctx: NotificationContext;
+  readonly pi: ToolInventory;
   /** Project-scope cwd (ignored for user scope). */
   readonly cwd: string;
   /** When omitted, fan-out across BOTH scopes (project-first per MSG-GR-3). */
@@ -317,5 +316,13 @@ export async function pendingReconcile(opts: PendingReconcileOptions): Promise<v
 
   // WR-06: the cascade arm carries the identical advisory lines the empty arm
   // carries, from the one render site that composes both.
-  notifyWithContext(opts.ctx, opts.pi, PENDING_CONTEXT, marketplaces, { advisories });
+  notifyWithContext(
+    opts.ctx,
+    opts.pi,
+    PENDING_CONTEXT,
+    marketplaces,
+    undefined,
+    "plural",
+    advisories,
+  );
 }

@@ -2,14 +2,16 @@ import {
   emitContextCascade,
   emitReconcileAppliedContextCascade,
   emitUpdateNoOpCascade,
+} from "./notification-dispatch.ts";
+import {
   type CascadeNotificationMessage,
   type MarketplaceNotificationMessage,
   type PluginNotificationMessage,
   type ReconcileAppliedCascadeMessage,
-} from "./notify.ts";
+} from "./notification-types.ts";
 
 import type { Scope } from "./types.ts";
-import type { ExtensionAPI, ExtensionContext, SoftDepStatus } from "../platform/pi-api.ts";
+import type { NotificationContext, SoftDepStatus, ToolInventory } from "../platform/pi-api.ts";
 
 /**
  * shared/notify-context.ts -- the horizontal command-context spine every
@@ -19,7 +21,7 @@ import type { ExtensionAPI, ExtensionContext, SoftDepStatus } from "../platform/
  * and the `notifyWithContext` entry point that dispatches the per-row body
  * through `context.render[status]` while routing the composed cascade through
  * the shared severity/summary/reload + single `ctx.ui.notify` seam in
- * `notify.ts` (`emitContextCascade`).
+ * `notification-summary.ts` (`emitContextCascade`).
  *
  * The legacy `notify(ctx, pi, message)` in `notify.ts` keeps serving
  * not-yet-migrated call sites (it still drives the central renderPluginRow /
@@ -131,39 +133,30 @@ export type MarketplaceRows<Msg> = WithPlugins<MarketplaceNotificationMessage, M
  * `/reload to pick up changes` trailer. `Messaging.label` feeds the trailing
  * tally on plural cascades.
  *
- * RLD-05 / D-07: `opts.kind` defaults to the plain `"cascade"` arm. The
+ * RLD-05 / D-07: `kind` is `"cascade" | undefined` rather than optional. The
  * `/claude:plugin disable` command does not thread a distinguishing kind --
  * its fresh `(disabled)` row stamps `needsReload: true` directly, so the
  * `/reload to pick up changes` trailer fires via the RLD-02 OR-reduce of the
- * per-row stamps, not via a cascade-kind straddle.
+ * per-row stamps, not via a cascade-kind straddle. Every call site states
+ * `kind` and `cardinality` explicitly so a transposed or omitted argument is a
+ * compile error at the call site rather than a silently-defaulted cascade.
  *
- * WR-06: the three optional envelope fields ride ONE `opts` bag rather than
- * three trailing positionals. `kind` and `cardinality` are both optional
- * string unions, so as positionals nothing distinguished their slots and a
- * transposition at a call site would have type-checked; the bag names each
- * one at every site that passes it. CONVENTIONS.md asks for the same shape for
- * anything past two optional fields.
+ * WR-06: `advisories` stays a trailing OPTIONAL parameter rather than joining
+ * `kind` / `cardinality` in a bag -- it is the only field a caller may omit
+ * entirely, and the two required fields ahead of it are unambiguous by
+ * position once neither can default.
  */
 export function notifyWithContext<
   Status extends string,
   Msg extends PluginNotificationMessage & { status: Status },
 >(
-  ctx: ExtensionContext,
-  pi: ExtensionAPI,
+  ctx: NotificationContext,
+  pi: ToolInventory,
   context: CommandContext<Status, Msg>,
   rows: readonly MarketplaceRows<Msg>[],
-  opts?: {
-    readonly kind?: "cascade";
-    readonly cardinality?: "single" | "plural";
-    /**
-     * Explicitly `| undefined` where the two above are not: the only producer
-     * composes the list conditionally and hands over whatever it got, so the
-     * key would otherwise need a conditional spread at a call site under
-     * `exactOptionalPropertyTypes`. `kind` and `cardinality` stay strict --
-     * every site that passes one passes a concrete value.
-     */
-    readonly advisories?: readonly string[] | undefined;
-  },
+  kind: "cascade" | undefined,
+  cardinality: "single" | "plural",
+  advisories?: readonly string[],
 ): void {
   // WR-01 seam: the rows are `Msg`-narrowed at the call site (a status the
   // render map omits is a compile error there); the cascade envelope consumes
@@ -178,18 +171,18 @@ export function notifyWithContext<
   // OUT-04 / D-04: thread the command's operation label + the STRUCTURAL
   // single-vs-bulk cardinality onto the cascade envelope. The trailing tally
   // (OUT-03) renders IFF `cardinality === "plural"`; `label` is its
-  // `<Operation>` prefix. A call site that omits `cardinality` (single-target
-  // ops) gets no tally. These fields are read only by the tally composer in
+  // `<Operation>` prefix. Single-target callers declare `"single"` explicitly
+  // and get no tally. These fields are read only by the tally composer in
   // `emitWithSummary` -- they never affect the per-row body or severity.
   // WR-06: free-text advisory body lines the command composed itself. The
   // renderer folds them in after the body and before the tally; a command that
   // omits them renders exactly what it rendered without them.
   const message: CascadeNotificationMessage = {
-    ...(opts?.kind === undefined ? {} : { kind: opts.kind }),
+    ...(kind === undefined ? {} : { kind }),
     marketplaces,
     label: context.Messaging.label,
-    ...(opts?.cardinality !== undefined && { cardinality: opts.cardinality }),
-    ...(opts?.advisories !== undefined && { advisories: opts.advisories }),
+    cardinality,
+    ...(advisories !== undefined && { advisories }),
   };
 
   emitContextCascade(ctx, pi, message, (p, probe, mpScope) =>
@@ -215,8 +208,8 @@ export function notifyUpdateWithContext<
   Status extends string,
   Msg extends PluginNotificationMessage & { status: Status },
 >(
-  ctx: ExtensionContext,
-  pi: ExtensionAPI,
+  ctx: NotificationContext,
+  pi: ToolInventory,
   context: CommandContext<Status, Msg>,
   rows: readonly MarketplaceRows<Msg>[],
   cardinality: "single" | "plural",
@@ -246,16 +239,18 @@ export function notifyUpdateWithContext<
  * render map and folds the hard-coded `Plugin update: nothing to update` headline
  * below them, so the summary line can never vanish. NO `cardinality` / `tally` --
  * the headline is a fixed constant owned by `emitUpdateNoOpCascade`, not the
- * `composeTally` success math.
+ * `composeTally` success math. Cardinality remains structural metadata on the
+ * envelope so every update notification retains the invocation form.
  */
 export function notifyUpdateNoOpWithContext<
   Status extends string,
   Msg extends PluginNotificationMessage & { status: Status },
 >(
-  ctx: ExtensionContext,
-  pi: ExtensionAPI,
+  ctx: NotificationContext,
+  pi: ToolInventory,
   context: CommandContext<Status, Msg>,
   rows: readonly MarketplaceRows<Msg>[],
+  cardinality: "single" | "plural",
 ): void {
   // Same type-safe widening as `notifyWithContext`: `MarketplaceRows<Msg>` is a
   // genuine subtype of `MarketplaceNotificationMessage[]` (no cast).
@@ -263,6 +258,7 @@ export function notifyUpdateNoOpWithContext<
   const message: CascadeNotificationMessage = {
     marketplaces,
     label: context.Messaging.label,
+    cardinality,
   };
 
   emitUpdateNoOpCascade(ctx, pi, message, (p, probe, mpScope) =>
@@ -284,8 +280,8 @@ export function notifyReconcileAppliedWithContext<
   Status extends string,
   Msg extends PluginNotificationMessage & { status: Status },
 >(
-  ctx: ExtensionContext,
-  pi: ExtensionAPI,
+  ctx: NotificationContext,
+  pi: ToolInventory,
   context: CommandContext<Status, Msg>,
   message: ReconcileAppliedCascadeMessage,
 ): void {

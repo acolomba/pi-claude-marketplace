@@ -53,7 +53,7 @@ import { REPO_ROOT, assertNoForbiddenSurface } from "./source-scan.ts";
  *     `pi` at all. Listing it here would make this gate red on day one, and a
  *     gate that is red on day one invites a suppression rather than a fix.
  *     The ledger half of the claim is proved behaviorally instead, by the
- *     byte-equality pair in `tests/orchestrators/plugin/install.test.ts`: two
+ *     byte-equality pair in `tests/orchestrators/plugin/install-flow.test.ts`: two
  *     installs differing only in the session's tool list write byte-identical
  *     envelopes and identical inventories.
  *
