@@ -1,4 +1,18 @@
 import assert from "node:assert/strict";
+import {
+  lstat,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  readlink,
+  realpath,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { describe, test } from "node:test";
 
 import { createHooksHydration as definingCreateHooksHydration } from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
@@ -12,8 +26,9 @@ import { createHooksRuntime as definingCreateHooksRuntime } from "../../../exten
 import {
   readHooksJson as definingReadHooksJson,
   removeHookConfig as definingRemoveHookConfig,
-  writeHookConfig as definingWriteHookConfig,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/stage.ts";
+import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { SymlinkRefusedError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
 
 import type * as HooksBarrel from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 
@@ -135,14 +150,126 @@ describe("removeHookConfig", () => {
 });
 
 describe("writeHookConfig", () => {
-  test("re-exports the defining binding", () => {
+  test("writes complete hook bytes repeatedly through the Node tree inspector", async (t) => {
     // arrange
-    const expectedWriteHookConfig = definingWriteHookConfig;
+    const directory = await mkdtemp(path.join(tmpdir(), "hooks-bridge-compose-"));
+    t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 3 }));
+    const root = await realpath(directory);
+    const locations = locationsFor("project", root);
+    const pluginRoot = path.join(root, "plugin");
+    const hooksRoot = path.join(pluginRoot, "hooks");
+    const nestedRoot = path.join(hooksRoot, "nested");
+    const sharedRoot = path.join(pluginRoot, "shared");
+    const sourceScript = path.join(nestedRoot, "run.sh");
+    const sharedScript = path.join(sharedRoot, "shared.sh");
+    const linkPath = path.join(hooksRoot, "shared-link");
+    await mkdir(nestedRoot, { recursive: true });
+    await mkdir(sharedRoot);
+    await writeFile(sourceScript, "echo source\n");
+    await writeFile(sharedScript, "echo shared\n");
+    await symlink(sharedRoot, linkPath, process.platform === "win32" ? "junction" : "dir");
+    const expectedPath = path.join(locations.hooksDir, "acme", "hooks.json");
+    const hooksValue = { Stop: [{ hooks: [{ type: "command", command: "echo ready" }] }] };
+    const expectedBytes = `{
+  "Stop": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "echo ready"
+        }
+      ]
+    }
+  ]
+}
+`;
 
     // act
-    const hooksWriteHookConfig = writeHookConfig;
+    const writtenHook = await writeHookConfig({
+      locations,
+      pluginName: "acme",
+      pluginRoot,
+      hooksValue,
+    });
+    const firstBytes = await readFile(expectedPath, "utf8");
+    const repeatedHook = await writeHookConfig({
+      locations,
+      pluginName: "acme",
+      pluginRoot,
+      hooksValue,
+    });
+    const repeatedBytes = await readFile(expectedPath, "utf8");
 
     // assert
-    assert.strictEqual(hooksWriteHookConfig, expectedWriteHookConfig);
+    assert.deepStrictEqual(writtenHook, { written: true, path: expectedPath });
+    assert.deepStrictEqual(repeatedHook, { written: true, path: expectedPath });
+    assert.strictEqual(firstBytes, expectedBytes);
+    assert.strictEqual(repeatedBytes, expectedBytes);
+    assert.deepStrictEqual(await readdir(path.dirname(expectedPath)), ["hooks.json"]);
+    assert.deepStrictEqual((await readdir(hooksRoot)).sort(), ["nested", "shared-link"]);
+    assert.strictEqual(await readFile(sourceScript, "utf8"), "echo source\n");
+    assert.strictEqual(await readFile(sharedScript, "utf8"), "echo shared\n");
+    assert.strictEqual((await lstat(linkPath)).isSymbolicLink(), true);
+  });
+
+  test("refuses an escaping source symlink before replacing staged or external bytes", async (t) => {
+    // arrange
+    const directory = await mkdtemp(path.join(tmpdir(), "hooks-bridge-escape-"));
+    t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 3 }));
+    const root = await realpath(directory);
+    const locations = locationsFor("project", root);
+    const pluginRoot = path.join(root, "plugin");
+    const hooksRoot = path.join(pluginRoot, "hooks");
+    const externalRoot = path.join(root, "external");
+    const externalFile = path.join(externalRoot, "keep.txt");
+    const linkPath = path.join(hooksRoot, "escape");
+    const stagedPath = path.join(locations.hooksDir, "acme", "hooks.json");
+    await mkdir(hooksRoot, { recursive: true });
+    await mkdir(externalRoot);
+    await mkdir(path.dirname(stagedPath), { recursive: true });
+    await writeFile(externalFile, "external bytes\n");
+    await writeFile(stagedPath, '{"retained":true}\n');
+    await symlink(externalRoot, linkPath, process.platform === "win32" ? "junction" : "dir");
+    const expectedLinkTarget = await readlink(linkPath);
+
+    // act
+    const writeError: unknown = await writeHookConfig({
+      locations,
+      pluginName: "acme",
+      pluginRoot,
+      hooksValue: { replacement: true },
+    }).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+
+    // assert
+    assert.ok(writeError instanceof SymlinkRefusedError);
+    assert.deepStrictEqual(
+      {
+        name: writeError.name,
+        message: writeError.message,
+        parent: writeError.parent,
+        child: writeError.child,
+        linkPath: writeError.linkPath,
+        linkTarget: writeError.linkTarget,
+        cause: writeError.cause,
+      },
+      {
+        name: "SymlinkRefusedError",
+        message: `hooks subtree symlink ${linkPath} contains symlink ${linkPath} -> ${expectedLinkTarget} (parent: ${pluginRoot}, target: ${externalRoot}).`,
+        parent: pluginRoot,
+        child: externalRoot,
+        linkPath,
+        linkTarget: expectedLinkTarget,
+        cause: undefined,
+      },
+    );
+    assert.strictEqual(await readFile(stagedPath, "utf8"), '{"retained":true}\n');
+    assert.strictEqual(await readFile(externalFile, "utf8"), "external bytes\n");
+    assert.deepStrictEqual(await readdir(path.dirname(stagedPath)), ["hooks.json"]);
+    assert.deepStrictEqual(await readdir(externalRoot), ["keep.txt"]);
+    assert.strictEqual((await lstat(linkPath)).isSymbolicLink(), true);
+    assert.strictEqual(await readlink(linkPath), expectedLinkTarget);
   });
 });
