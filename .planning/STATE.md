@@ -27,28 +27,38 @@ See: `.planning/PROJECT.md` (updated 2026-09-14 after manifest verification)
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 02 — Uninstall data disposition and the uninstall option seam
-Record how each installed plugin got there so `uninstall --prune` can remove the
-ones nothing needs any more, and close the two adjacent gaps that land on the
-same surfaces. 25 requirements across 5 phases. v1.19 Unit Test Refactor closed
-2026-09-04 and is archived under `.planning/milestones/v1.19-*`.
+**Current focus:** Phase 3 — Dependency resolution
+Installing a plugin that declares dependencies should install what it needs.
+25 requirements across 5 phases. v1.19 Unit Test Refactor closed 2026-09-04 and
+is archived under `.planning/milestones/v1.19-*`.
 
 ## Current Position
 
 Phase: 3 — Dependency resolution
 Plan: Not started
 Status: Ready to plan
-the flag catalog declares it, the handler's consuming scanner forwards `keepData`
-to the operation plan 02-01 built, and `--delete-data`, `-y`, `--yes` and `--prune`
-reject before any mutation. DATA-01, DATA-02 and DATA-03 are marked Complete in
-REQUIREMENTS.md; FLAG-01 stays Pending for Phase 5's `--prune`.
-Phase 2's remaining gates (code review, Nyquist validation sign-off, security,
-prior-phase regressions, goal verification) are outstanding.
+Phase 2 is complete and verified. `uninstall --keep-data` preserves the data
+directory; omitting it deletes without a prompt at both the explicit command
+and the load-time reconcile path (D-02-04, reaffirmed after a code-review
+challenge during Phase 2 — reconcile has no command line, so it stays on the
+promptless-delete default by design). The flag catalog declares
+`--keep-data`, the handler's consuming scanner forwards `keepData` to the
+operation plan 02-01 built, and `--delete-data`, `-y`, `--yes` and `--prune`
+reject before any mutation. DATA-01, DATA-02 and DATA-03 are marked Complete
+in REQUIREMENTS.md; FLAG-01 stays Pending for Phase 5's `--prune`.
+All of Phase 2's gates are closed: code review found 13 issues (1 critical
+— the reaffirmed D-02-04 tradeoff — 7 warning, 5 info), 9 were fixed, 1
+(WR-07) was fixed then reverted per operator decision, 3 (CR-01, WR-04,
+WR-05) were explicitly scoped out; Nyquist validation passed with 0 gaps;
+security audit passed with `threats_open: 0` across 6 STRIDE threats;
+regression covered by two full `npm run check` runs (0 failures); goal
+verification passed 10/10 must-haves. See `02-REVIEW.md`, `02-REVIEW-FIX.md`,
+`02-VALIDATION.md`, `02-SECURITY.md`, and `02-VERIFICATION.md`.
 Phase 1 verified: 7/7 requirements, 37/37 decisions, 5/5 acceptance criteria.
-Last activity: 2026-09-14 — Phase 02 complete, transitioned to Phase 3
+Last activity: 2026-09-14 — Phase 02 complete (all gates), transitioned to Phase 3
 Quick task `260914-aer` resolved WR-01 under D-01-35. The operator approved the
-whitespace-only `.mcp.json` formatting. GSD configuration remains uncommitted.
-Milestone progress is 1 of 5 phases complete (20%).
+whitespace-only `.mcp.json` formatting.
+Milestone progress is 2 of 5 phases complete (40%).
 See `01-VERIFICATION.md` for passing automated and real-plugin evidence.
 Phase 2 context records the user preference to follow existing output and help conventions.
 
@@ -435,6 +445,8 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 02]: uninstall keepData is forwarded only when --keep-data is present, so the operation's own default stays the single statement of the promptless deletion policy.
 - [Phase 02]: The uninstall handler joins install/update as a catalog-consuming verb via passThroughFlagNames, so one catalog entry drives usage, completions, the parse set and the drift pin.
 - [Phase 02]: The uninstall handler owner's whole-footprint observation carries both scopes' data bytes, so rejection cases prove no silent deletion rather than only a surviving record.
+- [Phase 02 code review]: D-02-04 reaffirmed — reconcile stays on the promptless-delete default with no `keepData` opt-out despite a code-review critical finding (CR-01); the operator confirmed this is DATA-03 working as specified, not a gap. See `PROJECT.md` Key Decisions for the full rationale.
+- [Phase 02 code review]: WR-07 (route a symlink-containment refusal through the cleanup swallow-catch instead of letting it propagate) was applied then reverted (commit `eeeb80eb`) per operator decision — the original NFR-10 propagating behavior stands. DATA-01..03 are marked Complete in REQUIREMENTS.md via plan 02-02.
 
 ### Pending Todos
 
@@ -461,8 +473,9 @@ session that must settle it:
   defaults-enabled, milestone and workflows-detection under `.planning/milestones/`.
   All 32 tracked files retain their original bytes. GSD recognizes v1.20 in flat
   mode. The archive operation did not waive historical verification debt.
-- Phase 1 still lacks its canonical verification report. ROADMAP criterion 3
-  still requires human judgment about real-plugin evidence versus fixture evidence.
+- RESOLVED: Phase 1's canonical verification report (`01-VERIFICATION.md`) exists
+  and passed — this note was stale (the report was already on disk when it was
+  written). Phase 2 also closed clean: `02-VERIFICATION.md` passed 10/10.
 - RESOLVED by 117-12: D-117-20 in `117-CONTEXT.md` now reads 190 complete numeric records + 7 accepted D-116-01a shortfalls + 7 type-only, matching the operator decision taken in plan 117-11 and the retained all-pair artifact. The superseded 197 + 7 wording is gone.
 
 ### Quick Tasks Completed
@@ -520,17 +533,21 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Phase 02 complete, ready to plan Phase 3
+**Stopped at:** Phase 2 complete (all gates passed), ready to plan Phase 3
 
 **Resume file:** None
 
-**Read beside it:** `.planning/phases/02-uninstall-data-disposition-and-the-uninstall-option-seam/02-01-SUMMARY.md`
+**Read beside it:** `.planning/phases/02-uninstall-data-disposition-and-the-uninstall-option-seam/02-VERIFICATION.md`
 
-Last session: 2026-09-14T18:00:51.838Z
+Last session: 2026-09-14 (this session, resumed from the mid-plan pause,
+closed out plan 02-01 task 3, executed plan 02-02, ran the full code-review
+fix cycle, then Nyquist and security gates, then verification and transition)
 
-**Next:** Execute plan 02-02 (flag catalog, uninstall handler, usage, completions
-and `docs/output-catalog.md`), then run the Phase 2 gates: code review, Nyquist
-validation, security, prior-phase regressions and goal verification.
+**Next:** Discuss Phase 3 (Dependency resolution — RESV-01..06) via
+`/gsd-discuss-phase 3`. No CONTEXT.md exists yet for Phase 3. Two of the four
+pending todos under Accumulated Context are bound to this discussion
+(version-constraint grammar RESV-03, and where a dependency-installed plugin
+stands relative to `claude-plugins.json`).
 Milestone v1.19 already closed.
 
 ### Historical v1.19 completion record
@@ -608,8 +625,12 @@ The workstream archive removed the old routing blocker.
 
 ## Operator Next Steps
 
-- Resume plan 02-01 task 3 from the pause handoff; tasks 1 and 2 are committed.
-- Phase 1 verification passed, including both pinned real-plugin installations.
+- Discuss Phase 3 (Dependency resolution, RESV-01..06) via `/gsd-discuss-phase 3`
+  — no CONTEXT.md exists yet. Two pending todos are bound to this discussion:
+  the version-constraint grammar (RESV-03) and where a dependency-installed
+  plugin stands relative to `claude-plugins.json`.
+- Phase 1 and Phase 2 verification both passed. Phase 2's full gate set (code
+  review, Nyquist, security, regression, goal verification) is closed.
 - Plan v1.20 phases with the UI gate skipped. No phase in this milestone is a
   frontend phase, but the keyword gate false-positives on "component", the flag
   "surface", and the `ui5` / `ui-theme-designer` plugin names.
