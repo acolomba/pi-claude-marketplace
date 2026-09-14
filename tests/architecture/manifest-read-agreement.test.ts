@@ -147,12 +147,18 @@ for (const { label, prepare } of [
     },
   },
 ]) {
-  test(`all three readers stop at ${label} instead of using the valid bare manifest`, async () => {
+  test(`all three readers stop at ${label} instead of using the bare sibling`, async () => {
     await withHermeticHome(async ({ home, cwd }) => {
       // arrange
       const marketplaceRoot = await seedScopedMarketplace(home, cwd);
       const previousResolution = await resolveStrict(ENTRY, { marketplaceRoot });
       requireInstallable(previousResolution);
+      // A wrong dependency fallback must change info's result before the
+      // resolver's unavailable row can suppress the selected dependencies.
+      await writeFile(
+        path.join(marketplaceRoot, "alpha", "plugin.json"),
+        '{"name":"alpha","version":"9.9.9","dependencies":[42]}',
+      );
       await prepare(path.join(marketplaceRoot, "alpha"));
       const { ctx, pi, notifications } = makeCtx();
 

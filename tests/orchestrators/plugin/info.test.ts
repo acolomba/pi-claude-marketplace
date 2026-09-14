@@ -7551,22 +7551,21 @@ test("D-01-07: an unparseable first candidate ends the walk; the bare sibling ne
   const message = await renderOwnManifestCase({
     entryDependencies: ["from-entry@mp"],
     wrapped: "{ not json",
-    bare: JSON.stringify({ name: "host", dependencies: ["bare-dep@mp"] }),
+    bare: JSON.stringify({ name: "host", dependencies: [42] }),
   });
 
-  // assert -- the present-but-unusable wrapped file decides the outcome for
-  // EVERY reader, so the row is `(unavailable)` and carries no dependency line
-  // at all. What this pins is that the bare sibling contributed nothing: had
-  // any reader fallen through to it, its list would be on the row.
-  assert.match(message, /\(unavailable\)/, message);
-  assert.doesNotMatch(message, /bare-dep@mp/, message);
+  // assert
+  assert.equal(
+    message,
+    "● mp [user] <no autoupdate>\n  ⊘ host v1.0.0 (unavailable) {unsupported source}",
+  );
 });
 
-test("a non-object own manifest cannot be rescued by a valid bare sibling", async () => {
+test("a non-object own manifest stops before the bare sibling", async () => {
   // arrange / act
   const message = await renderOwnManifestCase({
     wrapped: "[]",
-    bare: '{"dependencies":["fallback"]}',
+    bare: '{"dependencies":[42]}',
   });
 
   // assert
