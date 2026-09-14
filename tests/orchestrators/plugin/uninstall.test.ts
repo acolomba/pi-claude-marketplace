@@ -1,5 +1,15 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm, stat, symlink, unlink, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  stat,
+  symlink,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
 import { createRequire, syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -363,6 +373,89 @@ test("PU-1: cascade order observable end-state -- all four bridges' resources re
     }
   });
 });
+
+for (const keepData of [true, false, undefined]) {
+  test(`uninstall preserves nested data only when keepData is true (${String(keepData)})`, async () => {
+    // arrange
+    await withHermeticHome(async () => {
+      const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-data-policy-"));
+      try {
+        const locations = locationsFor("project", cwd);
+        const seeded = await seedFullPlugin(locations, "mp", "hello", cwd);
+        const dataDir = await locations.pluginDataDir("mp", "hello");
+        await mkdir(path.join(dataDir, "nested"), { recursive: true });
+        await writeFile(path.join(dataDir, "nested", "session.bin"), Buffer.from([0, 7, 255, 10]));
+        await writeFile(locations.configJsonPath, '{"plugins":{"hello@mp":{}}}\n');
+        const { ctx, pi, notifications } = makeCtx();
+
+        // act
+        const outcome = await uninstallWithFreshOwner({
+          ctx,
+          pi,
+          scope: "project",
+          cwd,
+          marketplace: "mp",
+          plugin: "hello",
+          ...(keepData !== undefined && { keepData }),
+        });
+
+        // assert
+        assert.strictEqual(outcome, undefined);
+        assert.deepStrictEqual(await loadState(locations.extensionRoot), {
+          schemaVersion: 2,
+          marketplaces: {
+            mp: {
+              name: "mp",
+              scope: "project",
+              source: { kind: "path", logical: "./src", raw: "./src" },
+              addedFromCwd: cwd,
+              manifestPath: path.join(cwd, "marketplace.json"),
+              marketplaceRoot: cwd,
+              plugins: {},
+            },
+          },
+        });
+        assert.strictEqual(
+          await readFile(locations.configJsonPath, "utf8"),
+          '{\n  "plugins": {},\n  "schemaVersion": 1\n}\n',
+        );
+        assert.deepStrictEqual(
+          await Promise.all(
+            [seeded.skillDir, seeded.commandFile, seeded.agentFile, seeded.hooksFile].map((file) =>
+              pathExists(file),
+            ),
+          ),
+          [false, false, false, false],
+        );
+        assert.deepStrictEqual(JSON.parse(await readFile(seeded.mcpJson, "utf8")), {
+          mcpServers: {},
+        });
+        assert.deepStrictEqual(await loadAgentsIndex(locations), {
+          schemaVersion: 1,
+          agents: [],
+          corruptions: [],
+        });
+        assert.strictEqual(await pathExists(dataDir), keepData === true);
+        if (keepData === true) {
+          assert.deepStrictEqual(await readdir(dataDir), ["nested"]);
+          assert.deepStrictEqual(await readdir(path.join(dataDir, "nested")), ["session.bin"]);
+          assert.deepStrictEqual(
+            await readFile(path.join(dataDir, "nested", "session.bin")),
+            Buffer.from([0, 7, 255, 10]),
+          );
+        }
+
+        assert.deepStrictEqual(notifications, [
+          {
+            message: "● mp [project]\n  ○ hello v0.0.1 (uninstalled)\n\n/reload to pick up changes",
+          },
+        ]);
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
 
 // PU-2 (state commit BEFORE data-dir cleanup; cleanup leaks SWALLOWED
 // per D-19-01 -- the rm() still runs; only the user-visible warning surface
@@ -1613,6 +1706,9 @@ test("RECON-03 uninstall orchestrated mode -- success returns { status: 'uninsta
     try {
       const locations = locationsFor("project", cwd);
       await seedFullPlugin(locations, "mp", "hello", cwd);
+      const dataDir = await locations.pluginDataDir("mp", "hello");
+      await mkdir(path.join(dataDir, "nested"), { recursive: true });
+      await writeFile(path.join(dataDir, "nested", "history"), "orchestrated history\n");
       const { ctx, pi, notifications } = makeCtx();
 
       const outcome = await uninstallWithFreshOwner({
@@ -1623,15 +1719,15 @@ test("RECON-03 uninstall orchestrated mode -- success returns { status: 'uninsta
         marketplace: "mp",
         plugin: "hello",
         notifications: { mode: "orchestrated" },
+        keepData: true,
       });
 
-      assert.equal(notifications.length, 0, "orchestrated mode must not fire notifications");
-      assert.ok(outcome);
-      assert.equal(outcome.status, "uninstalled");
-      if (outcome.status === "uninstalled") {
-        assert.equal(outcome.name, "hello");
-        assert.equal(outcome.version, "0.0.1");
-      }
+      assert.deepStrictEqual(outcome, { status: "uninstalled", name: "hello", version: "0.0.1" });
+      assert.strictEqual(
+        await readFile(path.join(dataDir, "nested", "history"), "utf8"),
+        "orchestrated history\n",
+      );
+      assert.deepStrictEqual(notifications, []);
 
       // State record removed via orchestrated path -- same cascade ran.
       const after = await loadState(locations.extensionRoot);

@@ -11,7 +11,7 @@
 //     await tx.save()  // WR-04: explicit save on mutating arms ONLY
 //   })
 //   if (alreadyGone) return  -- PU-5 silent success
-//   POST-state-commit: rm -rf pluginDataDir; leaks SWALLOWED per
+//   POST-state-commit: rm -rf pluginDataDir unless keepData; leaks SWALLOWED per
 //   D-19-01 -- the underlying rm() still runs, only the user-visible
 //   warning surface is gone.
 //   PU-8 reload hint: computed by notify() from PluginUninstalledMessage
@@ -137,6 +137,8 @@ export interface UninstallPluginOptions {
   readonly cwd: string;
   readonly marketplace: string;
   readonly plugin: string;
+  /** Preserves plugin data after uninstall; omission or false removes it. */
+  readonly keepData?: boolean;
   /**
    * D-12-style injection seam for the per-plugin cascade primitive. Defaults
    * to `cascadeUnstagePlugin` from `../marketplace/shared.ts`. Tests inject a
@@ -446,7 +448,7 @@ async function sweepPluginFromConfigLayers(
  * plugin index for this marketplace is dropped and the next completion read
  * rebuilds it with the new status.
  *
- * PU-2 / D-08: the per-plugin data dir is removed AFTER the state save, so an
+ * PU-2 / D-08: unless keepData is true, the data dir is removed AFTER the save, so an
  * EACCES on `rm` cannot strand state in installed=true. This is where the
  * PU-4 leaked-path warning would surface, and D-19-01 swallows it here.
  *
@@ -463,6 +465,7 @@ async function runPostUninstallCleanup(
   scope: Scope,
   marketplace: string,
   plugin: string,
+  keepData: boolean,
 ): Promise<void> {
   try {
     await completionCache.dropMarketplaceCache(
@@ -479,12 +482,14 @@ async function runPostUninstallCleanup(
   // and a containment failure must propagate rather than be mistaken for an
   // rm leak. D-19-01 sanctions swallowing the cleanup, not the assertion
   // guarding it.
-  const dataDir = await locations.pluginDataDir(marketplace, plugin);
+  if (!keepData) {
+    const dataDir = await locations.pluginDataDir(marketplace, plugin);
 
-  try {
-    await rm(dataDir, { recursive: true, force: true });
-  } catch {
-    // D-19-01: hygienic cleanup never becomes the primary user-facing path.
+    try {
+      await rm(dataDir, { recursive: true, force: true });
+    } catch {
+      // D-19-01: hygienic cleanup never becomes the primary user-facing path.
+    }
   }
 
   try {
@@ -785,7 +790,14 @@ async function uninstallPluginWithTransaction(
     });
   }
 
-  await transaction.runPostCommitCleanup(completionCache, locations, scope, marketplace, plugin);
+  await transaction.runPostCommitCleanup(
+    completionCache,
+    locations,
+    scope,
+    marketplace,
+    plugin,
+    opts.keepData ?? false,
+  );
 
   // PU-8 reload hint: computed by notify from the
   // PluginUninstalledMessage status (uninstalled is in the state-changing
