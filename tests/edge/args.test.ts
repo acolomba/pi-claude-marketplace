@@ -188,7 +188,7 @@ test("parseArgs rejects a trailing scope flag with the missing-value diagnostic"
   );
 });
 
-test("parseArgs rejects an empty quoted scope value with the missing-value diagnostic", () => {
+test("parseArgs rejects an empty quoted scope value with the invalid-value diagnostic", () => {
   // arrange
   const rawArgs = 'install --scope ""';
 
@@ -197,7 +197,7 @@ test("parseArgs rejects an empty quoted scope value with the missing-value diagn
     () => parseArgs(rawArgs),
     (error: unknown) => {
       assert.ok(error instanceof Error);
-      assert.strictEqual(error.message, '--scope requires a value: "user" or "project".');
+      assert.strictEqual(error.message, 'Invalid --scope value: "". Must be "user" or "project".');
       return true;
     },
   );
@@ -253,3 +253,34 @@ test("parseArgs keeps the last scope value when the pair is supplied twice", () 
   // assert
   assert.deepStrictEqual(parsedArgs, expectedArgs);
 });
+
+test("parseArgs separates unquoted whitespace and preserves quoted whitespace", () => {
+  // arrange
+  const args = "alpha\t'beta\tgamma'\n--scope\tproject";
+
+  // act
+  const parsed = parseArgs(args);
+
+  // assert
+  assert.deepStrictEqual(parsed, { positional: ["alpha", "beta\tgamma"], scope: "project" });
+});
+
+for (const rawArgs of ["\"\" alpha ''", "'' alpha \"\"", " \"\"  alpha  '' "]) {
+  test(`parseArgs preserves explicit empty arguments in ${JSON.stringify(rawArgs)}`, () => {
+    // act
+    const parsedArgs = parseArgs(rawArgs);
+
+    // assert
+    assert.deepStrictEqual(parsedArgs, { positional: ["", "alpha", ""] });
+  });
+}
+
+for (const rawArgs of ['--scope "" project', "--scope '' user"]) {
+  test(`parseArgs rejects the supplied empty scope in ${JSON.stringify(rawArgs)}`, () => {
+    // act & assert
+    assert.throws(() => parseArgs(rawArgs), {
+      name: "Error",
+      message: 'Invalid --scope value: "". Must be "user" or "project".',
+    });
+  });
+}

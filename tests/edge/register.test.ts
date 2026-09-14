@@ -53,7 +53,11 @@ import {
   registerClaudeMarketplaceTools,
   registerClaudePluginCommand,
 } from "../../extensions/pi-claude-marketplace/edge/register.ts";
-import { TOP_LEVEL_USAGE } from "../../extensions/pi-claude-marketplace/edge/router.ts";
+import {
+  MARKETPLACE_SUBCOMMANDS,
+  TOP_LEVEL_SUBCOMMANDS,
+  TOP_LEVEL_USAGE,
+} from "../../extensions/pi-claude-marketplace/edge/router.ts";
 import { makeLocationsResolver } from "../../extensions/pi-claude-marketplace/orchestrators/edge-deps.ts";
 import { createPluginUpdateOperations } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -1480,3 +1484,205 @@ describe("registerClaudeMarketplaceTools", () => {
     verify(pi);
   });
 });
+
+/** Complete public spellings with independently stated argument and error contracts. */
+const COMMAND_ARGUMENT_CASES = [
+  {
+    verb: "bootstrap",
+    operand: "",
+    usage: "bootstrap",
+    surplus: "bootstrap takes no arguments.",
+    unknown: "bootstrap takes no arguments.",
+  },
+  {
+    verb: "install",
+    operand: "alpha@official",
+    usage:
+      "install <plugin>@<marketplace> [--scope user|project] [--map-model] [--partial] [--local]",
+    surplus: "install requires exactly one <plugin>@<marketplace> argument.",
+  },
+  {
+    verb: "uninstall",
+    operand: "alpha@official",
+    usage: "uninstall <plugin>@<marketplace> [--scope user|project] [--local]",
+  },
+  {
+    verb: "update",
+    operand: "alpha@official",
+    usage:
+      "update [<plugin>@<marketplace> | @<marketplace>] [--scope user|project] [--map-model] [--partial] [--local]",
+  },
+  {
+    verb: "fetch",
+    operand: "alpha@official",
+    usage: "fetch [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]",
+  },
+  {
+    verb: "reinstall",
+    operand: "alpha@official",
+    usage: "reinstall [<plugin>@<marketplace> | @<marketplace>] [--scope user|project] [--local]",
+  },
+  {
+    verb: "list",
+    aliases: ["ls"],
+    operand: "official",
+    usage:
+      "list [<marketplace>] [--installed] [--available] [--unavailable] [--partial] [--remote] [--scope user|project]",
+    unknown: 'Unknown option: "--bogus".',
+  },
+  {
+    verb: "info",
+    operand: "alpha@official",
+    usage: "info <plugin>@<marketplace> [--fetch] [--scope user|project]",
+    surplus: "info requires exactly one <plugin>@<marketplace> argument.",
+  },
+  {
+    verb: "pending",
+    operand: "",
+    usage: "pending [--scope user|project]",
+    unknown: 'Unknown option: "--bogus".',
+  },
+  {
+    verb: "enable",
+    operand: "alpha@official",
+    usage: "enable <plugin>@<marketplace> [--scope user|project] [--local]",
+  },
+  {
+    verb: "disable",
+    operand: "alpha@official",
+    usage: "disable <plugin>@<marketplace> [--scope user|project] [--local]",
+  },
+  {
+    verb: "import",
+    operand: "",
+    usage: "import [--scope user|project]",
+    surplus: "import does not accept positional arguments.",
+    unknown: "import does not accept positional arguments.",
+  },
+  {
+    verb: "marketplace add",
+    operand: "./fixture-marketplace",
+    usage: "marketplace add <source> [--scope user|project] [--local]",
+  },
+  {
+    verb: "marketplace remove",
+    aliases: ["marketplace rm"],
+    operand: "official",
+    usage: "marketplace <remove|rm> <name> [--scope user|project] [--local]",
+  },
+  {
+    verb: "marketplace list",
+    aliases: ["marketplace ls"],
+    operand: "",
+    usage: "marketplace <list|ls> [--scope user|project] [--local]",
+  },
+  {
+    verb: "marketplace info",
+    operand: "official",
+    usage: "marketplace info <name> [--scope user|project] [--local]",
+  },
+  {
+    verb: "marketplace update",
+    operand: "official",
+    usage: "marketplace update [<name>] [--scope user|project] [--local]",
+  },
+  {
+    verb: "marketplace autoupdate",
+    operand: "official",
+    usage: "marketplace autoupdate [<name>] [--scope user|project] [--local]",
+  },
+  {
+    verb: "marketplace noautoupdate",
+    operand: "official",
+    usage: "marketplace noautoupdate [<name>] [--scope user|project] [--local]",
+  },
+];
+
+test("argument rejection cases cover every routed command and alias", () => {
+  // arrange
+  const exercised = COMMAND_ARGUMENT_CASES.flatMap(({ verb, aliases = [] }) => [verb, ...aliases]);
+  const routed = [
+    ...TOP_LEVEL_SUBCOMMANDS.filter((verb) => verb !== "marketplace"),
+    ...MARKETPLACE_SUBCOMMANDS.map((verb) => `marketplace ${verb}`),
+  ];
+
+  // act & assert
+  assert.deepStrictEqual(exercised.sort(), routed.sort());
+});
+
+for (const { verb, aliases = [], operand, usage, surplus, unknown } of COMMAND_ARGUMENT_CASES) {
+  for (const spelling of [verb, ...aliases]) {
+    for (const { kind, invalid, diagnostic } of [
+      {
+        kind: "unknown flag",
+        invalid: "--bogus",
+        diagnostic: unknown ?? 'Unknown flag: "--bogus".',
+      },
+      {
+        kind: "surplus positional",
+        invalid: "surplus",
+        diagnostic: surplus ?? "Too many arguments.",
+      },
+      {
+        kind: "empty double-quoted surplus",
+        invalid: '""',
+        diagnostic: surplus ?? "Too many arguments.",
+      },
+      {
+        kind: "empty single-quoted surplus",
+        invalid: "''",
+        diagnostic: surplus ?? "Too many arguments.",
+      },
+    ]) {
+      test(`registered ${spelling} rejects ${kind} before reading runtime context`, async (t) => {
+        // arrange
+        const { cwd } = await createHermeticScope(t, "reject-arguments");
+        const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+        const { registration, verifyRegistrar } = registerCommandUnderTest();
+
+        // act
+        await registration.handler(`${spelling} ${operand} ${invalid}`, ctx);
+
+        // assert
+        assert.deepStrictEqual(notifications, [
+          {
+            message: `${diagnostic}\n\nUsage: /claude:plugin ${usage}`,
+            severity: "error",
+          },
+        ]);
+        assert.deepStrictEqual(await retryTree(cwd), []);
+        verifyBoundary();
+        verifyRegistrar();
+      });
+    }
+  }
+}
+
+for (const { verb, aliases = [], operand, usage } of COMMAND_ARGUMENT_CASES.filter(
+  ({ verb }) => verb !== "bootstrap",
+)) {
+  for (const spelling of [verb, ...aliases]) {
+    for (const emptyValue of ['""', "''"]) {
+      test(`registered ${spelling} rejects the empty scope ${emptyValue} before a valid-looking token`, async (t) => {
+        // arrange
+        const { cwd } = await createHermeticScope(t, "reject-empty-scope");
+        const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+        const { registration, verifyRegistrar } = registerCommandUnderTest();
+
+        // act
+        await registration.handler(`${spelling} ${operand} --scope ${emptyValue} project`, ctx);
+
+        // assert
+        assert.deepStrictEqual(notifications, [
+          {
+            message: `Invalid --scope value: "". Must be "user" or "project".\n\nUsage: /claude:plugin ${usage}`,
+            severity: "error",
+          },
+        ]);
+        assert.deepStrictEqual(await retryTree(cwd), []);
+        verifyBoundary();
+        verifyRegistrar();
+      });
+    }
+  }
+}

@@ -72,6 +72,17 @@ export function parseCommandArgs<const Spec extends readonly PositionalSpec[]>(
     return undefined;
   }
 
+  const unknownFlag = parsed.positional.find((token) => token.startsWith("--"));
+  if (unknownFlag !== undefined) {
+    onError(`Unknown flag: "${unknownFlag}".`);
+    return undefined;
+  }
+
+  if (parsed.positional.length > schema.positional.length) {
+    onError("Too many arguments.");
+    return undefined;
+  }
+
   const out: Record<string, string | undefined> = {};
   for (const [i, entry] of schema.positional.entries()) {
     const value = parsed.positional[i];
@@ -83,7 +94,12 @@ export function parseCommandArgs<const Spec extends readonly PositionalSpec[]>(
       }
 
       out[entry.name] = value;
-    } else if (value !== undefined && value.trim() !== "") {
+    } else if (value !== undefined) {
+      if (value.trim() === "") {
+        onError("Argument must not be empty.");
+        return undefined;
+      }
+
       out[entry.name] = value;
     }
   }

@@ -866,3 +866,69 @@ test("TC-6 routes plugin references through the required completion cache", asyn
     { label: "cache-row@hub", value: "uninstall --scope user cache-row@hub " },
   ]);
 });
+
+for (const verb of [
+  "add",
+  "remove",
+  "rm",
+  "info",
+  "list",
+  "ls",
+  "update",
+  "autoupdate",
+  "noautoupdate",
+]) {
+  test(`offers local for marketplace ${verb} with its command-specific description`, async (t) => {
+    // arrange
+    const { resolver, completionCache } = await seedResolver(t, "marketplace-flag");
+    const readOnly = ["info", "list", "ls", "update"].includes(verb);
+    const description = readOnly
+      ? "Keep merged configuration reads; this command does not write configuration"
+      : "Write to claude-plugins.local.json (per-machine override), not the shared claude-plugins.json";
+
+    // act
+    const suggestions = await getArgumentCompletions(
+      `marketplace ${verb} --l`,
+      resolver,
+      completionCache,
+    );
+
+    // assert
+    assert.deepStrictEqual(suggestions, [
+      { label: "--local", value: `marketplace ${verb} --local `, description },
+    ]);
+  });
+}
+
+for (const verb of ["remove", "rm", "info", "update", "autoupdate", "noautoupdate"]) {
+  test(`marketplace ${verb} still completes names after local`, async (t) => {
+    // arrange
+    const { resolver, completionCache } = await seedResolver(t, "marketplace-local-name");
+
+    // act
+    const suggestions = await getArgumentCompletions(
+      `marketplace ${verb} --local `,
+      resolver,
+      completionCache,
+    );
+
+    // assert
+    assert.deepStrictEqual(suggestions, [
+      { label: "hub", value: `marketplace ${verb} --local hub ` },
+      { label: "lab", value: `marketplace ${verb} --local lab ` },
+    ]);
+  });
+}
+
+for (const prefix of ["bootstrap -", "bootstrap --scope "]) {
+  test(`does not offer unsupported scope completions for ${prefix}`, async (t) => {
+    // arrange
+    const { resolver, completionCache } = await seedResolver(t, "bootstrap-flags");
+
+    // act
+    const suggestions = await getArgumentCompletions(prefix, resolver, completionCache);
+
+    // assert
+    assert.deepStrictEqual(suggestions, []);
+  });
+}

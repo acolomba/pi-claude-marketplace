@@ -291,22 +291,25 @@ test("flips only the marketplace the name positional selects", async (t) => {
   verifyBoundary();
 });
 
-test("drops a surplus positional token and flips only the first name", async (t) => {
+test("rejects surplus input without writing either config layer", async (t) => {
   // arrange
   const workspace = await createHermeticWorkspace(t, "surplus-positional");
   await seedBothScopes(workspace);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
-    value: workspace.cwd,
-    reads: 1,
-  });
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
   const autoupdateHandler = makeAutoupdateHandler(pi, true);
 
   // act
   await autoupdateHandler("alpha beta", ctx);
 
   // assert
-  assert.deepStrictEqual(notifications, [{ message: "● alpha [project] <autoupdate>" }]);
-  assert.deepStrictEqual(await readConfigFootprint(workspace), PROJECT_BASE_ONLY);
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "Too many arguments.\n\nUsage: /claude:plugin marketplace autoupdate [<name>] [--scope user|project] [--local]",
+      severity: "error",
+    },
+  ]);
+  assert.deepStrictEqual(await readConfigFootprint(workspace), NOTHING_RECORDED);
   verifyBoundary();
 });
 

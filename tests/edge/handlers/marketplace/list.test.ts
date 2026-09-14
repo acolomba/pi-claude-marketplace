@@ -37,7 +37,7 @@
 // re-derives the list workflow's own outcome.
 
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import https from "node:https";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -51,7 +51,7 @@ import { mergeMarketplaceIntoState } from "../marketplace-seed.ts";
 import type { Scope } from "../../../../extensions/pi-claude-marketplace/shared/types.ts";
 
 /** Written out by hand; never read back off the module under test. */
-const USAGE = "Usage: /claude:plugin marketplace <list|ls> [--scope user|project]";
+const USAGE = "Usage: /claude:plugin marketplace <list|ls> [--scope user|project] [--local]";
 
 const PROJECT_ROW = "● alpha [project]";
 const USER_ROW = "● beta [user]";
@@ -157,21 +157,20 @@ for (const { args, label, surplus } of [
   { args: "official", label: "one-surplus", surplus: "one surplus positional token" },
   { args: "official extra", label: "two-surplus", surplus: "two surplus positional tokens" },
 ]) {
-  test(`drops ${surplus} and still lists every scope`, async (t) => {
+  test(`rejects ${surplus} before listing any scope`, async (t) => {
     // arrange
     const { cwd } = await createHermeticScope(t, label);
     await seedBothScopes(cwd);
-    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
-      value: cwd,
-      reads: 1,
-    });
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
     const marketplaceListHandler = makeMarketplaceListHandler(pi);
 
     // act
     await marketplaceListHandler(args, ctx);
 
     // assert
-    assert.deepStrictEqual(notifications, [{ message: BOTH_SCOPE_ROWS }]);
+    assert.deepStrictEqual(notifications, [
+      { message: `Too many arguments.\n\n${USAGE}`, severity: "error" },
+    ]);
     verifyBoundary();
   });
 }
@@ -235,6 +234,64 @@ test("reports an unrecognised scope value with the list usage block and never li
       message: `Invalid --scope value: "bogus". Must be "user" or "project".\n\n${USAGE}`,
       severity: "error",
     },
+  ]);
+  verifyBoundary();
+});
+
+for (const args of ["--scope project", "--local --scope project", "--scope project --local"]) {
+  test(`list ${args} keeps shared, local, and overridden entries with unchanged config bytes`, async (t) => {
+    // arrange
+    const { cwd } = await createHermeticScope(t, "merged-config");
+    await seedMarketplace(cwd, "project", "shared");
+    await seedMarketplace(cwd, "project", "local");
+    await seedMarketplace(cwd, "project", "overlap");
+    const locations = locationsFor("project", cwd);
+    const sharedBytes =
+      '{ "marketplaces": { "shared": { "source": "./shared", "autoupdate": true }, "overlap": { "source": "./overlap", "autoupdate": true } } }\n';
+    const localBytes =
+      '{ "marketplaces": { "local": { "source": "./local", "autoupdate": true }, "overlap": { "source": "./override", "autoupdate": false } } }\n';
+    await writeFile(locations.configJsonPath, sharedBytes);
+    await writeFile(locations.configLocalJsonPath, localBytes);
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+      value: cwd,
+      reads: 1,
+    });
+    const handler = makeMarketplaceListHandler(pi);
+
+    // act
+    await handler(args, ctx);
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● shared [project] <autoupdate>\n\n● local [project] <autoupdate>\n\n● overlap [project]\n\nMarketplace list: 3 successes",
+      },
+    ]);
+    assert.deepStrictEqual(
+      [
+        await readFile(locations.configJsonPath, "utf8"),
+        await readFile(locations.configLocalJsonPath, "utf8"),
+      ],
+      [sharedBytes, localBytes],
+    );
+    verifyBoundary();
+  });
+}
+
+test("list rejects unknown flags before reading state", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticScope(t, "unknown-flag");
+  await seedBothScopes(cwd);
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
+  const handler = makeMarketplaceListHandler(pi);
+
+  // act
+  await handler("--bogus", ctx);
+
+  // assert
+  assert.deepStrictEqual(notifications, [
+    { message: `Unknown flag: "--bogus".\n\n${USAGE}`, severity: "error" },
   ]);
   verifyBoundary();
 });

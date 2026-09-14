@@ -828,11 +828,8 @@ test("rejects an overwrite flag (--force) as an unknown flag rather than accepti
 });
 
 // ---------------------------------------------------------------------------
-// Flag rejection, STAGE TWO: the handler's own positional loop. The shared
-// scanner splits on whitespace and reads raw characters, while the tokenizer
-// behind it strips quotes, so each of these survives stage one as an ordinary
-// word and is reassembled into a long-flag-shaped token. The sentence is the
-// unknown-OPTION form, which stage one never emits.
+// Quoted long flags use the same tokenizer and rejection boundary as bare flags.
+// Each spelling must still reject before materializing files or writing config.
 // ---------------------------------------------------------------------------
 
 for (const { args, label, summary } of [
@@ -849,7 +846,7 @@ for (const { args, label, summary } of [
     summary: "wrapped in double quotes beside a scope flag",
   },
 ]) {
-  test(`reports a quoted long flag ${summary} as an unknown OPTION and re-materialises nothing (D-116-06)`, async (t) => {
+  test(`reports a quoted long flag ${summary} as an unknown flag and re-materialises nothing (D-116-06)`, async (t) => {
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
@@ -861,7 +858,7 @@ for (const { args, label, summary } of [
 
     // assert
     assert.deepStrictEqual(notifications, [
-      { message: `Unknown option: "--frobnicate".\n\n${REINSTALL_USAGE}`, severity: "error" },
+      { message: `Unknown flag: "--frobnicate".\n\n${REINSTALL_USAGE}`, severity: "error" },
     ]);
     assert.deepStrictEqual(await readFootprint(workspace), NOTHING_REINSTALLED);
     assert.strictEqual(workspace.transportCalls(), 0);
@@ -902,6 +899,30 @@ for (const { args, expectedSentence, label, summary } of [
     // assert
     assert.deepStrictEqual(notifications, [
       { message: `${expectedSentence}\n\n${REINSTALL_USAGE}`, severity: "error" },
+    ]);
+    assert.deepStrictEqual(await readFootprint(workspace), NOTHING_REINSTALLED);
+    assert.strictEqual(workspace.transportCalls(), 0);
+    verifyBoundary();
+  });
+}
+
+for (const args of ['""', "''", '--local ""', "'' --local"]) {
+  test(`rejects an empty supplied target without reinstalling any plugin: ${args}`, async (t) => {
+    // arrange
+    const workspace = await createHermeticWorkspace(t, "empty-target");
+    await seedBothScopes(workspace);
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
+    const reinstallHandler = makeReinstallHandler(pi);
+
+    // act
+    await reinstallHandler(args, ctx);
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: `Invalid <plugin>@<marketplace> ref: "".\n\n${REINSTALL_USAGE}`,
+        severity: "error",
+      },
     ]);
     assert.deepStrictEqual(await readFootprint(workspace), NOTHING_REINSTALLED);
     assert.strictEqual(workspace.transportCalls(), 0);

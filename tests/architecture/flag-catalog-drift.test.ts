@@ -44,6 +44,10 @@ import {
   completionFlagEntries,
   parseFlagNames,
 } from "../../extensions/pi-claude-marketplace/edge/flag-catalog.ts";
+import {
+  MARKETPLACE_SUBCOMMANDS,
+  TOP_LEVEL_SUBCOMMANDS,
+} from "../../extensions/pi-claude-marketplace/edge/router.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 
 import type { LocationsResolver } from "../../extensions/pi-claude-marketplace/edge/completions/data.ts";
@@ -74,6 +78,8 @@ const EMPTY_RESOLVER: LocationsResolver = {
 const COMPLETION_HEADS: { head: string; verb: CatalogVerb }[] = [
   ...CATALOG_VERBS.map((verb) => ({ head: verb, verb })),
   { head: "ls", verb: "list" },
+  { head: "marketplace ls", verb: "marketplace list" },
+  { head: "marketplace rm", verb: "marketplace remove" },
 ];
 
 function sorted(values: Iterable<string>): string[] {
@@ -122,20 +128,77 @@ const HANDLER_ACCEPTED_PARSE_SETS: Record<CatalogVerb, readonly string[]> = {
   pending: [],
   import: [],
   bootstrap: [],
+  "marketplace add": ["--local"],
+  "marketplace remove": ["--local"],
+  "marketplace info": ["--local"],
+  "marketplace list": ["--local"],
+  "marketplace update": ["--local"],
+  "marketplace autoupdate": ["--local"],
+  "marketplace noautoupdate": ["--local"],
 };
 
-test("catalog vs handlers: every verb's parse-set matches the ordered handler-accepted pin", () => {
-  assert.deepEqual(
-    sorted(Object.keys(HANDLER_ACCEPTED_PARSE_SETS)),
-    sorted(CATALOG_VERBS),
-    "HANDLER_ACCEPTED_PARSE_SETS must cover every catalog verb exactly.",
-  );
+function assertFlagSet(observed: Iterable<string>, expected: readonly string[]): void {
+  assert.deepStrictEqual(sorted(observed), expected);
+}
 
-  for (const verb of CATALOG_VERBS) {
-    assert.deepEqual(
-      sorted(parseFlagNames(verb)),
-      HANDLER_ACCEPTED_PARSE_SETS[verb],
-      `Parse-set drift for "${verb}": the catalog's parse bits no longer match what the handler accepts. Update the handler wiring and this pin in the same change.`,
+for (const verb of CATALOG_VERBS) {
+  test(`catalog parse flags for ${verb} match the independent handler contract`, () => {
+    // arrange
+    const expected = HANDLER_ACCEPTED_PARSE_SETS[verb];
+
+    // act
+    const accepted = parseFlagNames(verb);
+
+    // assert
+    assertFlagSet(accepted, expected);
+  });
+}
+
+test("catalog and alias completions cover the complete router inventory", () => {
+  // arrange
+  const routerHeads = [
+    ...TOP_LEVEL_SUBCOMMANDS.filter((verb) => verb !== "marketplace"),
+    ...MARKETPLACE_SUBCOMMANDS.map((verb) => `marketplace ${verb}`),
+  ];
+
+  // act
+  const catalogHeads = COMPLETION_HEADS.map(({ head }) => head);
+
+  // assert
+  assert.deepStrictEqual(sorted(catalogHeads), sorted(routerHeads));
+  assert.deepStrictEqual(sorted(Object.keys(HANDLER_ACCEPTED_PARSE_SETS)), sorted(CATALOG_VERBS));
+});
+
+for (const { observed, label } of [
+  { observed: [], label: "missing --local" },
+  { observed: ["--bogus", "--local"], label: "unexpected --bogus" },
+]) {
+  test(`flag drift comparison rejects a planted ${label}`, () => {
+    // arrange
+    const expected = ["--local"];
+
+    // act & assert
+    assert.throws(
+      () => {
+        assertFlagSet(observed, expected);
+      },
+      (error: unknown) => {
+        assert.ok(error instanceof assert.AssertionError);
+        assert.deepStrictEqual(error.actual, observed);
+        assert.deepStrictEqual(error.expected, ["--local"]);
+        assert.strictEqual(error.code, "ERR_ASSERTION");
+        return true;
+      },
     );
-  }
+  });
+}
+
+test("flag drift comparison accepts the benign complete set", () => {
+  // arrange
+  const observed = new Set(["--local"]);
+
+  // act & assert
+  assert.doesNotThrow(() => {
+    assertFlagSet(observed, ["--local"]);
+  });
 });

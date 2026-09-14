@@ -275,10 +275,7 @@ function createAddDeps(gitOps: GitOps) {
   return { completionCache: createCompletionCache(), gitOps };
 }
 
-for (const { args, arity } of [
-  { args: URL_SOURCE, arity: "at the accepted arity" },
-  { args: `${URL_SOURCE} extra`, arity: "with a surplus positional token dropped" },
-]) {
+for (const { args, arity } of [{ args: URL_SOURCE, arity: "at the accepted arity" }]) {
   test(`clones through the injected port into the user scope when no scope flag narrows the command ${arity}`, async (t) => {
     // arrange
     const { cwd, sourceTree, networkCallCount } = await createHermeticScope(t, "default-scope");
@@ -481,6 +478,26 @@ test("shows an unrecognised scope value verbatim against the add usage block and
       message: `Invalid --scope value: "bogus". Must be "user" or "project".\n\n${USAGE}`,
       severity: "error",
     },
+  ]);
+  assert.deepStrictEqual(await readAddFootprint(cwd), NOTHING_WRITTEN);
+  assert.deepStrictEqual(git.state.calls.clone, []);
+  assert.strictEqual(networkCallCount(), 0);
+  verifyBoundary();
+});
+
+test("rejects surplus input before cloning or writing config", async (t) => {
+  // arrange
+  const { cwd, sourceTree, networkCallCount } = await createHermeticScope(t, "surplus");
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
+  const git = createGitPort(sourceTree);
+  const handler = makeAddHandler(pi, createAddDeps(git.gitOps));
+
+  // act
+  await handler(`${URL_SOURCE} surplus`, ctx);
+
+  // assert
+  assert.deepStrictEqual(notifications, [
+    { message: `Too many arguments.\n\n${USAGE}`, severity: "error" },
   ]);
   assert.deepStrictEqual(await readAddFootprint(cwd), NOTHING_WRITTEN);
   assert.deepStrictEqual(git.state.calls.clone, []);

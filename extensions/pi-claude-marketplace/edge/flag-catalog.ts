@@ -22,7 +22,7 @@
 // SCOPE: this catalog models ONLY the per-verb EXTRA flags. `--scope` is a
 // global base flag consumed by the parseArgs tokenizer and hard-coded as the
 // base entry in flagCompletions; it is deliberately EXCLUDED here (and from both
-// sides of the drift guard) because it never varies per verb.
+// sides of the drift guard). Bootstrap rejects it explicitly.
 //
 // Each entry carries two orthogonal visibility bits:
 //   - parse:    the handler accepts the flag during argv parsing.
@@ -59,7 +59,14 @@ export type CatalogVerb =
   | "disable"
   | "pending"
   | "import"
-  | "bootstrap";
+  | "bootstrap"
+  | "marketplace add"
+  | "marketplace remove"
+  | "marketplace info"
+  | "marketplace list"
+  | "marketplace update"
+  | "marketplace autoupdate"
+  | "marketplace noautoupdate";
 
 // The write-target flag, shared by install/update/uninstall/reinstall/enable/
 // disable. It selects the PHYSICAL config file within a scope
@@ -74,6 +81,13 @@ const WRITE_TARGET_FLAG_ENTRY: FlagEntry = {
   name: "--local",
   description:
     "Write to claude-plugins.local.json (per-machine override), not the shared claude-plugins.json",
+  parse: true,
+  complete: true,
+};
+
+const MERGED_READ_FLAG_ENTRY: FlagEntry = {
+  name: "--local",
+  description: "Keep merged configuration reads; this command does not write configuration",
   parse: true,
   complete: true,
 };
@@ -148,6 +162,13 @@ const CATALOG: Record<CatalogVerb, readonly FlagEntry[]> = {
   pending: [],
   import: [],
   bootstrap: [],
+  "marketplace add": [WRITE_TARGET_FLAG_ENTRY],
+  "marketplace remove": [WRITE_TARGET_FLAG_ENTRY],
+  "marketplace info": [MERGED_READ_FLAG_ENTRY],
+  "marketplace list": [MERGED_READ_FLAG_ENTRY],
+  "marketplace update": [MERGED_READ_FLAG_ENTRY],
+  "marketplace autoupdate": [WRITE_TARGET_FLAG_ENTRY],
+  "marketplace noautoupdate": [WRITE_TARGET_FLAG_ENTRY],
 };
 
 /** Every catalog verb, derived from the CATALOG keys (no hand-copied list). */

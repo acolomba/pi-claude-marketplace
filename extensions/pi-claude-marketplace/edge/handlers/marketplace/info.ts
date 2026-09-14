@@ -13,7 +13,7 @@ import { makeSingleNameMarketplaceHandler } from "./shared.ts";
 
 import type { ExtensionAPI, ExtensionCommandContext } from "../../../platform/pi-api.ts";
 
-const USAGE = "Usage: /claude:plugin marketplace info <name> [--scope user|project]";
+const USAGE = "Usage: /claude:plugin marketplace info <name> [--scope user|project] [--local]";
 
 export function makeMarketplaceInfoHandler(
   pi: ExtensionAPI,

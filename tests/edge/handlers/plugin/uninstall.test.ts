@@ -331,22 +331,21 @@ test("reports a missing plugin reference and removes nothing (D-116-06)", async 
   verifyBoundary();
 });
 
-test("drops a surplus positional token and removes the plugin the first token names", async (t) => {
+test("rejects a surplus positional token and leaves both records intact", async (t) => {
   // arrange
   const workspace = await createHermeticWorkspace(t, "surplus-positional");
   await seedBothScopes(workspace);
-  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
-    value: workspace.cwd,
-    reads: 1,
-  });
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
   const uninstallHandler = makeHandlerUnderTest(pi);
 
   // act
   await uninstallHandler("demo@alpha surplus", ctx);
 
   // assert
-  assert.deepStrictEqual(notifications, [PROJECT_UNINSTALLED]);
-  assert.deepStrictEqual(await readObservedEffects(workspace), PROJECT_RECORD_REMOVED);
+  assert.deepStrictEqual(notifications, [
+    { message: `Too many arguments.\n\n${USAGE_BLOCK}`, severity: "error" },
+  ]);
+  assert.deepStrictEqual(await readObservedEffects(workspace), BOTH_RECORDS_INTACT);
   verifyBoundary();
 });
 

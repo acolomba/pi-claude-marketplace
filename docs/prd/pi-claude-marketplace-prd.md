@@ -18,8 +18,8 @@ ______________________________________________________________________
     - [5.1 Marketplace Lifecycle](#51-marketplace-lifecycle)
       - [5.1.1 `marketplace add <source> [--scope user|project]`](#511-marketplace-add-source---scope-userproject)
       - [5.1.2 `marketplace remove <name> [--scope user|project]` (alias `rm`)](#512-marketplace-remove-name---scope-userproject-alias-rm)
-      - [5.1.3 `marketplace list [--scope user|project]`](#513-marketplace-list---scope-userproject)
-      - [5.1.4 `marketplace update [<name>] [--scope user|project]`](#514-marketplace-update-name---scope-userproject)
+      - [5.1.3 `marketplace list [--scope user|project] [--local]`](#513-marketplace-list---scope-userproject---local)
+      - [5.1.4 `marketplace update [<name>] [--scope user|project] [--local]`](#514-marketplace-update-name---scope-userproject---local)
       - [5.1.5 `marketplace autoupdate [<name>]` and `marketplace noautoupdate [<name>]`](#515-marketplace-autoupdate-name-and-marketplace-noautoupdate-name)
     - [5.2 Plugin Lifecycle](#52-plugin-lifecycle)
       - [5.2.1 `install <plugin>@<marketplace> [--scope user|project] [--map-model]`](#521-install-pluginmarketplace---scope-userproject---map-model)
@@ -201,7 +201,9 @@ ______________________________________________________________________
 | **MR-7** | GitHub clone dirs MUST be retained when any plugin cleanup failed.                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | **MR-8** | Successful removal MUST emit a reload hint (verb: `drop`) listing the dropped plugins, but ONLY when at least one plugin's resources were actually removed. A removal that found no installed plugins (or whose plugins all failed cleanup) MUST NOT emit a hint.                                                                                                                                                                                                                                           |
 
-#### 5.1.3 `marketplace list [--scope user|project]`
+#### 5.1.3 `marketplace list [--scope user|project] [--local]`
+
+Marketplace `info <name>`, `list`, and `update [<name>]` accept `--local` at any argument position. Their reads MUST combine both configuration files, with local entries overriding shared entries. `--scope` retains its existing selection rules. These commands MUST NOT write either configuration file. Marketplace `update` retains its cache refresh and plugin update behavior, including autoupdate decisions from the merged configuration. For commands that write configuration, `--local` selects `claude-plugins.local.json`.
 
 | ID       | Requirement                                                                                                                                     |
 | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -210,7 +212,7 @@ ______________________________________________________________________
 | **ML-3** | This view MUST NOT load each marketplace's manifest. (Plugin-level inspection lives at top-level `list`.)                                       |
 | **ML-4** | The empty case MUST emit `No marketplaces configured.`                                                                                          |
 
-#### 5.1.4 `marketplace update [<name>] [--scope user|project]`
+#### 5.1.4 `marketplace update [<name>] [--scope user|project] [--local]`
 
 | ID       | Requirement                                                                                                                                                                                                                                                                                               |
 | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -608,12 +610,14 @@ These rules clarify how marketplace records and plugin install records interact 
 
 ### 6.7 Argument Parsing
 
-| ID       | Requirement                                                                                                                 |
-| -------- | --------------------------------------------------------------------------------------------------------------------------- |
-| **AP-1** | Tokenization MUST honor single and double quotes for arguments containing spaces.                                           |
-| **AP-2** | `--scope` MUST require exactly `user` or `project` as its value; missing value or any other value MUST raise a clear error. |
-| **AP-3** | Subcommand routing MUST surface a `Usage:` block on empty/unknown input (top-level and `marketplace`-nested).               |
-| **AP-4** | `--scope` MUST be accepted at any position in the arg list; positionals are extracted in order.                             |
+| ID       | Requirement                                                                                                                                                                                                                                                 |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **AP-1** | Tokenization MUST honor single and double quotes for arguments containing spaces.                                                                                                                                                                           |
+| **AP-2** | `--scope` MUST require exactly `user` or `project` as its value; missing value or any other value MUST raise a clear error.                                                                                                                                 |
+| **AP-3** | Subcommand routing MUST surface a `Usage:` block on empty/unknown input (top-level and `marketplace`-nested).                                                                                                                                               |
+| **AP-4** | `--scope` MUST be accepted at any position in the arg list; positionals are extracted in order.                                                                                                                                                             |
+| **AP-5** | Every command MUST reject unknown long flags and surplus positional arguments before dispatch.                                                                                                                                                              |
+| **AP-6** | Flag extraction MUST preserve quoted positional text, including explicitly empty arguments, and retain a scope value even when that value spells `--local`. A supplied empty or whitespace-only optional argument MUST be rejected, not treated as omitted. |
 
 ### 6.8 Reload Hint & Soft-Dependency Probing
 
@@ -1101,8 +1105,9 @@ ______________________________________________________________________
 └── marketplace
     ├── add          <source>                      [--scope user|project]
     ├── remove (rm)  <name>                        [--scope user|project]
-    ├── list                                       [--scope user|project]
-    ├── update       [<name>]                      [--scope user|project]
+    ├── info         <name>                        [--scope user|project] [--local]
+    ├── list                                       [--scope user|project] [--local]
+    ├── update       [<name>]                      [--scope user|project] [--local]
     ├── autoupdate   [<name>]                      [--scope user|project]
     └── noautoupdate [<name>]                      [--scope user|project]
 ```

@@ -1,8 +1,8 @@
 // edge/handlers/marketplace/shared.ts
 //
 // Shared factory for the single-`<name>`-positional marketplace edge handlers
-// (`info` / `remove`). Both shims parse one required `name` positional + the
-// optional `--scope` flag, route an argument-parsing failure through
+// (`info`). The shim parses one required `name` positional and the
+// optional `--scope` / `--local` flags, routes an argument-parsing failure through
 // `notifyUsageError` (MSG-NC-2: the missing-required-positional path collapses
 // the duplicated usage block into "Missing required argument."), then delegate
 // to their orchestrator with `{ ctx, pi, name, cwd, scope? }`.
@@ -49,8 +49,13 @@ export function makeSingleNameMarketplaceHandler(
   run: SingleNameMarketplaceRun,
 ): (args: string, ctx: ExtensionCommandContext) => Promise<void> {
   return async (args, ctx): Promise<void> => {
+    const localFlag = extractLocalFlag(args, ctx, usage);
+    if (localFlag === undefined) {
+      return;
+    }
+
     const parsed = parseCommandArgs(
-      args,
+      localFlag.residualArgs,
       {
         positional: [{ name: "name" }] as const,
         usage,

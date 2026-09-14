@@ -36,13 +36,8 @@
 //
 // Arity: the positional schema declares ONE optional entry, so zero and one
 // positional are both accepted and there is no count below the accepted range.
-// `parseCommandArgs` walks the SCHEMA rather than the input, so a second
-// positional is never inspected and is silently dropped -- one above the range
-// is not a rejection here, and the row table states the drop.
-//
-// The only positional is optional, so `parseCommandArgs` can reach the failure
-// callback only with a tokenizer diagnostic. The rejection case pins that
-// diagnostic's exact pass-through and the handler-owned usage suffix.
+// Surplus positionals and unknown flags now reject before a refresh; the shared
+// schema validates the entire argument list.
 //
 // No exhaustiveness claim: the selection is an `if` over an optional value, not a
 // switch over a closed union, so a missing-arm plant has no target here. No case
@@ -52,7 +47,7 @@
 // update workflow's outcome.
 
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import https from "node:https";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -60,8 +55,15 @@ import { test, type TestContext } from "node:test";
 
 import { mock, verify, when } from "strong-mock";
 
+import {
+  createHooksRouting,
+  createHooksRuntime,
+  readHooksJson,
+} from "../../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { makeMarketplaceUpdateHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/marketplace/update.ts";
+import { createPluginUpdateOperations } from "../../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts";
 import { locationsFor } from "../../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { loadState } from "../../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { createGitOpsFake } from "../../../platform/git-ops-fake.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
@@ -78,7 +80,7 @@ type PluginUpdateOutcome = Awaited<ReturnType<PluginUpdate>>;
 type GitFetchCall = ReturnType<typeof createGitOpsFake>["state"]["calls"]["fetch"][number];
 
 /** Written out by hand; never read back off the module under test. */
-const USAGE = "Usage: /claude:plugin marketplace update [<name>] [--scope user|project]";
+const USAGE = "Usage: /claude:plugin marketplace update [<name>] [--scope user|project] [--local]";
 
 const PROJECT_ALPHA_ROW = "● alpha [project] (skipped) {up-to-date}";
 const PROJECT_BETA_ROW = "● beta [project] (skipped) {up-to-date}";
@@ -300,7 +302,6 @@ test("updates every recorded marketplace in both scopes when no name is supplied
 
 for (const { args, label, arity } of [
   { args: "alpha", label: "named", arity: "at the accepted arity" },
-  { args: "alpha extra", label: "surplus", arity: "with a surplus positional token dropped" },
 ]) {
   test(`updates the named marketplace alone and leaves its siblings untouched ${arity}`, async (t) => {
     // arrange
@@ -392,10 +393,10 @@ for (const { emissions, probes, rows, scope, touched } of [
   });
 }
 
-test("takes the scope-target flag as the marketplace name instead of rejecting it", async (t) => {
+test("accepts local without narrowing the selected scope refresh", async (t) => {
   // arrange
   const { cwd, networkCallCount } = await createHermeticScope(t, "scope-target");
-  await seedThreeMarketplaces(cwd);
+  const clones = await seedThreeMarketplaces(cwd);
   const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
     value: cwd,
     reads: 1,
@@ -413,13 +414,9 @@ test("takes the scope-target flag as the marketplace name instead of rejecting i
 
   // assert
   assert.deepStrictEqual(notifications, [
-    {
-      message:
-        "A marketplace operation has failed.\n\n⊘ --local [user] (failed) {marketplace not added}",
-      severity: "error",
-    },
+    { message: "● alpha [user] (skipped) {up-to-date}\n\nMarketplace update: 1 success" },
   ]);
-  assert.deepStrictEqual(git.state.calls.fetch, []);
+  assert.deepStrictEqual(git.state.calls.fetch, [fetchOf(clones.userAlpha)]);
   assert.strictEqual(networkCallCount(), 0);
   verifyBoundary();
   verify(pluginUpdate);
@@ -453,3 +450,123 @@ test("reports an unrecognised scope value with the update usage block and never 
   verifyBoundary();
   verify(pluginUpdate);
 });
+
+for (const { args, diagnostic } of [
+  { args: "alpha extra", diagnostic: "Too many arguments." },
+  { args: "alpha --bogus", diagnostic: 'Unknown flag: "--bogus".' },
+  { args: '""', diagnostic: "Argument must not be empty." },
+  { args: "'' --local", diagnostic: "Argument must not be empty." },
+  { args: '--local " "', diagnostic: "Argument must not be empty." },
+]) {
+  test(`rejects ${args} before refreshing or cascading`, async (t) => {
+    // arrange
+    const { cwd, networkCallCount } = await createHermeticScope(t, "invalid-arguments");
+    await seedThreeMarketplaces(cwd);
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
+    const git = createGitOpsFake({ boundary: "memory" });
+    const pluginUpdate = mock<PluginUpdate>({ exactParams: true, name: "plugin update" });
+    const handler = makeMarketplaceUpdateHandler(pi, {
+      completionCache: createCompletionCache(),
+      gitOps: git.gitOps,
+      pluginUpdate,
+    });
+
+    // act
+    await handler(args, ctx);
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      { message: `${diagnostic}\n\n${USAGE}`, severity: "error" },
+    ]);
+    assert.deepStrictEqual(git.state.calls.fetch, []);
+    assert.strictEqual(networkCallCount(), 0);
+    verifyBoundary();
+    verify(pluginUpdate);
+  });
+}
+
+for (const { args, tally } of [
+  { args: "alpha --scope project", tally: "" },
+  { args: "--local alpha --scope project", tally: "" },
+  { args: "--scope project", tally: "\n\nMarketplace update: 2 successes" },
+  { args: "--scope project --local", tally: "\n\nMarketplace update: 2 successes" },
+]) {
+  test(`update ${args} runs the real merged-config cascade without rewriting configuration`, async (t) => {
+    // arrange
+    const { cwd } = await createHermeticScope(t, "real-cascade");
+    const previousCwd = process.cwd();
+    t.after(() => {
+      process.chdir(previousCwd);
+    });
+    process.chdir(cwd);
+    t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-02-03T04:05:06.000Z") });
+    const cloneDir = await seedMarketplace({
+      cwd,
+      scope: "project",
+      name: "alpha",
+      cascades: ["hello"],
+    });
+    const pluginRoot = path.join(cloneDir, "plugins", "hello");
+    await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
+    await writeFile(
+      path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+      '{"name":"hello","version":"1.0.0"}',
+    );
+    await mkdir(path.join(pluginRoot, "skills", "greet"), { recursive: true });
+    await writeFile(
+      path.join(pluginRoot, "skills", "greet", "SKILL.md"),
+      "---\nname: greet\ndescription: Greeting skill.\n---\nSay hello.\n",
+    );
+    const locations = locationsFor("project", cwd);
+    const sharedBytes =
+      '{ "marketplaces": { "alpha": { "source": "./alpha-src", "autoupdate": false } }, "plugins": { "hello@alpha": { "enabled": true } } }\n';
+    const localBytes =
+      '{ "marketplaces": { "alpha": { "source": "./alpha-local", "autoupdate": true } }, "plugins": { "keep@alpha": { "enabled": false } } }\n';
+    await writeFile(locations.configJsonPath, sharedBytes);
+    await writeFile(locations.configLocalJsonPath, localBytes);
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+      value: cwd,
+      reads: 1,
+    });
+    const completionCache = createCompletionCache();
+    const operations = createPluginUpdateOperations(
+      createHooksRouting(createHooksRuntime(), { readHooksJson }),
+      completionCache,
+    );
+    const git = createGitOpsFake({ boundary: "memory" });
+    const handler = makeMarketplaceUpdateHandler(pi, {
+      completionCache,
+      gitOps: git.gitOps,
+      pluginUpdate: operations.pluginUpdate,
+    });
+
+    // act
+    await handler(args, ctx);
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: `● alpha [project] (updated)\n  ● hello v0.0.1 → v1.0.0 (updated)${tally}\n\n/reload to pick up changes`,
+      },
+    ]);
+    assert.deepStrictEqual(
+      (await loadState(locations.extensionRoot)).marketplaces.alpha?.plugins.hello?.resources,
+      {
+        skills: ["hello:greet"],
+        prompts: [],
+        agents: [],
+        mcpServers: [],
+        hooks: [],
+      },
+    );
+    assert.deepStrictEqual(
+      [
+        await readFile(locations.configJsonPath, "utf8"),
+        await readFile(locations.configLocalJsonPath, "utf8"),
+      ],
+      [sharedBytes, localBytes],
+    );
+    assert.deepStrictEqual(git.state.calls.fetch, [fetchOf(cloneDir)]);
+    verifyBoundary();
+  });
+}

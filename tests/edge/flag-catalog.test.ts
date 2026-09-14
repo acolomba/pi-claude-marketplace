@@ -60,6 +60,13 @@ const EXPECTED_CATALOG_VERBS: readonly string[] = [
   "pending",
   "import",
   "bootstrap",
+  "marketplace add",
+  "marketplace remove",
+  "marketplace info",
+  "marketplace list",
+  "marketplace update",
+  "marketplace autoupdate",
+  "marketplace noautoupdate",
 ];
 
 test("completionFlagEntries returns the completable entries in catalog declaration order", () => {
@@ -203,3 +210,23 @@ test("CATALOG_VERBS lists exactly the catalog's verbs, in declaration order", ()
   // assert
   assert.deepStrictEqual(catalogVerbs, expectedVerbs);
 });
+
+for (const verb of ["marketplace info", "marketplace list", "marketplace update"] as const) {
+  test(`${verb} describes local as retaining merged reads without configuration writes`, () => {
+    // arrange
+    const expectedEntries = [
+      {
+        name: "--local",
+        description: "Keep merged configuration reads; this command does not write configuration",
+      },
+    ];
+
+    // act
+    const entries = completionFlagEntries(verb);
+
+    // assert
+    assert.deepStrictEqual(entries, expectedEntries);
+    assert.deepStrictEqual(parseFlagNames(verb), new Set(["--local"]));
+    assert.deepStrictEqual(passThroughFlagNames(verb), []);
+  });
+}
