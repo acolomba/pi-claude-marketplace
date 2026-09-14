@@ -1,8 +1,13 @@
 // edge/handlers/plugin/uninstall.ts
 //
 // Thin-shim handler factory for
-// `/claude:plugin uninstall <plugin>@<marketplace> [--scope user|project]`.
-// Identical shim shape as install.ts; delegates to `uninstallPlugin`.
+// `/claude:plugin uninstall <plugin>@<marketplace> [--scope user|project]
+// [--keep-data] [--local]`.
+// Same thin-shim shape as install.ts -- parse, then one orchestrator call --
+// but a different scanner mode: install passes its pass-through flags as the
+// array form and re-scans them downstream, while uninstall uses the CONSUMING
+// form and reads the extra flags off `consumedFlags`. Delegates to
+// `uninstallPlugin`.
 
 import { createNodeUninstallPlugin } from "../../../orchestrators/plugin/uninstall.ts";
 import { passThroughFlagNames } from "../../flag-catalog.ts";
