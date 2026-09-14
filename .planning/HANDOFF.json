@@ -1,0 +1,134 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-09-14T16:58:16.673Z",
+  "phase": "05",
+  "phase_name": "Production Export Ownership",
+  "phase_dir": ".planning/phases/05-production-export-ownership",
+  "plan": 7,
+  "task": 1,
+  "total_tasks": 2,
+  "status": "paused",
+  "completed_tasks": [
+    {
+      "id": 1,
+      "name": "Phases 1\u20134 implementation, review and verification",
+      "status": "done",
+      "commit": "bcd2c045"
+    },
+    {
+      "id": 2,
+      "name": "Phase 5 waves 1\u20133, eleven plans accepted",
+      "status": "done",
+      "commit": "ce407cf6"
+    },
+    {
+      "id": 3,
+      "name": "Phase 5 wave 4, plans05 and11 with repaired assertion controls",
+      "status": "done",
+      "commit": "851c5e26"
+    }
+  ],
+  "remaining_tasks": [
+    {
+      "id": 4,
+      "name": "Phase 5 wave 5: prepared plans07,12,24; not applied",
+      "status": "not_started"
+    },
+    {
+      "id": 5,
+      "name": "Phase 5 waves6\u201311; plan15 partial temporary preparation only",
+      "status": "not_started"
+    },
+    {
+      "id": 6,
+      "name": "Phase 6 eight approved static member-gate plans",
+      "status": "not_started"
+    },
+    {
+      "id": 7,
+      "name": "Phase 7 eight approved coverage/CRAP plans",
+      "status": "not_started"
+    },
+    {
+      "id": 8,
+      "name": "Phase 8 final regression, reconciliation, review and milestone audit",
+      "status": "not_started"
+    }
+  ],
+  "blockers": [],
+  "async_jobs": [],
+  "human_actions_pending": [],
+  "decisions": [
+    {
+      "decision": "Support marketplace --local with merged reads and local config writes only",
+      "rationale": "Explicit user instruction; implemented",
+      "phase": "04"
+    },
+    {
+      "decision": "Match Claude full source agent names and migrate owned generated names",
+      "rationale": "Explicit user instruction; implemented",
+      "phase": "03"
+    },
+    {
+      "decision": "Preserve exact100 percent aggregate production unit coverage and assertion strength",
+      "rationale": "Explicit user baseline; no threshold/exclusion relaxation",
+      "phase": "all"
+    },
+    {
+      "decision": "Keep Astra model override and unrelated local config/setup edits uncommitted",
+      "rationale": "Explicit user request; resolver verified",
+      "phase": "all"
+    },
+    {
+      "decision": "Defer exact RingBuffer annotation until atomic production-mode activation",
+      "rationale": "Integrated gate proved it stale under current test-inclusive shipping mode",
+      "phase": "05"
+    }
+  ],
+  "blocking_constraints": [
+    {
+      "severity": "blocking",
+      "constraint": "Node26 sandbox can report false file-only test success; validate actual native counts with escalation"
+    },
+    {
+      "severity": "blocking",
+      "constraint": "Negative missing-export proof must fail under restored-export mutation and pass ESLint; final optional-property idiom qualified13times"
+    },
+    {
+      "severity": "blocking",
+      "constraint": "Keep RingBuffer member census until Plan28 switches production mode and adds its local annotation atomically"
+    },
+    {
+      "severity": "blocking",
+      "constraint": "Freeze tracked files during explicit pre-commit; preserve user config and STATE quick row"
+    }
+  ],
+  "background_processes": [],
+  "uncommitted_files": [
+    " M .claude/settings.json",
+    " M .codex/config.toml",
+    " M .planning/ROADMAP.md",
+    " M .planning/STATE.md",
+    " M .planning/config.json",
+    " M .planning/phases/05-production-export-ownership/05-05-PLAN.md",
+    " M .planning/phases/05-production-export-ownership/05-11-PLAN.md",
+    " M .planning/phases/05-production-export-ownership/05-28-PLAN.md",
+    " M .planning/state.json",
+    " M CONTRIBUTING.md",
+    "?? .claude/CLAUDE.md",
+    "?? .codegraph/",
+    "?? .mcp.json",
+    "?? .planning/HANDOFF.json",
+    "?? .planning/inputs/test-backlog/paused-preparation/",
+    "?? .planning/phases/05-production-export-ownership/.continue-here.md",
+    "?? .planning/phases/05-production-export-ownership/05-05-SUMMARY.md",
+    "?? .planning/phases/05-production-export-ownership/05-11-SUMMARY.md",
+    "?? .planning/phases/05-production-export-ownership/05-WAVE-4-REVIEW.md",
+    "?? .planning/phases/05-production-export-ownership/05-WAVE-4-VERIFICATION.md",
+    "?? .planning/quick/260914-dz1-make-bash-repository-initialization-repe/",
+    "?? AGENTS.md",
+    "?? scripts/init.sh"
+  ],
+  "next_action": "After user requests resume, confirm branch/dirty tree and read phase handoff; verify prepared wave5 baseline hashes, then execute07/12/24 with GSD and stable-wave gates.",
+  "context_notes": "User explicitly paused. Phase5 13/28accepted; 23/54milestoneplans, phases1\u20134complete. Final unit6242/6242, production225modules L62664/62664 F1835/1835 B9063/9063,58controls,fullprecommitpass. Fallow42remaining. No outstanding external jobs. Durable preparations under .planning/inputs/test-backlog/paused-preparation. This dirty-file inventory is measured before the pause documentation commit; listed pause artifacts become committed, while user edits remain."
+}

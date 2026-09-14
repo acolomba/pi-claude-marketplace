@@ -2,14 +2,14 @@
 gsd_state_version: "1.0"
 milestone: test-backlog
 milestone_name: test-backlog
-status: executing
-last_updated: "2026-09-14T16:38:53+00:00"
+status: paused
+last_updated: "2026-09-14T16:58:15+00:00"
 last_activity: 2026-09-14
 progress:
   total_phases: 8
   completed_phases: 4
   total_plans: 54
-  completed_plans: 21
+  completed_plans: 23
   percent: 50
 ---
 
@@ -22,14 +22,14 @@ See: `.planning/PROJECT.md` (updated 2026-09-13 after the refine-unit-tests mile
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Execute production export ownership Wave 4; static member and coverage metric plans are approved.
+**Current focus:** Execute production export ownership Wave 5; static member and coverage metric plans are approved.
 
 ## Current Position
 
 Phase: 5 of 8 — Production Export Ownership
-Plan: 05-05 and 05-11 — Wave 4 hook ownership
-Status: Executing
-Last activity: 2026-09-14 — Wave 3 committed in 6a463603; all gates pass with exact 100% aggregate coverage; Wave 4 prepared; Phase 6 and 7 plans approved
+Plan: 05-07, 05-12 and 05-24 — Wave 5 composition, persistence and payload ownership
+Status: Paused by user request
+Last activity: 2026-09-14 — Wave 4 committed in 851c5e26; all gates pass with exact 100% aggregate coverage; Wave 5 prepared; Phase 6 and 7 plans approved
 
 ### Historical refine-unit-tests closeout: `override_closeout`
 
@@ -106,7 +106,7 @@ hit the same wall; convert it rather than re-disclosing it.
 ## Session Continuity
 
 **Current work:** test-backlog on `features/test-backlog`. Phases 1–4 are complete;
-Phase 5 has completed eleven of twenty-eight plans. Phase 6 and Phase 7 plans are
+Phase 5 has completed thirteen of twenty-eight plans. Phase 6 and Phase 7 plans are
 approved; their production acceptance follows Phase 5 completion. Earlier milestone continuity is preserved in
 `inputs/test-backlog/PRE-MILESTONE-STATE.md` and archived milestone artifacts.
 
@@ -135,7 +135,7 @@ recur: `milestone complete` leaves the original-path deletions **unstaged**
 - Phase 2: complete, independently verified 4/4; all pre-commit checks passed.
 - Phase 3: complete in b663bc68; review clean and independent verification 18/18.
 - Phase 4: complete in a8ef0dac; review clean and independent verification 7/7.
-- Next: execute Phase 5 Wave 4; then complete the remaining approved export, member-gate and coverage work.
+- Next: execute Phase 5 Wave 5; then complete the remaining approved export, member-gate and coverage work.
 
 ### Live baseline correction
 
@@ -144,12 +144,16 @@ branch uncovered in agents/convert.ts. Phase 3 Plan 1 removed a redundant
 unreachable throw by carrying the existing runtime validation in the type.
 Phase 3/4 measurement: 6267/6267 tests pass; production lines 63374/63374,
 functions 1851/1851, branches 9145/9145. Integration: 32/32 passed.
-Current Wave 3 measurement: 6238/6238 unit tests pass; production lines
-62680/62680, functions 1835/1835 and branches 9065/9065 across 225 emitted modules.
-All 234 direct pairs pass with the two unchanged pins; 43 analyzer/census controls pass.
-The complete production finding census moves from 111 to 57 across the first three waves, with no additions. The obsolete converter direct pin was
+Current Wave 4 measurement: 6242/6242 unit tests pass; production 62,664/62,664 lines, 1,835/1,835 functions and 9,063/9,063 branches across 225 emitted modules.
+Affected direct pairs and all 58 analyzer/census/Sonar controls pass.
+The complete production finding census moves from 111 to 42 across four waves, with no additions. The obsolete converter direct pin was
 removed after its owner reached 100%; the two unrelated direct pins remain.
 
 GSD phase.complete still refuses this root milestone because archived
 workstream directories exist. Phase 1–4 tracking was updated in the authorized
 root files and checked by diff; archived workstreams were preserved.
+
+
+### Explicit pause
+
+User requested `$gsd-pause-work` after the verified Wave 4 source commit `851c5e26`. All task executors and checks are stopped. Resume from `.planning/HANDOFF.json` and `phases/05-production-export-ownership/.continue-here.md`; Wave 5 preparation is saved durably, with no implementation applied. Configuration/setup changes and the local quick-task row remain uncommitted.

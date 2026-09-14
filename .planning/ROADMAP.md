@@ -72,7 +72,7 @@ roadmap is preserved in [PRE-MILESTONE-ROADMAP.md](inputs/test-backlog/PRE-MILES
 **Success Criteria:**
 1. Each current production-mode finding has an evidence-backed disposition and public-contract tests.
 2. Fallow runs in production mode with offender and benign controls; no test-only exports or mechanical helper modules are introduced.
-**Plans:** 05-01 through 05-28 approved in eleven dependency waves; eleven plans complete through Wave 3; continue with Wave 4 hook ownership changes.
+**Plans:** 05-01 through 05-28 approved in eleven dependency waves; thirteen plans complete through Wave 4; continue with Wave 5 composition and persistence ownership.
 
 ### Phase 6: Unused Type Member Gate
 
@@ -112,7 +112,7 @@ roadmap is preserved in [PRE-MILESTONE-ROADMAP.md](inputs/test-backlog/PRE-MILES
 | 2. Sonar Rules for Tests | 1/1 | Complete | 2026-09-14 |
 | 3. Reachable Agent Collision Contract | 4/4 | Complete | 2026-09-14 |
 | 4. Strict Command Arguments | 3/3 | Complete | 2026-09-14 |
-| 5. Production Export Ownership | 11/28 | Executing wave 4 | - |
+| 5. Production Export Ownership | 13/28 | Executing wave 5 | - |
 | 6. Unused Type Member Gate | 0/8 | Plans approved | - |
 | 7. Reliable Coverage Metrics | 0/8 | Plans approved | - |
 | 8. Final Verification and Reconciliation | 0/TBD | Not started | - |
