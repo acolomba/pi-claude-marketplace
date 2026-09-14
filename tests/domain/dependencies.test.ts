@@ -18,6 +18,37 @@ void ({ version: "^1.0.0" } satisfies DeclaredDependency);
 // @ts-expect-error A declared dependency carries no fields beyond the four.
 void ({ name: "helper", source: "./helper" } satisfies DeclaredDependency);
 
+for (const { label, raw, reason } of [
+  {
+    label: "a non-array field",
+    raw: { helper: "^1.0.0" },
+    reason: "dependencies: expected an array",
+  },
+  { label: "a null field", raw: null, reason: "dependencies: expected an array" },
+  { label: "a bare tilde range", raw: ["foo@~1.0.0"], reason: "dependencies.0: Invalid input" },
+  {
+    label: "a missing name",
+    raw: [{ version: "^1.0.0" }],
+    reason: "dependencies.0: Invalid input",
+  },
+  {
+    label: "an invalid element after a valid sibling",
+    raw: ["keeper", 42],
+    reason: "dependencies.1: Invalid input",
+  },
+]) {
+  test(`rejects the entire declaration containing ${label}`, () => {
+    // arrange
+    const declaration = raw;
+
+    // act
+    const parsed = parseDeclaredDependencies(declaration);
+
+    // assert
+    assert.deepStrictEqual(parsed, { ok: false, reason });
+  });
+}
+
 test("an absent dependencies field parses to no entries", () => {
   // arrange
   const raw = undefined;
@@ -26,18 +57,7 @@ test("an absent dependencies field parses to no entries", () => {
   const parsed = parseDeclaredDependencies(raw);
 
   // assert
-  assert.deepStrictEqual(parsed, []);
-});
-
-test("a non-array dependencies field parses to no entries", () => {
-  // arrange
-  const raw = { helper: "^1.0.0" };
-
-  // act
-  const parsed = parseDeclaredDependencies(raw);
-
-  // assert
-  assert.deepStrictEqual(parsed, []);
+  assert.deepStrictEqual(parsed, { ok: true, dependencies: [] });
 });
 
 test("an empty dependencies array parses to no entries", () => {
@@ -48,7 +68,7 @@ test("an empty dependencies array parses to no entries", () => {
   const parsed = parseDeclaredDependencies(raw);
 
   // assert
-  assert.deepStrictEqual(parsed, []);
+  assert.deepStrictEqual(parsed, { ok: true, dependencies: [] });
 });
 
 test("a bare string carrying an address splits into a name and a marketplace", () => {
@@ -59,7 +79,10 @@ test("a bare string carrying an address splits into a name and a marketplace", (
   const parsed = parseDeclaredDependencies(raw);
 
   // assert
-  assert.deepStrictEqual(parsed, [{ name: "helper", marketplace: "utils-mp" }]);
+  assert.deepStrictEqual(parsed, {
+    ok: true,
+    dependencies: [{ name: "helper", marketplace: "utils-mp" }],
+  });
 });
 
 test("a bare string carrying no address yields a name with no marketplace", () => {
@@ -70,7 +93,7 @@ test("a bare string carrying no address yields a name with no marketplace", () =
   const parsed = parseDeclaredDependencies(raw);
 
   // assert
-  assert.deepStrictEqual(parsed, [{ name: "helper" }]);
+  assert.deepStrictEqual(parsed, { ok: true, dependencies: [{ name: "helper" }] });
 });
 
 test("a bare string carrying a trailing range keeps the range as a version", () => {
@@ -81,7 +104,7 @@ test("a bare string carrying a trailing range keeps the range as a version", () 
   const parsed = parseDeclaredDependencies(raw);
 
   // assert
-  assert.deepStrictEqual(parsed, [{ name: "foo", version: "^1.0.0" }]);
+  assert.deepStrictEqual(parsed, { ok: true, dependencies: [{ name: "foo", version: "^1.0.0" }] });
 });
 
 test("a bare string carrying both an address and a range splits into all three fields", () => {
@@ -92,7 +115,10 @@ test("a bare string carrying both an address and a range splits into all three f
   const parsed = parseDeclaredDependencies(raw);
 
   // assert
-  assert.deepStrictEqual(parsed, [{ name: "foo", marketplace: "mp", version: "^1.0.0" }]);
+  assert.deepStrictEqual(parsed, {
+    ok: true,
+    dependencies: [{ name: "foo", marketplace: "mp", version: "^1.0.0" }],
+  });
 });
 
 test("an object element yields its name, version and marketplace", () => {
@@ -103,7 +129,10 @@ test("an object element yields its name, version and marketplace", () => {
   const parsed = parseDeclaredDependencies(raw);
 
   // assert
-  assert.deepStrictEqual(parsed, [{ name: "a", version: "^2.0.0", marketplace: "mp" }]);
+  assert.deepStrictEqual(parsed, {
+    ok: true,
+    dependencies: [{ name: "a", version: "^2.0.0", marketplace: "mp" }],
+  });
 });
 
 test("an object element yields its sha unshortened", () => {
@@ -114,7 +143,10 @@ test("an object element yields its sha unshortened", () => {
   const parsed = parseDeclaredDependencies(raw);
 
   // assert
-  assert.deepStrictEqual(parsed, [{ name: "a", sha: "abc1234def5678abc1234def5678abc1234def56" }]);
+  assert.deepStrictEqual(parsed, {
+    ok: true,
+    dependencies: [{ name: "a", sha: "abc1234def5678abc1234def5678abc1234def56" }],
+  });
 });
 
 test("a mixed array yields one entry per usable element in declaration order", () => {
@@ -125,58 +157,14 @@ test("a mixed array yields one entry per usable element in declaration order", (
   const parsed = parseDeclaredDependencies(raw);
 
   // assert
-  assert.deepStrictEqual(parsed, [
-    { name: "zulu", marketplace: "mp" },
-    { name: "alpha", version: "^1.0.0" },
-    { name: "mike" },
-  ]);
-});
-
-test("an element with a missing, empty or non-string name is dropped without throwing", () => {
-  // arrange
-  const raw = [{ version: "^1.0.0" }, "", { name: "" }, { name: 7 }, null, 42, ["a"], "keeper"];
-
-  // act
-  const parsed = parseDeclaredDependencies(raw);
-
-  // assert
-  assert.deepStrictEqual(parsed, [{ name: "keeper" }]);
-});
-
-test("an element whose name or marketplace fails the allowlist is dropped", () => {
-  // arrange
-  const raw = [
-    "-leading-hyphen",
-    "sp ace",
-    { name: "line\nbreak" },
-    { name: "ok", marketplace: "bad mp" },
-    { name: "ok", marketplace: "\u001b[31mred" },
-    "keeper@mp",
-  ];
-
-  // act
-  const parsed = parseDeclaredDependencies(raw);
-
-  // assert
-  assert.deepStrictEqual(parsed, [{ name: "keeper", marketplace: "mp" }]);
-});
-
-test("an element whose present version or sha is unrenderable is dropped whole", () => {
-  // arrange
-  const raw = [
-    { name: "a", version: "^1.0.0\ninjected" },
-    { name: "b", version: 1 },
-    { name: "c", sha: "nothex!" },
-    { name: "d", sha: "abc12" },
-    { name: "e", sha: false },
-    { name: "keeper", version: ">=1.0.0 <2.0.0 || 3.x" },
-  ];
-
-  // act
-  const parsed = parseDeclaredDependencies(raw);
-
-  // assert
-  assert.deepStrictEqual(parsed, [{ name: "keeper", version: ">=1.0.0 <2.0.0 || 3.x" }]);
+  assert.deepStrictEqual(parsed, {
+    ok: true,
+    dependencies: [
+      { name: "zulu", marketplace: "mp" },
+      { name: "alpha", version: "^1.0.0" },
+      { name: "mike" },
+    ],
+  });
 });
 
 test("the parser preserves declaration order and neither sorts nor collapses duplicates", () => {
@@ -187,9 +175,92 @@ test("the parser preserves declaration order and neither sorts nor collapses dup
   const parsed = parseDeclaredDependencies(raw);
 
   // assert
-  assert.deepStrictEqual(parsed, [
-    { name: "zulu", marketplace: "mp" },
-    { name: "alpha", marketplace: "mp" },
-    { name: "zulu", marketplace: "mp", version: "^2.0.0" },
-  ]);
+  assert.deepStrictEqual(parsed, {
+    ok: true,
+    dependencies: [
+      { name: "zulu", marketplace: "mp" },
+      { name: "alpha", marketplace: "mp" },
+      { name: "zulu", marketplace: "mp", version: "^2.0.0" },
+    ],
+  });
 });
+
+for (const element of [
+  "",
+  { name: "" },
+  { name: 7 },
+  null,
+  42,
+  ["a"],
+  "-leading-hyphen",
+  "sp ace",
+  { name: "line\nbreak" },
+  { name: "ok", marketplace: "bad mp" },
+  { name: "ok", marketplace: "\u001b[31mred" },
+  { name: "a", version: "^1.0.0\ninjected" },
+  { name: "b", version: 1 },
+  { name: "c", sha: "nothex!" },
+  { name: "d", sha: "abc12" },
+  { name: "e", sha: false },
+]) {
+  test(`rejects an invalid element ${JSON.stringify(element)} without returning siblings`, () => {
+    // arrange
+    const declaration = ["keeper", element];
+
+    // act
+    const parsed = parseDeclaredDependencies(declaration);
+
+    // assert
+    assert.deepStrictEqual(parsed, { ok: false, reason: "dependencies.1: Invalid input" });
+  });
+}
+
+test("preserves compound object ranges", () => {
+  // arrange
+  const declaration = [{ name: "helper", version: ">=1.0.0 <2.0.0 || 3.x" }];
+
+  // act
+  const parsed = parseDeclaredDependencies(declaration);
+
+  // assert
+  assert.deepStrictEqual(parsed, {
+    ok: true,
+    dependencies: [{ name: "helper", version: ">=1.0.0 <2.0.0 || 3.x" }],
+  });
+});
+
+for (const { field, dependency } of [
+  { field: "name", dependency: { name: "a".repeat(256) } },
+  { field: "marketplace", dependency: { name: "helper", marketplace: "a".repeat(256) } },
+  { field: "version", dependency: { name: "helper", version: "a".repeat(64) } },
+  { field: "sha", dependency: { name: "helper", sha: "a".repeat(40) } },
+]) {
+  test(`accepts a ${field} at its length limit`, () => {
+    // arrange
+    const declaration = [dependency];
+
+    // act
+    const parsed = parseDeclaredDependencies(declaration);
+
+    // assert
+    assert.deepStrictEqual(parsed, { ok: true, dependencies: [dependency] });
+  });
+}
+
+for (const { field, dependency } of [
+  { field: "name", dependency: { name: "a".repeat(257) } },
+  { field: "marketplace", dependency: { name: "helper", marketplace: "a".repeat(257) } },
+  { field: "version", dependency: { name: "helper", version: "a".repeat(65) } },
+  { field: "sha", dependency: { name: "helper", sha: "a".repeat(41) } },
+]) {
+  test(`rejects a ${field} beyond its length limit`, () => {
+    // arrange
+    const declaration = [dependency];
+
+    // act
+    const parsed = parseDeclaredDependencies(declaration);
+
+    // assert
+    assert.deepStrictEqual(parsed, { ok: false, reason: "dependencies.0: Invalid input" });
+  });
+}

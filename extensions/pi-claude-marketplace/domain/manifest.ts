@@ -11,9 +11,11 @@ import { readFile } from "node:fs/promises";
 import Type from "typebox";
 import { Compile } from "typebox/compile";
 
+import { hookDebugLog } from "../shared/debug-log.ts";
 import { InvalidMarketplaceManifestError } from "../shared/errors.ts";
 
 import { PLUGIN_ENTRY_SCHEMA } from "./components/plugin.ts";
+import { parseDeclaredDependencies } from "./dependencies.ts";
 import { createManifestCache } from "./manifest-cache.ts";
 
 /**
@@ -39,12 +41,50 @@ export type MarketplaceManifest = Type.Static<typeof MARKETPLACE_SCHEMA>;
 /** JIT-compiled validator (D-07). Call its `Check` (or coercing `Parse`) method. */
 export const MARKETPLACE_VALIDATOR = Compile(MARKETPLACE_SCHEMA);
 
+/** Isolate invalid dependency declarations before validating the marketplace. */
+function normalizeDependencyEntries(raw: unknown): unknown {
+  if (
+    typeof raw !== "object" ||
+    raw === null ||
+    !("plugins" in raw) ||
+    !Array.isArray(raw.plugins)
+  ) {
+    return raw;
+  }
+
+  const plugins: unknown[] = [];
+  const entries: readonly unknown[] = raw.plugins;
+  let changed = false;
+  for (const [index, entry] of entries.entries()) {
+    if (
+      typeof entry !== "object" ||
+      entry === null ||
+      !("dependencies" in entry) ||
+      parseDeclaredDependencies(entry.dependencies).ok
+    ) {
+      plugins.push(entry);
+      continue;
+    }
+
+    changed = true;
+    hookDebugLog(
+      `Invalid dependencies in marketplace entry ${index}; isolating the entry.`,
+      "plugins",
+    );
+    if ("name" in entry && typeof entry.name === "string" && entry.name.length > 0) {
+      plugins.push({ name: entry.name, source: { source: "unsupported" }, strict: true });
+    }
+  }
+
+  return changed ? { ...raw, plugins } : raw;
+}
+
 /**
  * NFR-8 / D-14: the sole marketplace.json read+parse+validate. This is the ONLY
  * marketplace.json file read in the repo (CACHE-06) and the injected loader
- * behind the cache. It returns the RAW JSON.parse value (WR-01) -- it does NOT
- * route the result back through the validator's coercing parse, a schema clean,
- * or a deep clone -- so key order and extra fields survive (`update.ts`
+ * behind the cache. Valid entries retain the RAW JSON.parse value (WR-01),
+ * including key order and extra fields. Invalid dependency entries become
+ * unsupported stubs, or are dropped when unnamed, as in Claude Code (`update.ts`
  * JSON.stringifys it; `info.ts` reads `parsed.description`). Keep this focused on
  * path-based reads only: no cache state, invalidation, or caller-specific error
  * wrapping belongs here.
@@ -67,6 +107,7 @@ async function loadMarketplaceManifestUncached(manifestPath: string): Promise<Ma
     );
   }
 
+  parsed = normalizeDependencyEntries(parsed);
   if (!MARKETPLACE_VALIDATOR.Check(parsed)) {
     const validationErrors = MARKETPLACE_VALIDATOR.Errors(parsed);
     const detail = validationErrors

@@ -22,8 +22,8 @@
 // Every rendered field is matched against a positive allowlist before it
 // leaves here (D-01-25, D-01-33). All four render verbatim into a
 // line-oriented notification row, so admitting a newline or an escape would
-// let manifest text forge a row. An element failing any allowlist is dropped
-// whole -- never half-rendered with a constraint quietly removed (D-01-05).
+// let manifest text forge a row. An element failing any allowlist rejects the
+// declaration whole -- never half-rendered with a constraint quietly removed.
 
 /**
  * One usable element of a `dependencies` array.
@@ -40,19 +40,25 @@ export interface DeclaredDependency {
 }
 
 /**
- * Upstream's own dependency-token rule, verbatim (D-01-25). It admits no
+ * Upstream's dependency-token alphabet, bounded to 256 characters. It admits no
  * control, bidi, ANSI, whitespace or quote character, and no `@`, which is
  * what makes the bare-string split below unambiguous.
  */
-const TOKEN_PATTERN = /^[A-Za-z0-9][-A-Za-z0-9._]*$/;
+const TOKEN_PATTERN = /^[A-Za-z0-9][-A-Za-z0-9._]{0,255}$/;
+
+/** Checks a declared or caller-supplied name against the dependency token rule. */
+export function isRenderableDependencyToken(value: unknown): value is string {
+  return typeof value === "string" && TOKEN_PATTERN.test(value);
+}
 
 /**
- * Every semver range form upstream accepts -- `^1.0.0`, `~1.2`,
+ * Object-form version text, bounded to 64 characters, including `^1.0.0`, `~1.2`,
  * `>=1.0.0 <2.0.0`, `1.x`, `*`, `1.0.0-beta.1`, `1.0.0 || 2.0.0` (D-01-33).
  * The space and the pipe are admitted deliberately: rejecting them would
- * silently lose a compound range that upstream genuinely accepts.
+ * lose a compound range that upstream accepts. Bare strings reach this pattern
+ * only through the caret-only `@^` marker; this is not a semver validator.
  */
-const VERSION_PATTERN = /^[A-Za-z0-9.\-+*~^<>=| ]+$/;
+const VERSION_PATTERN = /^[A-Za-z0-9.\-+*~^<>=| ]{1,64}$/;
 
 /** A git object name, at the widths D-01-30's short-form rendering assumes. */
 const SHA_PATTERN = /^[0-9a-fA-F]{7,40}$/;
@@ -105,9 +111,9 @@ function applyOptionalFields(target: MutableDependency, fields: RawFields): bool
   return true;
 }
 
-/** Validate one element's four fields, or drop the element (D-01-05). */
+/** Validate one element's four fields, or report that it is invalid. */
 function buildDependency(fields: RawFields): DeclaredDependency | undefined {
-  if (typeof fields.name !== "string" || !TOKEN_PATTERN.test(fields.name)) {
+  if (!isRenderableDependencyToken(fields.name)) {
     return undefined;
   }
 
@@ -143,7 +149,7 @@ function parseStringElement(raw: string): DeclaredDependency | undefined {
 /**
  * The object form. Four named keys are read off the widened record with
  * `=== undefined` absence tests; the record is never spread into the result,
- * so no crafted or inherited key can reach a `DeclaredDependency`.
+ * so no key beyond the four named ones reaches a `DeclaredDependency`.
  */
 function parseObjectElement(raw: Record<string, unknown>): DeclaredDependency | undefined {
   return buildDependency({
@@ -167,25 +173,35 @@ function parseElement(raw: unknown): DeclaredDependency | undefined {
 }
 
 /**
- * Parse a `dependencies` field into its usable elements, in declaration order.
+ * Parse a complete `dependencies` declaration in declaration order.
  *
- * Anything that is not an array yields no entries. Unusable elements are
- * dropped silently -- this is a read-only surface and nothing here throws
- * (D-01-05). The result is neither sorted nor deduplicated: ordering (D-01-04)
- * and the last-wins collapse (D-01-31) are the caller's rules.
+ * Absence and an empty array declare nothing. Any invalid element rejects the
+ * entire declaration; callers apply the manifest or marketplace failure policy.
+ * Errors contain only field paths, never untrusted input. Sorting and duplicate
+ * handling remain the caller's rules.
  */
-export function parseDeclaredDependencies(raw: unknown): readonly DeclaredDependency[] {
+export function parseDeclaredDependencies(
+  raw: unknown,
+):
+  | { readonly ok: true; readonly dependencies: readonly DeclaredDependency[] }
+  | { readonly ok: false; readonly reason: string } {
+  if (raw === undefined) {
+    return { ok: true, dependencies: [] };
+  }
+
   if (!Array.isArray(raw)) {
-    return [];
+    return { ok: false, reason: "dependencies: expected an array" };
   }
 
   const parsed: DeclaredDependency[] = [];
-  for (const element of raw as readonly unknown[]) {
+  for (const [index, element] of raw.entries()) {
     const dependency = parseElement(element);
-    if (dependency !== undefined) {
-      parsed.push(dependency);
+    if (dependency === undefined) {
+      return { ok: false, reason: `dependencies.${index}: Invalid input` };
     }
+
+    parsed.push(dependency);
   }
 
-  return parsed;
+  return { ok: true, dependencies: parsed };
 }

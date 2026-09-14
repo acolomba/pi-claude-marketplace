@@ -1474,11 +1474,10 @@ test("readdir EACCES on available plugin's skills dir surfaces `{permission deni
 });
 
 // ---------------------------------------------------------------------------
-// (j-S-3) normalizeDependencies: non-array shapes (object, empty array)
-// return undefined -> renderer omits `dependencies:` line entirely.
+// Non-array declarations reject the entry; an empty array declares nothing.
 // ---------------------------------------------------------------------------
 
-test("normalizeDependencies: object-shaped `dependencies` field omits the line", async () => {
+test("object-shaped dependencies reject an installed marketplace entry", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange
     const userRoot = path.join(home, ".pi", "agent");
@@ -1495,7 +1494,7 @@ test("normalizeDependencies: object-shaped `dependencies` field omits the line",
             source: "./p",
             version: "1.0.0",
             skills: "skills",
-            // Object shape, not string[] -- normalizer returns undefined.
+            // A declaration must be an array.
             dependencies: { foo: "1.0.0", bar: "2.0.0" },
           },
         ],
@@ -1510,7 +1509,10 @@ test("normalizeDependencies: object-shaped `dependencies` field omits the line",
     await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "p", scope: "user", cwd });
     // assert
     assert.equal(notifications.length, 1);
-    assert.doesNotMatch(notifications[0]!.message, /dependencies:/);
+    assert.equal(
+      notifications[0]!.message,
+      "● mp [user] <no autoupdate>\n  ● p v1.0.0 (installed) {unsupported source}\n    components: not resolved",
+    );
   });
 });
 
@@ -7012,6 +7014,36 @@ async function renderDependencyLine(dependencies: unknown): Promise<string> {
 
 const DEPENDENCY_BLOCK_HEAD = "● mp [user] <no autoupdate>\n  ○ host v1.0.0 (available)\n";
 
+test("rejects a declaration when its substituted marketplace name is not renderable", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const marketplace = "mp+invalid";
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: marketplace,
+      manifest: {
+        name: marketplace,
+        plugins: [{ name: "host", source: "./host", dependencies: ["valid@explicit", "implicit"] }],
+      },
+      installablePluginDirs: ["host"],
+    });
+    const { ctx, pi, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, pi, marketplace, plugin: "host", scope: "user", cwd });
+
+    // assert
+    assert.deepStrictEqual(
+      notifications.map(({ message }) => message),
+      [
+        "● mp+invalid [user] <no autoupdate>\n  ⊘ host (unavailable) {invalid manifest}\n    components: not resolved",
+      ],
+    );
+  });
+});
+
 test("DEPS-02: a mixed array of strings and objects lists every usable element", async () => {
   // arrange
   const dependencies = ["zulu@mp", { name: "alfa", version: "^1.0.0" }];
@@ -7130,7 +7162,7 @@ test("D-01-04: two entries sharing a name keep their declaration order", async (
   assert.equal(message, `${DEPENDENCY_BLOCK_HEAD}    dependencies: alfa@zulu-mp, alfa@bravo-mp`);
 });
 
-test("D-01-05: an array whose every element is unusable omits the line", async () => {
+test("invalid marketplace dependencies make the plugin unavailable", async () => {
   // arrange
   const dependencies = [{ version: "^1.0.0" }, 42, { name: "bad name" }, { name: "a", sha: "zz" }];
 
@@ -7138,8 +7170,99 @@ test("D-01-05: an array whose every element is unusable omits the line", async (
   const message = await renderDependencyLine(dependencies);
 
   // assert
-  assert.equal(message, DEPENDENCY_BLOCK_HEAD.trimEnd());
+  assert.equal(
+    message,
+    "● mp [user] <no autoupdate>\n  ⊘ host (unavailable) {unsupported source}\n    components: not resolved",
+  );
 });
+
+test("invalid own dependencies are reported without the entry or bare fallback", async () => {
+  // arrange
+  const manifests = {
+    entryDependencies: ["entry"],
+    wrapped: '{"dependencies":["foo@~1.0.0"]}',
+    bare: '{"dependencies":["fallback"]}',
+  };
+
+  // act
+  const message = await renderOwnManifestCase(manifests);
+
+  // assert
+  assert.equal(
+    message,
+    "● mp [user] <no autoupdate>\n  ⊘ host v1.0.0 (unavailable) {invalid manifest}\n    components: not resolved",
+  );
+});
+
+for (const { label, installed, entryVersion, description, dependencies, expected } of [
+  {
+    label: "an installed plugin with an invalid own manifest",
+    installed: { host: { version: "2.0.0" } },
+    entryVersion: "1.0.0",
+    description: "Host plugin.",
+    dependencies: undefined,
+    expected:
+      "  ● host v2.0.0 (installed) {invalid manifest}\n    Host plugin.\n    components: not resolved",
+  },
+  {
+    label: "an unversioned plugin with an invalid own manifest",
+    installed: undefined,
+    entryVersion: undefined,
+    description: undefined,
+    dependencies: undefined,
+    expected: "  ⊘ host (unavailable) {invalid manifest}\n    components: not resolved",
+  },
+  {
+    label: "an installed plugin with invalid marketplace dependencies",
+    installed: { host: { version: "2.0.0" } },
+    entryVersion: "1.0.0",
+    description: undefined,
+    dependencies: ["foo@~1.0.0"],
+    expected: "  ● host v2.0.0 (installed) {unsupported source}\n    components: not resolved",
+  },
+]) {
+  test(`reports ${label} without changing the installation record`, async () => {
+    await withHermeticHome(async ({ home, cwd }) => {
+      // arrange
+      const marketplaceRoot = await seedPathMarketplace({
+        scope: "user",
+        scopeRoot: path.join(home, ".pi", "agent"),
+        cwd,
+        mpName: "mp",
+        manifest: {
+          name: "mp",
+          plugins: [
+            {
+              name: "host",
+              source: "./host",
+              ...(entryVersion !== undefined && { version: entryVersion }),
+              ...(description !== undefined && { description }),
+              ...(dependencies !== undefined && { dependencies }),
+            },
+          ],
+        },
+        ...(installed !== undefined && { installed }),
+        installablePluginDirs: ["host"],
+      });
+      await plantOwnManifest(path.join(marketplaceRoot, "host"), {
+        bare: '{"dependencies":["foo@~1.0.0"]}',
+      });
+      const statePath = path.join(locationsFor("user", cwd).extensionRoot, "state.json");
+      const stateBefore = await readFile(statePath, "utf8");
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "host", scope: "user", cwd });
+
+      // assert
+      assert.deepStrictEqual(
+        notifications.map(({ message }) => message),
+        [`● mp [user] <no autoupdate>\n${expected}`],
+      );
+      assert.equal(await readFile(statePath, "utf8"), stateBefore);
+    });
+  });
+}
 
 // ---------------------------------------------------------------------------
 // D-01-32: `info` sources `dependencies` from the plugin's OWN `plugin.json`
@@ -7266,6 +7389,160 @@ test("D-01-07: an unparseable first candidate ends the walk; the bare sibling ne
   // any reader fallen through to it, its list would be on the row.
   assert.match(message, /\(unavailable\)/, message);
   assert.doesNotMatch(message, /bare-dep@mp/, message);
+});
+
+test("a non-object own manifest cannot be rescued by a valid bare sibling", async () => {
+  // arrange / act
+  const message = await renderOwnManifestCase({
+    wrapped: "[]",
+    bare: '{"dependencies":["fallback"]}',
+  });
+
+  // assert
+  assert.equal(
+    message,
+    "● mp [user] <no autoupdate>\n  ⊘ host v1.0.0 (unavailable) {unsupported source}",
+  );
+});
+
+for (const { label, error } of [
+  { label: "a permission error", error: Object.assign(new Error("denied"), { code: "EACCES" }) },
+  { label: "an error without an errno", error: new Error("unreadable") },
+]) {
+  test(`an own manifest read with ${label} does not use a valid bare sibling`, async () => {
+    await withHermeticHome(async ({ home, cwd }) => {
+      // arrange
+      const root = await seedPathMarketplace({
+        scope: "user",
+        scopeRoot: path.join(home, ".pi", "agent"),
+        cwd,
+        mpName: "mp",
+        manifest: { name: "mp", plugins: [{ name: "host", source: "./host" }] },
+        installablePluginDirs: ["host"],
+      });
+      await plantOwnManifest(path.join(root, "host"), {
+        wrapped: '{"dependencies":["original"]}',
+        bare: '{"dependencies":["fallback"]}',
+      });
+      const manifestPath = path.join(root, "host", ".claude-plugin", "plugin.json");
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      await withFsPromiseFault("readFile", manifestPath, error, async () => {
+        await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "host", scope: "user", cwd });
+      });
+
+      // assert
+      assert.deepEqual(
+        notifications.map(({ message }) => message),
+        ["● mp [user] <no autoupdate>\n  ⊘ host (unavailable) {unsupported source}"],
+      );
+    });
+  });
+}
+
+for (const { label, createObstacle, expected } of [
+  {
+    label: "a directory instead of plugin.json",
+    createObstacle: async (root: string) => {
+      await mkdir(path.join(root, ".claude-plugin", "plugin.json"), { recursive: true });
+    },
+    expected: "  ○ host (available)\n    dependencies: bare-dep@mp",
+  },
+  {
+    label: "a file instead of the wrapper directory",
+    createObstacle: async (root: string) => {
+      await writeFile(path.join(root, ".claude-plugin"), "not a directory");
+    },
+    expected: "  ○ host (available)\n    dependencies: bare-dep@mp",
+  },
+]) {
+  test(`info contains ${label} without throwing`, async () => {
+    await withHermeticHome(async ({ home, cwd }) => {
+      // arrange
+      const root = await seedPathMarketplace({
+        scope: "user",
+        scopeRoot: path.join(home, ".pi", "agent"),
+        cwd,
+        mpName: "mp",
+        manifest: { name: "mp", plugins: [{ name: "host", source: "./host" }] },
+        installablePluginDirs: ["host"],
+      });
+      const pluginRoot = path.join(root, "host");
+      await createObstacle(pluginRoot);
+      await plantOwnManifest(pluginRoot, { bare: '{"dependencies":["bare-dep"]}' });
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "host", scope: "user", cwd });
+
+      // assert
+      assert.deepEqual(
+        notifications.map(({ message }) => message),
+        [`● mp [user] <no autoupdate>\n${expected}`],
+      );
+    });
+  });
+}
+
+test("info reports a warm installed plugin's own dependencies", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const cloneUrl = "https://example.com/repo";
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [{ name: "gplug", source: cloneUrl }] },
+      installed: { gplug: { version: "2.0.0" } },
+    });
+    await seedWarmMirror({
+      scope: "user",
+      cwd,
+      cloneUrl,
+      pluginJson: { name: "gplug", dependencies: ["fresh@mp"] },
+    });
+    const { ctx, pi, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "gplug", scope: "user", cwd });
+
+    // assert
+    assert.deepEqual(
+      notifications.map(({ message }) => message),
+      ["● mp [user] <no autoupdate>\n  ● gplug v2.0.0 (installed)\n    dependencies: fresh@mp"],
+    );
+  });
+});
+
+test("info tolerates a corrupt cached mirror without fetching", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const cloneUrl = "https://example.com/repo";
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [{ name: "gplug", source: cloneUrl }] },
+    });
+    await seedWarmMirror({ scope: "user", cwd, cloneUrl, pluginJson: { name: "gplug" } });
+    const mirrorDir = await locationsFor("user", cwd).pluginCloneDir(pluginMirrorKey(cloneUrl));
+    await writeFile(path.join(mirrorDir, ".git", "HEAD"), "ref: refs/heads/missing\n");
+    const { ctx, pi, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "gplug", scope: "user", cwd });
+
+    // assert
+    assert.deepEqual(
+      notifications.map(({ message }) => message),
+      [
+        "● mp [user] <no autoupdate>\n  ◌ gplug (remote) {source missing}\n    components: not resolved",
+      ],
+    );
+  });
 });
 
 test("D-01-32: a path source whose root fails containment falls back to the entry without throwing", async () => {

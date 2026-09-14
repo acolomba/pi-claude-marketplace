@@ -28,6 +28,38 @@ import { PluginShapeError } from "../../extensions/pi-claude-marketplace/shared/
 
 import type { PluginEntry } from "../../extensions/pi-claude-marketplace/domain/components/plugin.ts";
 
+for (const { mode, resolve } of [
+  { mode: "strict", resolve: resolveStrict },
+  { mode: "loose", resolve: resolveLoose },
+]) {
+  test(`${mode} resolution rejects invalid dependencies in the selected manifest`, async (t) => {
+    // arrange
+    const marketplaceRoot = await mkdtemp(path.join(os.tmpdir(), "invalid-dependencies-"));
+    t.after(() => rm(marketplaceRoot, { recursive: true, force: true }));
+    const pluginRoot = path.join(marketplaceRoot, "host");
+    await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
+    await writeFile(
+      path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+      '{"dependencies":["keeper","foo@~1.0.0"]}',
+    );
+    await writeFile(path.join(pluginRoot, "plugin.json"), '{"dependencies":["fallback"]}');
+
+    // act
+    const resolved = await resolve(
+      { name: "host", source: "./host", dependencies: ["entry"] },
+      { marketplaceRoot },
+    );
+
+    // assert
+    assert.deepStrictEqual(resolved, {
+      state: "unavailable",
+      installable: false,
+      name: "host",
+      notes: ["malformed plugin.json: dependencies.1: Invalid input"],
+    });
+  });
+}
+
 /**
  * Build an in-memory ResolveContext. `files` maps absolute paths to either:
  *   - "dir"           -> directory exists
@@ -3795,21 +3827,65 @@ test("resolveStrict reads a real manifest through the default file reader", asyn
   });
 });
 
-test("resolveStrict propagates a default stat error below a non-directory manifest segment", async (testContext) => {
+test("resolveStrict falls through a non-directory wrapper to the bare manifest", async (testContext) => {
   // arrange
   const temporaryMarketplace = await mkdtemp(path.join(os.tmpdir(), "pi-cm-manifest-notdir-"));
   const localRoot = path.join(temporaryMarketplace, "local");
   await mkdir(localRoot, { recursive: true });
   await writeFile(path.join(localRoot, ".claude-plugin"), "not a directory", "utf8");
+  await writeFile(path.join(localRoot, "plugin.json"), '{"defaultEnabled":false}');
   testContext.after(() => rm(temporaryMarketplace, { recursive: true, force: true }));
 
-  // act & assert
-  await assert.rejects(
-    () => resolveStrict(pluginEntry(), { marketplaceRoot: temporaryMarketplace }),
-    (error: unknown) =>
-      error instanceof Error && (error as NodeJS.ErrnoException).code === "ENOTDIR",
-  );
+  // act
+  const resolved = await resolveStrict(pluginEntry(), { marketplaceRoot: temporaryMarketplace });
+
+  // assert
+  assert.deepStrictEqual(resolved, {
+    state: "installable",
+    installable: true,
+    name: "p1",
+    pluginRoot: localRoot,
+    supported: [],
+    unsupported: [],
+    notes: [],
+    componentPaths: { skills: [], commands: [], agents: [] },
+    mcpServers: {},
+    defaultEnabled: false,
+  });
 });
+
+for (const code of ["EACCES", "ELOOP", undefined]) {
+  test(`resolveStrict rejects a manifest stat failure with code ${String(code)}`, async () => {
+    // arrange
+    const localRoot = pathUnderMarketplace("./local");
+    const wrappedManifest = path.join(localRoot, ".claude-plugin", "plugin.json");
+    const bareManifest = path.join(localRoot, "plugin.json");
+    const context: ResolveContext = {
+      marketplaceRoot,
+      statKind(filePath) {
+        if (filePath === wrappedManifest) {
+          return Promise.reject(Object.assign(new Error("stat refused"), { code }));
+        }
+
+        return Promise.resolve(
+          filePath === localRoot ? "dir" : filePath === bareManifest ? "file" : null,
+        );
+      },
+      readFileText: () => Promise.resolve('{"defaultEnabled":false}'),
+    };
+
+    // act
+    const resolved = await resolveStrict(pluginEntry(), context);
+
+    // assert
+    assert.deepStrictEqual(resolved, {
+      state: "unavailable",
+      installable: false,
+      name: "p1",
+      notes: ["malformed plugin.json: stat refused"],
+    });
+  });
+}
 
 test("resolveStrict propagates a source containment error below a non-directory segment", async (testContext) => {
   // arrange

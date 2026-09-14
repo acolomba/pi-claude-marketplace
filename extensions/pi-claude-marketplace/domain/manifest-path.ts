@@ -17,6 +17,9 @@
 // candidate that exists but cannot be used -- unreadable, unparseable, or
 // schema-invalid -- stops the walk and produces that reader's failure. It
 // never hands off to the next candidate.
+// ENOENT and ENOTDIR mean absence, as does a candidate that is not a regular
+// file. Other stat failures (including EACCES and ELOOP) stop the walk; they
+// are not evidence that a later candidate should describe the plugin.
 //
 // D-01-06: the list lives in `domain/` because it is a pure, network-free,
 // write-free constant. `domain/` depends only on `shared/`, so no consumer can

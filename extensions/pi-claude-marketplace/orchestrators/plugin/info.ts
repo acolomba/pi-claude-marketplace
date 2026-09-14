@@ -36,7 +36,11 @@ import {
   type DroppedHook,
   type HookConfigParseResult,
 } from "../../domain/components/hooks.ts";
-import { parseDeclaredDependencies, type DeclaredDependency } from "../../domain/dependencies.ts";
+import {
+  isRenderableDependencyToken,
+  parseDeclaredDependencies,
+  type DeclaredDependency,
+} from "../../domain/dependencies.ts";
 import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
 import { MANIFEST_CANDIDATES } from "../../domain/manifest-path.ts";
 import { loadMarketplaceManifest, type MarketplaceManifest } from "../../domain/manifest.ts";
@@ -339,8 +343,9 @@ interface AddressedDependency extends DeclaredDependency {
 function withDeclaringMarketplace(
   dependency: DeclaredDependency,
   declaringMarketplace: string,
-): AddressedDependency {
-  return { ...dependency, marketplace: dependency.marketplace ?? declaringMarketplace };
+): AddressedDependency | undefined {
+  const marketplace = dependency.marketplace ?? declaringMarketplace;
+  return isRenderableDependencyToken(marketplace) ? { ...dependency, marketplace } : undefined;
 }
 
 /**
@@ -396,18 +401,26 @@ function renderDependency(dependency: AddressedDependency): string {
  * is stable, so two entries sharing a name keep their post-collapse
  * declaration order.
  *
- * Returns `undefined` when no element is usable, so the renderer omits the
- * `dependencies:` line exactly as it does for an empty array.
+ * An empty array declares nothing; undefined rejects the entire declaration,
+ * including an unrenderable marketplace supplied by the caller.
  */
 function renderDependencyList(
   raw: unknown,
   declaringMarketplace: string,
 ): readonly string[] | undefined {
-  const declared = parseDeclaredDependencies(raw).map((dependency) =>
-    withDeclaringMarketplace(dependency, declaringMarketplace),
-  );
-  if (declared.length === 0) {
+  const declaration = parseDeclaredDependencies(raw);
+  if (!declaration.ok) {
     return undefined;
+  }
+
+  const declared: AddressedDependency[] = [];
+  for (const dependency of declaration.dependencies) {
+    const addressed = withDeclaringMarketplace(dependency, declaringMarketplace);
+    if (addressed === undefined) {
+      return undefined;
+    }
+
+    declared.push(addressed);
   }
 
   return [...collapseByAddress(declared)]
@@ -1084,6 +1097,17 @@ async function buildBlock(args: {
   // because the D-01-32 read below is source-kind-dependent.
   const parsedSource = parsePluginSource((entry as Record<string, unknown>).source);
 
+  if (isUnsupportedEntrySource(entry.source)) {
+    return invalidManifestBlock({
+      marketplace,
+      scope,
+      marketplaceDetails,
+      entry,
+      installed,
+      reason: "unsupported source",
+    });
+  }
+
   // D-01-32: the plugin's OWN `plugin.json` outranks the marketplace entry for
   // `dependencies` whenever it is readable without a network call; the entry is
   // the fallback when it is not. A readable manifest is AUTHORITATIVE even
@@ -1099,12 +1123,24 @@ async function buildBlock(args: {
     ownPluginRoot === undefined
       ? OWN_MANIFEST_NOT_READABLE
       : await readOwnManifestDependencies(ownPluginRoot);
-  const dependencies = renderDependencyList(
+  const dependencyList = renderDependencyList(
     ownManifest.kind === "readable"
       ? ownManifest.dependencies
       : (entry as Record<string, unknown>).dependencies,
     marketplace,
   );
+  if (dependencyList === undefined) {
+    return invalidManifestBlock({
+      marketplace,
+      scope,
+      marketplaceDetails,
+      entry,
+      installed,
+      reason: "invalid manifest",
+    });
+  }
+
+  const dependencies = dependencyList.length === 0 ? undefined : dependencyList;
 
   // (c) Installed bucket.
   if (installed !== undefined) {
@@ -1155,6 +1191,46 @@ async function buildBlock(args: {
     scope,
     marketplaceDetails,
     applyInstallDisabledRowShape(row, entry, declaredEnabled),
+  );
+}
+
+/** Recognizes the stub used for an invalid marketplace entry. */
+function isUnsupportedEntrySource(source: unknown): boolean {
+  return (
+    typeof source === "object" &&
+    source !== null &&
+    "source" in source &&
+    source.source === "unsupported"
+  );
+}
+
+/**
+ * Reports a rejected manifest while preserving the recorded install state.
+ */
+function invalidManifestBlock(args: {
+  marketplace: string;
+  scope: Scope;
+  marketplaceDetails: { readonly autoupdate: boolean };
+  entry: MarketplaceManifest["plugins"][number];
+  installed: MarketplaceRecord["plugins"][string] | undefined;
+  reason: "invalid manifest" | "unsupported source";
+}): InfoBlock {
+  const { marketplace, scope, marketplaceDetails, entry, installed } = args;
+  const version = installed === undefined ? entry.version : installed.version;
+  const row: PluginInfoRow = {
+    status: installed === undefined ? "unavailable" : derivePersistedInstalledStatus(installed),
+    name: entry.name,
+    ...(version !== undefined && { version }),
+    ...(entry.description !== undefined && { description: entry.description }),
+    reasons: [args.reason],
+    componentsResolved: false,
+  };
+  return wrapBlock(
+    marketplace,
+    scope,
+    marketplaceDetails,
+    installed === undefined ? row : applyDisabledRowShape(row, installed),
+    installed === undefined ? undefined : skipReasonFor(installed, false),
   );
 }
 

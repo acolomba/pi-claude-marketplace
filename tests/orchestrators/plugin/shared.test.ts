@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, test } from "node:test";
@@ -1333,6 +1333,43 @@ describe("resolvePluginVersion", () => {
 
       // assert
       assert.equal(version, "1.0.0");
+    });
+  });
+
+  test("uses the entry version when a symlink loop prevents probing the wrapped manifest", async () => {
+    await withTempScopes(async ({ root }) => {
+      // arrange
+      const pluginRoot = path.join(root, "alpha");
+      const wrapper = path.join(pluginRoot, ".claude-plugin");
+      await mkdir(pluginRoot, { recursive: true });
+      await symlink(wrapper, wrapper, "junction");
+      await writeFile(path.join(pluginRoot, "plugin.json"), '{"version":"9.9.9"}');
+      const entry = { name: "alpha", source: "./alpha", version: "1.0.0" } satisfies PluginEntry;
+      const installable = makeMaterializablePlugin(pluginRoot);
+
+      // act
+      const version = await resolvePluginVersion(entry, installable);
+
+      // assert
+      assert.strictEqual(version, "1.0.0");
+    });
+  });
+
+  test("uses the bare manifest version when the wrapper is a regular file", async () => {
+    await withTempScopes(async ({ root }) => {
+      // arrange
+      const pluginRoot = path.join(root, "alpha");
+      await mkdir(pluginRoot, { recursive: true });
+      await writeFile(path.join(pluginRoot, ".claude-plugin"), "not a directory");
+      await writeFile(path.join(pluginRoot, "plugin.json"), '{"version":"9.9.9"}');
+      const entry = { name: "alpha", source: "./alpha", version: "1.0.0" } satisfies PluginEntry;
+      const installable = makeMaterializablePlugin(pluginRoot);
+
+      // act
+      const version = await resolvePluginVersion(entry, installable);
+
+      // assert
+      assert.strictEqual(version, "9.9.9");
     });
   });
 

@@ -39,12 +39,13 @@ import path from "node:path";
 
 import Type from "typebox";
 
-import { PluginShapeError } from "../shared/errors.ts";
+import { isErrnoException, PluginShapeError } from "../shared/errors.ts";
 import { PathContainmentError, assertPathInside } from "../shared/path-safety.ts";
 
 import { parseHooksConfig, type DroppedHook, type HooksConfig } from "./components/hooks.ts";
 import { MCP_SERVERS_VALIDATOR } from "./components/mcp.ts";
 import { PLUGIN_MANIFEST_VALIDATOR, type PluginEntry } from "./components/plugin.ts";
+import { parseDeclaredDependencies } from "./dependencies.ts";
 import { MANIFEST_CANDIDATES } from "./manifest-path.ts";
 import { assertSafeName } from "./name.ts";
 import {
@@ -622,9 +623,27 @@ async function sourceEscapeReason(
   }
 }
 
+/** Distinguishes a missing candidate from a failed filesystem probe. */
+async function manifestCandidateIsFile(
+  ctx: ResolveContext,
+  manifestPath: string,
+): Promise<boolean> {
+  try {
+    return (await statKindOf(ctx)(manifestPath)) === "file";
+  } catch (err: unknown) {
+    if (isErrnoException(err) && (err.code === "ENOENT" || err.code === "ENOTDIR")) {
+      return false;
+    }
+
+    // A failed stat is not evidence of absence. The manifest reader reports
+    // it as unusable, just like a read failure, without trying another file.
+    throw err;
+  }
+}
+
 /**
- * MANF-01 / MANF-02: read the plugin's own manifest, walking the shared
- * `MANIFEST_CANDIDATES` ordering rather than a path of this reader's own.
+ * MANF-01 / MANF-02: reads the plugin's own manifest in `MANIFEST_CANDIDATES`
+ * order, rejecting unusable candidates rather than trying another file.
  * MANF-05: no manifest at any candidate is a normal outcome, not a failure.
  */
 async function readManifest(
@@ -637,11 +656,11 @@ async function readManifest(
     // D-01-07: ABSENCE is the only fall-through. The first candidate that
     // exists is this plugin's manifest and its read decides the outcome; a
     // present-but-unusable file never hands off to the next candidate.
-    if ((await statKindOf(ctx)(manifestPath)) !== "file") {
-      continue;
-    }
-
     try {
+      if (!(await manifestCandidateIsFile(ctx, manifestPath))) {
+        continue;
+      }
+
       const raw = await readFileTextOf(ctx)(manifestPath);
       const parsed: unknown = JSON.parse(raw);
 
@@ -651,6 +670,11 @@ async function readManifest(
           .map((error) => `${error.instancePath || "(root)"}: ${error.message}`)
           .join("");
         return { ok: false, reason: `malformed plugin.json: ${detail}` };
+      }
+
+      const dependencies = parseDeclaredDependencies(parsed.dependencies);
+      if (!dependencies.ok) {
+        return { ok: false, reason: `malformed plugin.json: ${dependencies.reason}` };
       }
 
       return { ok: true, manifest: parsed };

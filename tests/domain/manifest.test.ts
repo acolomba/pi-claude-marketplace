@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, test } from "node:test";
@@ -22,6 +22,30 @@ void ({
 void ({ name: "marketplace" } satisfies MarketplaceManifest);
 // @ts-expect-error The strict declaration is boolean when present.
 void ({ name: "marketplace", plugins: [], strict: "false" } satisfies MarketplaceManifest);
+
+test("isolates invalid dependency entries and preserves healthy marketplace siblings", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "dependency-marketplace-"));
+  t.after(() => rm(directory, { force: true, recursive: true }));
+  const manifestPath = path.join(directory, "marketplace.json");
+  const raw =
+    '{"name":"marketplace","plugins":[{"name":"broken","source":"./broken","dependencies":["foo@~1.0.0"]},{"dependencies":[42]},{"name":"healthy","source":"./healthy","dependencies":[{"name":"foo","version":"~1.0.0"}]}]}';
+  await writeFile(manifestPath, raw);
+
+  // act
+  const manifest = await loadMarketplaceManifest(manifestPath);
+  const persisted = await readFile(manifestPath, "utf8");
+
+  // assert
+  assert.deepStrictEqual(manifest, {
+    name: "marketplace",
+    plugins: [
+      { name: "broken", source: { source: "unsupported" }, strict: true },
+      { name: "healthy", source: "./healthy", dependencies: [{ name: "foo", version: "~1.0.0" }] },
+    ],
+  });
+  assert.strictEqual(persisted, raw);
+});
 
 describe("MARKETPLACE_VALIDATOR", () => {
   test("accepts a minimal marketplace", () => {

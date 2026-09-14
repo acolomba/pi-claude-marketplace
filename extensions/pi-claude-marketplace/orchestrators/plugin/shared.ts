@@ -901,9 +901,10 @@ export async function resolveInstalledMarketplaceTarget(opts: {
  * D-01-07 / D-01-11: is this manifest candidate THERE? Only a path that is not
  * there may advance the walk to the next candidate, so a stat this process was
  * not allowed to make (EACCES and friends) counts as present -- it is not
- * evidence of absence. Mirrors the stat gate in
- * `domain/resolver.ts::readManifest`, which is what lets the two readers agree
- * on which file describes a plugin. Never throws.
+ * evidence of absence. Uses the absence policy beside MANIFEST_CANDIDATES:
+ * ENOENT, ENOTDIR and non-files advance the walk; other stat errors stop it.
+ * Unlike the resolver, this reader falls back to the entry version on failure.
+ * Never throws.
  */
 async function manifestCandidateExists(manifestPath: string): Promise<boolean> {
   try {

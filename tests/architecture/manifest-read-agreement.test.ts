@@ -24,7 +24,7 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
@@ -130,6 +130,78 @@ test("both readers tolerate a plugin declaring no manifest at either path", asyn
 const ENTRY_DEPENDENCY = "stale-dep@mp";
 /** What the plugin's OWN bare manifest declares -- the authoritative source. */
 const MANIFEST_DEPENDENCY = "fresh-dep@mp";
+
+for (const { label, prepare } of [
+  {
+    label: "malformed JSON",
+    prepare: async (root: string) => {
+      await mkdir(path.join(root, ".claude-plugin"));
+      await writeFile(path.join(root, ".claude-plugin", "plugin.json"), "{ invalid");
+    },
+  },
+  {
+    label: "a symlink loop preventing stat and read",
+    prepare: async (root: string) => {
+      const wrapper = path.join(root, ".claude-plugin");
+      await symlink(wrapper, wrapper, "junction");
+    },
+  },
+]) {
+  test(`all three readers stop at ${label} instead of using the valid bare manifest`, async () => {
+    await withHermeticHome(async ({ home, cwd }) => {
+      // arrange
+      const marketplaceRoot = await seedScopedMarketplace(home, cwd);
+      const previousResolution = await resolveStrict(ENTRY, { marketplaceRoot });
+      requireInstallable(previousResolution);
+      await prepare(path.join(marketplaceRoot, "alpha"));
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      const resolved = await resolveStrict(ENTRY, { marketplaceRoot });
+      const version = await resolvePluginVersion(ENTRY, previousResolution);
+      await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+
+      // assert
+      assert.deepStrictEqual(
+        { state: resolved.state, version, notifications },
+        {
+          state: "unavailable",
+          version: "1.0.0",
+          notifications: [
+            "● mp [user] <no autoupdate>\n  ⊘ alpha v1.0.0 (unavailable) {unsupported source}",
+          ],
+        },
+      );
+    });
+  });
+}
+
+test("all three readers fall through a non-directory wrapper to the bare manifest", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const marketplaceRoot = await seedScopedMarketplace(home, cwd);
+    await writeFile(path.join(marketplaceRoot, "alpha", ".claude-plugin"), "not a directory");
+    const { ctx, pi, notifications } = makeCtx();
+
+    // act
+    const resolved = await resolveStrict(ENTRY, { marketplaceRoot });
+    requireInstallable(resolved);
+    const version = await resolvePluginVersion(ENTRY, resolved);
+    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+
+    // assert
+    assert.deepStrictEqual(
+      { state: resolved.state, version, notifications },
+      {
+        state: "installable",
+        version: "9.9.9",
+        notifications: [
+          "● mp [user] <no autoupdate>\n  ○ alpha v1.0.0 (available)\n    dependencies: fresh-dep@mp",
+        ],
+      },
+    );
+  });
+});
 
 function makeCtx(): { ctx: ExtensionContext; pi: ExtensionAPI; notifications: string[] } {
   const notifications: string[] = [];

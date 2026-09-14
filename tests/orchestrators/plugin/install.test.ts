@@ -481,8 +481,10 @@ function buildSeededMarketplaceEntry(
     name: pluginName,
     source: opts.rawSourceOverride ?? `./plugins/${pluginName}`,
     ...(opts.pluginVersion !== undefined && { version: opts.pluginVersion }),
-    // PI-13: the exact dependency shape is not validated; presence is.
-    ...(opts.declareDependencies === true && { dependencies: { "some-other-plugin": "*" } }),
+    // PI-13: use a valid declaration to exercise the successful-install surface.
+    ...(opts.declareDependencies === true && {
+      dependencies: [{ name: "some-other-plugin", version: "*" }],
+    }),
     ...(opts.entryDefaultEnabled !== undefined && { defaultEnabled: opts.entryDefaultEnabled }),
   };
 }
@@ -573,7 +575,7 @@ async function seedPathMarketplaceWithPlugin(opts: {
   agents?: { sourceName: string; frontmatterName?: string; tools?: string; body?: string }[];
   /** mcp.json contents at <pluginRoot>/.mcp.json (raw object). */
   mcpServers?: Record<string, unknown>;
-  /** PI-13: declares dependencies. The exact shape isn't validated; presence is. */
+  /** PI-13: declares a valid dependency on another plugin. */
   declareDependencies?: boolean;
   /** Pre-seed a state.json with this plugin already installed (PI-5/PI-15). */
   preInstall?: boolean;
