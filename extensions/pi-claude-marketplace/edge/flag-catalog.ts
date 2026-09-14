@@ -80,6 +80,23 @@ const WRITE_TARGET_FLAG_ENTRY: FlagEntry = {
   complete: true,
 };
 
+// DATA-01 / D-02-02: `--keep-data` opts out of uninstall's default data
+// deletion; the plugin's artifacts and installation record are removed either
+// way.
+//
+// WR-01: the name is EXPORTED (as `KEEP_DATA_FLAG` below) because the uninstall
+// handler must map the consumed flag onto its `keepData` option field, and a
+// hand-written literal at that mapping site fails OPEN -- a catalog rename would
+// leave `consumedFlags.has("--keep-data")` false, so the command would delete
+// the data the operator asked to keep while reporting success. Reading the name
+// from here makes a rename a compile-time break at the mapping site instead.
+const KEEP_DATA_FLAG_ENTRY: FlagEntry = {
+  name: "--keep-data",
+  description: "Preserve the plugin's persistent data directory",
+  parse: true,
+  complete: true,
+};
+
 const CATALOG: Record<CatalogVerb, readonly FlagEntry[]> = {
   install: [
     // AG-7 opt-in: `--map-model` surfaces as a completion suggestion.
@@ -142,17 +159,7 @@ const CATALOG: Record<CatalogVerb, readonly FlagEntry[]> = {
       complete: true,
     },
   ],
-  uninstall: [
-    // DATA-01 / D-02-02: `--keep-data` opts out of the default data deletion;
-    // the plugin's artifacts and installation record are removed either way.
-    {
-      name: "--keep-data",
-      description: "Preserve the plugin's persistent data directory",
-      parse: true,
-      complete: true,
-    },
-    WRITE_TARGET_FLAG_ENTRY,
-  ],
+  uninstall: [KEEP_DATA_FLAG_ENTRY, WRITE_TARGET_FLAG_ENTRY],
   reinstall: [WRITE_TARGET_FLAG_ENTRY],
   fetch: [],
   enable: [WRITE_TARGET_FLAG_ENTRY],
@@ -176,6 +183,14 @@ export function isCatalogVerb(value: string): value is CatalogVerb {
  * catalog owns the name rather than a duplicated literal.
  */
 export const SCOPE_TARGET_FLAG = WRITE_TARGET_FLAG_ENTRY.name;
+
+/**
+ * WR-01 / DATA-01: the data-preservation flag name (`--keep-data`). The
+ * uninstall handler reads this constant when mapping the scanner's consumed
+ * flags onto the `keepData` option, so the catalog owns the name rather than a
+ * duplicated literal whose desynchronization would silently delete data.
+ */
+export const KEEP_DATA_FLAG = KEEP_DATA_FLAG_ENTRY.name;
 
 /**
  * Ordered completion entries (name + description) for a verb -- the entries

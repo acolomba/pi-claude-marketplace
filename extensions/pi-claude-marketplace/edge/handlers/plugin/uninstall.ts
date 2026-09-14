@@ -10,7 +10,7 @@
 // `uninstallPlugin`.
 
 import { createNodeUninstallPlugin } from "../../../orchestrators/plugin/uninstall.ts";
-import { passThroughFlagNames } from "../../flag-catalog.ts";
+import { KEEP_DATA_FLAG, passThroughFlagNames } from "../../flag-catalog.ts";
 import { extractLocalFlag } from "../shared.ts";
 
 import { parseRequiredPluginMarketplaceRef } from "./shared.ts";
@@ -22,11 +22,12 @@ import type { CompletionCache } from "../../../shared/completion-cache.ts";
 const USAGE =
   "Usage: /claude:plugin uninstall <plugin>@<marketplace> [--scope user|project] [--keep-data] [--local]";
 
-// D-02-02 / D-02-05: the catalog owns which extra flags this verb accepts.
-// The scanner CONSUMES them, so the residual reaching the reference parser holds
-// positionals and the `--scope` pair alone, and every other option -- long or
-// short -- is rejected before any state-changing work runs.
-const KEEP_DATA_FLAG = "--keep-data";
+// D-02-02 / D-02-05: the catalog owns which extra flags this verb accepts, and
+// WR-01 makes it own the `--keep-data` NAME too (imported above), so the
+// accepted set and the option mapping below cannot drift apart. The scanner
+// CONSUMES the accepted flags, so the residual reaching the reference parser
+// holds positionals and the `--scope` pair alone, and every other option --
+// long or short -- is rejected before any state-changing work runs.
 const CONSUMED_FLAGS = { consumeLongFlags: passThroughFlagNames("uninstall") };
 
 export function makeUninstallHandler(

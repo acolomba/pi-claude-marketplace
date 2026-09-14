@@ -30,6 +30,7 @@ import {
   CATALOG_VERBS,
   completionFlagEntries,
   isCatalogVerb,
+  KEEP_DATA_FLAG,
   parseFlagNames,
   passThroughFlagNames,
   SCOPE_TARGET_FLAG,
@@ -181,6 +182,25 @@ test("passThroughFlagNames drops the scope target and keeps the uninstall preser
 
   // assert
   assert.deepStrictEqual(passThroughNames, expectedPassThroughNames);
+});
+
+test("WR-01: KEEP_DATA_FLAG is the very name uninstall passes through to its handler", () => {
+  // The identity relation between two exports, in the shape the two
+  // SCOPE_TARGET_FLAG cases above already use: the handler maps this constant
+  // onto its `keepData` option, so a catalog rename that left the constant
+  // behind would silently stop preserving data. Naming the literal here instead
+  // would restate the drift guard's per-verb pin rather than the relation.
+
+  // arrange
+  const expectedPassThroughNames = [KEEP_DATA_FLAG];
+
+  // act
+  const passThroughNames = passThroughFlagNames("uninstall");
+  const parseNames = parseFlagNames("uninstall");
+
+  // assert
+  assert.deepStrictEqual(passThroughNames, expectedPassThroughNames);
+  assert.deepStrictEqual(parseNames, new Set([KEEP_DATA_FLAG, SCOPE_TARGET_FLAG]));
 });
 
 test("passThroughFlagNames keeps the remaining parse-accepted flags in catalog declaration order", () => {
