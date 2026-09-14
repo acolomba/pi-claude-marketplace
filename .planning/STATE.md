@@ -4,16 +4,16 @@ milestone: test-backlog
 current_phase: 05
 current_phase_name: Production Export Ownership
 status: executing
-last_updated: "2026-09-14T21:40:00Z"
+last_updated: "2026-09-14T20:46:01Z"
 last_activity: 2026-09-14
-last_activity_desc: Wave 6 plan 05-15 install composition owner complete
-state_head: a99d7dd1
+last_activity_desc: Wave 6 plan 05-19 plugin outcome and replacement owners complete
+state_head: 0f5f9d4c
 progress:
   total_phases: 8
   completed_phases: 4
   total_plans: 54
-  completed_plans: 27
-  percent: 50
+  completed_plans: 28
+  percent: 52
 milestone_name: test-backlog
 ---
 
@@ -31,9 +31,16 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 05 (Production Export Ownership) — EXECUTING
-Plan: 17 of 28 — 05-15 complete; Wave 6 source writing is under way
+Plan: 18 of 28 — 05-19 complete; Wave 6 source writing is under way
 Status: Executing Phase 05 Wave 6, awaiting the Wave 6 census reconciliation
-Last activity: 2026-09-14 — 05-15 gave install its production composition owner,
+Last activity: 2026-09-14 — 05-19 privatized install reason narrowing, plugin-PATH
+bin collection, the four reinstall replacement steps and the reinstall row
+projection, committed in `accb1fcd` and `0f5f9d4c`. Seven identities leave the
+production census, 31 to 24, with zero additions; the one transitive finding the
+privatization exposed, the now-unreferenced `ReinstallMsg` union, was dispositioned
+inside the same owner file.
+
+Earlier activity: 2026-09-14 — 05-15 gave install its production composition owner,
 committed in `dd8547ec` and `a99d7dd1`. `orchestrators/plugin/operations.ts` now
 holds the one concrete `runPhases` / `withLockedStateTransaction` binding;
 `createNodeInstallPlugin` is retired and all eleven callers ask the new owner for a
@@ -199,6 +206,32 @@ Correction to the handoff record: `.planning/config.json` no longer carries the
 runtime is `claude`.
 
 ### Wave 6 progress
+
+Plan 05-19 is complete. `narrowResolverReasons`, `collectBinDirs`,
+`replaceReinstalledPlugin`, `rollbackReinstalledPlugin`,
+`finalizeReinstalledPlugin`, `runPostSuccessMaintenance` and
+`outcomeToPluginMessage` are module-private and are now asserted through the
+public results that carry them: the `unavailable` row `classifyEntityShapeError`
+composes, the ledger and PATH `recomputePluginPath` writes, the
+`REAL_REINSTALL_TRANSACTION` schedule steps, and the exact notification bytes
+`renderReinstallPartitionAndNotify` emits. The cross-surface parity gate no longer
+imports the private helper; it drives the public install row and pins both
+surfaces to independent literals.
+
+`outcomeToPluginMessage`'s `marketplaceScope` argument had no reachable caller --
+the notify operation groups outcomes by `(scope, marketplace)`, so a row's scope
+always equalled its block's -- so the orphan-fold branch was retired with that
+evidence rather than left uncoverable. `ReinstallMsg` was privatized with it and
+its required-dependency proof retargeted at the public row composer's return type.
+
+Evidence: 6244 unit tests, 6242 pass, 2 fail -- both the parent-owned census
+equality gates. Integration 32/32, exit 0. All four changed direct owners measure
+hit == found. Typecheck, lint, prettier, fallow, test:corresponding and both
+negative-control gates pass. Five planted offenders and three benign controls
+discriminate the rewritten owner tests.
+
+Open, parent-owned: the seven identities this plan removes are listed in
+`05-19-SUMMARY.md`. Combined with 05-15 the live census reads 24, zero additions.
 
 Plan 05-15 is complete. `extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts`
 is the single production place that binds install's semantic `InstallTransaction`
