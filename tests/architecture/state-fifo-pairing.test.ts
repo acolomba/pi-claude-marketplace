@@ -14,19 +14,28 @@
 
 import assert from "node:assert/strict";
 import { constants } from "node:fs";
-import { mkdtemp, open, readFile, readdir, rm, stat } from "node:fs/promises";
+import { mkdir, mkdtemp, open, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { setTimeout } from "node:timers/promises";
 
+import { loadState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import {
   FIFO_SKIP,
+  OVER_READ_SENTINEL,
   createStateFifo,
   startFifoStateServer,
 } from "../orchestrators/plugin/state-fifo.ts";
 
 import type { FifoStateServer } from "../orchestrators/plugin/state-fifo.ts";
+
+/**
+ * How long an over-read may take before this file calls it blocked. The
+ * measured return is about a millisecond, so this is slack, not a wait for
+ * convergence.
+ */
+const OVER_READ_DEADLINE_MS = 2_000;
 
 test(
   "the state FIFO server delivers exactly one payload per reader open",
@@ -60,11 +69,59 @@ test(
 
       assert.deepEqual(await server.complete, { code: 0, signal: null });
       assert.deepEqual(server.messages, ["ready", "served:1", "served:2"]);
-      assert.equal((await stat(statePath)).isFIFO(), true);
+      assert.equal(
+        await readFile(statePath, "utf8"),
+        OVER_READ_SENTINEL,
+        "the last handoff must leave the over-read sentinel at the state path",
+      );
       assert.deepEqual(
         await readdir(dir),
         ["state.json"],
         "a clean run consumes every spare FIFO it created",
+      );
+    } finally {
+      server?.kill();
+      await rm(dir, { recursive: true, force: true });
+    }
+  },
+);
+
+test(
+  "an over-read of the state FIFO returns the sentinel instead of blocking",
+  { skip: FIFO_SKIP, timeout: 60_000 },
+  async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "state-fifo-over-read-"));
+    let server: FifoStateServer | undefined;
+
+    try {
+      const extensionRoot = path.join(dir, "pi-claude-marketplace");
+      await mkdir(extensionRoot);
+      const statePath = path.join(extensionRoot, "state.json");
+      createStateFifo(statePath);
+
+      // One payload on purpose: that is also the single-spare edge, where the
+      // only spare the server creates is the sentinel file.
+      const payload = '{"schemaVersion":2,"marketplaces":{}}\n';
+      server = startFifoStateServer({ statePath, payloads: [payload] });
+      await server.ready;
+
+      assert.equal(await readFile(statePath, "utf8"), payload);
+      assert.deepEqual(await server.complete, { code: 0, signal: null });
+
+      // The deadline is the subject of the test. A harness that leaves a FIFO
+      // no writer will ever open at the state path parks this read until the
+      // 60 s test timeout and diagnoses nothing; racing a short timer turns
+      // that back into a named failure in two seconds.
+      const overRead = await Promise.race([
+        readFile(statePath, "utf8"),
+        setTimeout(OVER_READ_DEADLINE_MS, "BLOCKED"),
+      ]);
+      assert.equal(overRead, OVER_READ_SENTINEL);
+
+      // And the reader a real regression actually reaches: the sentinel is
+      // not JSON, and loadState throws rather than absorbing it.
+      await assert.rejects(loadState(extensionRoot), (err: Error) =>
+        err.message.includes("OVER-READ"),
       );
     } finally {
       server?.kill();

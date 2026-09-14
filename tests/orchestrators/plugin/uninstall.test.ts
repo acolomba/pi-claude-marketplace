@@ -44,6 +44,7 @@ import { retryTree } from "./scope-tree-inventory.ts";
 import {
   createStateFifo,
   FIFO_SKIP,
+  OVER_READ_SENTINEL,
   serializedStateBytes,
   startFifoStateServer,
 } from "./state-fifo.ts";
@@ -1762,11 +1763,12 @@ test(
         assert.deepEqual(outcome, { status: "converged", name: "hello" });
         assert.equal(cascadeCalls, 0);
         assert.deepEqual(notifications, []);
-        // A save would rename a regular file over the FIFO, so the node type
-        // surviving IS the no-mutation proof (WR-04: converge never saves).
+        // A save renames the orchestrator's own file over the state path, so
+        // the harness sentinel surviving IS the no-mutation proof (WR-04:
+        // converge never saves).
         assert.equal(
-          (await stat(locations.stateJsonPath)).isFIFO(),
-          true,
+          await readFile(locations.stateJsonPath, "utf8"),
+          OVER_READ_SENTINEL,
           "PU-5 converge must leave state.json untouched",
         );
       } finally {

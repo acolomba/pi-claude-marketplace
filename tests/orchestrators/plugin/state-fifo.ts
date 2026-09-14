@@ -24,16 +24,18 @@
 // its EOF is guaranteed and payload k reaches read k, whatever the scheduler
 // does. Nothing here polls, sleeps, or retries.
 //
-// One limitation: an orchestrator that reads MORE times than there are
-// payloads blocks in `open` until the test's own timeout, because the server
-// has already exited and nothing is left to report it.
+// An orchestrator that reads MORE times than there are payloads does not
+// hang: the last handoff installs a regular file holding OVER_READ_SENTINEL
+// at the state path, so every later read returns that text at once and the
+// production reader turns it into a parse failure naming OVER-READ.
 //
 // Two invariants the callers assert against, both of which turn a silent
 // mis-serve into a loud failure:
 //   - the server exits 0 only after serving EVERY payload, so `served:N`
 //     message count is the orchestrator's exact read count;
-//   - the state path is still a FIFO afterwards, so any write by the
-//     orchestrator (which would `rename` a regular file over it) is caught.
+//   - the state path holds OVER_READ_SENTINEL afterwards, so any write by
+//     the orchestrator (which renames its own file over that path) is caught
+//     by comparing content.
 
 import { execFileSync, spawn } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
@@ -46,6 +48,16 @@ import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/p
 
 /** Watchdog for a reader that never arrives; keeps a regression loud, not hung. */
 const DEFAULT_TIMEOUT_MS = 30_000;
+
+/**
+ * What a read past the last payload gets. Not JSON on purpose, and it leads
+ * with its own name because V8 quotes only the first ten characters of the
+ * input back in its parse error -- and those ten are exactly `OVER-READ:`.
+ * `loadState` throws on a parse failure instead of absorbing it, so the
+ * production reader a real regression hits fails with the name in its message.
+ */
+export const OVER_READ_SENTINEL =
+  "OVER-READ: the FIFO state harness had no payload left for this read\n";
 
 /**
  * Serve each payload to one reader, in order, then exit 0.
@@ -62,7 +74,7 @@ const DEFAULT_TIMEOUT_MS = 30_000;
 const SERVER_SOURCE = `
   import { execFileSync } from "node:child_process";
   import { constants } from "node:fs";
-  import { open, rename } from "node:fs/promises";
+  import { open, rename, writeFile } from "node:fs/promises";
   import path from "node:path";
 
   const { O_WRONLY } = constants;
@@ -84,16 +96,26 @@ const SERVER_SOURCE = `
       });
     });
 
-  // One spare FIFO per payload, pre-created as a hidden sibling of the state
-  // path so each handoff below is a single atomic rename and no fork happens
-  // while a reader is parked. rename needs the same filesystem; a sibling is
-  // one. Every spare is consumed on a clean run, so nothing is left behind.
+  // One spare per payload, pre-created as a hidden sibling of the state path
+  // so each handoff below is a single atomic rename and no fork happens while
+  // a reader is parked. rename needs the same filesystem; a sibling is one.
+  // Every spare is consumed on a clean run, so nothing is left behind.
+  //
+  // The LAST spare is a regular file holding the over-read sentinel, not a
+  // FIFO. The final rename installs it at the state path at the same instant
+  // it retires the last paired inode, so from that moment an extra read gets
+  // the sentinel immediately rather than parking on a FIFO that no writer
+  // will ever open.
   const spares = payloads.map((_, index) =>
     path.join(path.dirname(fifoPath), \`.state-fifo-spare-\${index}\`),
   );
 
-  for (const spare of spares) {
-    execFileSync("mkfifo", [spare]);
+  for (const [index, spare] of spares.entries()) {
+    if (index === spares.length - 1) {
+      await writeFile(spare, process.env.PI_CM_FIFO_SENTINEL);
+    } else {
+      execFileSync("mkfifo", [spare]);
+    }
   }
 
   await announce("ready");
@@ -185,6 +207,7 @@ export function startFifoStateServer(opts: {
       PI_CM_FIFO_PATH: opts.statePath,
       PI_CM_FIFO_PAYLOADS: JSON.stringify(opts.payloads),
       PI_CM_FIFO_TIMEOUT_MS: String(opts.timeoutMs ?? DEFAULT_TIMEOUT_MS),
+      PI_CM_FIFO_SENTINEL: OVER_READ_SENTINEL,
     },
     stdio: ["ignore", "ignore", "pipe", "ipc"],
   });

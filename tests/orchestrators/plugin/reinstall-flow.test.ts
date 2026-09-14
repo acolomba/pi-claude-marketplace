@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { chmodSync, readdirSync, watch, writeFileSync } from "node:fs";
-import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -77,6 +77,7 @@ import { retryTree } from "./scope-tree-inventory.ts";
 import {
   createStateFifo,
   FIFO_SKIP,
+  OVER_READ_SENTINEL,
   serializedStateBytes,
   startFifoStateServer,
 } from "./state-fifo.ts";
@@ -5000,11 +5001,12 @@ test(
           notifications[0]?.message,
           "A marketplace operation has failed.\n\n⊘ mp (failed) {marketplace not added}",
         );
-        // A write would rename a regular file over the FIFO, so the node type
-        // surviving proves the aborted reinstall left state.json alone.
+        // A write renames the orchestrator's own file over the state path,
+        // so the harness sentinel surviving proves the aborted reinstall left
+        // state.json alone.
         assert.equal(
-          (await stat(locations.stateJsonPath)).isFIFO(),
-          true,
+          await readFile(locations.stateJsonPath, "utf8"),
+          OVER_READ_SENTINEL,
           "a marketplace-not-added abort must leave state.json untouched",
         );
       } finally {
