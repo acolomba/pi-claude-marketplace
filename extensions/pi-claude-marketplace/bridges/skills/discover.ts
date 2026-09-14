@@ -102,7 +102,7 @@ async function collectSelfSkillDir(
   pluginName: string,
   skillsDir: string,
   seenByGenerated: Map<string, DiscoveredSkill>,
-  seenByDir: Map<string, DiscoveredSkill>,
+  seenByDir: Set<string>,
   warnings: string[],
 ): Promise<boolean> {
   if (!(await isSelfSkillDir(skillsDir))) {
@@ -111,7 +111,8 @@ async function collectSelfSkillDir(
 
   // MANF-03 / D-01-21: already reached through an earlier component path, so
   // there is nothing to discover and nothing to warn about.
-  if (seenByDir.has(path.resolve(skillsDir))) {
+  const resolvedDir = path.resolve(skillsDir);
+  if (seenByDir.has(resolvedDir)) {
     return true;
   }
 
@@ -120,7 +121,7 @@ async function collectSelfSkillDir(
 
   const generatedName = generatedSkillName(pluginName, sourceName);
   const skill: DiscoveredSkill = { sourceName, generatedName, skillDir: skillsDir };
-  seenByDir.set(path.resolve(skillsDir), skill);
+  seenByDir.add(resolvedDir);
 
   const winner = seenByGenerated.get(generatedName);
   if (winner !== undefined) {
@@ -135,13 +136,13 @@ async function collectSelfSkillDir(
 /**
  * Enumerate the skill subdirs of ONE `componentPaths.skills` element, in
  * stable `localeCompare` order, threading each through the same two dedup
- * maps `collectSelfSkillDir` uses.
+ * collections `collectSelfSkillDir` uses.
  */
 async function collectSkillSubdirs(
   pluginName: string,
   skillsDir: string,
   seenByGenerated: Map<string, DiscoveredSkill>,
-  seenByDir: Map<string, DiscoveredSkill>,
+  seenByDir: Set<string>,
   warnings: string[],
 ): Promise<void> {
   const entries = await readDirEntriesTolerant(skillsDir);
@@ -165,13 +166,14 @@ async function collectSkillSubdirs(
 
     // MANF-03 / D-01-21: this directory was already reached through an
     // earlier component path, so it is the same skill, not a duplicate.
-    if (seenByDir.has(path.resolve(full))) {
+    const resolvedDir = path.resolve(full);
+    if (seenByDir.has(resolvedDir)) {
       continue;
     }
 
     const generatedName = generatedSkillName(pluginName, entry.name);
     const skill: DiscoveredSkill = { sourceName: entry.name, generatedName, skillDir: full };
-    seenByDir.set(path.resolve(full), skill);
+    seenByDir.add(resolvedDir);
 
     // D-07: first-wins dedup by GENERATED name. The second occurrence is
     // a soft-fail with a descriptive warning. RN-6 / D-141-04: the loser
@@ -222,7 +224,7 @@ export async function discoverPluginSkills(input: {
   // D-141-04 warning. `path.resolve` is what makes the two lookups
   // comparable: `skillsDir` is built with `path.join`, which preserves a
   // trailing separator that the entry-level `path.join` never produces.
-  const seenByDir = new Map<string, DiscoveredSkill>();
+  const seenByDir = new Set<string>();
   const warnings: string[] = [];
 
   for (const skillsRel of skillsDirs) {

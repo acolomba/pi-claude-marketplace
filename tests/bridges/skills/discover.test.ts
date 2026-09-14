@@ -461,6 +461,23 @@ test("MANF-03 keeps an undeclared sibling skill when a subdir is also declared",
   });
 });
 
+test("silently skips a direct skill already discovered through its parent", async (t) => {
+  // arrange
+  const pluginRoot = await createPluginRoot(t, "skill-discover-parent-first-");
+  const helpDirectory = path.join(pluginRoot, "skills", "help");
+  await writeSkill(helpDirectory, "help");
+  const resolved = resolvedPlugin(pluginRoot, ["skills", path.join("skills", "help")]);
+
+  // act
+  const discovery = await discoverPluginSkills({ pluginName: "acme", resolved });
+
+  // assert
+  assert.deepStrictEqual(discovery, {
+    discovered: [{ sourceName: "help", generatedName: "acme-help", skillDir: helpDirectory }],
+    warnings: [],
+  });
+});
+
 test("MANF-03 a trailing separator keys the same directory as one already seen", async (t) => {
   // arrange
   const pluginRoot = await createPluginRoot(t, "skill-discover-overlap-trailing-");
