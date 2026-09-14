@@ -438,6 +438,24 @@ async function sweepPluginFromConfigLayers(
 }
 
 /**
+ * IN-05: the post-commit cleanup's inputs as one bag rather than six
+ * positionals. TypeScript accepts a function of FEWER parameters where more are
+ * expected, so with positionals a five-parameter double injected through
+ * `UninstallTransaction.runPostCommitCleanup` still satisfied the `typeof` seam
+ * while silently ignoring the data disposition. A missing bag field is a compile
+ * error in any double instead.
+ */
+interface PostUninstallCleanupOptions {
+  readonly completionCache: CompletionCache;
+  readonly locations: ScopedLocations;
+  readonly scope: Scope;
+  readonly marketplace: string;
+  readonly plugin: string;
+  /** DATA-01: true preserves the plugin's data directory; false removes it. */
+  readonly keepData: boolean;
+}
+
+/**
  * The three POST-state-commit cleanups, all of them hygienic and all of them
  * swallowed per D-19-01: the underlying side effect still fires, only the
  * user-visible warning surface is gone, because
@@ -459,14 +477,14 @@ async function sweepPluginFromConfigLayers(
  * removes. `garbageCollectPluginClones` already folds per-dir rm leaks into a
  * returned string[] rather than throwing; the try/catch is belt and braces.
  */
-async function runPostUninstallCleanup(
-  completionCache: CompletionCache,
-  locations: ScopedLocations,
-  scope: Scope,
-  marketplace: string,
-  plugin: string,
-  keepData: boolean,
-): Promise<void> {
+async function runPostUninstallCleanup({
+  completionCache,
+  locations,
+  scope,
+  marketplace,
+  plugin,
+  keepData,
+}: PostUninstallCleanupOptions): Promise<void> {
   try {
     await completionCache.dropMarketplaceCache(
       await locations.pluginCacheFile(marketplace),
@@ -790,14 +808,15 @@ async function uninstallPluginWithTransaction(
     });
   }
 
-  await transaction.runPostCommitCleanup(
+  await transaction.runPostCommitCleanup({
     completionCache,
     locations,
     scope,
     marketplace,
     plugin,
-    opts.keepData ?? false,
-  );
+    // DATA-01 / D-02-04: omission is the deletion default.
+    keepData: opts.keepData ?? false,
+  });
 
   // PU-8 reload hint: computed by notify from the
   // PluginUninstalledMessage status (uninstalled is in the state-changing
