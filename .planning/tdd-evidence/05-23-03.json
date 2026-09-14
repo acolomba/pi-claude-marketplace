@@ -1,0 +1,9 @@
+{
+  "taskId": "05-23-03",
+  "command": "node --test --test-reporter=tap --test-name-pattern \"maps a degraded skill to its failure reason\" tests/shared/notify-reasons.test.ts",
+  "exitCode": 1,
+  "output": "TAP version 13\n# Subtest: maps a degraded skill to its failure reason\nnot ok 1 - maps a degraded skill to its failure reason\n  ---\n  duration_ms: 5.336538\n  type: 'test'\n  location: '/home/acolomba/src/pi-claude-marketplace-test-backlog/tests/shared/notify-reasons.test.ts:348:3'\n  failureType: 'testCodeFailure'\n  error: |-\n    Expected values to be strictly deep-equal:\n    + actual - expected\n    \n      [\n    +   'malformed command'\n    -   'malformed skill'\n      ]\n    \n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected:\n    0: 'malformed skill'\n  actual:\n    0: 'malformed command'\n  operator: 'deepStrictEqual'\n  stack: |-\n    TestContext.<anonymous> (file:///home/acolomba/src/pi-claude-marketplace-test-backlog/tests/shared/notify-reasons.test.ts:356:12)\n    Test.runInAsyncScope (node:async_hooks:226:14)\n    Test.run (node:internal/test_runner/test:1402:25)\n    Test.start (node:internal/test_runner/test:1262:17)\n    startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17)\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 0\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 319.195557\n",
+  "targetTest": "maps a degraded skill to its failure reason",
+  "expected": "[\"malformed skill\"]",
+  "actual": "[\"malformed command\"]"
+}
