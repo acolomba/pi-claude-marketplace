@@ -501,14 +501,22 @@ async function runPostUninstallCleanup({
   // the assertion costs nothing: the marketplace segment is still asserted by
   // `pluginCacheFile` above.
   if (!keepData) {
-    // NFR-10: resolve OUTSIDE the try. `pluginDataDir` is not a path join -- it
-    // runs assertSafeName on both segments and assertPathInside on the result,
-    // and a containment failure must propagate rather than be mistaken for an
-    // rm leak. D-19-01 sanctions swallowing the cleanup, not the assertion
-    // guarding it.
-    const dataDir = await locations.pluginDataDir(marketplace, plugin);
-
     try {
+      // NFR-10: `pluginDataDir` is not a path join -- it runs assertSafeName on
+      // both segments and assertPathInside on the result, so a data dir mounted
+      // as a symlink out of dataRoot refuses here and the `rm` below never
+      // runs. Containment is what the assertion buys, and it still holds: the
+      // escape target is not touched.
+      //
+      // WR-07 / D-19-01: the refusal is caught WITH the rm rather than raised
+      // past it. This is post-commit hygiene -- the cascade has run, the record
+      // is deleted, the config layers are swept -- so an escaping error here
+      // would replace the `(uninstalled)` row and the `/reload` hint with a raw
+      // SymlinkRefusedError for an uninstall that SUCCEEDED, and leave the clone
+      // GC below unrun. Nothing is written on this path, so there is no
+      // half-done write for the operator to repair, and a retry finds no record
+      // and reports `not installed`.
+      const dataDir = await locations.pluginDataDir(marketplace, plugin);
       await rm(dataDir, { recursive: true, force: true });
     } catch {
       // D-19-01: hygienic cleanup never becomes the primary user-facing path.

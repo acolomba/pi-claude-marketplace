@@ -48,7 +48,6 @@ import {
   StateLockHeldError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
-import { SymlinkRefusedError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
 import { retryTree } from "./scope-tree-inventory.ts";
@@ -546,13 +545,14 @@ test("PU-2: pluginDataDir rm failure leaves state record removed; cleanup leak S
   });
 });
 
-// NFR-10 (a containment assertion must never be absorbed by a D-19-01
-// hygiene `catch {}`) ---
+// NFR-10 (the containment assertion refuses the escape) x WR-07 (the refusal
+// is a post-commit cleanup outcome, not the command's user-facing result) ---
 
-test("NFR-10: pluginDataDir containment failure PROPAGATES; it is not swallowed as a cleanup leak", async () => {
+test("NFR-10 / WR-07: a data dir symlinked out of dataRoot is refused, and the refusal does not replace the uninstalled row", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-nfr10-"));
     try {
+      // arrange
       const locations = locationsFor("project", cwd);
       await seedFullPlugin(locations, "mp", "hello", cwd);
 
@@ -564,32 +564,46 @@ test("NFR-10: pluginDataDir containment failure PROPAGATES; it is not swallowed 
       // call under test. pluginCacheFile resolves under cacheDir and is
       // unaffected, so the cleanup step before it still runs normally.
       const escape = await mkdtemp(path.join(tmpdir(), "uninstall-nfr10-escape-"));
+      await writeFile(path.join(escape, "outside.txt"), "outside");
       const parent = await locations.marketplaceDataDir("mp");
       await mkdir(parent, { recursive: true });
       const dataDir = path.join(parent, "hello");
       await rm(dataDir, { recursive: true, force: true });
-      const { symlink } = await import("node:fs/promises");
       await symlink(escape, dataDir);
 
-      const { ctx, pi } = makeCtx();
+      const { ctx, pi, notifications } = makeCtx();
 
-      // Before the fix this rejected NOTHING: the getter sat inside the
-      // D-19-01 try, so a refused symlink was indistinguishable from an rm
-      // leak and uninstall reported plain success while the escape target
-      // survived. D-19-01 sanctions swallowing the cleanup, not the
-      // assertion guarding it.
-      await assert.rejects(
-        uninstallWithFreshOwner({
-          ctx,
-          pi,
-          scope: "project",
-          cwd,
-          marketplace: "mp",
-          plugin: "hello",
-        }),
-        (err: unknown) =>
-          err instanceof Error && /symlink|contain/i.test(`${err.name} ${err.message}`),
-        "a refused symlink under dataRoot must reach the caller, not be absorbed by the hygiene catch",
+      // act
+      const outcome = await uninstallWithFreshOwner({
+        ctx,
+        pi,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      // assert
+      // Containment: the refusal fires BEFORE the rm, so nothing under the
+      // escape target is touched and the link itself survives.
+      assert.strictEqual(await readFile(path.join(escape, "outside.txt"), "utf8"), "outside");
+      assert.strictEqual(await readlink(dataDir), escape);
+
+      // WR-07: the cascade ran, the record is gone and the config layers are
+      // swept by the time the cleanup starts, so the operator gets the row for
+      // the uninstall that SUCCEEDED rather than a raw SymlinkRefusedError from
+      // a hygiene step. D-19-01 already swallows every other cleanup outcome on
+      // this path; a containment refusal is one more of them, and refusing to
+      // delete is exactly what it achieved.
+      assert.strictEqual(outcome, undefined);
+      assert.deepStrictEqual(notifications, [
+        {
+          message: "● mp [project]\n  ○ hello v0.0.1 (uninstalled)\n\n/reload to pick up changes",
+        },
+      ]);
+      assert.equal(
+        "hello" in ((await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins ?? {}),
+        false,
       );
 
       await rm(escape, { recursive: true, force: true });
@@ -2516,6 +2530,65 @@ test("preservation bypasses the data path while retiring routes, caches and the 
   });
 });
 
+test("WR-07: deletion over a symlinked data dir is refused, and the rest of the hygiene still runs", async () => {
+  // The `keepData: true` half above plants a symlinked data dir and then takes
+  // the one branch that never resolves it. This is the other half: the same
+  // fixture on the DELETING branch, where `pluginDataDir` actually runs and
+  // refuses. What the refusal must not do is escape a command whose durable
+  // work already committed.
+
+  // arrange
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-delete-hygiene-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedGitPlugin(locations, "mp", { solo: "keySolo" }, cwd);
+      const dataDir = await locations.pluginDataDir("mp", "solo");
+      const retainedDir = path.join(cwd, "retained");
+      await mkdir(path.join(retainedDir, "nested"), { recursive: true });
+      await writeFile(path.join(retainedDir, "nested", "session"), "retained session\n");
+      await mkdir(path.dirname(dataDir), { recursive: true });
+      await symlink(retainedDir, dataDir);
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      const outcome = await uninstallWithFreshOwner({
+        ctx,
+        pi,
+        cwd,
+        scope: "project",
+        marketplace: "mp",
+        plugin: "solo",
+        keepData: false,
+      });
+
+      // assert
+      assert.strictEqual(outcome, undefined);
+      assert.deepStrictEqual(notifications, [
+        {
+          message: "● mp [project]\n  ○ solo v0.0.1 (uninstalled)\n\n/reload to pick up changes",
+        },
+      ]);
+      assert.deepStrictEqual(
+        (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins,
+        {},
+      );
+      // NFR-10: the escape target keeps every byte, because the refusal fires
+      // before the rm rather than after it.
+      assert.strictEqual(await readlink(dataDir), retainedDir);
+      assert.strictEqual(
+        await readFile(path.join(dataDir, "nested", "session"), "utf8"),
+        "retained session\n",
+      );
+      // WR-07: the clone collection AFTER the data step still runs, which it
+      // cannot do when the refusal escapes the cleanup.
+      assert.strictEqual(await pathExists(path.join(locations.pluginClonesDir, "keySolo")), false);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("uninstalling the last referencer of a git clone deletes its plugin-clones dir", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-gc-last-"));
@@ -3252,17 +3325,6 @@ function retryOutcomeShape(outcome: UninstallPluginOutcome | undefined): unknown
     reason: outcome.reason,
     status: outcome.status,
   };
-}
-
-/** Capture the rejection of one exported call without ending the case. */
-async function captureRejection(pending: Promise<unknown>): Promise<unknown> {
-  try {
-    await pending;
-  } catch (err) {
-    return err;
-  }
-
-  return undefined;
 }
 
 test("retry proof: uninstall: a hooks cascade refusal persists the shrunken record and the retry converges", async (t) => {
@@ -4553,7 +4615,7 @@ test("retry proof: uninstall: a clone-scan failure is swallowed and the retry co
   });
 });
 
-test("retry proof: uninstall: a refused data-dir path escape propagates after the commit and the retry reports not installed", async (t) => {
+test("retry proof: uninstall: a refused data-dir path escape is swallowed, the row still renders, and the retry reports not installed", async (t) => {
   await withHermeticHome(async () => {
     const uninstallWithFreshOwner = createUninstallOwner();
     const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-retry-data-escape-"));
@@ -4567,9 +4629,6 @@ test("retry proof: uninstall: a refused data-dir path escape propagates after th
       await writeFile(path.join(escape, "outside.txt"), "outside");
       await mkdir(path.dirname(targets.dataDir), { recursive: true });
       await symlink(escape, targets.dataDir);
-      const expectedRefusal =
-        `pluginDataDir(mp, hello) contains symlink ${targets.dataDir} -> ${escape} ` +
-        `(parent: ${locations.dataRoot}, target: ${targets.dataDir}).`;
       const firstSchedule: string[] = [];
       const secondSchedule: string[] = [];
       const activeSchedule = { current: firstSchedule };
@@ -4577,16 +4636,14 @@ test("retry proof: uninstall: a refused data-dir path escape propagates after th
       const { ctx, notifications, pi } = makeCtx();
 
       // act
-      const firstError = await captureRejection(
-        uninstallWithFreshOwner({
-          ctx,
-          cwd,
-          marketplace: "mp",
-          pi,
-          plugin: "hello",
-          scope: "project",
-        }),
-      );
+      const first = await uninstallWithFreshOwner({
+        ctx,
+        cwd,
+        marketplace: "mp",
+        pi,
+        plugin: "hello",
+        scope: "project",
+      });
       const firstNotifications = [...notifications];
       const firstTree = await retryTree(locations.scopeRoot);
       const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
@@ -4602,16 +4659,20 @@ test("retry proof: uninstall: a refused data-dir path escape propagates after th
       });
 
       // assert
-      assert.ok(firstError instanceof SymlinkRefusedError);
-      assert.strictEqual(firstError.name, "SymlinkRefusedError");
-      assert.strictEqual(firstError.parent, locations.dataRoot);
-      assert.strictEqual(firstError.child, targets.dataDir);
-      assert.strictEqual(firstError.linkPath, targets.dataDir);
-      assert.strictEqual(firstError.linkTarget, escape);
-      assert.strictEqual(firstError.message, expectedRefusal);
+      // WR-07: the refusal lands in post-commit hygiene, after the cascade, the
+      // record removal and the config sweep, so the command reports the
+      // uninstall it performed instead of raising a SymlinkRefusedError out of
+      // the handler. Containment still holds -- `rm` is never reached, so the
+      // escape target below is untouched.
+      assert.equal(first, undefined);
+      assert.deepStrictEqual(firstNotifications, [
+        {
+          message: "● mp [project]\n  ○ hello v0.0.1 (uninstalled)\n\n/reload to pick up changes",
+        },
+      ]);
       assert.equal(second, undefined);
-      assert.deepStrictEqual(firstNotifications, []);
       assert.deepStrictEqual(notifications, [
+        ...firstNotifications,
         {
           message:
             "A plugin operation has failed.\n\n● mp [project]\n" +
@@ -4625,12 +4686,17 @@ test("retry proof: uninstall: a refused data-dir path escape propagates after th
         false,
       );
       assert.equal(await readFile(path.join(escape, "outside.txt"), "utf8"), "outside");
+      // No `remove:data`: the containment assertion refuses before the rm. The
+      // trailing `gc:scan` is what the swallow buys -- the clone collection
+      // after it used to be skipped along with the rest of the cleanup when the
+      // refusal escaped.
       assert.deepStrictEqual(firstSchedule, [
         "unstage:skill:uni-skill",
         "unstage:command:uni-cmd.md",
         `unstage:agent:${GENERATED_AGENT_PREFIX}hello-uni-agent.md`,
         "unstage:hooks",
         "drop:cache",
+        "gc:scan",
       ]);
       assert.deepStrictEqual(secondSchedule, []);
       assert.deepStrictEqual(firstTree, [
