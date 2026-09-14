@@ -782,6 +782,8 @@ ______________________________________________________________________
 
 Single-plugin command in v2 still renders the always-marketplace-header form; the marketplace appears as a bare header and the plugin row indents underneath.
 
+The command takes `[--scope user|project] [--keep-data] [--local]`. `--keep-data` preserves the plugin's persistent data directory (DATA-01 / D-02-03); the plugin's artifacts and its installation record are removed either way, so the flag changes none of the output bytes below -- there is no retained-data report and no retained-path trailer (D-02-01). Omitting `--keep-data` deletes that data directory with no confirmation prompt (DATA-02 / D-02-04), and the load-time reconcile that uninstalls a plugin dropped from `claude-plugins.json` takes the same deletion default, because it has no command line to carry the flag (DATA-03). `--delete-data`, `-y` and `--yes` are rejected as unknown flags before any state changes (D-02-05): there is no prompt to answer, and the default needs no second spelling. `--local` keeps its shared write-target meaning, selecting `claude-plugins.local.json` for the config write.
+
 ### Success
 
 <!-- catalog-state: success -->
