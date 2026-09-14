@@ -1,9 +1,9 @@
 ---
 phase: "02"
 slug: uninstall-data-disposition-and-the-uninstall-option-seam
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: validated
+nyquist_compliant: true
+wave_0_complete: true
 created: "2026-09-14"
 ---
 
@@ -34,11 +34,11 @@ The five tasks below belong to two sequential plans. Each task uses existing own
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 02-01-01 | 02-01 | 1 | DATA-01, DATA-02 | T-02-01, T-02-03 | Preserve nested bytes or delete by default after commit; retain path checks and other cleanup | operation tracer | `node --test tests/orchestrators/plugin/uninstall.test.ts` | Yes | pending |
-| 02-01-02 | 02-01 | 1 | DATA-01 | T-02-02 | Consume accepted booleans; reject unknown short/long options in consuming mode; preserve old callers and scope values | unit | `node --test tests/edge/handlers/shared.test.ts` | Yes | pending |
-| 02-01-03 | 02-01 | 1 | DATA-01, DATA-02, DATA-03 | T-02-01, T-02-03, T-02-04 | Preserve data on failure; keep independent cleanup active; reconcile deletes seeded data without a prompt | filesystem and consumer integration | `node --test tests/orchestrators/plugin/uninstall.test.ts tests/orchestrators/reconcile/apply.test.ts` | Yes | pending |
-| 02-02-01 | 02-02 | 2 | DATA-01, DATA-02 | T-02-02, T-02-05, T-02-06 | Command reaches the shared operation; rejected flags change nothing; exact catalog set and success output hold | command tracer | `node --test tests/edge/handlers/shared.test.ts tests/edge/handlers/plugin/uninstall.test.ts tests/edge/flag-catalog.test.ts tests/architecture/flag-catalog-drift.test.ts` | Yes | pending |
-| 02-02-02 | 02-02 | 2 | DATA-01, DATA-02, DATA-03 | T-02-06 | Document both dispositions and reconcile default without changing success bytes | output regression and documentation | `node --test tests/edge/handlers/plugin/uninstall.test.ts tests/edge/flag-catalog.test.ts tests/architecture/flag-catalog-drift.test.ts`; `pre-commit run --files docs/output-catalog.md` | Yes | pending |
+| 02-01-01 | 02-01 | 1 | DATA-01, DATA-02 | T-02-01, T-02-03 | Preserve nested bytes or delete by default after commit; retain path checks and other cleanup | operation tracer | `node --test tests/orchestrators/plugin/uninstall.test.ts` | Yes | passed (68/68, 2026-09-14) |
+| 02-01-02 | 02-01 | 1 | DATA-01 | T-02-02 | Consume accepted booleans; reject unknown short/long options in consuming mode; preserve old callers and scope values | unit | `node --test tests/edge/handlers/shared.test.ts` | Yes | passed (part of 118/118 combined run, 2026-09-14) |
+| 02-01-03 | 02-01 | 1 | DATA-01, DATA-02, DATA-03 | T-02-01, T-02-03, T-02-04 | Preserve data on failure; keep independent cleanup active; reconcile deletes seeded data without a prompt | filesystem and consumer integration | `node --test tests/orchestrators/plugin/uninstall.test.ts tests/orchestrators/reconcile/apply.test.ts` | Yes | passed (118/118, 2026-09-14) |
+| 02-02-01 | 02-02 | 2 | DATA-01, DATA-02 | T-02-02, T-02-05, T-02-06 | Command reaches the shared operation; rejected flags change nothing; exact catalog set and success output hold | command tracer | `node --test tests/edge/handlers/shared.test.ts tests/edge/handlers/plugin/uninstall.test.ts tests/edge/flag-catalog.test.ts tests/architecture/flag-catalog-drift.test.ts` | Yes | passed (108/108, 2026-09-14) |
+| 02-02-02 | 02-02 | 2 | DATA-01, DATA-02, DATA-03 | T-02-06 | Document both dispositions and reconcile default without changing success bytes | output regression and documentation | `node --test tests/edge/handlers/plugin/uninstall.test.ts tests/edge/flag-catalog.test.ts tests/architecture/flag-catalog-drift.test.ts`; `pre-commit run --files docs/output-catalog.md` | Yes | passed (part of 108/108 combined run, 2026-09-14) |
 
 ### Direct coverage and wave checks
 
@@ -73,15 +73,35 @@ Existing infrastructure covers all phase requirements. Extend the existing paire
 
 All product behavior has automated verification. The documentation task also compares its prose with the tested usage and completion contract and checks that existing success text blocks remain byte-identical. This review supplements the automated output regressions and file hooks; it does not require a blocking user checkpoint.
 
+## Validation Audit 2026-09-14
+
+Post-execution audit (state A: existing draft VALIDATION.md, all five tasks
+re-run against the final source tree, including the code-review fix cycle's
+nine additional commits — WR-01/02/03/06, IN-01..05 — and the WR-07 revert).
+
+| Metric | Count |
+|--------|-------|
+| Gaps found | 0 |
+| Resolved | 0 |
+| Escalated | 0 |
+
+All five tasks' automated commands re-ran clean: quick-run command 108/108,
+data-lifecycle command 118/118, completions probe 59/59, and all five direct
+source-test pairs (`uninstall.ts`, `shared.ts`, `apply.ts`,
+`edge/handlers/plugin/uninstall.ts`, `flag-catalog.ts`) at 100% branch,
+function and line coverage. No new dependency, framework, or test file was
+required beyond what the existing owners already covered.
+
 ## Validation Sign-Off
 
-- [ ] All tasks have automated verification.
-- [ ] Sampling continuity: no three consecutive tasks lack automated verification.
-- [ ] Existing owners cover all required behaviors.
-- [ ] No watch-mode flags.
-- [ ] Focused feedback latency is below 60 seconds.
-- [ ] Direct coverage passes for changed source-test pairs.
-- [ ] Full project checks pass.
-- [ ] `nyquist_compliant: true` is set after validation.
+- [x] All tasks have automated verification.
+- [x] Sampling continuity: no three consecutive tasks lack automated verification.
+- [x] Existing owners cover all required behaviors.
+- [x] No watch-mode flags.
+- [x] Focused feedback latency is below 60 seconds.
+- [x] Direct coverage passes for changed source-test pairs.
+- [x] Full project checks pass.
+- [x] `nyquist_compliant: true` is set after validation.
 
-**Approval:** Pending execution and validation.
+**Approval:** Validated 2026-09-14 — all five tasks pass with fresh evidence
+on the final tree.
