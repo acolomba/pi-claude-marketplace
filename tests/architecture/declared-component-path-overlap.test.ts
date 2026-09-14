@@ -26,6 +26,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
 
+import { discoverPluginCommands } from "../../extensions/pi-claude-marketplace/bridges/commands/discover.ts";
 import { discoverPluginSkills } from "../../extensions/pi-claude-marketplace/bridges/skills/discover.ts";
 import {
   requireInstallable,
@@ -33,6 +34,39 @@ import {
 } from "../../extensions/pi-claude-marketplace/domain/resolver.ts";
 
 import type { PluginEntry } from "../../extensions/pi-claude-marketplace/domain/components/plugin.ts";
+
+test("overlapping declared and conventional command roots install each source once", async (t) => {
+  // arrange
+  const marketplaceRoot = await mkdtemp(path.join(tmpdir(), "command-path-overlap-"));
+  t.after(() => rm(marketplaceRoot, { recursive: true, force: true }));
+  const pluginRoot = path.join(marketplaceRoot, "acme");
+  await mkdir(path.join(pluginRoot, "commands", "git"), { recursive: true });
+  await writeFile(path.join(pluginRoot, "plugin.json"), '{"commands":["./commands/git"]}');
+  await writeFile(path.join(pluginRoot, "commands", "git", "commit.md"), "commit\n");
+  await writeFile(path.join(pluginRoot, "commands", "top.md"), "top\n");
+
+  // act
+  const resolved = await resolveStrict({ name: "acme", source: "./acme" }, { marketplaceRoot });
+  requireInstallable(resolved);
+  const discovery = await discoverPluginCommands({ pluginName: "acme", resolved });
+
+  // assert
+  assert.deepStrictEqual(discovery, {
+    discovered: [
+      {
+        sourceName: "commit",
+        generatedName: "acme:commit",
+        commandFile: path.join(pluginRoot, "commands", "git", "commit.md"),
+      },
+      {
+        sourceName: "top",
+        generatedName: "acme:top",
+        commandFile: path.join(pluginRoot, "commands", "top.md"),
+      },
+    ],
+    warnings: [],
+  });
+});
 
 /**
  * Plant a marketplace root holding one plugin whose manifest lives at the BARE
