@@ -24,7 +24,7 @@
 // that warm `pluginRoot`. Reading the warm clone is fs-only -- never a
 // fetch -- so NFR-5 holds.
 
-import { readdir, readFile } from "node:fs/promises";
+import { readdir, readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 
@@ -152,6 +152,8 @@ export interface GetPluginInfoOptions {
 export interface PluginInfoReader {
   readonly readTextFile: (filePath: string) => Promise<string>;
   readonly listDirectory: (directoryPath: string) => Promise<readonly Dirent[]>;
+  /** Follows symlinks; omitted by older readers to use the Node filesystem. */
+  readonly isRegularFile?: (filePath: string) => Promise<boolean>;
 }
 
 /**
@@ -525,25 +527,23 @@ type ManifestCandidateRead =
  * already follows for `hooks.json`: nothing propagates, and the caller decides
  * what a failure means.
  *
- * `absent` is reserved for the three errnos that mean "no file lives here":
- * `ENOENT` (nothing at the path), `ENOTDIR` (a parent component is not a
- * directory) and `EISDIR` (a directory sits where the file would be). Those
- * three are exactly what the two stat-gated readers reject with their
- * `isFile()` check, so all three readers fall through on the SAME set -- which
- * is what keeps them in agreement (D-01-07). Every other failure, a permission
- * refusal above all, is `unusable`: the file is there and could not be read.
+ * Non-files, ENOENT and ENOTDIR mean absence. Stat precedes the read so a
+ * device or FIFO cannot supply bytes or block the command. Other failures
+ * stop the candidate walk, as required by the shared manifest policy.
  */
 async function readManifestCandidate(
   reader: PluginInfoReader,
   absPath: string,
 ): Promise<ManifestCandidateRead> {
   try {
+    if (!(await (reader.isRegularFile ?? isRegularFile)(absPath))) {
+      return { kind: "absent" };
+    }
+
     return { kind: "text", raw: await reader.readTextFile(absPath) };
   } catch (err) {
     const code = isErrnoException(err) ? err.code : undefined;
-    return code === "ENOENT" || code === "ENOTDIR" || code === "EISDIR"
-      ? { kind: "absent" }
-      : { kind: "unusable" };
+    return code === "ENOENT" || code === "ENOTDIR" ? { kind: "absent" } : { kind: "unusable" };
   }
 }
 
@@ -579,13 +579,6 @@ function parseOwnManifest(raw: string): OwnManifestRead {
  * D-01-07: the walk falls through on ABSENCE ONLY. The first candidate that
  * exists is this plugin's manifest, and a candidate that exists but cannot be
  * used ends the walk as not-readable rather than handing off to its sibling.
- *
- * The gate is an ERRNO gate rather than the stat the version reader performs,
- * and that difference is deliberate: on THIS surface absence and
- * present-but-unusable produce the same user-visible outcome -- the marketplace
- * entry's list renders either way -- so the cheaper one-syscall form costs
- * nothing here, whereas the version reader must distinguish the two to pick a
- * tier and therefore has to stat.
  *
  * Upstream treats `plugin.json` as authoritative and the marketplace entry as a
  * mirror that can go stale. We render the authoritative source and stay SILENT
@@ -2824,7 +2817,12 @@ export function createGetPluginInfo(
   return (opts) => getPluginInfoWithReader(reader, opts);
 }
 
+async function isRegularFile(filePath: string): Promise<boolean> {
+  return (await stat(filePath)).isFile();
+}
+
 const NODE_PLUGIN_INFO_READER: PluginInfoReader = {
+  isRegularFile,
   readTextFile: (filePath) => readFile(filePath, "utf8"),
   listDirectory: (directoryPath) => readdir(directoryPath, { withFileTypes: true }),
 };

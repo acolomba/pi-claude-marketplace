@@ -29,7 +29,8 @@
 
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
-import { mkdir, readFile, readdir, symlink, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, stat, symlink, writeFile } from "node:fs/promises";
+import { devNull } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
@@ -68,7 +69,7 @@ import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts"
 import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
-type FaultableFsPromiseMethod = "readFile" | "readdir";
+type FaultableFsPromiseMethod = "readFile" | "readdir" | "stat";
 
 test("exposes a required plugin info reader factory", async () => {
   const infoModule: Record<string, unknown> =
@@ -85,6 +86,14 @@ async function withFsPromiseFault<T>(
 ): Promise<T> {
   let faultRaised = false;
   const reader: PluginInfoReader = {
+    async isRegularFile(filePath) {
+      if (method === "stat" && filePath === targetPath) {
+        faultRaised = true;
+        throw error;
+      }
+
+      return (await stat(filePath)).isFile();
+    },
     async readTextFile(filePath) {
       if (method === "readFile" && filePath === targetPath) {
         faultRaised = true;
@@ -7610,7 +7619,63 @@ for (const { label, error } of [
   });
 }
 
+for (const error of [
+  Object.assign(new Error("denied"), { code: "EACCES" }),
+  Object.assign(new Error("loop"), { code: "ELOOP" }),
+  new Error("stat failed"),
+]) {
+  test(`a manifest stat failure (${error.message}) stops before the bare sibling`, async () => {
+    await withHermeticHome(async ({ home, cwd }) => {
+      // arrange
+      const root = await seedPathMarketplace({
+        scope: "user",
+        scopeRoot: path.join(home, ".pi", "agent"),
+        cwd,
+        mpName: "mp",
+        manifest: {
+          name: "mp",
+          plugins: [{ name: "host", source: "./host", dependencies: ["entry"] }],
+        },
+        installablePluginDirs: ["host"],
+      });
+      await plantOwnManifest(path.join(root, "host"), {
+        wrapped: '{"dependencies":["original"]}',
+        bare: '{"dependencies":[42]}',
+      });
+      const manifestPath = path.join(root, "host", ".claude-plugin", "plugin.json");
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      await withFsPromiseFault("stat", manifestPath, error, async (getPluginInfoWithFault) => {
+        await getPluginInfoWithFault({
+          ctx,
+          pi,
+          marketplace: "mp",
+          plugin: "host",
+          scope: "user",
+          cwd,
+        });
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message: "● mp [user] <no autoupdate>\n  ○ host (available)\n    dependencies: entry@mp",
+        },
+      ]);
+    });
+  });
+}
+
 for (const { label, createObstacle, expected } of [
+  {
+    label: "a device instead of plugin.json",
+    createObstacle: async (root: string) => {
+      await mkdir(path.join(root, ".claude-plugin"));
+      await symlink(devNull, path.join(root, ".claude-plugin", "plugin.json"));
+    },
+    expected: "  ○ host (available)\n    dependencies: bare-dep@mp",
+  },
   {
     label: "a directory instead of plugin.json",
     createObstacle: async (root: string) => {

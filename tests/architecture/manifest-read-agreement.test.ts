@@ -25,7 +25,7 @@
 
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { devNull, tmpdir } from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
 
@@ -176,32 +176,51 @@ for (const { label, prepare } of [
   });
 }
 
-test("all three readers fall through a non-directory wrapper to the bare manifest", async () => {
-  await withHermeticHome(async ({ home, cwd }) => {
-    // arrange
-    const marketplaceRoot = await seedScopedMarketplace(home, cwd);
-    await writeFile(path.join(marketplaceRoot, "alpha", ".claude-plugin"), "not a directory");
-    const { ctx, pi, notifications } = makeCtx();
+for (const { label, prepare } of [
+  {
+    label: "a non-directory wrapper",
+    prepare: (root: string) => writeFile(path.join(root, ".claude-plugin"), "not a directory"),
+  },
+  {
+    label: "a directory candidate",
+    prepare: (root: string) =>
+      mkdir(path.join(root, ".claude-plugin", "plugin.json"), { recursive: true }),
+  },
+  {
+    label: "a device candidate",
+    prepare: async (root: string) => {
+      await mkdir(path.join(root, ".claude-plugin"));
+      await symlink(devNull, path.join(root, ".claude-plugin", "plugin.json"));
+    },
+  },
+]) {
+  test(`all three readers fall through ${label} to the bare manifest`, async () => {
+    await withHermeticHome(async ({ home, cwd }) => {
+      // arrange
+      const marketplaceRoot = await seedScopedMarketplace(home, cwd);
+      await prepare(path.join(marketplaceRoot, "alpha"));
+      const { ctx, pi, notifications } = makeCtx();
 
-    // act
-    const resolved = await resolveStrict(ENTRY, { marketplaceRoot });
-    requireInstallable(resolved);
-    const version = await resolvePluginVersion(ENTRY, resolved);
-    await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+      // act
+      const resolved = await resolveStrict(ENTRY, { marketplaceRoot });
+      requireInstallable(resolved);
+      const version = await resolvePluginVersion(ENTRY, resolved);
+      await getPluginInfo({ ctx, pi, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
 
-    // assert
-    assert.deepStrictEqual(
-      { state: resolved.state, version, notifications },
-      {
-        state: "installable",
-        version: "9.9.9",
-        notifications: [
-          "● mp [user] <no autoupdate>\n  ○ alpha v1.0.0 (available)\n    dependencies: fresh-dep@mp",
-        ],
-      },
-    );
+      // assert
+      assert.deepStrictEqual(
+        { state: resolved.state, version, notifications },
+        {
+          state: "installable",
+          version: "9.9.9",
+          notifications: [
+            "● mp [user] <no autoupdate>\n  ○ alpha v1.0.0 (available)\n    dependencies: fresh-dep@mp",
+          ],
+        },
+      );
+    });
   });
-});
+}
 
 function makeCtx(): { ctx: ExtensionContext; pi: ExtensionAPI; notifications: string[] } {
   const notifications: string[] = [];
