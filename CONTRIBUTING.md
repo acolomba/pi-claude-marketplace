@@ -13,18 +13,24 @@ The use of generative AI is welcome, provided these conditions are met:
 
 ## Development setup
 
-Before doing any work on a fresh repository:
+Prerequisites:
 
-- `node_modules/` missing: run `npm install`.
-- `.claude/gsd-core/` missing: install GSD local to the repository with `npx -y @opengsd/gsd-core@latest --claude --local` (use `--codex --local` instead when running under Codex).
+- [Pi Coding Agent](https://pi.dev/)
+- [npm](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm/)
+- [git-lfs](https://git-lfs.com/)
+- [pipx](https://pipx.pypa.io/stable/)
+
+Run this command to set up development tools and dependencies in a fresh clone or worktree.
 
 ```bash
-npm install
-npx @opengsd/gsd-core@latest --install --local
-git lfs install
-pre-commit install
-pre-commit install --hook-type commit-msg
+./scripts/init.sh
 ```
+
+It installs:
+
+- [pre-commit](https://pre-commit.com/#installation)
+- [gsd-core](https://github.com/open-gsd/gsd-core)
+- [codegraph](https://github.com/colbymchenry/codegraph)
 
 ## Checks
 
