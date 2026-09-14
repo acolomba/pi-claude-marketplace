@@ -141,6 +141,20 @@ const USER_UNINSTALLED = {
   message: "● alpha [user]\n  ○ demo v1.0.0 (uninstalled)\n\n/reload to pick up changes",
 };
 
+// WR-06 / DATA-01: the preserving disposition's row. The `{data kept}` brace is
+// the only byte that separates a preserved uninstall from a destructive one, so
+// the keep-data cases assert THIS row rather than the bare one -- a flag that
+// stopped reaching the orchestrator would otherwise still look right here.
+const PROJECT_UNINSTALLED_DATA_KEPT = {
+  message:
+    "● alpha [project]\n  ○ demo v1.0.0 (uninstalled) {data kept}\n\n/reload to pick up changes",
+};
+
+const USER_UNINSTALLED_DATA_KEPT = {
+  message:
+    "● alpha [user]\n  ○ demo v1.0.0 (uninstalled) {data kept}\n\n/reload to pick up changes",
+};
+
 const PROJECT_OVERRIDE_REJECTED = {
   message:
     'A plugin operation has failed.\n\n● alpha [project]\n  ⊘ demo (failed) {invalid manifest}\n    cause: Config file "claude-plugins.local.json" failed schema validation.',
@@ -411,7 +425,7 @@ for (const { args, placement } of [
     await uninstallHandler(args, ctx);
 
     // assert
-    assert.deepStrictEqual(notifications, [PROJECT_UNINSTALLED]);
+    assert.deepStrictEqual(notifications, [PROJECT_UNINSTALLED_DATA_KEPT]);
     assert.deepStrictEqual(await readObservedEffects(workspace), PROJECT_RECORD_REMOVED_DATA_KEPT);
     verifyBoundary();
   });
@@ -420,12 +434,12 @@ for (const { args, placement } of [
 for (const { expectedEffects, expectedNotification, scopeValue } of [
   {
     scopeValue: "project",
-    expectedNotification: PROJECT_UNINSTALLED,
+    expectedNotification: PROJECT_UNINSTALLED_DATA_KEPT,
     expectedEffects: PROJECT_RECORD_REMOVED_DATA_KEPT,
   },
   {
     scopeValue: "user",
-    expectedNotification: USER_UNINSTALLED,
+    expectedNotification: USER_UNINSTALLED_DATA_KEPT,
     expectedEffects: USER_RECORD_REMOVED_DATA_KEPT,
   },
 ]) {

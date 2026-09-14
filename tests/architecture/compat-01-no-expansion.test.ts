@@ -187,6 +187,9 @@ test("COMPAT-01: REASONS holds exactly its inherited members, in order", () => {
     "marketplace in user scope",
     "marketplace in project scope",
     "workflows",
+    // DATA-01 / WR-06: uninstall's data-disposition marker, appended at the
+    // tail with its catalog row, its renderer arm and its fixture.
+    "data kept",
   ];
 
   // act

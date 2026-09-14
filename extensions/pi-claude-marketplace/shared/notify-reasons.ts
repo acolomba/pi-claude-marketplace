@@ -240,6 +240,11 @@ type SharedTopicReason = IdempotentReason | UnsupportedReason | FailureReason | 
 type CommandPrivateReason =
   | "not found"
   | "not installed"
+  // DATA-01 / WR-06: uninstall's data-disposition marker, stamped by the
+  // preserving branch of the one command that offers the opt-out. Owned by that
+  // verb, so it is named here for the proof rather than promoted to a shared
+  // topic group.
+  | "data kept"
   // SCOPE-01 / D-01: the cross-scope qualifier the lifecycle verbs join to
   // `not installed` on an absent-target row. Owned by those verbs' own
   // absent-target composer alongside `not installed`, so it is named here for

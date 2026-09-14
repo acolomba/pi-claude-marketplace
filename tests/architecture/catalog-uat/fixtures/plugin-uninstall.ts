@@ -27,6 +27,30 @@ export const PLUGIN_UNINSTALL_FIXTURES: FixtureMap = {
       },
     },
 
+    // WR-06 / DATA-01: the preserving disposition, which is the only thing that
+    // separates this row from the `success` row above.
+    "success-keep-data": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "uninstalled",
+                name: "helper",
+                version: "1.0.0",
+                reasons: ["data kept"],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     "success-soft-dep-omitted": {
       pi: piWithNothingLoaded(),
       message: {

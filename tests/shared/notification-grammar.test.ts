@@ -909,6 +909,24 @@ for (const { name, row, expected } of [
     expected: "○ alpha [project] v1.0.0 (uninstalled)",
   },
   {
+    name: "renderUninstalledRow renders the data disposition of a realized removal",
+    row: () =>
+      renderUninstalledRow(
+        {
+          status: "uninstalled",
+          name: "alpha",
+          scope: "project",
+          version: "1.0.0",
+          reasons: ["data kept"],
+          severity: "info",
+          needsReload: true,
+        },
+        bothLoadedProbe(),
+        "user",
+      ),
+    expected: "○ alpha [project] v1.0.0 (uninstalled) {data kept}",
+  },
+  {
     name: "renderAvailableRow renders an entry-derived reason",
     row: () =>
       renderAvailableRow(

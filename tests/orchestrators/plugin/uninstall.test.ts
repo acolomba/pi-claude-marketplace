@@ -457,9 +457,13 @@ for (const scope of ["user", "project"] as const) {
             );
           }
 
+          // WR-06: the preserving disposition stamps `{data kept}`; the two
+          // deleting cases (false and omitted) keep the byte-frozen bare row,
+          // so the brace is exactly as discriminating as the data tree above.
+          const expectedReasonBrace = keepData === true ? " {data kept}" : "";
           assert.deepStrictEqual(notifications, [
             {
-              message: `● mp [${scope}]\n  ○ hello v0.0.1 (uninstalled)\n\n/reload to pick up changes`,
+              message: `● mp [${scope}]\n  ○ hello v0.0.1 (uninstalled)${expectedReasonBrace}\n\n/reload to pick up changes`,
             },
           ]);
         } finally {
@@ -2521,7 +2525,8 @@ test("preservation bypasses the data path while retiring routes, caches and the 
       assert.deepStrictEqual(runtime.getRoutingBucket("PreToolUse"), []);
       assert.deepStrictEqual(notifications, [
         {
-          message: "● mp [project]\n  ○ solo v0.0.1 (uninstalled)\n\n/reload to pick up changes",
+          message:
+            "● mp [project]\n  ○ solo v0.0.1 (uninstalled) {data kept}\n\n/reload to pick up changes",
         },
       ]);
     } finally {

@@ -581,6 +581,34 @@ function emitAlreadyGone(args: {
 }
 
 /**
+ * The standalone success row.
+ *
+ * WR-06 / DATA-01: the data disposition rides the PRESERVING branch only. The
+ * deleting branch keeps the byte-frozen bare row (D-02-01), and stamping the
+ * reversible outcome is what makes the irreversible one legible: a brace-less
+ * `(uninstalled)` row now means the data tree went with the plugin.
+ *
+ * The orchestrated arm carries no counterpart. Reconcile has no command line to
+ * spell a disposition with, so it always takes the deletion default and has
+ * nothing to report (D-02-01 keeps its outcome contract unchanged).
+ */
+function buildUninstalledRow(
+  plugin: string,
+  removedVersion: string | undefined,
+  keepData: boolean | undefined,
+): PluginUninstalledMessage {
+  return {
+    status: "uninstalled",
+    name: plugin,
+    ...(removedVersion !== undefined && { version: removedVersion }),
+    ...(keepData === true && { reasons: ["data kept"] as const }),
+    // D-03/D-06: realized uninstall transition -> info, reloads Pi resources.
+    severity: "info",
+    needsReload: true,
+  };
+}
+
+/**
  * RECON-03: returns `UninstallPluginOutcome` in orchestrated mode and
  * `undefined` in standalone mode (after firing the standalone notify()).
  *
@@ -863,14 +891,7 @@ async function uninstallPluginWithTransaction(
     };
   }
 
-  const uninstalledRow: PluginUninstalledMessage = {
-    status: "uninstalled",
-    name: plugin,
-    ...(removedVersion !== undefined && { version: removedVersion }),
-    // D-03/D-06: realized uninstall transition -> info, reloads Pi resources.
-    severity: "info",
-    needsReload: true,
-  };
+  const uninstalledRow = buildUninstalledRow(plugin, removedVersion, opts.keepData);
   notifyWithContext(
     ctx,
     pi,

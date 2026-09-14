@@ -48,6 +48,14 @@ export const REASONS = [
   "marketplace in user scope",
   "marketplace in project scope",
   "workflows",
+  // DATA-01 / WR-06: the uninstall row's disposition marker. Uninstall destroys
+  // the plugin's data directory by default, so the two dispositions rendered
+  // byte-identically and neither outcome was reportable: the operator who typed
+  // `--keep-data` got no confirmation it took effect, and the one who omitted it
+  // got no signal that a data tree was destroyed. The token rides the PRESERVING
+  // branch, which keeps the default row byte-frozen (D-02-01) while making the
+  // two branches distinguishable.
+  "data kept",
 ] as const;
 
 /** Literal union derived from the closed reason vocabulary. */
@@ -191,12 +199,20 @@ export interface PluginReinstalledMessage extends TransitionMessageBase {
   readonly reasons?: readonly ContentReason[];
 }
 
-/** Uninstalled plugin row. */
+/**
+ * Uninstalled plugin row.
+ *
+ * WR-06: `reasons` carries the data disposition (`data kept`) and nothing else
+ * today. The field is optional, so every producer that has nothing to report --
+ * `marketplace remove`'s per-plugin rows, the default uninstall -- composes the
+ * same brace-less row it always did.
+ */
 export interface PluginUninstalledMessage extends TransitionMessageBase {
   readonly status: "uninstalled";
   readonly name: string;
   readonly version?: string;
   readonly scope?: Scope;
+  readonly reasons?: readonly ContentReason[];
 }
 
 /** Disabled plugin row. */

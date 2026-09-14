@@ -671,7 +671,12 @@ export function renderUninstalledRow(
     renderScopeBracket(p.scope, mpScope),
     renderVersion(p.version),
     "(uninstalled)",
-    composeReasons(undefined, false, false, probe),
+    // WR-06: the row's only reason today is uninstall's `data kept` disposition,
+    // and the field is optional, so a producer with nothing to report composes
+    // the brace-less row byte for byte. Both soft-dep flags stay hard-coded
+    // false: MSG-SD-3 keeps `{requires pi-...}` markers off uninstall rows by
+    // construction (the variant has no `dependencies` field to read).
+    composeReasons(p.reasons, false, false, probe),
   ]);
 }
 

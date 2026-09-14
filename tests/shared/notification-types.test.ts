@@ -61,6 +61,7 @@ const EXPECTED_REASONS = [
   "marketplace in user scope",
   "marketplace in project scope",
   "workflows",
+  "data kept",
 ] as const;
 
 const EXPECTED_STATUS_TOKENS = [
