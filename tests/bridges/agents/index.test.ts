@@ -65,13 +65,13 @@ void ({ kind: "missing" } satisfies BarrelPreparedAgentsStaging);
 // @ts-expect-error an agent replacement handle has a closed discriminant set
 void ({ kind: "staged" } satisfies BarrelAgentsReplacement);
 // @ts-expect-error the barrel keeps the staged implementation type private
-void (true satisfies Same<AgentsBarrel.PreparedAgentsStaged, never>);
+void ({} satisfies { readonly retired?: AgentsBarrel.PreparedAgentsStaged });
 // @ts-expect-error the barrel does not export the internal marker prefix
-void (true satisfies Same<typeof AgentsBarrel.GENERATED_AGENT_PREFIX, never>);
+void ({} satisfies { readonly retired?: typeof AgentsBarrel.GENERATED_AGENT_PREFIX });
 // @ts-expect-error the barrel keeps the current marker in its defining module
-void (true satisfies Same<typeof AgentsBarrel.GENERATED_AGENT_MARKER, never>);
+void ({} satisfies { readonly retired?: typeof AgentsBarrel.GENERATED_AGENT_MARKER });
 // @ts-expect-error the barrel keeps the legacy marker private to its detector
-void (true satisfies Same<typeof AgentsBarrel.GENERATED_AGENT_MARKER_LEGACY, never>);
+void ({} satisfies { readonly retired?: typeof AgentsBarrel.GENERATED_AGENT_MARKER_LEGACY });
 
 describe("abortPreparedAgents", () => {
   test("re-exports the defining binding", () => {

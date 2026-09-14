@@ -138,3 +138,39 @@ describe("HOOKS_VALIDATOR", () => {
     });
   }
 });
+
+/**
+ * Recursively walk a JSON-Schema-shaped object looking for any sub-object
+ * carrying `additionalProperties: false`. Returns the dotted paths where
+ * strict gates appear; an empty array means HOOK-03 lenience holds.
+ */
+function walkSchemaForStrictAdditionalProperties(schema: unknown, path: string[]): string[] {
+  const offenders: string[] = [];
+  if (typeof schema !== "object" || schema === null) {
+    return offenders;
+  }
+
+  const obj = schema as Record<string, unknown>;
+  if (obj.additionalProperties === false) {
+    offenders.push(path.length === 0 ? "<root>" : path.join("."));
+  }
+
+  for (const [key, child] of Object.entries(obj)) {
+    if (child === null || typeof child !== "object") {
+      continue;
+    }
+
+    offenders.push(...walkSchemaForStrictAdditionalProperties(child, [...path, key]));
+  }
+
+  return offenders;
+}
+
+test("HOOK-03: the live hook validator schema carries NO `additionalProperties: false` at any nesting level", () => {
+  const offenders = walkSchemaForStrictAdditionalProperties(HOOKS_VALIDATOR.Type(), []);
+  assert.deepEqual(
+    offenders,
+    [],
+    `HOOK-03 lenient stance violated -- strict gates found at: ${offenders.join(", ")}`,
+  );
+});

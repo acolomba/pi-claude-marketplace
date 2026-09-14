@@ -80,9 +80,9 @@ void ({ kind: "missing" } satisfies BarrelPreparedSkillsStaging);
 // @ts-expect-error a skill replacement handle has a closed discriminant set
 void ({ kind: "staged" } satisfies BarrelSkillsReplacement);
 // @ts-expect-error the barrel keeps the staged implementation type private
-void (true satisfies Same<SkillsBarrel.PreparedSkillsStaged, never>);
+void ({} satisfies { readonly retired?: SkillsBarrel.PreparedSkillsStaged });
 // @ts-expect-error the barrel does not export the commit-result implementation type
-void (true satisfies Same<SkillsBarrel.StageSkillsCommitResult, never>);
+void ({} satisfies { readonly retired?: SkillsBarrel.StageSkillsCommitResult });
 
 describe("abortPreparedSkills", () => {
   test("re-exports the defining binding", () => {

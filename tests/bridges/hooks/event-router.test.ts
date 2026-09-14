@@ -22,7 +22,6 @@ import {
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts";
 import { adaptObservationResultForEvent } from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts";
 import {
-  createBeforeAgentStartHandler,
   createHooksHydration,
   createHooksRouting,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
@@ -352,6 +351,7 @@ test(
 
     await hydration.registerHooksBridge(pi, { ctx: context, cwd: projectRoot, executor });
     const previousEpoch = runtime.currentGeneration();
+    const staleBeforeAgentStartHandler = registeredHandler(registrations, "before_agent_start");
     const staleToolCallHandler = registrations.find(({ event }) => event === "tool_call")?.handler;
     const staleAgentEndHandler = registrations.find(({ event }) => event === "agent_end")?.handler;
     const staleAgentSettledHandler = registrations.find(
@@ -536,13 +536,13 @@ test(
       await Reflect.apply(staleToolCallHandler, undefined, [toolCall, context]);
     }
 
-    const staleBeforeAgentResult = await createBeforeAgentStartHandler(runtime, previousEpoch)(
+    const staleBeforeAgentResult = await staleBeforeAgentStartHandler(
       {
         type: "before_agent_start",
         prompt: "",
         systemPrompt: "stale",
         systemPromptOptions: {},
-      } as unknown as BeforeAgentStartEvent,
+      },
       context,
     );
     assert.strictEqual(staleBeforeAgentResult, undefined);
@@ -1091,10 +1091,17 @@ test("readAndCachePluginHooks leaves the cache unchanged after a parse failure",
   assert.deepStrictEqual(Array.from(runtime.parsedConfigEntries()), []);
 });
 
-test("createBeforeAgentStartHandler drains ordered context once and leaves an empty turn unchanged", async () => {
+test("registered before_agent_start drains ordered context once and leaves an empty turn unchanged", async (t) => {
   // arrange
   const runtime = createHooksRuntime();
-  const capturedGeneration = runtime.advanceGeneration();
+  const root = await mkdtemp(path.join(tmpdir(), "hooks-router-before-agent-"));
+  t.after(() => rm(root, { recursive: true, force: true, maxRetries: 3 }));
+  ownAgentRoot(t, path.join(root, "agent"));
+  const { pi, registrations } = makeRecordingPi();
+  const context = makeContext(root, root);
+  const hydration = createHooksHydration(runtime, EMPTY_STATE_READER);
+  await hydration.registerHooksBridge(pi, { ctx: context, cwd: root });
+  const handler = registeredHandler(registrations, "before_agent_start");
   adaptObservationResultForEvent(
     runtime,
     { kind: "mutate", additionalContext: "alpha context" },
@@ -1107,7 +1114,6 @@ test("createBeforeAgentStartHandler drains ordered context once and leaves an em
     "SessionStart",
     { scope: "user", marketplace: "catalog", pluginId: "beta" },
   );
-  const handler = createBeforeAgentStartHandler(runtime, capturedGeneration);
   const event = {
     type: "before_agent_start",
     prompt: "prompt",
@@ -1116,8 +1122,8 @@ test("createBeforeAgentStartHandler drains ordered context once and leaves an em
   } as BeforeAgentStartEvent;
 
   // act
-  const firstTurn = await handler(event, makeContext("/router/context", "/router/session"));
-  const secondTurn = await handler(event, makeContext("/router/context", "/router/session"));
+  const firstTurn = await handler(event, context);
+  const secondTurn = await handler(event, context);
 
   // assert
   assert.deepStrictEqual(firstTurn, {
@@ -1127,18 +1133,24 @@ test("createBeforeAgentStartHandler drains ordered context once and leaves an em
   assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), []);
 });
 
-test("createBeforeAgentStartHandler rejects a stale epoch without draining live context", async () => {
+test("registered before_agent_start rejects a stale epoch without draining live context", async (t) => {
   // arrange
   const runtime = createHooksRuntime();
-  const staleGeneration = runtime.advanceGeneration();
-  runtime.advanceGeneration();
+  const root = await mkdtemp(path.join(tmpdir(), "hooks-router-before-agent-"));
+  t.after(() => rm(root, { recursive: true, force: true, maxRetries: 3 }));
+  ownAgentRoot(t, path.join(root, "agent"));
+  const { pi, registrations } = makeRecordingPi();
+  const context = makeContext(root, root);
+  const hydration = createHooksHydration(runtime, EMPTY_STATE_READER);
+  await hydration.registerHooksBridge(pi, { ctx: context, cwd: root });
+  const handler = registeredHandler(registrations, "before_agent_start");
+  await hydration.registerHooksBridge(pi, { ctx: context, cwd: root });
   adaptObservationResultForEvent(
     runtime,
     { kind: "mutate", additionalContext: "live context" },
     "SessionStart",
     { scope: "project", marketplace: "catalog", pluginId: "live" },
   );
-  const handler = createBeforeAgentStartHandler(runtime, staleGeneration);
   const event = {
     type: "before_agent_start",
     prompt: "prompt",
@@ -1147,7 +1159,7 @@ test("createBeforeAgentStartHandler rejects a stale epoch without draining live 
   } as BeforeAgentStartEvent;
 
   // act
-  const promptUpdate = await handler(event, makeContext("/router/context", "/router/session"));
+  const promptUpdate = await handler(event, context);
 
   // assert
   assert.strictEqual(promptUpdate, undefined);

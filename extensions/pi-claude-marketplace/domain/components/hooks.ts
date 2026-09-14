@@ -51,12 +51,7 @@ import { HOOKS_VALIDATOR, type HookHandlerEntry, type HooksConfig } from "./hook
 
 export { parseMatcher, type ParsedMatcher } from "./hooks/matcher.ts";
 export type { DroppedHook } from "./hooks/partition.ts";
-export {
-  HOOKS_CONFIG_SCHEMA,
-  HOOKS_VALIDATOR,
-  type HookHandlerEntry,
-  type HooksConfig,
-} from "./hooks/schema.ts";
+export type { HookHandlerEntry, HooksConfig } from "./hooks/schema.ts";
 
 import type { ClaudeHookEvent, HookSummaryEntry } from "../../shared/concerns/hooks.ts";
 
@@ -78,7 +73,7 @@ const TOOL_EVENT_MEMBERS = new Set<string>(TOOL_EVENTS);
  * structurally -- duplicated here so the parser does not depend on
  * the bridge surface (D-11 import direction).
  */
-export interface CompileIfPredicateContext {
+export interface ResolveHookIfContext {
   readonly homedir: string;
   readonly cwd: string;
   readonly projectRoot: string;
@@ -100,7 +95,7 @@ export interface CompileIfPredicateContext {
 export type CompileIfCallback<P> = (
   rawIf: string,
   claudeEvent: BucketAEvent,
-  ctx: CompileIfPredicateContext,
+  ctx: ResolveHookIfContext,
 ) => P;
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -222,7 +217,7 @@ export type HookConfigParseResult<P> =
  * `compileIfPredicate` result for every handler whose `if` field is
  * defined. Missing keys collapse to MATCH_ALL_IF at the flatten seam.
  *
- * `ctx` is the `CompileIfPredicateContext` consumed by the path-glob
+ * `ctx` is the `ResolveHookIfContext` consumed by the path-glob
  * compiler; production call sites construct it from the in-scope
  * `ExtensionContext.cwd` per the A1 projectRoot fallback.
  *
@@ -234,7 +229,7 @@ export type HookConfigParseResult<P> =
  */
 export function parseHooksConfig<P>(
   raw: string,
-  ctx: CompileIfPredicateContext,
+  ctx: ResolveHookIfContext,
   compileIf: CompileIfCallback<P>,
   options: { skipIfMap?: boolean } = {},
 ): HookConfigParseResult<P> {
@@ -304,7 +299,7 @@ export function parseHooksConfig<P>(
  */
 function buildIfPredicateMap<P>(
   config: HooksConfig,
-  ctx: CompileIfPredicateContext,
+  ctx: ResolveHookIfContext,
   compileIf: CompileIfCallback<P>,
 ): CompiledIfPredicateMap<P> {
   const out = new Map<string, P>();
@@ -328,7 +323,7 @@ function compileGroupIfPredicates<P>(
   claudeEvent: BucketAEvent,
   groupIndex: number,
   hooks: ReadonlyArray<HookHandlerEntry>,
-  ctx: CompileIfPredicateContext,
+  ctx: ResolveHookIfContext,
   compileIf: CompileIfCallback<P>,
   out: Map<string, P>,
 ): void {

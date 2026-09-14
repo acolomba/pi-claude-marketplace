@@ -84,7 +84,7 @@ import type { HooksRuntime } from "../runtime.ts";
  * orphan-reap pass can probe `/proc/<pid>/environ` on Linux and refuse
  * to SIGKILL a stranger process that may have inherited a recycled pid.
  */
-export const MARKER_ENV = "PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH" as const;
+const MARKER_ENV = "PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH" as const;
 
 /** HOOK-06: separator between `rewakeMessage` and the captured body. */
 const BODY_SEPARATOR = "\n\n";

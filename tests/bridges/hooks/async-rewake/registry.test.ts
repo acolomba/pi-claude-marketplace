@@ -16,7 +16,6 @@ import {
   type PidTableEntry,
 } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/async-rewake/pid-table.ts";
 import {
-  MARKER_ENV,
   reapOrphans,
   shutdownInMemoryChildren,
   spawnAndRegister,
@@ -591,7 +590,7 @@ test(
         "data",
         "plugin-lifecycle",
       ),
-      [MARKER_ENV]: "dispatch-lifecycle",
+      ["PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH"]: "dispatch-lifecycle",
       CLAUDECODE: "1",
       CLAUDE_CODE_SESSION_ID: "session-lifecycle",
       CLAUDE_SESSION_ID: "session-lifecycle",
@@ -667,7 +666,6 @@ test(
           },
         },
       ]);
-      assert.strictEqual(MARKER_ENV, "PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH");
       assert.strictEqual(Buffer.concat(stdinChunks).toString("utf8"), expectedStdin);
       assert.strictEqual(child.stdin?.writableEnded, true);
       assert.deepStrictEqual(listenersAfterRegistration, {
@@ -2280,7 +2278,7 @@ test(
       environReader(pid): Promise<string> {
         calls.push({ kind: "environ", pid });
         return Promise.resolve(
-          `BROKEN\0OTHER=value\0${MARKER_ENV}=dispatch-owned\0${MARKER_ENV}_SUFFIX=ignored`,
+          `BROKEN\0OTHER=value\0PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH=dispatch-owned\0PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH_SUFFIX=ignored`,
         );
       },
     } satisfies OrphanProbes;
@@ -2337,7 +2335,9 @@ test(
       },
       environReader(pid): Promise<string> {
         return Promise.resolve(
-          pid === 31_002 ? `${MARKER_ENV}=dispatch-other\0OTHER=x` : "OTHER=x\0NO_EQUALS",
+          pid === 31_002
+            ? `PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH=dispatch-other\0OTHER=x`
+            : "OTHER=x\0NO_EQUALS",
         );
       },
     } satisfies OrphanProbes;
@@ -2432,7 +2432,7 @@ test(
         }
       },
       environReader(): Promise<string> {
-        return Promise.resolve(`${MARKER_ENV}=dispatch-permission`);
+        return Promise.resolve(`PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH=dispatch-permission`);
       },
     } satisfies OrphanProbes;
 
@@ -2579,7 +2579,7 @@ test(
         }
       },
       environReader(): Promise<string> {
-        return Promise.resolve(`${MARKER_ENV}=dispatch-kill-failure`);
+        return Promise.resolve(`PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH=dispatch-kill-failure`);
       },
     } satisfies OrphanProbes;
 

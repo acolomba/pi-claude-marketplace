@@ -563,24 +563,11 @@ export const FINDING_DISPOSITIONS_REL: (typeof EVIDENCE_RECORD_TARGETS)[number] 
  * bare string literal, which is what the literal-match scan over this file needs.
  */
 export const UNOWNED_EXPORT_CENSUS: Readonly<Record<string, readonly string[]>> = {
-  "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/pid-table.ts": [
-    "ASYNC_REWAKE_PIDS_FILENAME",
-    "ASYNC_REWAKE_PID_TABLE_VERSION",
-  ],
-  "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts": ["MARKER_ENV"],
-  "extensions/pi-claude-marketplace/bridges/hooks/event-router.ts": [
-    "createBeforeAgentStartHandler",
-  ],
   "extensions/pi-claude-marketplace/bridges/hooks/stage.ts": [
     "createWriteHookConfig",
     "hookConfigPathFor",
   ],
   "extensions/pi-claude-marketplace/bridges/skills/unstage.ts": ["createUnstagePluginSkills"],
-  "extensions/pi-claude-marketplace/domain/components/hooks/schema.ts": ["HOOKS_CONFIG_SCHEMA"],
-  "extensions/pi-claude-marketplace/domain/components/hooks.ts": [
-    "HOOKS_CONFIG_SCHEMA",
-    "HOOKS_VALIDATOR",
-  ],
   "extensions/pi-claude-marketplace/index.ts": ["default"],
   "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts": [
     "createSetPluginEnabled",
@@ -652,22 +639,6 @@ export const FALLOW_CONTROL_TARGETS = [
 export const PRODUCTION_FINDING_CENSUS = {
   unused_exports: [
     {
-      path: "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/pid-table.ts",
-      export_name: "ASYNC_REWAKE_PIDS_FILENAME",
-    },
-    {
-      path: "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/pid-table.ts",
-      export_name: "ASYNC_REWAKE_PID_TABLE_VERSION",
-    },
-    {
-      path: "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts",
-      export_name: "MARKER_ENV",
-    },
-    {
-      path: "extensions/pi-claude-marketplace/bridges/hooks/event-router.ts",
-      export_name: "createBeforeAgentStartHandler",
-    },
-    {
       path: "extensions/pi-claude-marketplace/bridges/hooks/stage.ts",
       export_name: "hookConfigPathFor",
     },
@@ -678,18 +649,6 @@ export const PRODUCTION_FINDING_CENSUS = {
     {
       path: "extensions/pi-claude-marketplace/bridges/skills/unstage.ts",
       export_name: "createUnstagePluginSkills",
-    },
-    {
-      path: "extensions/pi-claude-marketplace/domain/components/hooks/schema.ts",
-      export_name: "HOOKS_CONFIG_SCHEMA",
-    },
-    {
-      path: "extensions/pi-claude-marketplace/domain/components/hooks.ts",
-      export_name: "HOOKS_CONFIG_SCHEMA",
-    },
-    {
-      path: "extensions/pi-claude-marketplace/domain/components/hooks.ts",
-      export_name: "HOOKS_VALIDATOR",
     },
     {
       path: "extensions/pi-claude-marketplace/index.ts",
@@ -830,30 +789,6 @@ export const PRODUCTION_FINDING_CENSUS = {
   ],
   unused_types: [
     {
-      path: "extensions/pi-claude-marketplace/bridges/hooks/index.ts",
-      export_name: "HooksFileReader",
-    },
-    {
-      path: "extensions/pi-claude-marketplace/bridges/hooks/index.ts",
-      export_name: "HooksHydration",
-    },
-    {
-      path: "extensions/pi-claude-marketplace/bridges/hooks/index.ts",
-      export_name: "HooksHydrationDeps",
-    },
-    {
-      path: "extensions/pi-claude-marketplace/bridges/hooks/index.ts",
-      export_name: "ReadAndCachePluginHooksOptions",
-    },
-    {
-      path: "extensions/pi-claude-marketplace/bridges/hooks/index.ts",
-      export_name: "HooksRuntime",
-    },
-    {
-      path: "extensions/pi-claude-marketplace/domain/components/hook-events.ts",
-      export_name: "_BucketAEventsCoverageProof",
-    },
-    {
       path: "extensions/pi-claude-marketplace/persistence/state-io.ts",
       export_name: "EnabledPluginRecord",
     },
@@ -876,28 +811,6 @@ export const PRODUCTION_FINDING_CENSUS = {
     },
   ],
   duplicate_exports: [
-    {
-      export_name: "CompileIfPredicateContext",
-      locations: [
-        {
-          path: "extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts",
-        },
-        {
-          path: "extensions/pi-claude-marketplace/domain/components/hooks.ts",
-        },
-      ],
-    },
-    {
-      export_name: "ToolEvent",
-      locations: [
-        {
-          path: "extensions/pi-claude-marketplace/domain/components/hook-events.ts",
-        },
-        {
-          path: "extensions/pi-claude-marketplace/shared/concerns/hooks.ts",
-        },
-      ],
-    },
     {
       export_name: "translate",
       locations: [

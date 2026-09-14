@@ -170,11 +170,9 @@ async function readAndCachePluginHooksWith(
 
 /**
  * Factory: build the `before_agent_start` handler closure registered on
- * Pi at `registerHooksBridge` time. Each closure captures `capturedEpoch`
- * the same way the composite hook handlers do; on epoch mismatch the
- * closure short-circuits to `undefined` and does NOT drain the live
- * buffer (zombie defense -- a stale closure from a prior bridge load
- * must not consume the new session's pending context).
+ * Pi at `registerHooksBridge` time. The registration wrapper checks its
+ * captured generation synchronously before invoking this closure. A stale
+ * registration returns undefined without draining the live context buffer.
  *
  * Drain semantics:
  *   - empty buffer -> returns undefined (no systemPrompt mutation, no
@@ -191,18 +189,13 @@ async function readAndCachePluginHooksWith(
  * Claude Code's SessionStart semantics where the injected text is added
  * to the session prompt once at session boot.
  */
-export function createBeforeAgentStartHandler(
+function createBeforeAgentStartHandler(
   runtime: HooksRuntime,
-  capturedGeneration: number,
 ): (
   event: BeforeAgentStartEvent,
   ctx: ExtensionContext,
 ) => Promise<BeforeAgentStartEventResult | undefined> {
   return (event) => {
-    if (capturedGeneration !== runtime.currentGeneration()) {
-      return Promise.resolve(undefined);
-    }
-
     const pendingContext = runtime.drainPendingSessionStartContext();
     if (pendingContext.length === 0) {
       return Promise.resolve(undefined);
@@ -965,7 +958,7 @@ async function registerHooksBridgeWith(
   // turn.
   pi.on(
     "before_agent_start",
-    bind((generation) => createBeforeAgentStartHandler(runtime, generation)),
+    bind(() => createBeforeAgentStartHandler(runtime)),
   );
   // Settle-time turn-boundary dispatch: agent_end caches the run's
   // last-assistant message; agent_settled reads it and gates on stopReason

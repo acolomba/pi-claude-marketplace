@@ -16,14 +16,24 @@ import {
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/stage.ts";
 
 import type * as HooksBarrel from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
-import type { HooksHydrationDeps } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 
 type Public<Name extends keyof typeof HooksBarrel> = Name;
+
+// @ts-expect-error the barrel does not expose the HooksFileReader type
+void ({} satisfies { readonly retired?: HooksBarrel.HooksFileReader });
+// @ts-expect-error the barrel does not expose the HooksHydration type
+void ({} satisfies { readonly retired?: HooksBarrel.HooksHydration });
+// @ts-expect-error the barrel does not expose the HooksHydrationDeps type
+void ({} satisfies { readonly retired?: HooksBarrel.HooksHydrationDeps });
+// @ts-expect-error the barrel does not expose the ReadAndCachePluginHooksOptions type
+void ({} satisfies { readonly retired?: HooksBarrel.ReadAndCachePluginHooksOptions });
+// @ts-expect-error the barrel does not expose the HooksRuntime type
+void ({} satisfies { readonly retired?: HooksBarrel.HooksRuntime });
 
 void ({
   loadState: () => Promise.resolve({ schemaVersion: 2, marketplaces: {} }),
   readHooksJson: () => Promise.resolve("{}"),
-} satisfies HooksHydrationDeps);
+} satisfies Parameters<typeof createHooksHydration>[1]);
 
 // @ts-expect-error the barrel keeps accumulateStream internal
 void ("accumulateStream" satisfies Public<"accumulateStream">);

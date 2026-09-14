@@ -1,6 +1,6 @@
 /**
  * shared/concerns/hooks.ts -- the hooks-summary concern (D-01). Owns the hook
- * summary types (`ClaudeHookEvent`, `ToolEvent`, `HookSummaryEntry`) and the
+ * summary types (`ClaudeHookEvent`, `HookSummaryToolEvent`, `HookSummaryEntry`) and the
  * pure `appendHooksBlock` block renderer. The info renderer (`appendResolvedComponentLines`, which stays in
  * `notify.ts`) imports and calls `appendHooksBlock`; `COMPONENT_KINDS` also
  * stays in `notify.ts` (only the `kind === "hooks"` arm dispatches here).
@@ -78,11 +78,11 @@ export type ClaudeHookEvent =
  * from `domain/` (the import-direction fence), which is why the literal union
  * is restated here.
  */
-export type ToolEvent = "PreToolUse" | "PostToolUse" | "PostToolUseFailure";
+export type HookSummaryToolEvent = "PreToolUse" | "PostToolUse" | "PostToolUseFailure";
 
 export type HookSummaryEntry =
-  | { readonly event: ToolEvent; readonly matcher: string }
-  | { readonly event: Exclude<ClaudeHookEvent, ToolEvent> }
+  | { readonly event: HookSummaryToolEvent; readonly matcher: string }
+  | { readonly event: Exclude<ClaudeHookEvent, HookSummaryToolEvent> }
   | {
       readonly kind: "lenient";
       readonly event: string;

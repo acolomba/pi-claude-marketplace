@@ -54,7 +54,7 @@ const HOOK_ENTRY_SCHEMA = Type.Object({
 const HOOK_EVENT_ARRAY_SCHEMA = Type.Array(HOOK_ENTRY_SCHEMA);
 
 /** Claude hook events mapped to their matcher groups. */
-export const HOOKS_CONFIG_SCHEMA = Type.Record(Type.String(), HOOK_EVENT_ARRAY_SCHEMA);
+const HOOKS_CONFIG_SCHEMA = Type.Record(Type.String(), HOOK_EVENT_ARRAY_SCHEMA);
 
 export type HooksConfig = Type.Static<typeof HOOKS_CONFIG_SCHEMA>;
 

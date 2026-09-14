@@ -15,10 +15,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import {
-  HOOKS_CONFIG_SCHEMA,
-  HOOKS_VALIDATOR,
-} from "../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
+import { parseHooksConfig } from "../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
 import { resolveStrict } from "../../extensions/pi-claude-marketplace/domain/plugin-resolver.ts";
 import { STATE_SCHEMA } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
@@ -106,88 +103,61 @@ test("HOOK-02 / D-57-01: PLUGIN_INSTALL_RECORD_SCHEMA.resources.hooks is REQUIRE
 });
 
 // ──────────────────────────────────────────────────────────────────────────
-// Block 3: HOOK-03 -- HOOKS_CONFIG_SCHEMA accepts unknown fields at every
+// Block 3: HOOK-03 -- public hook resolution accepts unknown fields at every
 // nesting level (lenient stance).
 // ──────────────────────────────────────────────────────────────────────────
 
-/**
- * Recursively walk a JSON-Schema-shaped object looking for any sub-object
- * carrying `additionalProperties: false`. Returns the dotted paths where
- * strict gates appear; an empty array means HOOK-03 lenience holds.
- */
-function walkSchemaForStrictAdditionalProperties(schema: unknown, path: string[]): string[] {
-  const offenders: string[] = [];
-  if (typeof schema !== "object" || schema === null) {
-    return offenders;
-  }
+for (const { label, raw, expectedValue, expectedDropped } of [
+  {
+    label: "handler extension",
+    raw: '{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"echo hi","futureHandlerField":"ignored"}]}]}',
+    expectedValue: {
+      PreToolUse: [
+        {
+          matcher: "Bash",
+          hooks: [{ type: "command", command: "echo hi", futureHandlerField: "ignored" }],
+        },
+      ],
+    },
+    expectedDropped: [],
+  },
+  {
+    label: "group extension",
+    raw: '{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"echo hi"}],"futureEntryField":"ignored"}]}',
+    expectedValue: {
+      PreToolUse: [
+        {
+          matcher: "Bash",
+          hooks: [{ type: "command", command: "echo hi" }],
+          futureEntryField: "ignored",
+        },
+      ],
+    },
+    expectedDropped: [],
+  },
+  {
+    label: "future event",
+    raw: '{"FutureEventX":[{"matcher":"Bash","hooks":[{"type":"command","command":"echo hi"}]}]}',
+    expectedValue: {},
+    expectedDropped: [{ kind: "event", event: "FutureEventX" }],
+  },
+]) {
+  test(`HOOK-03: public hook resolution preserves ${label} lenience`, () => {
+    // arrange
+    const anchors = { homedir: "/home/u", cwd: "/plugins/alpha", projectRoot: "/plugins/alpha" };
 
-  const obj = schema as Record<string, unknown>;
-  if (obj.additionalProperties === false) {
-    offenders.push(path.length === 0 ? "<root>" : path.join("."));
-  }
+    // act
+    const resolvedHooks = parseHooksConfig(raw, anchors, () => null);
 
-  for (const [key, child] of Object.entries(obj)) {
-    if (child === null || typeof child !== "object") {
-      continue;
-    }
-
-    offenders.push(...walkSchemaForStrictAdditionalProperties(child, [...path, key]));
-  }
-
-  return offenders;
+    // assert
+    assert.deepStrictEqual(resolvedHooks, {
+      ok: true,
+      value: expectedValue,
+      dropped: expectedDropped,
+      ifPredicates: new Map(),
+    });
+  });
 }
-
-test("HOOK-03: HOOKS_CONFIG_SCHEMA carries NO `additionalProperties: false` at any nesting level", () => {
-  const offenders = walkSchemaForStrictAdditionalProperties(HOOKS_CONFIG_SCHEMA, []);
-  assert.deepEqual(
-    offenders,
-    [],
-    `HOOK-03 lenient stance violated -- strict gates found at: ${offenders.join(", ")}`,
-  );
-});
-
-test("HOOK-03: HOOKS_VALIDATOR.Check accepts unknown fields at handler, entry, and top level", () => {
-  // Unknown field on a handler entry.
-  const handlerExt = {
-    PreToolUse: [
-      {
-        matcher: "Bash",
-        hooks: [{ type: "command", command: "echo hi", futureHandlerField: "ignored" }],
-      },
-    ],
-  };
-  assert.equal(
-    HOOKS_VALIDATOR.Check(handlerExt),
-    true,
-    "handler-level unknown field must pass (HOOK-03)",
-  );
-
-  // Unknown field on a hook-entry.
-  const entryExt = {
-    PreToolUse: [
-      {
-        matcher: "Bash",
-        hooks: [{ type: "command", command: "echo hi" }],
-        futureEntryField: "ignored",
-      },
-    ],
-  };
-  assert.equal(
-    HOOKS_VALIDATOR.Check(entryExt),
-    true,
-    "entry-level unknown field must pass (HOOK-03)",
-  );
-
-  // Unknown event key at the top level (D-57-02 lenient top-level).
-  const topExt = {
-    FutureEventX: [{ matcher: "Bash", hooks: [{ type: "command", command: "echo hi" }] }],
-  };
-  assert.equal(
-    HOOKS_VALIDATOR.Check(topExt),
-    true,
-    "top-level unknown event key must pass (D-57-02)",
-  );
-});
 
 // ──────────────────────────────────────────────────────────────────────────
 // Block 5: NFR-7 + HOOK-01 -- resolveStrict admits a

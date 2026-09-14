@@ -14,7 +14,6 @@ import {
   type PidTableEntry,
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/async-rewake/pid-table.ts";
 import {
-  MARKER_ENV,
   shutdownInMemoryChildren,
   spawnAndRegister,
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts";
@@ -247,7 +246,7 @@ function destroyChildren(children: readonly ChildHarness[]): void {
 function assertLaneParity(syncEnv: NodeJS.ProcessEnv, asyncEnv: NodeJS.ProcessEnv): void {
   const syncKeys = Object.keys(syncEnv).sort();
   const asyncKeysWithoutMarker = Object.keys(asyncEnv)
-    .filter((key) => key !== MARKER_ENV)
+    .filter((key) => key !== "PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH")
     .sort();
   assert.deepStrictEqual(asyncKeysWithoutMarker, syncKeys);
   for (const key of syncKeys) {
@@ -321,7 +320,10 @@ test("keeps PreToolUse hook environments equal across sync and async lanes excep
       "D-07-03: expected one sync and one async spawn; lane parity over an unspawned lane proves nothing",
     );
     assertLaneParity(syncEnvironment, asyncEnvironment);
-    assert.strictEqual(asyncEnvironment[MARKER_ENV], "dispatch-pretool-parity");
+    assert.strictEqual(
+      asyncEnvironment["PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH"],
+      "dispatch-pretool-parity",
+    );
     assert.strictEqual(Object.hasOwn(syncEnvironment, "CLAUDE_ENV_FILE"), false);
     assert.strictEqual(Object.hasOwn(asyncEnvironment, "CLAUDE_ENV_FILE"), false);
   } finally {
@@ -372,7 +374,10 @@ test("keeps SessionStart env-file identity equal across sync and async lanes", a
       "D-07-03: expected one sync and one async spawn; lane parity over an unspawned lane proves nothing",
     );
     assertLaneParity(syncEnvironment, asyncEnvironment);
-    assert.strictEqual(asyncEnvironment[MARKER_ENV], "dispatch-session-parity");
+    assert.strictEqual(
+      asyncEnvironment["PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH"],
+      "dispatch-session-parity",
+    );
     assert.strictEqual(
       syncEnvironment.CLAUDE_ENV_FILE,
       path.join(
