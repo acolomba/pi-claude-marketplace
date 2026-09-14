@@ -568,15 +568,11 @@ export const FINDING_DISPOSITIONS_REL: (typeof EVIDENCE_RECORD_TARGETS)[number] 
  */
 export const UNOWNED_EXPORT_CENSUS: Readonly<Record<string, readonly string[]>> = {
   "extensions/pi-claude-marketplace/index.ts": ["default"],
-  "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts": [
-    "createSetPluginEnabled",
-  ],
   "extensions/pi-claude-marketplace/orchestrators/plugin/fetch.ts": ["createFetchPlugins"],
   "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts": ["createGetPluginInfo"],
   "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts": [
     "createReinstallPlugin",
   ],
-  "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts": ["createUninstallPlugin"],
   "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts": ["createApplyReconcile"],
   "extensions/pi-claude-marketplace/orchestrators/reconcile/backfill.ts": [
     "scanForceInstalledBackfills",
@@ -607,10 +603,6 @@ export const PRODUCTION_FINDING_CENSUS = {
       export_name: "default",
     },
     {
-      path: "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts",
-      export_name: "createSetPluginEnabled",
-    },
-    {
       path: "extensions/pi-claude-marketplace/orchestrators/plugin/fetch.ts",
       export_name: "createFetchPlugins",
     },
@@ -621,10 +613,6 @@ export const PRODUCTION_FINDING_CENSUS = {
     {
       path: "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts",
       export_name: "createReinstallPlugin",
-    },
-    {
-      path: "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts",
-      export_name: "createUninstallPlugin",
     },
     {
       path: "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts",
@@ -673,12 +661,6 @@ export const PRODUCTION_FINDING_CENSUS = {
     {
       export_name: "translate",
       locations: [
-        {
-          path: "extensions/pi-claude-marketplace/bridges/hooks/payloads/post-compact.ts",
-        },
-        {
-          path: "extensions/pi-claude-marketplace/bridges/hooks/payloads/pre-compact.ts",
-        },
         {
           path: "extensions/pi-claude-marketplace/bridges/hooks/payloads/stop-failure.ts",
         },
