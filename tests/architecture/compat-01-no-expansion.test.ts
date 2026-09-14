@@ -26,9 +26,9 @@
  *   scans source.
  *
  *   Persistence (COMPAT-01) -- the persisted install record's key set is exactly
- *   the eight fields it already had, and neither a manifest-snapshot-shaped key
- *   nor an orphan-shaped key appears. The state schema's version property still
- *   enumerates exactly the two versions it already enumerated and the frozen
+ *   the nine fields it already had, and neither a manifest-snapshot-shaped key
+ *   nor an orphan-shaped key appears. The public state's version type still
+ *   admits exactly the two versions it already admitted and the frozen
  *   default state still declares the current one, which together prove no
  *   migration and no version bump was introduced.
  *
@@ -74,11 +74,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 
-import {
-  DEFAULT_STATE,
-  PLUGIN_INSTALL_RECORD_SCHEMA,
-  STATE_SCHEMA,
-} from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { DEFAULT_STATE } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import {
   ICON_AVAILABLE,
   ICON_DISABLED,
@@ -100,6 +96,10 @@ import { REPO_ROOT, stripComments } from "./source-scan.ts";
 
 import type { LedgerDegradationSignals } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts";
 import type { InstallPluginOutcome } from "../../extensions/pi-claude-marketplace/orchestrators/types.ts";
+import type {
+  ExtensionState,
+  PluginInstallRecord,
+} from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
 /**
  * The two files this gate reads as data, taken from the registry (D-07-05) so
@@ -411,32 +411,24 @@ test("COMPAT-01: the glyph-declaration pattern recognises every spelling a glyph
   assert.equal(referenceMatches, false, "a glyph USE must not count as a declaration");
 });
 
-test("COMPAT-01: the persisted install record holds exactly its inherited key set", () => {
-  // arrange
-  const expected = [
-    "compatibility",
-    "enabled",
-    "hookEntries",
-    "installedAt",
-    "resolvedSha",
-    "resolvedSource",
-    "resources",
-    "updatedAt",
-    "version",
-  ];
+type IsExact<Actual, Expected> = [Actual] extends [Expected]
+  ? [Expected] extends [Actual]
+    ? true
+    : false
+  : false;
 
-  // act
-  const actual = Object.keys(PLUGIN_INSTALL_RECORD_SCHEMA.properties).sort((a, b) =>
-    a.localeCompare(b),
-  );
-
-  // assert
-  assert.deepEqual(
-    actual,
-    expected,
-    "COMPAT-01: this is the pinned key set of the persisted install record. A key may join it only as an OPTIONAL additive field that needs no schemaVersion bump and no migrate fill (the resolvedSha / hookEntries precedent); removing one is a migration. Either way the change lands here deliberately, alongside the sibling clause that forbids manifest-snapshot and orphan fields outright.",
-  );
-});
+void (true satisfies IsExact<
+  keyof PluginInstallRecord,
+  | "compatibility"
+  | "enabled"
+  | "hookEntries"
+  | "installedAt"
+  | "resolvedSha"
+  | "resolvedSource"
+  | "resources"
+  | "updatedAt"
+  | "version"
+>);
 
 test("COMPAT-01: the install outcome inherits exactly the signals installPlugin populates", () => {
   // arrange
@@ -473,48 +465,21 @@ test("COMPAT-01: the install outcome inherits exactly the signals installPlugin 
   );
 });
 
-test("COMPAT-01: no manifest-snapshot or orphan field reached the install record", () => {
-  // arrange
-  // Named explicitly rather than left to the key-set clause: these are the two
-  // shapes the manifest-independent work could plausibly have persisted, and a
-  // reader looking for that promise should find it stated, not inferred.
-  const shapes = [
-    "manifestSnapshot",
-    "manifest",
-    "manifestEntry",
-    "entry",
-    "orphan",
-    "orphanRewake",
-    "orphaned",
-  ];
+void (true satisfies IsExact<
+  Extract<
+    keyof PluginInstallRecord,
+    | "manifestSnapshot"
+    | "manifest"
+    | "manifestEntry"
+    | "entry"
+    | "orphan"
+    | "orphanRewake"
+    | "orphaned"
+  >,
+  never
+>);
 
-  // act
-  const present = shapes.filter((key) =>
-    Object.hasOwn(PLUGIN_INSTALL_RECORD_SCHEMA.properties, key),
-  );
-
-  // assert
-  assert.deepEqual(
-    present,
-    [],
-    "COMPAT-01: the install record caches no manifest material and records no orphan marker. Plugin lifecycle reads the manifest live or does not read it at all.",
-  );
-});
-
-test("COMPAT-01: the state schema version union is unchanged", () => {
-  // arrange
-  const expected = [1, 2];
-
-  // act
-  const actual = STATE_SCHEMA.properties.schemaVersion.anyOf.map((member) => member.const);
-
-  // assert
-  assert.deepEqual(
-    actual,
-    expected,
-    "COMPAT-01: no state-schema migration was introduced. A third version means an on-disk migration, which this work promised not to require.",
-  );
-});
+void (true satisfies IsExact<ExtensionState["schemaVersion"], 1 | 2>);
 
 test("COMPAT-01: the default state still declares the current schema version", () => {
   // arrange

@@ -41,7 +41,6 @@ import { locationsFor } from "../../../extensions/pi-claude-marketplace/persiste
 import {
   loadState,
   saveState,
-  STATE_VALIDATOR,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
@@ -8149,9 +8148,11 @@ test("orchestrated install reports when the state write does not retain its fres
         marketplaceRoot: path.join(cwd, "mp-src"),
         pluginName: "vanishing",
       });
+      const seededBytes = await readFile(locations.stateJsonPath, "utf8");
+      const seededState = await loadState(locations.extensionRoot);
       const parse = t.mock.method(JSON, "parse", (text: string): unknown => {
-        const parsed = originalParse(text);
-        if (STATE_VALIDATOR.Check(parsed)) {
+        if (text === seededBytes) {
+          const parsed = structuredClone(seededState);
           const marketplace = parsed.marketplaces.mp;
           if (marketplace !== undefined) {
             marketplace.plugins = new Proxy(marketplace.plugins, {
@@ -8162,9 +8163,11 @@ test("orchestrated install reports when the state write does not retain its fres
               },
             });
           }
+
+          return parsed;
         }
 
-        return parsed;
+        return originalParse(text);
       });
       const { ctx, notifications, pi } = makeCtx();
       const expectedError = new Error(
@@ -9312,10 +9315,11 @@ test("retry proof: install: state commit race after staged work retries from unc
       const firstSchedule: string[] = [];
       const secondSchedule: string[] = [];
       const activeSchedule = { current: firstSchedule };
+      const seededState = await loadState(locations.extensionRoot);
       let eraseFreshRecord = true;
       parseMock = t.mock.method(JSON, "parse", (text: string): unknown => {
-        const parsed = originalParse(text);
-        if (eraseFreshRecord && STATE_VALIDATOR.Check(parsed)) {
+        if (eraseFreshRecord && text === stateBytes) {
+          const parsed = structuredClone(seededState);
           const marketplace = parsed.marketplaces.mp;
           if (marketplace !== undefined) {
             marketplace.plugins = new Proxy(marketplace.plugins, {
@@ -9326,9 +9330,11 @@ test("retry proof: install: state commit race after staged work retries from unc
               },
             });
           }
+
+          return parsed;
         }
 
-        return parsed;
+        return originalParse(text);
       });
       restoreSchedule = observeRetryBridgeSchedule(
         transactionControl,

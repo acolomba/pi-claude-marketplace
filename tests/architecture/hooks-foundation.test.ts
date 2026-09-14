@@ -1,14 +1,10 @@
 // Architecture-level invariant pins for the HOOK-01 / HOOK-02 / HOOK-03 /
 // D-57-01 / D-57-02 / D-57-04 / NFR-7 leaf-foundation contract.
 //
-// Each test in this file pins one load-bearing decision that is a single
-// textual diff away from regression. If any of the five tests below
-// red-fails CI, a future contributor inadvertently reverted a locked
-// invariant.
+// Each runtime or compile-time assertion pins a locked foundation contract.
 //
-// Static introspection of TypeBox schemas (via the JSON Schema shape they
-// produce at module load) is the technique. Runtime parse round-trips
-// exercise HOOK-03 lenience at every nesting level. A type-level
+// Exact public types pin state versions and required resource arrays.
+// Runtime parse round-trips exercise HOOK-03 lenience at every nesting level. A type-level
 // `@ts-expect-error` directive locks the NFR-7 discriminated contract --
 // `npm run typecheck` is the load-bearing assertion for that block.
 
@@ -17,90 +13,37 @@ import test from "node:test";
 
 import { parseHooksConfig } from "../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
 import { resolveStrict } from "../../extensions/pi-claude-marketplace/domain/plugin-resolver.ts";
-import { STATE_SCHEMA } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
 import type { PluginEntry } from "../../extensions/pi-claude-marketplace/domain/components/plugin.ts";
 import type {
   ResolveContext,
   ResolvedPluginUnavailable,
 } from "../../extensions/pi-claude-marketplace/domain/resolver-types.ts";
+import type {
+  ExtensionState,
+  PluginInstallRecord,
+} from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
-// ──────────────────────────────────────────────────────────────────────────
-// Block 1: ENBL-02 -- STATE_SCHEMA.schemaVersion is Union(Literal(1), Literal(2))
-// ──────────────────────────────────────────────────────────────────────────
+// The actual public state contract keeps exactly both accepted schema versions
+// and requires all five resource arrays. Persistence owner tests exercise these
+// same fields through loadState/saveState, including invalid records and bytes.
+type IsExact<Actual, Expected> = [Actual] extends [Expected]
+  ? [Expected] extends [Actual]
+    ? true
+    : false
+  : false;
 
-test("ENBL-02: STATE_SCHEMA.schemaVersion is Type.Union([Literal(1), Literal(2)])", () => {
-  const versionSchema = STATE_SCHEMA.properties.schemaVersion as unknown as Record<string, unknown>;
-
-  // Type.Union([Type.Literal(1), Type.Literal(2)]) compiles to
-  // { anyOf: [{ const: 1 }, { const: 2 }] }.
-  // Asserting the anyOf structure pins the ENBL-02 migration contract:
-  // both v1 (pre-enabled) and v2 (enabled) on-disk formats are accepted,
-  // and any future widening to v3 requires this test to be updated.
-  assert.ok(Array.isArray(versionSchema.anyOf), "schemaVersion must be a union (anyOf present)");
-  const anyOf = versionSchema.anyOf as Array<Record<string, unknown>>;
-  assert.equal(anyOf.length, 2, "schemaVersion union must have exactly two members (1 and 2)");
-  assert.ok(
-    anyOf.some((m) => m.const === 1),
-    "schemaVersion union must include Literal(1)",
-  );
-  assert.ok(
-    anyOf.some((m) => m.const === 2),
-    "schemaVersion union must include Literal(2)",
-  );
-});
-
-// ──────────────────────────────────────────────────────────────────────────
-// Block 2: HOOK-02 / D-57-01 -- resources.hooks is REQUIRED Array(String)
-// ──────────────────────────────────────────────────────────────────────────
-
-test("HOOK-02 / D-57-01: PLUGIN_INSTALL_RECORD_SCHEMA.resources.hooks is REQUIRED Array(String)", () => {
-  // Navigate the nested schema down to the plugin record's resources.
-  // STATE_SCHEMA.marketplaces is a Type.Record so each marketplace lives
-  // under patternProperties. Same for marketplaces.<mp>.plugins.
-  type SchemaNode = Record<string, unknown>;
-  const marketplacesSchema = STATE_SCHEMA.properties.marketplaces as unknown as SchemaNode;
-  const marketplacesPattern = marketplacesSchema.patternProperties as Record<string, SchemaNode>;
-  const marketplaceKey = Object.keys(marketplacesPattern)[0];
-  assert.ok(marketplaceKey !== undefined, "marketplaces must have a patternProperties entry");
-  const marketplaceSchema = marketplacesPattern[marketplaceKey]!;
-
-  const marketplaceProps = marketplaceSchema.properties as Record<string, SchemaNode>;
-  const pluginsSchema = marketplaceProps.plugins;
-  assert.ok(pluginsSchema !== undefined, "marketplace must declare a plugins field");
-  const pluginsPattern = pluginsSchema.patternProperties as Record<string, SchemaNode>;
-  const pluginKey = Object.keys(pluginsPattern)[0];
-  assert.ok(pluginKey !== undefined, "plugins must have a patternProperties entry");
-  const pluginSchema = pluginsPattern[pluginKey]!;
-
-  const pluginProps = pluginSchema.properties as Record<string, SchemaNode>;
-  const resourcesSchema = pluginProps.resources;
-  assert.ok(resourcesSchema !== undefined, "plugin record must declare a resources field");
-
-  // Required-list contains `hooks` alongside the other four resource arrays.
-  const required = resourcesSchema.required as string[];
-  assert.ok(Array.isArray(required), "resources.required must be an array");
-  assert.ok(
-    required.includes("hooks"),
-    `resources.required must include "hooks": ${required.join(",")}`,
-  );
-  assert.ok(required.includes("skills"));
-  assert.ok(required.includes("prompts"));
-  assert.ok(required.includes("agents"));
-  assert.ok(required.includes("mcpServers"));
-
-  // The shape of resources.hooks is Type.Array(Type.String()).
-  const resourceProps = resourcesSchema.properties as Record<string, SchemaNode>;
-  const hooksProp = resourceProps.hooks;
-  assert.ok(hooksProp !== undefined, "resources must declare a hooks field");
-  assert.equal(hooksProp.type, "array", "resources.hooks must be an array schema");
-  const itemsSchema = hooksProp.items as Record<string, unknown>;
-  assert.equal(
-    itemsSchema.type,
-    "string",
-    "resources.hooks items must be strings (D-57-03 generatedName)",
-  );
-});
+void (true satisfies IsExact<ExtensionState["schemaVersion"], 1 | 2>);
+void (true satisfies IsExact<
+  PluginInstallRecord["resources"],
+  {
+    skills: string[];
+    prompts: string[];
+    agents: string[];
+    mcpServers: string[];
+    hooks: string[];
+  }
+>);
 
 // ──────────────────────────────────────────────────────────────────────────
 // Block 3: HOOK-03 -- public hook resolution accepts unknown fields at every
