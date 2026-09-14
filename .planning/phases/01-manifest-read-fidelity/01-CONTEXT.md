@@ -206,7 +206,7 @@ DEPS-01/02 name `info` and only `info`.
   `domain/resolver.ts` -- it stays module-private, and `domain/manifest-path.ts`
   stays a pure constant module per D-01-06.
 
-- **D-01-24 (scope fence, from the OQ-1 symmetry note):** `bridges/commands/discover.ts`
+- **D-01-24 [SUPERSEDED by D-01-34 -- the premise was falsified]:** `bridges/commands/discover.ts`
   has the same overlap shape and would warn identically, but the four
   bare-manifest plugins declare NO commands, so it is outside MANF-03's letter.
   Do not widen this phase to the commands bridge. Note for the backlog that the
@@ -387,6 +387,44 @@ These SUPERSEDE the spike's summary where they disagree.
 
   Carried in the plans as threat `T-01-03` (Spoofing / output forgery, severity
   high, ASVS V5).
+
+### Commands-bridge widening (added 2026-09-14, superseding D-01-24)
+
+- **D-01-34 (SUPERSEDES D-01-24):** The phase DOES widen to
+  `bridges/commands/discover.ts`. D-01-24 fenced it out on the stated premise that
+  the commands bridge "would warn identically" -- a cosmetic defect with no
+  in-the-wild victim. The code review falsified that premise by executing the
+  shipped code: it is not a warning, it is a DOUBLE INSTALL.
+
+  Reproduced against a plugin whose only manifest is a bare `plugin.json`
+  declaring `commands: ["./commands/git"]`, over a tree holding
+  `commands/git/commit.md` and `commands/top.md`:
+
+  ```text
+  # after this phase (the bare plugin.json is now read)
+  componentPaths.commands = [ "commands/git", "commands" ]
+  discovered = [ "acme:commit", "acme:git:commit", "acme:top" ]
+
+  # same tree, no manifest -- the pre-change state
+  componentPaths.commands = [ "commands" ]
+  discovered = [ "acme:git:commit", "acme:top" ]
+  ```
+
+  One source file installs as two commands. `collectStrictComponentKind` appends
+  the conventional `commands` directory unconditionally and `walkCommandsDir`
+  RECURSES, so a declared `commands/<sub>` and the conventional `commands` reach
+  the same file at two depths under two generated names. `agents` is safe -- its
+  discovery is flat, so nesting cannot re-reach a file. `skills` is closed by
+  D-01-21. `commands` is the live gap.
+
+  The fix is the same collapse `skills` got: `discoverPluginCommands` already keys
+  `seenByFile` on the absolute source file, so warn-and-install-anyway becomes
+  skip. `tests/architecture/declared-component-path-overlap.test.ts` extends with a
+  commands case so the gate covers every RECURSIVE component kind rather than one.
+
+  D-01-24's backlog note about the two bridges being a fallow-reported mirrored
+  clone pair still stands as a duplication observation; it is no longer a reason to
+  leave the defect unfixed.
 
 ### Claude's Discretion
 

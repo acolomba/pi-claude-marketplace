@@ -4,12 +4,12 @@ milestone: v1.20
 milestone_name: transitive-dependencies
 current_phase: 1
 current_phase_name: Manifest read fidelity
-status: planning
+status: executing
 stopped_at: Phase 1 planned, ready to execute
-last_updated: "2026-09-13T16:06:45.173Z"
+last_updated: "2026-09-13T16:08:59.883Z"
 last_activity: 2026-09-13
-last_activity_desc: Phase 1 planned, 4 plans across 2 waves
-state_head: f54c16c4afbfd93e809f71ab3d294944d1777de6
+last_activity_desc: Phase 1 execution started
+state_head: c8899de2c214ec9790907149f6d27a569321c21b
 progress:
   total_phases: 5
   completed_phases: 0
@@ -27,7 +27,7 @@ See: `.planning/PROJECT.md` (updated 2026-09-04 after the v1.19 milestone closed
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** v1.20 transitive-dependencies, on branch `features/manifest`.
+**Current focus:** Phase 1 — Manifest read fidelity
 Record how each installed plugin got there so `uninstall --prune` can remove the
 ones nothing needs any more, and close the two adjacent gaps that land on the
 same surfaces. 25 requirements across 5 phases. v1.19 Unit Test Refactor closed
@@ -35,11 +35,11 @@ same surfaces. 25 requirements across 5 phases. v1.19 Unit Test Refactor closed
 
 ## Current Position
 
-Phase: 1 of 5 (Manifest read fidelity) — READY TO EXECUTE
-Plan: 0 of 4 complete — waves 1 (01-01, 01-02) then 2 (01-03, 01-04)
-Status: Discussed, researched, pattern-mapped and planned. Plan-checker passed;
+Phase: 1 (Manifest read fidelity) — EXECUTING
+Plan: 1 of 4
+Status: Executing Phase 1
 requirements coverage 7/7, decision coverage 33/33, gap analysis 40/40.
-Last activity: 2026-09-13 — Phase 1 planned, 4 plans across 2 waves
+Last activity: 2026-09-13 — Phase 1 execution started
 
 **Phase numbering restarts at 1 for this milestone** (operator decision,
 2026-09-09). Phases 1-117 belong to archived milestones. A bare phase number in
