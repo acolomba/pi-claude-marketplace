@@ -4,17 +4,17 @@ milestone: v1.20
 milestone_name: transitive-dependencies
 current_phase: 02
 current_phase_name: Uninstall data disposition and the uninstall option seam
-status: Paused at user request; plan 02-01 task 3 checks pending
-stopped_at: Paused by user during plan 02-01 task 3 verification
-last_updated: "2026-09-14T16:54:56.706Z"
+status: executing
+stopped_at: Completed 02-01-PLAN.md
+last_updated: "2026-09-14T17:30:00.000Z"
 last_activity: 2026-09-14
-last_activity_desc: Phase 02 execution started
-state_head: a2b275365947a7a6f63cd4048f06cc8848841eb2
+last_activity_desc: Plan 02-01 complete — uninstall keepData policy and scanner consuming mode
+state_head: 5a3afa555280dc157b1ae35fbda55b7d452f286e
 progress:
   total_phases: 5
   completed_phases: 1
   total_plans: 6
-  completed_plans: 4
+  completed_plans: 5
   percent: 20
 ---
 
@@ -35,11 +35,14 @@ same surfaces. 25 requirements across 5 phases. v1.19 Unit Test Refactor closed
 
 ## Current Position
 
-Phase: 02 (Uninstall data disposition and the uninstall option seam) — PAUSED
-Plan: 1 of 2
-Status: Paused at user request; plan 02-01 task 3 checks pending
+Phase: 02 (Uninstall data disposition and the uninstall option seam) — EXECUTING
+Plan: 2 of 2 (02-01 complete; 02-02 not started)
+Status: Plan 02-01 closed. The uninstall operation now carries an optional
+`keepData` policy and the shared flag scanner has a strict consuming mode.
+Plan 02-02 adds the `--keep-data` CLI flag, usage text, completions and docs.
+DATA-01..03 stay Pending in REQUIREMENTS.md until 02-02 ships that flag.
 Phase 1 verified: 7/7 requirements, 37/37 decisions, 5/5 acceptance criteria.
-Last activity: 2026-09-14 — Phase 02 execution started
+Last activity: 2026-09-14 — plan 02-01 complete (`5a3afa55`)
 Quick task `260914-aer` resolved WR-01 under D-01-35. The operator approved the
 whitespace-only `.mcp.json` formatting. GSD configuration remains uncommitted.
 Milestone progress is 1 of 5 phases complete (20%).
@@ -210,6 +213,7 @@ Execution order 1 → 3 → 4 → 5, with 2 free to run at any point before 5.
 | Phase 117 P10 | 12 min | 1 tasks | 1 files |
 | Phase 117 P11 | 50 min | 1 tasks | 4 files |
 | Phase 117 P11 | 2h 20m | 2 tasks | 16 files |
+| Phase 02 P01 | 58 min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -419,6 +423,10 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 117]: D-117-20 amended to 190 + 7 + 7: 190 complete numeric records, 7 accepted D-116-01a shortfalls, 7 type-only — Operator decision after plan 117-11 measured it; the gate is deliberately unchanged, no ledger-keyed verdict and no production licence, because a ledger-keyed pass would be the coverage-exception pragma D-116-01a bans
 - [Phase 117]: Concurrency is NOT added to the all-pair run, decided against a measured 533.2 s for all 204 rows — Under nine minutes at a phase boundary does not justify D-117-11's obligation of a second planting control proving a failing pair is still detected under interleaving
 - [Phase 117]: An errno path and errno message text are runtime-owned, not contractual; assertions pin name, code and syscall, and read the runtime's wording back where production composes around it — A package upgrade changed the EISDIR wording mid-phase and reddened 11 assertions with no behaviour change; the ten hardened suites are now identical on v22.22.2 and v26.8.1
+- [Phase 02]: `keepData` guards only data-path resolution and the data `rm`; completion-cache invalidation, hook-route removal, unused-clone collection, config write-back and artifact removal keep their established scheduling — D-02-06; proven by the symlinked-data-dir case that still retires routes, cache and the last clone
+- [Phase 02]: The consuming scanner form takes `{ consumeLongFlags: readonly string[] }` and returns `consumedFlags: ReadonlySet<string>`; the omitted and `readonly string[]` fourth-argument forms keep their exact existing result shape — D-02-05; one token walk owns scope-value precedence, extraction and unknown-option rejection
+- [Phase 02]: DATA-01..03 are NOT marked complete by plan 02-01 — each names the `uninstall --keep-data` command surface, which plan 02-02 delivers; 02-01 proves the operation underneath it
+- [Phase 02]: TruffleHog's pre-commit git-mode scan cannot run in this checkout because `.git` is a worktree file; commits use `SKIP=trufflehog` per CLAUDE.md and a filesystem-mode scan covers the exact staged files
 
 ### Pending Todos
 
@@ -504,15 +512,17 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Paused by user during plan 02-01 task 3 verification
+**Stopped at:** Completed 02-01-PLAN.md
 
-**Resume file:** .planning/phases/02-uninstall-data-disposition-and-the-uninstall-option-seam/.continue-here.md
+**Resume file:** None
 
-**Read beside it:** `.planning/phases/02-uninstall-data-disposition-and-the-uninstall-option-seam/02-DISCUSSION-LOG.md`
+**Read beside it:** `.planning/phases/02-uninstall-data-disposition-and-the-uninstall-option-seam/02-01-SUMMARY.md`
 
-Last session: 2026-09-14T16:53:41.378Z
+Last session: 2026-09-14T17:30:00.000Z
 
-**Next:** `$gsd-resume-work` recovers plan 02-01 task 3 checks and closeout.
+**Next:** Execute plan 02-02 (flag catalog, uninstall handler, usage, completions
+and `docs/output-catalog.md`), then run the Phase 2 gates: code review, Nyquist
+validation, security, prior-phase regressions and goal verification.
 Milestone v1.19 already closed.
 
 ### Historical v1.19 completion record
