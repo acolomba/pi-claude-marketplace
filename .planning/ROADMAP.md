@@ -12,7 +12,7 @@ roadmap is preserved in [PRE-MILESTONE-ROADMAP.md](inputs/test-backlog/PRE-MILES
 ## Phases
 
 - [x] **Phase 1: Reliable Negative Controls** — NEGCTL-01, E2EIMP-01, TESTQ-01, FLOW-07, COV-01
-- [ ] **Phase 2: Sonar Rules for Tests** — SWTEST-01
+- [x] **Phase 2: Sonar Rules for Tests** — SWTEST-01
 - [ ] **Phase 3: Reachable Agent Collision Contract** — AGCOL-01
 - [ ] **Phase 4: Strict Command Arguments** — ARGS-01
 - [ ] **Phase 5: Production Export Ownership** — FLOW-09
@@ -41,7 +41,7 @@ roadmap is preserved in [PRE-MILESTONE-ROADMAP.md](inputs/test-backlog/PRE-MILES
 **Success Criteria:**
 1. The three assertion rules reject planted violations without meaningless assertions in type-only owners.
 2. Helper and strict-mock assertions remain strong; other recommended-rule clusters have measured dispositions.
-**Plans:** To be planned after discussion and live investigation.
+**Plans:** 02-01 complete; review and independent verification passed 2026-09-14.
 
 ### Phase 3: Reachable Agent Collision Contract
 
@@ -109,8 +109,8 @@ roadmap is preserved in [PRE-MILESTONE-ROADMAP.md](inputs/test-backlog/PRE-MILES
 | Phase | Plans Complete | Status | Completed |
 | --- | --- | --- | --- |
 | 1. Reliable Negative Controls | 2/2 | Complete | 2026-09-14 |
-| 2. Sonar Rules for Tests | 0/1 | In progress | - |
-| 3. Reachable Agent Collision Contract | 1/TBD | In progress | - |
+| 2. Sonar Rules for Tests | 1/1 | Complete | 2026-09-14 |
+| 3. Reachable Agent Collision Contract | 1/4 | In progress | - |
 | 4. Strict Command Arguments | 0/TBD | Not started | - |
 | 5. Production Export Ownership | 0/TBD | Not started | - |
 | 6. Unused Type Member Gate | 0/TBD | Not started | - |

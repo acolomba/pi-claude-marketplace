@@ -2736,6 +2736,18 @@ recursion, no wrapper stripping. Both command arms now guard on
 
 ## SWTEST-01: the Sonar way ruleset stops at `extensions/`; `tests/` is unmeasured by it
 
+**Closed 2026-09-14 — test-backlog Phase 2.** The three assertion rules now
+run as errors on tests. Seven exact type-only owner files retain their compile-time
+proofs; five helper/strict-mock cases have narrow, explained analyzer controls.
+The overload proof now also checks the full runtime outcome. Thirteen planted
+violation/benign controls pass, including controls that re-enable the exempt rule.
+The current full recommended scan found 1,083 flags across 354 files; all clusters
+have measured dispositions in [02-SONAR-POLICY.md](phases/02-sonar-rules-for-tests/02-SONAR-POLICY.md).
+Independent [verification](phases/02-sonar-rules-for-tests/02-VERIFICATION.md) passed
+4/4; full lint, typecheck, Fallow, formatting, direct checks, and 6,016 unit tests
+passed with exact 100% aggregate production coverage. Original filing follows
+as historical evidence; its counts and proposed dispositions are superseded.
+
 Filed 2026-09-07 alongside the change that adopted the ruleset (`fe1313c6`,
 quick task 260907-qsx). Deferred deliberately, with the cost measured rather
 than guessed, so the decision is a scoping call and not a discovery exercise.

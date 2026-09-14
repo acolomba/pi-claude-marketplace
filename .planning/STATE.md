@@ -22,14 +22,14 @@ See: `.planning/PROJECT.md` (updated 2026-09-13 after the refine-unit-tests mile
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** test-backlog Phase 2 review; Phase 3 agent naming and Phase 4 argument planning.
+**Current focus:** test-backlog Phase 3 agent naming; Phase 4 argument planning.
 
 ## Current Position
 
-Phase: 2 of 8 — Sonar Rules for Tests
-Plan: 02-01 — implemented, awaiting review
+Phase: 3 of 8 — Reachable Agent Collision Contract
+Plan: 03-02 — planned, awaiting plan review
 Status: Executing
-Last activity: 2026-09-14 — Phase 1 verified; exact unit baseline restored
+Last activity: 2026-09-14 — Phase 2 independently verified; exact unit baseline preserved
 
 ### Closeout type: `override_closeout`
 
@@ -145,7 +145,8 @@ recur: `milestone complete` leaves the original-path deletions **unstaged**
 - Marketplace decision: add/document --local on info/list/update; keep merged reads and use local only for config writes.
 - Agent collision decision: preserve full source names like Claude; keep both agents and migrate owned generated names on reinstall/update.
 - Phase 1: complete, independently reviewed and verified 5/5.
-- Next: finish Phase 2 review and execute the approved Phase 3 naming contract.
+- Phase 2: complete, independently verified 4/4; all pre-commit checks passed.
+- Next: execute the approved Phase 3 naming contract and strict argument parsing.
 - Older continuity and operator-next-step text above is inherited history.
 
 ### Live baseline correction
@@ -158,5 +159,5 @@ functions 1851/1851, branches 9111/9111. The obsolete converter direct pin was
 removed after its owner reached 100%; the two unrelated direct pins remain.
 
 GSD phase.complete still refuses this root milestone because archived
-workstream directories exist. Phase 1 tracking was updated in the authorized
+workstream directories exist. Phase 1 and 2 tracking was updated in the authorized
 root files and checked by diff; archived workstreams were preserved.

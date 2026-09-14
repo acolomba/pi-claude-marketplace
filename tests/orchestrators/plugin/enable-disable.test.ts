@@ -2712,7 +2712,7 @@ test("Y3: orchestrated overload returns EnableDisablePluginOutcome (no | undefin
 test("Y3: standalone overload still returns | undefined -- typecheck pin", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
-    const { ctx } = makeCtx(cwd);
+    const { ctx, notifications } = makeCtx(cwd);
     // The standalone arm fires its own notify() and the caller has nothing to
     // consume; the overload pair preserves that shape so existing callers
     // (edge handlers) keep their current contract.
@@ -2733,6 +2733,14 @@ test("Y3: standalone overload still returns | undefined -- typecheck pin", async
     // as orchestrated) is caught at typecheck.
     const _narrow: EnableDisablePluginOutcome = outcome;
     void _narrow;
+    assert.strictEqual(outcome, undefined);
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A marketplace operation has failed.\n\n⊘ ghost-mp [user] (failed) {marketplace not added}",
+        severity: "error",
+      },
+    ]);
   });
 });
 

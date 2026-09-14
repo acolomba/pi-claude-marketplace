@@ -1852,6 +1852,7 @@ describe("splitStagingWarnings", () => {
 });
 
 describe("surfaceDiscoveryWarnings", () => {
+  // eslint-disable-next-line sonarjs/assertions-in-tests -- Explicit strong-mock verify calls assert the complete notification interaction.
   test("does not notify when no discovery warning exists", () => {
     // arrange
     const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
@@ -1863,6 +1864,7 @@ describe("surfaceDiscoveryWarnings", () => {
     verify(ctx);
   });
 
+  // eslint-disable-next-line sonarjs/assertions-in-tests -- Explicit strong-mock verify calls assert the complete notification interaction.
   test("redacts a singular discovery path and emits exact warning bytes", () => {
     // arrange
     const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
@@ -1891,6 +1893,7 @@ describe("surfaceDiscoveryWarnings", () => {
     verify(ui);
   });
 
+  // eslint-disable-next-line sonarjs/assertions-in-tests -- Explicit strong-mock verify calls assert the complete notification interaction.
   test("emits plural updated diagnostics in caller warning order", () => {
     // arrange
     const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });

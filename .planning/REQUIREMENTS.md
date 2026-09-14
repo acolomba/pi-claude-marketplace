@@ -15,8 +15,8 @@ Started 2026-09-14 on `features/test-backlog`.
 - [x] **NEG-01**: Repair the direct-coverage CLI negative controls on Node 26 without weakening exit or diagnostic assertions.
 - [x] **NEG-02**: Determine the child-observation cause and check analogous subprocess assertions, retaining launch-error discrimination.
 - [x] **HIST-01**: Reconfirm E2EIMP-01 and reconcile TESTQ-01, FLOW-07, and COV-01 without duplicate implementation.
-- [ ] **SONAR-01**: Enable assertions-in-tests, no-empty-test-file, and no-trivial-assertions with deliberate type-only and helper controls.
-- [ ] **SONAR-02**: Measure and disposition the remaining SWTEST-01 rule clusters instead of enabling the preset wholesale.
+- [x] **SONAR-01**: Enable assertions-in-tests, no-empty-test-file, and no-trivial-assertions with deliberate type-only and helper controls.
+- [x] **SONAR-02**: Measure and disposition the remaining SWTEST-01 rule clusters instead of enabling the preset wholesale.
 - [ ] **AGENT-01**: Test collisions through real discovery/staging and preserve distinct Claude source names and migrate owned generated names under the approved collision contract.
 - [ ] **AGENT-02**: Align AG-12, RN-6, duplicate warnings, comments, and collision tests with reachable production behavior.
 - [ ] **ARGS-01**: Reject unknown flags and surplus positionals across the live command inventory before dispatch.
@@ -38,8 +38,8 @@ Started 2026-09-14 on `features/test-backlog`.
 | NEG-01 | 1 | Complete |
 | NEG-02 | 1 | Complete |
 | HIST-01 | 1 | Complete |
-| SONAR-01 | 2 | Pending |
-| SONAR-02 | 2 | Pending |
+| SONAR-01 | 2 | Complete |
+| SONAR-02 | 2 | Complete |
 | AGENT-01 | 3 | Pending |
 | AGENT-02 | 3 | Pending |
 | ARGS-01 | 4 | Pending |

@@ -1,0 +1,60 @@
+# Sonar rules for tests
+
+Measured 2026-09-14 on the starting test tree: 354 test/support files, 1,083
+findings under the full recommended override. The complete file/rule/line
+inventory is in `02-SONAR-SCAN.json`. Counts describe analyzer findings, not
+confirmed defects. SWTEST-01's earlier 1,021/21 counts are historical.
+
+## Adopted rules
+
+| Rule                  | Findings | Disposition                                                                                                                                                                                                                                                                                       |
+| --------------------- | -------: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| assertions-in-tests   |        6 | Enable at error. Two dynamic contract runners already execute assertions; three tests explicitly verify strict mocks. Keep five narrow, explained exceptions. Strengthen the standalone overload test with the complete result and notification while retaining its compile-time rejection proof. |
+| no-empty-test-file    |        7 | Enable at error, except seven exact `types.test.ts` owners whose proofs are checked by TypeScript. Do not add runtime assertions with no behavioral subject.                                                                                                                                      |
+| no-trivial-assertions |        0 | Enable at error; a planted constant comparison proves detection.                                                                                                                                                                                                                                  |
+
+`tests/architecture/sonar-test-rules.test.ts` runs the real ESLint config on
+offender and benign snippets. Each rule has a disabled-rule control. Every
+type-owner exception has the inverse control: force the rule on and observe
+its error on the same source. An ordinary runtime owner remains protected.
+
+S2699 recognizes assertion-library call patterns; it is not a measure of
+assertion strength. The installed implementation recognizes Node assert but
+not strong-mock, and cannot trace the contract runner's selected callback.
+The narrow exceptions preserve real assertions instead of disguising calls
+to satisfy the heuristic. Compiler, strict-mock, and behavioral test checks
+remain necessary.
+
+## Remaining clusters
+
+These rules remain outside the test preset for the specific reasons below.
+This does not disable any existing test rule or relax production Sonar rules.
+
+| Rule                          | Findings | Current evidence and decision                                                                                                                                                                                                                                                                                                                      |
+| ----------------------------- | -------: | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| void-use                      |      839 | Intentional `void (value satisfies Type)` and references to compiler-proof functions/constants. Runtime rewrites would erase the purpose. Leave off.                                                                                                                                                                                               |
+| no-alphabetical-sort          |       66 | The scan sorts file paths, keys, resource names and sets for deterministic equality. The alleged numeric candidate in agents/stage is actually an array of directory names. Locale-sensitive alphabetical order is not the contract; retain deterministic code-point order. Leave off.                                                             |
+| publicly-writable-directories |       47 | Temporary fixture roots use unique `mkdtemp` directories and teardown. A shared parent temp directory is intentional. Fixtures are inline throughout owner tests, so a `tests/fixtures/**` exception would not describe this population. Leave off.                                                                                                |
+| no-hardcoded-passwords        |       34 | Synthetic credential fixtures in auth, marketplace, fetch, and credential contract tests. Exact credential forwarding/rejection is the subject. Keep these values and assertions. Leave off.                                                                                                                                                       |
+| no-unused-vars                |        5 | All five are `_auth` parameters; the configured TypeScript rule already enforces the project's explicit ignored-parameter convention. Do not introduce a second inconsistent unused-variable policy.                                                                                                                                               |
+| super-linear-regex            |       15 | All sites inspected: source comment stripping, architecture scans of checked-in source, and matching bounded fixture notifications. The heuristic flags possible repeated scans/backtracking, not a measured runtime failure. Retain the existing corpus controls; do not adopt a production input-security rule for these controlled test inputs. |
+| regex-complexity              |        7 | One gate-target source matcher and six credential-leak architecture matchers. Their patterns recognize guarded syntax and have negative controls. No correctness defect established by the complexity score. Leave off; changes require preserving those controls.                                                                                 |
+| different-types-comparison    |       11 | All sites inspected: runtime shape/non-null assertions, timer-handle filters, required vocabulary checks, and outcome/credential assertions. A TypeScript promise about a shape does not replace runtime validation of the result. Preserve assertions.                                                                                            |
+| no-misleading-array-reverse   |        4 | All sites are `.sort()` of file inventories, an offender list, or supported component names used in unordered comparisons. None is a reverse/order assertion. No later observer depends on the pre-sort array. Leave off.                                                                                                                          |
+| concise-regex                 |        3 | Explicit ASCII identifier classes in the no-test-only-production-surface scanner. Equivalent shorthand is a style choice; retain readable guarded syntax.                                                                                                                                                                                          |
+| no-nested-assignment          |        1 | Census accumulation initializes one indexed bucket. No ambiguous assertion or dropped result. Leave off.                                                                                                                                                                                                                                           |
+| no-extra-arguments            |        2 | Both are false positives: deferred Promise resolver variables initialized with a no-op and subsequently assigned the actual resolver. Calls in dispatch-exec and settle pass the required typed resolution payload.                                                                                                                                |
+| no-identical-functions        |       10 | Independent case callbacks and boundary doubles may have the same body but different failure contracts. Shared test abstractions require a coherent concern, not body matching. Leave off.                                                                                                                                                         |
+| no-undefined-argument         |        2 | Explicit absence at hook dispatch and a replacement-operation fake. Retain call shape and boundary intent.                                                                                                                                                                                                                                         |
+| no-nested-conditional         |        5 | Already off for tests; fixture selection style, not an assertion defect. Retain current policy.                                                                                                                                                                                                                                                    |
+| use-type-alias                |        1 | The resolver fake repeats its short stat-result union. This is a type naming preference; leave off.                                                                                                                                                                                                                                                |
+| no-clear-text-protocols       |        6 | All are source parser tests for rejecting or classifying HTTP/FTP URLs. Replacing them with HTTPS would remove the negative input.                                                                                                                                                                                                                 |
+| no-os-command-from-path       |        3 | Two integration prerequisites and the FIFO fixture's platform command intentionally use installed tools from PATH. This is test environment setup, not a production command assembled from user input. Leave off.                                                                                                                                  |
+| no-nested-template-literals   |        5 | Test expected strings and fixture text. Existing formatting/typechecking applies; leave stylistic restriction off.                                                                                                                                                                                                                                 |
+| no-invariant-returns          |        2 | State-transaction fault injectors mutate a loaded state in selected branches and return that state. Returning the same object is intentional; branches change the observed state.                                                                                                                                                                  |
+| no-selector-parameter         |        2 | Environment restoration helpers choose set/delete based on whether a variable existed before a hermetic test. Preserve exact restoration behavior.                                                                                                                                                                                                 |
+
+No remaining cluster established a new production defect or an assertion
+that should be weakened. Broad recommended-preset adoption is deliberately
+declined. These measured dispositions close SWTEST-01's scope; future rule
+adoption should use current evidence and discriminating controls again.
