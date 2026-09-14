@@ -55,11 +55,6 @@ import type { Scope } from "./types.ts";
 // Cache file schemas (D-03 -- drop+rebuild on schemaVersion mismatch).
 // ---------------------------------------------------------------------------
 
-export const MARKETPLACE_NAMES_CACHE_SCHEMA = Type.Object({
-  schemaVersion: Type.Literal(2),
-  names: Type.Array(Type.String()),
-});
-
 // LIST-02 / D-67-02: the plugin-index cache carries the FINER derived status
 // set so the completion bucketizer can offer the `--partial`-gated candidate sets
 // without a second classifier. WR-02 adds `partially-installed-upgradable` -- a
@@ -76,7 +71,7 @@ export const MARKETPLACE_NAMES_CACHE_SCHEMA = Type.Object({
 // the fix. RSTA-03: the 5 -> 6 bump drops caches carrying the OLD not-installed
 // git-source `(available)` classification (a not-fetched git plugin is now
 // `remote`), so pre-fix caches drop+rebuild via the same drop-on-mismatch path.
-export const PLUGIN_INDEX_CACHE_SCHEMA = Type.Object({
+const PLUGIN_INDEX_CACHE_SCHEMA = Type.Object({
   schemaVersion: Type.Literal(6),
   lastRefreshedAt: Type.String(),
   manifestRef: Type.Optional(Type.String()),
