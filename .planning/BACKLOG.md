@@ -1937,7 +1937,27 @@ Code seams: `bridges/hooks/dispatch.ts` (`reduceBucket`,
 `compositeHandlerFor`), `bridges/hooks/timeout.ts` (`BLOCKING_EVENT_DEFAULT_SECONDS`),
 `bridges/hooks/event-router.ts` (the `session_shutdown` registration).
 
-## AGCOL-01: the agents collision gate is dead by the same argument that retired the skills one
+## ~~AGCOL-01: the agents collision gate is dead by the same argument that retired the skills one~~ — CLOSED
+
+**Current disposition, 2026-09-14:** Closed in test-backlog Phase 3, commit
+`b663bc68`; review clean and independent goal verification passed 18/18. The user chose Claude-compatible
+complete source names and migration of owned names. Distinct `reviewer` and
+`<plugin>-reviewer` sources now coexist; true duplicates keep the discovered
+incumbent and warn with both full source paths. The unreachable post-discovery
+throw is removed. AG-12, RN-1/RN-6, Appendix B, and source comments agree.
+
+Real install/update/reinstall tests cover ownership, legacy filename/index
+migration, coexistence, occupied destinations, rollback, and retry. Independent
+review found and repaired index-save failure recovery: new targets are reversed
+while the old index remains available for retry. The four direct agent owners
+retain 100% coverage; the combined final unit run passes 6,267 tests with exact
+100% production line/function/branch coverage. See
+[Phase 3 review](phases/03-reachable-agent-collision-contract/03-REVIEW.md)
+and the phase's verification report for final gate evidence.
+
+The following disposition and original report describe the archived
+refine-unit-tests scope; they do not restrict this authorized milestone.
+
 
 **Disposition 2026-09-11: `evidence-only`** (`GGAT-02`, `SCOPE-REQ-GGAT-02`,
 formerly Phase 7). This item asserts that the agents-collision gate is dead by
@@ -2145,7 +2165,23 @@ together or neither.
 Code seams: `bridges/hooks/event-router.ts` (the `session_start` wrapper),
 `domain/components/hook-events.ts` (`BUCKET_A_EVENTS`).
 
-## ARGS-01: the edge parse layer silently swallows unknown flags and surplus positionals
+## ~~ARGS-01: the edge parse layer silently swallows unknown flags and surplus positionals~~ — CLOSED
+
+**Current disposition, 2026-09-14:** Closed in test-backlog Phase 4, commit
+`a8ef0dac`; review clean and independent goal verification passed 7/7. All 19
+canonical verbs and three aliases reject unknown flags and surplus operands
+before dispatch. Explicit empty quoted operands remain arguments and are rejected
+where invalid; they cannot silently select bulk operations. The flag catalog and
+its independent missing/extra controls cover both command families.
+
+Marketplace info/list/update accept and document `--local` under the user's
+approved policy: reads remain merged; local selects configuration writes only.
+Real named and bulk update tests preserve both config files byte-for-byte while
+upgrading plugins. Complete unit coverage remains 100%; all 6,267 unit and 32
+integration tests pass. See [Phase 4 verification](phases/04-strict-command-arguments/04-VERIFICATION.md).
+
+The original report below is retained as historical evidence; its verb counts
+and examples describe the earlier implementation.
 
 Surfaced 2026-08-24 while probing what a usage error looks like, during the
 cross-scope reason-token work. Two independent defects in the same layer,

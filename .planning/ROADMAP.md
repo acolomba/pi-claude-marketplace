@@ -13,8 +13,8 @@ roadmap is preserved in [PRE-MILESTONE-ROADMAP.md](inputs/test-backlog/PRE-MILES
 
 - [x] **Phase 1: Reliable Negative Controls** — NEGCTL-01, E2EIMP-01, TESTQ-01, FLOW-07, COV-01
 - [x] **Phase 2: Sonar Rules for Tests** — SWTEST-01
-- [ ] **Phase 3: Reachable Agent Collision Contract** — AGCOL-01
-- [ ] **Phase 4: Strict Command Arguments** — ARGS-01
+- [x] **Phase 3: Reachable Agent Collision Contract** — AGCOL-01
+- [x] **Phase 4: Strict Command Arguments** — ARGS-01
 - [ ] **Phase 5: Production Export Ownership** — FLOW-09
 - [ ] **Phase 6: Unused Type Member Gate** — 2026-09-02-detect-unused-code-and-type-members.md
 - [ ] **Phase 7: Reliable Coverage Metrics** — FLOW-05
@@ -51,7 +51,7 @@ roadmap is preserved in [PRE-MILESTONE-ROADMAP.md](inputs/test-backlog/PRE-MILES
 **Success Criteria:**
 1. Real discovery and staging prove the chosen collision behavior and complete warning text.
 2. AG-12, RN-6, source comments, and tests agree; unreachable guards and manufactured inputs are removed.
-**Plans:** To be planned after discussion and live investigation.
+**Plans:** 03-01 through 03-04 complete in `b663bc68`; review clean, independent verification 18/18 on 2026-09-14.
 
 ### Phase 4: Strict Command Arguments
 
@@ -62,7 +62,7 @@ roadmap is preserved in [PRE-MILESTONE-ROADMAP.md](inputs/test-backlog/PRE-MILES
 1. Every current verb rejects unknown flags and excess positionals before doing work.
 2. The three marketplace verbs enforce the approved --local policy and usage strings.
 3. The flag catalog and drift controls cover both plugin and marketplace families.
-**Plans:** To be planned after discussion and live investigation.
+**Plans:** 04-01 parser, 04-02 merged local reads, 04-03 catalog/completion complete in `a8ef0dac`; review clean, independent verification 7/7 on 2026-09-14.
 
 ### Phase 5: Production Export Ownership
 
@@ -72,7 +72,7 @@ roadmap is preserved in [PRE-MILESTONE-ROADMAP.md](inputs/test-backlog/PRE-MILES
 **Success Criteria:**
 1. Each current production-mode finding has an evidence-backed disposition and public-contract tests.
 2. Fallow runs in production mode with offender and benign controls; no test-only exports or mechanical helper modules are introduced.
-**Plans:** To be planned after discussion and live investigation.
+**Plans:** 05-01 through 05-28 approved in eleven dependency waves; begin with real Fallow controls and complete census.
 
 ### Phase 6: Unused Type Member Gate
 
@@ -110,9 +110,9 @@ roadmap is preserved in [PRE-MILESTONE-ROADMAP.md](inputs/test-backlog/PRE-MILES
 | --- | --- | --- | --- |
 | 1. Reliable Negative Controls | 2/2 | Complete | 2026-09-14 |
 | 2. Sonar Rules for Tests | 1/1 | Complete | 2026-09-14 |
-| 3. Reachable Agent Collision Contract | 1/4 | In progress | - |
-| 4. Strict Command Arguments | 0/TBD | Not started | - |
-| 5. Production Export Ownership | 0/TBD | Not started | - |
-| 6. Unused Type Member Gate | 0/TBD | Not started | - |
-| 7. Reliable Coverage Metrics | 0/TBD | Not started | - |
+| 3. Reachable Agent Collision Contract | 4/4 | Complete | 2026-09-14 |
+| 4. Strict Command Arguments | 3/3 | Complete | 2026-09-14 |
+| 5. Production Export Ownership | 0/28 | Ready for execution | - |
+| 6. Unused Type Member Gate | 0/TBD | Planning | - |
+| 7. Reliable Coverage Metrics | 0/TBD | Research complete | - |
 | 8. Final Verification and Reconciliation | 0/TBD | Not started | - |

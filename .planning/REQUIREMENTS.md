@@ -17,11 +17,11 @@ Started 2026-09-14 on `features/test-backlog`.
 - [x] **HIST-01**: Reconfirm E2EIMP-01 and reconcile TESTQ-01, FLOW-07, and COV-01 without duplicate implementation.
 - [x] **SONAR-01**: Enable assertions-in-tests, no-empty-test-file, and no-trivial-assertions with deliberate type-only and helper controls.
 - [x] **SONAR-02**: Measure and disposition the remaining SWTEST-01 rule clusters instead of enabling the preset wholesale.
-- [ ] **AGENT-01**: Test collisions through real discovery/staging and preserve distinct Claude source names and migrate owned generated names under the approved collision contract.
-- [ ] **AGENT-02**: Align AG-12, RN-6, duplicate warnings, comments, and collision tests with reachable production behavior.
-- [ ] **ARGS-01**: Reject unknown flags and surplus positionals across the live command inventory before dispatch.
-- [ ] **ARGS-02**: Resolve and enforce --local semantics for marketplace info/list/update with accurate usage.
-- [ ] **ARGS-03**: Extend the flag catalog and discriminating drift gate to marketplace verbs.
+- [x] **AGENT-01**: Test collisions through real discovery/staging and preserve distinct Claude source names and migrate owned generated names under the approved collision contract.
+- [x] **AGENT-02**: Align AG-12, RN-6, duplicate warnings, comments, and collision tests with reachable production behavior.
+- [x] **ARGS-01**: Reject unknown flags and surplus positionals across the live command inventory before dispatch.
+- [x] **ARGS-02**: Resolve and enforce --local semantics for marketplace info/list/update with accurate usage.
+- [x] **ARGS-03**: Extend the flag catalog and discriminating drift gate to marketplace verbs.
 - [ ] **EXPORT-01**: Triage all current Fallow production findings; remove ordinary test-only exports through coherent ownership and public tests.
 - [ ] **EXPORT-02**: Enable and validate Fallow production mode while retaining completed explicit-seam protections.
 - [ ] **MEMBER-01**: Add a static gate that detects unused interface/type members, including an unread optional EdgeDeps member.
@@ -40,11 +40,11 @@ Started 2026-09-14 on `features/test-backlog`.
 | HIST-01 | 1 | Complete |
 | SONAR-01 | 2 | Complete |
 | SONAR-02 | 2 | Complete |
-| AGENT-01 | 3 | Pending |
-| AGENT-02 | 3 | Pending |
-| ARGS-01 | 4 | Pending |
-| ARGS-02 | 4 | Pending |
-| ARGS-03 | 4 | Pending |
+| AGENT-01 | 3 | Complete |
+| AGENT-02 | 3 | Complete |
+| ARGS-01 | 4 | Complete |
+| ARGS-02 | 4 | Complete |
+| ARGS-03 | 4 | Complete |
 | EXPORT-01 | 5 | Pending |
 | EXPORT-02 | 5 | Pending |
 | MEMBER-01 | 6 | Pending |

@@ -3,14 +3,14 @@ gsd_state_version: "1.0"
 milestone: test-backlog
 milestone_name: test-backlog
 status: executing
-last_updated: "2026-09-14T14:20:52.953Z"
+last_updated: "2026-09-14T15:37:44+00:00"
 last_activity: 2026-09-14
 progress:
   total_phases: 8
-  completed_phases: 1
-  total_plans: 4
-  completed_plans: 3
-  percent: 12
+  completed_phases: 4
+  total_plans: 38
+  completed_plans: 10
+  percent: 50
 ---
 
 # Project State
@@ -22,16 +22,16 @@ See: `.planning/PROJECT.md` (updated 2026-09-13 after the refine-unit-tests mile
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** test-backlog Phase 3 agent naming; Phase 4 argument planning.
+**Current focus:** Execute production export ownership; plan the static member and coverage metric gates.
 
 ## Current Position
 
-Phase: 3 of 8 — Reachable Agent Collision Contract
-Plan: 03-02 — planned, awaiting plan review
+Phase: 5 of 8 — Production Export Ownership
+Plan: 05-01 — real Fallow controls and complete production census
 Status: Executing
-Last activity: 2026-09-14 — Phase 2 independently verified; exact unit baseline preserved
+Last activity: 2026-09-14 — Phases 3 and 4 committed and independently verified; Phase 5 approved for execution
 
-### Closeout type: `override_closeout`
+### Historical refine-unit-tests closeout: `override_closeout`
 
 Two reasons, neither an outcome failure.
 
@@ -105,23 +105,10 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Stopped at:** Milestone `refine-unit-tests` closed and archived on 2026-09-13.
-
-PR #181 merged to main on 2026-09-13, closing the milestone's branch.
-
-Since then, four quick tasks landed on `features/random-refinements`: 260909-h38 made
-three cross-process concurrency proofs deterministic, 260913-f6a and 260913-l07
-hardened the CI workflows and gated them, and 260913-n7w fixed a reader-pairing race
-the first of those introduced. 260913-r2h then closed that harness's remaining over-read hang. That branch is
-PR #183, awaiting merge.
-
-Quick task 260913-ttl then landed on `features/100-coverage`: it measured the
-SonarQube 98.6% branch reading as ~133 phantom lcov-merge conditions plus one
-real branch, retired that branch by narrowing `isErrnoException`, and pointed
-`sonar.javascript.lcov.reportPaths` at `coverage/unit.lcov` alone — proven
-locally at 100.00% line and 100.00% branch coverage. Awaiting PR.
-
-**Next:** merge PR #183, then `/gsd-new-milestone`.
+**Current work:** test-backlog on `features/test-backlog`. Phases 1–4 are complete;
+Phase 5 is approved for execution. Phase 6 planning and Phase 7 coverage research
+continue. Earlier milestone continuity is preserved in
+`inputs/test-backlog/PRE-MILESTONE-STATE.md` and archived milestone artifacts.
 
 ### Known snag for the next close
 
@@ -135,8 +122,8 @@ recur: `milestone complete` leaves the original-path deletions **unstaged**
 
 ## Operator Next Steps
 
-- Squash-merge PR #183 (all checks green; the repository allows squash merges only)
-- Start the next milestone with `/gsd-new-milestone`
+- Execute Phase 5 in approved dependency waves, retaining public assertions and exact coverage.
+- Complete Phases 6–8; reconcile every authorized item before milestone close.
 
 ## Active Session — test-backlog
 
@@ -146,18 +133,19 @@ recur: `milestone complete` leaves the original-path deletions **unstaged**
 - Agent collision decision: preserve full source names like Claude; keep both agents and migrate owned generated names on reinstall/update.
 - Phase 1: complete, independently reviewed and verified 5/5.
 - Phase 2: complete, independently verified 4/4; all pre-commit checks passed.
-- Next: execute the approved Phase 3 naming contract and strict argument parsing.
-- Older continuity and operator-next-step text above is inherited history.
+- Phase 3: complete in b663bc68; review clean and independent verification 18/18.
+- Phase 4: complete in a8ef0dac; review clean and independent verification 7/7.
+- Next: execute Phase 5; complete Phase 6 planning and plan Phase 7.
 
 ### Live baseline correction
 
 Initial measurement: 6003/6003 tests passed, with four production lines and one
 branch uncovered in agents/convert.ts. Phase 3 Plan 1 removed a redundant
 unreachable throw by carrying the existing runtime validation in the type.
-Current measurement: 6016/6016 tests pass; production lines 63343/63343,
-functions 1851/1851, branches 9111/9111. The obsolete converter direct pin was
+Current measurement: 6267/6267 tests pass; production lines 63374/63374,
+functions 1851/1851, branches 9145/9145. Integration: 32/32 passed. The obsolete converter direct pin was
 removed after its owner reached 100%; the two unrelated direct pins remain.
 
 GSD phase.complete still refuses this root milestone because archived
-workstream directories exist. Phase 1 and 2 tracking was updated in the authorized
+workstream directories exist. Phase 1–4 tracking was updated in the authorized
 root files and checked by diff; archived workstreams were preserved.
