@@ -20,7 +20,7 @@ affects: [05-28, wave-6-reconciliation]
 # Actuals (#2632)
 actuals:
   tasks: 3
-  commits: 3
+  commits: 4
   plan_head_before: a19b8280dce1fbb86f9b2a8cc6945ccd640c5593
   # tokens: deliberately omitted. Actual token telemetry is unavailable in this
   # environment and the user decision on record forbids reporting diff
@@ -158,7 +158,9 @@ status: complete
 2. **Task 2: Wire translateSessionEnd through both dispatch modes** - `6823c071` (refactor)
 3. **Task 3: Wire translateUserPromptSubmit through both dispatch modes** - `fefd6fe9` (refactor)
 
-Measured, not narrated: `git rev-list --count a19b8280dce1fbb86f9b2a8cc6945ccd640c5593..HEAD` reports **3** at the time the three task commits were complete.
+**Plan metadata:** `df378f75` (docs: complete plan)
+
+Measured, not narrated: `git rev-list --count a19b8280dce1fbb86f9b2a8cc6945ccd640c5593..HEAD` reports **3** after the three task commits and **4** once the metadata commit lands. The `commits: 4` actual is the post-metadata figure, so it matches what a later verifier measures with the same instrument.
 
 ## Census Identity Delta
 
@@ -353,3 +355,11 @@ No blockers.
 ---
 *Phase: 05-production-export-ownership*
 *Completed: 2026-09-15*
+
+## Self-Check: PASSED
+
+All nine modified source/test files exist on disk, the SUMMARY exists at its declared
+path, and all four commits (`fbce2dfc`, `6823c071`, `fefd6fe9`, `df378f75`) resolve in
+`git log --oneline --all`. `tests/architecture/gate-targets.ts` and `.fallowrc.json` are
+untouched by every commit in this plan: `git diff --name-only a19b8280..HEAD` lists
+exactly the nine files above.
