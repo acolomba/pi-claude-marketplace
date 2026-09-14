@@ -5,11 +5,11 @@ milestone_name: transitive-dependencies
 current_phase: 3
 current_phase_name: Dependency resolution
 status: planning
-stopped_at: Phase 02 complete, ready to plan Phase 3
-last_updated: "2026-09-14T20:51:48.200Z"
+stopped_at: Phase 3 context gathered
+last_updated: "2026-09-14T22:34:13.057Z"
 last_activity: 2026-09-14
 last_activity_desc: Phase 02 complete, transitioned to Phase 3
-state_head: 38881aa3cc40a30192b905431559947c0b4330ff
+state_head: 7fff6c2337f91d5c7eb7a4d5cf27cf624aa620b2
 progress:
   total_phases: 5
   completed_phases: 2
@@ -533,13 +533,13 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Phase 2 complete (all gates passed), ready to plan Phase 3
+**Stopped at:** Phase 3 context gathered
 
-**Resume file:** None
+**Resume file:** .planning/phases/03-dependency-resolution/03-CONTEXT.md
 
 **Read beside it:** `.planning/phases/02-uninstall-data-disposition-and-the-uninstall-option-seam/02-VERIFICATION.md`
 
-Last session: 2026-09-14 (this session, resumed from the mid-plan pause,
+Last session: 2026-09-14T22:34:12.953Z
 closed out plan 02-01 task 3, executed plan 02-02, ran the full code-review
 fix cycle, then Nyquist and security gates, then verification and transition)
 
