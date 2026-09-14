@@ -401,3 +401,11 @@ None - no external service configuration required.
 ---
 *Phase: 05-production-export-ownership*
 *Completed: 2026-09-14*
+
+## Self-Check: PASSED
+
+- All nine declared source files, the SUMMARY and the phase `deferred-items.md` exist on disk (`[ -f ]` verified).
+- All four plan commits resolve in `git log`: `13a65732`, `fccb598a`, `6051a028`, `74207541`.
+- Both task `<verify>` commands re-run green after the final commit (56/56 and 187/187, 0 fail).
+- The only failing gates in the tree are the two parent-owned census pin equality checks, failing on exactly the ten expected Wave 5 identities with zero additions.
+- The working tree carries no new modification: only the user's pre-existing uncommitted files remain, and the local `260914-dz1` STATE row is present in the working file and absent from the commit.
