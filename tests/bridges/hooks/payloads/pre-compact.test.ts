@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { translate } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/pre-compact.ts";
+import { translatePreCompact } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/pre-compact.ts";
 
 import type { TranslationContext } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/translation-context.ts";
 import type { SessionBeforeCompactEvent } from "../../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
@@ -72,8 +72,8 @@ for (const { reason, trigger } of compactTriggerCases) {
     };
 
     // act
-    const firstPayload = translate(event, context);
-    const repeatedPayload = translate(event, context);
+    const firstPayload = translatePreCompact(event, context);
+    const repeatedPayload = translatePreCompact(event, context);
 
     // assert
     assert.deepStrictEqual(firstPayload, expectedPayload);
@@ -119,7 +119,7 @@ test("preserves empty context strings in the complete PreCompact envelope", () =
   };
 
   // act
-  const payload = translate(event, context);
+  const payload = translatePreCompact(event, context);
 
   // assert
   assert.deepStrictEqual(payload, expectedPayload);

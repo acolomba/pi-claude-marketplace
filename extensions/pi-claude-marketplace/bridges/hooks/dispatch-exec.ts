@@ -62,7 +62,7 @@ import { prepareHookEnv } from "./hook-env.ts";
 import { translate as translatePostCompact } from "./payloads/post-compact.ts";
 import { translatePostToolUseFailure } from "./payloads/post-tool-use-failure.ts";
 import { translatePostToolUse } from "./payloads/post-tool-use.ts";
-import { translate as translatePreCompact } from "./payloads/pre-compact.ts";
+import { translatePreCompact } from "./payloads/pre-compact.ts";
 import { translatePreToolUse } from "./payloads/pre-tool-use.ts";
 import { translateSessionEnd } from "./payloads/session-end.ts";
 import { translateSessionStart } from "./payloads/session-start.ts";
