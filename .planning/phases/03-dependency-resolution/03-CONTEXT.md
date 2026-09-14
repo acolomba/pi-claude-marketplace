@@ -30,10 +30,20 @@ Verified against the installed Claude Code CLI binary
 (`~/.local/share/claude/versions/2.1.251`), not docs or the spike summary —
 same evidentiary bar Phase 1 used for D-01-25..30.
 
-- **D-03-01:** Add `semver` as a direct dependency (already resolved
-  transitively at `7.8.0` via the `@earendil-works/pi-coding-agent` peer, so
-  no new download — this makes it OUR OWN declared contract rather than an
-  incidental resolution of someone else's). Upstream itself bundles the real
+- **D-03-01:** Add `semver` as a direct dependency. **Correction from
+  RESEARCH.md, 2026-09-14:** the original rationale here ("already resolved
+  transitively, so no new download") undersold what's actually needed —
+  `node_modules/semver` is hoisted at `7.8.5` from the ESLint DEV-dependency
+  chain, a different version than the `7.8.0` nested under the
+  `@earendil-works/pi-coding-agent` peer's own runtime deps, and neither is
+  something production code may import unlabeled: a dev-only hoist is absent
+  under `npm install --production`, and importing a peer's nested transitive
+  dependency is exactly the fragile-undeclared-dependency pattern this
+  decision exists to avoid. `semver` IS a genuine new runtime dependency for
+  this project — declare it as such in `package.json`. This doesn't change
+  the decision (add semver as a direct dependency was always correct), only
+  the reasoning: declare it because resolution needs a real evaluator, not
+  because it's "already there for free." Upstream itself bundles the real
   `semver` package (`semver.validRange`, `semver.satisfies`, `semver.valid`,
   `semver.coerce` all appear verbatim in the compiled binary) — this is a
   verified parity fact, not a guess. Phase 1's D-01-33 already accepts the
@@ -93,6 +103,39 @@ same evidentiary bar Phase 1 used for D-01-25..30.
   as an explicit, visible constraint amendment, not an incidental side
   effect discovered later by the no-orchestrator-network architecture test
   or a future reader of NFR-5.
+
+- **D-03-09 (research follow-up, resolves RESEARCH.md open question 1 /
+  Pitfall 7):** Upstream's `no-matching-tag` handling has two arms, not one —
+  found only after the researcher extracted both call sites verbatim:
+  ```
+  if (rr === null && !xn) return { ok:false, reason:"no-matching-tag", ... }  // own git source: hard fail
+  if (rr === null) n(`... falling through to HEAD copy`)                       // marketplace repo: soft degrade, no failure
+  ```
+  `xn` is true when the dependency's entry `source` is a plain string that did
+  not parse as a recognized git source, meaning the tag query ran against the
+  MARKETPLACE repo rather than the plugin's own source repo — in that case a
+  no-match upstream just logs and falls through to installing whatever's at
+  HEAD. This project does NOT port that asymmetry: hard-fail BOTH arms. A
+  constrained dependency with no matching tag always fails the dependency
+  under D-03-07's all-or-nothing rollback, regardless of which repo the tag
+  query ran against. Consistent with D-03-08's own precedent (this project
+  already chose a uniform failure model over upstream's case-by-case soft
+  degrades in the adjacent unknown-marketplace case) — no silent HEAD-copy
+  substitution anywhere in this phase.
+
+- **D-03-10 (research follow-up, resolves RESEARCH.md open question 3):** The
+  cross-manifest range-intersection accumulator (D-03-02.1) includes
+  constraints ONLY from plugins within THIS install's own resolution graph —
+  the plugin being installed plus whatever it transitively depends on — never
+  from unrelated already-installed plugins system-wide that happen to declare
+  a constraint on the same dependency name. Upstream's `GGn` walks EVERY
+  installed plugin's `depConstraints` for a name match; this project
+  deliberately does not replicate that: `install foo` failing because of a
+  constraint declared by a completely unrelated plugin installed weeks
+  earlier is a surprising failure mode with no clear recovery story, and
+  RESV-05's separate already-installed-satisfies check (D-03-02.3) already
+  protects an existing install from being silently broken by a fresh one —
+  it does not need reinforcement from a system-wide intersection walk.
 
 - **D-03-04 (deliberate risk acceptance):** A candidate plugin with no real
   semver version — this project's PI-7 content-hash (`hash-<12hex>`) or
@@ -177,6 +220,21 @@ reversed once the verified behavior came back.
   divergence from upstream's specific softer handling. Record this
   explicitly so it reads as a decision, not a missed parity case.
 
+### Cycle detection (RESV-04) — correction from RESEARCH.md
+
+- **D-03-11:** The original framing ("a visited-set walk is sufficient") was
+  wrong and is superseded. Upstream's closure walk carries TWO structures,
+  not one: a PATH STACK (an array tracking the current recursion chain —
+  `A.includes(F)` → true cycle, reported as `chain: [...A, F]`) and a
+  separate VISITED MEMO (a `Set` deduping a diamond — the same dependency
+  reached twice through two different non-overlapping paths, which is legal
+  and must NOT be reported as a cycle). A single visited-set walk cannot
+  distinguish "I am currently resolving this dependency's own ancestor chain"
+  from "I already fully resolved this dependency once, on a different
+  branch" — it would misreport every legal diamond (two siblings depending
+  on the same third plugin) as a cycle. Both structures are required; this is
+  a correctness fix, not an optional refinement.
+
 ### Claude's Discretion
 
 - Exact placement/naming of the new git-tag-listing capability in
@@ -191,9 +249,10 @@ reversed once the verified behavior came back.
   "dependency's marketplace not added" — follow `docs/messaging-style-guide.md`
   and the existing closed-set `REASONS` pattern rather than inventing new
   prose per call site.
-- How deep a cycle-detection report names the chain (RESV-04) — a visited-set
-  walk during the cascade is sufficient; no dependency-graph library exists in
-  this codebase and none is needed for cycle detection specifically (only the
+- Exact structure/naming of the path-stack + visited-memo pair D-03-11
+  requires (plain arrays/Sets vs. a small typed helper) — no dependency-graph
+  library exists in this codebase and none is needed; the two-structure walk
+  is a handful of lines, not a graph-theory problem (only the
   version-constraint work needs `semver`).
 - Whether the guard-free ledger body (`runInstallLedgerBody`) is called
   directly per cascade member under one outer `withLockedStateTransaction`,
@@ -328,8 +387,8 @@ reversed once the verified behavior came back.
   expected, not a bug, given REQUIREMENTS.md's finding that no real
   marketplace currently ships dependencies with real constraints.
 - No dependency-graph/cycle-detection library exists in this codebase and
-  none is needed — RESV-04 is a visited-set walk during the cascade, not a
-  graph-theory problem.
+  none is needed — RESV-04 is a path-stack + visited-memo walk during the
+  cascade (D-03-11), not a graph-theory problem.
 
 </specifics>
 
