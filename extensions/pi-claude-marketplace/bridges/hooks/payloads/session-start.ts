@@ -22,7 +22,10 @@ export interface SessionStartStdin {
   readonly source: string;
 }
 
-export function translate(event: SessionStartEvent, ctx: TranslationContext): SessionStartStdin {
+export function translateSessionStart(
+  event: SessionStartEvent,
+  ctx: TranslationContext,
+): SessionStartStdin {
   return {
     session_id: ctx.sessionId,
     transcript_path: ctx.transcriptPath,

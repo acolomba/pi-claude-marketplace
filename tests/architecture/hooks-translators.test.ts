@@ -38,12 +38,12 @@ const EVENT_TO_KEBAB: Readonly<Record<DispatchableEvent, string>> = {
 const TOOL_EVENTS: readonly ToolEvent[] = ["PreToolUse", "PostToolUse", "PostToolUseFailure"];
 
 /**
- * The exact public export each payload module publishes (D-03, D-06). The tool
- * translators carry event-specific names, so the expected name is pinned per
- * event here and the gate below proves each one resolves to a live function.
+ * The exact public export each payload module publishes (D-03, D-06). The
+ * published name differs per event, so the expected name is pinned per event
+ * here and the gate below proves each one resolves to a live function.
  */
 const EVENT_TO_TRANSLATOR_EXPORT: Readonly<Record<DispatchableEvent, string>> = {
-  SessionStart: "translate",
+  SessionStart: "translateSessionStart",
   UserPromptSubmit: "translate",
   PreToolUse: "translatePreToolUse",
   PostToolUse: "translatePostToolUse",

@@ -65,7 +65,7 @@ import { translatePostToolUse } from "./payloads/post-tool-use.ts";
 import { translate as translatePreCompact } from "./payloads/pre-compact.ts";
 import { translatePreToolUse } from "./payloads/pre-tool-use.ts";
 import { translate as translateSessionEnd } from "./payloads/session-end.ts";
-import { translate as translateSessionStart } from "./payloads/session-start.ts";
+import { translateSessionStart } from "./payloads/session-start.ts";
 import { translate as translateStopFailure } from "./payloads/stop-failure.ts";
 import { translate as translateStop } from "./payloads/stop.ts";
 import { translate as translateUserPromptSubmit } from "./payloads/user-prompt-submit.ts";
