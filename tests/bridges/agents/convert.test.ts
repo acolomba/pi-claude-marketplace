@@ -4,63 +4,7 @@ import { describe, test } from "node:test";
 import {
   convertAgent,
   GUIDED_DROPPED_FIELDS,
-  MODEL_MAP,
-  THINKING_VALUES,
-  TOOL_MAP,
 } from "../../../extensions/pi-claude-marketplace/bridges/agents/convert.ts";
-
-describe("MODEL_MAP", () => {
-  test("exposes the complete supported Claude-to-Pi model mapping", () => {
-    // arrange
-    const expectedModelMap = {
-      sonnet: "anthropic/claude-sonnet-4-6",
-      opus: "anthropic/claude-opus-4-7",
-      haiku: "anthropic/claude-haiku-4-5",
-    };
-
-    // act
-    const modelMap = { ...MODEL_MAP };
-
-    // assert
-    assert.deepStrictEqual(modelMap, expectedModelMap);
-    assert.ok(Object.isFrozen(MODEL_MAP));
-  });
-});
-
-describe("TOOL_MAP", () => {
-  test("exposes the complete supported Claude-to-Pi tool mapping", () => {
-    // arrange
-    const expectedToolMap = {
-      Read: "read",
-      Bash: "bash",
-      Edit: "edit",
-      Write: "write",
-      Grep: "grep",
-      Glob: "find",
-      LS: "ls",
-    };
-
-    // act
-    const toolMap = { ...TOOL_MAP };
-
-    // assert
-    assert.deepStrictEqual(toolMap, expectedToolMap);
-    assert.ok(Object.isFrozen(TOOL_MAP));
-  });
-});
-
-describe("THINKING_VALUES", () => {
-  test("exposes the complete supported thinking allowlist", () => {
-    // arrange
-    const expectedThinkingValues = ["off", "minimal", "low", "medium", "high", "xhigh"];
-
-    // act
-    const thinkingValues = [...THINKING_VALUES];
-
-    // assert
-    assert.deepStrictEqual(thinkingValues, expectedThinkingValues);
-  });
-});
 
 describe("GUIDED_DROPPED_FIELDS", () => {
   test("exposes the complete guided set and every member warns when dropped", () => {
@@ -100,6 +44,218 @@ describe("GUIDED_DROPPED_FIELDS", () => {
 });
 
 describe("convertAgent", () => {
+  for (const {
+    label,
+    sourceFields,
+    expectedMapping,
+    expectedModelProvenance,
+    expectedOriginalModel,
+  } of [
+    {
+      label: "model sonnet",
+      sourceFields: {
+        model: "sonnet",
+      },
+      expectedMapping: "model: anthropic/claude-sonnet-4-6\ntools: read\n",
+      expectedModelProvenance: "  originalModel: sonnet\n",
+      expectedOriginalModel: {
+        originalModel: "sonnet",
+      },
+    },
+    {
+      label: "model opus",
+      sourceFields: {
+        model: "opus",
+      },
+      expectedMapping: "model: anthropic/claude-opus-4-7\ntools: read\n",
+      expectedModelProvenance: "  originalModel: opus\n",
+      expectedOriginalModel: {
+        originalModel: "opus",
+      },
+    },
+    {
+      label: "model haiku",
+      sourceFields: {
+        model: "haiku",
+      },
+      expectedMapping: "model: anthropic/claude-haiku-4-5\ntools: read\n",
+      expectedModelProvenance: "  originalModel: haiku\n",
+      expectedOriginalModel: {
+        originalModel: "haiku",
+      },
+    },
+    {
+      label: "tool Read",
+      sourceFields: {
+        tools: "Read",
+      },
+      expectedMapping: "tools: read\n",
+      expectedModelProvenance: "",
+      expectedOriginalModel: {},
+    },
+    {
+      label: "tool Bash",
+      sourceFields: {
+        tools: "Bash",
+      },
+      expectedMapping: "tools: bash\n",
+      expectedModelProvenance: "",
+      expectedOriginalModel: {},
+    },
+    {
+      label: "tool Edit",
+      sourceFields: {
+        tools: "Edit",
+      },
+      expectedMapping: "tools: edit\n",
+      expectedModelProvenance: "",
+      expectedOriginalModel: {},
+    },
+    {
+      label: "tool Write",
+      sourceFields: {
+        tools: "Write",
+      },
+      expectedMapping: "tools: write\n",
+      expectedModelProvenance: "",
+      expectedOriginalModel: {},
+    },
+    {
+      label: "tool Grep",
+      sourceFields: {
+        tools: "Grep",
+      },
+      expectedMapping: "tools: grep\n",
+      expectedModelProvenance: "",
+      expectedOriginalModel: {},
+    },
+    {
+      label: "tool Glob",
+      sourceFields: {
+        tools: "Glob",
+      },
+      expectedMapping: "tools: find\n",
+      expectedModelProvenance: "",
+      expectedOriginalModel: {},
+    },
+    {
+      label: "tool LS",
+      sourceFields: {
+        tools: "LS",
+      },
+      expectedMapping: "tools: ls\n",
+      expectedModelProvenance: "",
+      expectedOriginalModel: {},
+    },
+    {
+      label: "thinking off",
+      sourceFields: {
+        thinking: "off",
+      },
+      expectedMapping: "tools: read\nthinking: off\n",
+      expectedModelProvenance: "",
+      expectedOriginalModel: {},
+    },
+    {
+      label: "thinking minimal",
+      sourceFields: {
+        thinking: "minimal",
+      },
+      expectedMapping: "tools: read\nthinking: minimal\n",
+      expectedModelProvenance: "",
+      expectedOriginalModel: {},
+    },
+    {
+      label: "thinking low",
+      sourceFields: {
+        thinking: "low",
+      },
+      expectedMapping: "tools: read\nthinking: low\n",
+      expectedModelProvenance: "",
+      expectedOriginalModel: {},
+    },
+    {
+      label: "thinking medium",
+      sourceFields: {
+        thinking: "medium",
+      },
+      expectedMapping: "tools: read\nthinking: medium\n",
+      expectedModelProvenance: "",
+      expectedOriginalModel: {},
+    },
+    {
+      label: "thinking high",
+      sourceFields: {
+        thinking: "high",
+      },
+      expectedMapping: "tools: read\nthinking: high\n",
+      expectedModelProvenance: "",
+      expectedOriginalModel: {},
+    },
+    {
+      label: "thinking xhigh",
+      sourceFields: {
+        thinking: "xhigh",
+      },
+      expectedMapping: "tools: read\nthinking: xhigh\n",
+      expectedModelProvenance: "",
+      expectedOriginalModel: {},
+    },
+  ]) {
+    test(`converts supported ${label} into the complete agent contract`, () => {
+      // arrange
+      const expectedAgent = {
+        sourceName: "reviewer",
+        generatedName: "pi-claude-marketplace-acme-reviewer",
+        sourcePath: "/plugins/acme/agents/reviewer.md",
+        fileContent: `---
+name: pi-claude-marketplace-acme-reviewer
+description: Reviews files
+${expectedMapping}systemPromptMode: replace
+inheritProjectContext: true
+inheritSkills: false
+provenance:
+  generatedBy: pi-claude-marketplace
+  sourcePlugin: acme
+  sourceAgent: reviewer
+  sourcePath: /plugins/acme/agents/reviewer.md
+${expectedModelProvenance}  droppedFields: []
+  droppedTools: []
+  warnings: []
+---
+
+Review files.
+`,
+        sourceHash: "converted-hash",
+        droppedFields: [],
+        droppedTools: [],
+        warnings: [],
+        ...expectedOriginalModel,
+      };
+
+      // act
+      const agent = convertAgent({
+        pluginName: "acme",
+        pluginRoot: "/plugins/acme",
+        pluginDataDir: "/data/acme",
+        knownSkills: [],
+        discovered: {
+          sourceName: "reviewer",
+          generatedName: "pi-claude-marketplace-acme-reviewer",
+          sourcePath: "/plugins/acme/agents/reviewer.md",
+          sourceHash: "discovery-hash",
+          raw: { description: "Reviews files", tools: "Read", ...sourceFields },
+          body: "Review files.\n",
+        },
+        sourceHash: "converted-hash",
+        mapModel: true,
+      });
+
+      // assert
+      assert.deepStrictEqual(agent, expectedAgent);
+    });
+  }
+
   test("converts the complete mapped agent contract into independently pinned bytes", () => {
     // arrange
     const expectedAgent = {

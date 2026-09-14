@@ -47,10 +47,8 @@ import {
 } from "./state-fifo.ts";
 
 import type { FifoStateServer } from "./state-fifo.ts";
-import type {
-  HooksRouting,
-  HooksRuntime,
-} from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
+import type { HooksRouting } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
+import type { HooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import type {
   UninstallPluginOperation,
   UninstallPluginOptions,

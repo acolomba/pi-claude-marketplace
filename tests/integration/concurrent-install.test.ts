@@ -12,7 +12,6 @@ import {
   saveState,
   type ExtensionState,
 } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import { STATE_LOCK_HELD_PREFIX } from "../../extensions/pi-claude-marketplace/shared/markers.ts";
 
 interface ChildResult {
   readonly ok: boolean;
@@ -182,7 +181,7 @@ function assertOneWinner(outcome: RaceOutcome): ChildResult {
 
   assert.equal(winners.length, 1, JSON.stringify(results));
   assert.equal(losers.length, 1, JSON.stringify(results));
-  assert.match(losers[0]!.message, new RegExp(STATE_LOCK_HELD_PREFIX));
+  assert.match(losers[0]!.message, /Another pi-claude-marketplace operation is in progress for/);
   return winners[0]!;
 }
 

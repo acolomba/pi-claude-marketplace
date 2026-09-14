@@ -1,9 +1,8 @@
 // bridges/agents/frontmatter.ts
 //
 // Owns the input + output sides of pi-subagents' frontmatter format.
-// GENERATED_AGENT_MARKER is re-exported from ./marker.ts rather than
-// redefined here, so the constant has a single source of truth (see
-// marker.ts -- markers-snapshot test asserts byte-for-byte equality).
+// The ownership marker comes from ./marker.ts so the writer and detector
+// share the same current-format signature.
 //
 // On the OUTPUT side, this module is the only place in the extension that
 // decides how generated agent files are assembled: which scalars get
@@ -53,7 +52,7 @@ import type { RawAgentFrontmatter } from "./types.ts";
  * cheap to guard) would be misread as a key on the next line. We normalize
  * newlines to spaces and wrap in the opposing quote char only when needed.
  */
-export function emitYamlScalar(value: string): string {
+function emitYamlScalar(value: string): string {
   const oneLine = value.replace(/\r?\n/g, " ");
   if (oneLine.startsWith('"') && oneLine.endsWith('"')) {
     return `'${oneLine}'`;
@@ -72,7 +71,7 @@ export function emitYamlScalar(value: string): string {
  * Provenance values are purely informational; collapsing an embedded
  * newline to a space is safe.
  */
-export function sanitizeProvenanceValue(value: string): string {
+function sanitizeProvenanceValue(value: string): string {
   return value.replace(/\r?\n/g, " ");
 }
 

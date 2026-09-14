@@ -25,7 +25,7 @@ function knownSection(value: unknown): Record<string, unknown> {
   return isPlainObject(value) ? value : {};
 }
 
-export function resolveClaudeSettingsPaths(
+function resolveClaudeSettingsPaths(
   scope: Scope,
   options: ClaudeSettingsReadOptions = {},
 ): ClaudeSettingsPaths {
@@ -95,7 +95,7 @@ async function readClaudeSettingsFile(
   }
 }
 
-export function mergeClaudeSettings(
+function mergeClaudeSettings(
   base: Record<string, unknown>,
   local: Record<string, unknown>,
 ): MergedClaudeSettings {

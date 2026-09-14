@@ -1,14 +1,10 @@
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { homedir, tmpdir } from "node:os";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import {
-  loadMergedClaudeSettingsForScope,
-  mergeClaudeSettings,
-  resolveClaudeSettingsPaths,
-} from "../../../extensions/pi-claude-marketplace/orchestrators/import/settings.ts";
+import { loadMergedClaudeSettingsForScope } from "../../../extensions/pi-claude-marketplace/orchestrators/import/settings.ts";
 
 import type { TestContext } from "node:test";
 
@@ -51,27 +47,37 @@ async function writeSettings(
   return filePath;
 }
 
-test("resolves default user paths from the private home root when the config variable is absent", async (t) => {
+test("loads default user paths from the private home root when the config variable is absent", async (t) => {
   // arrange
   const root = await makeTempRoot(t, "import-settings-default-user-");
+  const configRoot = path.join(root, ".claude");
   const originalConfigDirectory = captureEnvironmentProperty("CLAUDE_CONFIG_DIR");
   const originalHome = captureEnvironmentProperty("HOME");
-  let paths;
+  await writeSettings(configRoot, "base", { enabledPlugins: { "base@market": true } });
+  await writeSettings(configRoot, "local", { enabledPlugins: { "local@market": false } });
+  let loaded;
 
   // act
   try {
     delete process.env.CLAUDE_CONFIG_DIR;
     process.env.HOME = root;
-    paths = resolveClaudeSettingsPaths("user");
+    loaded = await loadMergedClaudeSettingsForScope("user");
   } finally {
     restoreEnvironmentProperty("CLAUDE_CONFIG_DIR", originalConfigDirectory);
     restoreEnvironmentProperty("HOME", originalHome);
   }
 
   // assert
-  assert.deepStrictEqual(paths, {
-    basePath: path.join(root, ".claude", "settings.json"),
-    localPath: path.join(root, ".claude", "settings.local.json"),
+  assert.deepStrictEqual(loaded, {
+    paths: {
+      basePath: path.join(configRoot, "settings.json"),
+      localPath: path.join(configRoot, "settings.local.json"),
+    },
+    settings: {
+      enabledPlugins: { "base@market": true, "local@market": false },
+      extraKnownMarketplaces: {},
+    },
+    diagnostics: [],
   });
   assert.strictEqual(
     Object.hasOwn(process.env, "CLAUDE_CONFIG_DIR"),
@@ -82,120 +88,221 @@ test("resolves default user paths from the private home root when the config var
   assert.strictEqual(process.env.HOME, originalHome.value);
 });
 
-test("resolves explicit user paths ahead of an absolute config environment value", async (t) => {
+test("loads explicit user paths ahead of an absolute config environment value", async (t) => {
   // arrange
   const root = await makeTempRoot(t, "import-settings-explicit-user-");
-  const explicitRoot = path.join(root, "explicit");
-  const environmentRoot = path.join(root, "environment");
+  const configRoot = path.join(root, "explicit");
   const originalConfigDirectory = captureEnvironmentProperty("CLAUDE_CONFIG_DIR");
-  let paths;
+  const originalHome = captureEnvironmentProperty("HOME");
+  await writeSettings(configRoot, "base", { enabledPlugins: { "base@market": true } });
+  await writeSettings(configRoot, "local", { enabledPlugins: { "local@market": false } });
+  let loaded;
 
   // act
   try {
-    process.env.CLAUDE_CONFIG_DIR = environmentRoot;
-    paths = resolveClaudeSettingsPaths("user", { claudeConfigDir: explicitRoot });
+    process.env.CLAUDE_CONFIG_DIR = path.join(root, "environment");
+    loaded = await loadMergedClaudeSettingsForScope("user", {
+      claudeConfigDir: path.join(root, "explicit"),
+    });
   } finally {
     restoreEnvironmentProperty("CLAUDE_CONFIG_DIR", originalConfigDirectory);
+    restoreEnvironmentProperty("HOME", originalHome);
   }
 
   // assert
-  assert.deepStrictEqual(paths, {
-    basePath: path.join(explicitRoot, "settings.json"),
-    localPath: path.join(explicitRoot, "settings.local.json"),
+  assert.deepStrictEqual(loaded, {
+    paths: {
+      basePath: path.join(configRoot, "settings.json"),
+      localPath: path.join(configRoot, "settings.local.json"),
+    },
+    settings: {
+      enabledPlugins: { "base@market": true, "local@market": false },
+      extraKnownMarketplaces: {},
+    },
+    diagnostics: [],
   });
   assert.strictEqual(
     Object.hasOwn(process.env, "CLAUDE_CONFIG_DIR"),
     originalConfigDirectory.exists,
   );
   assert.strictEqual(process.env.CLAUDE_CONFIG_DIR, originalConfigDirectory.value);
+  assert.strictEqual(Object.hasOwn(process.env, "HOME"), originalHome.exists);
+  assert.strictEqual(process.env.HOME, originalHome.value);
 });
 
-test("resolves user paths from an absolute config environment value", async (t) => {
+test("loads user paths from an absolute config environment value", async (t) => {
   // arrange
   const root = await makeTempRoot(t, "import-settings-environment-user-");
-  const environmentRoot = path.join(root, "environment");
+  const configRoot = path.join(root, "environment");
   const originalConfigDirectory = captureEnvironmentProperty("CLAUDE_CONFIG_DIR");
-  let paths;
+  const originalHome = captureEnvironmentProperty("HOME");
+  await writeSettings(configRoot, "base", { enabledPlugins: { "base@market": true } });
+  await writeSettings(configRoot, "local", { enabledPlugins: { "local@market": false } });
+  let loaded;
 
   // act
   try {
-    process.env.CLAUDE_CONFIG_DIR = environmentRoot;
-    paths = resolveClaudeSettingsPaths("user", {});
+    process.env.CLAUDE_CONFIG_DIR = path.join(root, "environment");
+    loaded = await loadMergedClaudeSettingsForScope("user", {});
   } finally {
     restoreEnvironmentProperty("CLAUDE_CONFIG_DIR", originalConfigDirectory);
+    restoreEnvironmentProperty("HOME", originalHome);
   }
 
   // assert
-  assert.deepStrictEqual(paths, {
-    basePath: path.join(environmentRoot, "settings.json"),
-    localPath: path.join(environmentRoot, "settings.local.json"),
+  assert.deepStrictEqual(loaded, {
+    paths: {
+      basePath: path.join(configRoot, "settings.json"),
+      localPath: path.join(configRoot, "settings.local.json"),
+    },
+    settings: {
+      enabledPlugins: { "base@market": true, "local@market": false },
+      extraKnownMarketplaces: {},
+    },
+    diagnostics: [],
   });
   assert.strictEqual(
     Object.hasOwn(process.env, "CLAUDE_CONFIG_DIR"),
     originalConfigDirectory.exists,
   );
   assert.strictEqual(process.env.CLAUDE_CONFIG_DIR, originalConfigDirectory.value);
+  assert.strictEqual(Object.hasOwn(process.env, "HOME"), originalHome.exists);
+  assert.strictEqual(process.env.HOME, originalHome.value);
 });
 
-test("ignores a relative config environment value when resolving user paths", () => {
+test("loads private home settings with a warning for a relative config environment value", async (t) => {
   // arrange
+  const root = await makeTempRoot(t, "import-settings-relative-user-");
+  const configRoot = path.join(root, ".claude");
   const originalConfigDirectory = captureEnvironmentProperty("CLAUDE_CONFIG_DIR");
-  let paths;
+  const originalHome = captureEnvironmentProperty("HOME");
+  await writeSettings(configRoot, "base", { enabledPlugins: { "base@market": true } });
+  await writeSettings(configRoot, "local", { enabledPlugins: { "local@market": false } });
+  let loaded;
 
   // act
   try {
     process.env.CLAUDE_CONFIG_DIR = "relative/config";
-    paths = resolveClaudeSettingsPaths("user", {});
+    process.env.HOME = root;
+    loaded = await loadMergedClaudeSettingsForScope("user", {});
   } finally {
     restoreEnvironmentProperty("CLAUDE_CONFIG_DIR", originalConfigDirectory);
+    restoreEnvironmentProperty("HOME", originalHome);
   }
 
   // assert
-  assert.deepStrictEqual(paths, {
-    basePath: path.join(homedir(), ".claude", "settings.json"),
-    localPath: path.join(homedir(), ".claude", "settings.local.json"),
+  assert.deepStrictEqual(loaded, {
+    paths: {
+      basePath: path.join(configRoot, "settings.json"),
+      localPath: path.join(configRoot, "settings.local.json"),
+    },
+    settings: {
+      enabledPlugins: { "base@market": true, "local@market": false },
+      extraKnownMarketplaces: {},
+    },
+    diagnostics: [
+      {
+        severity: "warning",
+        scope: "user",
+        code: "invalid-claude-config-dir",
+        message:
+          'CLAUDE_CONFIG_DIR is not an absolute path ("relative/config"); falling back to ~/.claude.',
+      },
+    ],
   });
   assert.strictEqual(
     Object.hasOwn(process.env, "CLAUDE_CONFIG_DIR"),
     originalConfigDirectory.exists,
   );
   assert.strictEqual(process.env.CLAUDE_CONFIG_DIR, originalConfigDirectory.value);
+  assert.strictEqual(Object.hasOwn(process.env, "HOME"), originalHome.exists);
+  assert.strictEqual(process.env.HOME, originalHome.value);
 });
 
-test("resolves explicit and default project paths independently from the config environment", async (t) => {
+test("loads explicit project paths independently from the config environment", async (t) => {
   // arrange
-  const root = await makeTempRoot(t, "import-settings-project-paths-");
-  const projectRoot = path.join(root, "project");
+  const root = await makeTempRoot(t, "import-settings-explicit-project-");
+  const configRoot = path.join(root, "project", ".claude");
   const originalConfigDirectory = captureEnvironmentProperty("CLAUDE_CONFIG_DIR");
-  let explicitPaths;
-  let defaultPaths;
+  const originalHome = captureEnvironmentProperty("HOME");
+  await writeSettings(configRoot, "base", { enabledPlugins: { "base@market": true } });
+  await writeSettings(configRoot, "local", { enabledPlugins: { "local@market": false } });
+  let loaded;
 
   // act
   try {
     process.env.CLAUDE_CONFIG_DIR = path.join(root, "ignored-user-config");
-    explicitPaths = resolveClaudeSettingsPaths("project", { cwd: projectRoot });
-    defaultPaths = resolveClaudeSettingsPaths("project");
+    loaded = await loadMergedClaudeSettingsForScope("project", {
+      cwd: path.join(root, "project"),
+    });
   } finally {
     restoreEnvironmentProperty("CLAUDE_CONFIG_DIR", originalConfigDirectory);
+    restoreEnvironmentProperty("HOME", originalHome);
   }
 
   // assert
-  assert.deepStrictEqual(explicitPaths, {
-    basePath: path.join(projectRoot, ".claude", "settings.json"),
-    localPath: path.join(projectRoot, ".claude", "settings.local.json"),
-  });
-  assert.deepStrictEqual(defaultPaths, {
-    basePath: path.join(process.cwd(), ".claude", "settings.json"),
-    localPath: path.join(process.cwd(), ".claude", "settings.local.json"),
+  assert.deepStrictEqual(loaded, {
+    paths: {
+      basePath: path.join(configRoot, "settings.json"),
+      localPath: path.join(configRoot, "settings.local.json"),
+    },
+    settings: {
+      enabledPlugins: { "base@market": true, "local@market": false },
+      extraKnownMarketplaces: {},
+    },
+    diagnostics: [],
   });
   assert.strictEqual(
     Object.hasOwn(process.env, "CLAUDE_CONFIG_DIR"),
     originalConfigDirectory.exists,
   );
   assert.strictEqual(process.env.CLAUDE_CONFIG_DIR, originalConfigDirectory.value);
+  assert.strictEqual(Object.hasOwn(process.env, "HOME"), originalHome.exists);
+  assert.strictEqual(process.env.HOME, originalHome.value);
 });
 
-test("shallow-merges known sections with local precedence", () => {
+test("loads default project paths independently from the config environment", async (t) => {
+  // arrange
+  const root = await makeTempRoot(t, "import-settings-default-project-");
+  const configRoot = path.join(root, "project", ".claude");
+  const originalConfigDirectory = captureEnvironmentProperty("CLAUDE_CONFIG_DIR");
+  const originalHome = captureEnvironmentProperty("HOME");
+  t.mock.method(process, "cwd", () => path.join(root, "project"));
+  await writeSettings(configRoot, "base", { enabledPlugins: { "base@market": true } });
+  await writeSettings(configRoot, "local", { enabledPlugins: { "local@market": false } });
+  let loaded;
+
+  // act
+  try {
+    process.env.CLAUDE_CONFIG_DIR = path.join(root, "ignored-user-config");
+    loaded = await loadMergedClaudeSettingsForScope("project");
+  } finally {
+    restoreEnvironmentProperty("CLAUDE_CONFIG_DIR", originalConfigDirectory);
+    restoreEnvironmentProperty("HOME", originalHome);
+  }
+
+  // assert
+  assert.deepStrictEqual(loaded, {
+    paths: {
+      basePath: path.join(configRoot, "settings.json"),
+      localPath: path.join(configRoot, "settings.local.json"),
+    },
+    settings: {
+      enabledPlugins: { "base@market": true, "local@market": false },
+      extraKnownMarketplaces: {},
+    },
+    diagnostics: [],
+  });
+  assert.strictEqual(
+    Object.hasOwn(process.env, "CLAUDE_CONFIG_DIR"),
+    originalConfigDirectory.exists,
+  );
+  assert.strictEqual(process.env.CLAUDE_CONFIG_DIR, originalConfigDirectory.value);
+  assert.strictEqual(Object.hasOwn(process.env, "HOME"), originalHome.exists);
+  assert.strictEqual(process.env.HOME, originalHome.value);
+});
+
+test("shallow-merges known sections with local precedence", async (t) => {
   // arrange
   const base = {
     enabledPlugins: { "alpha@market": true, "shared@market": true },
@@ -214,25 +321,38 @@ test("shallow-merges known sections with local precedence", () => {
     ignored: { local: true },
   };
 
+  const configRoot = await makeTempRoot(t, "import-settings-merge-");
+  await writeSettings(configRoot, "base", base);
+  await writeSettings(configRoot, "local", local);
+
   // act
-  const settings = mergeClaudeSettings(base, local);
+  const loaded = await loadMergedClaudeSettingsForScope("user", {
+    claudeConfigDir: configRoot,
+  });
 
   // assert
-  assert.deepStrictEqual(settings, {
-    enabledPlugins: {
-      "alpha@market": true,
-      "shared@market": false,
-      "beta@market": true,
+  assert.deepStrictEqual(loaded, {
+    paths: {
+      basePath: path.join(configRoot, "settings.json"),
+      localPath: path.join(configRoot, "settings.local.json"),
     },
-    extraKnownMarketplaces: {
-      alpha: { source: "base-alpha" },
-      shared: { source: "local-shared" },
-      beta: { source: "local-beta" },
+    diagnostics: [],
+    settings: {
+      enabledPlugins: {
+        "alpha@market": true,
+        "shared@market": false,
+        "beta@market": true,
+      },
+      extraKnownMarketplaces: {
+        alpha: { source: "base-alpha" },
+        shared: { source: "local-shared" },
+        beta: { source: "local-beta" },
+      },
     },
   });
 });
 
-test("treats every nonobject known section as empty", () => {
+test("treats every nonobject known section as empty", async (t) => {
   // arrange
   const base = {
     enabledPlugins: "invalid",
@@ -243,13 +363,26 @@ test("treats every nonobject known section as empty", () => {
     extraKnownMarketplaces: 42,
   };
 
+  const configRoot = await makeTempRoot(t, "import-settings-merge-");
+  await writeSettings(configRoot, "base", base);
+  await writeSettings(configRoot, "local", local);
+
   // act
-  const settings = mergeClaudeSettings(base, local);
+  const loaded = await loadMergedClaudeSettingsForScope("user", {
+    claudeConfigDir: configRoot,
+  });
 
   // assert
-  assert.deepStrictEqual(settings, {
-    enabledPlugins: {},
-    extraKnownMarketplaces: {},
+  assert.deepStrictEqual(loaded, {
+    paths: {
+      basePath: path.join(configRoot, "settings.json"),
+      localPath: path.join(configRoot, "settings.local.json"),
+    },
+    diagnostics: [],
+    settings: {
+      enabledPlugins: {},
+      extraKnownMarketplaces: {},
+    },
   });
 });
 

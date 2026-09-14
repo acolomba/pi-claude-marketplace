@@ -12,30 +12,6 @@ function preserveDirectOwnerType(owner: OwnerShape): void {
 
 void preserveDirectOwnerType;
 
-test("exports the exact supported and unsupported closed sets", async () => {
-  // arrange
-  let supported: readonly string[] = [];
-  let unsupported: readonly string[] = [];
-
-  // act & assert
-  await assert.doesNotReject(async () => {
-    const owner =
-      await import("../../extensions/pi-claude-marketplace/domain/unsupported-components.ts");
-    supported = owner.SUPPORTED_COMPONENT_KINDS;
-    unsupported = owner.UNSUPPORTED_COMPONENT_KINDS;
-  }, "unsupported-components.ts is absent");
-  assert.deepStrictEqual(supported, ["skills", "commands", "agents", "hooks"]);
-  assert.deepStrictEqual(unsupported, [
-    "lspServers",
-    "monitors",
-    "themes",
-    "outputStyles",
-    "channels",
-    "userConfig",
-    "settings",
-    "workflows",
-  ]);
-});
 test("rowClaimsInstallDisabled preserves user-declaration precedence", async () => {
   // arrange
   const { rowClaimsInstallDisabled } =

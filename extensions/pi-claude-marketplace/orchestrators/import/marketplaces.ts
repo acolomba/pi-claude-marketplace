@@ -95,7 +95,7 @@ function marketplaceSourceFromExtra(entry: unknown): string | undefined {
   return undefined;
 }
 
-export function planMarketplaceSourcesForRefs(
+function planMarketplaceSourcesForRefs(
   scope: Scope,
   refs: readonly EnabledPluginRef[],
   extraKnownMarketplaces: Record<string, unknown>,

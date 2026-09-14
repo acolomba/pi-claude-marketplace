@@ -11,7 +11,6 @@ import {
   cleanupFailuresFromError,
   composeErrorWithCauseChain,
   ConcurrentInstallError,
-  ConcurrentUninstallError,
   CrossPluginConflictError,
   errorMessage,
   errorWithCleanupFailures,
@@ -797,34 +796,6 @@ describe("ConcurrentInstallError", () => {
         message: 'Plugin "acme" was installed concurrently in marketplace "official".',
         plugin: "acme",
         marketplace: "official",
-        cause: undefined,
-      },
-    );
-  });
-});
-
-describe("ConcurrentUninstallError", () => {
-  test("exposes the complete concurrent-uninstall sentinel", () => {
-    // arrange
-    const plugin = "acme";
-
-    // act
-    const error = new ConcurrentUninstallError(plugin);
-
-    // assert
-    assert.ok(error instanceof ConcurrentUninstallError);
-    assert.ok(error instanceof Error);
-    assert.deepStrictEqual(
-      {
-        name: error.name,
-        message: error.message,
-        plugin: error.plugin,
-        cause: error.cause,
-      },
-      {
-        name: "ConcurrentUninstallError",
-        message: 'Plugin "acme" already uninstalled.',
-        plugin: "acme",
         cause: undefined,
       },
     );

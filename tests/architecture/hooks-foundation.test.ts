@@ -19,10 +19,7 @@ import {
   HOOKS_CONFIG_SCHEMA,
   HOOKS_VALIDATOR,
 } from "../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
-import {
-  resolveLoose,
-  resolveStrict,
-} from "../../extensions/pi-claude-marketplace/domain/plugin-resolver.ts";
+import { resolveStrict } from "../../extensions/pi-claude-marketplace/domain/plugin-resolver.ts";
 import { STATE_SCHEMA } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
 import type { PluginEntry } from "../../extensions/pi-claude-marketplace/domain/components/plugin.ts";
@@ -193,7 +190,7 @@ test("HOOK-03: HOOKS_VALIDATOR.Check accepts unknown fields at handler, entry, a
 });
 
 // ──────────────────────────────────────────────────────────────────────────
-// Block 5: NFR-7 + HOOK-01 -- resolveStrict and resolveLoose admit a
+// Block 5: NFR-7 + HOOK-01 -- resolveStrict admits a
 // hook-only plugin with a parseable hooks/hooks.json. The discriminated
 // installable: true | false contract is enforced both at runtime (these
 // assertions) and at compile time (the @ts-expect-error directive below).
@@ -241,28 +238,19 @@ test("NFR-7 + HOOK-01: resolveStrict admits a hook-only plugin (installable: tru
 
   const r = await resolveStrict(entry, ctx);
 
-  assert.equal(r.state, "installable", `resolveStrict must admit: notes=${r.notes.join(" / ")}`);
-
-  if (r.state === "installable") {
-    assert.ok(r.supported.includes("hooks"), "supported must contain 'hooks'");
-    assert.equal(typeof r.pluginRoot, "string");
-    assert.ok(r.pluginRoot.length > 0);
-  }
-});
-
-test("NFR-7 + HOOK-01: resolveLoose admits a hook-only plugin (installable: true with hooks supported)", async () => {
-  const entry: PluginEntry = { name: "hookplug", source: "./hookplug" };
-  const ctx = hookOnlyCtx("/abs/marketplace/hookplug");
-
-  const r = await resolveLoose(entry, ctx);
-
-  assert.equal(r.state, "installable", `resolveLoose must admit: notes=${r.notes.join(" / ")}`);
-
-  if (r.state === "installable") {
-    assert.ok(r.supported.includes("hooks"), "supported must contain 'hooks'");
-    assert.equal(typeof r.pluginRoot, "string");
-    assert.ok(r.pluginRoot.length > 0);
-  }
+  assert.deepStrictEqual(r, {
+    state: "installable",
+    installable: true,
+    name: "hookplug",
+    pluginRoot: "/abs/marketplace/hookplug",
+    supported: ["hooks"],
+    unsupported: [],
+    notes: [],
+    componentPaths: { skills: [], commands: [], agents: [] },
+    mcpServers: {},
+    hooksConfigPath: "hooks/hooks.json",
+    defaultEnabled: true,
+  });
 });
 
 // NFR-7 type-level check. The load-bearing assertion is the

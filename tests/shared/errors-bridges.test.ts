@@ -2,13 +2,11 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
-  AgentForeignContentError,
   AgentOwnershipConflictError,
   BridgeStagingError,
   CommandNameError,
   McpServerCollisionError,
 } from "../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
-import { PathContainmentError } from "../../extensions/pi-claude-marketplace/shared/path-safety.ts";
 
 import type { AgentOwnershipConflict } from "../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 
@@ -18,88 +16,6 @@ void ({
 } satisfies AgentOwnershipConflict);
 // @ts-expect-error an ownership conflict requires its owner
 void ({ generatedName: "pi-claude-marketplace-acme-bot" } satisfies AgentOwnershipConflict);
-
-describe("AgentForeignContentError", () => {
-  test("exposes the complete foreign-content refusal", () => {
-    // arrange
-    const targetPath = "/scope/agents/foreign.md";
-    const reason = "missing marker";
-
-    // act
-    const error = new AgentForeignContentError(targetPath, reason);
-
-    // assert
-    assert.ok(error instanceof AgentForeignContentError);
-    assert.ok(error instanceof PathContainmentError);
-    assert.ok(error instanceof Error);
-    assert.deepStrictEqual(
-      {
-        name: error.name,
-        message: error.message,
-        parent: error.parent,
-        child: error.child,
-        targetPath: error.targetPath,
-        reason: error.reason,
-        cause: error.cause,
-      },
-      {
-        name: "AgentForeignContentError",
-        message: "Refusing to overwrite agent file at /scope/agents/foreign.md: missing marker.",
-        parent: "/scope/agents",
-        child: "/scope/agents/foreign.md",
-        targetPath: "/scope/agents/foreign.md",
-        reason: "missing marker",
-        cause: undefined,
-      },
-    );
-  });
-
-  test("keeps adjacent target paths and reasons distinct", () => {
-    // arrange
-    const firstTargetPath = "/scope/agents/a.md";
-    const secondTargetPath = "/scope/agents/aa.md";
-
-    // act
-    const firstError = new AgentForeignContentError(firstTargetPath, "a");
-    const secondError = new AgentForeignContentError(secondTargetPath, "aa");
-
-    // assert
-    assert.deepStrictEqual(
-      [
-        {
-          message: firstError.message,
-          parent: firstError.parent,
-          child: firstError.child,
-          targetPath: firstError.targetPath,
-          reason: firstError.reason,
-        },
-        {
-          message: secondError.message,
-          parent: secondError.parent,
-          child: secondError.child,
-          targetPath: secondError.targetPath,
-          reason: secondError.reason,
-        },
-      ],
-      [
-        {
-          message: "Refusing to overwrite agent file at /scope/agents/a.md: a.",
-          parent: "/scope/agents",
-          child: "/scope/agents/a.md",
-          targetPath: "/scope/agents/a.md",
-          reason: "a",
-        },
-        {
-          message: "Refusing to overwrite agent file at /scope/agents/aa.md: aa.",
-          parent: "/scope/agents",
-          child: "/scope/agents/aa.md",
-          targetPath: "/scope/agents/aa.md",
-          reason: "aa",
-        },
-      ],
-    );
-  });
-});
 
 describe("AgentOwnershipConflictError", () => {
   test("exposes an empty ownership conflict collection exactly", () => {

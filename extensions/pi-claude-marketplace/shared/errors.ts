@@ -387,24 +387,6 @@ export class ConcurrentInstallError extends Error {
 }
 
 /**
- * PU-5 silent-converge sentinel for uninstall.
- *
- * Thrown inside the `withStateGuard` closure of
- * orchestrators/plugin/uninstall.ts when the plugin record is already
- * absent at re-load time (another process completed the uninstall first).
- * The caller catches this sentinel and returns success with no
- * user-visible notification per PRD §5.2.2 PU-5 verbatim semantics.
- */
-export class ConcurrentUninstallError extends Error {
-  readonly plugin: string;
-  constructor(plugin: string) {
-    super(`Plugin "${plugin}" already uninstalled.`);
-    this.name = "ConcurrentUninstallError";
-    this.plugin = plugin;
-  }
-}
-
-/**
  * Stable producer fact for state that changes between update preflight and
  * its guarded intent/finalize writes. Consumers narrow on `kind`; the message
  * remains diagnostic text only.

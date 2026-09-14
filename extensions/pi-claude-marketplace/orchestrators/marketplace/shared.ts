@@ -474,7 +474,7 @@ export function classifyAutoupdateFlip(
  * caller's withStateGuard wraps the state mutation that follows; an
  * additional fresh load happens inside that guard.
  */
-export async function resolveScopeFromState(
+async function resolveScopeFromState(
   mpName: string,
   userLocations: ScopedLocations,
   projectLocations: ScopedLocations,

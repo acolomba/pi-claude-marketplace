@@ -49,6 +49,28 @@ import type {
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { CompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 
+type FailedAddOutcome = Extract<AddMarketplaceOutcome, { status: "failed" }>;
+
+void ({
+  status: "failed",
+  reason: "duplicate name",
+  error: new Error("duplicate marketplace"),
+  cause: "duplicate marketplace",
+} satisfies AddMarketplaceOutcome);
+
+void ({
+  status: "failed",
+  reason: "stale clone",
+  error: new Error("existing clone"),
+  cause: "existing clone",
+} satisfies AddMarketplaceOutcome);
+
+// The public add outcome deliberately accepts the shared reason vocabulary.
+void ("plugins remain" satisfies FailedAddOutcome["reason"]);
+
+// @ts-expect-error failed add outcomes retain the closed shared reason vocabulary
+void ("unknown add failure" satisfies FailedAddOutcome["reason"]);
+
 function fixtureMarketplaceDir(
   name: "valid-marketplace" | "invalid-manifest" | "empty-marketplace",
 ): string {

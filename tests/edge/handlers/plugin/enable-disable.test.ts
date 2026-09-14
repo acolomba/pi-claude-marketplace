@@ -66,10 +66,8 @@ import {
   mergeMarketplaceIntoState,
 } from "../marketplace-seed.ts";
 
-import type {
-  HooksRouting,
-  HooksRuntime,
-} from "../../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
+import type { HooksRouting } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
+import type { HooksRuntime } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import type {
   ExtensionAPI,
   ExtensionCommandContext,

@@ -1,142 +1,226 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import {
-  extractEnabledPluginRefs,
-  parseEnabledPluginRef,
-} from "../../../extensions/pi-claude-marketplace/orchestrators/import/refs.ts";
+import { extractEnabledPluginRefs } from "../../../extensions/pi-claude-marketplace/orchestrators/import/refs.ts";
 
-test("parseEnabledPluginRef accepts one separator and preserves the verbatim raw input", () => {
+test("extractEnabledPluginRefs accepts one separator and preserves the verbatim raw input", () => {
   // arrange
   const raw = "frontend-design@claude-plugins-official";
 
   // act
-  const result = parseEnabledPluginRef(raw);
+  const result = extractEnabledPluginRefs("user", {
+    enabledPlugins: { [raw]: true },
+    extraKnownMarketplaces: {},
+  });
 
   // assert
   assert.deepEqual(result, {
-    ok: true,
-    ref: {
-      marketplace: "claude-plugins-official",
-      plugin: "frontend-design",
-      raw: "frontend-design@claude-plugins-official",
-    },
+    diagnostics: [],
+    refs: [
+      {
+        marketplace: "claude-plugins-official",
+        plugin: "frontend-design",
+        raw: "frontend-design@claude-plugins-official",
+      },
+    ],
   });
 });
 
-test("parseEnabledPluginRef trims the ref parts without changing the raw input", () => {
+test("extractEnabledPluginRefs trims the ref parts without changing the raw input", () => {
   // arrange
   const raw = "  frontend-design  @  claude-plugins-official  ";
 
   // act
-  const result = parseEnabledPluginRef(raw);
+  const result = extractEnabledPluginRefs("user", {
+    enabledPlugins: { [raw]: true },
+    extraKnownMarketplaces: {},
+  });
 
   // assert
   assert.deepEqual(result, {
-    ok: true,
-    ref: {
-      marketplace: "claude-plugins-official",
-      plugin: "frontend-design",
-      raw: "  frontend-design  @  claude-plugins-official  ",
-    },
+    diagnostics: [],
+    refs: [
+      {
+        marketplace: "claude-plugins-official",
+        plugin: "frontend-design",
+        raw: "  frontend-design  @  claude-plugins-official  ",
+      },
+    ],
   });
 });
 
-test("parseEnabledPluginRef rejects an empty input with the separator diagnostic", () => {
+test("extractEnabledPluginRefs rejects an empty input with the separator diagnostic", () => {
   // arrange
   const raw = "";
 
   // act
-  const result = parseEnabledPluginRef(raw);
+  const result = extractEnabledPluginRefs("user", {
+    enabledPlugins: { [raw]: true },
+    extraKnownMarketplaces: {},
+  });
 
   // assert
   assert.deepEqual(result, {
-    ok: false,
-    reason: "Expected exactly one @ separator in plugin@marketplace ref.",
+    refs: [],
+    diagnostics: [
+      {
+        code: "malformed-plugin-ref",
+        message: `Skipping malformed enabled plugin ref ${JSON.stringify(raw)}: Expected exactly one @ separator in plugin@marketplace ref. Expected plugin@marketplace.`,
+        ref: raw,
+        scope: "user",
+        severity: "warning",
+      },
+    ],
   });
 });
 
-test("parseEnabledPluginRef rejects a ref with no separator", () => {
+test("extractEnabledPluginRefs rejects a ref with no separator", () => {
   // arrange
   const raw = "frontend-design";
 
   // act
-  const result = parseEnabledPluginRef(raw);
+  const result = extractEnabledPluginRefs("user", {
+    enabledPlugins: { [raw]: true },
+    extraKnownMarketplaces: {},
+  });
 
   // assert
   assert.deepEqual(result, {
-    ok: false,
-    reason: "Expected exactly one @ separator in plugin@marketplace ref.",
+    refs: [],
+    diagnostics: [
+      {
+        code: "malformed-plugin-ref",
+        message: `Skipping malformed enabled plugin ref ${JSON.stringify(raw)}: Expected exactly one @ separator in plugin@marketplace ref. Expected plugin@marketplace.`,
+        ref: raw,
+        scope: "user",
+        severity: "warning",
+      },
+    ],
   });
 });
 
-test("parseEnabledPluginRef rejects a ref with multiple separators", () => {
+test("extractEnabledPluginRefs rejects a ref with multiple separators", () => {
   // arrange
   const raw = "frontend-design@marketplace@extra";
 
   // act
-  const result = parseEnabledPluginRef(raw);
+  const result = extractEnabledPluginRefs("user", {
+    enabledPlugins: { [raw]: true },
+    extraKnownMarketplaces: {},
+  });
 
   // assert
   assert.deepEqual(result, {
-    ok: false,
-    reason: "Expected exactly one @ separator in plugin@marketplace ref.",
+    refs: [],
+    diagnostics: [
+      {
+        code: "malformed-plugin-ref",
+        message: `Skipping malformed enabled plugin ref ${JSON.stringify(raw)}: Expected exactly one @ separator in plugin@marketplace ref. Expected plugin@marketplace.`,
+        ref: raw,
+        scope: "user",
+        severity: "warning",
+      },
+    ],
   });
 });
 
-test("parseEnabledPluginRef rejects an empty plugin side", () => {
+test("extractEnabledPluginRefs rejects an empty plugin side", () => {
   // arrange
   const raw = "@claude-plugins-official";
 
   // act
-  const result = parseEnabledPluginRef(raw);
+  const result = extractEnabledPluginRefs("user", {
+    enabledPlugins: { [raw]: true },
+    extraKnownMarketplaces: {},
+  });
 
   // assert
   assert.deepEqual(result, {
-    ok: false,
-    reason: "Expected non-empty plugin and marketplace in plugin@marketplace ref.",
+    refs: [],
+    diagnostics: [
+      {
+        code: "malformed-plugin-ref",
+        message: `Skipping malformed enabled plugin ref ${JSON.stringify(raw)}: Expected non-empty plugin and marketplace in plugin@marketplace ref. Expected plugin@marketplace.`,
+        ref: raw,
+        scope: "user",
+        severity: "warning",
+      },
+    ],
   });
 });
 
-test("parseEnabledPluginRef rejects a whitespace-only plugin side", () => {
+test("extractEnabledPluginRefs rejects a whitespace-only plugin side", () => {
   // arrange
   const raw = "   @claude-plugins-official";
 
   // act
-  const result = parseEnabledPluginRef(raw);
+  const result = extractEnabledPluginRefs("user", {
+    enabledPlugins: { [raw]: true },
+    extraKnownMarketplaces: {},
+  });
 
   // assert
   assert.deepEqual(result, {
-    ok: false,
-    reason: "Expected non-empty plugin and marketplace in plugin@marketplace ref.",
+    refs: [],
+    diagnostics: [
+      {
+        code: "malformed-plugin-ref",
+        message: `Skipping malformed enabled plugin ref ${JSON.stringify(raw)}: Expected non-empty plugin and marketplace in plugin@marketplace ref. Expected plugin@marketplace.`,
+        ref: raw,
+        scope: "user",
+        severity: "warning",
+      },
+    ],
   });
 });
 
-test("parseEnabledPluginRef rejects an empty marketplace side", () => {
+test("extractEnabledPluginRefs rejects an empty marketplace side", () => {
   // arrange
   const raw = "frontend-design@";
 
   // act
-  const result = parseEnabledPluginRef(raw);
+  const result = extractEnabledPluginRefs("user", {
+    enabledPlugins: { [raw]: true },
+    extraKnownMarketplaces: {},
+  });
 
   // assert
   assert.deepEqual(result, {
-    ok: false,
-    reason: "Expected non-empty plugin and marketplace in plugin@marketplace ref.",
+    refs: [],
+    diagnostics: [
+      {
+        code: "malformed-plugin-ref",
+        message: `Skipping malformed enabled plugin ref ${JSON.stringify(raw)}: Expected non-empty plugin and marketplace in plugin@marketplace ref. Expected plugin@marketplace.`,
+        ref: raw,
+        scope: "user",
+        severity: "warning",
+      },
+    ],
   });
 });
 
-test("parseEnabledPluginRef rejects a whitespace-only marketplace side", () => {
+test("extractEnabledPluginRefs rejects a whitespace-only marketplace side", () => {
   // arrange
   const raw = "frontend-design@   ";
 
   // act
-  const result = parseEnabledPluginRef(raw);
+  const result = extractEnabledPluginRefs("user", {
+    enabledPlugins: { [raw]: true },
+    extraKnownMarketplaces: {},
+  });
 
   // assert
   assert.deepEqual(result, {
-    ok: false,
-    reason: "Expected non-empty plugin and marketplace in plugin@marketplace ref.",
+    refs: [],
+    diagnostics: [
+      {
+        code: "malformed-plugin-ref",
+        message: `Skipping malformed enabled plugin ref ${JSON.stringify(raw)}: Expected non-empty plugin and marketplace in plugin@marketplace ref. Expected plugin@marketplace.`,
+        ref: raw,
+        scope: "user",
+        severity: "warning",
+      },
+    ],
   });
 });
 

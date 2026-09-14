@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test, type TestContext } from "node:test";
@@ -17,7 +17,6 @@ import {
   marketplaceInOtherScope,
   narrowCascadeFailure,
   refreshGitHubClone,
-  resolveScopeFromState,
   resolveScopeOrNotifyNotAdded,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -911,7 +910,7 @@ test("classifyAutoupdateFlip throws the complete missing-marketplace error", () 
   );
 });
 
-test("resolveScopeFromState gives project scope precedence when both scopes contain the name", async (t) => {
+test("resolveScopeOrNotifyNotAdded gives project scope precedence when both scopes contain the name", async (t) => {
   // arrange
   const user = await createProjectScope(t, "resolve-both-user");
   const project = await createProjectScope(t, "resolve-both-project");
@@ -921,15 +920,35 @@ test("resolveScopeFromState gives project scope precedence when both scopes cont
   ]);
   const expected = { scope: "project", locations: project.locations };
 
+  const boundary = notificationBoundary();
+  const userBytes = await readFile(path.join(user.locations.extensionRoot, "state.json"), "utf8");
+  const projectBytes = await readFile(
+    path.join(project.locations.extensionRoot, "state.json"),
+    "utf8",
+  );
+
   // act
-  const resolved = await resolveScopeFromState("official", user.locations, project.locations);
+  const resolved = await resolveScopeOrNotifyNotAdded(
+    { ctx: boundary.ctx, pi: boundary.pi, name: "official" },
+    user.locations,
+    project.locations,
+  );
 
   // assert
   assert.deepStrictEqual(resolved, expected);
-  assert.strictEqual(resolved.locations, project.locations);
+  assert.strictEqual(resolved?.locations, project.locations);
+  assert.strictEqual(
+    await readFile(path.join(user.locations.extensionRoot, "state.json"), "utf8"),
+    userBytes,
+  );
+  assert.strictEqual(
+    await readFile(path.join(project.locations.extensionRoot, "state.json"), "utf8"),
+    projectBytes,
+  );
+  boundary.verifyAll();
 });
 
-test("resolveScopeFromState selects the sole user-scope record", async (t) => {
+test("resolveScopeOrNotifyNotAdded selects the sole user-scope record", async (t) => {
   // arrange
   const user = await createProjectScope(t, "resolve-user-user");
   const project = await createProjectScope(t, "resolve-user-project");
@@ -937,35 +956,32 @@ test("resolveScopeFromState selects the sole user-scope record", async (t) => {
   await saveMarketplaces(project.locations, []);
   const expected = { scope: "user", locations: user.locations };
 
+  const boundary = notificationBoundary();
+  const userBytes = await readFile(path.join(user.locations.extensionRoot, "state.json"), "utf8");
+  const projectBytes = await readFile(
+    path.join(project.locations.extensionRoot, "state.json"),
+    "utf8",
+  );
+
   // act
-  const resolved = await resolveScopeFromState("official", user.locations, project.locations);
+  const resolved = await resolveScopeOrNotifyNotAdded(
+    { ctx: boundary.ctx, pi: boundary.pi, name: "official" },
+    user.locations,
+    project.locations,
+  );
 
   // assert
   assert.deepStrictEqual(resolved, expected);
-  assert.strictEqual(resolved.locations, user.locations);
-});
-
-test("resolveScopeFromState throws complete project-before-user absence diagnostics", async (t) => {
-  // arrange
-  const user = await createProjectScope(t, "resolve-missing-user");
-  const project = await createProjectScope(t, "resolve-missing-project");
-  await saveMarketplaces(user.locations, []);
-  await saveMarketplaces(project.locations, []);
-  let caught: unknown;
-
-  // act
-  try {
-    await resolveScopeFromState("missing", user.locations, project.locations);
-  } catch (error) {
-    caught = error;
-  }
-
-  // assert
-  assert.ok(caught instanceof MarketplaceNotFoundError);
-  assert.equal(caught.name, "MarketplaceNotFoundError");
-  assert.equal(caught.message, 'Marketplace "missing" not found in project, user scopes.');
-  assert.equal(caught.mpName, "missing");
-  assert.deepStrictEqual(caught.scopes, ["project", "user"]);
+  assert.strictEqual(resolved?.locations, user.locations);
+  assert.strictEqual(
+    await readFile(path.join(user.locations.extensionRoot, "state.json"), "utf8"),
+    userBytes,
+  );
+  assert.strictEqual(
+    await readFile(path.join(project.locations.extensionRoot, "state.json"), "utf8"),
+    projectBytes,
+  );
+  boundary.verifyAll();
 });
 
 test("resolveScopeOrNotifyNotAdded returns a bare resolved scope without notification", async (t) => {
@@ -1002,6 +1018,12 @@ test("resolveScopeOrNotifyNotAdded emits exact bytes for a bare miss", async (t)
     severity: "error",
   });
 
+  const userBytes = await readFile(path.join(user.locations.extensionRoot, "state.json"), "utf8");
+  const projectBytes = await readFile(
+    path.join(project.locations.extensionRoot, "state.json"),
+    "utf8",
+  );
+
   // act
   const resolved = await resolveScopeOrNotifyNotAdded(
     { ctx: boundary.ctx, pi: boundary.pi, name: "missing" },
@@ -1011,6 +1033,14 @@ test("resolveScopeOrNotifyNotAdded emits exact bytes for a bare miss", async (t)
 
   // assert
   assert.equal(resolved, undefined);
+  assert.strictEqual(
+    await readFile(path.join(user.locations.extensionRoot, "state.json"), "utf8"),
+    userBytes,
+  );
+  assert.strictEqual(
+    await readFile(path.join(project.locations.extensionRoot, "state.json"), "utf8"),
+    projectBytes,
+  );
   boundary.verifyAll();
 });
 
@@ -1171,7 +1201,11 @@ test("marketplaceInOtherScope reports a container absent from the sibling scope"
   await saveMarketplaces(projectLocations, []);
 
   // act
-  const elsewhere = await marketplaceInOtherScope({ cwd, marketplace: "missing", scope: "user" });
+  const elsewhere = await marketplaceInOtherScope({
+    cwd,
+    marketplace: "missing",
+    scope: "user",
+  });
 
   // assert
   assert.strictEqual(elsewhere, false);
@@ -1185,7 +1219,11 @@ test("marketplaceInOtherScope degrades an unreadable sibling state to no claim",
   await writeFile(path.join(projectLocations.extensionRoot, "state.json"), "{");
 
   // act
-  const elsewhere = await marketplaceInOtherScope({ cwd, marketplace: "official", scope: "user" });
+  const elsewhere = await marketplaceInOtherScope({
+    cwd,
+    marketplace: "official",
+    scope: "user",
+  });
 
   // assert
   assert.strictEqual(elsewhere, false);

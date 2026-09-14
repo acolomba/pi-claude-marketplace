@@ -39,7 +39,6 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
-import { STATE_LOCK_HELD_PREFIX } from "../../extensions/pi-claude-marketplace/shared/markers.ts";
 
 interface ChildResult {
   readonly ok: boolean;
@@ -316,7 +315,7 @@ test("RECON-06 (two-process race): config declares one path-source mp-a + plugin
       if (!r.ok) {
         assert.match(
           r.message ?? "",
-          new RegExp(STATE_LOCK_HELD_PREFIX),
+          /Another pi-claude-marketplace operation is in progress for/,
           `non-ok child must carry the StateLockHeldError marker (NFR-2 soft-fail); got: ${r.message ?? ""}`,
         );
       }

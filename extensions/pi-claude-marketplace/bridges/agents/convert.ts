@@ -9,8 +9,8 @@
 //      not here.
 //   3. discoverPluginAgents lives in ./discover.ts so convert stays pure.
 //
-// MODEL_MAP, TOOL_MAP, THINKING_VALUES are user contract; tests assert exact
-// equality.
+// Model, tool, and thinking mappings are user contracts; owner tests assert
+// their exact converted output.
 
 import { generatedSkillName } from "../../domain/name.ts";
 import { escapeRegExp } from "../../shared/regexp.ts";
@@ -40,7 +40,7 @@ const SUPPORTED_SOURCE_FIELDS = new Set([
  * AG-7 user contract: allowlisted Claude model strings. Anything else is
  * omitted from the generated frontmatter.
  */
-export const MODEL_MAP: Readonly<Record<string, string>> = Object.freeze({
+const MODEL_MAP: Readonly<Record<string, string>> = Object.freeze({
   sonnet: "anthropic/claude-sonnet-4-6",
   opus: "anthropic/claude-opus-4-7",
   haiku: "anthropic/claude-haiku-4-5",
@@ -50,7 +50,7 @@ export const MODEL_MAP: Readonly<Record<string, string>> = Object.freeze({
  * AG-7 user contract: Claude tool name -> Pi tool name. Tokens not present
  * here are dropped.
  */
-export const TOOL_MAP: Readonly<Record<string, string>> = Object.freeze({
+const TOOL_MAP: Readonly<Record<string, string>> = Object.freeze({
   Read: "read",
   Bash: "bash",
   Edit: "edit",
@@ -61,7 +61,7 @@ export const TOOL_MAP: Readonly<Record<string, string>> = Object.freeze({
 });
 
 /** Allowlist for thinking/effort values. */
-export const THINKING_VALUES: ReadonlySet<string> = new Set([
+const THINKING_VALUES: ReadonlySet<string> = new Set([
   "off",
   "minimal",
   "low",

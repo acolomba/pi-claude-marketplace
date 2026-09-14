@@ -383,6 +383,7 @@ export default tseslint.config(
       "tests/bridges/hooks/exec-result.test.ts",
       "tests/bridges/mcp/types.test.ts",
       "tests/bridges/skills/types.test.ts",
+      "tests/domain/resolver-types.test.ts",
       "tests/edge/types.test.ts",
       "tests/orchestrators/import/types.test.ts",
       "tests/orchestrators/types.test.ts",
