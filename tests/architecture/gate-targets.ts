@@ -563,11 +563,6 @@ export const FINDING_DISPOSITIONS_REL: (typeof EVIDENCE_RECORD_TARGETS)[number] 
  * bare string literal, which is what the literal-match scan over this file needs.
  */
 export const UNOWNED_EXPORT_CENSUS: Readonly<Record<string, readonly string[]>> = {
-  "extensions/pi-claude-marketplace/bridges/hooks/stage.ts": [
-    "createWriteHookConfig",
-    "hookConfigPathFor",
-  ],
-  "extensions/pi-claude-marketplace/bridges/skills/unstage.ts": ["createUnstagePluginSkills"],
   "extensions/pi-claude-marketplace/index.ts": ["default"],
   "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts": [
     "createSetPluginEnabled",
@@ -599,21 +594,11 @@ export const UNOWNED_EXPORT_CENSUS: Readonly<Record<string, readonly string[]>> 
   "extensions/pi-claude-marketplace/orchestrators/reconcile/reconcile.messaging.ts": [
     "PENDING_STATUSES",
   ],
-  "extensions/pi-claude-marketplace/persistence/config-io.ts": ["CONFIG_VALIDATOR"],
-  "extensions/pi-claude-marketplace/persistence/state-io.ts": [
-    "PLUGIN_INSTALL_RECORD_SCHEMA",
-    "STATE_SCHEMA",
-    "STATE_VALIDATOR",
-  ],
   "extensions/pi-claude-marketplace/platform/git-credential.ts": ["createCredentialOps"],
   "extensions/pi-claude-marketplace/platform/git.ts": [
     "buildAuthCallbacks",
     "listBranches",
     "listRemotes",
-  ],
-  "extensions/pi-claude-marketplace/shared/completion-cache.ts": [
-    "MARKETPLACE_NAMES_CACHE_SCHEMA",
-    "PLUGIN_INDEX_CACHE_SCHEMA",
   ],
   "extensions/pi-claude-marketplace/shared/notification-dispatch.ts": ["emitWithSummary"],
   "extensions/pi-claude-marketplace/shared/notification-grammar.ts": [
@@ -638,18 +623,6 @@ export const FALLOW_CONTROL_TARGETS = [
 /** Complete production finding identities; additions, removals, and swaps require review. */
 export const PRODUCTION_FINDING_CENSUS = {
   unused_exports: [
-    {
-      path: "extensions/pi-claude-marketplace/bridges/hooks/stage.ts",
-      export_name: "hookConfigPathFor",
-    },
-    {
-      path: "extensions/pi-claude-marketplace/bridges/hooks/stage.ts",
-      export_name: "createWriteHookConfig",
-    },
-    {
-      path: "extensions/pi-claude-marketplace/bridges/skills/unstage.ts",
-      export_name: "createUnstagePluginSkills",
-    },
     {
       path: "extensions/pi-claude-marketplace/index.ts",
       export_name: "default",
@@ -719,22 +692,6 @@ export const PRODUCTION_FINDING_CENSUS = {
       export_name: "PENDING_STATUSES",
     },
     {
-      path: "extensions/pi-claude-marketplace/persistence/config-io.ts",
-      export_name: "CONFIG_VALIDATOR",
-    },
-    {
-      path: "extensions/pi-claude-marketplace/persistence/state-io.ts",
-      export_name: "PLUGIN_INSTALL_RECORD_SCHEMA",
-    },
-    {
-      path: "extensions/pi-claude-marketplace/persistence/state-io.ts",
-      export_name: "STATE_SCHEMA",
-    },
-    {
-      path: "extensions/pi-claude-marketplace/persistence/state-io.ts",
-      export_name: "STATE_VALIDATOR",
-    },
-    {
       path: "extensions/pi-claude-marketplace/platform/git-credential.ts",
       export_name: "createCredentialOps",
     },
@@ -749,14 +706,6 @@ export const PRODUCTION_FINDING_CENSUS = {
     {
       path: "extensions/pi-claude-marketplace/platform/git.ts",
       export_name: "buildAuthCallbacks",
-    },
-    {
-      path: "extensions/pi-claude-marketplace/shared/completion-cache.ts",
-      export_name: "MARKETPLACE_NAMES_CACHE_SCHEMA",
-    },
-    {
-      path: "extensions/pi-claude-marketplace/shared/completion-cache.ts",
-      export_name: "PLUGIN_INDEX_CACHE_SCHEMA",
     },
     {
       path: "extensions/pi-claude-marketplace/shared/notification-dispatch.ts",
@@ -789,10 +738,6 @@ export const PRODUCTION_FINDING_CENSUS = {
   ],
   unused_types: [
     {
-      path: "extensions/pi-claude-marketplace/persistence/state-io.ts",
-      export_name: "EnabledPluginRecord",
-    },
-    {
       path: "extensions/pi-claude-marketplace/shared/notify-reasons.ts",
       export_name: "_ReasonsCoverageProof",
     },
@@ -818,16 +763,7 @@ export const PRODUCTION_FINDING_CENSUS = {
           path: "extensions/pi-claude-marketplace/bridges/hooks/payloads/post-compact.ts",
         },
         {
-          path: "extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use-failure.ts",
-        },
-        {
-          path: "extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use.ts",
-        },
-        {
           path: "extensions/pi-claude-marketplace/bridges/hooks/payloads/pre-compact.ts",
-        },
-        {
-          path: "extensions/pi-claude-marketplace/bridges/hooks/payloads/pre-tool-use.ts",
         },
         {
           path: "extensions/pi-claude-marketplace/bridges/hooks/payloads/session-end.ts",
