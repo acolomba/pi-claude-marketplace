@@ -3,10 +3,9 @@
   "rows": [
     {
       "sourcePath": "extensions/pi-claude-marketplace/bridges/commands/discover.ts",
-      "reading": "branches 55/57, lines 412/414",
+      "reading": "branches 55/56, lines 412/414",
       "findingIds": ["BC-019"],
       "reasons": [
-        "178 (branch 178): the `?? \"\"` arm of `TOLERATED_WALK_ERRNOS.has(err.code ?? \"\")` in `isToleratedWalkError`. `isErrnoException` (shared/errors.ts) already requires `typeof err.code === \"string\"`, so the right arm of the `??` can never be taken, while `NodeJS.ErrnoException` declares `code?: string` and forces it to exist. Tightening the predicate to `err is NodeJS.ErrnoException & { code: string }` would retire this arm but would not empty the row, because 288-290 survives under BC-019, and it widens the blast radius to every consumer of that predicate.",
         "288-290 (branch 288): the `if (!(err instanceof CommandNameError)) { throw err; }` narrowing arm around `nameCommandInDir`. BC-019 records the measured disposition: the arm is unreachable -- only a `Symbol.hasInstance` patch reaches its throw -- but the check still narrows the `unknown` catch binding for `badNameWarning(err)`, so deleting it without a restructure breaks typing."
       ]
     },
