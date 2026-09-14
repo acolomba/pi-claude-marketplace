@@ -136,8 +136,8 @@ This extension converts each plugin agent into a pi-subagents agent file named `
 
 Two conversion rules to know:
 
-- If the source agent does not declare `tools:`, the generated agent has no tool allowlist. pi-subagents then grants its default builtin tools, like Claude Code grants every tool. Background children also receive ambient extension tools, such as MCP tools from pi-mcp-adapter.
-- Agent-level `allowed-tools` and `mcpServers` fields are dropped, with a warning that explains why. Claude Code ignores both on plugin agents. The plugin's own MCP servers still install through pi-mcp-adapter.
+- If the source agent does not declare `tools:`, the generated agent has no tool allowlist. pi-subagents then grants its default builtin tools, like Claude Code grants every tool available to subagents. Background children also receive ambient extension tools, such as MCP tools from pi-mcp-adapter. If the source agent sets `disallowedTools`, those names become `excludeTools`, which needs pi-subagents 0.62.0 or newer. Older versions ignore the field.
+- Agent-level `allowed-tools`, `mcpServers`, `permissionMode`, and `hooks` fields are dropped, with a warning that explains why. Claude Code ignores all four on plugin agents (`allowed-tools` is a slash-command field). The plugin's own MCP servers and its hooks.json still install.
 
 To change a generated agent's settings so the change survives plugin updates, use pi-subagents agent overrides in your Pi settings file (`~/.pi/agent/settings.json` for the user scope, `<project>/.pi/settings.json` for the project scope):
 

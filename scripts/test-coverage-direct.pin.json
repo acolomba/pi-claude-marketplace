@@ -2,6 +2,14 @@
   "version": 1,
   "rows": [
     {
+      "sourcePath": "extensions/pi-claude-marketplace/bridges/agents/convert.ts",
+      "reading": "branches 125/126, lines 751/755",
+      "findingIds": ["AG-11"],
+      "reasons": [
+        "668-671 (branch 668): the `first === undefined` throw in toolsFields' explicit arm. assertMappedToolsNonEmpty already rejected an empty explicit tools list with the user-facing AG-11 message before toolsFields runs, so the arm is unreachable through convertAgent; it exists because destructuring is the only cast-free way to build the non-empty tuple GeneratedToolsFields requires, and the compiler cannot see the earlier assert."
+      ]
+    },
+    {
       "sourcePath": "extensions/pi-claude-marketplace/bridges/commands/discover.ts",
       "reading": "branches 55/56, lines 412/414",
       "findingIds": ["BC-019"],

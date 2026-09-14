@@ -791,6 +791,7 @@ Body already has framing.
         name: "pi-claude-marketplace-acme-scout",
         description: "Scout source changes",
         excludeTools: ["edit", "write"] as const,
+        thinking: "high",
         skills: [],
         inheritSkills: true,
       },
@@ -808,6 +809,7 @@ Body already has framing.
 name: pi-claude-marketplace-acme-scout
 description: Scout source changes
 excludeTools: edit,write
+thinking: high
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: true

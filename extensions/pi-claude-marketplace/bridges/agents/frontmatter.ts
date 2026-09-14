@@ -411,35 +411,38 @@ function normalizeBody(body: string): string {
 }
 
 /**
+ * #179: the tool grant of a generated agent -- exactly one shape renders.
+ *
+ * `tools` present is an explicit, non-empty allowlist: pi-subagents reads
+ * an empty `tools:` as "no tools", which has no safe representation, and
+ * the non-empty tuple encodes that invariant (AG-11 -- convertAgent throws
+ * before reaching here on an empty explicit list). `tools` absent means
+ * the source agent omitted `tools:` -- the generated frontmatter omits the
+ * allowlist so pi-subagents grants its default builtin tools -- and only
+ * then can `excludeTools` (the Pi mapping of source `disallowedTools:`,
+ * also non-empty when present) narrow that default set. The `?: never`
+ * arms are what enforce "never both": a value carrying both keys matches
+ * neither arm.
+ */
+export type GeneratedToolsFields =
+  | { readonly tools: readonly [string, ...string[]]; readonly excludeTools?: never }
+  | { readonly tools?: never; readonly excludeTools?: readonly [string, ...string[]] };
+
+/**
  * Structured frontmatter fields for a generated agent. Identifiers
  * (name, model, tools, thinking, skills) are drawn from validated enums or
  * assertSafeName-checked tokens; only `description` is free text and goes
- * through emitYamlScalar.
+ * through emitYamlScalar. The tools/excludeTools pair comes from
+ * GeneratedToolsFields, whose union shape carries their mutual exclusion.
  */
-export interface GeneratedFrontmatterFields {
+export type GeneratedFrontmatterFields = {
   readonly name: string;
   readonly description: string;
   readonly model?: string;
-  /**
-   * AG-11: when present, the allowlist is non-empty -- pi-subagents reads an
-   * empty `tools:` as "no tools", which has no safe representation, and the
-   * non-empty tuple encodes that invariant in the type (convertAgent throws
-   * before reaching here on an empty explicit list). Absent when the source
-   * agent omitted `tools:` -- the generated frontmatter then omits the
-   * allowlist so pi-subagents grants its default builtin tools (#179).
-   */
-  readonly tools?: readonly [string, ...string[]];
-  /**
-   * #179: Pi names excluded from pi-subagents' default builtin tool set --
-   * the mapping of source `disallowedTools:` when `tools` is absent. Never
-   * present together with `tools` (an explicit allowlist is already
-   * filtered).
-   */
-  readonly excludeTools?: readonly [string, ...string[]];
   readonly thinking?: string;
   readonly skills: readonly string[];
   readonly inheritSkills: boolean;
-}
+} & GeneratedToolsFields;
 
 /**
  * AGSK-04: one skill legend entry. `token` is the `<plugin>:<skill>`

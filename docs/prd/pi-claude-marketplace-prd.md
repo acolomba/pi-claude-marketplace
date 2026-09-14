@@ -451,7 +451,7 @@ flowchart LR
 #### AG-7 detail -- frontmatter field mappings
 
 - `model:` -- OPT-IN via `--map-model` on `/claude:plugin install` and `/claude:plugin update`. **Default (no flag):** the generated agent frontmatter MUST OMIT `model:` entirely regardless of the source value; Pi picks its own default model and no `originalModel` provenance is recorded (absence is self-documenting). **With `--map-model`:** `sonnet` → `anthropic/claude-sonnet-4-6`, `opus` → `anthropic/claude-opus-4-7`, `haiku` → `anthropic/claude-haiku-4-5`. `inherit` → omit + record `originalModel`. Unknown → omit + warn. The marketplace autoupdate cascade (`updateSinglePlugin`) ALWAYS uses the omit-by-default behavior; the flag is install/update-only.
-- `tools:` -- Map known Claude tools to Pi names per the table below. Unknown tools (e.g., `WebFetch`, `NotebookEdit`) are silently dropped. Missing `tools:` → omit the allowlist entirely (#179): Claude grants an agent every tool when `tools:` is omitted, and the faithful pi-subagents equivalent is no `tools:` line, which grants Pi's default builtin tools (plus ambient extension tools for background children).
+- `tools:` -- Map known Claude tools to Pi names per the table below. Unknown tools (e.g., `WebFetch`, `NotebookEdit`) are silently dropped. Missing `tools:` → omit the allowlist entirely (#179): Claude Code grants an agent every tool available to subagents when `tools:` is omitted, and the faithful pi-subagents equivalent is no `tools:` line, which grants Pi's default builtin tools (plus ambient extension tools for background children).
   - `Read` → `read`
   - `Bash` → `bash`
   - `Edit` → `edit`
@@ -459,8 +459,8 @@ flowchart LR
   - `Grep` → `grep`
   - `Glob` → `find` (note: name change, not a 1:1 rename of the Pi tool)
   - `LS` → `ls`
-- `disallowedTools:` -- Filtered out of the mapped list. With `tools:` omitted, mapped names emit as `excludeTools:` instead, narrowing pi-subagents' default tool set (#179).
-- `allowed-tools:` / `mcpServers:` -- Dropped with a targeted guidance warning (#179). Upstream parity: `allowed-tools` is a slash-command field Claude Code ignores on agents, and Claude Code documents agent-level `mcpServers` as ignored for plugin agents. The `mcpServers` warning points at pi-subagents' `subagents.agentOverrides.<generated-name>.tools` (with `mcp:<server>` entries) as the working mechanism. Both fields stay off the generic `dropped fields:` summary line to avoid double-reporting.
+- `disallowedTools:` -- Filtered out of the mapped list. With `tools:` omitted, mapped names emit as `excludeTools:` instead, narrowing pi-subagents' default tool set (#179; pi-subagents >= 0.62.0 -- older versions ignore the key, and the conversion warns about the floor). A disallowed name with no `TOOL_MAP` entry cannot narrow the omitted-tools default set, so that case warns too.
+- `allowed-tools:` / `mcpServers:` / `permissionMode:` / `hooks:` -- Dropped with a targeted guidance warning (#179). Upstream parity: Claude Code's sub-agents documentation states plugin subagents do not support `hooks`, `mcpServers`, or `permissionMode` (the fields are ignored when agents load from a plugin), and `allowed-tools` is a slash-command field absent from the agent frontmatter schema. The `mcpServers` warning points at pi-subagents' `subagents.agentOverrides.<generated-name>.tools` (with `mcp:<server>` entries) as the working mechanism. All four fields stay off the generic `dropped fields:` summary line to avoid double-reporting.
 - `thinking:` / `effort:` -- Allowlist `off,minimal,low,medium,high,xhigh`. `thinking` wins; invalid → fall back to `effort` if valid; otherwise omit + warn.
 - `skills:` -- Each token resolved as `<plugin>-<skill>`; unknown → drop + warn.
 - `description:` -- Missing/empty → fallback `Imported Claude Code plugin agent <agent> from plugin <plugin>.` + warning.

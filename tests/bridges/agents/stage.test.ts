@@ -490,6 +490,64 @@ Duplicate body.
     });
   });
 
+  test("keeps guided dropped fields off the summary line while unguided ones stay on it", async (t) => {
+    // arrange
+    const { pluginRoot, agentsSourceDir, locations, pluginDataDir } = await createStageTree(
+      t,
+      "agents-stage-guided-",
+    );
+    const sourcePath = path.join(agentsSourceDir, "mixed.md");
+    await writeFile(
+      sourcePath,
+      `---
+name: mixed
+description: Mixed agent
+tools: Read
+priority: high
+mcpServers: echo
+---
+
+Mixed body.
+`,
+    );
+    const resolved = {
+      installable: true,
+      state: "installable",
+      name: "acme",
+      pluginRoot,
+      supported: ["agents"],
+      unsupported: [],
+      notes: [],
+      componentPaths: { skills: [], commands: [], agents: ["agents"] },
+      mcpServers: {},
+      defaultEnabled: true,
+    } satisfies ResolvedPluginInstallable;
+    const generatedName = "pi-claude-marketplace-acme-mixed";
+    const expectedWarnings = [
+      "[mixed] agent-level `mcpServers` is not converted -- dropped (Claude Code ignores it for plugin agents too). " +
+        `To grant this agent MCP tools, set subagents.agentOverrides["${generatedName}"].tools ` +
+        "(e.g. read,bash,mcp:<server>) in Pi settings.",
+      "[mixed] dropped fields: priority",
+    ];
+
+    // act
+    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
+      locations,
+      cwd: locations.scopeRoot,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      resolved,
+      agentsDirs: [agentsSourceDir],
+      mapModel: false,
+    });
+
+    // assert
+    assert.strictEqual(prepared.kind, "staged");
+    assert.deepStrictEqual(prepared.result.warnings, expectedWarnings);
+  });
+
   test("surfaces every foreign previous target as a complete failure", async (t) => {
     // arrange
     const { pluginRoot, agentsSourceDir, locations, pluginDataDir } = await createStageTree(
