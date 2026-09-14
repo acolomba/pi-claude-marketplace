@@ -87,11 +87,11 @@ Closes `UDISP-01`. `uninstall.ts:429` runs
 `rm(dataDir, { recursive: true, force: true })` on every uninstall, with no way
 to opt out.
 
-- [ ] **DATA-01**: `uninstall --keep-data` preserves the plugin's data
+- [x] **DATA-01**: `uninstall --keep-data` preserves the plugin's data
   directory.
-- [ ] **DATA-02**: `uninstall` without `--keep-data` deletes the data directory
+- [x] **DATA-02**: `uninstall` without `--keep-data` deletes the data directory
   and does not prompt.
-- [ ] **DATA-03**: An uninstall driven by reconcile deletes the data directory,
+- [x] **DATA-03**: An uninstall driven by reconcile deletes the data directory,
   matching the promptless default, since it carries no command line.
 
 ### Uninstall flag surface (FLAG)
@@ -150,9 +150,9 @@ this milestone.
 | PRUNE-02 | Phase 5 | Pending |
 | PRUNE-03 | Phase 5 | Pending |
 | PRUNE-04 | Phase 5 | Pending |
-| DATA-01 | Phase 2 | Pending |
-| DATA-02 | Phase 2 | Pending |
-| DATA-03 | Phase 2 | Pending |
+| DATA-01 | Phase 2 | Complete |
+| DATA-02 | Phase 2 | Complete |
+| DATA-03 | Phase 2 | Complete |
 | FLAG-01 | Phase 5 | Pending |
 
 **Coverage:**

@@ -4,17 +4,17 @@ milestone: v1.20
 milestone_name: transitive-dependencies
 current_phase: 02
 current_phase_name: Uninstall data disposition and the uninstall option seam
-status: executing
-stopped_at: Completed 02-01-PLAN.md
-last_updated: "2026-09-14T17:30:00.000Z"
+status: ready_for_verification
+stopped_at: Completed 02-02-PLAN.md
+last_updated: "2026-09-14T18:01:16.216Z"
 last_activity: 2026-09-14
-last_activity_desc: Plan 02-01 complete — uninstall keepData policy and scanner consuming mode
-state_head: 5a3afa555280dc157b1ae35fbda55b7d452f286e
+last_activity_desc: Plan 02-02 complete — uninstall --keep-data option, completions and docs
+state_head: 8e32a055bd4857c60d5a699f1cbf8a7e4388444f
 progress:
   total_phases: 5
   completed_phases: 1
   total_plans: 6
-  completed_plans: 5
+  completed_plans: 6
   percent: 20
 ---
 
@@ -35,14 +35,17 @@ same surfaces. 25 requirements across 5 phases. v1.19 Unit Test Refactor closed
 
 ## Current Position
 
-Phase: 02 (Uninstall data disposition and the uninstall option seam) — EXECUTING
-Plan: 2 of 2 (02-01 complete; 02-02 not started)
-Status: Plan 02-01 closed. The uninstall operation now carries an optional
-`keepData` policy and the shared flag scanner has a strict consuming mode.
-Plan 02-02 adds the `--keep-data` CLI flag, usage text, completions and docs.
-DATA-01..03 stay Pending in REQUIREMENTS.md until 02-02 ships that flag.
+Phase: 02 (Uninstall data disposition and the uninstall option seam) — READY FOR VERIFICATION
+Plan: 2 of 2 (02-01 and 02-02 both complete)
+Status: Both plans closed. `/claude:plugin uninstall --keep-data` works end to end:
+the flag catalog declares it, the handler's consuming scanner forwards `keepData`
+to the operation plan 02-01 built, and `--delete-data`, `-y`, `--yes` and `--prune`
+reject before any mutation. DATA-01, DATA-02 and DATA-03 are marked Complete in
+REQUIREMENTS.md; FLAG-01 stays Pending for Phase 5's `--prune`.
+Phase 2's remaining gates (code review, Nyquist validation sign-off, security,
+prior-phase regressions, goal verification) are outstanding.
 Phase 1 verified: 7/7 requirements, 37/37 decisions, 5/5 acceptance criteria.
-Last activity: 2026-09-14 — plan 02-01 complete (`5a3afa55`)
+Last activity: 2026-09-14 — plan 02-02 complete (`8e32a055`)
 Quick task `260914-aer` resolved WR-01 under D-01-35. The operator approved the
 whitespace-only `.mcp.json` formatting. GSD configuration remains uncommitted.
 Milestone progress is 1 of 5 phases complete (20%).
@@ -214,6 +217,7 @@ Execution order 1 → 3 → 4 → 5, with 2 free to run at any point before 5.
 | Phase 117 P11 | 50 min | 1 tasks | 4 files |
 | Phase 117 P11 | 2h 20m | 2 tasks | 16 files |
 | Phase 02 P01 | 58 min | 3 tasks | 5 files |
+| Phase 02 P02 | 28min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -427,6 +431,9 @@ Decisions are logged in the PROJECT.md Key Decisions table.
 - [Phase 02]: The consuming scanner form takes `{ consumeLongFlags: readonly string[] }` and returns `consumedFlags: ReadonlySet<string>`; the omitted and `readonly string[]` fourth-argument forms keep their exact existing result shape — D-02-05; one token walk owns scope-value precedence, extraction and unknown-option rejection
 - [Phase 02]: DATA-01..03 are NOT marked complete by plan 02-01 — each names the `uninstall --keep-data` command surface, which plan 02-02 delivers; 02-01 proves the operation underneath it
 - [Phase 02]: TruffleHog's pre-commit git-mode scan cannot run in this checkout because `.git` is a worktree file; commits use `SKIP=trufflehog` per CLAUDE.md and a filesystem-mode scan covers the exact staged files
+- [Phase 02]: uninstall keepData is forwarded only when --keep-data is present, so the operation's own default stays the single statement of the promptless deletion policy.
+- [Phase 02]: The uninstall handler joins install/update as a catalog-consuming verb via passThroughFlagNames, so one catalog entry drives usage, completions, the parse set and the drift pin.
+- [Phase 02]: The uninstall handler owner's whole-footprint observation carries both scopes' data bytes, so rejection cases prove no silent deletion rather than only a surviving record.
 
 ### Pending Todos
 
@@ -512,13 +519,13 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Completed 02-01-PLAN.md
+**Stopped at:** Completed 02-02-PLAN.md
 
 **Resume file:** None
 
 **Read beside it:** `.planning/phases/02-uninstall-data-disposition-and-the-uninstall-option-seam/02-01-SUMMARY.md`
 
-Last session: 2026-09-14T17:30:00.000Z
+Last session: 2026-09-14T18:00:51.838Z
 
 **Next:** Execute plan 02-02 (flag catalog, uninstall handler, usage, completions
 and `docs/output-catalog.md`), then run the Phase 2 gates: code review, Nyquist

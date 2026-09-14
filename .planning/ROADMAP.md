@@ -138,7 +138,7 @@ imports it directly. 204 pairs, corresponding-test gate at zero violations.
 3. Dropping a plugin from `claude-plugins.json` and reloading deletes its data directory too, because the reconcile path carries no command line and therefore takes the promptless default. The operation has one behavior at both entry points. (DATA-03)
 4. `uninstall` documents `--keep-data` in its usage text and offers it in completions, and rejects `--delete-data` and `-y` as unknown flags. Neither exists upstream; adopting either would import a model this milestone recorded as the wrong one to copy.
 
-**Plans**: 1/2 plans executed
+**Plans**: 2/2 plans executed
 
 **Wave 1**
 
@@ -146,7 +146,7 @@ imports it directly. 204 pairs, corresponding-test gate at zero violations.
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 02-02-PLAN.md
+- [x] 02-02-PLAN.md
 
 **Notes.** Closes `UDISP-01`. No cross-scope data check: `dataRoot` is already per-scope (`persistence/locations.ts`), so a user-scope uninstall cannot reach project-scope data and the data-loss case upstream's cross-scope check defends against cannot arise here. A GC sweep for data directories retained by `--keep-data` is a separate follow-on, not a blocker — keeping is opt-in under this model, so it is not a default-driven accumulation path.
 
@@ -238,7 +238,7 @@ plugin names — so plan these phases with the UI gate skipped.
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 1. Manifest read fidelity | v1.20 | 4/4 | Complete   | 2026-09-14 |
-| 2. Uninstall data disposition and the uninstall option seam | v1.20 | 1/2 | In Progress|  |
+| 2. Uninstall data disposition and the uninstall option seam | v1.20 | 2/2 | In Progress|  |
 | 3. Dependency resolution | v1.20 | 0/— | Not started | — |
 | 4. Install provenance | v1.20 | 0/— | Not started | — |
 | 5. Prune on uninstall | v1.20 | 0/— | Not started | — |
