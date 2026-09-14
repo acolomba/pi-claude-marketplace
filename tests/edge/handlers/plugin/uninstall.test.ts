@@ -79,25 +79,47 @@ import type { Scope } from "../../../../extensions/pi-claude-marketplace/shared/
 const USAGE_BLOCK =
   "Usage: /claude:plugin uninstall <plugin>@<marketplace> [--scope user|project] [--local]";
 
+/**
+ * The exact payload seeded under each scope's plugin data directory. Data
+ * disposition is a byte contract (DATA-01 / DATA-02), so every case compares the
+ * content rather than mere presence.
+ */
+const DATA_PAYLOAD = "session bytes\n";
+
 /** Nothing was removed anywhere: the shape a rejected command must leave behind. */
 const BOTH_RECORDS_INTACT = {
   transportCalls: 0,
   projectPlugins: ["demo"],
+  projectData: DATA_PAYLOAD,
   userPlugins: ["demo"],
+  userData: DATA_PAYLOAD,
 };
 
-/** The project scope lost the record; the same plugin in the user scope survived. */
+/** The project scope lost the record and its data; the user scope survived whole. */
 const PROJECT_RECORD_REMOVED = {
   transportCalls: 0,
   projectPlugins: [],
+  projectData: null,
   userPlugins: ["demo"],
+  userData: DATA_PAYLOAD,
 };
 
-/** The user scope lost the record; the same plugin in the project scope survived. */
+/** The user scope lost the record and its data; the project scope survived whole. */
 const USER_RECORD_REMOVED = {
   transportCalls: 0,
   projectPlugins: ["demo"],
+  projectData: DATA_PAYLOAD,
   userPlugins: [],
+  userData: null,
+};
+
+/** DATA-01: the project record is gone, its seeded data bytes are not. */
+const PROJECT_RECORD_REMOVED_DATA_KEPT = {
+  transportCalls: 0,
+  projectPlugins: [],
+  projectData: DATA_PAYLOAD,
+  userPlugins: ["demo"],
+  userData: DATA_PAYLOAD,
 };
 
 const PROJECT_UNINSTALLED = {
@@ -174,7 +196,9 @@ interface HermeticWorkspace {
 interface ObservedEffects {
   readonly transportCalls: number;
   readonly projectPlugins: readonly string[];
+  readonly projectData: string | null;
   readonly userPlugins: readonly string[];
+  readonly userData: string | null;
 }
 
 /**
@@ -241,10 +265,52 @@ async function seedInstalledPlugin(
   });
 }
 
-/** The same `demo@alpha` install recorded in both scopes, so a wrong scope shows. */
+/**
+ * The nested payload file under a scope's plugin data directory, composed the
+ * way `locations.pluginDataDir` composes it (`<extensionRoot>/data/<mp>/<plugin>`)
+ * rather than by calling the production helper.
+ */
+function pluginDataFile(scopeRoot: string): string {
+  return path.join(
+    scopeRoot,
+    "pi-claude-marketplace",
+    "data",
+    "alpha",
+    "demo",
+    "nested",
+    "session.bin",
+  );
+}
+
+/** Persistent data a user would lose if the command disposed of it wrongly. */
+async function seedPluginData(scopeRoot: string): Promise<void> {
+  const dataFile = pluginDataFile(scopeRoot);
+  await mkdir(path.dirname(dataFile), { recursive: true });
+  await writeFile(dataFile, DATA_PAYLOAD, "utf8");
+}
+
+/** The seeded payload when it survived; `null` once the data directory is gone. */
+async function readPluginData(scopeRoot: string): Promise<string | null> {
+  try {
+    return await readFile(pluginDataFile(scopeRoot), "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return null;
+    }
+
+    throw error;
+  }
+}
+
+/**
+ * The same `demo@alpha` install recorded in both scopes, each with its own
+ * seeded data, so a wrong scope and a wrong data disposition both show.
+ */
 async function seedBothScopes(workspace: HermeticWorkspace): Promise<void> {
   await seedInstalledPlugin(workspace, "project", workspace.projectRoot);
   await seedInstalledPlugin(workspace, "user", workspace.userRoot);
+  await seedPluginData(workspace.projectRoot);
+  await seedPluginData(workspace.userRoot);
 }
 
 /**
@@ -272,12 +338,14 @@ async function readInstalledPlugins(scopeRoot: string): Promise<readonly string[
   return marketplace === undefined ? [] : Object.keys(marketplace.plugins).sort();
 }
 
-/** Both scopes' surviving install records plus the transport counter. */
+/** Both scopes' surviving install records and data bytes, plus the transport counter. */
 async function readObservedEffects(workspace: HermeticWorkspace): Promise<ObservedEffects> {
   return {
     transportCalls: workspace.transportCalls(),
     projectPlugins: await readInstalledPlugins(workspace.projectRoot),
+    projectData: await readPluginData(workspace.projectRoot),
     userPlugins: await readInstalledPlugins(workspace.userRoot),
+    userData: await readPluginData(workspace.userRoot),
   };
 }
 
@@ -310,6 +378,25 @@ test("removes the project-scope record when the reference alone selects the plug
     peerRuntime.getRoutingBucket("PreToolUse").map((entry) => entry.pluginId),
     ["demo"],
   );
+  verifyBoundary();
+});
+
+test("DATA-01: keeps the seeded data bytes when the preservation flag is supplied", async (t) => {
+  // arrange
+  const workspace = await createHermeticWorkspace(t, "keep-data");
+  await seedBothScopes(workspace);
+  const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 2, {
+    value: workspace.cwd,
+    reads: 1,
+  });
+  const uninstallHandler = makeHandlerUnderTest(pi);
+
+  // act
+  await uninstallHandler("demo@alpha --keep-data", ctx);
+
+  // assert
+  assert.deepStrictEqual(notifications, [PROJECT_UNINSTALLED]);
+  assert.deepStrictEqual(await readObservedEffects(workspace), PROJECT_RECORD_REMOVED_DATA_KEPT);
   verifyBoundary();
 });
 
