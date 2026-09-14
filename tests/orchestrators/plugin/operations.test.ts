@@ -12,22 +12,30 @@ import {
   readHooksJson,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
-import { createInstallOperation } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
+import {
+  createEnableOperation,
+  createInstallOperation,
+  createUninstallOperation,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   loadState,
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
+import type { EnableDisableHooksRouting } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts";
 import type { InstallHooksRouting } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-disable-cascade.ts";
+import type { UninstallHooksRouting } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type {
   NotificationContext,
   ToolInventory,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { CompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import type { TestContext } from "node:test";
 
 interface NotifyRecord {
   readonly message: string;
@@ -231,4 +239,194 @@ test("WR-03: installPlugin of a hooks-declaring plugin rebuilds the routing tabl
     "RoutingEntry.resolvedSource must mirror state.json's resolvedSource",
   );
   assert.deepStrictEqual(peerRuntime.getRoutingBucket("PreToolUse"), []);
+});
+
+test("constructs the enable operation without using its owner or starting asynchronous work", (t) => {
+  // arrange
+  const hooksRouting = mock<EnableDisableHooksRouting>({
+    exactParams: true,
+    name: "hooks routing",
+  });
+  const startedResourceTypes: string[] = [];
+  const resources = createHook({
+    init: (_asyncId, type) => {
+      startedResourceTypes.push(type);
+    },
+  });
+  t.after(() => resources.disable());
+
+  // act
+  resources.enable();
+  const setPluginEnabled = createEnableOperation(hooksRouting);
+  resources.disable();
+
+  // assert
+  assert.strictEqual(typeof setPluginEnabled, "function");
+  assert.deepStrictEqual(startedResourceTypes, []);
+  verify(hooksRouting);
+});
+
+test("constructs the uninstall operation without using its owners or starting asynchronous work", (t) => {
+  // arrange
+  const hooksRouting = mock<UninstallHooksRouting>({ exactParams: true, name: "hooks routing" });
+  const completionCache = mock<CompletionCache>({ exactParams: true, name: "completion cache" });
+  const startedResourceTypes: string[] = [];
+  const resources = createHook({
+    init: (_asyncId, type) => {
+      startedResourceTypes.push(type);
+    },
+  });
+  t.after(() => resources.disable());
+
+  // act
+  resources.enable();
+  const uninstallPlugin = createUninstallOperation(hooksRouting, completionCache);
+  resources.disable();
+
+  // assert
+  assert.strictEqual(typeof uninstallPlugin, "function");
+  assert.deepStrictEqual(startedResourceTypes, []);
+  verify(hooksRouting);
+  verify(completionCache);
+});
+
+/**
+ * Install the seeded hooks-declaring plugin through the composed install
+ * operation and hand back the live lifecycle owners the enable and uninstall
+ * operations then act on. The composed install is the fixture here, not the
+ * subject: what each caller asserts is what its own operation does next.
+ */
+async function installHooksDeclaringPlugin(
+  t: TestContext,
+  prefix: string,
+): Promise<{
+  readonly cwd: string;
+  readonly runtime: ReturnType<typeof createHooksRuntime>;
+  readonly hooksRouting: ReturnType<typeof createHooksRouting>;
+  readonly locations: ReturnType<typeof locationsFor>;
+}> {
+  const { cwd } = await createHermeticEnvironment(t, prefix);
+  const runtime = createHooksRuntime();
+  const hooksRouting = createHooksRouting(runtime, { readHooksJson });
+  await seedHooksDeclaringPlugin({
+    cwd,
+    marketplace: "mp",
+    plugin: "p1",
+    hooksJson: {
+      PreToolUse: [{ matcher: "", hooks: [{ type: "command", command: "echo hello" }] }],
+    },
+  });
+  const { ctx, pi } = makeCtx();
+  await createInstallOperation(
+    hooksRouting,
+    createCompletionCache(),
+  )({
+    ctx,
+    pi,
+    scope: "project",
+    cwd,
+    marketplace: "mp",
+    plugin: "p1",
+  });
+  return { cwd, runtime, hooksRouting, locations: locationsFor("project", cwd) };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ENBL-18 / D-100-10: the composed enable operation runs against the real
+// `cascadeUnstagePlugin`, `runInstallLedger`, config-write and state-lock
+// bindings this module holds. A disable must unstage the artifacts, flip the
+// record to its disabled form with the inventory intact, and drop the plugin's
+// routes -- all of which are effects of those concrete bindings, so replacing
+// any of them with a no-op is visible here.
+// ─────────────────────────────────────────────────────────────────────────────
+
+test("setPluginEnabled(false) unstages the artifacts, flips durable state and drops the routes", async (t) => {
+  // arrange
+  t.mock.timers.enable({ apis: ["Date"], now: Date.UTC(2026, 0, 1) });
+  const { cwd, runtime, hooksRouting, locations } = await installHooksDeclaringPlugin(
+    t,
+    "enable-operation-",
+  );
+  const setPluginEnabled = createEnableOperation(hooksRouting);
+  // Pre-conditions: the install left one live route and a staged hooks.json.
+  assert.equal(runtime.getRoutingBucket("PreToolUse").length, 1);
+  assert.equal(await pathExists(path.join(locations.hooksDir, "p1", "hooks.json")), true);
+  const { ctx, pi } = makeCtx();
+
+  // act
+  const outcome = await setPluginEnabled({
+    ctx,
+    pi,
+    scope: "project",
+    cwd,
+    marketplace: "mp",
+    plugin: "p1",
+    enable: false,
+    notifications: { mode: "orchestrated" },
+  });
+
+  // assert
+  assert.deepStrictEqual(outcome, { status: "disabled", name: "p1", version: "0.0.1" });
+
+  // The whole record is pinned: `enabled` flips and `updatedAt` restamps, and
+  // every other field -- including the complete `resources` inventory the
+  // re-enable ledger replays -- survives the disable unchanged.
+  const afterState = await loadState(locations.extensionRoot);
+  assert.deepStrictEqual(afterState.marketplaces["mp"]?.plugins["p1"], {
+    version: "0.0.1",
+    resolvedSource: path.join(cwd, "mp-src", "plugins", "p1"),
+    compatibility: { installable: true, notes: [], supported: ["hooks"], unsupported: [] },
+    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: ["p1"] },
+    hookEntries: [{ event: "PreToolUse", matcher: "" }],
+    enabled: false,
+    installedAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  });
+
+  // The cascade removed the materialized config, and the routing table no
+  // longer dispatches to a plugin whose artifacts are gone.
+  assert.equal(await pathExists(path.join(locations.hooksDir, "p1", "hooks.json")), false);
+  assert.deepStrictEqual(runtime.getRoutingBucket("PreToolUse"), []);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PU-1..8: the composed uninstall operation runs against the real cascade,
+// removal-commit, config-sweep, post-commit-cleanup and state-lock bindings.
+// Removing the record, the artifacts and the routes together is what proves
+// the bound transaction -- not a stand-in -- executed.
+// ─────────────────────────────────────────────────────────────────────────────
+
+test("uninstallPlugin removes the record, the staged artifacts and the routes", async (t) => {
+  // arrange
+  const { cwd, runtime, hooksRouting, locations } = await installHooksDeclaringPlugin(
+    t,
+    "uninstall-operation-",
+  );
+  const uninstallPlugin = createUninstallOperation(hooksRouting, createCompletionCache());
+  // Pre-conditions: the install left one live route and a staged hooks.json.
+  assert.equal(runtime.getRoutingBucket("PreToolUse").length, 1);
+  assert.equal(await pathExists(path.join(locations.hooksDir, "p1", "hooks.json")), true);
+  const { ctx, pi } = makeCtx();
+
+  // act
+  const outcome = await uninstallPlugin({
+    ctx,
+    pi,
+    scope: "project",
+    cwd,
+    marketplace: "mp",
+    plugin: "p1",
+    notifications: { mode: "orchestrated" },
+  });
+
+  // assert
+  assert.deepStrictEqual(outcome, { status: "uninstalled", name: "p1", version: "0.0.1" });
+
+  // The marketplace record survives with an empty plugin map -- uninstall
+  // removes the plugin, never the marketplace that declared it.
+  const afterState = await loadState(locations.extensionRoot);
+  assert.deepStrictEqual(afterState.marketplaces["mp"]?.plugins, {});
+
+  assert.equal(await pathExists(path.join(locations.hooksDir, "p1")), false);
+  assert.deepStrictEqual(runtime.getRoutingBucket("PreToolUse"), []);
 });

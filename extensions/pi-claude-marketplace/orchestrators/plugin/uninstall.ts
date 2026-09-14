@@ -174,7 +174,14 @@ export type UninstallHooksRouting = Pick<
   "rebuildRoutingTables" | "removePluginConfigFromCache"
 >;
 
-const REAL_UNINSTALL_TRANSACTION: UninstallTransaction = {
+/**
+ * The one concrete binding of uninstall's semantic transaction contract.
+ * `orchestrators/plugin/operations.ts` is its single consumer: three of the six
+ * members are steps of the uninstall algorithm itself and stay private to this
+ * module, so the bound object -- not its parts -- is what the composition owner
+ * imports (D-03).
+ */
+export const REAL_UNINSTALL_TRANSACTION: UninstallTransaction = {
   cascadeUnstagePlugin,
   commitPluginRemoval,
   loadTargetConfig: loadConfig,
