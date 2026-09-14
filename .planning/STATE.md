@@ -4,9 +4,9 @@ milestone: refine-unit-tests
 milestone_name: Refine Unit Tests
 status: Awaiting next milestone
 stopped_at: "Milestone closed and archived. PR #181 has since merged to main; quick tasks 260913-csn (PR #180 evaluation and suite repair, branch pr-180) and 260913-skt (SKTK-01 skill-token rewrite, branch features/skill-token-rewrite) followed, then 260913-f6a and 260913-l07 hardened the CI workflows."
-last_updated: "2026-09-13T22:35:00.000Z"
-last_activity: 2026-09-13
-last_activity_desc: Quick task 260913-r2h made a FIFO harness over-read fail loudly
+last_updated: "2026-09-14T02:37:00.000Z"
+last_activity: 2026-09-14
+last_activity_desc: Quick task 260913-uwq landed the issue-179 agent tools conversion fix
 state_head: 6551dfbf387d166f655004ec9e0421686b86cb1d
 progress:
   total_phases: 9
@@ -114,6 +114,7 @@ hit the same wall; convert it rather than re-disclosing it.
 
 | # | Description | Date | Commit | Status | Directory |
 | --- | --- | --- | --- | --- | --- |
+| 260913-uwq | Gate and commit the issue-179 fix: agents omitting `tools:` inherit Pi's defaults, and the two dropped agent fields get targeted guidance | 2026-09-13 | a9186816 | Complete | [260913-uwq-issue-179-agent-tools-and-mcpservers-con](./quick/260913-uwq-issue-179-agent-tools-and-mcpservers-con/) |
 | 260913-r2h | Make a FIFO state-harness over-read fail loudly instead of hanging to the test timeout | 2026-09-13 | c45850af | Complete | [260913-r2h-make-a-fifo-harness-over-read-fail-loudl](./quick/260913-r2h-make-a-fifo-harness-over-read-fail-loudl/) |
 | 260913-n7w | Fix the FIFO state server so each reader open receives exactly one payload | 2026-09-13 | e4f12cce | Complete | [260913-n7w-fix-the-fifo-state-server-reader-pairing](./quick/260913-n7w-fix-the-fifo-state-server-reader-pairing/) |
 | 260913-l07 | Fix every remaining zizmor finding, drop the severity floor, and simplify the gate comments | 2026-09-13 | 729348b4 | Complete | [260913-l07-fix-remaining-zizmor-findings-and-simpli](./quick/260913-l07-fix-remaining-zizmor-findings-and-simpli/) |
