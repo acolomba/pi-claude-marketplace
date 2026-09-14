@@ -75,6 +75,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { EXTENSION_VERSION } from "../../../extensions/pi-claude-marketplace/shared/extension-version.ts";
+import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { createNotificationBoundary } from "../../edge/notification-boundary.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { retryTree } from "../plugin/scope-tree-inventory.ts";
@@ -1182,6 +1183,8 @@ describe("applyReconcile", () => {
   test("WR-06: a plugin whose declaration is deleted is uninstalled while its marketplace stays recorded, and the next pass is silent", async (t) => {
     // arrange
     const { cwd, project } = await createHermeticScopes(t, "uninstall-direct");
+    const pluginDataDir = await project.pluginDataDir("mp", "hello");
+    await writeUnder(path.join(pluginDataDir, "nested", "history"), "reconcile history\n");
     const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
       hello: { skill: "clean" },
     });
@@ -1265,6 +1268,7 @@ describe("applyReconcile", () => {
       hooksRouting,
     });
     const afterFirst = await loadState(project.extensionRoot);
+    const dataExistsAfterFirst = await pathExists(pluginDataDir);
     await applyReconcileWithRouting({
       ctx,
       pi,
@@ -1306,11 +1310,14 @@ describe("applyReconcile", () => {
       },
     ]);
     assert.deepStrictEqual(Object.keys(afterFirst.marketplaces["mp"]?.plugins ?? {}), []);
+    assert.strictEqual(dataExistsAfterFirst, false);
     assert.deepStrictEqual(await loadState(project.extensionRoot), afterFirst);
     assert.equal(await readFile(project.configJsonPath, "utf8"), declaration);
     assert.deepStrictEqual(afterSecondTree, [
       "claude-plugins.json",
       "pi-claude-marketplace/",
+      "pi-claude-marketplace/data/",
+      "pi-claude-marketplace/data/mp/",
       "pi-claude-marketplace/resources/",
       "pi-claude-marketplace/resources/skills/",
       "pi-claude-marketplace/state.json",

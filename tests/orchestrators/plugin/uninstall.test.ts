@@ -4,6 +4,7 @@ import {
   mkdtemp,
   readFile,
   readdir,
+  readlink,
   rm,
   stat,
   symlink,
@@ -374,87 +375,100 @@ test("PU-1: cascade order observable end-state -- all four bridges' resources re
   });
 });
 
-for (const keepData of [true, false, undefined]) {
-  test(`uninstall preserves nested data only when keepData is true (${String(keepData)})`, async () => {
-    // arrange
-    await withHermeticHome(async () => {
-      const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-data-policy-"));
-      try {
-        const locations = locationsFor("project", cwd);
-        const seeded = await seedFullPlugin(locations, "mp", "hello", cwd);
-        const dataDir = await locations.pluginDataDir("mp", "hello");
-        await mkdir(path.join(dataDir, "nested"), { recursive: true });
-        await writeFile(path.join(dataDir, "nested", "session.bin"), Buffer.from([0, 7, 255, 10]));
-        await writeFile(locations.configJsonPath, '{"plugins":{"hello@mp":{}}}\n');
-        const { ctx, pi, notifications } = makeCtx();
-
-        // act
-        const outcome = await uninstallWithFreshOwner({
-          ctx,
-          pi,
-          scope: "project",
-          cwd,
-          marketplace: "mp",
-          plugin: "hello",
-          ...(keepData !== undefined && { keepData }),
-        });
-
-        // assert
-        assert.strictEqual(outcome, undefined);
-        assert.deepStrictEqual(await loadState(locations.extensionRoot), {
-          schemaVersion: 2,
-          marketplaces: {
-            mp: {
-              name: "mp",
-              scope: "project",
-              source: { kind: "path", logical: "./src", raw: "./src" },
-              addedFromCwd: cwd,
-              manifestPath: path.join(cwd, "marketplace.json"),
-              marketplaceRoot: cwd,
-              plugins: {},
-            },
-          },
-        });
-        assert.strictEqual(
-          await readFile(locations.configJsonPath, "utf8"),
-          '{\n  "plugins": {},\n  "schemaVersion": 1\n}\n',
-        );
-        assert.deepStrictEqual(
-          await Promise.all(
-            [seeded.skillDir, seeded.commandFile, seeded.agentFile, seeded.hooksFile].map((file) =>
-              pathExists(file),
-            ),
-          ),
-          [false, false, false, false],
-        );
-        assert.deepStrictEqual(JSON.parse(await readFile(seeded.mcpJson, "utf8")), {
-          mcpServers: {},
-        });
-        assert.deepStrictEqual(await loadAgentsIndex(locations), {
-          schemaVersion: 1,
-          agents: [],
-          corruptions: [],
-        });
-        assert.strictEqual(await pathExists(dataDir), keepData === true);
-        if (keepData === true) {
-          assert.deepStrictEqual(await readdir(dataDir), ["nested"]);
-          assert.deepStrictEqual(await readdir(path.join(dataDir, "nested")), ["session.bin"]);
-          assert.deepStrictEqual(
-            await readFile(path.join(dataDir, "nested", "session.bin")),
+for (const scope of ["user", "project"] as const) {
+  for (const keepData of [true, false, undefined]) {
+    test(`uninstall preserves nested data only when keepData is true (${String(keepData)}, ${scope})`, async () => {
+      // arrange
+      await withHermeticHome(async () => {
+        const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-data-policy-"));
+        try {
+          const locations = locationsFor(scope, cwd);
+          const seeded = await seedFullPlugin(locations, "mp", "hello", cwd);
+          const dataDir = await locations.pluginDataDir("mp", "hello");
+          await mkdir(path.join(dataDir, "nested"), { recursive: true });
+          await writeFile(
+            path.join(dataDir, "nested", "session.bin"),
             Buffer.from([0, 7, 255, 10]),
           );
-        }
+          await writeFile(locations.configJsonPath, '{"plugins":{"hello@mp":{}}}\n');
+          const otherLocations = locationsFor(scope === "user" ? "project" : "user", cwd);
+          const otherDataDir = await otherLocations.pluginDataDir("mp", "hello");
+          await mkdir(path.join(otherDataDir, "nested"), { recursive: true });
+          await writeFile(path.join(otherDataDir, "nested", "sentinel"), Buffer.from([31, 65, 0]));
+          const { ctx, pi, notifications } = makeCtx();
 
-        assert.deepStrictEqual(notifications, [
-          {
-            message: "● mp [project]\n  ○ hello v0.0.1 (uninstalled)\n\n/reload to pick up changes",
-          },
-        ]);
-      } finally {
-        await rm(cwd, { recursive: true, force: true });
-      }
+          // act
+          const outcome = await uninstallWithFreshOwner({
+            ctx,
+            pi,
+            scope,
+            cwd,
+            marketplace: "mp",
+            plugin: "hello",
+            ...(keepData !== undefined && { keepData }),
+          });
+
+          // assert
+          assert.strictEqual(outcome, undefined);
+          assert.deepStrictEqual(
+            await readFile(path.join(otherDataDir, "nested", "sentinel")),
+            Buffer.from([31, 65, 0]),
+          );
+          assert.deepStrictEqual(await loadState(locations.extensionRoot), {
+            schemaVersion: 2,
+            marketplaces: {
+              mp: {
+                name: "mp",
+                scope,
+                source: { kind: "path", logical: "./src", raw: "./src" },
+                addedFromCwd: cwd,
+                manifestPath: path.join(cwd, "marketplace.json"),
+                marketplaceRoot: cwd,
+                plugins: {},
+              },
+            },
+          });
+          assert.strictEqual(
+            await readFile(locations.configJsonPath, "utf8"),
+            '{\n  "plugins": {},\n  "schemaVersion": 1\n}\n',
+          );
+          assert.deepStrictEqual(
+            await Promise.all(
+              [seeded.skillDir, seeded.commandFile, seeded.agentFile, seeded.hooksFile].map(
+                (file) => pathExists(file),
+              ),
+            ),
+            [false, false, false, false],
+          );
+          assert.deepStrictEqual(JSON.parse(await readFile(seeded.mcpJson, "utf8")), {
+            mcpServers: {},
+          });
+          assert.deepStrictEqual(await loadAgentsIndex(locations), {
+            schemaVersion: 1,
+            agents: [],
+            corruptions: [],
+          });
+          assert.strictEqual(await pathExists(dataDir), keepData === true);
+          if (keepData === true) {
+            assert.deepStrictEqual(await readdir(dataDir), ["nested"]);
+            assert.deepStrictEqual(await readdir(path.join(dataDir, "nested")), ["session.bin"]);
+            assert.deepStrictEqual(
+              await readFile(path.join(dataDir, "nested", "session.bin")),
+              Buffer.from([0, 7, 255, 10]),
+            );
+          }
+
+          assert.deepStrictEqual(notifications, [
+            {
+              message: `● mp [${scope}]\n  ○ hello v0.0.1 (uninstalled)\n\n/reload to pick up changes`,
+            },
+          ]);
+        } finally {
+          await rm(cwd, { recursive: true, force: true });
+        }
+      });
     });
-  });
+  }
 }
 
 // PU-2 (state commit BEFORE data-dir cleanup; cleanup leaks SWALLOWED
@@ -2412,6 +2426,96 @@ async function seedGitPlugin(
   });
 }
 
+test("preservation bypasses the data path while retiring routes, caches and the last clone", async () => {
+  // arrange
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-preserve-hygiene-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedGitPlugin(locations, "mp", { solo: "keySolo" }, cwd);
+      const dataDir = await locations.pluginDataDir("mp", "solo");
+      const retainedDir = path.join(cwd, "retained");
+      await mkdir(path.join(retainedDir, "nested"), { recursive: true });
+      await writeFile(path.join(retainedDir, "nested", "session"), "retained session\n");
+      await mkdir(path.dirname(dataDir), { recursive: true });
+      await symlink(retainedDir, dataDir);
+      const runtime = createHooksRuntime();
+      const hooksRouting = await populateRuntimeRoute(cwd, runtime, {
+        command: "echo retained",
+        marketplace: "mp",
+        plugin: "solo",
+      });
+      const completionCache = createCompletionCache();
+      const pluginCachePath = await locations.pluginCacheFile("mp");
+      await completionCache.getPluginIndex(pluginCachePath, "project", "mp", () =>
+        Promise.resolve([{ name: "solo", status: "installed" }]),
+      );
+      const uninstallPlugin = createNodeUninstallPlugin(hooksRouting, completionCache);
+      const { ctx, pi, notifications } = makeCtx();
+
+      // act
+      const outcome = await uninstallPlugin({
+        ctx,
+        pi,
+        cwd,
+        scope: "project",
+        marketplace: "mp",
+        plugin: "solo",
+        keepData: true,
+      });
+      const cacheFilePresent = await pathExists(pluginCachePath);
+      const rows = await completionCache.getPluginIndex(pluginCachePath, "project", "mp", () =>
+        Promise.resolve([{ name: "solo", status: "available" }]),
+      );
+      const repeatedOutcome = await uninstallPlugin({
+        ctx,
+        pi,
+        cwd,
+        scope: "project",
+        marketplace: "mp",
+        plugin: "solo",
+        notifications: { mode: "orchestrated" },
+      });
+
+      // assert
+      assert.strictEqual(outcome, undefined);
+      assert.deepStrictEqual(repeatedOutcome, { status: "converged", name: "solo" });
+      assert.deepStrictEqual(await loadState(locations.extensionRoot), {
+        schemaVersion: 2,
+        marketplaces: {
+          mp: {
+            name: "mp",
+            scope: "project",
+            source: { kind: "path", logical: "./src", raw: "./src" },
+            addedFromCwd: cwd,
+            manifestPath: path.join(cwd, "marketplace.json"),
+            marketplaceRoot: cwd,
+            plugins: {},
+          },
+        },
+      });
+      assert.strictEqual(await readlink(dataDir), retainedDir);
+      assert.deepStrictEqual(await readdir(dataDir), ["nested"]);
+      assert.deepStrictEqual(await readdir(path.join(dataDir, "nested")), ["session"]);
+      assert.strictEqual(
+        await readFile(path.join(dataDir, "nested", "session"), "utf8"),
+        "retained session\n",
+      );
+      assert.strictEqual(await pathExists(path.join(locations.pluginClonesDir, "keySolo")), false);
+      assert.strictEqual(cacheFilePresent, false);
+      assert.deepStrictEqual(rows, [{ name: "solo", status: "available" }]);
+      assert.deepStrictEqual(runtime.getRoutingBucket("PreToolUse"), []);
+      assert.deepStrictEqual(notifications, [
+        {
+          message: "● mp [project]\n  ○ solo v0.0.1 (uninstalled)\n\n/reload to pick up changes",
+        },
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("uninstalling the last referencer of a git clone deletes its plugin-clones dir", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-gc-last-"));
@@ -3171,6 +3275,9 @@ test("retry proof: uninstall: a hooks cascade refusal persists the shrunken reco
       const locations = locationsFor("project", cwd);
       const seeded = await seedFullPlugin(locations, "mp", "hello", cwd);
       const agentName = path.basename(seeded.agentFile, ".md");
+      const dataDir = await locations.pluginDataDir("mp", "hello");
+      await mkdir(path.join(dataDir, "nested"), { recursive: true });
+      await writeFile(path.join(dataDir, "nested", "history"), "hooks history\n");
       const configBytes = JSON.stringify({ schemaVersion: 1, plugins: { "hello@mp": {} } });
       await writeFile(locations.configJsonPath, configBytes, "utf8");
       const firstSchedule: string[] = [];
@@ -3196,6 +3303,7 @@ test("retry proof: uninstall: a hooks cascade refusal persists the shrunken reco
         scope: "project",
       });
       const firstTree = await retryTree(locations.scopeRoot);
+      const firstDataBytes = await readFile(path.join(dataDir, "nested", "history"), "utf8");
       const firstRecord = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
         "hello"
       ];
@@ -3223,6 +3331,8 @@ test("retry proof: uninstall: a hooks cascade refusal persists the shrunken reco
       });
       assert.deepStrictEqual(second, { name: "hello", status: "uninstalled", version: "0.0.1" });
       assert.deepStrictEqual(notifications, []);
+      assert.strictEqual(firstDataBytes, "hooks history\n");
+      assert.strictEqual(await pathExists(dataDir), false);
       assert.deepStrictEqual(firstRecord?.resources, {
         agents: [],
         hooks: ["hello"],
@@ -3249,6 +3359,11 @@ test("retry proof: uninstall: a hooks cascade refusal persists the shrunken reco
         "mcp.json",
         "pi-claude-marketplace/",
         "pi-claude-marketplace/agents-index.json",
+        "pi-claude-marketplace/data/",
+        "pi-claude-marketplace/data/mp/",
+        "pi-claude-marketplace/data/mp/hello/",
+        "pi-claude-marketplace/data/mp/hello/nested/",
+        "pi-claude-marketplace/data/mp/hello/nested/history",
         "pi-claude-marketplace/hooks/",
         "pi-claude-marketplace/hooks/hello/",
         "pi-claude-marketplace/hooks/hello/hooks.json",
@@ -3263,6 +3378,8 @@ test("retry proof: uninstall: a hooks cascade refusal persists the shrunken reco
         "mcp.json",
         "pi-claude-marketplace/",
         "pi-claude-marketplace/agents-index.json",
+        "pi-claude-marketplace/data/",
+        "pi-claude-marketplace/data/mp/",
         "pi-claude-marketplace/hooks/",
         "pi-claude-marketplace/resources/",
         "pi-claude-marketplace/resources/prompts/",
@@ -3846,6 +3963,9 @@ test("retry proof: uninstall: a refused state save leaves the swept config diver
         "utf8",
       );
       const stateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const dataDir = await locations.pluginDataDir("mp", "hello");
+      await mkdir(path.join(dataDir, "nested"), { recursive: true });
+      await writeFile(path.join(dataDir, "nested", "history"), "save history\n");
       const firstSchedule: string[] = [];
       const secondSchedule: string[] = [];
       const activeSchedule = { current: firstSchedule };
@@ -3869,6 +3989,7 @@ test("retry proof: uninstall: a refused state save leaves the swept config diver
       });
       const firstNotifications = [...notifications];
       const firstTree = await retryTree(locations.scopeRoot);
+      const firstDataBytes = await readFile(path.join(dataDir, "nested", "history"), "utf8");
       const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
       const firstConfigBytes = await readFile(locations.configJsonPath, "utf8");
       const firstConfigMtime = (await stat(locations.configJsonPath)).mtimeMs;
@@ -3901,6 +4022,8 @@ test("retry proof: uninstall: a refused state save leaves the swept config diver
         },
       ]);
       assert.equal(firstStateBytes, stateBytes);
+      assert.strictEqual(firstDataBytes, "save history\n");
+      assert.strictEqual(await pathExists(dataDir), false);
       assert.deepStrictEqual(JSON.parse(firstConfigBytes), {
         plugins: { "keep@mp": {} },
         schemaVersion: 1,
@@ -3927,6 +4050,11 @@ test("retry proof: uninstall: a refused state save leaves the swept config diver
       assert.deepStrictEqual(firstTree, [
         "claude-plugins.json",
         "pi-claude-marketplace/",
+        "pi-claude-marketplace/data/",
+        "pi-claude-marketplace/data/mp/",
+        "pi-claude-marketplace/data/mp/hello/",
+        "pi-claude-marketplace/data/mp/hello/nested/",
+        "pi-claude-marketplace/data/mp/hello/nested/history",
         "pi-claude-marketplace/hooks/",
         "pi-claude-marketplace/resources/",
         "pi-claude-marketplace/resources/prompts/",
@@ -3936,6 +4064,8 @@ test("retry proof: uninstall: a refused state save leaves the swept config diver
       assert.deepStrictEqual(await retryTree(locations.scopeRoot), [
         "claude-plugins.json",
         "pi-claude-marketplace/",
+        "pi-claude-marketplace/data/",
+        "pi-claude-marketplace/data/mp/",
         "pi-claude-marketplace/hooks/",
         "pi-claude-marketplace/resources/",
         "pi-claude-marketplace/resources/prompts/",
