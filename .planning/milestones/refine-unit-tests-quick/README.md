@@ -7,6 +7,7 @@
 - [260907-qqo-hkps-01-if-field-powershell-rule-prefix-](260907-qqo-hkps-01-if-field-powershell-rule-prefix-/260907-qqo-SUMMARY.md)
 - [260907-qsx-adopt-sonarjs-recommended-ruleset-for-ex](260907-qsx-adopt-sonarjs-recommended-ruleset-for-ex/260907-qsx-SUMMARY.md)
 - [260907-uzb-fmbom-01-strip-leading-utf-8-bom-at-skil](260907-uzb-fmbom-01-strip-leading-utf-8-bom-at-skil/260907-uzb-SUMMARY.md)
+- [260909-h38-make-three-cross-process-concurrency-tes](260909-h38-make-three-cross-process-concurrency-tes/260909-h38-SUMMARY.md)
 - [260912-fp0-correct-the-cwd-lifetime-comments-in-ext](260912-fp0-correct-the-cwd-lifetime-comments-in-ext/260912-fp0-SUMMARY.md)
 - [260912-fp1-repoint-two-stale-test-path-references-i](260912-fp1-repoint-two-stale-test-path-references-i/260912-fp1-SUMMARY.md)
 - [260912-fp2-correct-three-stale-documentation-refere](260912-fp2-correct-three-stale-documentation-refere/260912-fp2-SUMMARY.md)

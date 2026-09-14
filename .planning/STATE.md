@@ -41,9 +41,11 @@ was reset at close so the next milestone starts from a readable state:
   driver, accomplishments, closeout type, and accepted gaps.
 - **Detail:** `.planning/milestones/refine-unit-tests-{ROADMAP,REQUIREMENTS,MILESTONE-AUDIT}.md`,
   with phase directories under `refine-unit-tests-phases/` and quick tasks under
-  `refine-unit-tests-quick/`. That bucket holds the 14 tasks done inside this
+  `refine-unit-tests-quick/`. That bucket holds the 15 tasks done inside this
   milestone's window. The 29 older ones the close had swept in with them were
   filed under `v1.19-quick-tasks/` instead, by date against v1.19's ship date.
+  260909-h38 was filed after the close: its only commit lived on
+  `features/random-refinements`, so the close, which ran on main, never saw it.
 - **Carried forward:** [`.planning/ROADMAP.md`](ROADMAP.md) — what the next
   milestone inherits, with evidence for each item.
 
@@ -116,7 +118,6 @@ hit the same wall; convert it rather than re-disclosing it.
 | 260913-n7w | Fix the FIFO state server so each reader open receives exactly one payload | 2026-09-13 | e4f12cce | Complete | [260913-n7w-fix-the-fifo-state-server-reader-pairing](./quick/260913-n7w-fix-the-fifo-state-server-reader-pairing/) |
 | 260913-l07 | Fix every remaining zizmor finding, drop the severity floor, and simplify the gate comments | 2026-09-13 | 729348b4 | Complete | [260913-l07-fix-remaining-zizmor-findings-and-simpli](./quick/260913-l07-fix-remaining-zizmor-findings-and-simpli/) |
 | 260913-f6a | Gate the two SonarQube workflow findings, githubactions:S6505 and githubactions:S7637 | 2026-09-13 | 8a8a0396..69797ebc | Complete | [260913-f6a-gate-sonar-workflow-findings-s6505-and-s](./quick/260913-f6a-gate-sonar-workflow-findings-s6505-and-s/) |
-| 260909-h38 | Make three cross-process concurrency tests deterministic with a FIFO state.json barrier | 2026-09-09 | 147b63f4 | Complete | [260909-h38-make-three-cross-process-concurrency-tes](./quick/260909-h38-make-three-cross-process-concurrency-tes/) |
 
 ## Session Continuity
 
