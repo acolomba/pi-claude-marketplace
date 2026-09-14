@@ -35,3 +35,21 @@ the owner file so a later bounded plan can pick it up; none is a gate failure.
   falsify the record it exists to hold.
   **Suggested fix:** none required. If the spike is ever re-run, copy the schema
   into the prototype rather than re-exporting the validator.
+
+- The new plugin operations owner is not named by the network-free
+  architecture gate
+  status: open
+  **What:** `tests/architecture/no-orchestrator-network.test.ts` gates a NAMED
+  list of orchestrator modules (`NETWORK_FREE_TARGETS` in
+  `tests/architecture/gate-targets.ts`) against `platform/git.ts` / `gitOps` /
+  `DEFAULT_GIT_OPS` / `refreshGitHubClone`. The new
+  `orchestrators/plugin/operations.ts` composes install, which is on that list,
+  but the new module itself is not.
+  **Why it is deferred:** `gate-targets.ts` is the parent-owned shared census
+  pin and every task in this plan forbids editing it. The module is clean today
+  -- it imports only `transaction/`, `install-flow.ts`, and two type-only
+  modules -- so nothing is currently unguarded; only the future regression is.
+  **Suggested fix:** add
+  `extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts` to
+  `NETWORK_FREE_TARGETS` during a wave reconciliation, or in whichever later
+  plan next owns the composition module (05-16 through 05-18 all extend it).

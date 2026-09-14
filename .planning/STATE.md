@@ -4,16 +4,16 @@ milestone: test-backlog
 current_phase: 05
 current_phase_name: Production Export Ownership
 status: executing
-last_updated: "2026-09-14T19:02:00Z"
+last_updated: "2026-09-14T21:40:00Z"
 last_activity: 2026-09-14
-last_activity_desc: Wave 5 plan 05-24 payload translator export ownership complete
-state_head: 0afdd4f4
+last_activity_desc: Wave 6 plan 05-15 install composition owner complete
+state_head: a99d7dd1
 progress:
   total_phases: 8
   completed_phases: 4
   total_plans: 54
-  completed_plans: 26
-  percent: 48
+  completed_plans: 27
+  percent: 50
 milestone_name: test-backlog
 ---
 
@@ -31,12 +31,15 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 05 (Production Export Ownership) — EXECUTING
-Plan: 16 of 28 — 05-24 complete; Wave 5 source writing is finished
-Status: Executing Phase 05, awaiting the Wave 5 census reconciliation
-Last activity: 2026-09-14 — 05-24 payload translator export ownership committed in
-`a8c1dd60`, `4832bda3`, `19a1d92e` and `0afdd4f4`; the `translate` duplicate-export
-group drops from ten members to seven with the production census total unchanged at
-32; the shared census pin edit remains deferred to the parent wave reconciliation
+Plan: 17 of 28 — 05-15 complete; Wave 6 source writing is under way
+Status: Executing Phase 05 Wave 6, awaiting the Wave 6 census reconciliation
+Last activity: 2026-09-14 — 05-15 gave install its production composition owner,
+committed in `dd8547ec` and `a99d7dd1`. `orchestrators/plugin/operations.ts` now
+holds the one concrete `runPhases` / `withLockedStateTransaction` binding;
+`createNodeInstallPlugin` is retired and all eleven callers ask the new owner for a
+composed operation. The production census drops one identity, from 32 to 31, with
+zero additions; the shared census pin edit remains deferred to the parent wave
+reconciliation
 
 ### Historical refine-unit-tests closeout: `override_closeout`
 
@@ -194,6 +197,29 @@ deliberately retained until Wave 5 lands. Next action: execute Phase 5 Wave 5
 Correction to the handoff record: `.planning/config.json` no longer carries the
 `model_profile_overrides.codex.opus` Astra entry and is clean in git; the active
 runtime is `claude`.
+
+### Wave 6 progress
+
+Plan 05-15 is complete. `extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts`
+is the single production place that binds install's semantic `InstallTransaction`
+contract to the concrete ledger and state lock. `createInstallPlugin` keeps the
+semantic factory and is now production-consumed; `createNodeInstallPlugin` and
+`REAL_INSTALL_TRANSACTION` are retired, and install-flow's two transaction imports
+became type-only. The edge install handler, the import executor, the reconcile apply
+loop, the concurrent-install child helper and six test consumers all migrated.
+
+Evidence: 6245 unit tests, 6243 pass, 2 fail — both are the parent-owned census
+equality gates, red by design on exactly one removal and zero additions. Integration
+32/32, exit 0. All five affected direct owners measure hit == found at 100%
+(operations 36/36 lines, install-flow 1119/1119, edge install 106/106, import execute
+1212/1212, reconcile apply 961/961). Typecheck, lint, prettier, fallow,
+test:corresponding and both negative-control gates pass. Four planted offenders and
+one benign control discriminate the new owner tests.
+
+Open, parent-owned: the one census identity to remove at the Wave 6 reconciliation is
+`unused_exports|extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts|createInstallPlugin`
+(and the matching `UNOWNED_EXPORT_CENSUS` key, whose only member it was). 32 -> 31,
+zero additions. Sibling Wave 6 plans contribute their own deltas.
 
 ### Wave 5 progress
 
