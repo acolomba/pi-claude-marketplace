@@ -45,7 +45,7 @@ import {
 } from "../../shared/fs-utils.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
 
-import { assertNoAgentCollisions, convertAgent } from "./convert.ts";
+import { assertNoAgentCollisions, convertAgent, GUIDED_DROPPED_FIELDS } from "./convert.ts";
 import { discoverPluginAgents } from "./discover.ts";
 import { findOwnershipConflicts, partitionByOwner } from "./index-mutation.ts";
 import { isOwnedAgentFile } from "./marker.ts";
@@ -294,8 +294,11 @@ function formatAgentWarnings(converted: ConvertedAgent): string[] {
     out.push(`[${converted.sourceName}] ${w}`);
   }
 
-  if (converted.droppedFields.length > 0) {
-    out.push(`[${converted.sourceName}] dropped fields: ${converted.droppedFields.join(", ")}`);
+  // #179: fields with a targeted warning of their own (already in
+  // converted.warnings) stay off the generic summary line.
+  const summarizedDropped = converted.droppedFields.filter((f) => !GUIDED_DROPPED_FIELDS.has(f));
+  if (summarizedDropped.length > 0) {
+    out.push(`[${converted.sourceName}] dropped fields: ${summarizedDropped.join(", ")}`);
   }
 
   if (converted.droppedTools.length > 0) {

@@ -784,6 +784,53 @@ Body already has framing.
     assert.strictEqual(generatedAgentFile, expectedGeneratedAgentFile);
   });
 
+  test("omits the tool allowlist and renders excludeTools when the agent inherits Pi defaults", () => {
+    // arrange
+    const generatedAgent = {
+      frontmatter: {
+        name: "pi-claude-marketplace-acme-scout",
+        description: "Scout source changes",
+        excludeTools: ["edit", "write"] as const,
+        skills: [],
+        inheritSkills: true,
+      },
+      provenance: {
+        pluginName: "acme",
+        sourceName: "scout",
+        sourcePath: "agents/scout.md",
+        droppedFields: [],
+        droppedTools: [],
+        warnings: [],
+      },
+      body: "\nScout body.\n",
+    };
+    const expectedGeneratedAgentFile = `---
+name: pi-claude-marketplace-acme-scout
+description: Scout source changes
+excludeTools: edit,write
+systemPromptMode: replace
+inheritProjectContext: true
+inheritSkills: true
+provenance:
+  generatedBy: pi-claude-marketplace
+  sourcePlugin: acme
+  sourceAgent: scout
+  sourcePath: agents/scout.md
+  droppedFields: []
+  droppedTools: []
+  warnings: []
+---
+
+Scout body.
+`;
+
+    // act
+    const generatedAgentFile = emitGeneratedAgentFile(generatedAgent);
+
+    // assert
+    assert.strictEqual(generatedAgentFile, expectedGeneratedAgentFile);
+  });
+
   test("treats an empty legend as absent and adds only the missing trailing newline", () => {
     // arrange
     const generatedAgent = {

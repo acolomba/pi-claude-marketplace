@@ -421,11 +421,21 @@ export interface GeneratedFrontmatterFields {
   readonly description: string;
   readonly model?: string;
   /**
-   * AG-11: a generated agent always has at least one tool -- pi-subagents has
-   * no safe representation of "no tools". The non-empty tuple encodes that
-   * invariant in the type (convertAgent throws before reaching here on empty).
+   * AG-11: when present, the allowlist is non-empty -- pi-subagents reads an
+   * empty `tools:` as "no tools", which has no safe representation, and the
+   * non-empty tuple encodes that invariant in the type (convertAgent throws
+   * before reaching here on an empty explicit list). Absent when the source
+   * agent omitted `tools:` -- the generated frontmatter then omits the
+   * allowlist so pi-subagents grants its default builtin tools (#179).
    */
-  readonly tools: readonly [string, ...string[]];
+  readonly tools?: readonly [string, ...string[]];
+  /**
+   * #179: Pi names excluded from pi-subagents' default builtin tool set --
+   * the mapping of source `disallowedTools:` when `tools` is absent. Never
+   * present together with `tools` (an explicit allowlist is already
+   * filtered).
+   */
+  readonly excludeTools?: readonly [string, ...string[]];
   readonly thinking?: string;
   readonly skills: readonly string[];
   readonly inheritSkills: boolean;
@@ -476,7 +486,9 @@ export interface GeneratedProvenanceFields {
  *   <body>
  *
  * AG-8 / D-84-04 / T-d8i-01 deterministic field order: name, description,
- * model, tools, thinking, skills, skillPath (only when skills is
+ * model, tools (only when an explicit allowlist exists), excludeTools
+ * (only when tools is absent and disallowed names mapped, #179), thinking,
+ * skills, skillPath (only when skills is
  * non-empty), systemPromptMode, inheritProjectContext, inheritSkills,
  * then the `provenance` mapping (generatedBy, sourcePlugin, sourceAgent,
  * sourcePath, originalModel [only when defined], droppedFields,
@@ -509,7 +521,14 @@ export function emitGeneratedAgentFile(input: {
     lines.push(`model: ${frontmatter.model}`);
   }
 
-  lines.push(`tools: ${frontmatter.tools.join(",")}`);
+  if (frontmatter.tools !== undefined) {
+    lines.push(`tools: ${frontmatter.tools.join(",")}`);
+  }
+
+  if (frontmatter.excludeTools !== undefined) {
+    lines.push(`excludeTools: ${frontmatter.excludeTools.join(",")}`);
+  }
+
   if (frontmatter.thinking !== undefined) {
     lines.push(`thinking: ${frontmatter.thinking}`);
   }

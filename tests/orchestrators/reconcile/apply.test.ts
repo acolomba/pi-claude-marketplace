@@ -284,11 +284,12 @@ interface PluginTree {
   readonly skill?: "clean" | "malformed";
   readonly command?: boolean;
   /**
-   * One entry per agent file. `with-tools` declares a `tools:` list, which is
-   * what keeps the bridge from raising its defaulted-tools post-commit warning;
-   * `without-tools` raises exactly one such warning per file.
+   * One entry per agent file. `with-tools` declares a `tools:` list and
+   * converts warning-free; `with-mcp-servers` declares an agent-level
+   * `mcpServers:` field, which the bridge drops with exactly one guidance
+   * warning per file (#179).
    */
-  readonly agents?: readonly ("with-tools" | "without-tools")[];
+  readonly agents?: readonly ("with-tools" | "with-mcp-servers")[];
   readonly mcpServer?: boolean;
   readonly hooks?: boolean;
   /** hooks.json whose kept handler carries a rewake field without `asyncRewake: true`. */
@@ -327,7 +328,7 @@ async function writePluginTree(
     await writeUnder(
       path.join(pluginRoot, "agents", `bot${String(index)}.md`),
       `---\nname: bot${String(index)}\ndescription: helper\n` +
-        (tools === "with-tools" ? "tools: Read, Bash, Edit\n" : "") +
+        (tools === "with-tools" ? "tools: Read, Bash, Edit\n" : "mcpServers: echo\n") +
         "---\n\nbody\n",
     );
   }
@@ -1875,11 +1876,11 @@ describe("applyReconcile", () => {
     verifyBoundary();
   });
 
-  test("S2: two agents installed without a declared tool list raise the plural post-install warning header", async (t) => {
+  test("S2: two agents with dropped mcpServers raise the plural post-install warning header", async (t) => {
     // arrange
     const { cwd, project } = await createHermeticScopes(t, "install-warnings");
     const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
-      duo: { agents: ["without-tools", "without-tools"] },
+      duo: { agents: ["with-mcp-servers", "with-mcp-servers"] },
     });
     await writeUnder(
       project.configJsonPath,
@@ -1921,8 +1922,8 @@ describe("applyReconcile", () => {
         message:
           "2 post-install warnings surfaced from reconcile installs.\n" +
           "\n" +
-          "[bot0] source agent omitted `tools:` -- defaulted to read,bash,edit. Add `tools: read,bash,edit` (or your intended subset) to the source agent to silence this warning.\n" +
-          "[bot1] source agent omitted `tools:` -- defaulted to read,bash,edit. Add `tools: read,bash,edit` (or your intended subset) to the source agent to silence this warning.",
+          '[bot0] agent-level `mcpServers` is not converted -- dropped (Claude Code ignores it for plugin agents too). To grant this agent MCP tools, set subagents.agentOverrides["pi-claude-marketplace-duo-bot0"].tools (e.g. read,bash,mcp:<server>) in Pi settings.\n' +
+          '[bot1] agent-level `mcpServers` is not converted -- dropped (Claude Code ignores it for plugin agents too). To grant this agent MCP tools, set subagents.agentOverrides["pi-claude-marketplace-duo-bot1"].tools (e.g. read,bash,mcp:<server>) in Pi settings.',
         severity: "warning",
       },
     ]);
@@ -2915,7 +2916,7 @@ describe("applyReconcile", () => {
     // arrange
     const { cwd, project } = await createHermeticScopes(t, "disabled-warnings");
     const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
-      quiet: { agents: ["without-tools"], entryDefaultEnabled: false, skill: "clean" },
+      quiet: { agents: ["with-mcp-servers"], entryDefaultEnabled: false, skill: "clean" },
     });
     await writeUnder(
       project.configJsonPath,
@@ -2958,7 +2959,7 @@ describe("applyReconcile", () => {
         message:
           "1 post-install warning surfaced from reconcile installs.\n" +
           "\n" +
-          "[bot0] source agent omitted `tools:` -- defaulted to read,bash,edit. Add `tools: read,bash,edit` (or your intended subset) to the source agent to silence this warning.",
+          '[bot0] agent-level `mcpServers` is not converted -- dropped (Claude Code ignores it for plugin agents too). To grant this agent MCP tools, set subagents.agentOverrides["pi-claude-marketplace-quiet-bot0"].tools (e.g. read,bash,mcp:<server>) in Pi settings.',
         severity: "warning",
       },
     ]);
