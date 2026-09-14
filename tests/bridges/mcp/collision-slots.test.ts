@@ -4,10 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, test, type TestContext } from "node:test";
 
-import {
-  MCP_COLLISION_SLOTS,
-  loadEffectiveServerNames,
-} from "../../../extensions/pi-claude-marketplace/bridges/mcp/collision-slots.ts";
+import { loadEffectiveServerNames } from "../../../extensions/pi-claude-marketplace/bridges/mcp/collision-slots.ts";
 
 interface CollisionPaths {
   agentDirectory: string;
@@ -26,8 +23,8 @@ async function allocateCollisionPaths(t: TestContext): Promise<CollisionPaths> {
   };
 }
 
-describe("MCP_COLLISION_SLOTS", () => {
-  test("returns the exact frozen slot order from the case environment", async (t) => {
+describe("loadEffectiveServerNames", () => {
+  test("preserves every slot priority and stable repeated reads", async (t) => {
     // arrange
     const { agentDirectory, cwd, homeDirectory } = await allocateCollisionPaths(t);
     const previousHome = process.env.HOME;
@@ -48,23 +45,46 @@ describe("MCP_COLLISION_SLOTS", () => {
       }
     });
     process.env.PI_CODING_AGENT_DIR = agentDirectory;
-    const expectedSlots = [
+    const slotPaths = [
       path.join(homeDirectory, ".config", "mcp", "mcp.json"),
       path.join(agentDirectory, "mcp.json"),
       path.join(cwd, ".mcp.json"),
       path.join(cwd, ".pi", "mcp.json"),
-    ];
+    ] as const;
+
+    for (const slotPath of slotPaths) {
+      await mkdir(path.dirname(slotPath), { recursive: true });
+    }
+
+    await writeFile(slotPaths[0], JSON.stringify({ global: {}, allSlots: {} }));
+    await writeFile(slotPaths[1], JSON.stringify({ agent: {}, allSlots: {}, afterGlobal: {} }));
+    await writeFile(
+      slotPaths[2],
+      JSON.stringify({ project: {}, allSlots: {}, afterGlobal: {}, afterAgent: {} }),
+    );
+    await writeFile(
+      slotPaths[3],
+      JSON.stringify({ piProject: {}, allSlots: {}, afterGlobal: {}, afterAgent: {} }),
+    );
+    const expectedOwners = new Map([
+      ["global", path.join(homeDirectory, ".config", "mcp", "mcp.json")],
+      ["allSlots", path.join(homeDirectory, ".config", "mcp", "mcp.json")],
+      ["agent", path.join(agentDirectory, "mcp.json")],
+      ["afterGlobal", path.join(agentDirectory, "mcp.json")],
+      ["project", path.join(cwd, ".mcp.json")],
+      ["afterAgent", path.join(cwd, ".mcp.json")],
+      ["piProject", path.join(cwd, ".pi", "mcp.json")],
+    ]);
 
     // act
-    const slots = MCP_COLLISION_SLOTS(cwd);
+    const owners = await loadEffectiveServerNames(cwd);
+    const repeatedOwners = await loadEffectiveServerNames(cwd);
 
     // assert
-    assert.deepStrictEqual(slots, expectedSlots);
-    assert.strictEqual(Object.isFrozen(slots), true);
+    assert.deepStrictEqual(owners, expectedOwners);
+    assert.deepStrictEqual(repeatedOwners, expectedOwners);
   });
-});
 
-describe("loadEffectiveServerNames", () => {
   test("keeps the first declaration across all four ordered slots", async (t) => {
     // arrange
     const { agentDirectory, cwd, homeDirectory } = await allocateCollisionPaths(t);

@@ -48,9 +48,9 @@
 // has a single call site between iterations.
 
 import { hookDebugLog } from "../../shared/debug-log.ts";
+import { assertNever } from "../../shared/errors.ts";
 
-import { assertNever, type HookExecResult } from "./exec-result.ts";
-
+import type { HookExecResult } from "./exec-result.ts";
 import type { HooksRuntime } from "./runtime.ts";
 import type { BucketAEvent } from "../../domain/components/hook-events.ts";
 import type {
@@ -172,7 +172,7 @@ export function adaptToolCallResult(
       return undefined;
 
     default:
-      return assertNever(result);
+      return assertNever(result, `unreachable HookExecResult arm: ${JSON.stringify(result)}`);
   }
 }
 
@@ -224,7 +224,7 @@ export function adaptToolResultResult(
       return undefined;
 
     default:
-      return assertNever(result);
+      return assertNever(result, `unreachable HookExecResult arm: ${JSON.stringify(result)}`);
   }
 }
 
@@ -264,7 +264,7 @@ export function adaptInputResult(
       return undefined;
 
     default:
-      return assertNever(result);
+      return assertNever(result, `unreachable HookExecResult arm: ${JSON.stringify(result)}`);
   }
 }
 
@@ -348,6 +348,6 @@ export function adaptObservationResultForEvent(
       return undefined;
 
     default:
-      return assertNever(result);
+      return assertNever(result, `unreachable HookExecResult arm: ${JSON.stringify(result)}`);
   }
 }

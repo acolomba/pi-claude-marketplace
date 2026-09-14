@@ -48,13 +48,3 @@ export type HookExecResult =
       permissionDecisionReason?: string;
     }
   | { kind: "stop"; stopReason?: string };
-
-/**
- * Exhaustiveness gate for `HookExecResult` switch statements. Reaching
- * this call site at runtime means a new arm was added without updating
- * the consumer; the compile-time `never` parameter additionally fails
- * `tsc` so the gap is caught before CI. NFR-7 pattern.
- */
-export function assertNever(x: never): never {
-  throw new Error(`unreachable HookExecResult arm: ${JSON.stringify(x)}`);
-}

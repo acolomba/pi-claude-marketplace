@@ -2,41 +2,18 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
-  bashSubcommandFires as definingBashSubcommandFires,
-  parseBashSubcommands as definingParseBashSubcommands,
-} from "../../../../extensions/pi-claude-marketplace/bridges/hooks/if-field/bash.ts";
-import {
-  compileBashGlob as definingCompileBashGlob,
-  compilePathGlob as definingCompilePathGlob,
-  compilePowerShellGlob as definingCompilePowerShellGlob,
-  type CompiledBashGlob as DefiningCompiledBashGlob,
-  type CompiledPathGlob as DefiningCompiledPathGlob,
-  type CompiledPowerShellGlob as DefiningCompiledPowerShellGlob,
-} from "../../../../extensions/pi-claude-marketplace/bridges/hooks/if-field/glob.ts";
-import {
-  bashSubcommandFires as exportedBashSubcommandFires,
-  compileBashGlob as exportedCompileBashGlob,
   compileIfPredicate,
-  compilePathGlob as exportedCompilePathGlob,
-  compilePowerShellGlob as exportedCompilePowerShellGlob,
-  compilePowerShellRule as exportedCompilePowerShellRule,
   ifFires,
   MATCH_ALL_IF,
-  parseBashSubcommands as exportedParseBashSubcommands,
-  parsePowerShellSubcommands as exportedParsePowerShellSubcommands,
-  powerShellSubcommandFires as exportedPowerShellSubcommandFires,
-  type CompiledBashGlob as ExportedCompiledBashGlob,
-  type CompiledPathGlob as ExportedCompiledPathGlob,
-  type CompiledPowerShellGlob as ExportedCompiledPowerShellGlob,
   type CompileIfPredicateContext,
   type IfPredicate,
 } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts";
-import {
-  compilePowerShellRule as definingCompilePowerShellRule,
-  parsePowerShellSubcommands as definingParsePowerShellSubcommands,
-  powerShellSubcommandFires as definingPowerShellSubcommandFires,
-} from "../../../../extensions/pi-claude-marketplace/bridges/hooks/if-field/powershell.ts";
 
+import type {
+  CompiledBashGlob,
+  CompiledPathGlob,
+  CompiledPowerShellGlob,
+} from "../../../../extensions/pi-claude-marketplace/bridges/hooks/if-field/glob.ts";
 import type { BucketAEvent } from "../../../../extensions/pi-claude-marketplace/domain/components/hook-events.ts";
 import type { PiToolName } from "../../../../extensions/pi-claude-marketplace/domain/components/hook-tool-names.ts";
 import type {
@@ -55,71 +32,44 @@ type ExpectedIfPredicate =
   | {
       readonly kind: "bash";
       readonly piEvents: ReadonlySet<PiToolName>;
-      readonly bashGlob: DefiningCompiledBashGlob;
+      readonly bashGlob: CompiledBashGlob;
     }
   | {
       readonly kind: "powershell";
       readonly piEvents: ReadonlySet<PiToolName>;
-      readonly psGlob: DefiningCompiledPowerShellGlob;
+      readonly psGlob: CompiledPowerShellGlob;
     }
   | {
       readonly kind: "path-tool";
       readonly piEvents: ReadonlySet<PiToolName>;
-      readonly pathGlob: DefiningCompiledPathGlob;
+      readonly pathGlob: CompiledPathGlob;
     }
   | { readonly kind: "mcp-literal"; readonly toolName: string }
   | { readonly kind: "mcp-server-prefix"; readonly serverPrefix: string };
 
 void (true satisfies Same<CompileIfPredicateContext, ExpectedCompileIfPredicateContext>);
 void (true satisfies Same<IfPredicate, ExpectedIfPredicate>);
-void (true satisfies Same<ExportedCompiledBashGlob, DefiningCompiledBashGlob>);
-void (true satisfies Same<ExportedCompiledPathGlob, DefiningCompiledPathGlob>);
-void (true satisfies Same<ExportedCompiledPowerShellGlob, DefiningCompiledPowerShellGlob>);
-void (true satisfies Same<typeof exportedCompileBashGlob, typeof definingCompileBashGlob>);
-void (true satisfies Same<typeof exportedCompilePathGlob, typeof definingCompilePathGlob>);
-void (true satisfies Same<
-  typeof exportedCompilePowerShellGlob,
-  typeof definingCompilePowerShellGlob
->);
-void (true satisfies Same<
-  typeof exportedCompilePowerShellRule,
-  typeof definingCompilePowerShellRule
->);
-void (true satisfies Same<
-  typeof exportedParseBashSubcommands,
-  typeof definingParseBashSubcommands
->);
-void (true satisfies Same<
-  typeof exportedParsePowerShellSubcommands,
-  typeof definingParsePowerShellSubcommands
->);
-void (true satisfies Same<typeof exportedBashSubcommandFires, typeof definingBashSubcommandFires>);
-void (true satisfies Same<
-  typeof exportedPowerShellSubcommandFires,
-  typeof definingPowerShellSubcommandFires
->);
-
 const typeEvidenceBashGlob = {
   raw: "git *",
   tokens: [],
   trailingWordBoundary: true,
   isCommandNameOnly: true,
   test: (_subcommand: string): boolean => true,
-} satisfies DefiningCompiledBashGlob;
+} satisfies CompiledBashGlob;
 const typeEvidencePowerShellGlob = {
   raw: "Get-ChildItem *",
   tokens: [],
   trailingWordBoundary: true,
   isCommandNameOnly: true,
   test: (_subcommand: string): boolean => true,
-} satisfies DefiningCompiledPowerShellGlob;
+} satisfies CompiledPowerShellGlob;
 const typeEvidencePathGlob = {
   raw: "src/**",
   anchor: { kind: "cwd" },
   absoluteBase: "/workspace/plugin",
   tokens: [],
   testAbsolute: (_absolutePath: string): boolean => true,
-} satisfies DefiningCompiledPathGlob;
+} satisfies CompiledPathGlob;
 
 void ({ kind: "match-all", reason: "fall open" } satisfies IfPredicate);
 void ({

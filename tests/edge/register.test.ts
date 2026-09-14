@@ -56,7 +56,6 @@ import {
 import {
   MARKETPLACE_SUBCOMMANDS,
   TOP_LEVEL_SUBCOMMANDS,
-  TOP_LEVEL_USAGE,
 } from "../../extensions/pi-claude-marketplace/edge/router.ts";
 import { makeLocationsResolver } from "../../extensions/pi-claude-marketplace/orchestrators/edge-deps.ts";
 import { createPluginUpdateOperations } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts";
@@ -125,6 +124,22 @@ type ToolRegistration = Omit<
 type PiRegistrar = Omit<ExtensionAPI, "registerTool"> & {
   readonly registerTool: (tool: ToolRegistration) => void;
 };
+
+const EXPECTED_TOP_LEVEL_USAGE =
+  "Usage: /claude:plugin <bootstrap|install|uninstall|update|fetch|reinstall|list|ls|info|pending|enable|disable|import|marketplace> ...\n" +
+  "  bootstrap                                          add anthropics/claude-plugins-official to user scope and enable autoupdate\n" +
+  "  install <plugin>@<marketplace> [--scope user|project]\n" +
+  "  uninstall <plugin>@<marketplace> [--scope user|project]\n" +
+  "  update [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]\n" +
+  "  fetch [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]\n" +
+  "  reinstall [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]\n" +
+  "  list [<marketplace>] [--scope user|project]   (alias: ls)\n" +
+  "  info <plugin>@<marketplace> [--scope user|project]\n" +
+  "  pending [--scope user|project]\n" +
+  "  enable <plugin>@<marketplace> [--scope user|project] [--local]\n" +
+  "  disable <plugin>@<marketplace> [--scope user|project] [--local]\n" +
+  "  import [--scope user|project]\n" +
+  "  marketplace <add|remove|rm|list|ls|info|update|autoupdate|noautoupdate> ...";
 
 interface HermeticScope {
   readonly cwd: string;
@@ -398,7 +413,10 @@ describe("registerClaudePluginCommand", () => {
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
     const { registration, verifyRegistrar } = registerCommandUnderTest();
     const expectedNotifications: readonly Notification[] = [
-      { message: `Unknown subcommand: "frobnicate".\n\n${TOP_LEVEL_USAGE}`, severity: "error" },
+      {
+        message: `Unknown subcommand: "frobnicate".\n\n${EXPECTED_TOP_LEVEL_USAGE}`,
+        severity: "error",
+      },
     ];
 
     // act

@@ -1,6 +1,6 @@
 // Owner suite for `edge/handlers/tools.ts`: the two read-only LLM tools
 // (`pi_claude_marketplace_list` and `pi_claude_marketplace_plugin_list`) and the
-// exported `projectRowStatus` projection.
+// complete registered-tool status projection.
 //
 // Registration is not the behavior. Each rendering case captures the registered
 // callback off the recorded `registerTool` call and invokes it against a seeded
@@ -31,14 +31,11 @@ import { describe, test, type TestContext } from "node:test";
 import { mock, verify, when } from "strong-mock";
 
 import {
-  projectRowStatus,
   registerListMarketplacesTool,
   registerListPluginsTool,
-  type ToolPluginStatus,
 } from "../../../extensions/pi-claude-marketplace/edge/handlers/tools.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import { type PluginNotificationMessage } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type {
@@ -84,7 +81,6 @@ interface RegisteredToolBoundary {
 }
 type MarketplaceRecord = ExtensionState["marketplaces"][string];
 type PluginRecord = MarketplaceRecord["plugins"][string];
-type PluginStatus = PluginNotificationMessage["status"];
 
 interface HermeticScope {
   readonly cwd: string;
@@ -134,7 +130,7 @@ interface ExpectedPluginRow {
   readonly marketplace: string;
   readonly scope: Scope;
   readonly name: string;
-  readonly status: ToolPluginStatus;
+  readonly status: "installed" | "available" | "unavailable";
   readonly version?: string;
   readonly reasons?: readonly string[];
 }
@@ -370,72 +366,6 @@ function registerToolUnderTest(
 
   return { ctx: boundary.ctx, registration, verifyBoundary: boundary.verifyBoundary };
 }
-
-describe("projectRowStatus", () => {
-  const projectedStatuses = [
-    { status: "installed", bucket: "installed" },
-    { status: "upgradable", bucket: "installed" },
-    { status: "partially-installed", bucket: "installed" },
-    { status: "partially-upgradable", bucket: "installed" },
-    { status: "available", bucket: "available" },
-    { status: "remote", bucket: "available" },
-    { status: "unavailable", bucket: "unavailable" },
-    { status: "partially-available", bucket: "unavailable" },
-    { status: "disabled", bucket: "unavailable" },
-  ] as const satisfies readonly { status: PluginStatus; bucket: ToolPluginStatus }[];
-
-  const refusedStatuses = [
-    "updated",
-    "reinstalled",
-    "uninstalled",
-    "failed",
-    "skipped",
-    "manual recovery",
-    "will install",
-    "will uninstall",
-    "will enable",
-    "will disable",
-  ] as const satisfies readonly PluginStatus[];
-
-  // A status neither table drives has no key here and makes this a compile
-  // error, so the two tables together stay total over the plugin status union.
-  type UndrivenStatus = Exclude<
-    PluginStatus,
-    (typeof projectedStatuses)[number]["status"] | (typeof refusedStatuses)[number]
-  >;
-  void ({} satisfies Record<UndrivenStatus, never>);
-
-  for (const { status, bucket } of projectedStatuses) {
-    test(`projects the ${status} list row onto the ${bucket} tool bucket`, () => {
-      // arrange
-      const expectedBucket = bucket;
-
-      // act
-      const toolStatus = projectRowStatus(status);
-
-      // assert
-      assert.deepStrictEqual(toolStatus, expectedBucket);
-    });
-  }
-
-  for (const status of refusedStatuses) {
-    test(`refuses the ${status} row the list surface never produces`, () => {
-      // arrange
-      const expectedMessage = `pi_claude_marketplace_plugin_list: unexpected plugin status "${status}" on list payload`;
-
-      // act & assert
-      assert.throws(
-        () => projectRowStatus(status),
-        (error: unknown) => {
-          assert.ok(error instanceof Error);
-          assert.deepStrictEqual(error.name, "Error");
-          assert.deepStrictEqual(error.message, expectedMessage);
-          return true;
-        },
-      );
-    });
-  }
-});
 
 describe("registerListMarketplacesTool", () => {
   test("registers pi_claude_marketplace_list with an empty parameter schema", async (t) => {

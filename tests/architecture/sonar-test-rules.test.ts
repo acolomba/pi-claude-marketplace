@@ -88,6 +88,7 @@ for (const { rule, source } of OFFENDERS) {
 const TYPE_ONLY_OWNERS = [
   "tests/bridges/agents/types.test.ts",
   "tests/bridges/commands/types.test.ts",
+  "tests/bridges/hooks/exec-result.test.ts",
   "tests/bridges/mcp/types.test.ts",
   "tests/bridges/skills/types.test.ts",
   "tests/edge/types.test.ts",

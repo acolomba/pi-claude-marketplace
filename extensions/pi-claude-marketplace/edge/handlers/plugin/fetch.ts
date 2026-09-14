@@ -29,7 +29,7 @@ import type { Scope } from "../../../shared/types.ts";
 const USAGE =
   "Usage: /claude:plugin fetch [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]";
 
-export interface ParsedFetchTarget {
+interface ParsedFetchTarget {
   readonly target: FetchTarget;
   readonly scope?: Scope;
 }
@@ -40,7 +40,7 @@ export interface ParsedFetchTarget {
  * error (MSG-NC-2: sentence form with the Usage block appended). Only `--scope`
  * is accepted; any other `--flag` is rejected inline.
  */
-export function parseFetchTarget(
+function parseFetchTarget(
   args: string,
   ctx: ExtensionCommandContext,
 ): ParsedFetchTarget | undefined {

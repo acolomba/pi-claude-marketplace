@@ -2,12 +2,11 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
-  deepSubstitute,
   substituteAndInject,
   type McpSubstitutionContext,
 } from "../../../extensions/pi-claude-marketplace/bridges/mcp/substitute.ts";
 
-describe("deepSubstitute", () => {
+describe("substituteAndInject", () => {
   test("substitutes every string leaf while preserving complete source structure", () => {
     // arrange
     const server = {
@@ -44,11 +43,11 @@ describe("deepSubstitute", () => {
       disabled: false,
       nullable: null,
     };
-    const substitutions = new Map<string, string>([
-      ["CLAUDE_PLUGIN_ROOT", "/plugin/root"],
-      ["CLAUDE_PLUGIN_DATA", "/plugin/data"],
-      ["CLAUDE_PROJECT_DIR", "/project/root"],
-    ]);
+    const context: McpSubstitutionContext = {
+      pluginRoot: "/plugin/root",
+      pluginData: "/plugin/data",
+      projectDir: "/project/root",
+    };
     const expectedServer = {
       "${CLAUDE_PLUGIN_ROOT}": "/plugin/data/key-value",
       command: "/plugin/root/bin/server",
@@ -61,10 +60,15 @@ describe("deepSubstitute", () => {
       retries: 3,
       disabled: false,
       nullable: null,
+      env: {
+        CLAUDE_PLUGIN_ROOT: "/plugin/root",
+        CLAUDE_PLUGIN_DATA: "/plugin/data",
+        CLAUDE_PROJECT_DIR: "/project/root",
+      },
     };
 
     // act
-    const substitutedServer = deepSubstitute(server, substitutions);
+    const substitutedServer = substituteAndInject(server, context);
 
     // assert
     assert.deepStrictEqual(substitutedServer, expectedServer);
@@ -75,53 +79,50 @@ describe("deepSubstitute", () => {
     assert.notStrictEqual(substitutedServer.headers, server.headers);
   });
 
-  for (const { description, leaf, bindings, expectedLeaf } of [
+  for (const { description, leaf, context, expectedLeaf } of [
     {
       description: "adjacent and repeated tokens",
       leaf: "${CLAUDE_PLUGIN_ROOT}:${CLAUDE_PLUGIN_ROOT}${CLAUDE_PLUGIN_DATA}:${CLAUDE_PROJECT_DIR}",
-      bindings: [
-        ["CLAUDE_PLUGIN_ROOT", "/root"],
-        ["CLAUDE_PLUGIN_DATA", "/data"],
-        ["CLAUDE_PROJECT_DIR", "/project"],
-      ],
+      context: { pluginRoot: "/root", pluginData: "/data", projectDir: "/project" },
       expectedLeaf: "/root:/root/data:/project",
     },
     {
       description: "known and unknown tokens",
       leaf: "${CLAUDE_PLUGIN_ROOT}/${CLAUDE_SESSION_ID}/${CLAUDE_PROJECT_DIR}",
-      bindings: [["CLAUDE_PLUGIN_ROOT", "/root"]],
+      context: { pluginRoot: "/root", pluginData: "/data", projectDir: undefined },
       expectedLeaf: "/root/${CLAUDE_SESSION_ID}/${CLAUDE_PROJECT_DIR}",
     },
     {
       description: "a replacement containing another recognized token",
       leaf: "${CLAUDE_PLUGIN_ROOT}",
-      bindings: [
-        ["CLAUDE_PLUGIN_ROOT", "${CLAUDE_PLUGIN_DATA}"],
-        ["CLAUDE_PLUGIN_DATA", "/data"],
-      ],
+      context: { pluginRoot: "${CLAUDE_PLUGIN_DATA}", pluginData: "/data", projectDir: undefined },
       expectedLeaf: "${CLAUDE_PLUGIN_DATA}",
     },
     {
       description: "replacement-pattern and Unicode characters",
       leaf: "${CLAUDE_PLUGIN_DATA}",
-      bindings: [["CLAUDE_PLUGIN_DATA", "café-☃-$1-$&-\\path-{value}"]],
+      context: {
+        pluginRoot: "/root",
+        pluginData: "café-☃-$1-$&-\\path-{value}",
+        projectDir: undefined,
+      },
       expectedLeaf: "café-☃-$1-$&-\\path-{value}",
     },
   ] satisfies ReadonlyArray<{
     description: string;
     leaf: string;
-    bindings: [string, string][];
+    context: McpSubstitutionContext;
     expectedLeaf: string;
   }>) {
     test(`substitutes ${description} exactly once`, () => {
       // arrange
-      const substitutions = new Map<string, string>(bindings);
+      const server = { leaf };
 
       // act
-      const substitutedLeaf = deepSubstitute(leaf, substitutions);
+      const substitutedServer = substituteAndInject(server, context);
 
       // assert
-      assert.strictEqual(substitutedLeaf, expectedLeaf);
+      assert.deepStrictEqual(substitutedServer, { leaf: expectedLeaf });
     });
   }
 
@@ -134,13 +135,18 @@ describe("deepSubstitute", () => {
   ]) {
     test(`preserves ${description}`, () => {
       // arrange
-      const substitutions = new Map<string, string>([["CLAUDE_PLUGIN_ROOT", "/root"]]);
+      const server = { leaf };
+      const context: McpSubstitutionContext = {
+        pluginRoot: "/root",
+        pluginData: "/data",
+        projectDir: undefined,
+      };
 
       // act
-      const substitutedLeaf = deepSubstitute(leaf, substitutions);
+      const substitutedServer = substituteAndInject(server, context);
 
       // assert
-      assert.deepStrictEqual(substitutedLeaf, expectedLeaf);
+      assert.deepStrictEqual(substitutedServer, { leaf: expectedLeaf });
     });
   }
 
@@ -149,16 +155,17 @@ describe("deepSubstitute", () => {
     const server = JSON.parse(
       '{"__proto__":{"root":"${CLAUDE_PLUGIN_ROOT}"},"keep":"${CLAUDE_PLUGIN_DATA}"}',
     ) as Record<string, unknown>;
-    const substitutions = new Map<string, string>([
-      ["CLAUDE_PLUGIN_ROOT", "/plugin/root"],
-      ["CLAUDE_PLUGIN_DATA", "/plugin/data"],
-    ]);
+    const context: McpSubstitutionContext = {
+      pluginRoot: "/plugin/root",
+      pluginData: "/plugin/data",
+      projectDir: undefined,
+    };
     const expectedServer = JSON.parse(
       '{"__proto__":{"root":"/plugin/root"},"keep":"/plugin/data"}',
     ) as Record<string, unknown>;
 
     // act
-    const substitutedServer = deepSubstitute(server, substitutions);
+    const substitutedServer = substituteAndInject(server, context);
 
     // assert
     assert.deepStrictEqual(substitutedServer, expectedServer);
@@ -167,9 +174,7 @@ describe("deepSubstitute", () => {
     assert.strictEqual(Object.getPrototypeOf(substitutedServer), Object.prototype);
     assert.strictEqual(({} as Record<string, unknown>).root, undefined);
   });
-});
 
-describe("substituteAndInject", () => {
   test("substitutes a project server and lets declared environment keys win", () => {
     // arrange
     const server = {

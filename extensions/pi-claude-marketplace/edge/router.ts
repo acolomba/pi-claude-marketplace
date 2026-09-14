@@ -88,7 +88,7 @@ export const MARKETPLACE_SUBCOMMANDS = [
   "noautoupdate",
 ] as const;
 
-export const TOP_LEVEL_USAGE =
+const TOP_LEVEL_USAGE =
   "Usage: /claude:plugin <bootstrap|install|uninstall|update|fetch|reinstall|list|ls|info|pending|enable|disable|import|marketplace> ...\n" +
   "  bootstrap                                          add anthropics/claude-plugins-official to user scope and enable autoupdate\n" +
   "  install <plugin>@<marketplace> [--scope user|project]\n" +
@@ -104,7 +104,7 @@ export const TOP_LEVEL_USAGE =
   "  import [--scope user|project]\n" +
   "  marketplace <add|remove|rm|list|ls|info|update|autoupdate|noautoupdate> ...";
 
-export const MARKETPLACE_USAGE =
+const MARKETPLACE_USAGE =
   "Usage: /claude:plugin marketplace <add|remove|rm|list|ls|info|update|autoupdate|noautoupdate> ...\n" +
   "  add <source> [--scope user|project]\n" +
   "  remove <name> [--scope user|project]   (alias: rm)\n" +

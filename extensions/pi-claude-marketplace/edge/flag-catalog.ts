@@ -171,9 +171,6 @@ const CATALOG: Record<CatalogVerb, readonly FlagEntry[]> = {
   "marketplace noautoupdate": [WRITE_TARGET_FLAG_ENTRY],
 };
 
-/** Every catalog verb, derived from the CATALOG keys (no hand-copied list). */
-export const CATALOG_VERBS = Object.keys(CATALOG) as readonly CatalogVerb[];
-
 /** Type guard narrowing a raw completion head to a catalog verb key. */
 export function isCatalogVerb(value: string): value is CatalogVerb {
   return Object.hasOwn(CATALOG, value);

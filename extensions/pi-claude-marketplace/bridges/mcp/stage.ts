@@ -90,7 +90,7 @@ async function readScopedDoc(filePath: string): Promise<{ doc: RawMcpDoc; malfor
 }
 
 /** Refusal for a present scoped `mcpServers` field that is not an object map. */
-export class MalformedMcpServersError extends Error {
+class MalformedMcpServersError extends Error {
   readonly mcpJsonPath: string;
   readonly valueKind: string;
 

@@ -9,7 +9,7 @@
 // Three reconciliations:
 //
 //   (a) Completion consistency: the labels emitted by `getArgumentCompletions`
-//       for `<verb> -` -- every catalog verb (derived from CATALOG_VERBS, so a
+//       for `<verb> -` -- every catalog verb (from the independent EXPECTED_CATALOG_VERBS inventory, so a
 //       new verb cannot be silently omitted) plus the `ls` alias -- with the
 //       global `--scope` excluded, MUST equal the catalog's complete=true
 //       names for that verb (exact set, sorted).
@@ -40,7 +40,7 @@ import test from "node:test";
 
 import { getArgumentCompletions } from "../../extensions/pi-claude-marketplace/edge/completions/provider.ts";
 import {
-  CATALOG_VERBS,
+  isCatalogVerb,
   completionFlagEntries,
   parseFlagNames,
 } from "../../extensions/pi-claude-marketplace/edge/flag-catalog.ts";
@@ -71,12 +71,34 @@ const EMPTY_RESOLVER: LocationsResolver = {
   },
 };
 
-// Every catalog verb (derived from CATALOG_VERBS -- a new verb cannot be
-// silently omitted here) plus the `ls` completion alias, which maps to the
+// Every independently declared catalog verb (the router inventory check below
+// detects any reachable command omitted here) plus the `ls` completion alias, which maps to the
 // `list` catalog key. The completion head is what the user types; the catalog
 // key is what governs its per-verb flags.
+const EXPECTED_CATALOG_VERBS = [
+  "install",
+  "update",
+  "list",
+  "info",
+  "uninstall",
+  "reinstall",
+  "fetch",
+  "enable",
+  "disable",
+  "pending",
+  "import",
+  "bootstrap",
+  "marketplace add",
+  "marketplace remove",
+  "marketplace info",
+  "marketplace list",
+  "marketplace update",
+  "marketplace autoupdate",
+  "marketplace noautoupdate",
+] as const;
+
 const COMPLETION_HEADS: { head: string; verb: CatalogVerb }[] = [
-  ...CATALOG_VERBS.map((verb) => ({ head: verb, verb })),
+  ...EXPECTED_CATALOG_VERBS.map((verb) => ({ head: verb, verb })),
   { head: "ls", verb: "list" },
   { head: "marketplace ls", verb: "marketplace list" },
   { head: "marketplace rm", verb: "marketplace remove" },
@@ -141,7 +163,7 @@ function assertFlagSet(observed: Iterable<string>, expected: readonly string[]):
   assert.deepStrictEqual(sorted(observed), expected);
 }
 
-for (const verb of CATALOG_VERBS) {
+for (const verb of EXPECTED_CATALOG_VERBS) {
   test(`catalog parse flags for ${verb} match the independent handler contract`, () => {
     // arrange
     const expected = HANDLER_ACCEPTED_PARSE_SETS[verb];
@@ -166,7 +188,14 @@ test("catalog and alias completions cover the complete router inventory", () => 
 
   // assert
   assert.deepStrictEqual(sorted(catalogHeads), sorted(routerHeads));
-  assert.deepStrictEqual(sorted(Object.keys(HANDLER_ACCEPTED_PARSE_SETS)), sorted(CATALOG_VERBS));
+  assert.deepStrictEqual(
+    sorted(Object.keys(HANDLER_ACCEPTED_PARSE_SETS)),
+    sorted(EXPECTED_CATALOG_VERBS),
+  );
+  assert.deepStrictEqual(
+    EXPECTED_CATALOG_VERBS.map((verb) => isCatalogVerb(verb)),
+    Array.from({ length: 19 }, () => true),
+  );
 });
 
 for (const { observed, label } of [

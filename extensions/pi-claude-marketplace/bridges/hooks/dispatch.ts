@@ -40,6 +40,7 @@
 // every-entry-must-run.
 
 import { hookDebugLog } from "../../shared/debug-log.ts";
+import { assertNever } from "../../shared/errors.ts";
 
 import { dispatchHookExec } from "./dispatch-exec.ts";
 import {
@@ -49,9 +50,9 @@ import {
   adaptToolResultResult,
   applyMutationInPlace,
 } from "./event-adapters.ts";
-import { assertNever, type HookExecResult } from "./exec-result.ts";
 import { ifFires } from "./if-field/index.ts";
 
+import type { HookExecResult } from "./exec-result.ts";
 import type { RoutingEntry } from "./routing-state.ts";
 import type { HooksRuntime } from "./runtime.ts";
 import type { BucketAEvent, DispatchableEvent } from "../../domain/components/hook-events.ts";
@@ -220,7 +221,7 @@ async function reduceBucket(
       case "noop":
         continue;
       default:
-        return assertNever(r);
+        return assertNever(r, `unreachable HookExecResult arm: ${JSON.stringify(r)}`);
     }
   }
 

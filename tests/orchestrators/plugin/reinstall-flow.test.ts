@@ -13,7 +13,6 @@ import {
   replacePreparedAgents,
   rollbackAgentsReplacement,
 } from "../../../extensions/pi-claude-marketplace/bridges/agents/index.ts";
-import { GENERATED_AGENT_PREFIX } from "../../../extensions/pi-claude-marketplace/bridges/agents/marker.ts";
 import {
   abortPreparedCommands,
   finalizeCommandsReplacement,
@@ -794,7 +793,7 @@ test("PDEF-01: reinstall preview detects an agent conflict from a later resolved
             ...installed,
             resources: {
               ...installed.resources,
-              agents: [`${GENERATED_AGENT_PREFIX}hello-later`],
+              agents: ["pi-claude-marketplace-hello-later"],
             },
           },
         },
@@ -852,7 +851,7 @@ test("PDEF-01: reinstall stages every agent directory and warns on a later dupli
       const conventionalAgentsDir = path.join(seeded.pluginRoot, "agents");
       const expectedWarning =
         `agent source "shared" at "${path.join(conventionalAgentsDir, "shared-later.md")}" duplicates generated name ` +
-        `"${GENERATED_AGENT_PREFIX}hello-shared" already produced by agent source "shared" at ` +
+        '"pi-claude-marketplace-hello-shared" already produced by agent source "shared" at ' +
         `"${path.join(conventionalAgentsDir, "..", "declared-agents", "shared-first.md")}"; keeping first discovered source.`;
       const { ctx, pi } = makeCtx({ toolNames: ["subagent"] });
 
@@ -870,19 +869,19 @@ test("PDEF-01: reinstall stages every agent directory and warns on a later dupli
       assert.deepStrictEqual(outcome.notes, [`warning: ${expectedWarning}`]);
       const state = await loadState(locations.extensionRoot);
       assert.deepStrictEqual(state.marketplaces.mp?.plugins.hello?.resources.agents, [
-        `${GENERATED_AGENT_PREFIX}hello-shared`,
-        `${GENERATED_AGENT_PREFIX}hello-later`,
+        "pi-claude-marketplace-hello-shared",
+        "pi-claude-marketplace-hello-later",
       ]);
       assert.match(
         await readFile(
-          path.join(locations.agentsDir, `${GENERATED_AGENT_PREFIX}hello-shared.md`),
+          path.join(locations.agentsDir, "pi-claude-marketplace-hello-shared.md"),
           "utf8",
         ),
         /First shared agent\./,
       );
       assert.match(
         await readFile(
-          path.join(locations.agentsDir, `${GENERATED_AGENT_PREFIX}hello-later.md`),
+          path.join(locations.agentsDir, "pi-claude-marketplace-hello-later.md"),
           "utf8",
         ),
         /Later agent\./,
@@ -924,8 +923,8 @@ test("PDEF-01: reinstall rolls back replacements sourced from every agent direct
           { sourceName: "later", body: "New later agent.\n" },
         ],
       });
-      const firstTarget = path.join(locations.agentsDir, `${GENERATED_AGENT_PREFIX}hello-first.md`);
-      const laterTarget = path.join(locations.agentsDir, `${GENERATED_AGENT_PREFIX}hello-later.md`);
+      const firstTarget = path.join(locations.agentsDir, "pi-claude-marketplace-hello-first.md");
+      const laterTarget = path.join(locations.agentsDir, "pi-claude-marketplace-hello-later.md");
       let observedAtSave: readonly string[] = [];
       const { ctx, pi } = makeCtx({ toolNames: ["subagent"] });
 
@@ -1004,7 +1003,7 @@ test("PRL-10 / RINST-01: bare reinstall unconditionally overwrites foreign agent
         resources: { skill: "old skill", command: "old command", agent: "old agent" },
         install: true,
       });
-      const agentPath = path.join(locations.agentsDir, `${GENERATED_AGENT_PREFIX}hello-bot.md`);
+      const agentPath = path.join(locations.agentsDir, "pi-claude-marketplace-hello-bot.md");
       await writeFile(agentPath, "manual foreign bytes", "utf8");
       await writePluginTree(seeded.pluginRoot, "hello", {
         skill: "new skill",
@@ -1087,7 +1086,7 @@ test("PRL-10 / RINST-01: unconditional overwrite of foreign previous agent conte
         resources: { agent: "old agent" },
         install: true,
       });
-      const agentPath = path.join(locations.agentsDir, `${GENERATED_AGENT_PREFIX}hello-bot.md`);
+      const agentPath = path.join(locations.agentsDir, "pi-claude-marketplace-hello-bot.md");
       const foreignBytes = "manual foreign bytes";
       await writeFile(agentPath, foreignBytes, "utf8");
       await writePluginTree(seeded.pluginRoot, "hello", { agent: "new agent" });
@@ -2190,7 +2189,7 @@ test("GAP-11 / RINST-01: reinstallPlugin unconditionally overwrites agent foreig
         resources: { agent: "old agent" },
         install: true,
       });
-      const agentPath = path.join(locations.agentsDir, `${GENERATED_AGENT_PREFIX}hello-bot.md`);
+      const agentPath = path.join(locations.agentsDir, "pi-claude-marketplace-hello-bot.md");
       await writeFile(agentPath, "foreign bytes", "utf8");
       await writePluginTree(seeded.pluginRoot, "hello", { agent: "new agent" });
       const { ctx, pi, notifications } = makeCtx();
@@ -4064,7 +4063,7 @@ test("SUB-02: project-scope reinstall substitutes ${CLAUDE_PROJECT_DIR} to the i
       );
 
       const agentBody = await readFile(
-        path.join(locations.agentsDir, `${GENERATED_AGENT_PREFIX}hello-bot.md`),
+        path.join(locations.agentsDir, "pi-claude-marketplace-hello-bot.md"),
         "utf8",
       );
       assert.ok(
@@ -4134,7 +4133,7 @@ test("SUB-02: user-scope reinstall keeps ${CLAUDE_PROJECT_DIR} literal in skill,
       );
 
       const agentBody = await readFile(
-        path.join(locations.agentsDir, `${GENERATED_AGENT_PREFIX}hello-bot.md`),
+        path.join(locations.agentsDir, "pi-claude-marketplace-hello-bot.md"),
         "utf8",
       );
       assert.ok(
@@ -6582,7 +6581,7 @@ test("retry proof: reinstall: MCP prepare failure aborts three prepared handles 
         mcp: true,
         skill: "new skill",
       });
-      const agentPath = path.join(locations.agentsDir, `${GENERATED_AGENT_PREFIX}hello-bot.md`);
+      const agentPath = path.join(locations.agentsDir, "pi-claude-marketplace-hello-bot.md");
       const stateBytes = await readFile(locations.stateJsonPath, "utf8");
       const mcpBytes = await readFile(locations.mcpJsonPath, "utf8");
       const oldAgent = await readFile(agentPath, "utf8");
@@ -6644,7 +6643,7 @@ test("retry proof: reinstall: MCP prepare failure aborts three prepared handles 
       assert.deepStrictEqual(first.notes, [retryCauseChain(readFailure)]);
       assert.equal(second.partition, "reinstalled");
       assert.deepStrictEqual(second.stagedMcpServerNames, ["server1"]);
-      assert.deepStrictEqual(second.stagedAgentNames, [`${GENERATED_AGENT_PREFIX}hello-bot`]);
+      assert.deepStrictEqual(second.stagedAgentNames, ["pi-claude-marketplace-hello-bot"]);
       assert.equal(second.version, "1.0.0");
       assert.deepStrictEqual(second.notes, [
         "warning: [bot] source description was missing or empty -- using fallback",
@@ -6656,7 +6655,7 @@ test("retry proof: reinstall: MCP prepare failure aborts three prepared handles 
       assert.deepStrictEqual(secondSchedule, ["save:state", "drop:cache", "remove:data"]);
       assert.deepStrictEqual(firstTree, [
         "agents/",
-        `agents/${GENERATED_AGENT_PREFIX}hello-bot.md`,
+        "agents/pi-claude-marketplace-hello-bot.md",
         "claude-plugins.json",
         "mcp.json/",
         "pi-claude-marketplace/",
@@ -6677,7 +6676,7 @@ test("retry proof: reinstall: MCP prepare failure aborts three prepared handles 
       ]);
       assert.deepStrictEqual(await retryTree(locations.scopeRoot), [
         "agents/",
-        `agents/${GENERATED_AGENT_PREFIX}hello-bot.md`,
+        "agents/pi-claude-marketplace-hello-bot.md",
         "claude-plugins.json",
         "mcp.json",
         "pi-claude-marketplace/",
@@ -7142,7 +7141,7 @@ test("retry proof: reinstall: a persistence failure after four committed replace
         mcp: true,
         skill: "new skill",
       });
-      const agentPath = path.join(locations.agentsDir, `${GENERATED_AGENT_PREFIX}hello-bot.md`);
+      const agentPath = path.join(locations.agentsDir, "pi-claude-marketplace-hello-bot.md");
       const stateBytes = await readFile(locations.stateJsonPath, "utf8");
       const mcpBytes = await readFile(locations.mcpJsonPath, "utf8");
       const oldAgent = await readFile(agentPath, "utf8");
@@ -7243,7 +7242,7 @@ test("retry proof: reinstall: a persistence failure after four committed replace
       ]);
       assert.deepStrictEqual(firstTree, [
         "agents/",
-        `agents/${GENERATED_AGENT_PREFIX}hello-bot.md`,
+        "agents/pi-claude-marketplace-hello-bot.md",
         "claude-plugins.json",
         "mcp.json",
         "pi-claude-marketplace/",
@@ -7264,7 +7263,7 @@ test("retry proof: reinstall: a persistence failure after four committed replace
       ]);
       assert.deepStrictEqual(await retryTree(locations.scopeRoot), [
         "agents/",
-        `agents/${GENERATED_AGENT_PREFIX}hello-bot.md`,
+        "agents/pi-claude-marketplace-hello-bot.md",
         "claude-plugins.json",
         "mcp.json",
         "pi-claude-marketplace/",
@@ -8123,7 +8122,7 @@ test("PRL-08 / PRL-11: preserves state, tree, cleanup, and exact notification th
         marketplace: "mp",
         scope: "project",
         version: "1.0.0",
-        stagedAgentNames: [`${GENERATED_AGENT_PREFIX}hello-bot`],
+        stagedAgentNames: ["pi-claude-marketplace-hello-bot"],
         stagedMcpServerNames: ["server1"],
         declaresAgents: true,
         declaresMcp: true,
@@ -8136,7 +8135,7 @@ test("PRL-08 / PRL-11: preserves state, tree, cleanup, and exact notification th
       assert.deepStrictEqual(record.resources, {
         skills: ["hello:tool"],
         prompts: ["hello:deploy"],
-        agents: [`${GENERATED_AGENT_PREFIX}hello-bot`],
+        agents: ["pi-claude-marketplace-hello-bot"],
         mcpServers: ["server1"],
         hooks: [],
       });

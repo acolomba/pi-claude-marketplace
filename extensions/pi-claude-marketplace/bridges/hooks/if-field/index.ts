@@ -47,8 +47,7 @@ import path from "node:path";
 import { TOOL_EVENTS, type BucketAEvent } from "../../../domain/components/hook-events.ts";
 import { IF_PREFIX_TARGETS } from "../../../domain/components/hook-if-targets.ts";
 import { hookDebugLog } from "../../../shared/debug-log.ts";
-import { errorMessage } from "../../../shared/errors.ts";
-import { assertNever } from "../exec-result.ts";
+import { assertNever, errorMessage } from "../../../shared/errors.ts";
 
 import { bashSubcommandFires, parseBashSubcommands } from "./bash.ts";
 import { compileBashGlob, compilePathGlob } from "./glob.ts";
@@ -62,16 +61,6 @@ import type { ParseResult } from "./bash.ts";
 import type { CompiledBashGlob, CompiledPathGlob, CompiledPowerShellGlob } from "./glob.ts";
 import type { PiToolName } from "../../../domain/components/hook-tool-names.ts";
 import type { ExtensionContext } from "../../../platform/pi-api.ts";
-
-export type { CompiledBashGlob, CompiledPathGlob, CompiledPowerShellGlob } from "./glob.ts";
-export { compileBashGlob, compilePathGlob, compilePowerShellGlob } from "./glob.ts";
-
-export { parseBashSubcommands, bashSubcommandFires } from "./bash.ts";
-export {
-  compilePowerShellRule,
-  parsePowerShellSubcommands,
-  powerShellSubcommandFires,
-} from "./powershell.ts";
 
 // ──────────────────────────────────────────────────────────────────────────
 // IfPredicate discriminated union
@@ -533,6 +522,6 @@ export function ifFires(
       return extractToolName(event).startsWith(predicate.serverPrefix);
 
     default:
-      return assertNever(predicate);
+      return assertNever(predicate, `unreachable HookExecResult arm: ${JSON.stringify(predicate)}`);
   }
 }

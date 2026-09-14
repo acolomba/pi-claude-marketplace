@@ -5,10 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import {
-  GENERATED_AGENT_MARKER,
-  GENERATED_AGENT_PREFIX,
-} from "../../../extensions/pi-claude-marketplace/bridges/agents/marker.ts";
+import { GENERATED_AGENT_MARKER } from "../../../extensions/pi-claude-marketplace/bridges/agents/marker.ts";
 import {
   createHooksRouting,
   createHooksRuntime,
@@ -242,7 +239,7 @@ async function seedFullPlugin(
 
   // agent: write owned file + index row
   await mkdir(locations.agentsDir, { recursive: true });
-  const agentName = `${GENERATED_AGENT_PREFIX}${plugin}-uni-agent`;
+  const agentName = `pi-claude-marketplace-${plugin}-uni-agent`;
   const agentFile = path.join(locations.agentsDir, `${agentName}.md`);
   await writeFile(agentFile, makeOwnedAgentFile(agentName));
   const agentsIndex: AgentsIndex = {
@@ -505,7 +502,7 @@ test("PU-3 + PU-7: foreign agent content -> V2 PluginFailedMessage + state recor
       // but body LACKS the marker, so the agents bridge soft-fails the rm
       // and preserves the index row.
       await mkdir(locations.agentsDir, { recursive: true });
-      const agentName = `${GENERATED_AGENT_PREFIX}hello-foreign`;
+      const agentName = "pi-claude-marketplace-hello-foreign";
       const agentFile = path.join(locations.agentsDir, `${agentName}.md`);
       await writeFile(agentFile, "---\nname: foreign\n---\n\nNo marker here.\n");
 
@@ -3280,7 +3277,7 @@ test("retry proof: uninstall: foreign agent content preserves the whole record a
       ]);
       assert.deepStrictEqual(secondSchedule, [
         "unstage:command:uni-cmd.md",
-        `unstage:agent:${GENERATED_AGENT_PREFIX}hello-uni-agent.md`,
+        "unstage:agent:pi-claude-marketplace-hello-uni-agent.md",
         "unstage:hooks",
         "drop:cache",
         "remove:data",
@@ -3401,7 +3398,7 @@ test("retry proof: uninstall: a normalized cascade rejection mutates nothing and
       assert.deepStrictEqual(secondSchedule, [
         "unstage:skill:uni-skill",
         "unstage:command:uni-cmd.md",
-        `unstage:agent:${GENERATED_AGENT_PREFIX}hello-uni-agent.md`,
+        "unstage:agent:pi-claude-marketplace-hello-uni-agent.md",
         "unstage:hooks",
         "drop:cache",
         "remove:data",
@@ -3514,7 +3511,7 @@ test("retry proof: uninstall: an invalid config aborts before any mutation and t
       assert.deepStrictEqual(secondSchedule, [
         "unstage:skill:uni-skill",
         "unstage:command:uni-cmd.md",
-        `unstage:agent:${GENERATED_AGENT_PREFIX}hello-uni-agent.md`,
+        "unstage:agent:pi-claude-marketplace-hello-uni-agent.md",
         "unstage:hooks",
         "drop:cache",
         "remove:data",
@@ -3922,7 +3919,7 @@ test("retry proof: uninstall: a refused cache drop leaves the cache file and the
       assert.deepStrictEqual(firstSchedule, [
         "unstage:skill:uni-skill",
         "unstage:command:uni-cmd.md",
-        `unstage:agent:${GENERATED_AGENT_PREFIX}hello-uni-agent.md`,
+        "unstage:agent:pi-claude-marketplace-hello-uni-agent.md",
         "unstage:hooks",
         "drop:cache",
         "refuse:cache-unlink",
@@ -4004,7 +4001,7 @@ test("retry proof: uninstall: a refused data-dir removal keeps the directory and
       assert.deepStrictEqual(firstSchedule, [
         "unstage:skill:uni-skill",
         "unstage:command:uni-cmd.md",
-        `unstage:agent:${GENERATED_AGENT_PREFIX}hello-uni-agent.md`,
+        "unstage:agent:pi-claude-marketplace-hello-uni-agent.md",
         "unstage:hooks",
         "drop:cache",
         "remove:data",
@@ -4402,7 +4399,7 @@ test("retry proof: uninstall: a refused data-dir path escape propagates after th
       assert.deepStrictEqual(firstSchedule, [
         "unstage:skill:uni-skill",
         "unstage:command:uni-cmd.md",
-        `unstage:agent:${GENERATED_AGENT_PREFIX}hello-uni-agent.md`,
+        "unstage:agent:pi-claude-marketplace-hello-uni-agent.md",
         "unstage:hooks",
         "drop:cache",
       ]);
@@ -4498,7 +4495,7 @@ test("retry proof: uninstall: a refused cache path escape is swallowed and later
       assert.deepStrictEqual(firstSchedule, [
         "unstage:skill:uni-skill",
         "unstage:command:uni-cmd.md",
-        `unstage:agent:${GENERATED_AGENT_PREFIX}hello-uni-agent.md`,
+        "unstage:agent:pi-claude-marketplace-hello-uni-agent.md",
         "unstage:hooks",
         "remove:data",
         "gc:scan",

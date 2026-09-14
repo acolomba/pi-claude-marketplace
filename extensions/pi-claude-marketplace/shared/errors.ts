@@ -26,9 +26,10 @@ export function isErrnoException(err: unknown): err is NodeJS.ErrnoException & {
  * Exhaustiveness check helper for discriminated unions.
  * Call in the `default` case of a switch to get a compile-time error if a new
  * variant is added without updating the switch.
+ * A caller may supply its established error message.
  */
-export function assertNever(x: never): never {
-  throw new Error(`Unexpected value: ${String(x)}`);
+export function assertNever(x: never, message = `Unexpected value: ${String(x)}`): never {
+  throw new Error(message);
 }
 
 /**

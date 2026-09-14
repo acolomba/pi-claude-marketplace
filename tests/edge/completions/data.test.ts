@@ -49,13 +49,11 @@ import path from "node:path";
 import { describe, test, type TestContext } from "node:test";
 
 import {
-  buildItem,
   extractPositionals,
   extractScope,
   getMarketplaceCompletions,
   getMarketplaceNamesAcrossScopes,
   getPluginRefCompletions,
-  getPluginToMarketplacesMap,
   splitCompletionInput,
 } from "../../../extensions/pi-claude-marketplace/edge/completions/data.ts";
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
@@ -63,11 +61,12 @@ import { createCompletionCache } from "../../../extensions/pi-claude-marketplace
 import type {
   LocationsResolver,
   MarketplaceStateRecord,
-  PluginMapOptions,
   PluginRefCompletionMode,
 } from "../../../extensions/pi-claude-marketplace/edge/completions/data.ts";
 import type { PluginIndexRow } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
+
+type PluginMapOptions = Omit<Parameters<typeof getPluginRefCompletions>[5], "allowMarketplaceOnly">;
 
 /** Marketplace records and manifest rows a single case makes visible per scope. */
 interface ResolverSeed {
@@ -191,32 +190,57 @@ const INSTALLED_INVENTORY_MODES: readonly PluginRefCompletionMode[] = [
   "disable",
 ];
 
-describe("buildItem", () => {
-  for (const { argumentTextPrefix, itemText, appendSpace, expectedValue } of [
-    { argumentTextPrefix: "", itemText: "install", appendSpace: true, expectedValue: "install " },
-    { argumentTextPrefix: "", itemText: "install", appendSpace: false, expectedValue: "install" },
-    {
-      argumentTextPrefix: "install",
-      itemText: "alpha@official",
-      appendSpace: true,
-      expectedValue: "install alpha@official ",
-    },
-    {
-      argumentTextPrefix: "install",
-      itemText: "alpha@",
-      appendSpace: false,
-      expectedValue: "install alpha@",
-    },
-  ]) {
-    test(`replaces the whole argument text with ${JSON.stringify(expectedValue)}`, () => {
-      // act
-      const item = buildItem(argumentTextPrefix, itemText, appendSpace);
-
-      // assert
-      assert.deepStrictEqual(item, { label: itemText, value: expectedValue });
+for (const { argumentTextPrefix, currentPrefix, expectedItem } of [
+  {
+    argumentTextPrefix: "",
+    currentPrefix: "solo",
+    expectedItem: { label: "solo@official", value: "solo@official " },
+  },
+  {
+    argumentTextPrefix: "",
+    currentPrefix: "shared",
+    expectedItem: { label: "shared@", value: "shared@" },
+  },
+  {
+    argumentTextPrefix: "install",
+    currentPrefix: "solo",
+    expectedItem: { label: "solo@official", value: "install solo@official " },
+  },
+  {
+    argumentTextPrefix: "install",
+    currentPrefix: "shared",
+    expectedItem: { label: "shared@", value: "install shared@" },
+  },
+]) {
+  test(`completion replaces the whole argument text with ${JSON.stringify(expectedItem.value)}`, async (t) => {
+    // arrange
+    const { resolver, completionCache } = await seedResolver(t, "item-public", {
+      marketplaces: { user: { official: {}, secondary: {} } },
+      manifests: {
+        user: {
+          official: [
+            { name: "solo", status: "available" },
+            { name: "shared", status: "available" },
+          ],
+          secondary: [{ name: "shared", status: "available" }],
+        },
+      },
     });
-  }
-});
+
+    // act
+    const items = await getPluginRefCompletions(
+      "install",
+      currentPrefix,
+      argumentTextPrefix,
+      resolver,
+      completionCache,
+      { allowMarketplaceOnly: true },
+    );
+
+    // assert
+    assert.deepStrictEqual(items, [expectedItem]);
+  });
+}
 
 describe("splitCompletionInput", () => {
   for (const { input, tokens, current } of [
@@ -455,7 +479,7 @@ describe("getMarketplaceNamesAcrossScopes", () => {
   }
 });
 
-describe("getPluginToMarketplacesMap", () => {
+describe("getPluginRefCompletions candidate policy", () => {
   test("reads plugin rows through the required completion cache", async (t) => {
     // arrange
     const { resolver } = await seedResolver(t, "map-required-cache", {
@@ -470,12 +494,15 @@ describe("getPluginToMarketplacesMap", () => {
     await rm(cachePath);
 
     // act
-    const candidatesByPlugin = await getPluginToMarketplacesMap("uninstall", resolver, cache, {
+    const candidatesByPlugin = await getPluginRefCompletions("uninstall", "", "", resolver, cache, {
+      allowMarketplaceOnly: true,
       targetScope: "user",
     });
 
     // assert
-    assert.deepStrictEqual(Array.from(candidatesByPlugin), [["cache-row", ["official"]]]);
+    assert.deepStrictEqual(candidatesByPlugin, [
+      { label: "cache-row@official", value: "cache-row@official " },
+    ]);
   });
 
   test("install offers the not-yet-installed and not-yet-fetched rows of the default user scope", async (t) => {
@@ -486,16 +513,19 @@ describe("getPluginToMarketplacesMap", () => {
     });
 
     // act
-    const candidatesByPlugin = await getPluginToMarketplacesMap(
+    const candidatesByPlugin = await getPluginRefCompletions(
       "install",
+      "",
+      "",
       resolver,
       completionCache,
+      { allowMarketplaceOnly: true },
     );
 
     // assert
-    assert.deepStrictEqual(Array.from(candidatesByPlugin), [
-      ["fresh", ["official"]],
-      ["not-fetched", ["official"]],
+    assert.deepStrictEqual(candidatesByPlugin, [
+      { label: "fresh@official", value: "fresh@official " },
+      { label: "not-fetched@official", value: "not-fetched@official " },
     ]);
   });
 
@@ -508,17 +538,19 @@ describe("getPluginToMarketplacesMap", () => {
     });
 
     // act
-    const candidatesByPlugin = await getPluginToMarketplacesMap(
+    const candidatesByPlugin = await getPluginRefCompletions(
       "install",
+      "",
+      "",
       resolver,
       completionCache,
-      options,
+      { allowMarketplaceOnly: true, ...options },
     );
 
     // assert
-    assert.deepStrictEqual(Array.from(candidatesByPlugin), [
-      ["fresh", ["official"]],
-      ["degraded", ["official"]],
+    assert.deepStrictEqual(candidatesByPlugin, [
+      { label: "fresh@official", value: "fresh@official " },
+      { label: "degraded@official", value: "degraded@official " },
     ]);
   });
 
@@ -537,14 +569,19 @@ describe("getPluginToMarketplacesMap", () => {
     });
 
     // act
-    const candidatesByPlugin = await getPluginToMarketplacesMap(
+    const candidatesByPlugin = await getPluginRefCompletions(
       "install",
+      "",
+      "",
       resolver,
       completionCache,
+      { allowMarketplaceOnly: true },
     );
 
     // assert
-    assert.deepStrictEqual(Array.from(candidatesByPlugin), [["fresh", ["official"]]]);
+    assert.deepStrictEqual(candidatesByPlugin, [
+      { label: "fresh@official", value: "fresh@official " },
+    ]);
   });
 
   test("a project install reads project marketplaces first and falls back to unshadowed user ones (CMP-8)", async (t) => {
@@ -565,17 +602,19 @@ describe("getPluginToMarketplacesMap", () => {
     });
 
     // act
-    const candidatesByPlugin = await getPluginToMarketplacesMap(
+    const candidatesByPlugin = await getPluginRefCompletions(
       "install",
+      "",
+      "",
       resolver,
       completionCache,
-      options,
+      { allowMarketplaceOnly: true, ...options },
     );
 
     // assert
-    assert.deepStrictEqual(Array.from(candidatesByPlugin), [
-      ["project-side", ["official"]],
-      ["extra", ["user-only-mp"]],
+    assert.deepStrictEqual(candidatesByPlugin, [
+      { label: "project-side@official", value: "project-side@official " },
+      { label: "extra@user-only-mp", value: "extra@user-only-mp " },
     ]);
   });
 
@@ -588,15 +627,22 @@ describe("getPluginToMarketplacesMap", () => {
       });
 
       // act
-      const candidatesByPlugin = await getPluginToMarketplacesMap(mode, resolver, completionCache);
+      const candidatesByPlugin = await getPluginRefCompletions(
+        mode,
+        "",
+        "",
+        resolver,
+        completionCache,
+        { allowMarketplaceOnly: true },
+      );
 
       // assert
-      assert.deepStrictEqual(Array.from(candidatesByPlugin), [
-        ["held", ["official"]],
-        ["outdated", ["official"]],
-        ["held-partly", ["official"]],
-        ["held-partly-outdated", ["official"]],
-        ["outdated-partly", ["official"]],
+      assert.deepStrictEqual(candidatesByPlugin, [
+        { label: "held@official", value: "held@official " },
+        { label: "outdated@official", value: "outdated@official " },
+        { label: "held-partly@official", value: "held-partly@official " },
+        { label: "held-partly-outdated@official", value: "held-partly-outdated@official " },
+        { label: "outdated-partly@official", value: "outdated-partly@official " },
       ]);
     });
   }
@@ -610,15 +656,23 @@ describe("getPluginToMarketplacesMap", () => {
       });
 
       // act
-      const candidatesByPlugin = await getPluginToMarketplacesMap(mode, resolver, completionCache, {
-        partial: true,
-      });
+      const candidatesByPlugin = await getPluginRefCompletions(
+        mode,
+        "",
+        "",
+        resolver,
+        completionCache,
+        {
+          allowMarketplaceOnly: true,
+          partial: true,
+        },
+      );
 
       // assert
-      assert.deepStrictEqual(Array.from(candidatesByPlugin), [
-        ["outdated", ["official"]],
-        ["held-partly-outdated", ["official"]],
-        ["outdated-partly", ["official"]],
+      assert.deepStrictEqual(candidatesByPlugin, [
+        { label: "outdated@official", value: "outdated@official " },
+        { label: "held-partly-outdated@official", value: "held-partly-outdated@official " },
+        { label: "outdated-partly@official", value: "outdated-partly@official " },
       ]);
     });
   }
@@ -634,16 +688,19 @@ describe("getPluginToMarketplacesMap", () => {
     });
 
     // act
-    const candidatesByPlugin = await getPluginToMarketplacesMap(
+    const candidatesByPlugin = await getPluginRefCompletions(
       "uninstall",
+      "",
+      "",
       resolver,
       completionCache,
+      { allowMarketplaceOnly: true },
     );
 
     // assert
-    assert.deepStrictEqual(Array.from(candidatesByPlugin), [
-      ["project-side", ["internal"]],
-      ["user-side", ["official"]],
+    assert.deepStrictEqual(candidatesByPlugin, [
+      { label: "project-side@internal", value: "project-side@internal " },
+      { label: "user-side@official", value: "user-side@official " },
     ]);
   });
 
@@ -658,17 +715,22 @@ describe("getPluginToMarketplacesMap", () => {
     });
 
     // act
-    const candidatesByPlugin = await getPluginToMarketplacesMap(
+    const candidatesByPlugin = await getPluginRefCompletions(
       "uninstall",
+      "",
+      "",
       resolver,
       completionCache,
       {
+        allowMarketplaceOnly: true,
         targetScope: "user",
       },
     );
 
     // assert
-    assert.deepStrictEqual(Array.from(candidatesByPlugin), [["user-side", ["official"]]]);
+    assert.deepStrictEqual(candidatesByPlugin, [
+      { label: "user-side@official", value: "user-side@official " },
+    ]);
   });
 
   test("fetch offers the warm and warmable rows and ignores the partial option", async (t) => {
@@ -679,19 +741,27 @@ describe("getPluginToMarketplacesMap", () => {
     });
 
     // act
-    const withoutPartial = await getPluginToMarketplacesMap("fetch", resolver, completionCache);
-    const withPartial = await getPluginToMarketplacesMap("fetch", resolver, completionCache, {
+    const withoutPartial = await getPluginRefCompletions(
+      "fetch",
+      "",
+      "",
+      resolver,
+      completionCache,
+      { allowMarketplaceOnly: true },
+    );
+    const withPartial = await getPluginRefCompletions("fetch", "", "", resolver, completionCache, {
+      allowMarketplaceOnly: true,
       partial: true,
     });
 
     // assert
-    assert.deepStrictEqual(Array.from(withoutPartial), [
-      ["fresh", ["official"]],
-      ["not-fetched", ["official"]],
-      ["broken", ["official"]],
-      ["degraded", ["official"]],
+    assert.deepStrictEqual(withoutPartial, [
+      { label: "fresh@official", value: "fresh@official " },
+      { label: "not-fetched@official", value: "not-fetched@official " },
+      { label: "broken@official", value: "broken@official " },
+      { label: "degraded@official", value: "degraded@official " },
     ]);
-    assert.deepStrictEqual(Array.from(withPartial), Array.from(withoutPartial));
+    assert.deepStrictEqual(withPartial, withoutPartial);
   });
 
   test("an explicit target scope narrows fetch to that scope alone", async (t) => {
@@ -705,17 +775,22 @@ describe("getPluginToMarketplacesMap", () => {
     });
 
     // act
-    const candidatesByPlugin = await getPluginToMarketplacesMap(
+    const candidatesByPlugin = await getPluginRefCompletions(
       "fetch",
+      "",
+      "",
       resolver,
       completionCache,
       {
+        allowMarketplaceOnly: true,
         targetScope: "project",
       },
     );
 
     // assert
-    assert.deepStrictEqual(Array.from(candidatesByPlugin), [["project-side", ["internal"]]]);
+    assert.deepStrictEqual(candidatesByPlugin, [
+      { label: "project-side@internal", value: "project-side@internal " },
+    ]);
   });
 
   test("info spans both scopes with no status filter and ignores the target scope", async (t) => {
@@ -734,16 +809,24 @@ describe("getPluginToMarketplacesMap", () => {
     });
 
     // act
-    const candidatesByPlugin = await getPluginToMarketplacesMap("info", resolver, completionCache, {
-      targetScope: "project",
-      partial: true,
-    });
+    const candidatesByPlugin = await getPluginRefCompletions(
+      "info",
+      "",
+      "",
+      resolver,
+      completionCache,
+      {
+        allowMarketplaceOnly: true,
+        targetScope: "project",
+        partial: true,
+      },
+    );
 
     // assert
-    assert.deepStrictEqual(Array.from(candidatesByPlugin), [
-      ["held", ["official"]],
-      ["broken", ["official"]],
-      ["fresh", ["internal"]],
+    assert.deepStrictEqual(candidatesByPlugin, [
+      { label: "held@official", value: "held@official " },
+      { label: "broken@official", value: "broken@official " },
+      { label: "fresh@internal", value: "fresh@internal " },
     ]);
   });
 
@@ -760,14 +843,31 @@ describe("getPluginToMarketplacesMap", () => {
     });
 
     // act
-    const candidatesByPlugin = await getPluginToMarketplacesMap(
+    const candidatesByPlugin = await getPluginRefCompletions(
       "uninstall",
+      "",
+      "",
       resolver,
       completionCache,
+      { allowMarketplaceOnly: true },
     );
 
     // assert
-    assert.deepStrictEqual(Array.from(candidatesByPlugin), [["shared", ["mp-a", "mp-b"]]]);
+    assert.deepStrictEqual(candidatesByPlugin, [{ label: "shared@", value: "shared@" }]);
+    assert.deepStrictEqual(
+      await getPluginRefCompletions(
+        "uninstall",
+        "shared@",
+        "uninstall",
+        resolver,
+        completionCache,
+        { allowMarketplaceOnly: true },
+      ),
+      [
+        { label: "shared@mp-a", value: "uninstall shared@mp-a " },
+        { label: "shared@mp-b", value: "uninstall shared@mp-b " },
+      ],
+    );
   });
 
   test("a marketplace named in both scopes is recorded once for the same plugin", async (t) => {
@@ -781,14 +881,19 @@ describe("getPluginToMarketplacesMap", () => {
     });
 
     // act
-    const candidatesByPlugin = await getPluginToMarketplacesMap(
+    const candidatesByPlugin = await getPluginRefCompletions(
       "uninstall",
+      "",
+      "",
       resolver,
       completionCache,
+      { allowMarketplaceOnly: true },
     );
 
     // assert
-    assert.deepStrictEqual(Array.from(candidatesByPlugin), [["held", ["official"]]]);
+    assert.deepStrictEqual(candidatesByPlugin, [
+      { label: "held@official", value: "held@official " },
+    ]);
   });
 
   test("a marketplace whose manifest cannot be loaded contributes no candidates (TC-8)", async (t) => {
@@ -799,14 +904,19 @@ describe("getPluginToMarketplacesMap", () => {
     });
 
     // act
-    const candidatesByPlugin = await getPluginToMarketplacesMap(
+    const candidatesByPlugin = await getPluginRefCompletions(
       "uninstall",
+      "",
+      "",
       resolver,
       completionCache,
+      { allowMarketplaceOnly: true },
     );
 
     // assert
-    assert.deepStrictEqual(Array.from(candidatesByPlugin), [["held", ["official"]]]);
+    assert.deepStrictEqual(candidatesByPlugin, [
+      { label: "held@official", value: "held@official " },
+    ]);
   });
 
   test("a state read failure during the candidate sweep propagates (TC-9)", async (t) => {
@@ -820,7 +930,10 @@ describe("getPluginToMarketplacesMap", () => {
 
     // act & assert
     await assert.rejects(
-      () => getPluginToMarketplacesMap("uninstall", resolver, completionCache),
+      () =>
+        getPluginRefCompletions("uninstall", "", "", resolver, completionCache, {
+          allowMarketplaceOnly: true,
+        }),
       (error: unknown) => {
         assert.strictEqual(error, stateFailure);
         return true;

@@ -6,10 +6,7 @@ import { test, type TestContext } from "node:test";
 
 import { mock, verify, when } from "strong-mock";
 
-import {
-  GENERATED_AGENT_MARKER,
-  GENERATED_AGENT_PREFIX,
-} from "../../../extensions/pi-claude-marketplace/bridges/agents/marker.ts";
+import { GENERATED_AGENT_MARKER } from "../../../extensions/pi-claude-marketplace/bridges/agents/marker.ts";
 import {
   AgentsUnstageFailureError,
   DEFAULT_GIT_OPS,
@@ -282,7 +279,7 @@ async function seedAgent(
   plugin: string,
   contents: string,
 ): Promise<{ readonly generatedName: string; readonly targetPath: string }> {
-  const generatedName = `${GENERATED_AGENT_PREFIX}${plugin}-agent`;
+  const generatedName = `pi-claude-marketplace-${plugin}-agent`;
   const targetPath = path.join(locations.agentsDir, `${generatedName}.md`);
   await mkdir(locations.agentsDir, { recursive: true });
   await writeFile(targetPath, contents);
@@ -319,7 +316,7 @@ async function seedFullCascade(
   await mkdir(locations.promptsTargetDir, { recursive: true });
   await writeFile(path.join(locations.promptsTargetDir, "sample-command.md"), "Command.\n");
 
-  const agentName = `${GENERATED_AGENT_PREFIX}${plugin}-agent`;
+  const agentName = `pi-claude-marketplace-${plugin}-agent`;
   await seedAgent(locations, marketplace, plugin, ownedAgentFile(agentName));
 
   const hookFile = path.join(locations.hooksDir, plugin, "hooks.json");

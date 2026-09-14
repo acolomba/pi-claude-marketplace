@@ -15,10 +15,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import {
-  GENERATED_AGENT_MARKER,
-  GENERATED_AGENT_PREFIX,
-} from "../../../extensions/pi-claude-marketplace/bridges/agents/marker.ts";
+import { GENERATED_AGENT_MARKER } from "../../../extensions/pi-claude-marketplace/bridges/agents/marker.ts";
 import {
   createHooksRouting,
   createHooksRuntime,
@@ -1104,7 +1101,7 @@ test("PDEF-01: install preview detects an agent conflict from a later resolved d
         conflictingPriorPlugin: {
           marketplace: "other-mp",
           plugin: "world",
-          agentName: `${GENERATED_AGENT_PREFIX}hello-later`,
+          agentName: "pi-claude-marketplace-hello-later",
         },
       });
 
@@ -1128,7 +1125,7 @@ test("PDEF-01: install preview detects an agent conflict from a later resolved d
       const state = await loadState(locations.extensionRoot);
       assert.strictEqual(state.marketplaces.mp?.plugins.hello, undefined);
       await assert.rejects(
-        () => readFile(path.join(locations.agentsDir, `${GENERATED_AGENT_PREFIX}hello-first.md`)),
+        () => readFile(path.join(locations.agentsDir, "pi-claude-marketplace-hello-first.md")),
         { code: "ENOENT" },
       );
     } finally {
@@ -1168,7 +1165,7 @@ test("PDEF-01: install stages every agent directory and warns on a later duplica
       const conventionalAgentsDir = path.join(pluginRoot, "agents");
       const expectedWarning =
         `agent source "shared" at "${path.join(conventionalAgentsDir, "shared-later.md")}" duplicates generated name ` +
-        `"${GENERATED_AGENT_PREFIX}hello-shared" already produced by agent source "shared" at ` +
+        '"pi-claude-marketplace-hello-shared" already produced by agent source "shared" at ' +
         `"${path.join(conventionalAgentsDir, "..", "declared-agents", "shared-first.md")}"; keeping first discovered source.`;
       const { ctx, pi, notifications } = makeCtx({ toolNames: ["subagent"] });
 
@@ -1192,19 +1189,19 @@ test("PDEF-01: install stages every agent directory and warns on a later duplica
       );
       const state = await loadState(locations.extensionRoot);
       assert.deepStrictEqual(state.marketplaces.mp?.plugins.hello?.resources.agents, [
-        `${GENERATED_AGENT_PREFIX}hello-shared`,
-        `${GENERATED_AGENT_PREFIX}hello-later`,
+        "pi-claude-marketplace-hello-shared",
+        "pi-claude-marketplace-hello-later",
       ]);
       assert.match(
         await readFile(
-          path.join(locations.agentsDir, `${GENERATED_AGENT_PREFIX}hello-shared.md`),
+          path.join(locations.agentsDir, "pi-claude-marketplace-hello-shared.md"),
           "utf8",
         ),
         /First shared agent\./,
       );
       assert.match(
         await readFile(
-          path.join(locations.agentsDir, `${GENERATED_AGENT_PREFIX}hello-later.md`),
+          path.join(locations.agentsDir, "pi-claude-marketplace-hello-later.md"),
           "utf8",
         ),
         /Later agent\./,
@@ -1530,7 +1527,7 @@ test("OUT-04 / D-102-07 / ENBL-15: the install-disabled row is ONE info emission
       const record = after.marketplaces["mp"]?.plugins["hello"];
       assert.ok(record !== undefined);
       assert.equal(record.enabled, false);
-      assert.deepEqual([...record.resources.agents], [`${GENERATED_AGENT_PREFIX}hello-bot`]);
+      assert.deepEqual([...record.resources.agents], ["pi-claude-marketplace-hello-bot"]);
       assert.deepEqual([...record.resources.mcpServers], ["server1"]);
       assert.ok(
         !note.message.includes("requires pi-"),
@@ -2596,7 +2593,7 @@ test("D-102-02 / NFR-3: a disable cascade that throws reports failure and leaves
       // skills -> commands -> agents -> hooks -> mcp order, so the two bridges
       // ahead of it drop cleanly and the two behind it never run.
       await mkdir(locations.agentsDir, { recursive: true });
-      const foreignAgentName = `${GENERATED_AGENT_PREFIX}hello-bot`;
+      const foreignAgentName = "pi-claude-marketplace-hello-bot";
       const foreignAgentPath = path.join(locations.agentsDir, `${foreignAgentName}.md`);
       await writeFile(foreignAgentPath, "---\nname: foreign\n---\n\nNo marker.\n");
       await writeFile(
@@ -2747,7 +2744,7 @@ test("PI-9: happy-path install lands skills + commands + agents + mcp + state in
       const commandTarget = path.join(locations.promptsTargetDir, "hello:deploy.md");
       assert.ok((await readFile(commandTarget, "utf8")).length > 0, "command .md must exist");
 
-      const agentTarget = path.join(locations.agentsDir, `${GENERATED_AGENT_PREFIX}hello-bot.md`);
+      const agentTarget = path.join(locations.agentsDir, "pi-claude-marketplace-hello-bot.md");
       assert.ok((await readFile(agentTarget, "utf8")).length > 0, "agent .md must exist");
 
       const mcp = JSON.parse(await readFile(locations.mcpJsonPath, "utf8")) as {
@@ -2762,7 +2759,7 @@ test("PI-9: happy-path install lands skills + commands + agents + mcp + state in
       assert.ok(record !== undefined);
       assert.deepEqual([...record.resources.skills], ["hello:tool"]);
       assert.deepEqual([...record.resources.prompts], ["hello:deploy"]);
-      assert.deepEqual([...record.resources.agents], [`${GENERATED_AGENT_PREFIX}hello-bot`]);
+      assert.deepEqual([...record.resources.agents], ["pi-claude-marketplace-hello-bot"]);
       assert.deepEqual([...record.resources.mcpServers], ["server1"]);
 
       // V2 byte form matches `docs/output-catalog.md` (`success-with-soft-dep`):
@@ -3285,7 +3282,7 @@ test("AS-7: retired foreign agent target is preserved while a distinct new agent
       // preservation; only the user-visible warning is gone.
       await mkdir(locations.extensionRoot, { recursive: true });
       await mkdir(locations.agentsDir, { recursive: true });
-      const foreignAgentName = `${GENERATED_AGENT_PREFIX}hello-bot`;
+      const foreignAgentName = "pi-claude-marketplace-hello-bot";
       const foreignAgentPath = path.join(locations.agentsDir, `${foreignAgentName}.md`);
       await writeFile(foreignAgentPath, "---\nname: foreign\n---\n\nNo marker.\n");
 
@@ -3593,7 +3590,7 @@ test("Sanity: staged agent target carries the AG-5 owned-agent marker", async ()
         plugin: "hello",
       });
 
-      const agentPath = path.join(locations.agentsDir, `${GENERATED_AGENT_PREFIX}hello-bot.md`);
+      const agentPath = path.join(locations.agentsDir, "pi-claude-marketplace-hello-bot.md");
       const body = await readFile(agentPath, "utf8");
       assert.ok(
         body.includes(GENERATED_AGENT_MARKER),
@@ -3765,7 +3762,7 @@ test("Rollback-agents-undo: agents committed then mcp phase fails -> agent targe
       assert.equal(notifications[0]?.severity, "error");
 
       // Agents undo: the committed agent file must have been removed.
-      const agentTarget = path.join(locations.agentsDir, `${GENERATED_AGENT_PREFIX}hello-bot.md`);
+      const agentTarget = path.join(locations.agentsDir, "pi-claude-marketplace-hello-bot.md");
       const { stat } = await import("node:fs/promises");
       let exists = true;
       try {
@@ -4213,7 +4210,7 @@ test("Orchestrated-agent-foreign: agentForeignFailures -> postCommitWarnings has
       // a foreign-preserved row.
       await mkdir(locations.extensionRoot, { recursive: true });
       await mkdir(locations.agentsDir, { recursive: true });
-      const foreignAgentName = `${GENERATED_AGENT_PREFIX}hello-bot`;
+      const foreignAgentName = "pi-claude-marketplace-hello-bot";
       const foreignAgentPath = path.join(locations.agentsDir, `${foreignAgentName}.md`);
       await writeFile(foreignAgentPath, "---\nname: foreign\n---\n\nNo marker.\n");
 
@@ -6862,7 +6859,7 @@ test("SUB-02: project-scope install substitutes ${CLAUDE_PROJECT_DIR} to the ins
       );
 
       const agentBody = await readFile(
-        path.join(locations.agentsDir, `${GENERATED_AGENT_PREFIX}hello-bot.md`),
+        path.join(locations.agentsDir, "pi-claude-marketplace-hello-bot.md"),
         "utf8",
       );
       assert.ok(
@@ -6925,7 +6922,7 @@ test("SUB-02: user-scope install keeps ${CLAUDE_PROJECT_DIR} literal in skill, c
       );
 
       const agentBody = await readFile(
-        path.join(locations.agentsDir, `${GENERATED_AGENT_PREFIX}hello-bot.md`),
+        path.join(locations.agentsDir, "pi-claude-marketplace-hello-bot.md"),
         "utf8",
       );
       assert.ok(
@@ -7746,7 +7743,7 @@ test("install cleans up each bridge staging root inside its own phase and a repe
       assert.deepStrictEqual(await retryTree(locations.scopeRoot), firstTree);
       assert.deepStrictEqual(firstTree, [
         "agents/",
-        `agents/${GENERATED_AGENT_PREFIX}complete-reviewer.md`,
+        "agents/pi-claude-marketplace-complete-reviewer.md",
         "pi-claude-marketplace/",
         "pi-claude-marketplace/agents-index.json",
         "pi-claude-marketplace/agents-staging/",
@@ -7766,7 +7763,7 @@ test("install cleans up each bridge staging root inside its own phase and a repe
       assert.deepStrictEqual(
         (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.complete?.resources,
         {
-          agents: [`${GENERATED_AGENT_PREFIX}complete-reviewer`],
+          agents: ["pi-claude-marketplace-complete-reviewer"],
           hooks: [],
           mcpServers: [],
           prompts: ["complete:deploy"],
@@ -8637,7 +8634,7 @@ test("retry proof: install: agents prepare failure after committed commands unwi
         {
           agentTarget: path.join(
             locations.agentsDir,
-            `${GENERATED_AGENT_PREFIX}retryable-reviewer.md`,
+            "pi-claude-marketplace-retryable-reviewer.md",
           ),
           agentsStagingDir: locations.agentsStagingDir,
           commandsStagingDir: locations.commandsStagingDir,
@@ -8719,7 +8716,7 @@ test("retry proof: install: agents prepare failure after committed commands unwi
       assert.deepStrictEqual(
         (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.retryable?.resources,
         {
-          agents: [`${GENERATED_AGENT_PREFIX}retryable-reviewer`],
+          agents: ["pi-claude-marketplace-retryable-reviewer"],
           hooks: [],
           mcpServers: [],
           prompts: ["retryable:deploy"],
@@ -8780,7 +8777,7 @@ test("retry proof: install: hooks reparse failure after three bridges retries wi
         {
           agentTarget: path.join(
             locations.agentsDir,
-            `${GENERATED_AGENT_PREFIX}retryable-reviewer.md`,
+            "pi-claude-marketplace-retryable-reviewer.md",
           ),
           agentsStagingDir: locations.agentsStagingDir,
           commandsStagingDir: locations.commandsStagingDir,
@@ -8876,7 +8873,7 @@ test("retry proof: install: hooks reparse failure after three bridges retries wi
       ]);
       const record = (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.retryable;
       assert.deepStrictEqual(record?.resources, {
-        agents: [`${GENERATED_AGENT_PREFIX}retryable-reviewer`],
+        agents: ["pi-claude-marketplace-retryable-reviewer"],
         hooks: ["retryable"],
         mcpServers: [],
         prompts: ["retryable:deploy"],
@@ -8944,7 +8941,7 @@ test("retry proof: install: MCP prepare failure after hooks compensates every co
         {
           agentTarget: path.join(
             locations.agentsDir,
-            `${GENERATED_AGENT_PREFIX}retryable-reviewer.md`,
+            "pi-claude-marketplace-retryable-reviewer.md",
           ),
           agentsStagingDir: locations.agentsStagingDir,
           commandsStagingDir: locations.commandsStagingDir,
@@ -9023,7 +9020,7 @@ test("retry proof: install: MCP prepare failure after hooks compensates every co
       assert.deepStrictEqual(
         (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.retryable?.resources,
         {
-          agents: [`${GENERATED_AGENT_PREFIX}retryable-reviewer`],
+          agents: ["pi-claude-marketplace-retryable-reviewer"],
           hooks: ["retryable"],
           mcpServers: ["server"],
           prompts: ["retryable:deploy"],

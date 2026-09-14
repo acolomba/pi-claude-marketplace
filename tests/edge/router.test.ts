@@ -38,10 +38,8 @@ import { mock, verify, when } from "strong-mock";
 
 import {
   MARKETPLACE_SUBCOMMANDS,
-  MARKETPLACE_USAGE,
   routeClaudePlugin,
   TOP_LEVEL_SUBCOMMANDS,
-  TOP_LEVEL_USAGE,
   type SubcommandHandlers,
 } from "../../extensions/pi-claude-marketplace/edge/router.ts";
 
@@ -424,26 +422,4 @@ test("names an unrecognized marketplace token back to the operator with the mark
   ]);
   verifyBoundary();
   verify(handlers);
-});
-
-test("publishes the top-level usage block for the surfaces that render it", () => {
-  // arrange
-  const expectedUsage = EXPECTED_TOP_LEVEL_USAGE;
-
-  // act
-  const publishedUsage = TOP_LEVEL_USAGE;
-
-  // assert
-  assert.deepStrictEqual(publishedUsage, expectedUsage);
-});
-
-test("publishes the marketplace usage block for the surfaces that render it", () => {
-  // arrange
-  const expectedUsage = EXPECTED_MARKETPLACE_USAGE;
-
-  // act
-  const publishedUsage = MARKETPLACE_USAGE;
-
-  // assert
-  assert.deepStrictEqual(publishedUsage, expectedUsage);
 });

@@ -186,13 +186,47 @@ describe("isErrnoException", () => {
 describe("assertNever", () => {
   test("throws the complete unexpected-value error", () => {
     // arrange
-    const unexpected = "future-arm" as never;
+    const unexpected = "future-arm";
 
     // act & assert
-    assert.throws(() => assertNever(unexpected), {
-      name: "Error",
-      message: "Unexpected value: future-arm",
-    });
+    assert.throws(
+      // @ts-expect-error runtime misuse must retain the unexpected-value diagnostic
+      () => assertNever(unexpected),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.strictEqual(error.constructor, Error);
+        assert.deepStrictEqual(
+          { name: error.name, message: error.message, cause: error.cause },
+          { name: "Error", message: "Unexpected value: future-arm", cause: undefined },
+        );
+        return true;
+      },
+    );
+  });
+
+  test("throws the caller's complete serialized hook error", () => {
+    // arrange
+    const unexpected = { kind: "future" };
+    const message = `unreachable HookExecResult arm: ${JSON.stringify(unexpected)}`;
+
+    // act & assert
+    assert.throws(
+      // @ts-expect-error runtime misuse must retain the caller's established diagnostic
+      () => assertNever(unexpected, message),
+      (error: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.strictEqual(error.constructor, Error);
+        assert.deepStrictEqual(
+          { name: error.name, message: error.message, cause: error.cause },
+          {
+            name: "Error",
+            message: 'unreachable HookExecResult arm: {"kind":"future"}',
+            cause: undefined,
+          },
+        );
+        return true;
+      },
+    );
   });
 });
 

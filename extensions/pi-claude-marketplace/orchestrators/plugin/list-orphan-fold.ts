@@ -1,6 +1,7 @@
 import { compareByNameThenScope } from "../../shared/compare-name-scope.ts";
 import { isScopeBearingListRow } from "../../shared/notification-types.ts";
 
+import type { InstalledListRow } from "./list-installed-row.ts";
 import type { ListMsg } from "./list.messaging.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { PluginNotificationMessage } from "../../shared/notification-types.ts";
@@ -9,7 +10,7 @@ import type { Scope } from "../../shared/types.ts";
 
 /** Project-scope inventory rows adopted by a cloned user marketplace. */
 export interface OrphanFold {
-  readonly folded: readonly ListMsg[];
+  readonly folded: readonly InstalledListRow[];
   readonly foldedNames: ReadonlySet<string>;
 }
 
@@ -46,7 +47,10 @@ function rowScope(row: PluginNotificationMessage, marketplaceScope: Scope): Scop
   return isScopeBearingListRow(row) ? (row.scope ?? marketplaceScope) : marketplaceScope;
 }
 
-function orderRows(marketplaceScope: Scope, rows: readonly ListMsg[]): readonly ListMsg[] {
+function orderRows<Row extends ListMsg>(
+  marketplaceScope: Scope,
+  rows: readonly Row[],
+): readonly Row[] {
   if (rows.length === 0) {
     return rows;
   }
@@ -60,9 +64,9 @@ function orderRows(marketplaceScope: Scope, rows: readonly ListMsg[]): readonly 
 }
 
 /** Orders list blocks and their rows by canonical name/scope rules without mutating inputs. */
-export function orderPluginListBlocks(
-  blocks: readonly MarketplaceRows<ListMsg>[],
-): readonly MarketplaceRows<ListMsg>[] {
+export function orderPluginListBlocks<Row extends ListMsg>(
+  blocks: readonly MarketplaceRows<Row>[],
+): readonly MarketplaceRows<Row>[] {
   return [...blocks]
     .sort((left, right) => compareByNameThenScope(left, right))
     .map((block) => ({

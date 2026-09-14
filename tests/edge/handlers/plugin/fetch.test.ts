@@ -1,11 +1,8 @@
 // Owner for edge/handlers/plugin/fetch.ts (MOD-09).
 //
-// This is the only plugin shim that EXPORTS its parser, so the module carries
-// two public contracts rather than one. `parseFetchTarget` is a pure function
-// over the raw argument string and is proven as a contract in its own right:
-// every accepted shape is asserted as one whole `{ target, scope? }` value, and
-// every rejection carries its own stated sentence. `makeFetchHandler` is proven
-// separately, as delegation plus the short-circuit that precedes it.
+// Target parsing is private. Successful forms are observed through the complete
+// scoped fetch notification; rejected forms retain their exact sentence and
+// severity and prove that validation precedes every workflow interaction.
 //
 // D-81-01 gives the three accepted positional shapes and the three target forms
 // they select: no positional yields the all form, `@<marketplace>` yields the
@@ -69,11 +66,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, test, type TestContext } from "node:test";
 
-import {
-  makeFetchHandler,
-  parseFetchTarget,
-  type ParsedFetchTarget,
-} from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/fetch.ts";
+import { makeFetchHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/fetch.ts";
 import { createNotificationBoundary } from "../../notification-boundary.ts";
 import { mergeMarketplaceIntoState } from "../marketplace-seed.ts";
 
@@ -171,56 +164,7 @@ async function seedBothScopes(workspace: HermeticWorkspace): Promise<void> {
   await seedMarketplace(workspace, "user", workspace.userRoot, "other", ["gamma"]);
 }
 
-describe("parseFetchTarget", () => {
-  for (const { args, expectedParse, summary } of [
-    {
-      args: "",
-      summary: "maps no positional onto the all form",
-      expectedParse: { target: { kind: "all" } },
-    },
-    {
-      args: "--scope user",
-      summary: "carries the user scope beside the all form",
-      expectedParse: { target: { kind: "all" }, scope: "user" },
-    },
-    {
-      args: "--scope project",
-      summary: "carries the project scope beside the all form",
-      expectedParse: { target: { kind: "all" }, scope: "project" },
-    },
-    {
-      args: "@mymkt",
-      summary: "strips the leading separator from a bare marketplace reference",
-      expectedParse: { target: { kind: "marketplace", marketplace: "mymkt" } },
-    },
-    {
-      args: "hello@mymkt",
-      summary: "splits a plugin reference into both halves",
-      expectedParse: { target: { kind: "plugin", plugin: "hello", marketplace: "mymkt" } },
-    },
-    {
-      args: "hello@mymkt --scope user",
-      summary: "carries the user scope beside a plugin reference",
-      expectedParse: {
-        target: { kind: "plugin", plugin: "hello", marketplace: "mymkt" },
-        scope: "user",
-      },
-    },
-  ] satisfies readonly { args: string; expectedParse: ParsedFetchTarget; summary: string }[]) {
-    test(`${summary} and stays silent (D-81-01)`, () => {
-      // arrange
-      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0, 0);
-
-      // act
-      const parsed = parseFetchTarget(args, ctx);
-
-      // assert
-      assert.deepStrictEqual(parsed, expectedParse);
-      assert.deepStrictEqual(notifications, []);
-      verifyBoundary();
-    });
-  }
-
+describe("makeFetchHandler validation", () => {
   for (const { args, expectedMessage, summary } of [
     {
       args: "no-at-sign",
@@ -241,15 +185,17 @@ describe("parseFetchTarget", () => {
         'Invalid <plugin>@<marketplace> ref: "foo@".\n\nUsage: /claude:plugin fetch [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]',
     },
   ]) {
-    test(`names ${summary} verbatim and returns no target (FTCH-01)`, () => {
+    test(`names ${summary} verbatim and returns no target (FTCH-01)`, async (t) => {
       // arrange
-      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+      const workspace = await createHermeticWorkspace(t, "validation");
+      await seedBothScopes(workspace);
+      const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
+      const fetchHandler = makeFetchHandler(pi);
 
       // act
-      const parsed = parseFetchTarget(args, ctx);
+      await fetchHandler(args, ctx);
 
       // assert
-      assert.strictEqual(parsed, undefined);
       assert.deepStrictEqual(notifications, [{ message: expectedMessage, severity: "error" }]);
       verifyBoundary();
     });
@@ -259,15 +205,17 @@ describe("parseFetchTarget", () => {
     { args: "a@mp b@mp", summary: "two references" },
     { args: "a@mp b@mp c@mp", summary: "three references" },
   ]) {
-    test(`rejects ${summary} as too many arguments and returns no target (D-81-01)`, () => {
+    test(`rejects ${summary} as too many arguments and returns no target (D-81-01)`, async (t) => {
       // arrange
-      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+      const workspace = await createHermeticWorkspace(t, "validation");
+      await seedBothScopes(workspace);
+      const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
+      const fetchHandler = makeFetchHandler(pi);
 
       // act
-      const parsed = parseFetchTarget(args, ctx);
+      await fetchHandler(args, ctx);
 
       // assert
-      assert.strictEqual(parsed, undefined);
       assert.deepStrictEqual(notifications, [
         {
           message:
@@ -299,29 +247,33 @@ describe("parseFetchTarget", () => {
         'Unknown flag: "--local".\n\nUsage: /claude:plugin fetch [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]',
     },
   ]) {
-    test(`names ${summary} verbatim and returns no target (T-81-10)`, () => {
+    test(`names ${summary} verbatim and returns no target (T-81-10)`, async (t) => {
       // arrange
-      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+      const workspace = await createHermeticWorkspace(t, "validation");
+      await seedBothScopes(workspace);
+      const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
+      const fetchHandler = makeFetchHandler(pi);
 
       // act
-      const parsed = parseFetchTarget(args, ctx);
+      await fetchHandler(args, ctx);
 
       // assert
-      assert.strictEqual(parsed, undefined);
       assert.deepStrictEqual(notifications, [{ message: expectedMessage, severity: "error" }]);
       verifyBoundary();
     });
   }
 
-  test("carries the tokenizer's own sentence for an unrecognised scope value (FTCH-01)", () => {
+  test("carries the tokenizer's own sentence for an unrecognised scope value (FTCH-01)", async (t) => {
     // arrange
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, 0);
+    const workspace = await createHermeticWorkspace(t, "validation");
+    await seedBothScopes(workspace);
+    const { ctx, notifications, pi, verifyBoundary } = createNotificationBoundary(1, 0);
+    const fetchHandler = makeFetchHandler(pi);
 
     // act
-    const parsed = parseFetchTarget("hello@mymkt --scope bogus", ctx);
+    await fetchHandler("hello@mymkt --scope bogus", ctx);
 
     // assert
-    assert.strictEqual(parsed, undefined);
     assert.deepStrictEqual(notifications, [
       {
         message:
@@ -335,6 +287,12 @@ describe("parseFetchTarget", () => {
 
 describe("makeFetchHandler", () => {
   for (const { args, expectedMessage, label, summary } of [
+    {
+      args: "gamma@other --scope user",
+      label: "scoped-plugin-form",
+      summary: "carries the explicit user scope beside a named plugin reference",
+      expectedMessage: "● other [user]\n  ⊘ gamma v1.0.0 (skipped) {up-to-date}",
+    },
     {
       args: "",
       label: "all-form",

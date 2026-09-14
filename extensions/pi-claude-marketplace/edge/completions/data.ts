@@ -158,7 +158,7 @@ export interface MarketplaceStateRecord {
  * (for non-terminal completions) append a space so the next argument can be
  * typed without the user adding one.
  */
-export function buildItem(
+function buildItem(
   argumentTextPrefix: string,
   itemText: string,
   appendSpace: boolean,
@@ -298,7 +298,7 @@ export async function getMarketplaceNamesAcrossScopes(
   return Array.from(new Set(perScope.flat()));
 }
 
-export interface PluginMapOptions {
+interface PluginMapOptions {
   /** Install target scope, or explicit uninstall/update scope. */
   readonly targetScope?: Scope;
   /**
@@ -492,7 +492,7 @@ async function getInfoPluginToMarketplacesMap(
  * reinstall flows through the installed-only path; info is the union
  * of every status across both scopes.
  */
-export async function getPluginToMarketplacesMap(
+async function getPluginToMarketplacesMap(
   mode: PluginRefCompletionMode,
   resolver: LocationsResolver,
   completionCache: CompletionCache,

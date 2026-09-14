@@ -42,10 +42,6 @@ import { GENERATED_AGENT_MARKER } from "./marker.ts";
 
 import type { RawAgentFrontmatter } from "./types.ts";
 
-// Re-export so consumers can import from one module rather than knowing
-// which agents/* file owns the constant.
-export { GENERATED_AGENT_MARKER } from "./marker.ts";
-
 /**
  * Emit a free-text scalar in pi-subagents' frontmatter form.
  *

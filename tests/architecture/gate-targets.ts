@@ -569,7 +569,6 @@ export const UNOWNED_EXPORT_CENSUS: Readonly<Record<string, readonly string[]>> 
     "TOOL_MAP",
   ],
   "extensions/pi-claude-marketplace/bridges/agents/frontmatter.ts": [
-    "GENERATED_AGENT_MARKER",
     "emitYamlScalar",
     "sanitizeProvenanceValue",
   ],
@@ -589,50 +588,23 @@ export const UNOWNED_EXPORT_CENSUS: Readonly<Record<string, readonly string[]>> 
   "extensions/pi-claude-marketplace/bridges/hooks/event-router.ts": [
     "createBeforeAgentStartHandler",
   ],
-  "extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts": [
-    "bashSubcommandFires",
-    "compileBashGlob",
-    "compilePathGlob",
-    "compilePowerShellGlob",
-    "compilePowerShellRule",
-    "parseBashSubcommands",
-    "parsePowerShellSubcommands",
-    "powerShellSubcommandFires",
-  ],
   "extensions/pi-claude-marketplace/bridges/hooks/stage.ts": [
     "createWriteHookConfig",
     "hookConfigPathFor",
   ],
-  "extensions/pi-claude-marketplace/bridges/mcp/collision-slots.ts": ["MCP_COLLISION_SLOTS"],
-  "extensions/pi-claude-marketplace/bridges/mcp/index.ts": ["resolvePluginMcpServers"],
-  "extensions/pi-claude-marketplace/bridges/mcp/marker.ts": ["readMarker"],
-  "extensions/pi-claude-marketplace/bridges/mcp/parse.ts": [
-    "parseMcpServers",
-    "resolvePluginMcpServers",
-  ],
-  "extensions/pi-claude-marketplace/bridges/mcp/stage.ts": ["MalformedMcpServersError"],
-  "extensions/pi-claude-marketplace/bridges/mcp/substitute.ts": ["deepSubstitute"],
   "extensions/pi-claude-marketplace/bridges/skills/unstage.ts": ["createUnstagePluginSkills"],
   "extensions/pi-claude-marketplace/domain/auth-registry.ts": ["GITLAB_PROVIDER"],
+  "extensions/pi-claude-marketplace/domain/components/hooks/schema.ts": ["HOOKS_CONFIG_SCHEMA"],
   "extensions/pi-claude-marketplace/domain/components/hooks.ts": [
     "HOOKS_CONFIG_SCHEMA",
     "HOOKS_VALIDATOR",
   ],
-  "extensions/pi-claude-marketplace/domain/components/hooks/schema.ts": ["HOOKS_CONFIG_SCHEMA"],
   "extensions/pi-claude-marketplace/domain/plugin-resolver.ts": ["resolveLoose"],
   "extensions/pi-claude-marketplace/domain/resolver-types.ts": ["ResolvedPluginSchema"],
   "extensions/pi-claude-marketplace/domain/unsupported-components.ts": [
     "SUPPORTED_COMPONENT_KINDS",
     "UNSUPPORTED_COMPONENT_KINDS",
   ],
-  "extensions/pi-claude-marketplace/edge/completions/data.ts": [
-    "buildItem",
-    "getPluginToMarketplacesMap",
-  ],
-  "extensions/pi-claude-marketplace/edge/flag-catalog.ts": ["CATALOG_VERBS"],
-  "extensions/pi-claude-marketplace/edge/handlers/plugin/fetch.ts": ["parseFetchTarget"],
-  "extensions/pi-claude-marketplace/edge/handlers/tools.ts": ["projectRowStatus"],
-  "extensions/pi-claude-marketplace/edge/router.ts": ["MARKETPLACE_USAGE", "TOP_LEVEL_USAGE"],
   "extensions/pi-claude-marketplace/index.ts": ["default"],
   "extensions/pi-claude-marketplace/orchestrators/import/marketplaces.ts": [
     "planMarketplaceSourcesForRefs",
@@ -643,7 +615,6 @@ export const UNOWNED_EXPORT_CENSUS: Readonly<Record<string, readonly string[]>> 
     "resolveClaudeSettingsPaths",
   ],
   "extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts": ["resolveScopeFromState"],
-  "extensions/pi-claude-marketplace/orchestrators/plugin-path.ts": ["collectBinDirs"],
   "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts": [
     "createSetPluginEnabled",
   ],
@@ -666,6 +637,7 @@ export const UNOWNED_EXPORT_CENSUS: Readonly<Record<string, readonly string[]>> 
     "outcomeToPluginMessage",
   ],
   "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts": ["createUninstallPlugin"],
+  "extensions/pi-claude-marketplace/orchestrators/plugin-path.ts": ["collectBinDirs"],
   "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts": ["createApplyReconcile"],
   "extensions/pi-claude-marketplace/orchestrators/reconcile/backfill.ts": [
     "scanForceInstalledBackfills",
@@ -684,10 +656,6 @@ export const UNOWNED_EXPORT_CENSUS: Readonly<Record<string, readonly string[]>> 
     "buildAuthCallbacks",
     "listBranches",
     "listRemotes",
-  ],
-  "extensions/pi-claude-marketplace/platform/pi-api.ts": [
-    "hasLoadedPiMcpAdapter",
-    "hasLoadedPiSubagents",
   ],
   "extensions/pi-claude-marketplace/shared/completion-cache.ts": [
     "MARKETPLACE_NAMES_CACHE_SCHEMA",
@@ -737,10 +705,6 @@ export const PRODUCTION_FINDING_CENSUS = {
     },
     {
       path: "extensions/pi-claude-marketplace/bridges/agents/frontmatter.ts",
-      export_name: "GENERATED_AGENT_MARKER",
-    },
-    {
-      path: "extensions/pi-claude-marketplace/bridges/agents/frontmatter.ts",
       export_name: "emitYamlScalar",
     },
     {
@@ -780,72 +744,12 @@ export const PRODUCTION_FINDING_CENSUS = {
       export_name: "createBeforeAgentStartHandler",
     },
     {
-      path: "extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts",
-      export_name: "compileBashGlob",
-    },
-    {
-      path: "extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts",
-      export_name: "compilePathGlob",
-    },
-    {
-      path: "extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts",
-      export_name: "compilePowerShellGlob",
-    },
-    {
-      path: "extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts",
-      export_name: "bashSubcommandFires",
-    },
-    {
-      path: "extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts",
-      export_name: "parseBashSubcommands",
-    },
-    {
-      path: "extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts",
-      export_name: "compilePowerShellRule",
-    },
-    {
-      path: "extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts",
-      export_name: "parsePowerShellSubcommands",
-    },
-    {
-      path: "extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts",
-      export_name: "powerShellSubcommandFires",
-    },
-    {
       path: "extensions/pi-claude-marketplace/bridges/hooks/stage.ts",
       export_name: "hookConfigPathFor",
     },
     {
       path: "extensions/pi-claude-marketplace/bridges/hooks/stage.ts",
       export_name: "createWriteHookConfig",
-    },
-    {
-      path: "extensions/pi-claude-marketplace/bridges/mcp/collision-slots.ts",
-      export_name: "MCP_COLLISION_SLOTS",
-    },
-    {
-      path: "extensions/pi-claude-marketplace/bridges/mcp/index.ts",
-      export_name: "resolvePluginMcpServers",
-    },
-    {
-      path: "extensions/pi-claude-marketplace/bridges/mcp/marker.ts",
-      export_name: "readMarker",
-    },
-    {
-      path: "extensions/pi-claude-marketplace/bridges/mcp/parse.ts",
-      export_name: "parseMcpServers",
-    },
-    {
-      path: "extensions/pi-claude-marketplace/bridges/mcp/parse.ts",
-      export_name: "resolvePluginMcpServers",
-    },
-    {
-      path: "extensions/pi-claude-marketplace/bridges/mcp/stage.ts",
-      export_name: "MalformedMcpServersError",
-    },
-    {
-      path: "extensions/pi-claude-marketplace/bridges/mcp/substitute.ts",
-      export_name: "deepSubstitute",
     },
     {
       path: "extensions/pi-claude-marketplace/bridges/skills/unstage.ts",
@@ -882,34 +786,6 @@ export const PRODUCTION_FINDING_CENSUS = {
     {
       path: "extensions/pi-claude-marketplace/domain/unsupported-components.ts",
       export_name: "UNSUPPORTED_COMPONENT_KINDS",
-    },
-    {
-      path: "extensions/pi-claude-marketplace/edge/completions/data.ts",
-      export_name: "buildItem",
-    },
-    {
-      path: "extensions/pi-claude-marketplace/edge/completions/data.ts",
-      export_name: "getPluginToMarketplacesMap",
-    },
-    {
-      path: "extensions/pi-claude-marketplace/edge/flag-catalog.ts",
-      export_name: "CATALOG_VERBS",
-    },
-    {
-      path: "extensions/pi-claude-marketplace/edge/handlers/plugin/fetch.ts",
-      export_name: "parseFetchTarget",
-    },
-    {
-      path: "extensions/pi-claude-marketplace/edge/handlers/tools.ts",
-      export_name: "projectRowStatus",
-    },
-    {
-      path: "extensions/pi-claude-marketplace/edge/router.ts",
-      export_name: "TOP_LEVEL_USAGE",
-    },
-    {
-      path: "extensions/pi-claude-marketplace/edge/router.ts",
-      export_name: "MARKETPLACE_USAGE",
     },
     {
       path: "extensions/pi-claude-marketplace/index.ts",
@@ -1030,14 +906,6 @@ export const PRODUCTION_FINDING_CENSUS = {
     {
       path: "extensions/pi-claude-marketplace/platform/git.ts",
       export_name: "buildAuthCallbacks",
-    },
-    {
-      path: "extensions/pi-claude-marketplace/platform/pi-api.ts",
-      export_name: "hasLoadedPiSubagents",
-    },
-    {
-      path: "extensions/pi-claude-marketplace/platform/pi-api.ts",
-      export_name: "hasLoadedPiMcpAdapter",
     },
     {
       path: "extensions/pi-claude-marketplace/shared/completion-cache.ts",
@@ -1179,17 +1047,6 @@ export const PRODUCTION_FINDING_CENSUS = {
         },
         {
           path: "extensions/pi-claude-marketplace/shared/concerns/hooks.ts",
-        },
-      ],
-    },
-    {
-      export_name: "assertNever",
-      locations: [
-        {
-          path: "extensions/pi-claude-marketplace/bridges/hooks/exec-result.ts",
-        },
-        {
-          path: "extensions/pi-claude-marketplace/shared/errors.ts",
         },
       ],
     },

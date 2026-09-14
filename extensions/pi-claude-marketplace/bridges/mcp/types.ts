@@ -1,7 +1,7 @@
 // bridges/mcp/types.ts
 //
 // Type-only module: shapes shared across the MCP bridge surface
-// (parse / collision-slots / stage / unstage). Kept in a single file so
+// (collision-slots / stage / unstage). Kept in a single file so
 // the discriminated `PreparedMcpStaging` union and `StageMcpInput` /
 // `UnstageMcpInput` records cannot drift apart across modules.
 
@@ -19,22 +19,6 @@ export interface RawMcpDoc {
   readonly [extra: string]: unknown;
 }
 
-/** MC-1 source-of-truth tag returned by `resolvePluginMcpServers`. */
-export type McpServersSource = "marketplace-entry" | "plugin-manifest" | "standalone" | "none";
-
-/** Outcome of MC-1 precedence resolution. `servers` is empty when source === "none". */
-export interface ResolvedMcpServers {
-  readonly source: McpServersSource;
-  readonly servers: Record<string, unknown>;
-}
-
-/** MC-1 input bundle. `pluginRoot` is consulted only when entry+manifest are both absent. */
-export interface ResolvePluginMcpServersInput {
-  readonly entry: { readonly mcpServers?: unknown };
-  readonly manifest: { readonly mcpServers?: unknown };
-  readonly pluginRoot: string;
-}
-
 /** Input record for `prepareStageMcpServers`. */
 export interface StageMcpInput {
   readonly locations: ScopedLocations;
@@ -42,7 +26,7 @@ export interface StageMcpInput {
   readonly cwd: string;
   readonly marketplaceName: string;
   readonly pluginName: string;
-  /** Already-resolved per-plugin servers (output of `resolvePluginMcpServers().servers`). */
+  /** Already-resolved per-plugin servers from the domain plugin resolver. */
   readonly servers: Record<string, unknown>;
   /** Absolute install path substituted for `${CLAUDE_PLUGIN_ROOT}` and injected into stdio env (MENV-01/02). */
   readonly pluginRoot: string;

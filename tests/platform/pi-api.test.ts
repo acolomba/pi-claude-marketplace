@@ -8,8 +8,6 @@ import {
 
 import {
   getAgentDir,
-  hasLoadedPiMcpAdapter,
-  hasLoadedPiSubagents,
   parseFrontmatter,
   softDepStatus,
 } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
@@ -206,7 +204,7 @@ describe("parseFrontmatter", () => {
   });
 });
 
-describe("hasLoadedPiSubagents", () => {
+describe("softDepStatus", () => {
   for (const { tools, expectedLoaded, behavior } of [
     {
       behavior: "recognizes the subagent tool",
@@ -234,46 +232,16 @@ describe("hasLoadedPiSubagents", () => {
       const extensionApi = toolInventory(tools);
 
       // act
-      const isLoaded = hasLoadedPiSubagents(extensionApi);
+      const status = softDepStatus(extensionApi);
 
       // assert
-      assert.strictEqual(isLoaded, expectedLoaded);
+      assert.deepStrictEqual(status, {
+        piSubagentsLoaded: expectedLoaded,
+        piMcpAdapterLoaded: false,
+      });
     });
   }
 
-  test("degrades to unloaded when tool discovery fails", () => {
-    // arrange
-    const extensionApi: PiBoundary.ToolInventory = {
-      getAllTools: () => {
-        throw new Error("not ready");
-      },
-    };
-
-    // act
-    const isLoaded = hasLoadedPiSubagents(extensionApi);
-
-    // assert
-    assert.strictEqual(isLoaded, false);
-  });
-
-  test("degrades to unloaded when a tool name accessor fails", () => {
-    // arrange
-    const inaccessibleTool = Object.defineProperty({}, "name", {
-      get: () => {
-        throw new Error("inaccessible");
-      },
-    });
-    const extensionApi = toolInventory([inaccessibleTool]);
-
-    // act
-    const isLoaded = hasLoadedPiSubagents(extensionApi);
-
-    // assert
-    assert.strictEqual(isLoaded, false);
-  });
-});
-
-describe("hasLoadedPiMcpAdapter", () => {
   for (const { tools, expectedLoaded, behavior } of [
     {
       behavior: "recognizes the mcp tool name",
@@ -316,27 +284,15 @@ describe("hasLoadedPiMcpAdapter", () => {
       const extensionApi = toolInventory(tools);
 
       // act
-      const isLoaded = hasLoadedPiMcpAdapter(extensionApi);
+      const status = softDepStatus(extensionApi);
 
       // assert
-      assert.strictEqual(isLoaded, expectedLoaded);
+      assert.deepStrictEqual(status, {
+        piSubagentsLoaded: false,
+        piMcpAdapterLoaded: expectedLoaded,
+      });
     });
   }
-
-  test("degrades to unloaded when tool discovery fails", () => {
-    // arrange
-    const extensionApi: PiBoundary.ToolInventory = {
-      getAllTools: () => {
-        throw new Error("not ready");
-      },
-    };
-
-    // act
-    const isLoaded = hasLoadedPiMcpAdapter(extensionApi);
-
-    // assert
-    assert.strictEqual(isLoaded, false);
-  });
 
   test("degrades to unloaded when a tool name accessor fails", () => {
     // arrange
@@ -348,14 +304,15 @@ describe("hasLoadedPiMcpAdapter", () => {
     const extensionApi = toolInventory([inaccessibleTool]);
 
     // act
-    const isLoaded = hasLoadedPiMcpAdapter(extensionApi);
+    const status = softDepStatus(extensionApi);
 
     // assert
-    assert.strictEqual(isLoaded, false);
+    assert.deepStrictEqual(status, {
+      piSubagentsLoaded: false,
+      piMcpAdapterLoaded: false,
+    });
   });
-});
 
-describe("softDepStatus", () => {
   for (const { tools, expectedStatus, behavior } of [
     {
       behavior: "reports both dependencies as loaded",

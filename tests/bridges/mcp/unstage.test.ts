@@ -4,7 +4,6 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
 
-import { MalformedMcpServersError } from "../../../extensions/pi-claude-marketplace/bridges/mcp/stage.ts";
 import { unstageMcpServers } from "../../../extensions/pi-claude-marketplace/bridges/mcp/unstage.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 
@@ -383,21 +382,20 @@ for (const { description, storedValue, valueKind } of [
           pluginName: "acme",
         }),
       (error: unknown) => {
-        assert.strictEqual(error instanceof MalformedMcpServersError, true);
-        if (!(error instanceof MalformedMcpServersError)) {
-          return false;
-        }
+        assert.ok(error instanceof Error);
+        assert.ok("mcpJsonPath" in error);
+        assert.ok("valueKind" in error);
 
         assert.deepStrictEqual(
           {
-            constructor: error.constructor,
+            constructorName: error.constructor.name,
             name: error.name,
             message: error.message,
             mcpJsonPath: error.mcpJsonPath,
             valueKind: error.valueKind,
           },
           {
-            constructor: MalformedMcpServersError,
+            constructorName: "MalformedMcpServersError",
             name: "MalformedMcpServersError",
             message: `mcpServers at ${locations.mcpJsonPath} must be an object; received ${valueKind}.`,
             mcpJsonPath: locations.mcpJsonPath,

@@ -51,7 +51,7 @@
 
 import path from "node:path";
 
-import { assertNever } from "../exec-result.ts";
+import { assertNever } from "../../../shared/errors.ts";
 
 // ──────────────────────────────────────────────────────────────────────────
 // Token + anchor discriminated unions
@@ -287,7 +287,7 @@ function matchTokens(
     case "globstar":
       return matchGlobstar(tokens, text, ti, xi, crossSegment);
     default:
-      return assertNever(tok);
+      return assertNever(tok, `unreachable HookExecResult arm: ${JSON.stringify(tok)}`);
   }
 }
 
@@ -532,7 +532,7 @@ function matchPathGlob(
     }
 
     default:
-      return assertNever(anchor);
+      return assertNever(anchor, `unreachable HookExecResult arm: ${JSON.stringify(anchor)}`);
   }
 }
 

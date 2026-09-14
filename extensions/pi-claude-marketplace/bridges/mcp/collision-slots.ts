@@ -25,10 +25,9 @@ import { getAgentDir } from "../../platform/pi-api.ts";
  *   [2] shared-project -- <cwd>/.mcp.json
  *   [3] pi-project-scope -- <cwd>/.pi/mcp.json
  *
- * Returned array is frozen so test snapshots and runtime code cannot
- * accidentally mutate the contract.
+ * The private slot order is frozen to prevent accidental mutation.
  */
-export function MCP_COLLISION_SLOTS(cwd: string): readonly string[] {
+function MCP_COLLISION_SLOTS(cwd: string): readonly string[] {
   return Object.freeze([
     path.join(homedir(), ".config", "mcp", "mcp.json"),
     path.join(getAgentDir(), "mcp.json"),
