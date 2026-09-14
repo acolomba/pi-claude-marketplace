@@ -10,7 +10,7 @@ import {
   readHooksJson,
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { pathSource } from "../../extensions/pi-claude-marketplace/domain/source.ts";
-import { createNodeInstallPlugin } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts";
+import { createInstallOperation } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
 import { createNodeReinstallPlugin } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts";
 import { createNodeUninstallPlugin } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
 import { createPluginUpdateOperations } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts";
@@ -147,7 +147,7 @@ test("LIFE-01 / LIFE-02 integration: install -> update -> reinstall -> uninstall
       const hooksRuntime = createHooksRuntime();
       const hooksRouting = createHooksRouting(hooksRuntime, { readHooksJson });
       const completionCache = createCompletionCache();
-      const installPlugin = createNodeInstallPlugin(hooksRouting, completionCache);
+      const installPlugin = createInstallOperation(hooksRouting, completionCache);
       const reinstallPlugin = createNodeReinstallPlugin(hooksRouting, completionCache);
       const updatePlugins = createPluginUpdateOperations(
         hooksRouting,
