@@ -20,7 +20,7 @@ each one's full phase detail is archived under
 v1.20 phase. Decimal phases (2.1, 3.1) are urgent insertions only, marked
 `INSERTED`.
 
-- [ ] **Phase 1: Manifest read fidelity** — open the manifest where it actually sits and stop discarding what it says. A bare `<pluginRoot>/plugin.json` is read at both call sites that hardcode the wrapped path, `"./skills/"` and `skills` collapse to one component path so the fallback does not enumerate a directory twice, and `info` renders object-shaped `{name, version, marketplace}` dependency entries instead of filtering them out. Independent of the dependency machinery; the cheapest phase in the milestone. (MANF-01, MANF-02, MANF-03, MANF-04, MANF-05, DEPS-01, DEPS-02)
+- [x] **Phase 1: Manifest read fidelity** — open the manifest where it actually sits and stop discarding what it says. A bare `<pluginRoot>/plugin.json` is read at both call sites that hardcode the wrapped path, `"./skills/"` and `skills` collapse to one component path so the fallback does not enumerate a directory twice, and `info` renders object-shaped `{name, version, marketplace}` dependency entries instead of filtering them out. Independent of the dependency machinery; the cheapest phase in the milestone. (MANF-01, MANF-02, MANF-03, MANF-04, MANF-05, DEPS-01, DEPS-02) (completed 2026-09-14)
 - [ ] **Phase 2: Uninstall data disposition and the uninstall option seam** — `uninstall --keep-data` preserves the plugin's data directory; without it the directory is deleted with no prompt, including on the reconcile path that carries no command line. This phase also establishes the single seam through which a per-invocation uninstall option is parsed, carried into `uninstallPlugin()` and defaulted for callers with no command line, so `--prune` joins an existing structure in Phase 5 rather than a second mechanism being invented for it. Independent of the dependency work. (DATA-01, DATA-02, DATA-03)
 - [ ] **Phase 3: Dependency resolution** — installing a plugin installs what it declares it needs, retiring the PI-13 / PR-5 no-auto-resolution decision. Marketplace attribution, a stated version-constraint grammar, cycle termination, no reinstall of what is already there, and a named failure that leaves nothing half-materialized. Maps onto the existing `orchestrators/import/` cascade and the `orchestrators/plugin/bootstrap.ts` composer rather than adding a second cascade beside them. (RESV-01, RESV-02, RESV-03, RESV-04, RESV-05, RESV-06)
 - [ ] **Phase 4: Install provenance** — each install record states whether the user asked for the plugin by name or another plugin declared it, with the promotion and retention rules that keep the two from overwriting each other, and a pre-milestone record reported as stale rather than silently repaired. This is the record `--prune` reads. (PROV-01, PROV-02, PROV-03, PROV-04)
@@ -114,12 +114,12 @@ imports it directly. 204 pairs, corresponding-test gate at zero violations.
 4. A malformed bare `plugin.json` resolves `(unavailable)` carrying the existing `malformed plugin.json:` reason instead of being skipped, and a plugin with no manifest at either location still installs — the absent-manifest miss stays non-fatal. (MANF-04, MANF-05)
 5. `info` on a plugin whose `dependencies` array mixes bare strings with `{name, version, marketplace}` objects lists every element with its version constraint; nothing is dropped. (DEPS-01, DEPS-02)
 
-**Plans**: 4 plans
+**Plans**: 4/4 plans complete
 
-- [ ] `01-01-PLAN.md` — the ordered manifest candidate list, and both hardcoded manifest readers rewired to it (wave 1; MANF-01, MANF-02, MANF-04, MANF-05)
-- [ ] `01-02-PLAN.md` — the dependency element parser, the `info` render with its constraint parenthetical, and the new catalogued byte form (wave 1; DEPS-01, DEPS-02)
-- [ ] `01-03-PLAN.md` — component-path normalization plus the same-resolved-directory skill dedup that keeps MANF-01 from being a net output regression (wave 2, after 01-01; MANF-03)
-- [ ] `01-04-PLAN.md` — `info` sources dependencies from the plugin's own `plugin.json` when readable offline, with the marketplace entry as the fallback (wave 2, after 01-01 and 01-02; DEPS-01, DEPS-02)
+- [x] `01-01-PLAN.md` — the ordered manifest candidate list, and both hardcoded manifest readers rewired to it (wave 1; MANF-01, MANF-02, MANF-04, MANF-05)
+- [x] `01-02-PLAN.md` — the dependency element parser, the `info` render with its constraint parenthetical, and the new catalogued byte form (wave 1; DEPS-01, DEPS-02)
+- [x] `01-03-PLAN.md` — component-path normalization plus the same-resolved-directory skill dedup that keeps MANF-01 from being a net output regression (wave 2, after 01-01; MANF-03)
+- [x] `01-04-PLAN.md` — `info` sources dependencies from the plugin's own `plugin.json` when readable offline, with the marketplace entry as the fallback (wave 2, after 01-01 and 01-02; DEPS-01, DEPS-02)
 
 **Notes.** This phase closes `PMAN-01` and the display half of `PDEP-01`. PMAN-01 is a parity gap with no in-the-wild victim in the official marketplace today — the convention probe in `collectStrictComponentKind` already yields the same skill set the four bare-manifest plugins declare, their declared versions are unreachable because a resolved sha replaces the whole version ladder for git-subdir sources, and the manifest `description` is consumed nowhere in `extensions/`. That is why it is a safe warm-up rather than a blocker. PDEP-01's separate still-open question — whether the dependency note should also reappear on `install` and `list` — is not in this milestone: DEPS-01 and DEPS-02 both name `info` and only `info`.
 
@@ -229,7 +229,7 @@ plugin names — so plan these phases with the UI gate skipped.
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 1. Manifest read fidelity | v1.20 | 0/4 | Planned | — |
+| 1. Manifest read fidelity | v1.20 | 4/4 | Complete   | 2026-09-14 |
 | 2. Uninstall data disposition and the uninstall option seam | v1.20 | 0/— | Not started | — |
 | 3. Dependency resolution | v1.20 | 0/— | Not started | — |
 | 4. Install provenance | v1.20 | 0/— | Not started | — |

@@ -2,32 +2,32 @@
 gsd_state_version: "1.0"
 milestone: v1.20
 milestone_name: transitive-dependencies
-current_phase: 1
-current_phase_name: Manifest read fidelity
-status: executing
-stopped_at: Review fixes implemented, awaiting phase verification
-last_updated: "2026-09-14"
+current_phase: 02
+current_phase_name: Uninstall data disposition and the uninstall option seam
+status: planning
+stopped_at: Phase 1 verified; Phase 2 context ready for planning
+last_updated: "2026-09-14T16:13:24.850Z"
 last_activity: 2026-09-14
-last_activity_desc: Review fixes implemented and stale workstreams archived
-state_head: c8899de2c214ec9790907149f6d27a569321c21b
+last_activity_desc: Phase 1 complete, transitioned to Phase 02
+state_head: 9fd3b95f2812c7f478a6ef38196ddfcebe0c06ed
 progress:
   total_phases: 5
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 4
   completed_plans: 4
-  percent: 100
+  percent: 20
 ---
 
 # Project State
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-09-04 after the v1.19 milestone closed)
+See: `.planning/PROJECT.md` (updated 2026-09-14 after manifest verification)
 
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 1 — Manifest read fidelity
+**Current focus:** Phase 2 - Uninstall data disposition and the uninstall option seam
 Record how each installed plugin got there so `uninstall --prune` can remove the
 ones nothing needs any more, and close the two adjacent gaps that land on the
 same surfaces. 25 requirements across 5 phases. v1.19 Unit Test Refactor closed
@@ -35,15 +35,16 @@ same surfaces. 25 requirements across 5 phases. v1.19 Unit Test Refactor closed
 
 ## Current Position
 
-Phase: 1 (Manifest read fidelity) — AWAITING VERIFICATION
-Plan: 4 of 4 executed
-Status: Review fixes implemented, phase verification pending
-requirements coverage 7/7, decision coverage 33/33, gap analysis 40/40.
-Last activity: 2026-09-14. The fix pass resolved the six remaining review findings.
+Phase: 02 — Uninstall data disposition and the uninstall option seam
+Plan: Not started
+Status: Ready to plan
+Phase 1 verified: 7/7 requirements, 37/37 decisions, 5/5 acceptance criteria.
+Last activity: 2026-09-14 — Phase 1 complete, transitioned to Phase 02
 Quick task `260914-aer` resolved WR-01 under D-01-35. The operator approved the
 whitespace-only `.mcp.json` formatting. GSD configuration remains uncommitted.
-The 100% progress value counts existing plans, not milestone or phase completion.
-See `01-REVIEW-FIX.md` for test evidence and the remaining verification work.
+Milestone progress is 1 of 5 phases complete (20%).
+See `01-VERIFICATION.md` for passing automated and real-plugin evidence.
+Phase 2 context records the user preference to follow existing output and help conventions.
 
 **Phase numbering restarts at 1 for this milestone** (operator decision,
 2026-09-09). Phases 1-117 belong to archived milestones. A bare phase number in
@@ -65,7 +66,7 @@ Execution order 1 → 3 → 4 → 5, with 2 free to run at any point before 5.
 
 **Velocity:**
 
-- Total plans completed: 152
+- Total plans completed: 155
 - Average recorded duration: 11.9 min
 - Total recorded execution time: 30 hr 1 min
 
@@ -79,6 +80,7 @@ Execution order 1 → 3 → 4 → 5, with 2 free to run at any point before 5.
 | 111. Non-Hook Component Bridges |    31 | -               | -                 |
 | 112. Hook Runtime               |    31 | 7h 58m          | 15.4 min          |
 | 113. Orchestrator Support       |    35 | 7h 46m recorded | 16.6 min recorded |
+| 1 | 4 | - | - |
 
 **Recent Trend:** 35 Phase 113 plans completed with all direct owner, review, validation, verification, security, and clean-repository gates green.
 **Per-Plan Metrics:**
@@ -502,16 +504,16 @@ restructured to satisfy a scanner. Its content is a pre-existing
 
 ## Session Continuity
 
-**Stopped at:** Review fixes implemented, awaiting phase verification
+**Stopped at:** Phase 1 verified; Phase 2 context ready for planning
 
-**Resume file:** .planning/phases/01-manifest-read-fidelity/01-REVIEW-FIX.md
+**Resume file:** .planning/phases/02-uninstall-data-disposition-and-the-uninstall-option-seam/02-CONTEXT.md
 
-**Read beside it:** `.planning/phases/01-manifest-read-fidelity/.continue-here.md`
+**Read beside it:** `.planning/phases/02-uninstall-data-disposition-and-the-uninstall-option-seam/02-DISCUSSION-LOG.md`
 
-Last session: 2026-09-14
+Last session: 2026-09-14T16:09:11.730Z
 
-**Next:** `$gsd-execute-phase 1` resumes at the verification gates.
-It does not rerun plans with summaries. Milestone v1.19 already closed.
+**Next:** Plan and execute Phase 2, then discuss Phase 3.
+Milestone v1.19 already closed.
 
 ### Historical v1.19 completion record
 
@@ -588,8 +590,8 @@ The workstream archive removed the old routing blocker.
 
 ## Operator Next Steps
 
-- Run `$gsd-execute-phase 1` for the missing phase verification.
-- After verification passes, update the roadmap and requirement statuses.
+- Continue Phase 2 planning from the recorded context.
+- Phase 1 verification passed, including both pinned real-plugin installations.
 - Plan v1.20 phases with the UI gate skipped. No phase in this milestone is a
   frontend phase, but the keyword gate false-positives on "component", the flag
   "surface", and the `ui5` / `ui-theme-designer` plugin names.

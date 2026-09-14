@@ -4,8 +4,6 @@ verified: 2026-09-14T16:05:20Z
 status: passed
 score: 5/5 must-haves verified
 covered_files:
-  - .planning/REQUIREMENTS.md
-  - .planning/ROADMAP.md
   - .planning/phases/01-manifest-read-fidelity/01-01-PLAN.md
   - .planning/phases/01-manifest-read-fidelity/01-01-SUMMARY.md
   - .planning/phases/01-manifest-read-fidelity/01-02-PLAN.md
@@ -44,7 +42,7 @@ covered_files:
   - tests/domain/plugin-resolver.test.ts
   - tests/orchestrators/plugin/info.test.ts
   - tests/orchestrators/plugin/shared.test.ts
-covered_digest: "v1:sha256:52c4cd06f78180c264f707eff8b2f36d98292db08d964e27eceafa8a349708e9"
+covered_digest: "v1:sha256:648336ce9d28e34eeeff898d0791fce04ad3d2e396ef13d1abb5e9458d473d0b"
 behavior_unverified: 0
 overrides_applied: 0
 decision_coverage:
@@ -80,6 +78,8 @@ re_verification:
 | 5 | Invalid dependency declarations are rejected as a whole, while valid missing or empty declarations remain valid. | VERIFIED | D-01-35 is implemented in dependencies.ts, applied by plugin-manifest and marketplace-manifest paths, and rendered as invalid manifest by info without a state write. The targeted dependency, manifest, resolver, and info suites passed. |
 
 **Score:** 5/5 truths verified (0 present, behavior-unverified)
+
+**Fingerprint scope:** The phase-owned plans, summaries, context, review artifacts, implementation, and tests are fingerprinted. Shared `.planning/ROADMAP.md` and `.planning/REQUIREMENTS.md` are lifecycle inventories, so their later status-row updates are excluded; the Phase 1 plans and this report preserve the criterion snapshot that was verified.
 
 ## Required Artifacts
 

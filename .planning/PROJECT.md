@@ -29,6 +29,14 @@ land on the same surfaces.
 - Remove no-longer-needed transitive plugins with `uninstall --prune`.
 - Keep a plugin's data directory with `uninstall --keep-data`.
 
+**Delivered 2026-09-14:** Manifest read fidelity is verified. All three readers
+share the ordered manifest candidates; component discovery avoids duplicate
+paths; and `info` displays validated dependency declarations from the readable
+plugin manifest, with the marketplace entry as the offline fallback. Isolated
+installs of the pinned upstream `ui5` and `ui-theme-designer` plugins installed
+eight and two skills with no duplicate warnings. Uninstall data preservation is
+the next phase; its output and help must follow existing option conventions.
+
 ## Previous Milestone: refine-unit-tests -- Refine Unit Tests (branch: features/refine-unit-tests, shipped 2026-09-13, no npm release)
 
 **Goal:** Revalidate the adversarial unit-test review and related backlog against
@@ -322,6 +330,13 @@ operator decision. Workstream `milestone` (force-install closeout) remains open.
 ## Requirements
 
 ### Validated
+
+- ✓ Bare and wrapped plugin manifests follow consistent precedence, malformed
+  manifests keep their failure behavior, and missing manifests remain valid —
+  v1.20 Phase 1, verified 2026-09-14.
+- ✓ Skill and command path overlap does not create duplicate warnings; `info`
+  preserves valid string and object dependencies with constraints — v1.20
+  Phase 1, verified 2026-09-14.
 
 <!-- Shipped and confirmed valuable via this GSD project. -->
 

@@ -15,17 +15,17 @@ Closes `PMAN-01`. Claude Code reads a plugin manifest from either
 `<pluginRoot>/.claude-plugin/plugin.json` or a bare `<pluginRoot>/plugin.json`;
 we only ever build the wrapped path, at two independent call sites.
 
-- [ ] **MANF-01**: A plugin whose manifest sits at a bare
+- [x] **MANF-01**: A plugin whose manifest sits at a bare
   `<pluginRoot>/plugin.json` has that manifest read and honored.
-- [ ] **MANF-02**: When a plugin ships both manifest locations, the wrapped
+- [x] **MANF-02**: When a plugin ships both manifest locations, the wrapped
   `.claude-plugin/plugin.json` wins.
-- [ ] **MANF-03**: A plugin that declares `"./skills/"` and also ships a
+- [x] **MANF-03**: A plugin that declares `"./skills/"` and also ships a
   conventional `skills/` directory produces one component path, so installing it
   emits no duplicate-skill warning.
-- [ ] **MANF-04**: A plugin whose bare `plugin.json` is malformed resolves
+- [x] **MANF-04**: A plugin whose bare `plugin.json` is malformed resolves
   `(unavailable)` with the existing `malformed plugin.json:` reason, rather than
   being skipped silently.
-- [ ] **MANF-05**: A plugin with no manifest at either location still installs.
+- [x] **MANF-05**: A plugin with no manifest at either location still installs.
 
 ### Dependency display (DEPS)
 
@@ -129,11 +129,11 @@ this milestone.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| MANF-01 | Phase 1 | Pending |
-| MANF-02 | Phase 1 | Pending |
-| MANF-03 | Phase 1 | Pending |
-| MANF-04 | Phase 1 | Pending |
-| MANF-05 | Phase 1 | Pending |
+| MANF-01 | Phase 1 | Complete |
+| MANF-02 | Phase 1 | Complete |
+| MANF-03 | Phase 1 | Complete |
+| MANF-04 | Phase 1 | Complete |
+| MANF-05 | Phase 1 | Complete |
 | DEPS-01 | Phase 1 | Complete |
 | DEPS-02 | Phase 1 | Complete |
 | RESV-01 | Phase 3 | Pending |
