@@ -89,7 +89,15 @@ export function extractLocalFlag(
     }
   }
 
-  // Preserve the legacy removal of --local even when it was a scope value.
+  // WR-03: the two modes deliberately part company on a SCOPE_TARGET_FLAG token
+  // sitting in the `--scope` VALUE position. Array-form callers strip every such
+  // token regardless of position, so `install --scope --local foo@bar` reaches
+  // the downstream parser as `--scope foo@bar` and it complains about the
+  // positional. Consuming callers keep the token verbatim, so the same input
+  // reaches the parser as `--scope --local foo@bar` and it names the offending
+  // value itself -- the better message, and the reason the split exists rather
+  // than being an oversight. Both modes still remove a SCOPE_TARGET_FLAG token
+  // in every other position (the loop pops it above).
   const residualArgs = residualTokens
     .filter((token) => consuming || token !== SCOPE_TARGET_FLAG)
     .join(" ");
