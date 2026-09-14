@@ -4,16 +4,16 @@ milestone: test-backlog
 current_phase: 05
 current_phase_name: Production Export Ownership
 status: executing
-last_updated: "2026-09-14T17:52:00Z"
+last_updated: "2026-09-14T18:32:00Z"
 last_activity: 2026-09-14
-last_activity_desc: Wave 5 plan 05-07 bridge composition complete
-state_head: 2c67f3915091e3a2573f419ea3235d259d29669b
+last_activity_desc: Wave 5 plan 05-12 persistence and cache schema ownership complete
+state_head: 6051a028fd8b94eee5bc078411eb46ebb51ac67d
 progress:
   total_phases: 8
   completed_phases: 4
   total_plans: 54
-  completed_plans: 24
-  percent: 44
+  completed_plans: 25
+  percent: 46
 milestone_name: test-backlog
 ---
 
@@ -31,11 +31,11 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 05 (Production Export Ownership) — EXECUTING
-Plan: 14 of 28 — 05-07 complete; Wave 5 continues with 05-12 and 05-24
+Plan: 15 of 28 — 05-12 complete; Wave 5 continues with 05-24
 Status: Executing Phase 05, Wave 5
-Last activity: 2026-09-14 — 05-07 bridge composition committed in `614e7cad` and
-`6a381012`; production findings 42 → 39; the shared census pin edit is deferred to the
-parent wave reconciliation
+Last activity: 2026-09-14 — 05-12 persistence and cache schema ownership committed in
+`13a65732` and `fccb598a`; production findings 39 → 32; the shared census pin edit is
+deferred to the parent wave reconciliation
 
 ### Historical refine-unit-tests closeout: `override_closeout`
 
@@ -112,7 +112,7 @@ hit the same wall; convert it rather than re-disclosing it.
 ## Session Continuity
 
 **Current work:** test-backlog on `features/test-backlog`. Phases 1–4 are complete;
-Phase 5 has completed fourteen of twenty-eight plans. Phase 6 and Phase 7 plans are
+Phase 5 has completed fifteen of twenty-eight plans. Phase 6 and Phase 7 plans are
 approved; their production acceptance follows Phase 5 completion. Earlier milestone continuity is preserved in
 `inputs/test-backlog/PRE-MILESTONE-STATE.md` and archived milestone artifacts.
 
@@ -185,8 +185,20 @@ Plan 05-07 is complete. Hook config writing and skill tree removal are now compo
 factories; `hookConfigPathFor` is private. 40/40 focused tests, all four direct owners at
 100% with hit == found, 2113/2113 orchestrator tests, typecheck/lint/format/fallow clean.
 
-Open, parent-owned: `tests/architecture/gate-targets.ts` still pins `createWriteHookConfig`,
-`hookConfigPathFor` and `createUnstagePluginSkills`, so two census equality gates in
-`tests/architecture/unowned-exports-census.test.ts` fail on exactly those three identities
-with zero additions. Both tasks forbid editing that pin; the wave reconciliation updates it
-once after 05-12 and 05-24 also land.
+Plan 05-12 is complete. Config, state and completion-cache validation now lives entirely
+inside `persistence/config-io.ts`, `persistence/state-io.ts` and `shared/completion-cache.ts`:
+five schema/validator bindings are private, `MARKETPLACE_NAMES_CACHE_SCHEMA` and the
+`EnabledPluginRecord` alias are retired with no-caller evidence, and validity plus the
+diagnostic now come from the compiled validator's first `Errors` entry. Every private-schema
+assertion became a public load/save/hydrate result, an exact serialized byte string, or an
+exact public type equality. 243/243 focused tests, all three direct owners at 100% with
+hit == found, 6242 passing unit tests, 32/32 integration, 8 of 8 isolated drift controls
+reproduced, and a 644-case typebox corpus confirming the validator swap is behaviour-neutral.
+Production findings 39 → 32, seven exact removals, zero additions.
+
+Open, parent-owned: `tests/architecture/gate-targets.ts` still pins all ten Wave 5 identities
+so far, so two census equality gates in `tests/architecture/unowned-exports-census.test.ts`
+fail on exactly those ten with zero additions. Every task in both plans forbids editing that
+pin; the wave reconciliation updates it once after 05-24 also lands. The combined Wave 5
+target of 42 → 32 is already reached; 05-24 should leave the total at 32 while changing
+`translate` duplicate-group membership, so compare group member identities, not the count.
