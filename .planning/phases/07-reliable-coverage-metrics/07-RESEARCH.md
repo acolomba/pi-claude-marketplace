@@ -70,10 +70,10 @@ The requirement wording above is verbatim. [VERIFIED: .planning/REQUIREMENTS.md:
 | --- | --- | --- | --- |
 | Node | 26.8.2 | Existing runner, raw V8 capture, native type stripping | Installed and exercised. [VERIFIED: runtime and fixture probes] |
 | Fallow | 3.22.0 | Existing health consumer | Installed binary reports `fallow 3.22.0`; npm dependency declaration remains `"fallow": "^3.17.0"`. [VERIFIED: binary version probe; package.json:24] |
-| `ast-v8-to-istanbul` [WARNING: flagged as suspicious — verify before using.] | 1.0.6, published 2026-09-07 | Candidate AST-aware producer | Official API requires executed-code AST; fidelity defects prevent unconditional adoption. [CITED: https://github.com/AriPerkkio/ast-v8-to-istanbul] [VERIFIED: npm version/time query; isolated probes] |
+| `ast-v8-to-istanbul` | 1.0.6, published 2026-09-07 | Candidate AST-aware producer | Official identity/license rechecked during planning; 1.0.6 remains unaccepted for fidelity. No newer corrected release was verified. [CITED: https://github.com/AriPerkkio/ast-v8-to-istanbul] [VERIFIED: local 1.0.6 package metadata/license; original registry query and isolated probes] |
 | `acorn` | 8.18.0, published 2026-07-28 | Parse stripped JavaScript with offsets and locations | Officially supported parser in converter documentation; legitimacy check OK. [VERIFIED: npm registry] [CITED: https://github.com/acornjs/acorn] |
 | `istanbul-lib-coverage` | 3.2.2, published 2023-11-08 | Merge per-worker maps and summarize counters | Official Istanbul package; legitimacy check OK. [VERIFIED: npm registry] [CITED: https://github.com/istanbuljs/istanbuljs/tree/main/packages/istanbul-lib-coverage] |
-| `@jridgewell/sourcemap-codec` [WARNING: flagged as suspicious — verify before using.] | 1.6.0, published 2026-08-28 | Encode explicit identity source-map segments | Official source-map codec; flagged solely on latest-release age. [CITED: https://github.com/jridgewell/sourcemaps/tree/main/packages/sourcemap-codec] [VERIFIED: npm version/time and legitimacy query] |
+| `@jridgewell/sourcemap-codec` | 1.6.0, published 2026-08-28 | Encode explicit identity source-map segments | Official package identity rechecked; the original automated signal was latest-release age only. Exact selected archive integrity remains an installation check. [CITED: https://github.com/jridgewell/sourcemaps/tree/main/packages/sourcemap-codec] [VERIFIED: original npm version/time query] |
 
 ### Supporting
 
@@ -96,12 +96,14 @@ All package names above were located in official project documentation before re
 
 | Package | Registry | Latest release age | Weekly downloads | Source repository | Verdict | Disposition |
 | --- | --- | --- | --- | --- | --- | --- |
-| ast-v8-to-istanbul | npm | 7 days | 24,907,830 | AriPerkkio/ast-v8-to-istanbul | SUS: too-new | Candidate only; record human verification before repository install |
+| ast-v8-to-istanbul | npm | 7 days | 24,907,830 | AriPerkkio/ast-v8-to-istanbul | Original age-only flag; official identity verified | Fidelity-unaccepted 1.0.6; exact provenance/integrity plus corrected-delivery conformance required by 07-02 |
 | acorn | npm | 48 days | 180,583,668 | acornjs/acorn | OK | Suitable parser |
 | istanbul-lib-coverage | npm | About 34 months | 60,461,047 | istanbuljs/istanbuljs | OK | Suitable merger |
-| @jridgewell/sourcemap-codec | npm | 17 days | 158,514,442 | jridgewell/sourcemaps | SUS: too-new | Record human verification before direct repository install |
+| @jridgewell/sourcemap-codec | npm | 17 days | 158,514,442 | jridgewell/sourcemaps | Original age-only flag; official identity verified | Verify exact reviewed archive/integrity at scripts-disabled installation; no age-only permission gate |
 
 The converter package was first published on 2025-02-18. The seam's latest-release-age warning is not a finding that the package itself appeared seven days ago. All four postinstall lookups returned no postinstall script. No SLOP package was found. [VERIFIED: registry time history and postinstall queries]
+
+Planning provenance resolution (2026-09-14): the official converter repository and the existing downloaded 1.0.6 package agree on package identity, upstream author/repository and MIT license; the source-map codec's official repository/package metadata establishes its intended namespace and license. The age-only signals are not treated as malicious-package findings or a new permission requirement under the user's authorized workflow. A current registry refresh failed with EAI_AGAIN, so planning does not assert a newer release or newly verified registry integrity. Task 07-02-01 rechecks the exact selected artifact before repository installation. Functional acceptance remains separate: the unmodified 1.0.6 walker is known to omit a nested callback and is not promoted. [CITED: https://github.com/AriPerkkio/ast-v8-to-istanbul] [CITED: https://github.com/jridgewell/sourcemaps/tree/main/packages/sourcemap-codec] [VERIFIED: /tmp/phase7-coverage-probe/node_modules/ast-v8-to-istanbul/package.json and LICENSE; planning registry refresh EAI_AGAIN]
 
 ## Architecture Patterns
 
@@ -388,15 +390,19 @@ No external service is needed to execute the final coverage pipeline. Package do
 | A2 | No OS-registered component needs migration for the proposed local tooling. [ASSUMED] | An undocumented external consumer keeps an old input | Confirm only if implementation discovers such an integration |
 | A3 | A corrected producer will preserve the exploratory maximum CRAP of 20 on a stable tree. [ASSUMED] | Candidate threshold selection needs reevaluation | Measure a stable complete run; never lock the current number as a baseline |
 
-## Open Questions and Bounded Remaining Work
+## Open Questions (RESOLVED)
 
-1. **Choose a conformance-passing producer delivery.** The unmodified 1.0.6 package fails function completeness. Validate a corrected upstream version or a maintained version-specific patch. The temporary one-line patch proves only the minimal reproduction, not the full corpus.
-2. **Finish the exact implicit-else schema policy.** Preserve absent syntax explicitly without fabricating coordinates. Demonstrate actual consumer acceptance and reject other absent positions.
-3. **Implement complete correspondence.** A generic AST/V8 function recovery is permissible only with exact range evidence and complete body statements. Name restoration alone and Fallow's match count are insufficient.
-4. **Capture the final stable tree.** The exploratory run changed underneath the analysis. Source hashes must be captured before execution, checked after it, and carried through publication. The final implementation must fail the naturally observed drift case.
-5. **Reassess candidate AST deficits and the CRAP 30 policy after the producer fix.** Preserve native unit 100%; do not impose equality between unrelated denominators or dismiss the AST deficits as automatically false.
+These are adopted implementation and acceptance policies, not claims of a validated converter, corrected upstream release or certified live measurement.
 
-These are executable planning tasks. Research is ready for planning; converter implementation and phase acceptance are not complete.
+| Question | Adopted policy | Binding task/acceptance |
+| --- | --- | --- |
+| Producer delivery | Prefer a specifically verified corrected official release. The currently verified local package is 1.0.6, whose nested logical descendant omission is known. A fresh latest-version registry query failed EAI_AGAIN, so no newer corrected version is established. Otherwise deliver a reproducible version-specific patched npm artifact with original license and explicit source/patch/integrity provenance. | [07-02 Tasks 1–3](07-02-PLAN.md); the complete source-map/schema/correspondence corpus in [07-03](07-03-PLAN.md), [07-04](07-04-PLAN.md) and [07-05](07-05-PLAN.md) is required before promotion. |
+| Implicit else | Preserve only the exact pinned producer absent-location convention for an AST-proven if without else, after an actual Fallow control. Reject every other missing/invalid concrete position; fabricate no zeros. | [07-04 Task 2](07-04-PLAN.md). |
+| Source identity and correspondence | Record immutable source and the actual native-stripped JavaScript supplied for evaluation under original URLs; first prove native behavior/coverage equivalence. Independently enumerate exact function/body and covered-statement relationships, including logical descendants, and validate both directions after merge. Fallow match percentage or function-entry recovery alone cannot pass. | [07-01 Tasks 1–3](07-01-PLAN.md), [07-03](07-03-PLAN.md), [07-04](07-04-PLAN.md), [07-05 Task 2](07-05-PLAN.md) and [07-06 Task 2](07-06-PLAN.md). |
+| Stable final capture | Final certification waits for completed stable Phase 6 and finished Phase 5/6 writes. A new successful full unit capture must bind source/test/tool/worker and artifact hashes; the changing research capture is never promoted. | [07-07 Task 1](07-07-PLAN.md); stale/failed/substituted run controls in [07-01](07-01-PLAN.md) and [07-05 Task 3](07-05-PLAN.md). |
+| AST deficits and CRAP policy | Preserve native production100 and report faithful AST differences separately. Investigate every deficit and certified CRAP>=30 result. The chosen additional wrapper gates the complete production function population at >=30 while existing all-tree cyclomatic20/cognitive15/unit-size60/maxCrap0 and duplication remain unchanged. | Actual shipping CC6 offender/benign and exact threshold/consumer-identity controls in [07-06](07-06-PLAN.md); discrepancy resolution in [07-07 Task 2](07-07-PLAN.md) blocks [07-08 Task 1](07-08-PLAN.md) activation. |
+
+Exact newly discovered source/tooling repairs require bounded owner-specific Phase 7 plans, corresponding assertions/coverage evidence, execution and a new capture before acceptance. A substantive product or metric-policy conflict is raised only after certified evidence establishes it. Routine implementation/provenance choices are authorized; this document does not introduce an age-only approval gate.
 
 ## Sources
 
@@ -427,7 +433,7 @@ The research-plan seam selected Context7 for library questions and web search fo
 
 | Area | Confidence | Reason |
 | --- | --- | --- |
-| Stack | MEDIUM | Official identities and registry metadata checked; two age warnings remain |
+| Stack | MEDIUM | Official identities/license reviewed; exact selected delivery still requires installation integrity and functional conformance |
 | Architecture | MEDIUM | Same-run capture demonstrated; immutable final-run workflow still to implement |
 | Pitfalls | MEDIUM | Concrete local counterexamples and consumer source agree |
 | Production metric baseline | LOW | Concurrent source edits invalidate final certification |

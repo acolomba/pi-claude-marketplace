@@ -3,7 +3,7 @@ phase: 05-production-export-ownership
 plan: "01"
 subsystem: architecture-tests
 tags: [fallow, production-reachability, export-ownership, census]
-status: pending-verification
+status: complete
 requires:
   - phase: 03-reachable-agent-collision-contract
     provides: Full source agent names and collision ownership contract
@@ -34,7 +34,7 @@ completed: 2026-09-14
 plan_head_before: bcd2c0453877011d3da286d0e9de54340e07e866
 actuals:
   tasks: 2
-  commits: 0
+  commits: 1
 ---
 
 # Phase 5 Plan 1: Complete production finding gate summary
@@ -43,7 +43,7 @@ Fifteen real Fallow fixture controls and six instrument-failure controls calibra
 
 ## Completion and commit ownership
 
-Both implementation tasks are finished. Source and test writes are frozen for independent review. The parent owns aggregate verification, final precommit, commits, and root planning updates. This summary remains pending verification until those gates finish; the executor created no commits. The measured commit count from the recorded base is zero.
+Both tasks passed parent review and all required pre-commit checks; committed in `7615c965`. Focused controls passed 43/43. No production module or production owner test changed in this plan, so the previous exact native coverage measurement remains applicable; the next production wave receives a fresh aggregate measurement.
 
 Phase 4's passed verification artifact and its completed source work were present before execution. CodeGraph traced the existing census, registry, and shared source-scan entry point before changes.
 
@@ -78,7 +78,8 @@ No production operation, public export, source-test pairing, threshold, exclusio
 - `npm run typecheck`: passed, including the final post-format invocation; log: `/tmp/phase5-01-typecheck-final.log`.
 - Scoped ESLint on all four architecture files: passed with no diagnostics. Log: `/tmp/phase5-01-eslint-final.log`.
 - Prettier wrote all four owned architecture files successfully. Log: `/tmp/phase5-01-format.log`.
-- Full unit/aggregate, integration, complete check, review, and commits: parent coordinated and pending.
+- Full pre-commit passed, including ESLint, typecheck, Fallow, formatting and unchanged direct pin floors: `/tmp/test-backlog-fallow-controls-precommit.log`. Parent review found no unresolved issue. Commit: `7615c965`.
+- Production and owner tests are unchanged by this plan; prior native evidence remains 6,267 passing tests, 227 production records and exact 100% line/function/branch coverage. A fresh aggregate run is required after Wave 2 production edits.
 
 ## Deviations from plan
 
@@ -206,4 +207,4 @@ unused_types|extensions/pi-claude-marketplace/shared/notify-reasons.ts|_ReasonsC
 
 ## Self-Check: PASSED
 
-The four architecture files and amended plan exist; focused validation is green, and the recorded full identity set matches the committed pin introduced by this work. No skipped tests, stubs, TODOs, coverage ignores, or linter suppressions were introduced. Parent verification and commits remain explicit pending work.
+The four architecture files and amended plan exist; focused validation is green, and the recorded full identity set matches the committed pin introduced by this work. No skipped tests, stubs, TODOs, coverage ignores, or linter suppressions were introduced. Parent review and required pre-commit checks passed; implementation is committed.

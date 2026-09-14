@@ -369,13 +369,17 @@ Threat assessment: source/contract text can mislead analysis, uncontrolled recur
 
 No unsupported factual assumption is promoted to a locked decision. Proposed algorithms, categories, and command/file names are recommendations, distinguished from observations. Remaining uncertainty concerns implementation completeness and live-tree classification rather than a missing user preference.
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-- **Final diagnostics:** regenerate after Phase 5 and complete the prescribed models. Today's unresolved population is not an exemption set.
-- **Performance:** optimize compiler-derived caches and library pruning, then measure before selecting a fixed CI budget.
-- **Boundary drift:** resolve exact installed peer symbols and actual callback sites during implementation. External-input mirrors need local purpose; upstream existence alone is insufficient.
+These are adopted planning policies, not claims of completed implementation or validated live measurements. Every acceptance step below precedes mandatory gate activation.
 
-None prevents planning. Ask the user only if later triage uncovers a substantive product-contract conflict; this research establishes no such conflict.
+| Question | Adopted policy | Binding execution and acceptance |
+| --- | --- | --- |
+| Final diagnostics | Regenerate the complete current population after stable Phase 5 verification. Historical modeled/unresolved counts grant no allowance. The final categories are runtime-observed, test-only-observed, explicit-contract, unread and unsupported-analysis; the last two fail. | [06-01 Task 3](06-01-PLAN.md) defines reports; [06-05 Task 2](06-05-PLAN.md) inventories the stable tree; [06-06 Tasks 1–2](06-06-PLAN.md) resolve every row and require fresh zero-unexplained closure before [06-08 Task 1](06-08-PLAN.md) activation. Exact owner-specific repair plans remain required for newly proven source defects. |
+| Performance | Use cached compiler identities, property indexes, pruning and cycle-aware bounded worklists. Exhaustion is an explicit failing diagnostic. Measure fixture and live work/time before adopting the execution budget; a guessed timeout or partial clean result is prohibited. | [06-01 Task 3](06-01-PLAN.md) implements bounded failure and [06-02 Task 3](06-02-PLAN.md) tests container/cycle/cutoff controls. [06-06 Task 2](06-06-PLAN.md) records stable live timing/work counts and the justified budget before closure; [06-08 Task 1](06-08-PLAN.md) verifies that acceptance record before activation. |
+| Boundary drift | Resolve exact installed peer declarations and actual directed callback/return sites. Output acceptance needs evidenced transfer; input mirrors need indispensable local purpose. Validate exact brands/type filters and reject stale, redundant, wildcard or sibling exemptions. | [06-03 Tasks 1–2](06-03-PLAN.md) implement contract identity and drift controls. [06-06 Task 2](06-06-PLAN.md) revalidates current installed boundaries and every contract before closure; [06-07 Task 2](06-07-PLAN.md) exercises shipping drift/sibling controls. |
+
+The planning choices are resolved. Remaining work is execution and measurement under those policies. Raise a substantive product-contract conflict only if live evidence establishes one; no such conflict is established here.
 
 ## Sources and Metadata
 

@@ -3,13 +3,13 @@ gsd_state_version: "1.0"
 milestone: test-backlog
 milestone_name: test-backlog
 status: executing
-last_updated: "2026-09-14T15:37:44+00:00"
+last_updated: "2026-09-14T16:23:39+00:00"
 last_activity: 2026-09-14
 progress:
   total_phases: 8
   completed_phases: 4
-  total_plans: 38
-  completed_plans: 10
+  total_plans: 54
+  completed_plans: 16
   percent: 50
 ---
 
@@ -22,14 +22,14 @@ See: `.planning/PROJECT.md` (updated 2026-09-13 after the refine-unit-tests mile
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Execute production export ownership; plan the static member and coverage metric gates.
+**Current focus:** Execute production export ownership Wave 3; static member and coverage metric plans are approved.
 
 ## Current Position
 
 Phase: 5 of 8 — Production Export Ownership
-Plan: 05-01 — real Fallow controls and complete production census
+Plan: 05-03, 05-04, 05-10, 05-14, 05-22 — Wave 3 export ownership
 Status: Executing
-Last activity: 2026-09-14 — Phases 3 and 4 committed and independently verified; Phase 5 approved for execution
+Last activity: 2026-09-14 — Wave 2 committed in 080d395e; all gates passed with exact 100% aggregate coverage; Wave 3 prepared; Phase 6 and 7 plans approved
 
 ### Historical refine-unit-tests closeout: `override_closeout`
 
@@ -106,8 +106,8 @@ hit the same wall; convert it rather than re-disclosing it.
 ## Session Continuity
 
 **Current work:** test-backlog on `features/test-backlog`. Phases 1–4 are complete;
-Phase 5 is approved for execution. Phase 6 planning and Phase 7 coverage research
-continue. Earlier milestone continuity is preserved in
+Phase 5 has completed six of twenty-eight plans. Phase 6 and Phase 7 plans are
+approved; their production acceptance follows Phase 5 completion. Earlier milestone continuity is preserved in
 `inputs/test-backlog/PRE-MILESTONE-STATE.md` and archived milestone artifacts.
 
 ### Known snag for the next close
@@ -135,15 +135,19 @@ recur: `milestone complete` leaves the original-path deletions **unstaged**
 - Phase 2: complete, independently verified 4/4; all pre-commit checks passed.
 - Phase 3: complete in b663bc68; review clean and independent verification 18/18.
 - Phase 4: complete in a8ef0dac; review clean and independent verification 7/7.
-- Next: execute Phase 5; complete Phase 6 planning and plan Phase 7.
+- Next: execute Phase 5 Wave 3; then complete the remaining approved export, member-gate and coverage work.
 
 ### Live baseline correction
 
 Initial measurement: 6003/6003 tests passed, with four production lines and one
 branch uncovered in agents/convert.ts. Phase 3 Plan 1 removed a redundant
 unreachable throw by carrying the existing runtime validation in the type.
-Current measurement: 6267/6267 tests pass; production lines 63374/63374,
-functions 1851/1851, branches 9145/9145. Integration: 32/32 passed. The obsolete converter direct pin was
+Phase 3/4 measurement: 6267/6267 tests pass; production lines 63374/63374,
+functions 1851/1851, branches 9145/9145. Integration: 32/32 passed.
+Current Wave 2 measurement: 6230/6230 unit tests pass; production lines
+63120/63120, functions 1848/1848 and branches 9099/9099 across 225 emitted modules.
+All 233 direct pairs pass with the two unchanged pins; 53 census controls pass.
+The complete production finding census moves from 111 to 85 with no additions. The obsolete converter direct pin was
 removed after its owner reached 100%; the two unrelated direct pins remain.
 
 GSD phase.complete still refuses this root milestone because archived

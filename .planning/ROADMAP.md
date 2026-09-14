@@ -72,7 +72,7 @@ roadmap is preserved in [PRE-MILESTONE-ROADMAP.md](inputs/test-backlog/PRE-MILES
 **Success Criteria:**
 1. Each current production-mode finding has an evidence-backed disposition and public-contract tests.
 2. Fallow runs in production mode with offender and benign controls; no test-only exports or mechanical helper modules are introduced.
-**Plans:** 05-01 through 05-28 approved in eleven dependency waves; begin with real Fallow controls and complete census.
+**Plans:** 05-01 through 05-28 approved in eleven dependency waves; six plans complete through Wave 2; continue with Wave 3 ownership changes.
 
 ### Phase 6: Unused Type Member Gate
 
@@ -82,7 +82,7 @@ roadmap is preserved in [PRE-MILESTONE-ROADMAP.md](inputs/test-backlog/PRE-MILES
 **Success Criteria:**
 1. An unread optional EdgeDeps member fails an automated static-analysis gate.
 2. Read, write-only, structural, external-contract, type-only, alias, and computed-access controls establish scope and limitations.
-**Plans:** To be planned after discussion and live investigation.
+**Plans:** 06-01 through 06-08 approved after independent plan review; live triage waits for Phase 5 completion.
 
 ### Phase 7: Reliable Coverage Metrics
 
@@ -92,7 +92,7 @@ roadmap is preserved in [PRE-MILESTONE-ROADMAP.md](inputs/test-backlog/PRE-MILES
 **Success Criteria:**
 1. Unit coverage converts to valid Istanbul data with measured source/function correspondence and no clamped coordinates.
 2. Fallow health consumes verified coverage under a measured CRAP policy; offender and benign controls reject missing or misleading inputs.
-**Plans:** To be planned after discussion and live investigation.
+**Plans:** 07-01 through 07-08 approved after independent plan review; producer qualification and production acceptance wait for the stable Phase 5/6 tree.
 
 ### Phase 8: Final Verification and Reconciliation
 
@@ -112,7 +112,7 @@ roadmap is preserved in [PRE-MILESTONE-ROADMAP.md](inputs/test-backlog/PRE-MILES
 | 2. Sonar Rules for Tests | 1/1 | Complete | 2026-09-14 |
 | 3. Reachable Agent Collision Contract | 4/4 | Complete | 2026-09-14 |
 | 4. Strict Command Arguments | 3/3 | Complete | 2026-09-14 |
-| 5. Production Export Ownership | 0/28 | Ready for execution | - |
-| 6. Unused Type Member Gate | 0/TBD | Planning | - |
-| 7. Reliable Coverage Metrics | 0/TBD | Research complete | - |
+| 5. Production Export Ownership | 6/28 | Executing wave 3 | - |
+| 6. Unused Type Member Gate | 0/8 | Plans approved | - |
+| 7. Reliable Coverage Metrics | 0/8 | Plans approved | - |
 | 8. Final Verification and Reconciliation | 0/TBD | Not started | - |
