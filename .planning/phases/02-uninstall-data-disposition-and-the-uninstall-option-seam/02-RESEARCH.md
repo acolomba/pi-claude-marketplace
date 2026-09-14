@@ -275,9 +275,9 @@ OWASP's file-storage guidance requires trusted path inputs or strict validation 
 
 No unverified package, external compatibility, or policy assumption is needed for this phase. Proposed implementation choices are explicitly recommendations within the recorded discretion. The FIFO restriction is observed failing output, not an inferred runtime incompatibility.
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-No product decision is missing. The planner should select the smallest scanner API extension that preserves existing pass-through callers, then cover it in the scanner's own tests. The only environment issue found is the sandbox restriction on the existing FIFO fixture.
+No product decision is missing. Plan 02-01 Task 2 selects an in-place extension of extractLocalFlag: preserve its existing readonly string[] fourth argument and add a named consuming form with required consumeLongFlags: readonly string[]. That form returns consumedFlags as a ReadonlySet and applies strict short/long-option rejection; existing callers retain their exact result shape and pass-through behavior. One token walk owns scope-value precedence, extraction and rejection. The paired scanner tests cover both forms. The existing FIFO fixture runs in the permitted execution environment identified by research; no implementation choice remains open.
 
 ## Sources
 
