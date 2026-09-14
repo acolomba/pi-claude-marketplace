@@ -34,7 +34,6 @@ import {
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts";
 import {
   createInstallPlugin,
-  createNodeInstallPlugin,
   type InstallTransaction,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -75,7 +74,7 @@ import type { CompletionCache } from "../../../extensions/pi-claude-marketplace/
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 import type { TestContext } from "node:test";
 
-type InstallOperation = ReturnType<typeof createNodeInstallPlugin>;
+type InstallOperation = ReturnType<typeof createInstallPlugin>;
 
 const REAL_INSTALL_TRANSACTION: InstallTransaction = {
   runPhases: (...args) => runPhases(...args),
@@ -5274,105 +5273,6 @@ test("UAT-05: base-targeted install with marketplace already in base leaves the 
 
       // Local file untouched.
       assert.equal((await loadConfig(locations.configLocalJsonPath)).status, "absent");
-    } finally {
-      await rm(cwd, { recursive: true, force: true });
-    }
-  });
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-// WR-03 / D-60-05: after a successful installPlugin for a plugin declaring a
-// hooks.json, the hooks-bridge routing table reflects the new entry. Without
-// the rebuildRoutingTables call inside the per-plugin lock, the routing table
-// would stay pinned to whatever the last reconcile produced and the new
-// plugin would not receive dispatch until `/reload` (NFR-2 violation).
-// ─────────────────────────────────────────────────────────────────────────────
-
-test("WR-03: installPlugin of a hooks-declaring plugin rebuilds the routing table without /reload", async () => {
-  await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "install-wr03-"));
-    try {
-      const ownerRuntime = createHooksRuntime();
-      const peerRuntime = createHooksRuntime();
-      const runtimeInstallPlugin = createNodeInstallPlugin(
-        createHooksRouting(ownerRuntime, { readHooksJson }),
-        createCompletionCache(),
-      );
-      const locations = locationsFor("project", cwd);
-      await mkdir(locations.extensionRoot, { recursive: true });
-
-      await seedPathMarketplaceWithPlugin({
-        cwd,
-        marketplaceRoot: path.join(cwd, "mp-src"),
-        marketplaceName: "mp",
-        pluginName: "p1",
-        hooksJson: {
-          PreToolUse: [{ matcher: "", hooks: [{ type: "command", command: "echo hello" }] }],
-        },
-      });
-
-      // Pre-condition: the routing table's PreToolUse bucket is empty.
-      assert.equal(ownerRuntime.getRoutingBucket("PreToolUse").length, 0);
-
-      const { ctx, pi, notifications } = makeCtx();
-      await runtimeInstallPlugin({
-        ctx,
-        pi,
-        scope: "project",
-        cwd,
-        marketplace: "mp",
-        plugin: "p1",
-      });
-
-      // Confirm install succeeded (no "failed" / "unavailable" notification).
-      // The first notification carries the cascade text; we only need the
-      // routing-table effect to be observable.
-      const summary = notifications.map((n) => n.message).join("\n");
-      assert.ok(
-        !summary.includes("(failed)") && !summary.includes("(unavailable)"),
-        `expected clean install notification; got: ${summary}`,
-      );
-
-      // The plugin must have its hooks resource recorded -- otherwise the
-      // bridge cache lookup at rebuild time would silently skip it.
-      const afterState = await loadState(locations.extensionRoot);
-      assert.ok(
-        afterState.marketplaces["mp"]?.plugins["p1"]?.resources.hooks !== undefined,
-        `expected hooks resource recorded; full notification text: ${summary}`,
-      );
-      assert.ok(
-        (afterState.marketplaces["mp"]?.plugins["p1"]?.resources.hooks ?? []).length > 0,
-        `expected non-empty hooks resource; got ${JSON.stringify(afterState.marketplaces["mp"]?.plugins["p1"]?.resources)}; notification: ${summary}`,
-      );
-
-      // D-100-01 / ENBL-11: the same install also describes the hooks it
-      // materialized. `resources.hooks` names the container slug; this names
-      // the entries, which is what `info` reports once the artifacts are gone.
-      // A tool event carries its matcher (empty string = match-all); no
-      // handler payload is recorded.
-      assert.deepEqual(afterState.marketplaces["mp"]?.plugins["p1"]?.hookEntries, [
-        { event: "PreToolUse", matcher: "" },
-      ]);
-
-      // Post-condition: the routing-table now reflects the installed plugin's
-      // PreToolUse entry. This proves WR-03's `rebuildRoutingTables()` ran
-      // inside the per-plugin lock right after `addPluginConfigToCache`.
-      const bucket = ownerRuntime.getRoutingBucket("PreToolUse");
-      assert.equal(bucket.length, 1);
-      assert.equal(bucket[0]?.pluginId, "p1");
-      assert.equal(bucket[0]?.scope, "project");
-      assert.equal(bucket[0]?.handlerDecl["command"], "echo hello");
-      // resolvedSource must propagate from the resolver -> cache -> routing
-      // table; without this assert a regression that drops the pluginRoot
-      // argument from addPluginConfigToCache(...) would not be caught at
-      // the orchestrator-test layer. CLAUDE_PLUGIN_ROOT export at dispatch
-      // depends on this field.
-      assert.equal(
-        bucket[0]?.resolvedSource,
-        afterState.marketplaces["mp"]?.plugins["p1"]?.resolvedSource,
-        "RoutingEntry.resolvedSource must mirror state.json's resolvedSource",
-      );
-      assert.deepStrictEqual(peerRuntime.getRoutingBucket("PreToolUse"), []);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

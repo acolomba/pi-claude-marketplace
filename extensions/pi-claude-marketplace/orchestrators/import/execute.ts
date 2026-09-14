@@ -1,9 +1,7 @@
 import { parsePluginSource, samePlannedSource, sourceLogical } from "../../domain/source.ts";
 import { addMarketplace as defaultAddMarketplace } from "../../orchestrators/marketplace/add.ts";
-import {
-  createNodeInstallPlugin,
-  type InstallPluginOptions,
-} from "../../orchestrators/plugin/install-flow.ts";
+import { type InstallPluginOptions } from "../../orchestrators/plugin/install-flow.ts";
+import { createInstallOperation } from "../../orchestrators/plugin/operations.ts";
 import { loadConfig } from "../../persistence/config-io.ts";
 import {
   writeBatchedConfigEntries,
@@ -230,7 +228,7 @@ function installPluginFn(
   hooksRouting: InstallHooksRouting,
   completionCache: CompletionCache,
 ): (opts: InstallPluginOptions) => Promise<InstallPluginOutcome> {
-  return deps?.installPlugin ?? createNodeInstallPlugin(hooksRouting, completionCache);
+  return deps?.installPlugin ?? createInstallOperation(hooksRouting, completionCache);
 }
 
 function pluginsForMarketplace(

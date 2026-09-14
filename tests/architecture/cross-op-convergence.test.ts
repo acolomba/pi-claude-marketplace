@@ -51,7 +51,7 @@ import { setMarketplaceAutoupdate } from "../../extensions/pi-claude-marketplace
 import { removeMarketplace } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts";
 import { updateMarketplace } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts";
 import { getPluginInfo } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts";
-import { createNodeInstallPlugin } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts";
+import { createInstallOperation } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
 import { createNodeReinstallPlugins } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts";
 import { createNodeUninstallPlugin } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
 import { createPluginUpdateOperations } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts";
@@ -154,7 +154,7 @@ const INVOKERS: Record<string, Invoker> = {
   },
   // install ALWAYS carries a resolved scope -> explicit only. install-flow.test.ts M1.
   install: async ({ ctx, pi, cwd }) => {
-    await createNodeInstallPlugin(
+    await createInstallOperation(
       createHooksRouting(createHooksRuntime(), { readHooksJson }),
       createCompletionCache(),
     )({ ctx, pi, scope: "project", cwd, marketplace: NAME, plugin: "anything" });

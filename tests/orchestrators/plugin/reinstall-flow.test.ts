@@ -53,7 +53,7 @@ import {
   materializePluginClone,
   resolvePluginPin,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts";
-import { createNodeInstallPlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts";
+import { createInstallOperation } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
 import {
   createNodeReinstallPlugin,
   createNodeReinstallPlugins,
@@ -299,7 +299,7 @@ async function seedMarketplace(opts: {
 
   if (opts.install === true) {
     const { ctx, pi } = makeCtx({ toolNames: ["subagent", "mcp"] });
-    const installPlugin = createNodeInstallPlugin(
+    const installPlugin = createInstallOperation(
       createHooksRouting(createHooksRuntime(), { readHooksJson }),
       createCompletionCache(),
     );
@@ -3283,7 +3283,7 @@ async function seedInstalledGitSourcePlugin(opts: {
 
   const { gitOps } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
   const { ctx, pi } = makeCtx();
-  const installPlugin = createNodeInstallPlugin(
+  const installPlugin = createInstallOperation(
     createHooksRouting(createHooksRuntime(), { readHooksJson }),
     createCompletionCache(),
   );

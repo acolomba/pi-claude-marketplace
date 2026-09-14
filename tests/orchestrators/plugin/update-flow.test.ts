@@ -36,7 +36,7 @@ import {
   materializePluginClone,
   resolvePluginPin,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts";
-import { createNodeInstallPlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts";
+import { createInstallOperation } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
 import { createPluginUpdateOperations } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
@@ -4908,7 +4908,7 @@ test("DFEN-07 / D-103-10: update against a flipped defaultEnabled moves the vers
       // record keeps the inventory ENBL-18 preserves, which a hand-seeded
       // disabled record leaves empty.
       const seed = makeCtx();
-      const installPlugin = createNodeInstallPlugin(
+      const installPlugin = createInstallOperation(
         createHooksRouting(createHooksRuntime(), { readHooksJson }),
         createCompletionCache(),
       );
@@ -5030,7 +5030,7 @@ test("DFEN-08: a declared-true entry and a silent entry render identical update 
       // install-time opt-in that the real install handler and the reconcile
       // apply pass both set. The whole point is that it changes nothing for two
       // of the three.
-      const installPlugin = createNodeInstallPlugin(
+      const installPlugin = createInstallOperation(
         createHooksRouting(createHooksRuntime(), { readHooksJson }),
         createCompletionCache(),
       );
