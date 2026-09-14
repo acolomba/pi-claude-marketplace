@@ -37,15 +37,32 @@ const EVENT_TO_KEBAB: Readonly<Record<DispatchableEvent, string>> = {
 
 const TOOL_EVENTS: readonly ToolEvent[] = ["PreToolUse", "PostToolUse", "PostToolUseFailure"];
 
-interface TranslatorModule {
-  translate: (event: unknown, context: TranslationContext) => unknown;
-}
+/**
+ * The exact public export each payload module publishes (D-03, D-06). The tool
+ * translators carry event-specific names, so the expected name is pinned per
+ * event here and the gate below proves each one resolves to a live function.
+ */
+const EVENT_TO_TRANSLATOR_EXPORT: Readonly<Record<DispatchableEvent, string>> = {
+  SessionStart: "translate",
+  UserPromptSubmit: "translate",
+  PreToolUse: "translatePreToolUse",
+  PostToolUse: "translatePostToolUse",
+  PostToolUseFailure: "translatePostToolUseFailure",
+  PreCompact: "translate",
+  PostCompact: "translate",
+  SessionEnd: "translate",
+  Stop: "translate",
+  StopFailure: "translate",
+};
 
-async function loadTranslator(name: DispatchableEvent): Promise<TranslatorModule> {
+type Translator = (event: unknown, context: TranslationContext) => unknown;
+
+async function loadTranslator(name: DispatchableEvent): Promise<unknown> {
   const kebab = EVENT_TO_KEBAB[name];
-  return (await import(
+  const module: unknown = await import(
     "../../extensions/pi-claude-marketplace/bridges/hooks/payloads/" + kebab + ".ts"
-  )) as TranslatorModule;
+  );
+  return (module as Record<string, unknown>)[EVENT_TO_TRANSLATOR_EXPORT[name]];
 }
 
 function toolEventFor(event: ToolEvent, toolName: string): unknown {
@@ -99,7 +116,7 @@ test("keeps one translator module for every dispatchable event", async () => {
   const translatorExports: Array<{ event: DispatchableEvent; exportType: string }> = [];
   for (const event of LOCAL_DISPATCHABLE) {
     const translator = await loadTranslator(event);
-    translatorExports.push({ event, exportType: typeof translator.translate });
+    translatorExports.push({ event, exportType: typeof translator });
   }
 
   // assert
@@ -130,12 +147,9 @@ test("keeps shared built-in and custom tool-name mapping across all tool transla
   // act
   const mappings: Array<{ event: ToolEvent; input: string; mapped: unknown }> = [];
   for (const event of TOOL_EVENTS) {
-    const translator = await loadTranslator(event);
+    const translate = (await loadTranslator(event)) as Translator;
     for (const input of ["bash", "mcp__server__tool"]) {
-      const payload = translator.translate(toolEventFor(event, input), context) as Record<
-        string,
-        unknown
-      >;
+      const payload = translate(toolEventFor(event, input), context) as Record<string, unknown>;
       mappings.push({ event, input, mapped: payload.tool_name });
     }
   }
