@@ -878,11 +878,3 @@ export function createUninstallPlugin(
 
   return configuredUninstallPlugin;
 }
-
-/** Production uninstall operation bound to the root lifecycle routing owner. */
-export function createNodeUninstallPlugin(
-  hooksRouting: UninstallHooksRouting,
-  completionCache: CompletionCache,
-): UninstallPluginOperation {
-  return createUninstallPlugin(REAL_UNINSTALL_TRANSACTION, hooksRouting, completionCache);
-}

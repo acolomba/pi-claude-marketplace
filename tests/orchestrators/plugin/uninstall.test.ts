@@ -17,10 +17,8 @@ import {
   AgentsUnstageFailureError,
   cascadeUnstagePlugin,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
-import {
-  createNodeUninstallPlugin,
-  createUninstallPlugin,
-} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
+import { createUninstallOperation } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
+import { createUninstallPlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
 import { loadAgentsIndex } from "../../../extensions/pi-claude-marketplace/persistence/agents-index-io.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
@@ -129,7 +127,7 @@ test("uninstall exposes its required transaction factory", () => {
 
 /** Construct one production uninstall operation with fresh lifecycle owners. */
 function createUninstallOwner(): UninstallPluginOperation {
-  return createNodeUninstallPlugin(
+  return createUninstallOperation(
     createHooksRouting(createHooksRuntime(), { readHooksJson }),
     createCompletionCache(),
   );
@@ -963,7 +961,7 @@ test("D-03-INV :: uninstall invalidates plugin cache for the target marketplace"
       const locations = locationsFor("project", cwd);
       await seedFullPlugin(locations, "mp", "hello", cwd);
       const completionCache = createCompletionCache();
-      const uninstallPlugin = createNodeUninstallPlugin(
+      const uninstallPlugin = createUninstallOperation(
         createHooksRouting(createHooksRuntime(), { readHooksJson }),
         completionCache,
       );
@@ -1158,7 +1156,7 @@ test("TR-03 (non-AG-5 partial): resources.* filtered by outcome.dropped.*; sReco
         marketplace: "mp",
         plugin: "hello",
       });
-      await createNodeUninstallPlugin(
+      await createUninstallOperation(
         hooksRouting,
         createCompletionCache(),
       )({
@@ -1285,7 +1283,7 @@ test("TR-03 (AG-5 cause): full row preserved intact when cause instanceof Agents
         marketplace: "mp",
         plugin: "hello",
       });
-      await createNodeUninstallPlugin(
+      await createUninstallOperation(
         hooksRouting,
         createCompletionCache(),
       )({
@@ -2171,7 +2169,7 @@ test("WR-03: uninstallPlugin clears the plugin's routing-table entries without /
       );
 
       const { ctx, pi, notifications } = makeCtx();
-      await createNodeUninstallPlugin(
+      await createUninstallOperation(
         hooksRouting,
         createCompletionCache(),
       )({
@@ -2235,7 +2233,7 @@ test("WR-03: a post-save routing failure cannot roll back committed uninstall", 
       const routingError = new Error("forced post-save routing failure");
       const { ctx, pi, notifications } = makeCtx();
 
-      await createNodeUninstallPlugin(
+      await createUninstallOperation(
         {
           rebuildRoutingTables(): void {
             throw new Error("rebuild must not run after cache removal throws");
@@ -3851,7 +3849,7 @@ test("retry proof: uninstall: a refused state save leaves the swept config diver
 test("retry proof: uninstall: a refused cache drop leaves the cache file and the retry reports not installed", async (t) => {
   await withHermeticHome(async () => {
     const completionCache = createCompletionCache();
-    const uninstallWithFreshOwner = createNodeUninstallPlugin(
+    const uninstallWithFreshOwner = createUninstallOperation(
       createHooksRouting(createHooksRuntime(), { readHooksJson }),
       completionCache,
     );

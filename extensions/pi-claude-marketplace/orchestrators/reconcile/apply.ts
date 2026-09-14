@@ -61,9 +61,11 @@ import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 import { addMarketplace } from "../marketplace/add.ts";
 import { removeMarketplace } from "../marketplace/remove.ts";
-import { createNodeSetPluginEnabled } from "../plugin/enable-disable.ts";
-import { createInstallOperation } from "../plugin/operations.ts";
-import { createNodeUninstallPlugin } from "../plugin/uninstall.ts";
+import {
+  createEnableOperation,
+  createInstallOperation,
+  createUninstallOperation,
+} from "../plugin/operations.ts";
 
 import {
   classifyOrchestratorThrow,
@@ -344,7 +346,7 @@ async function applyPluginUninstalls(
   plan: ReconcilePlan,
   outcomes: PerEntryOutcome[],
 ): Promise<void> {
-  const uninstallPlugin = createNodeUninstallPlugin(opts.hooksRouting, opts.completionCache);
+  const uninstallPlugin = createUninstallOperation(opts.hooksRouting, opts.completionCache);
   for (const op of plan.pluginsToUninstall) {
     try {
       const result = await uninstallPlugin({
@@ -572,7 +574,7 @@ async function applyPluginToggles(
   outcomes: PerEntryOutcome[],
   axes: PluginToggleAxes,
 ): Promise<void> {
-  const setPluginEnabled = createNodeSetPluginEnabled(opts.hooksRouting);
+  const setPluginEnabled = createEnableOperation(opts.hooksRouting);
   // Y6: successStatus is derivable from `enable` -- enable=true => "enabled",
   // enable=false => "disabled". Deriving it here closes a redundant-axis
   // footgun where a caller could pass an inconsistent (enable, successStatus)

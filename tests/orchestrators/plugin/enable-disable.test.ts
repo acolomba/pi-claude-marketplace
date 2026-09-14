@@ -22,11 +22,9 @@ import {
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import { cascadeUnstagePlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
-import {
-  createNodeSetPluginEnabled,
-  createSetPluginEnabled,
-} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts";
+import { createSetPluginEnabled } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts";
 import { runInstallLedger } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts";
+import { createEnableOperation } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
 import { createNodeReinstallPlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts";
 import {
   selectDeclaringConfigWriteTarget,
@@ -138,7 +136,7 @@ function setPluginEnabled(
 function setPluginEnabled(
   opts: EnableDisablePluginOptions,
 ): Promise<EnableDisablePluginOutcome | undefined> {
-  const operation = createNodeSetPluginEnabled(
+  const operation = createEnableOperation(
     createHooksRouting(createHooksRuntime(), { readHooksJson }),
   );
   return operation(opts);
@@ -1104,7 +1102,7 @@ test("publishes a freshly enabled hook only to the supplied runtime after durabl
     });
     const ownerRuntime = createHooksRuntime();
     const peerRuntime = createHooksRuntime();
-    const setPluginEnabledForOwner = createNodeSetPluginEnabled(
+    const setPluginEnabledForOwner = createEnableOperation(
       createHooksRouting(ownerRuntime, { readHooksJson }),
     );
     const configBefore = await readFile(configPath, "utf8");
@@ -1173,7 +1171,7 @@ for (const { failure, label } of [
       const { ctx, notifications } = makeCtx(cwd);
 
       // act
-      const outcome = await createNodeSetPluginEnabled(failingRouting)({
+      const outcome = await createEnableOperation(failingRouting)({
         ctx,
         cwd,
         enable: true,
@@ -2288,7 +2286,7 @@ test("RECON-03 enable-disable orchestrated mode -- idempotent enable-already-ena
     const routesBefore = runtime.getRoutingBucket("PreToolUse");
     const { ctx, notifications } = makeCtx(cwd);
     // act
-    const outcome = await createNodeSetPluginEnabled(hooksRouting)({
+    const outcome = await createEnableOperation(hooksRouting)({
       ctx,
       pi: makePi(),
       cwd,
@@ -3621,7 +3619,7 @@ test("a clean disable remains successful when the hooks cache rebuild throws", a
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
-    const outcome = await createNodeSetPluginEnabled(failingRouting)({
+    const outcome = await createEnableOperation(failingRouting)({
       ctx,
       cwd,
       enable: false,
