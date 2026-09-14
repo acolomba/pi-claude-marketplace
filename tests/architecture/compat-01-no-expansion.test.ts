@@ -10,20 +10,24 @@
  *
  * Clause by clause:
  *
- *   Closed sets (COMPAT-01 / D-98-08) -- `REASONS`, `STATUS_TOKENS`,
- *   `PLUGIN_STATUSES`, and `MARKETPLACE_STATUSES` each equal a hand-written
- *   literal member list, in the tuple's own declared order. ENUMERATION
- *   equality, not a count: a count pin catches a member ADDED, but not a member
- *   renamed or swapped for another. Adding, removing, or renaming any member
- *   fails here and forces a deliberate amendment.
+ *   Closed sets (COMPAT-01 / D-98-08) -- `Reason`, `StatusToken`,
+ *   `PluginStatus`, and `MarketplaceStatus` each equal a hand-written literal
+ *   member list, in the vocabulary's own declared order. ENUMERATION equality,
+ *   not a count: a count pin catches a member ADDED, but not a member renamed or
+ *   swapped for another. Adding, removing, or renaming any member fails here and
+ *   forces a deliberate amendment. Each set is stated twice, because the two
+ *   halves see different things: the order comes from the declaration read as
+ *   data, and the membership from a bidirectional proof against the union the
+ *   renderer is actually written against.
  *
- *   Glyphs (COMPAT-01) -- each of the seven exported glyph constants equals its
- *   exact code point, written as an escape so the pin states the code point
- *   rather than relying on the reader to identify a character by eye. There is
- *   no exported COLLECTION of glyphs, so an EIGHTH glyph export cannot be caught
- *   by comparing a tuple; the notification grammar owner's export-declaration
- *   count is the only way to catch one, and it is the one clause here that
- *   scans source.
+ *   Glyphs (COMPAT-01) -- each of the seven glyphs equals its exact code point,
+ *   written as an escape so the pin states the code point rather than relying on
+ *   the reader to identify a character by eye. Five are exported and pinned
+ *   directly; the two that are module-private are pinned through the rows that
+ *   carry them. There is no COLLECTION of glyphs, so an EIGHTH glyph cannot be
+ *   caught by comparing a tuple; the notification grammar owner's
+ *   declaration count is the only way to catch one, and it is one of the two
+ *   clauses here that scan source.
  *
  *   Persistence (COMPAT-01) -- the persisted install record's key set is exactly
  *   the nine fields it already had, and neither a manifest-snapshot-shaped key
