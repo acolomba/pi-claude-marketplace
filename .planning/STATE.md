@@ -1,16 +1,20 @@
 ---
 gsd_state_version: "1.0"
 milestone: test-backlog
-milestone_name: test-backlog
-status: paused
-last_updated: "2026-09-14T16:58:15+00:00"
+current_phase: 05
+current_phase_name: Production Export Ownership
+status: executing
+last_updated: "2026-09-14T17:52:00Z"
 last_activity: 2026-09-14
+last_activity_desc: Wave 5 plan 05-07 bridge composition complete
+state_head: 2c67f3915091e3a2573f419ea3235d259d29669b
 progress:
   total_phases: 8
   completed_phases: 4
   total_plans: 54
-  completed_plans: 23
-  percent: 50
+  completed_plans: 24
+  percent: 44
+milestone_name: test-backlog
 ---
 
 # Project State
@@ -22,14 +26,16 @@ See: `.planning/PROJECT.md` (updated 2026-09-13 after the refine-unit-tests mile
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Execute production export ownership Wave 5; static member and coverage metric plans are approved.
+**Current focus:** Phase 05 — Production Export Ownership
 
 ## Current Position
 
-Phase: 5 of 8 — Production Export Ownership
-Plan: 05-07, 05-12 and 05-24 — Wave 5 composition, persistence and payload ownership
-Status: Paused by user request
-Last activity: 2026-09-14 — Wave 4 committed in 851c5e26; all gates pass with exact 100% aggregate coverage; Wave 5 prepared; Phase 6 and 7 plans approved
+Phase: 05 (Production Export Ownership) — EXECUTING
+Plan: 14 of 28 — 05-07 complete; Wave 5 continues with 05-12 and 05-24
+Status: Executing Phase 05, Wave 5
+Last activity: 2026-09-14 — 05-07 bridge composition committed in `614e7cad` and
+`6a381012`; production findings 42 → 39; the shared census pin edit is deferred to the
+parent wave reconciliation
 
 ### Historical refine-unit-tests closeout: `override_closeout`
 
@@ -106,7 +112,7 @@ hit the same wall; convert it rather than re-disclosing it.
 ## Session Continuity
 
 **Current work:** test-backlog on `features/test-backlog`. Phases 1–4 are complete;
-Phase 5 has completed thirteen of twenty-eight plans. Phase 6 and Phase 7 plans are
+Phase 5 has completed fourteen of twenty-eight plans. Phase 6 and Phase 7 plans are
 approved; their production acceptance follows Phase 5 completion. Earlier milestone continuity is preserved in
 `inputs/test-backlog/PRE-MILESTONE-STATE.md` and archived milestone artifacts.
 
@@ -153,7 +159,34 @@ GSD phase.complete still refuses this root milestone because archived
 workstream directories exist. Phase 1–4 tracking was updated in the authorized
 root files and checked by diff; archived workstreams were preserved.
 
-
 ### Explicit pause
 
 User requested `$gsd-pause-work` after the verified Wave 4 source commit `851c5e26`. All task executors and checks are stopped. Resume from `.planning/HANDOFF.json` and `phases/05-production-export-ownership/.continue-here.md`; Wave 5 preparation is saved durably, with no implementation applied. Configuration/setup changes and the local quick-task row remain uncommitted.
+
+### Session resumed
+
+Session resumed on 2026-09-14 via `$gsd-resume-work`. Context restored and
+reconciled against the checkout: branch `features/test-backlog` at `2c67f391`;
+Phase 5 holds 13 of 28 summaries; the three durable pause archives verify against
+`MANIFEST.json`; all eight prepared 05-07 baseline hashes still match the committed
+tree. No background jobs, no async job manifests, no blockers. Implementation has
+**not** restarted -- `.planning/HANDOFF.json` and the phase `.continue-here.md` are
+deliberately retained until Wave 5 lands. Next action: execute Phase 5 Wave 5
+(plans 05-07, 05-12, 05-24).
+
+Correction to the handoff record: `.planning/config.json` no longer carries the
+`model_profile_overrides.codex.opus` Astra entry and is clean in git; the active
+runtime is `claude`.
+
+### Wave 5 progress
+
+Plan 05-07 is complete. Hook config writing and skill tree removal are now composed at
+`bridges/hooks/index.ts` and `bridges/skills/index.ts` from their production-consumed
+factories; `hookConfigPathFor` is private. 40/40 focused tests, all four direct owners at
+100% with hit == found, 2113/2113 orchestrator tests, typecheck/lint/format/fallow clean.
+
+Open, parent-owned: `tests/architecture/gate-targets.ts` still pins `createWriteHookConfig`,
+`hookConfigPathFor` and `createUnstagePluginSkills`, so two census equality gates in
+`tests/architecture/unowned-exports-census.test.ts` fail on exactly those three identities
+with zero additions. Both tasks forbid editing that pin; the wave reconciliation updates it
+once after 05-12 and 05-24 also land.

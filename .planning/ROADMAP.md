@@ -72,7 +72,7 @@ roadmap is preserved in [PRE-MILESTONE-ROADMAP.md](inputs/test-backlog/PRE-MILES
 **Success Criteria:**
 1. Each current production-mode finding has an evidence-backed disposition and public-contract tests.
 2. Fallow runs in production mode with offender and benign controls; no test-only exports or mechanical helper modules are introduced.
-**Plans:** 05-01 through 05-28 approved in eleven dependency waves; thirteen plans complete through Wave 4; continue with Wave 5 composition and persistence ownership.
+**Plans:** 05-01 through 05-28 approved in eleven dependency waves; fourteen plans complete, Wave 5 in progress with 05-07 landed; continue with 05-12 and 05-24, then the wave census reconciliation.
 
 ### Phase 6: Unused Type Member Gate
 

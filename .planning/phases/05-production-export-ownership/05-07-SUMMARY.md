@@ -290,3 +290,10 @@ None - no external service configuration required.
 ---
 *Phase: 05-production-export-ownership*
 *Completed: 2026-09-14*
+
+## Self-Check: PASSED
+
+- All eight declared source files and the SUMMARY exist on disk (`[ -f ]` verified).
+- All three plan commits resolve in `git log`: `614e7cad`, `6a381012`, `0dd3864e`.
+- Both task `<verify>` commands re-run green after the final commit (25/25 and 15/15).
+- The only failing gates in the tree are the two parent-owned census pin equality checks, failing on exactly the three expected identities with zero additions.
